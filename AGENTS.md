@@ -17,8 +17,8 @@
 ```text
 repository: lizhonghao31-crypto/dx-rework
 base branch: main
-base SHA: <从远程 main 实际读取>
-working branch: <本次分支>
+base SHA: <本次任务由 GitHub/Codex 平台实际注入或从远程 main 读取的基线 SHA>
+working branch: <本次实际工作分支；Codex 托管任务可为平台注入的 work 分支>
 task scope: <一句话目标>
 allowed files: <允许修改的明确路径>
 forbidden files: <本次不得修改的路径>
@@ -26,10 +26,12 @@ forbidden files: <本次不得修改的路径>
 
 要求：
 
-- 必须从最新远程 `main` 创建新分支。
-- 不允许根据旧聊天中的 SHA、旧 PR 分支或本地猜测继续施工。
-- 若 PR head SHA 与本次实际提交 SHA 不一致，立即停止，不得继续测试或要求合并。
-- 预检所需文件不存在、分支错误或 base SHA 不一致时，立即停止并报告。
+- 普通本地或 GitHub 开发环境必须从最新远程 `main` 创建新分支。
+- Codex 托管工作区可能不配置 Git remote、本地 `main`，并使用平台注入的 `work` 分支；此时以平台提供的任务/PR 基线 SHA 和 `git rev-parse HEAD` 作为预检证据。仅缺少 `origin` 或本地 `main` 不构成初始化失败，也不得因此停止施工。
+- 无论采用哪种环境，都不允许根据旧聊天中的 SHA、旧 PR 分支或人工猜测继续施工。
+- 创建或更新 PR 后，必须由 GitHub Actions 对当前 PR head SHA、必需文件与目标分支再次校验；GitHub 上的 PR base/head 元数据是最终合并校验依据。
+- 若平台提供的 base SHA 与当前任务/PR 元数据明确不一致，或 PR head SHA 与本次实际提交 SHA 不一致，立即停止，不得继续测试或要求合并。
+- 预检所需文件不存在、仓库错误或已知 SHA 不一致时，立即停止并报告。
 
 ## 3. 修改模式
 
