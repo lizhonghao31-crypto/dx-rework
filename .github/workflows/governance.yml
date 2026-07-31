@@ -1,0 +1,82 @@
+name: Governance preflight
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden-source:
+    name: Verify Golden Source and PR head
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Print immutable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "repository=${GITHUB_REPOSITORY}"
+          echo "event_name=${GITHUB_EVENT_NAME}"
+          echo "event_sha=${GITHUB_SHA}"
+          echo "checked_out_sha=$(git rev-parse HEAD)"
+          echo "ref=${GITHUB_REF}"
+
+      - name: Verify current PR head
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          ACTUAL_HEAD_SHA="$(git rev-parse HEAD)"
+          if [[ "${ACTUAL_HEAD_SHA}" != "${EXPECTED_HEAD_SHA}" ]]; then
+            echo "::error::Head SHA mismatch: actual=${ACTUAL_HEAD_SHA}, expected=${EXPECTED_HEAD_SHA}"
+            exit 1
+          fi
+
+      - name: Verify required governance files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_files=(
+            "README.md"
+            "AGENTS.md"
+            "docs/requirements/startup-requirements-v1.1.md"
+            "docs/architecture/target-architecture-v0.1.md"
+            "docs/ui/figma-pilot-baseline.md"
+            ".github/pull_request_template.md"
+          )
+          for path in "${required_files[@]}"; do
+            if [[ ! -f "${path}" ]]; then
+              echo "::error file=${path}::Required governance file is missing"
+              exit 1
+            fi
+          done
+
+      - name: Write evidence summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Governance preflight"
+            echo
+            echo "- Repository: ${GITHUB_REPOSITORY}"
+            echo "- Checked-out SHA: $(git rev-parse HEAD)"
+            echo "- Event: ${GITHUB_EVENT_NAME}"
+            echo "- Required files: verified"
+          } >> "${GITHUB_STEP_SUMMARY}"
