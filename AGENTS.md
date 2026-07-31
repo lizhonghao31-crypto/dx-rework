@@ -5,7 +5,7 @@
 ## 1. Golden Source
 
 1. GitHub `main` 是唯一代码 Golden Source。
-2. 业务规则以 `docs/requirements/startup-requirements-v1.1.md` 为当前确认基线。
+2. 业务规则以 `docs/requirements/startup-requirements-v1.2.md` 为当前确认基线。
 3. Figma「达兴企业 UI 基础库 · Pilot」是 UI 变量与通用组件的设计 Golden Source。
 4. Figma「内部计件返工系统 · Product」是页面布局与交互验收载体。
 5. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
