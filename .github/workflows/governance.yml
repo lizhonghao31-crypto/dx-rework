@@ -56,7 +56,7 @@ jobs:
           required_files=(
             "README.md"
             "AGENTS.md"
-            "docs/requirements/startup-requirements-v1.1.md"
+            "docs/requirements/startup-requirements-v1.2.md"
             "docs/architecture/target-architecture-v0.1.md"
             "docs/ui/figma-pilot-baseline.md"
             ".github/pull_request_template.md"
