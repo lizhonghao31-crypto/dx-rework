@@ -12,6 +12,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../apps/api/src/app.js";
 import {
   EXPECTED_SCHEMA_CHECKSUM,
+  EXPECTED_SCHEMA_HISTORY,
   EXPECTED_SCHEMA_VERSION,
   migrationHistoriesMatch,
 } from "../../apps/api/src/platform/schema-version.js";
@@ -22,6 +23,13 @@ const config = loadConfig({
   DATABASE_URL: "postgresql://user:password@127.0.0.1:5432/dx_rework_test",
   GIT_SHA: "test-sha",
   BUILD_TIME: "2026-08-01T00:00:00.000Z",
+  DINGTALK_CORP_ID: "corp-test",
+  DINGTALK_H5_APP_KEY: "app-key-test",
+  DINGTALK_H5_APP_SECRET: "app-secret-test",
+  DINGTALK_WEB_CLIENT_ID: "qr-client-test",
+  DINGTALK_WEB_CLIENT_SECRET: "web-client-secret-test",
+  DINGTALK_QR_REDIRECT_URI: "https://example.test/auth/qr/callback",
+  SESSION_SECRET: "test-session-secret-at-least-32-characters",
 });
 
 afterEach(async () => {
@@ -37,7 +45,7 @@ function createApp(overrides?: {
     checkDatabase: overrides?.checkDatabase ?? (async () => undefined),
     getAppliedSchemaHistory:
       overrides?.getAppliedSchemaHistory ??
-      (async () => [{ version: EXPECTED_SCHEMA_VERSION, checksum: EXPECTED_SCHEMA_CHECKSUM }]),
+      (async () => [...EXPECTED_SCHEMA_HISTORY]),
   });
   apps.push(app);
   return app;

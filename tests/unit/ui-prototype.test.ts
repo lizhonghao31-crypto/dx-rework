@@ -11,6 +11,7 @@ const ui = read("../../packages/ui/src/index.tsx");
 const tokens = read("../../packages/ui/src/tokens.css");
 const components = read("../../packages/ui/src/components.css");
 const uiPackage = read("../../packages/ui/package.json");
+const auth = read("../../apps/web/src/auth.tsx");
 
 describe("PR-01A UI prototype contract", () => {
   it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/piecework/collective", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
@@ -50,6 +51,13 @@ describe("PR-01A UI prototype contract", () => {
     expect(pages).toContain("Schema");
     expect(pages).toContain("当前页面仅用于验证独立前端、API 与版本追踪链路");
     expect(pages).toContain("不连接 ERP · 不启用钉钉 · 不写入生产数据");
+  });
+  it("loads public DingTalk client config and prefixes auth navigation with Vite BASE_URL", () => {
+    expect(auth).toContain('import.meta.env.BASE_URL');
+    expect(auth).toContain('apiUrl("auth/client-config")');
+    expect(auth).toContain('apiUrl("auth/mobile")');
+    expect(auth).toContain('apiUrl("auth/qr/start")');
+    expect(auth).toContain('pageUrl("auth/qr")');
   });
   it("retains accessible status, meter, audit and touch contracts", () => {
     expect(ui).toContain('aria-hidden="true" className={`dx-meter');
