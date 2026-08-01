@@ -8,7 +8,8 @@ export type SourceReference = Readonly<{
 export type AuditEventDraft = Readonly<{
   requestId: string;
   actorId?: string;
-  actorRole?: string;
+  actorRoles?: readonly string[];
+  authorizationCapability?: string;
   action: string;
   entityType: string;
   entityId: string;
@@ -59,7 +60,7 @@ export class DisabledErpAdapter implements ErpAdapter {
   }
 }
 
-export type TrustedActor = Readonly<{ actorId: string; actorRole: string }>;
+export type TrustedActor = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string }>;
 export type IdempotencyStatus = "in_progress" | "completed";
 export type AttachmentStatus = "pending" | "ready" | "rejected";
 export type OutboxStatus = "pending" | "processing" | "sent" | "failed";
@@ -86,21 +87,9 @@ export const transitionOutbox = (from: OutboxStatus, to: OutboxStatus): OutboxSt
 export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus): ExportJobStatus =>
   transitions<ExportJobStatus>({ pending: ["running"], running: ["succeeded", "failed"], succeeded: [], failed: [] }, from, to);
 
-export function sanitizeOperationalError(error: unknown): string {
-  const fallback = "Operation failed; inspect protected server logs";
-  if (!(error instanceof Error)) return fallback;
-  const normalized = Array.from(error.message, (character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 31 || codePoint === 127 ? " " : character;
-  }).join("").trim();
-  const assignments = normalized.replace(
-    /\b(password|secret|token|api[-_]?key|access[-_]?key|authorization|signature)\b\s*[=:]\s*(?:"[^"]*"|'[^']*'|Bearer\s+\S+|\S+)/gi,
-    (_match, label: string) => `${label}=[REDACTED]`,
-  );
-  const bearer = assignments.replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]");
-  const queryValues = bearer.replace(
-    /([?&](?:signature|x-oss-signature|ossaccesskeyid|accesskeyid|security-token|token|secret)=)[^&\s]+/gi,
-    "$1[REDACTED]",
-  );
-  return queryValues.slice(0, 500) || fallback;
+export function sanitizeOperationalError(_error: unknown): string {
+  // Worker errors are persisted in retry tables. Never attempt to enumerate
+  // every vendor credential label here: persist only a fixed public
+  // classification and keep diagnostics in access-controlled server telemetry.
+  return "Operation failed; inspect protected server logs";
 }
