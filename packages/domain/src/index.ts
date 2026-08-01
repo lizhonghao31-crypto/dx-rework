@@ -89,7 +89,10 @@ export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus):
 export function sanitizeOperationalError(error: unknown): string {
   const fallback = "Operation failed; inspect protected server logs";
   if (!(error instanceof Error)) return fallback;
-  const normalized = error.message.replace(/[\r\n\t\u0000-\u001f\u007f]+/g, " ").trim();
+  const normalized = Array.from(error.message, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127 ? " " : character;
+  }).join("").trim();
   const assignments = normalized.replace(
     /\b(password|secret|token|api[-_]?key|access[-_]?key|authorization|signature)\b\s*[=:]\s*(?:"[^"]*"|'[^']*'|Bearer\s+\S+|\S+)/gi,
     (_match, label: string) => `${label}=[REDACTED]`,
