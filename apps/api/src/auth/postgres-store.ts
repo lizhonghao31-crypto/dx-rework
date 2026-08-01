@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 import type { OrganizationMember } from "./provider.js";
-import type { AuthStore, AuthUser, QrChallenge, SessionIdentity, SessionRecord } from "./service.js";
+import { stableEqual, type AuthStore, type AuthUser, type QrChallenge, type SessionIdentity, type SessionRecord } from "./service.js";
 
 export class PostgresAuthStore implements AuthStore {
   constructor(private readonly database: Pool) {}
@@ -13,9 +13,22 @@ export class PostgresAuthStore implements AuthStore {
   async createQrState(value: QrChallenge): Promise<void> {
     await this.database.query("INSERT INTO auth_qr_challenges(state_hash, nonce, expires_at) VALUES($1,$2,$3)", [value.stateHash, value.bindingHash, value.expiresAt]);
   }
-  async consumeQrState(stateHash: string, now: Date): Promise<QrChallenge | null> {
-    const result = await this.database.query<QrChallenge>("UPDATE auth_qr_challenges SET used_at=$2 WHERE state_hash=$1 AND used_at IS NULL AND expires_at>$2 RETURNING state_hash AS \"stateHash\", nonce AS \"bindingHash\", expires_at AS \"expiresAt\", used_at AS \"usedAt\"", [stateHash, now]);
-    return result.rows[0] ?? null;
+  async consumeQrState(stateHash: string, bindingHash: string, now: Date): Promise<boolean> {
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ binding_hash: string }>("SELECT nonce AS binding_hash FROM auth_qr_challenges WHERE state_hash=$1 AND used_at IS NULL AND expires_at>$2 FOR UPDATE", [stateHash, now]);
+      if (!result.rows[0] || !stableEqual(result.rows[0].binding_hash, bindingHash)) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      await client.query("UPDATE auth_qr_challenges SET used_at=$2 WHERE state_hash=$1", [stateHash, now]);
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
   }
   async upsertIdentity(member: OrganizationMember): Promise<AuthUser> {
     const client = await this.database.connect();

@@ -25,6 +25,14 @@ export type AppDependencies = Readonly<{
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
+export function serializeRequestForLog(request: { id?: string; method?: string; url?: string }): Record<string, string | undefined> {
+  return {
+    requestId: request.id,
+    method: request.method,
+    path: request.url?.split("?", 1)[0],
+  };
+}
+
 export function buildApp(dependencies: AppDependencies): FastifyInstance {
   const { config } = dependencies;
   const app = Fastify({
@@ -33,6 +41,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
         ? false
         : {
             level: config.logLevel,
+            serializers: { req: serializeRequestForLog },
             redact: {
               paths: [
                 "req.headers.authorization",

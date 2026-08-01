@@ -9,7 +9,7 @@ export type SessionIdentity = Readonly<{ userId: string; unionId: string; corpId
 
 export interface AuthStore {
   consumeCode(codeHash: string, expiresAt: Date): Promise<boolean>;
-  consumeQrState(stateHash: string, now: Date): Promise<QrChallenge | null>;
+  consumeQrState(stateHash: string, bindingHash: string, now: Date): Promise<boolean>;
   createQrState(challenge: QrChallenge): Promise<void>;
   upsertIdentity(member: OrganizationMember): Promise<AuthUser>;
   createSession(session: SessionRecord): Promise<void>;
@@ -49,9 +49,8 @@ export class AuthService {
   }
 
   async loginQr(code: string, state: string, bindingToken: string | undefined): Promise<{ token: string; user: AuthUser }> {
-    const challenge = await this.store.consumeQrState(hash(state), this.now());
     const presentedHash = this.hashBinding(bindingToken ?? "");
-    if (!challenge || !stableEqual(challenge.bindingHash, presentedHash)) throw new AuthDeniedError("INVALID_QR_STATE", "扫码请求无效、已过期或已使用");
+    if (!(await this.store.consumeQrState(hash(state), presentedHash, this.now()))) throw new AuthDeniedError("INVALID_QR_STATE", "扫码请求无效、已过期或已使用");
     return this.completeCode(code, () => this.provider.exchangeQrCode(code));
   }
 
@@ -104,7 +103,7 @@ export class AuthService {
   }
 }
 
-function stableEqual(left: string, right: string): boolean {
+export function stableEqual(left: string, right: string): boolean {
   const a = Buffer.from(left); const b = Buffer.from(right);
   return a.length === b.length && timingSafeEqual(a, b);
 }
