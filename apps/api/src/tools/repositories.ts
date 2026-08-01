@@ -5,7 +5,7 @@ import { sanitizeOperationalError } from "@dx-rework/domain";
 import { ApplicationError } from "../platform/errors.js";
 
 export type SqlClient = Pick<PoolClient, "query">;
-export type TrustedActorContext = Readonly<{ actorId: string; actorRole: string; requestId: string }>;
+export type TrustedActorContext = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string; requestId: string }>;
 
 const validateClaimOptions = (limit: number, leaseSeconds: number): void => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
@@ -83,9 +83,9 @@ export class OperationEventRepository {
   async append(client: SqlClient, actor: TrustedActorContext, input: { action: string; entityType: string; entityId: string; before?: unknown; after?: unknown; reason?: string }): Promise<string> {
     const eventId = randomUUID();
     await client.query(
-      `INSERT INTO operation_events(event_id,request_id,actor_id,actor_role,action,entity_type,entity_id,before_state,after_state,reason)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [eventId, actor.requestId, actor.actorId, actor.actorRole, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
+      `INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,before_state,after_state,reason)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [eventId, actor.requestId, actor.actorId, [...new Set(actor.actorRoles)].sort(), actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
     );
     return eventId;
   }
