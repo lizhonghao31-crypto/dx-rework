@@ -3,6 +3,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { ApplicationError } from "../platform/errors.js";
 
 export type StoredObjectMetadata = Readonly<{ sizeBytes: number; mimeType: string; sha256?: string }>;
+export class ObjectStorageObjectNotFoundError extends Error {
+  constructor() {
+    super("Object not found");
+    this.name = "ObjectStorageObjectNotFoundError";
+  }
+}
 export interface ObjectStorage {
   createUploadUrl(objectKey: string, options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number }): Promise<string>;
   createDownloadUrl(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<string>;
@@ -24,11 +30,23 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     return this.client.signatureUrl(objectKey, { method: "GET", expires: options.ttlSeconds, response: { "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(options.filename)}` } });
   }
   async head(objectKey: string): Promise<StoredObjectMetadata> {
-    const result = await this.client.head(objectKey);
+    let result;
+    try {
+      result = await this.client.head(objectKey);
+    } catch (error) {
+      if (isObjectNotFound(error)) throw new ObjectStorageObjectNotFoundError();
+      throw error;
+    }
     const headers = result.res.headers;
     const sha256 = headers["x-oss-meta-sha256"];
     return { sizeBytes: Number(headers["content-length"]), mimeType: String(headers["content-type"] ?? ""), ...(typeof sha256 === "string" ? { sha256: sha256.toLowerCase() } : {}) };
   }
+}
+
+function isObjectNotFound(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { status?: unknown; statusCode?: unknown; code?: unknown };
+  return candidate.status === 404 || candidate.statusCode === 404 || candidate.code === "NoSuchKey";
 }
 
 export class DisabledObjectStorage implements ObjectStorage {

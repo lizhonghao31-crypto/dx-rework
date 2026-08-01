@@ -18,7 +18,7 @@ CREATE INDEX idempotency_records_expiry_idx ON idempotency_records (expires_at);
 CREATE TABLE operation_events (
   event_id uuid PRIMARY KEY,
   request_id text NOT NULL,
-  actor_id uuid NOT NULL REFERENCES users(id),
+  actor_id uuid NOT NULL REFERENCES app_users(id),
   actor_role text NOT NULL,
   action text NOT NULL,
   entity_type text NOT NULL,
@@ -67,7 +67,7 @@ CREATE TABLE attachments (
   mime_type text NOT NULL,
   size_bytes bigint NOT NULL CHECK (size_bytes > 0),
   sha256 text NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
-  uploaded_by uuid NOT NULL REFERENCES users(id),
+  uploaded_by uuid NOT NULL REFERENCES app_users(id),
   entity_type text,
   entity_id text,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ready', 'rejected')),
@@ -83,7 +83,7 @@ CREATE INDEX attachments_entity_idx ON attachments (entity_type, entity_id) WHER
 
 CREATE TABLE export_jobs (
   export_job_id uuid PRIMARY KEY,
-  requested_by uuid NOT NULL REFERENCES users(id),
+  requested_by uuid NOT NULL REFERENCES app_users(id),
   export_type text NOT NULL,
   filters jsonb NOT NULL,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
