@@ -89,6 +89,15 @@ export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus):
 export function sanitizeOperationalError(error: unknown): string {
   const fallback = "Operation failed; inspect protected server logs";
   if (!(error instanceof Error)) return fallback;
-  const value = error.message.replace(/(?:password|secret|token|key|authorization)\s*[=:]\s*\S+/gi, "$1=[REDACTED]");
-  return value.slice(0, 500) || fallback;
+  const normalized = error.message.replace(/[\r\n\t\u0000-\u001f\u007f]+/g, " ").trim();
+  const assignments = normalized.replace(
+    /\b(password|secret|token|api[-_]?key|access[-_]?key|authorization|signature)\b\s*[=:]\s*(?:"[^"]*"|'[^']*'|Bearer\s+\S+|\S+)/gi,
+    (_match, label: string) => `${label}=[REDACTED]`,
+  );
+  const bearer = assignments.replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]");
+  const queryValues = bearer.replace(
+    /([?&](?:signature|x-oss-signature|ossaccesskeyid|accesskeyid|security-token|token|secret)=)[^&\s]+/gi,
+    "$1[REDACTED]",
+  );
+  return queryValues.slice(0, 500) || fallback;
 }
