@@ -31,7 +31,6 @@ const EnvironmentSchema = z
     APP_BASE_PATH: z.string().regex(/^\/(?!\/)[^?#\\]*$/).refine((value) => !value.includes("//"), "must not contain empty path segments").default("/"),
     SESSION_SECRET: z.string().min(32),
     SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
-    ORGANIZATION_FRESHNESS_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== "production") return;
@@ -69,7 +68,6 @@ export type AppConfig = Readonly<{
   appBasePath: string;
   sessionSecret: string;
   sessionTtlSeconds: number;
-  organizationFreshnessSeconds: number;
 }>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -92,6 +90,5 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     appBasePath: result.data.APP_BASE_PATH.endsWith("/") ? result.data.APP_BASE_PATH : `${result.data.APP_BASE_PATH}/`,
     sessionSecret: result.data.SESSION_SECRET,
     sessionTtlSeconds: result.data.SESSION_TTL_SECONDS,
-    organizationFreshnessSeconds: result.data.ORGANIZATION_FRESHNESS_SECONDS,
   });
 }

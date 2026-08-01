@@ -25,7 +25,7 @@ const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
-  auth: new AuthService(new OfficialDingTalkProvider(config.dingtalk), new PostgresAuthStore(database), config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret, config.organizationFreshnessSeconds * 1000),
+  auth: new AuthService(new OfficialDingTalkProvider(config.dingtalk), new PostgresAuthStore(database), config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret),
 });
 registerDatabasePoolErrorHandler(database, app.log);
 

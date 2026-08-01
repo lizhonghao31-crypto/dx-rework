@@ -31,7 +31,6 @@ export class AuthService {
     private readonly corpId: string,
     private readonly sessionTtlMs: number,
     private readonly sessionSecret: string,
-    private readonly organizationFreshnessMs: number = 5 * 60_000,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -59,7 +58,6 @@ export class AuthService {
     const record = await this.store.findSession(this.hashSession(token), this.now());
     if (!record) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
     if (!record.identity.active || !record.identity.employed) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
-    if (this.now().getTime() - record.identity.lastVerifiedAt.getTime() <= this.organizationFreshnessMs) return record.user;
     return this.revalidate(record.user.id, record.identity);
   }
 
@@ -95,7 +93,10 @@ export class AuthService {
         throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
       }
       const user = await this.store.upsertIdentity(member);
-      if (!member.active || !member.employed) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      if (!member.active || !member.employed) {
+        await this.store.deactivateIdentity(userId, this.now());
+        throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      }
       return user;
     })();
     this.revalidations.set(userId, operation);
