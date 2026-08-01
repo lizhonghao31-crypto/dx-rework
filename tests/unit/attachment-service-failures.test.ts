@@ -22,7 +22,9 @@ const row = {
   created_at: new Date("2026-08-01T00:00:00Z"),
 };
 
-function poolWithOwnedRow(ownedRow = row) {
+type AttachmentTestRow = Omit<typeof row, "status"> & { status: "pending" | "ready" | "rejected" };
+
+function poolWithOwnedRow(ownedRow: AttachmentTestRow = row) {
   const operations: string[] = [];
   const client = {
     query: vi.fn(async (sql: string) => {
