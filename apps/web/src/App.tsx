@@ -1,29 +1,13 @@
-import { useEffect, useState } from "react";
-import { VersionResponseSchema, type VersionResponse } from "@dx-rework/contracts";
-import { Button, InsetField, KpiInstrument, NavigationItem, StatusBadge, Surface } from "@dx-rework/ui";
+import { Dashboard, Detail, Foundation, MobileForm, Tasks } from "./pages.js";
 
-type LoadState = { kind: "loading" } | { kind: "ready"; version: VersionResponse } | { kind: "unavailable" };
-type Task = { id: string; title: string; meta: string; tone: "info" | "warning" | "danger" };
-const tasks: Task[] = [
-  { id: "RW-2026-0801-012", title: "待本厂责任终审", meta: "281 件 · ¥512.25 · 李总 / 伍总任一人", tone: "danger" },
-  { id: "RW-2026-0801-018", title: "返工上数中", meta: "成员快照 V1 · 7 人 · 当前：叶才华", tone: "info" },
-  { id: "RW-2026-0731-026", title: "外部扣款跟进", meta: "356 件 · ¥763.50 · 温燕红", tone: "warning" },
-  { id: "RW-2026-0730-009", title: "责任证据待补", meta: "140 件 · 李同生 · 已停滞 3.2h", tone: "warning" },
-  { id: "RW-2026-0729-006", title: "待 IE 审核", meta: "工序 / 价格 · 当前：邝飞", tone: "info" },
-  { id: "RW-2026-0728-003", title: "工资已核对", meta: "N10-A 月结 · 欧阳俊珺", tone: "info" },
-];
-
-function Shell({ active, children }: { active: string; children: React.ReactNode }) {
-  const navigation: [string, string, string][] = [["总","总览","/ui/management"],["工","返工任务","/ui/tasks"],["责","责任处理","/ui/tasks/RW-2026-0728-003"],["计","集体计件","/ui/piecework/collective"],["审","审计日志","#"]];
-  return <div className="app-shell"><aside><h2>达兴 · 质检返工</h2><small>共享事实 · 全量可见</small><nav aria-label="主导航">{navigation.map(([i,n,h]) => <a href={h} key={n}><NavigationItem icon={i} active={active === n}>{n}</NavigationItem></a>)}</nav><div className="org"><StatusBadge tone="success">组织内已认证</StatusBadge><b>共享事实 · 全量可见</b><small>操作按稳定身份与角色审计</small></div></aside><main>{children}</main></div>;
+export function App() {
+  const path = window.location.pathname;
+  if (path === "/ui/management") return <Dashboard />;
+  if (path === "/ui/supervisor") return <Dashboard supervisor />;
+  if (path === "/ui/tasks") return <Tasks />;
+  if (path.startsWith("/ui/tasks/")) return <Detail />;
+  if (path === "/ui/qc/new") return <MobileForm />;
+  if (path === "/ui/piecework/collective") return <MobileForm piecework />;
+  if (path === "/system/foundation") return <Foundation />;
+  return <Foundation />;
 }
-function Header({ title, subtitle, badge, action }: { title: string; subtitle: string; badge: string; action: string }) { return <header><div><h1>{title}</h1><p>{subtitle}</p></div><div className="header-actions"><StatusBadge tone="info">{badge}</StatusBadge><Button>{action}</Button></div></header>; }
-function Kpis({ supervisor = false }: { supervisor?: boolean }) { const data: [string, number, string][] = supervisor ? [["待配置工序 / 单价",4,"最早进入 09:18"],["待分派 / 改成员",3,"2 条待生成新快照"],["待整单审核",5,"含 1 条驳回重提"],["现场异常",2,"1 单等待补料"]] : [["待处理项",12,"其中 3 单临近时限"],["进行中",8,"覆盖 4 个工序"],["已超时",3,"最长超时 1.6 天"],["待责任确认",5,"2 单待老板终审"]]; return <div className="kpis">{data.map(([a,b,c],i)=><KpiInstrument key={a} label={a} value={b} detail={c} tone={i===2?"warning":"info"}/>)}</div>; }
-function Queue({ supervisor = false }: { supervisor?: boolean }) { const rows = supervisor ? ["N02　待配置工序 / 单价","N04　待分派成员","N04-V2　新成员快照待确认","N06　待整单审核","N10-A　工资初核","异常　现场异常 / 等待补料"] : ["N01　待主管配置","N03　待 IE 复核","N05　返工上数中","N07　待责任确认","N08-A　本厂承担审批","N08-B　外部签收 / 扣款跟进"]; return <Surface><h2>{supervisor?"今日行动队列":"全流程节点监控"}</h2><p>按节点与时效排序，静态预览不提交业务数据</p><div className="queue">{rows.map((x,i)=><div key={x}><span>{x}</span><StatusBadge tone={i%3===0?"warning":"info"}>{i+2} 单</StatusBadge></div>)}</div></Surface>; }
-function Dashboard({ supervisor=false }: { supervisor?: boolean }) { return <Shell active="总览"><Header title={supervisor?"李同生 · 现场返工工作台":"管理层共享座舱"} subtitle={supervisor?"配置工序与单价、动态分派成员、整单审核、工资初核":"李总、伍总、张文豪查看同一事实；最终审批仅李总 / 伍总"} badge={supervisor?"N01–N10-A 现场节点":"N00–N09 实时同步"} action={supervisor?"开始处理下一单":"导出当前视图"}/><Kpis supervisor={supervisor}/><div className="dashboard-grid"><Queue supervisor={supervisor}/><Surface><h2>{supervisor?"快捷操作与现场异常":"待决策与异常"}</h2><p>{supervisor?"李同生仅展示现场动作，不混入老板终审":"事实对三人完全共享；操作按钮按稳定身份开放"}</p>{tasks.slice(0,3).map(t=><TaskCard key={t.id} task={t}/>)}</Surface></div></Shell>; }
-function TaskCard({ task }: { task: Task }) { return <article className={`task task--${task.tone}`}><b>{task.id}</b><StatusBadge tone={task.tone}>{task.tone==="danger"?"已超时":task.tone==="warning"?"临近时限":"进行中"}</StatusBadge><h3>{task.title}</h3><small>{task.meta}</small></article>; }
-function Tasks() { return <Shell active="返工任务"><Header title="返工任务列表" subtitle="统一查询返工单、当前节点、责任链、计件与扣款状态" badge="28 条 · N01–N10-B" action="发起返工"/><Surface className="filters"><InsetField label="关键词" aria-label="关键词" placeholder="单号 / 款号 / 发起人 / 责任人"/><Button>全部 28</Button><Button>待处理 12</Button><Button>进行中 8</Button><Button>待责任 5</Button></Surface><h2>任务结果（28）</h2><div className="task-grid">{tasks.map(t=><TaskCard key={t.id} task={t}/>)}</div></Shell>; }
-function Detail() { return <Shell active="责任处理"><Header title="RW-2026-0801-012 · PD20529725" subtitle="尾部返工 · 281 件 · 当前节点 N08-A 本厂承担审批" badge="待李总 / 伍总任一人终审" action="返回任务列表"/><div className="dashboard-grid"><Surface><h2>节点时间线与返工摘要</h2><div className="queue">{["N01 品控发起 · 08:42","N02 李同生配置工序 · 09:18","N03 IE 审核 · 09:46","N04 动态分派 · 成员快照 V1","N05 集体上数完成 · 281 件","N06 李同生整单审核 · 已通过"].map(x=><div key={x}><span>{x}</span><StatusBadge tone="info">已完成</StatusBadge></div>)}</div></Surface><Surface><h2>责任判断与审批</h2><p>李总、伍总、张文豪看到同一事实；仅李总或伍总可完成本厂承担最终审批。</p><TaskCard task={tasks[0]!}/><Button>预览审批操作</Button><Button className="warning">返回补充证据</Button></Surface></div></Shell>; }
-function MobileForm({ piecework=false }: { piecework?: boolean }) { const members=["叶才华","陈静","林秀兰","周美珍","梁小玲","赵海","吴江"]; return <main className="mobile-page"><div className="mobile-hero"><h1>{piecework?"集体计件上数":"发起返工"}</h1><p>{piecework?"RW-2026-0801-018 · 返查工序":"品控现场录入 · 提交后通知李同生"}</p><StatusBadge tone="success">{piecework?`N05 上数中 · 自动防重`:"组织内已认证 · 可保存草稿"}</StatusBadge></div><Surface><h2>{piecework?"任务信息":"返工基本信息"}</h2><p>款号：{piecework?"PD20611308":"PD20529725"}<br/>本条快照：{piecework?members.join("、"):"订单跟单：陈晓琳 · 加工厂：本厂"}</p>{piecework&&<p className="hint">成员快照 V1 · {members.length} 人；成员变化创建新版本，历史记录不反算。</p>}</Surface><Surface><InsetField label={piecework?"本次上数":"返工数量"} value="281" readOnly suffix="件"/><p>{piecework?"单价 ¥0.55 / 件　组总额 ¥154.55":"类型：尾查 / 拆包 / 重新包装"}</p></Surface><Surface><h2>{piecework?"平均分摊预览":"QC 证据"}</h2>{piecework?<><StatusBadge tone="success">快照 V1 · {members.length} 人</StatusBadge><p>¥154.55 ÷ {members.length} 人 = ¥{(154.55/members.length).toFixed(2)}（预估）</p><InsetField label="你的预估分摊" value={(154.55/members.length).toFixed(2)} readOnly suffix="元"/></>:<><p>拆包前照片 · 疵点近照 · 整单标签</p><InsetField label="QC 附件" value="3" readOnly suffix="份"/></>}</Surface><div className="mobile-actions"><Button>保存草稿</Button><Button className="primary">{piecework?"预览提交集体上数":"预览提交并通知"}</Button></div></main>; }
-function Foundation() { const [state,setState]=useState<LoadState>({kind:"loading"}); useEffect(()=>{const c=new AbortController(); void fetch("/api/version",{signal:c.signal}).then(async r=>{if(!r.ok)throw Error(); return VersionResponseSchema.parse(await r.json());}).then(version=>setState({kind:"ready",version})).catch(()=>setState({kind:"unavailable"})); return()=>c.abort();},[]); return <main className="foundation-shell"><Surface className="foundation-card"><h1>内部计件返工系统</h1><p>PR-01 技术基座诊断页已迁移至 /system/foundation。</p><p>API：{state.kind==="loading"?"检查中":state.kind==="ready"?"可访问":"未连接"}</p><p>Git SHA：{state.kind==="ready"?state.version.gitSha.slice(0,12):"—"}</p></Surface></main>; }
-export function App() { const p=window.location.pathname; if(p==="/ui/management")return <Dashboard/>; if(p==="/ui/supervisor")return <Dashboard supervisor/>; if(p==="/ui/tasks")return <Tasks/>; if(p.startsWith("/ui/tasks/"))return <Detail/>; if(p==="/ui/qc/new")return <MobileForm/>; if(p==="/ui/piecework/collective")return <MobileForm piecework/>; return <Foundation/>; }

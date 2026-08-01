@@ -1,9 +1,12 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+export type ButtonVariant = "primary" | "secondary";
 
-export function Button({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={`dx-button ${className}`} {...props} />;
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant };
+
+export function Button({ className = "", variant = "secondary", ...props }: ButtonProps) {
+  return <button className={`dx-button dx-button--${variant} ${className}`.trim()} {...props} />;
 }
 
 export function StatusBadge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
@@ -15,7 +18,7 @@ export function NavigationItem({ active = false, icon, children }: { active?: bo
 }
 
 export function KpiInstrument({ label, value, detail, tone = "info" }: { label: string; value: string | number; detail: string; tone?: Tone }) {
-  return <article className="dx-kpi"><span>{label}</span><strong>{value}</strong><small>{detail}</small><i className={`dx-meter dx-meter--${tone}`} /></article>;
+  return <article className="dx-kpi"><span>{label}</span><strong>{value}</strong><small>{detail}</small><i aria-hidden="true" className={`dx-meter dx-meter--${tone}`} /></article>;
 }
 
 export function InsetField({ label, suffix, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; suffix?: string }) {
@@ -23,5 +26,5 @@ export function InsetField({ label, suffix, ...props }: InputHTMLAttributes<HTML
 }
 
 export function Surface({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`dx-surface ${className}`}>{children}</section>;
+  return <section className={`dx-surface ${className}`.trim()}>{children}</section>;
 }

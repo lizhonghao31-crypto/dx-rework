@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App.js";
+import "@dx-rework/ui/tokens.css";
+import "@dx-rework/ui/components.css";
 import "./styles.css";
 
 const root = document.getElementById("root");
