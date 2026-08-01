@@ -15,6 +15,7 @@ describe("public tools migration invariants", () => {
     expect(sql).toContain("operation_events_no_delete");
     expect(sql).toContain("operation_events_no_truncate");
     expect(sql).toContain("actor_roles text[]");
+    expect(sql).toContain("cardinality(actor_roles) > 0");
     expect(sql).toContain("authorization_capability text");
     expect(repositories).toContain("SKIP LOCKED");
   });
