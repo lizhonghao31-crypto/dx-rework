@@ -16,8 +16,8 @@ runWithPostgres("role permissions and versioned master data", () => {
   const schema = `access_${randomUUID().replaceAll("-", "")}`;
   const adminDatabase = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
-  const service = new AccessMasterDataService(database);
-  const authStore = new PostgresAuthStore(database);
+  const service = new AccessMasterDataService(database, "corp");
+  const authStore = new PostgresAuthStore(database, "corp");
 
   const adminId = randomUUID();
   const bootstrapOwnerId = randomUUID();
@@ -26,8 +26,9 @@ runWithPostgres("role permissions and versioned master data", () => {
   const zhangId = randomUUID();
   const liTongshengId = randomUUID();
   const financeId = randomUUID();
-  const userIds = [adminId, bootstrapOwnerId, liOwnerId, wuOwnerId, zhangId, liTongshengId, financeId];
-  const displayNames = ["系统管理员", "启动老板", "李总", "伍云峰", "张文豪", "李同生", "财务"];
+  const foreignOwnerId = randomUUID();
+  const userIds = [adminId, bootstrapOwnerId, liOwnerId, wuOwnerId, zhangId, liTongshengId, financeId, foreignOwnerId];
+  const displayNames = ["系统管理员", "启动老板", "李总", "伍云峰", "张文豪", "李同生", "财务", "外部组织老板"];
 
   const adminActor: TrustedActorContext = {
     actorId: adminId,
@@ -82,16 +83,26 @@ runWithPostgres("role permissions and versioned master data", () => {
       `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
        VALUES
        ($1,$2,'system_admin',$2,'controlled bootstrap'),
-       ($3,$4,'owner_group',$4,'controlled bootstrap')`,
-      [randomUUID(), adminId, randomUUID(), bootstrapOwnerId],
+       ($3,$4,'owner_group',$4,'controlled bootstrap'),
+       ($5,$6,'owner_group',$6,'controlled foreign-corporation fixture')`,
+      [randomUUID(), adminId, randomUUID(), bootstrapOwnerId, randomUUID(), foreignOwnerId],
+    );
+    await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','foreign-corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(), foreignOwnerId, `ding-${foreignOwnerId}`, `union-${foreignOwnerId}`],
     );
     for (const [userId, token] of [
+      [adminId, "admin-token"],
+      [bootstrapOwnerId, "bootstrap-token"],
       [liOwnerId, "li-token"],
       [wuOwnerId, "wu-token"],
       [zhangId, "zhang-token"],
       [liTongshengId, "litongsheng-token"],
       [financeId, "finance-token"],
     ] as const) await addLogin(userId, token);
+    await service.ensureOrganizationPolicy();
   });
 
   afterAll(async () => {
@@ -123,6 +134,14 @@ runWithPostgres("role permissions and versioned master data", () => {
     expect(await service.listRoleAssignments({ userId: zhangId })).toEqual([
       expect.objectContaining({ userId: zhangId, displayName: "张文豪", roleCode: "production_management", revokedAt: null }),
     ]);
+    expect((await database.query(
+      "SELECT 1 FROM operation_events WHERE action='access.role.assign' AND entity_type='user_role_assignment'",
+    )).rowCount).toBe(4);
+    await expect(database.query(
+      `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+       VALUES($1,$2,'finance_read',$3,'绕过受控服务直接授权')`,
+      [randomUUID(), liOwnerId, adminId],
+    )).rejects.toMatchObject({ code: "55000" });
   });
 
   it("keeps legacy direct capabilities inert after role migration", async () => {
@@ -142,35 +161,76 @@ runWithPostgres("role permissions and versioned master data", () => {
     })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
   });
 
+  it("keeps authentication and authorization bound to the configured corporation", async () => {
+    await expect(new AccessMasterDataService(database, "other-corp").ensureOrganizationPolicy())
+      .rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    await expect(database.query(
+      "UPDATE access_security_policy SET dingtalk_corp_id='other-corp' WHERE policy_key='primary'",
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(authStore.upsertIdentity({
+      corpId: "foreign-corp",
+      userId: "foreign-user",
+      unionId: "foreign-union",
+      active: true,
+      employed: true,
+      displayName: "外部组织人员",
+    })).rejects.toThrow("different corporation");
+    await database.query(
+      "INSERT INTO auth_sessions(id,token_hash,user_id,expires_at) VALUES($1,'foreign-token',$2,CURRENT_TIMESTAMP+interval '1 day')",
+      [randomUUID(), foreignOwnerId],
+    );
+    await expect(authStore.findSession("foreign-token", new Date())).resolves.toBeNull();
+  });
+
   it("maps 李生 only to 李总 and keeps temporary workers outside login users", async () => {
     const li = await service.createPerson(masterDataActor, {
       personType: "internal",
       appUserId: liOwnerId,
       displayName: "李总",
       aliases: ["李生"],
+      reason: "受控建立李总人员档案与确认称呼",
     });
     await expect(service.createPerson(masterDataActor, {
       personType: "internal",
       appUserId: liTongshengId,
       displayName: "李同生",
       aliases: ["李生"],
+      reason: "验证别名冲突",
     })).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
     await service.createPerson(masterDataActor, {
       personType: "internal",
       appUserId: liTongshengId,
       displayName: "李同生",
       aliases: [],
+      reason: "建立独立人员档案",
     });
     const temporary = await service.createPerson(masterDataActor, {
       personType: "temporary",
       displayName: "临时工甲",
       aliases: ["临工甲"],
+      reason: "临时人员建档",
     });
     const alias = await database.query<{ person_id: string }>(
       "SELECT person_id FROM business_person_aliases WHERE normalized_alias=$1",
       ["李生".normalize("NFKC").toLocaleLowerCase("zh-CN")],
     );
     expect(alias.rows[0]?.person_id).toBe(li.personId);
+    const personCreationAudit = await database.query<{ after_state: {
+      aliases: Array<{ aliasId: string; alias: string; normalizedAlias: string; reason: string }>;
+    } }>(
+      "SELECT after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.person.create'",
+      [li.personId],
+    );
+    expect(personCreationAudit.rows[0]?.after_state.aliases).toEqual([
+      expect.objectContaining({ aliasId: expect.any(String), alias: "李生", reason: "受控建立李总人员档案与确认称呼" }),
+    ]);
+    const initialAliasId = personCreationAudit.rows[0]!.after_state.aliases[0]!.aliasId;
+    expect(await database.query(
+      `SELECT 1 FROM operation_events
+       WHERE entity_id=$1 AND action='master_data.person_alias.create'
+         AND reason='受控建立李总人员档案与确认称呼'`,
+      [initialAliasId],
+    )).toHaveProperty("rowCount", 1);
     const temp = await database.query<{ app_user_id: string | null; person_type: string }>(
       "SELECT app_user_id,person_type FROM business_people WHERE person_id=$1",
       [temporary.personId],
@@ -180,6 +240,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       personType: "temporary",
       displayName: "临时工乙",
       aliases: [],
+      reason: "建立待纠正归属的既有人员档案",
     });
     const temporaryDirectory = await service.listPeople();
     const temporaryAliasId = temporaryDirectory
@@ -201,13 +262,18 @@ runWithPostgres("role permissions and versioned master data", () => {
        WHERE alias_id=$1`,
       [correctedAlias.aliasId, adminId],
     )).rejects.toMatchObject({ code: "55000" });
-    expect(await database.query(
-      `SELECT 1 FROM operation_events
+    const aliasRevocationAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      `SELECT after_state FROM operation_events
        WHERE entity_type='business_person_alias' AND entity_id=$1
          AND action='master_data.person_alias.revoke'
          AND actor_id=$2 AND authorization_capability='master_data:manage'`,
       [temporaryAliasId, adminId],
-    )).toHaveProperty("rowCount", 1);
+    );
+    expect(aliasRevocationAudit.rows[0]?.after_state).toEqual(expect.objectContaining({
+      revokedBy: adminId,
+      revokeReason: "纠正临时工别名归属",
+      revokedAt: expect.any(String),
+    }));
     await service.deactivatePerson(masterDataActor, correctedTemporary.personId, "临时工离场");
     expect(await database.query(
       `SELECT 1 FROM operation_events
@@ -216,8 +282,17 @@ runWithPostgres("role permissions and versioned master data", () => {
       [correctedAlias.aliasId],
     )).toHaveProperty("rowCount", 1);
     expect((await service.listPeople()).some((person) => person.personId === correctedTemporary.personId)).toBe(false);
-    expect(await service.listPeople(true)).toContainEqual(
-      expect.objectContaining({ personId: correctedTemporary.personId, active: false, aliases: [] }),
+    expect(await service.listPeople({ includeInactive: true, includeRevokedAliases: true })).toContainEqual(
+      expect.objectContaining({
+        personId: correctedTemporary.personId,
+        active: false,
+        aliases: [expect.objectContaining({
+          aliasId: correctedAlias.aliasId,
+          alias: "临工甲",
+          revokedAt: expect.any(String),
+          revokeReason: "临时工离场",
+        })],
+      }),
     );
   });
 
@@ -241,6 +316,14 @@ runWithPostgres("role permissions and versioned master data", () => {
     );
     expect(processCurrent.rows[0]).toEqual({ version: 2, process_name: "成品返查" });
     expect((await database.query("SELECT 1 FROM process_catalog_versions WHERE process_id=$1", [process.processId])).rowCount).toBe(2);
+    const processAudit = await database.query<{ before_state: Record<string, unknown>; after_state: Record<string, unknown> }>(
+      "SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.process.revise'",
+      [process.processId],
+    );
+    expect(processAudit.rows[0]).toEqual({
+      before_state: expect.objectContaining({ version: 1, processName: "返查", pricingUnit: "piece", active: true }),
+      after_state: expect.objectContaining({ version: 2, processName: "成品返查", pricingUnit: "piece", active: true }),
+    });
 
     const supplier = await service.createSupplier(masterDataActor, {
       supplierCode: "FACTORY_01",
@@ -259,6 +342,14 @@ runWithPostgres("role permissions and versioned master data", () => {
       [supplier.supplierId],
     );
     expect(supplierCurrent.rows[0]).toEqual({ version: 2, supplier_name: "加工厂一号" });
+    const supplierAudit = await database.query<{ before_state: Record<string, unknown>; after_state: Record<string, unknown> }>(
+      "SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.supplier.revise'",
+      [supplier.supplierId],
+    );
+    expect(supplierAudit.rows[0]).toEqual({
+      before_state: expect.objectContaining({ version: 1, supplierName: "加工厂一", active: true }),
+      after_state: expect.objectContaining({ version: 2, supplierName: "加工厂一号", active: true }),
+    });
     expect(await service.listProcesses()).toEqual([
       expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2 }),
     ]);
@@ -278,7 +369,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       validUntil: new Date(Date.now() + 60_000).toISOString(),
       reason: "临时全局查看",
     });
-    await service.createDelegation(delegationActor, {
+    const scopedDelegation = await service.createDelegation(delegationActor, {
       grantorUserId: financeId,
       granteeUserId: liTongshengId,
       capability: "finance:read",
@@ -299,6 +390,18 @@ runWithPostgres("role permissions and versioned master data", () => {
         revokedAt: null,
       }),
     ]);
+    await service.revokeDelegation(delegationActor, scopedDelegation.delegationId, "代理任务结束");
+    expect(await service.listDelegations({ userId: liTongshengId, includeRevoked: true })).toEqual([
+      expect.objectContaining({ delegationId: scopedDelegation.delegationId, revokedAt: expect.any(Date) }),
+    ]);
+    const delegationAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      "SELECT after_state FROM operation_events WHERE entity_id=$1 AND action='access.delegation.revoke'",
+      [scopedDelegation.delegationId],
+    );
+    expect(delegationAudit.rows[0]?.after_state).toEqual(expect.objectContaining({
+      revokedBy: bootstrapOwnerId,
+      revokeReason: "代理任务结束",
+    }));
   });
 
   it("blocks self-escalation and global approval delegation while allowing scoped owner proxy", async () => {
@@ -326,42 +429,98 @@ runWithPostgres("role permissions and versioned master data", () => {
       validUntil: new Date(Date.now() + 60_000).toISOString(),
       reason: "老板离岗期间指定单据代理",
     })).resolves.toMatchObject({ delegationId: expect.any(String) });
+
+    const directClient = await database.connect();
+    try {
+      await directClient.query("BEGIN");
+      await directClient.query(
+        `SELECT
+           set_config('dx_rework.delegation_create_event_id',$1,true),
+           set_config('dx_rework.delegation_create_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      await expect(directClient.query(
+        `INSERT INTO delegated_authorizations(
+           delegation_id,grantor_user_id,grantee_user_id,capability,scope_type,scope_id,
+           valid_from,valid_until,granted_by,grant_reason
+         ) VALUES($1,$2,$3,'own_factory:approve','global',NULL,
+           CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+interval '1 hour',$4,'绕过服务创建全局审批代理')`,
+        [randomUUID(), liOwnerId, zhangId, bootstrapOwnerId],
+      )).rejects.toMatchObject({ code: "23514" });
+    } finally {
+      await directClient.query("ROLLBACK");
+      directClient.release();
+    }
   });
 
   it("serializes concurrent revocations and preserves the last usable owner", async () => {
     const usableOwners = await database.query<{ assignment_id: string; user_id: string }>(
       `SELECT assignment_id,user_id
        FROM user_role_assignments
-       WHERE role_code='owner_group' AND revoked_at IS NULL AND user_id IN ($1,$2)
+       WHERE role_code='owner_group' AND revoked_at IS NULL AND user_id IN ($1,$2,$3)
        ORDER BY user_id`,
-      [liOwnerId, wuOwnerId],
+      [bootstrapOwnerId, liOwnerId, wuOwnerId],
     );
-    expect(usableOwners.rows).toHaveLength(2);
+    expect(usableOwners.rows).toHaveLength(3);
 
-    const results = await Promise.allSettled(usableOwners.rows.map((assignment) =>
-      service.revokeRole(ownerActor, assignment.assignment_id, "并发撤权校验"),
-    ));
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const results = await Promise.allSettled(usableOwners.rows.map((assignment) => {
+      const selfActor: TrustedActorContext = {
+        actorId: assignment.user_id,
+        actorRoles: ["owner_group"],
+        authorizationCapability: "access:admin",
+        requestId: randomUUID(),
+      };
+      return service.revokeRole(selfActor, assignment.assignment_id, "并发撤权校验");
+    }));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(2);
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
     expect(results.find((result) => result.status === "rejected")).toMatchObject({
       reason: expect.objectContaining({ code: "CONFLICT", statusCode: 409 }),
     });
+    const roleRevocationAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      "SELECT after_state FROM operation_events WHERE action='access.role.revoke' AND reason='并发撤权校验'",
+    );
+    expect(roleRevocationAudit.rows).toHaveLength(2);
+    expect(roleRevocationAudit.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        after_state: expect.objectContaining({
+          roleCode: "owner_group",
+          revokedBy: expect.any(String),
+          revokeReason: "并发撤权校验",
+        }),
+      }),
+    ]));
 
-    const remainingUsable = await database.query<{ assignment_id: string }>(
+    const remainingUsable = await database.query<{ assignment_id: string; user_id: string }>(
       `SELECT ura.assignment_id
+              ,ura.user_id
        FROM user_role_assignments ura
        JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
        WHERE ura.role_code='owner_group' AND ura.revoked_at IS NULL
          AND EXISTS (
            SELECT 1 FROM identity_mappings i
-           WHERE i.user_id=ura.user_id AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+           WHERE i.user_id=ura.user_id AND i.provider='dingtalk' AND i.corp_id='corp'
+             AND i.active=true AND i.employed=true
          )`,
     );
     expect(remainingUsable.rows).toHaveLength(1);
+    expect(await database.query(
+      `SELECT 1 FROM user_role_assignments ura
+       JOIN identity_mappings i ON i.user_id=ura.user_id
+       WHERE ura.user_id=$1 AND ura.role_code='owner_group' AND ura.revoked_at IS NULL
+         AND i.corp_id='foreign-corp' AND i.active=true AND i.employed=true`,
+      [foreignOwnerId],
+    )).toHaveProperty("rowCount", 1);
+    const lastOwnerActor: TrustedActorContext = {
+      actorId: remainingUsable.rows[0]!.user_id,
+      actorRoles: ["owner_group"],
+      authorizationCapability: "access:admin",
+      requestId: randomUUID(),
+    };
     await expect(service.revokeRole(
-      ownerActor,
+      lastOwnerActor,
       remainingUsable.rows[0]!.assignment_id,
-      "不能只留下无有效钉钉身份的启动记录",
+      "外部组织老板不能计入本公司保底人数",
     )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
   });
 });

@@ -14,7 +14,10 @@ import {
 type Queryable = Pick<Pool | PoolClient, "query">;
 
 export class PostgresAuthStore implements AuthStore {
-  constructor(private readonly database: Pool) {}
+  constructor(
+    private readonly database: Pool,
+    private readonly corporationId: string,
+  ) {}
 
   async cleanupExpiredAuthArtifacts(now: Date): Promise<void> {
     const client = await this.database.connect();
@@ -70,9 +73,15 @@ export class PostgresAuthStore implements AuthStore {
   }
 
   async upsertIdentity(member: OrganizationMember): Promise<AuthUser> {
+    if (!stableEqual(member.corpId, this.corporationId)) {
+      throw new Error("DingTalk identity belongs to a different corporation");
+    }
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      if (!member.active || !member.employed) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
+      }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         `dingtalk:${member.corpId}:${member.unionId}`,
       ]);
@@ -140,9 +149,10 @@ export class PostgresAuthStore implements AuthStore {
               i.provider_user_id,i.union_id,i.corp_id,i.active,i.employed,i.last_verified_at
        FROM auth_sessions s
        JOIN app_users u ON u.id=s.user_id
-       JOIN identity_mappings i ON i.user_id=u.id AND i.provider='dingtalk'
-       WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND u.enabled=true`,
-      [tokenHash, now],
+       JOIN identity_mappings i ON i.user_id=u.id AND i.provider='dingtalk' AND i.corp_id=$3
+       WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND u.enabled=true
+         AND i.active=true AND i.employed=true`,
+      [tokenHash, now, this.corporationId],
     );
     const row = result.rows[0];
     if (!row) return null;
@@ -166,10 +176,23 @@ export class PostgresAuthStore implements AuthStore {
   }
 
   async deactivateIdentity(userId: string, verifiedAt: Date): Promise<void> {
-    await this.database.query(
-      "UPDATE identity_mappings SET active=false,employed=false,last_verified_at=$2 WHERE user_id=$1 AND provider='dingtalk'",
-      [userId, verifiedAt],
-    );
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
+      await client.query(
+        `UPDATE identity_mappings
+         SET active=false,employed=false,last_verified_at=$2
+         WHERE user_id=$1 AND provider='dingtalk' AND corp_id=$3`,
+        [userId, verifiedAt, this.corporationId],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async revokeSession(tokenHash: string, now: Date): Promise<void> {
@@ -208,9 +231,29 @@ export class PostgresAuthStore implements AuthStore {
            AND da.revoked_at IS NULL
            AND da.valid_from <= CURRENT_TIMESTAMP
            AND da.valid_until > CURRENT_TIMESTAMP
+           AND EXISTS (
+             SELECT 1
+             FROM app_users grantor
+             JOIN identity_mappings i ON i.user_id=grantor.id
+             WHERE grantor.id=da.grantor_user_id AND grantor.enabled=true
+               AND i.provider='dingtalk' AND i.corp_id=$2
+               AND i.active=true AND i.employed=true
+           )
+           AND EXISTS (
+             SELECT 1
+             FROM user_role_assignments grantor_role
+             JOIN business_roles grantor_business_role
+               ON grantor_business_role.role_code=grantor_role.role_code
+               AND grantor_business_role.enabled=true
+             JOIN role_capabilities grantor_capability
+               ON grantor_capability.role_code=grantor_role.role_code
+             WHERE grantor_role.user_id=da.grantor_user_id
+               AND grantor_role.revoked_at IS NULL
+               AND grantor_capability.capability=da.capability
+           )
        ) effective
        ORDER BY capability`,
-      [userId],
+      [userId, this.corporationId],
     );
     return {
       businessRoles: roles.rows.map((row) => row.role_code),

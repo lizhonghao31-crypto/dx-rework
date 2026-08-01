@@ -96,6 +96,7 @@ export const RoleAssignmentsQuerySchema = z.object({
 const PersonBaseSchema = z.object({
   displayName: z.string().trim().min(1).max(100),
   aliases: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
+  reason: ReasonSchema,
 });
 export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
   PersonBaseSchema.extend({ personType: z.literal("internal"), appUserId: IdSchema }).strict(),
@@ -152,6 +153,9 @@ export const DelegationsQuerySchema = z.object({
 }).strict();
 export const CatalogListQuerySchema = z.object({
   includeInactive: z.enum(["true", "false"]).optional(),
+}).strict();
+export const PeopleListQuerySchema = CatalogListQuerySchema.extend({
+  includeRevokedAliases: z.enum(["true", "false"]).optional(),
 }).strict();
 
 export type AssignRole = z.infer<typeof AssignRoleSchema>;

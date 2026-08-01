@@ -24,6 +24,8 @@ const translateDatabaseError = (error: unknown): never => {
   const code = (error as DatabaseError | null)?.code;
   if (code === "23505") throw new ApplicationError("CONFLICT", "记录已存在或别名已绑定给其他人员", 409);
   if (code === "23503") throw new ApplicationError("NOT_FOUND", "引用的用户、角色或基础资料不存在", 404);
+  if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前用户无权执行该操作", 403);
+  if (code === "55000") throw new ApplicationError("CONFLICT", "该记录不允许绕过受控流程修改", 409);
   if (code === "23514" || code === "22P02") throw new ApplicationError("VALIDATION_ERROR", "数据不符合业务约束", 400);
   throw error;
 };
@@ -37,6 +39,7 @@ const ensureProtectedRoleAuthority = (actor: TrustedActorContext, roleCode: stri
 const ensureActiveOrganizationUser = async (
   client: PoolClient,
   userId: string,
+  corporationId: string,
   message: string,
 ): Promise<void> => {
   const result = await client.query(
@@ -45,9 +48,10 @@ const ensureActiveOrganizationUser = async (
      WHERE u.id=$1 AND u.enabled=true
        AND EXISTS (
          SELECT 1 FROM identity_mappings i
-         WHERE i.user_id=u.id AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+         WHERE i.user_id=u.id AND i.provider='dingtalk' AND i.corp_id=$2
+           AND i.active=true AND i.employed=true
        )`,
-    [userId],
+    [userId, corporationId],
   );
   if (!result.rows[0]) throw new ApplicationError("NOT_FOUND", message, 404);
 };
@@ -55,8 +59,24 @@ const ensureActiveOrganizationUser = async (
 export class AccessMasterDataService {
   constructor(
     private readonly database: Pool,
+    private readonly corporationId: string,
     private readonly events = new OperationEventRepository(),
   ) {}
+
+  async ensureOrganizationPolicy(): Promise<void> {
+    await this.database.query(
+      `INSERT INTO access_security_policy(policy_key,dingtalk_corp_id)
+       VALUES('primary',$1)
+       ON CONFLICT (policy_key) DO NOTHING`,
+      [this.corporationId],
+    );
+    const policy = await this.database.query<{ dingtalk_corp_id: string }>(
+      "SELECT dingtalk_corp_id FROM access_security_policy WHERE policy_key='primary'",
+    );
+    if (policy.rows[0]?.dingtalk_corp_id !== this.corporationId) {
+      throw new ApplicationError("CONFLICT", "数据库绑定的钉钉组织与当前系统配置不一致", 409);
+    }
+  }
 
   async listRoles(): Promise<Array<{
     roleCode: string;
@@ -173,13 +193,13 @@ export class AccessMasterDataService {
     }));
   }
 
-  async listPeople(includeInactive = false): Promise<Array<{
+  async listPeople(input: { includeInactive?: boolean; includeRevokedAliases?: boolean } = {}): Promise<Array<{
     personId: string;
     personType: string;
     appUserId: string | null;
     displayName: string;
     active: boolean;
-    aliases: Array<{ aliasId: string; alias: string }>;
+    aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
   }>> {
     const result = await this.database.query<{
       person_id: string;
@@ -187,20 +207,29 @@ export class AccessMasterDataService {
       app_user_id: string | null;
       display_name: string;
       active: boolean;
-      aliases: Array<{ aliasId: string; alias: string }>;
+      aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
     }>(
       `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.active,
               COALESCE(
-                jsonb_agg(jsonb_build_object('aliasId',a.alias_id,'alias',a.alias) ORDER BY a.alias)
+                jsonb_agg(
+                  jsonb_build_object(
+                    'aliasId',a.alias_id,
+                    'alias',a.alias,
+                    'revokedAt',a.revoked_at,
+                    'revokeReason',a.revoke_reason
+                  )
+                  ORDER BY a.created_at,a.alias
+                )
                   FILTER (WHERE a.alias_id IS NOT NULL),
                 '[]'::jsonb
               ) aliases
        FROM business_people p
-       LEFT JOIN business_person_aliases a ON a.person_id=p.person_id AND a.revoked_at IS NULL
+       LEFT JOIN business_person_aliases a
+         ON a.person_id=p.person_id AND ($2::boolean OR a.revoked_at IS NULL)
        WHERE ($1::boolean OR p.active=true)
        GROUP BY p.person_id
        ORDER BY p.display_name,p.person_id`,
-      [includeInactive],
+      [input.includeInactive ?? false, input.includeRevokedAliases ?? false],
     );
     return result.rows.map((row) => ({
       personId: row.person_id,
@@ -282,27 +311,30 @@ export class AccessMasterDataService {
       throw new ApplicationError("FORBIDDEN", "不能给自己授予业务角色", 403);
     }
     return this.transaction(async (client) => {
-      await ensureActiveOrganizationUser(client, input.userId, "目标用户不存在、不在职或已停用");
+      if (input.roleCode === "owner_group") {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
+      }
+      await ensureActiveOrganizationUser(client, input.userId, this.corporationId, "目标用户不存在、不在职或已停用");
       const role = await client.query<{ enabled: boolean }>("SELECT enabled FROM business_roles WHERE role_code=$1 FOR SHARE", [input.roleCode]);
       if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用", 404);
       const assignmentId = randomUUID();
       await client.query(
+        `SELECT
+           set_config('dx_rework.role_assign_event_id',$1,true),
+           set_config('dx_rework.role_assign_request_id',$2,true)`,
+        [randomUUID(), actor.requestId],
+      );
+      await client.query(
         "INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,$5)",
         [assignmentId, input.userId, input.roleCode, actor.actorId, input.reason],
       );
-      await this.events.append(client, actor, {
-        action: "access.role.assign",
-        entityType: "user_role_assignment",
-        entityId: assignmentId,
-        after: { userId: input.userId, roleCode: input.roleCode },
-        reason: input.reason,
-      });
       return { assignmentId };
     });
   }
 
   async revokeRole(actor: TrustedActorContext, assignmentId: string, reason: string): Promise<void> {
     await this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
       const current = await client.query<{ user_id: string; role_code: string }>(
         "SELECT user_id,role_code FROM user_role_assignments WHERE assignment_id=$1 AND revoked_at IS NULL FOR UPDATE",
         [assignmentId],
@@ -311,7 +343,6 @@ export class AccessMasterDataService {
       if (!assignment) throw new ApplicationError("NOT_FOUND", "有效角色绑定不存在", 404);
       ensureProtectedRoleAuthority(actor, assignment.role_code);
       if (assignment.role_code === "owner_group") {
-        await client.query("SELECT role_code FROM business_roles WHERE role_code='owner_group' FOR UPDATE");
         const owners = await client.query<{ count: string; target_usable: boolean | null }>(
           `SELECT count(*)::text count,
                   bool_or(ura.user_id=$1) target_usable
@@ -320,25 +351,27 @@ export class AccessMasterDataService {
            WHERE ura.role_code='owner_group' AND ura.revoked_at IS NULL
              AND EXISTS (
                SELECT 1 FROM identity_mappings i
-               WHERE i.user_id=ura.user_id AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+               WHERE i.user_id=ura.user_id AND i.provider='dingtalk' AND i.corp_id=$2
+                 AND i.active=true AND i.employed=true
              )`,
-          [assignment.user_id],
+          [assignment.user_id, this.corporationId],
         );
         if (owners.rows[0]?.target_usable === true && Number(owners.rows[0].count) <= 1) {
           throw new ApplicationError("CONFLICT", "不能撤销最后一名老板权限组成员", 409);
         }
       }
       await client.query(
-        "UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3 WHERE assignment_id=$1",
+        `SELECT
+           set_config('dx_rework.role_revoke_event_id',$1,true),
+           set_config('dx_rework.role_revoke_request_id',$2,true)`,
+        [randomUUID(), actor.requestId],
+      );
+      await client.query(
+        `UPDATE user_role_assignments
+         SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3
+         WHERE assignment_id=$1`,
         [assignmentId, actor.actorId, reason],
       );
-      await this.events.append(client, actor, {
-        action: "access.role.revoke",
-        entityType: "user_role_assignment",
-        entityId: assignmentId,
-        before: { userId: assignment.user_id, roleCode: assignment.role_code },
-        reason,
-      });
     });
   }
 
@@ -351,23 +384,37 @@ export class AccessMasterDataService {
       const personId = randomUUID();
       const appUserId = input.personType === "internal" ? input.appUserId : null;
       if (appUserId) {
-        await ensureActiveOrganizationUser(client, appUserId, "内部人员对应的登录用户不存在、不在职或已停用");
+        await ensureActiveOrganizationUser(client, appUserId, this.corporationId, "内部人员对应的登录用户不存在、不在职或已停用");
       }
       await client.query(
         "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,created_by) VALUES($1,$2,$3,$4,$5)",
         [personId, input.personType, appUserId, input.displayName, actor.actorId],
       );
-      for (const [index, alias] of input.aliases.entries()) {
+      const aliases = input.aliases.map((alias, index) => ({
+        aliasId: randomUUID(),
+        alias,
+        normalizedAlias: normalizedAliases[index]!,
+        reason: input.reason,
+      }));
+      for (const alias of aliases) {
         await client.query(
           "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by) VALUES($1,$2,$3,$4,$5)",
-          [randomUUID(), personId, alias, normalizedAliases[index], actor.actorId],
+          [alias.aliasId, personId, alias.alias, alias.normalizedAlias, actor.actorId],
         );
+        await this.events.append(client, actor, {
+          action: "master_data.person_alias.create",
+          entityType: "business_person_alias",
+          entityId: alias.aliasId,
+          after: { personId, alias: alias.alias, normalizedAlias: alias.normalizedAlias },
+          reason: input.reason,
+        });
       }
       await this.events.append(client, actor, {
         action: "master_data.person.create",
         entityType: "business_person",
         entityId: personId,
-        after: { personType: input.personType, appUserId, displayName: input.displayName, aliases: input.aliases },
+        after: { personType: input.personType, appUserId, displayName: input.displayName, aliases },
+        reason: input.reason,
       });
       return { personId };
     });
@@ -461,12 +508,28 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const item = await client.query("SELECT process_id FROM process_catalog_items WHERE process_id=$1 FOR UPDATE", [processId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "工序不存在", 404);
+      const current = await client.query<{
+        version: number;
+        process_name: string;
+        pricing_unit: string;
+        active: boolean;
+      }>(
+        "SELECT version,process_name,pricing_unit,active FROM current_process_catalog WHERE process_id=$1",
+        [processId],
+      );
+      const previous = current.rows[0];
+      if (!previous) throw new ApplicationError("CONFLICT", "工序缺少可修订的当前版本", 409);
       const next = await client.query<{ version: number }>(
         "SELECT COALESCE(max(version),0)+1 version FROM process_catalog_versions WHERE process_id=$1",
         [processId],
       );
       const version = next.rows[0]?.version ?? 1;
-      await this.insertProcessVersion(client, actor, processId, version, input);
+      await this.insertProcessVersion(client, actor, processId, version, input, {
+        version: previous.version,
+        processName: previous.process_name,
+        pricingUnit: previous.pricing_unit,
+        active: previous.active,
+      });
       return { processId, version };
     });
   }
@@ -487,12 +550,26 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const item = await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [supplierId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
+      const current = await client.query<{
+        version: number;
+        supplier_name: string;
+        active: boolean;
+      }>(
+        "SELECT version,supplier_name,active FROM current_supplier_catalog WHERE supplier_id=$1",
+        [supplierId],
+      );
+      const previous = current.rows[0];
+      if (!previous) throw new ApplicationError("CONFLICT", "供应商缺少可修订的当前版本", 409);
       const next = await client.query<{ version: number }>(
         "SELECT COALESCE(max(version),0)+1 version FROM supplier_catalog_versions WHERE supplier_id=$1",
         [supplierId],
       );
       const version = next.rows[0]?.version ?? 1;
-      await this.insertSupplierVersion(client, actor, supplierId, version, input);
+      await this.insertSupplierVersion(client, actor, supplierId, version, input, {
+        version: previous.version,
+        supplierName: previous.supplier_name,
+        active: previous.active,
+      });
       return { supplierId, version };
     });
   }
@@ -505,8 +582,8 @@ export class AccessMasterDataService {
       throw new ApplicationError("FORBIDDEN", "不能给自己创建临时授权", 403);
     }
     return this.transaction(async (client) => {
-      await ensureActiveOrganizationUser(client, input.grantorUserId, "授权人不存在、不在职或已停用");
-      await ensureActiveOrganizationUser(client, input.granteeUserId, "被授权用户不存在、不在职或已停用");
+      await ensureActiveOrganizationUser(client, input.grantorUserId, this.corporationId, "授权人不存在、不在职或已停用");
+      await ensureActiveOrganizationUser(client, input.granteeUserId, this.corporationId, "被授权用户不存在、不在职或已停用");
       const grantorCapability = await client.query(
         `SELECT 1
          FROM user_role_assignments ura
@@ -527,27 +604,18 @@ export class AccessMasterDataService {
       }
       const delegationId = randomUUID();
       await client.query(
+        `SELECT
+           set_config('dx_rework.delegation_create_event_id',$1,true),
+           set_config('dx_rework.delegation_create_request_id',$2,true)`,
+        [randomUUID(), actor.requestId],
+      );
+      await client.query(
         `INSERT INTO delegated_authorizations(
            delegation_id,grantor_user_id,grantee_user_id,capability,scope_type,scope_id,
            valid_from,valid_until,granted_by,grant_reason
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [delegationId, input.grantorUserId, input.granteeUserId, input.capability, input.scopeType, input.scopeId ?? null, input.validFrom, input.validUntil, actor.actorId, input.reason],
       );
-      await this.events.append(client, actor, {
-        action: "access.delegation.create",
-        entityType: "delegated_authorization",
-        entityId: delegationId,
-        after: {
-          grantorUserId: input.grantorUserId,
-          granteeUserId: input.granteeUserId,
-          capability: input.capability,
-          scopeType: input.scopeType,
-          scopeId: input.scopeId ?? null,
-          validFrom: input.validFrom,
-          validUntil: input.validUntil,
-        },
-        reason: input.reason,
-      });
       return { delegationId };
     });
   }
@@ -564,19 +632,19 @@ export class AccessMasterDataService {
         "SELECT grantor_user_id,grantee_user_id,capability,scope_type,scope_id FROM delegated_authorizations WHERE delegation_id=$1 AND revoked_at IS NULL FOR UPDATE",
         [delegationId],
       );
-      const delegation = existing.rows[0];
-      if (!delegation) throw new ApplicationError("NOT_FOUND", "有效授权不存在", 404);
+      if (!existing.rows[0]) throw new ApplicationError("NOT_FOUND", "有效授权不存在", 404);
       await client.query(
-        "UPDATE delegated_authorizations SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3 WHERE delegation_id=$1",
+        `SELECT
+           set_config('dx_rework.delegation_revoke_event_id',$1,true),
+           set_config('dx_rework.delegation_revoke_request_id',$2,true)`,
+        [randomUUID(), actor.requestId],
+      );
+      await client.query(
+        `UPDATE delegated_authorizations
+         SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3
+         WHERE delegation_id=$1`,
         [delegationId, actor.actorId, reason],
       );
-      await this.events.append(client, actor, {
-        action: "access.delegation.revoke",
-        entityType: "delegated_authorization",
-        entityId: delegationId,
-        before: delegation,
-        reason,
-      });
     });
   }
 
@@ -586,15 +654,11 @@ export class AccessMasterDataService {
     alias: PersonAliasRow,
     reason: string,
   ): Promise<void> {
-    const actorRoles = [...new Set(actor.actorRoles)].sort();
     await client.query(
       `SELECT
          set_config('dx_rework.alias_revoke_event_id',$1,true),
-         set_config('dx_rework.alias_revoke_request_id',$2,true),
-         set_config('dx_rework.alias_revoke_actor_id',$3,true),
-         set_config('dx_rework.alias_revoke_actor_roles',$4,true),
-         set_config('dx_rework.alias_revoke_capability',$5,true)`,
-      [randomUUID(), actor.requestId, actor.actorId, JSON.stringify(actorRoles), actor.authorizationCapability],
+         set_config('dx_rework.alias_revoke_request_id',$2,true)`,
+      [randomUUID(), actor.requestId],
     );
     await client.query(
       "UPDATE business_person_aliases SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3 WHERE alias_id=$1",
@@ -608,6 +672,7 @@ export class AccessMasterDataService {
     processId: string,
     version: number,
     input: ReviseProcess,
+    before?: { version: number; processName: string; pricingUnit: string; active: boolean },
   ): Promise<void> {
     await client.query(
       "INSERT INTO process_catalog_versions(process_id,version,process_name,pricing_unit,active,change_reason,changed_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
@@ -617,6 +682,7 @@ export class AccessMasterDataService {
       action: version === 1 ? "master_data.process.create" : "master_data.process.revise",
       entityType: "process_catalog",
       entityId: processId,
+      ...(before ? { before } : {}),
       after: { version, processName: input.processName, pricingUnit: input.pricingUnit, active: input.active },
       reason: input.changeReason,
     });
@@ -628,6 +694,7 @@ export class AccessMasterDataService {
     supplierId: string,
     version: number,
     input: ReviseSupplier,
+    before?: { version: number; supplierName: string; active: boolean },
   ): Promise<void> {
     await client.query(
       "INSERT INTO supplier_catalog_versions(supplier_id,version,supplier_name,active,change_reason,changed_by) VALUES($1,$2,$3,$4,$5,$6)",
@@ -637,6 +704,7 @@ export class AccessMasterDataService {
       action: version === 1 ? "master_data.supplier.create" : "master_data.supplier.revise",
       entityType: "supplier_catalog",
       entityId: supplierId,
+      ...(before ? { before } : {}),
       after: { version, supplierName: input.supplierName, active: input.active },
       reason: input.changeReason,
     });

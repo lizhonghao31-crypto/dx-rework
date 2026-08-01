@@ -13,10 +13,16 @@ describe("access and master-data contracts", () => {
       personType: "temporary",
       appUserId: "00000000-0000-4000-8000-000000000001",
       displayName: "临时工",
+      reason: "建档",
     }).success).toBe(false);
     expect(CreateBusinessPersonSchema.safeParse({
       personType: "internal",
       displayName: "员工",
+      reason: "建档",
+    }).success).toBe(false);
+    expect(CreateBusinessPersonSchema.safeParse({
+      personType: "temporary",
+      displayName: "临时工",
     }).success).toBe(false);
   });
 

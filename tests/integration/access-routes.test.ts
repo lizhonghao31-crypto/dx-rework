@@ -135,6 +135,20 @@ describe("access routes", () => {
     })).statusCode).toBe(403);
   });
 
+  it("exposes revoked alias history only when explicitly requested", async () => {
+    const { app, service } = create(["people:read"], ["system_admin"]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/master-data/people?includeInactive=true&includeRevokedAliases=true",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(service.listPeople).toHaveBeenCalledWith({
+      includeInactive: true,
+      includeRevokedAliases: true,
+    });
+  });
+
   it("rejects empty roles, missing capabilities and untrusted sessions", async () => {
     const noRole = create(["access:admin"], []);
     expect((await noRole.app.inject({

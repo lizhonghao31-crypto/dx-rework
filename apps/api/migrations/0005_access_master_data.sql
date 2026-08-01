@@ -1,3 +1,31 @@
+CREATE TABLE access_security_policy (
+  policy_key text PRIMARY KEY CHECK (policy_key = 'primary'),
+  dingtalk_corp_id text NOT NULL UNIQUE CHECK (length(btrim(dingtalk_corp_id)) BETWEEN 1 AND 200),
+  configured_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TRIGGER access_security_policy_no_update BEFORE UPDATE ON access_security_policy FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER access_security_policy_no_delete BEFORE DELETE ON access_security_policy FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER access_security_policy_no_truncate BEFORE TRUNCATE ON access_security_policy FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+
+CREATE OR REPLACE FUNCTION lock_owner_eligibility_change() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_TABLE_NAME='identity_mappings' THEN
+    IF (OLD.active,OLD.employed) IS DISTINCT FROM (NEW.active,NEW.employed) THEN
+      PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
+    END IF;
+  ELSIF TG_TABLE_NAME='app_users' THEN
+    IF OLD.enabled IS DISTINCT FROM NEW.enabled THEN
+      PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER identity_mappings_owner_guard BEFORE UPDATE ON identity_mappings FOR EACH ROW EXECUTE FUNCTION lock_owner_eligibility_change();
+CREATE TRIGGER app_users_owner_guard BEFORE UPDATE ON app_users FOR EACH ROW EXECUTE FUNCTION lock_owner_eligibility_change();
+CREATE TRIGGER identity_mappings_no_delete BEFORE DELETE ON identity_mappings FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER identity_mappings_no_truncate BEFORE TRUNCATE ON identity_mappings FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+
 CREATE TABLE capability_catalog (
   capability text PRIMARY KEY CHECK (capability ~ '^[a-z][a-z0-9:_-]{2,127}$'),
   display_name text NOT NULL,
@@ -48,6 +76,182 @@ CREATE INDEX user_role_assignments_user_history_idx
 COMMENT ON TABLE user_capabilities IS
   'Legacy pre-role grants retained only for migration traceability; authorization ignores this table from schema 0005 onward.';
 
+CREATE OR REPLACE FUNCTION access_authorized_actor_roles(
+  requested_actor_id uuid,
+  required_capability text
+) RETURNS text[] LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  actor_roles text[];
+  capability_allowed boolean;
+BEGIN
+  SELECT array_agg(DISTINCT ura.role_code ORDER BY ura.role_code),
+         bool_or(rc.capability = required_capability)
+  INTO actor_roles, capability_allowed
+  FROM user_role_assignments ura
+  JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+  JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+  LEFT JOIN role_capabilities rc ON rc.role_code=ura.role_code
+  WHERE ura.user_id=requested_actor_id AND ura.revoked_at IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM identity_mappings i
+      JOIN access_security_policy policy
+        ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+      WHERE i.user_id=ura.user_id AND i.provider='dingtalk'
+        AND i.active=true AND i.employed=true
+    );
+  IF actor_roles IS NULL OR capability_allowed IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'actor is not authorized for capability %', required_capability
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN actor_roles;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION guard_user_role_assignment_revocation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.role_revoke_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.role_revoke_request_id', true), '');
+  audit_actor_roles text[];
+  usable_owner_count bigint;
+  target_is_usable boolean;
+BEGIN
+  IF OLD.revoked_at IS NOT NULL
+     OR NEW.revoked_at IS NULL OR NEW.revoked_by IS NULL OR NEW.revoke_reason IS NULL
+     OR NEW.assignment_id IS DISTINCT FROM OLD.assignment_id
+     OR NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.role_code IS DISTINCT FROM OLD.role_code
+     OR NEW.granted_by IS DISTINCT FROM OLD.granted_by
+     OR NEW.grant_reason IS DISTINCT FROM OLD.grant_reason
+     OR NEW.granted_at IS DISTINCT FROM OLD.granted_at
+  THEN
+    RAISE EXCEPTION 'role assignments are immutable except for one audited revocation'
+      USING ERRCODE = '55000';
+  END IF;
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'role revocation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+
+  audit_actor_roles := access_authorized_actor_roles(NEW.revoked_by, 'access:admin');
+  IF OLD.role_code='owner_group' THEN
+    IF NOT (audit_actor_roles @> ARRAY['owner_group']) THEN
+      RAISE EXCEPTION 'owner group can only be maintained by an active owner'
+        USING ERRCODE = '42501';
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
+    SELECT count(*), bool_or(ura.user_id=OLD.user_id)
+    INTO usable_owner_count, target_is_usable
+    FROM user_role_assignments ura
+    JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+    WHERE ura.role_code='owner_group' AND ura.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM identity_mappings i
+        JOIN access_security_policy policy
+          ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+        WHERE i.user_id=ura.user_id AND i.provider='dingtalk'
+          AND i.active=true AND i.employed=true
+      );
+    IF target_is_usable IS TRUE AND usable_owner_count <= 1 THEN
+      RAISE EXCEPTION 'cannot revoke the last usable owner'
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.revoked_by,audit_actor_roles,'access:admin',
+    'access.role.revoke','user_role_assignment',OLD.assignment_id::text,
+    jsonb_build_object('userId',OLD.user_id,'roleCode',OLD.role_code),
+    jsonb_build_object(
+      'userId',NEW.user_id,
+      'roleCode',NEW.role_code,
+      'revokedAt',NEW.revoked_at,
+      'revokedBy',NEW.revoked_by,
+      'revokeReason',NEW.revoke_reason
+    ),
+    NEW.revoke_reason
+  );
+  RETURN NEW;
+END;
+$$;
+CREATE OR REPLACE FUNCTION guard_user_role_assignment_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.role_assign_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.role_assign_request_id', true), '');
+  audit_actor_roles text[];
+BEGIN
+  IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'new role assignments cannot start revoked'
+      USING ERRCODE = '23514';
+  END IF;
+
+  -- The immutable corporation policy is intentionally configured only after a
+  -- database administrator has inserted the first controlled admin/owner rows.
+  -- Every assignment after first application start is authorized and audited.
+  IF NOT EXISTS (SELECT 1 FROM access_security_policy WHERE policy_key='primary') THEN
+    RETURN NEW;
+  END IF;
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'role assignment requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  IF NEW.user_id=NEW.granted_by THEN
+    RAISE EXCEPTION 'users cannot grant a role to themselves'
+      USING ERRCODE = '42501';
+  END IF;
+
+  audit_actor_roles := access_authorized_actor_roles(NEW.granted_by, 'access:admin');
+  IF NEW.role_code='owner_group' AND NOT (audit_actor_roles @> ARRAY['owner_group']) THEN
+    RAISE EXCEPTION 'owner group can only be maintained by an active owner'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NEW.role_code='owner_group' THEN
+    PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM app_users u
+    JOIN identity_mappings i ON i.user_id=u.id
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+    WHERE u.id=NEW.user_id AND u.enabled=true
+      AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+  ) THEN
+    RAISE EXCEPTION 'role target must be an active employee in the configured corporation'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM business_roles WHERE role_code=NEW.role_code AND enabled=true
+  ) THEN
+    RAISE EXCEPTION 'role is unavailable'
+      USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.granted_by,audit_actor_roles,'access:admin',
+    'access.role.assign','user_role_assignment',NEW.assignment_id::text,
+    jsonb_build_object('userId',NEW.user_id,'roleCode',NEW.role_code),
+    NEW.grant_reason
+  );
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER user_role_assignments_guard_creation BEFORE INSERT ON user_role_assignments FOR EACH ROW EXECUTE FUNCTION guard_user_role_assignment_creation();
+CREATE TRIGGER user_role_assignments_revoke_only BEFORE UPDATE ON user_role_assignments FOR EACH ROW EXECUTE FUNCTION guard_user_role_assignment_revocation();
+CREATE TRIGGER user_role_assignments_no_delete BEFORE DELETE ON user_role_assignments FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER user_role_assignments_no_truncate BEFORE TRUNCATE ON user_role_assignments FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+
 CREATE TABLE business_people (
   person_id uuid PRIMARY KEY,
   person_type text NOT NULL CHECK (person_type IN ('internal', 'temporary')),
@@ -89,10 +293,6 @@ CREATE OR REPLACE FUNCTION allow_business_person_alias_revocation_only() RETURNS
 DECLARE
   audit_event_id text := nullif(current_setting('dx_rework.alias_revoke_event_id', true), '');
   audit_request_id text := nullif(current_setting('dx_rework.alias_revoke_request_id', true), '');
-  audit_actor_id text := nullif(current_setting('dx_rework.alias_revoke_actor_id', true), '');
-  audit_actor_roles_text text := nullif(current_setting('dx_rework.alias_revoke_actor_roles', true), '');
-  audit_capability text := nullif(current_setting('dx_rework.alias_revoke_capability', true), '');
-  audit_actor_roles_json jsonb;
   audit_actor_roles text[];
 BEGIN
   IF OLD.revoked_at IS NOT NULL
@@ -108,53 +308,33 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
-  IF audit_event_id IS NULL OR audit_request_id IS NULL OR audit_actor_id IS NULL
-     OR audit_actor_roles_text IS NULL OR audit_capability IS NULL
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
   THEN
     RAISE EXCEPTION 'business person alias revocation requires trusted audit context'
       USING ERRCODE = '55000';
   END IF;
-
-  BEGIN
-    audit_actor_roles_json := audit_actor_roles_text::jsonb;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE EXCEPTION 'business person alias revocation has invalid role audit context'
-      USING ERRCODE = '55000';
-  END;
-  IF jsonb_typeof(audit_actor_roles_json) <> 'array' OR jsonb_array_length(audit_actor_roles_json) = 0 THEN
-    RAISE EXCEPTION 'business person alias revocation requires a role snapshot'
-      USING ERRCODE = '55000';
-  END IF;
-  SELECT array_agg(role_name ORDER BY role_name)
-  INTO audit_actor_roles
-  FROM jsonb_array_elements_text(audit_actor_roles_json) AS roles(role_name);
-  IF EXISTS (
-    SELECT 1 FROM unnest(audit_actor_roles) AS roles(role_name)
-    WHERE role_name !~ '^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$'
-  ) THEN
-    RAISE EXCEPTION 'business person alias revocation has an invalid role snapshot'
-      USING ERRCODE = '55000';
-  END IF;
-  IF audit_capability <> 'master_data:manage'
-     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
-     OR audit_actor_id::uuid IS DISTINCT FROM NEW.revoked_by
-  THEN
-    RAISE EXCEPTION 'business person alias revocation audit context does not authorize this mutation'
-      USING ERRCODE = '55000';
-  END IF;
+  audit_actor_roles := access_authorized_actor_roles(NEW.revoked_by, 'master_data:manage');
 
   INSERT INTO operation_events(
     event_id,request_id,actor_id,actor_roles,authorization_capability,
     action,entity_type,entity_id,before_state,after_state,reason
   ) VALUES (
-    audit_event_id::uuid,audit_request_id,audit_actor_id::uuid,audit_actor_roles,audit_capability,
+    audit_event_id::uuid,audit_request_id,NEW.revoked_by,audit_actor_roles,'master_data:manage',
     'master_data.person_alias.revoke','business_person_alias',OLD.alias_id::text,
     jsonb_build_object(
       'personId',OLD.person_id,
       'alias',OLD.alias,
       'normalizedAlias',OLD.normalized_alias
     ),
-    NULL,
+    jsonb_build_object(
+      'personId',NEW.person_id,
+      'alias',NEW.alias,
+      'normalizedAlias',NEW.normalized_alias,
+      'revokedAt',NEW.revoked_at,
+      'revokedBy',NEW.revoked_by,
+      'revokeReason',NEW.revoke_reason
+    ),
     NEW.revoke_reason
   );
   RETURN NEW;
@@ -234,6 +414,7 @@ CREATE TABLE delegated_authorizations (
   CHECK (grantor_user_id <> grantee_user_id),
   CHECK (valid_until > valid_from),
   CHECK ((scope_type = 'global') = (scope_id IS NULL)),
+  CHECK (capability <> 'own_factory:approve' OR (scope_type = 'rework_order' AND scope_id IS NOT NULL)),
   CHECK (
     (revoked_at IS NULL AND revoked_by IS NULL AND revoke_reason IS NULL)
     OR
@@ -246,6 +427,155 @@ CREATE INDEX delegated_authorizations_grantee_active_idx
   WHERE revoked_at IS NULL;
 CREATE INDEX delegated_authorizations_grantor_history_idx
   ON delegated_authorizations (grantor_user_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION guard_delegated_authorization_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.delegation_create_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.delegation_create_request_id', true), '');
+  audit_actor_roles text[];
+BEGIN
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'delegation creation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  IF NEW.grantee_user_id=NEW.granted_by THEN
+    RAISE EXCEPTION 'operators cannot delegate a capability to themselves'
+      USING ERRCODE = '42501';
+  END IF;
+
+  audit_actor_roles := access_authorized_actor_roles(NEW.granted_by, 'delegation:manage');
+  IF NOT EXISTS (
+    SELECT 1
+    FROM app_users u
+    JOIN identity_mappings i ON i.user_id=u.id
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+    WHERE u.id=NEW.grantor_user_id AND u.enabled=true
+      AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM app_users u
+    JOIN identity_mappings i ON i.user_id=u.id
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+    WHERE u.id=NEW.grantee_user_id AND u.enabled=true
+      AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+  ) THEN
+    RAISE EXCEPTION 'delegation parties must be active employees in the configured corporation'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM user_role_assignments ura
+    JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+    JOIN role_capabilities rc ON rc.role_code=ura.role_code
+    WHERE ura.user_id=NEW.grantor_user_id AND ura.revoked_at IS NULL
+      AND rc.capability=NEW.capability
+  ) THEN
+    RAISE EXCEPTION 'delegation grantor does not hold the delegated capability'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NEW.capability='own_factory:approve' AND NOT EXISTS (
+    SELECT 1
+    FROM user_role_assignments ura
+    JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+    WHERE ura.user_id=NEW.grantor_user_id AND ura.role_code='owner_group'
+      AND ura.revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'own-factory approval can only be delegated by an active owner'
+      USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.granted_by,audit_actor_roles,'delegation:manage',
+    'access.delegation.create','delegated_authorization',NEW.delegation_id::text,
+    jsonb_build_object(
+      'grantorUserId',NEW.grantor_user_id,
+      'granteeUserId',NEW.grantee_user_id,
+      'capability',NEW.capability,
+      'scopeType',NEW.scope_type,
+      'scopeId',NEW.scope_id,
+      'validFrom',NEW.valid_from,
+      'validUntil',NEW.valid_until
+    ),
+    NEW.grant_reason
+  );
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION guard_delegated_authorization_revocation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.delegation_revoke_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.delegation_revoke_request_id', true), '');
+  audit_actor_roles text[];
+BEGIN
+  IF OLD.revoked_at IS NOT NULL
+     OR NEW.revoked_at IS NULL OR NEW.revoked_by IS NULL OR NEW.revoke_reason IS NULL
+     OR NEW.delegation_id IS DISTINCT FROM OLD.delegation_id
+     OR NEW.grantor_user_id IS DISTINCT FROM OLD.grantor_user_id
+     OR NEW.grantee_user_id IS DISTINCT FROM OLD.grantee_user_id
+     OR NEW.capability IS DISTINCT FROM OLD.capability
+     OR NEW.scope_type IS DISTINCT FROM OLD.scope_type
+     OR NEW.scope_id IS DISTINCT FROM OLD.scope_id
+     OR NEW.valid_from IS DISTINCT FROM OLD.valid_from
+     OR NEW.valid_until IS DISTINCT FROM OLD.valid_until
+     OR NEW.granted_by IS DISTINCT FROM OLD.granted_by
+     OR NEW.grant_reason IS DISTINCT FROM OLD.grant_reason
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'delegations are immutable except for one audited revocation'
+      USING ERRCODE = '55000';
+  END IF;
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'delegation revocation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+
+  audit_actor_roles := access_authorized_actor_roles(NEW.revoked_by, 'delegation:manage');
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.revoked_by,audit_actor_roles,'delegation:manage',
+    'access.delegation.revoke','delegated_authorization',OLD.delegation_id::text,
+    jsonb_build_object(
+      'grantorUserId',OLD.grantor_user_id,
+      'granteeUserId',OLD.grantee_user_id,
+      'capability',OLD.capability,
+      'scopeType',OLD.scope_type,
+      'scopeId',OLD.scope_id,
+      'validFrom',OLD.valid_from,
+      'validUntil',OLD.valid_until
+    ),
+    jsonb_build_object(
+      'grantorUserId',NEW.grantor_user_id,
+      'granteeUserId',NEW.grantee_user_id,
+      'capability',NEW.capability,
+      'scopeType',NEW.scope_type,
+      'scopeId',NEW.scope_id,
+      'validFrom',NEW.valid_from,
+      'validUntil',NEW.valid_until,
+      'revokedAt',NEW.revoked_at,
+      'revokedBy',NEW.revoked_by,
+      'revokeReason',NEW.revoke_reason
+    ),
+    NEW.revoke_reason
+  );
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER delegated_authorizations_guard_creation BEFORE INSERT ON delegated_authorizations FOR EACH ROW EXECUTE FUNCTION guard_delegated_authorization_creation();
+CREATE TRIGGER delegated_authorizations_revoke_only BEFORE UPDATE ON delegated_authorizations FOR EACH ROW EXECUTE FUNCTION guard_delegated_authorization_revocation();
+CREATE TRIGGER delegated_authorizations_no_delete BEFORE DELETE ON delegated_authorizations FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER delegated_authorizations_no_truncate BEFORE TRUNCATE ON delegated_authorizations FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
 INSERT INTO capability_catalog(capability, display_name, description) VALUES
   ('tools:user', '公共工具', '使用附件、导出等公共工具'),
