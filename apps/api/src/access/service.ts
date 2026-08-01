@@ -398,16 +398,15 @@ export class AccessMasterDataService {
       }));
       for (const alias of aliases) {
         await client.query(
-          "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by) VALUES($1,$2,$3,$4,$5)",
-          [alias.aliasId, personId, alias.alias, alias.normalizedAlias, actor.actorId],
+          `SELECT
+             set_config('dx_rework.alias_create_event_id',$1,true),
+             set_config('dx_rework.alias_create_request_id',$2,true)`,
+          [randomUUID(), actor.requestId],
         );
-        await this.events.append(client, actor, {
-          action: "master_data.person_alias.create",
-          entityType: "business_person_alias",
-          entityId: alias.aliasId,
-          after: { personId, alias: alias.alias, normalizedAlias: alias.normalizedAlias },
-          reason: input.reason,
-        });
+        await client.query(
+          "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by,create_reason) VALUES($1,$2,$3,$4,$5,$6)",
+          [alias.aliasId, personId, alias.alias, alias.normalizedAlias, actor.actorId, input.reason],
+        );
       }
       await this.events.append(client, actor, {
         action: "master_data.person.create",
@@ -434,16 +433,15 @@ export class AccessMasterDataService {
       const aliasId = randomUUID();
       const normalizedAlias = normalizeAlias(input.alias);
       await client.query(
-        "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by) VALUES($1,$2,$3,$4,$5)",
-        [aliasId, personId, input.alias, normalizedAlias, actor.actorId],
+        `SELECT
+           set_config('dx_rework.alias_create_event_id',$1,true),
+           set_config('dx_rework.alias_create_request_id',$2,true)`,
+        [randomUUID(), actor.requestId],
       );
-      await this.events.append(client, actor, {
-        action: "master_data.person_alias.create",
-        entityType: "business_person_alias",
-        entityId: aliasId,
-        after: { personId, alias: input.alias, normalizedAlias },
-        reason: input.reason,
-      });
+      await client.query(
+        "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by,create_reason) VALUES($1,$2,$3,$4,$5,$6)",
+        [aliasId, personId, input.alias, normalizedAlias, actor.actorId, input.reason],
+      );
       return { aliasId };
     });
   }
@@ -580,6 +578,10 @@ export class AccessMasterDataService {
     }
     if (input.granteeUserId === actor.actorId) {
       throw new ApplicationError("FORBIDDEN", "不能给自己创建临时授权", 403);
+    }
+    if (input.capability === "own_factory:approve"
+      && (input.grantorUserId !== actor.actorId || !actor.actorRoles.includes("owner_group"))) {
+      throw new ApplicationError("FORBIDDEN", "本厂承担审批代理必须由实际操作的老板本人授权", 403);
     }
     return this.transaction(async (client) => {
       await ensureActiveOrganizationUser(client, input.grantorUserId, this.corporationId, "授权人不存在、不在职或已停用");

@@ -197,7 +197,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       aliases: ["李生"],
       reason: "验证别名冲突",
     })).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
-    await service.createPerson(masterDataActor, {
+    const liTongshengPerson = await service.createPerson(masterDataActor, {
       personType: "internal",
       appUserId: liTongshengId,
       displayName: "李同生",
@@ -231,6 +231,31 @@ runWithPostgres("role permissions and versioned master data", () => {
          AND reason='受控建立李总人员档案与确认称呼'`,
       [initialAliasId],
     )).toHaveProperty("rowCount", 1);
+    await expect(database.query(
+      `INSERT INTO business_person_aliases(
+         alias_id,person_id,alias,normalized_alias,created_by,create_reason
+       ) VALUES($1,$2,'李老板','李老板',$3,'绕过受控服务直接绑定别名')`,
+      [randomUUID(), liTongshengPerson.personId, adminId],
+    )).rejects.toMatchObject({ code: "55000" });
+    const directAliasClient = await database.connect();
+    try {
+      await directAliasClient.query("BEGIN");
+      await directAliasClient.query(
+        `SELECT
+           set_config('dx_rework.alias_create_event_id',$1,true),
+           set_config('dx_rework.alias_create_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      await expect(directAliasClient.query(
+        `INSERT INTO business_person_aliases(
+           alias_id,person_id,alias,normalized_alias,created_by,create_reason
+         ) VALUES($1,$2,'李老板','李老板',$3,'伪造审计上下文绑定别名')`,
+        [randomUUID(), liTongshengPerson.personId, zhangId],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await directAliasClient.query("ROLLBACK");
+      directAliasClient.release();
+    }
     const temp = await database.query<{ app_user_id: string | null; person_type: string }>(
       "SELECT app_user_id,person_type FROM business_people WHERE person_id=$1",
       [temporary.personId],
@@ -381,6 +406,28 @@ runWithPostgres("role permissions and versioned master data", () => {
     });
     expect((await authStore.findSession("zhang-token", new Date()))?.user.capabilities).toContain("finance:read");
     expect((await authStore.findSession("litongsheng-token", new Date()))?.user.capabilities).not.toContain("finance:read");
+    const delegatedAccessAdmin = await service.createDelegation(delegationActor, {
+      grantorUserId: bootstrapOwnerId,
+      granteeUserId: zhangId,
+      capability: "access:admin",
+      scopeType: "global",
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+      reason: "临时角色管理代理",
+    });
+    const delegatedAdminActor: TrustedActorContext = {
+      actorId: zhangId,
+      actorRoles: ["production_management"],
+      authorizationCapability: "access:admin",
+      requestId: randomUUID(),
+    };
+    const delegatedAssignment = await service.assignRole(delegatedAdminActor, {
+      userId: financeId,
+      roleCode: "payroll_review",
+      reason: "验证数据库承认有效全局代理",
+    });
+    await service.revokeRole(delegatedAdminActor, delegatedAssignment.assignmentId, "全局代理鉴权验证完成");
+    await service.revokeDelegation(delegationActor, delegatedAccessAdmin.delegationId, "全局代理鉴权验证完成");
     expect(await service.listDelegations({ userId: liTongshengId })).toEqual([
       expect.objectContaining({
         granteeUserId: liTongshengId,
@@ -419,8 +466,23 @@ runWithPostgres("role permissions and versioned master data", () => {
       validUntil: new Date(Date.now() + 60_000).toISOString(),
       reason: "不可转授权",
     })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
-    await expect(service.createDelegation(delegationActor, {
+    const systemDelegationActor: TrustedActorContext = {
+      ...adminActor,
+      authorizationCapability: "delegation:manage",
+      requestId: randomUUID(),
+    };
+    await expect(service.createDelegation(systemDelegationActor, {
       grantorUserId: liOwnerId,
+      granteeUserId: zhangId,
+      capability: "own_factory:approve",
+      scopeType: "rework_order",
+      scopeId: "rework-admin-impersonation",
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+      reason: "管理员不得代填老板授权",
+    })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    await expect(service.createDelegation(delegationActor, {
+      grantorUserId: bootstrapOwnerId,
       granteeUserId: zhangId,
       capability: "own_factory:approve",
       scopeType: "rework_order",
@@ -447,6 +509,22 @@ runWithPostgres("role permissions and versioned master data", () => {
            CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+interval '1 hour',$4,'绕过服务创建全局审批代理')`,
         [randomUUID(), liOwnerId, zhangId, bootstrapOwnerId],
       )).rejects.toMatchObject({ code: "23514" });
+      await directClient.query("ROLLBACK");
+      await directClient.query("BEGIN");
+      await directClient.query(
+        `SELECT
+           set_config('dx_rework.delegation_create_event_id',$1,true),
+           set_config('dx_rework.delegation_create_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      await expect(directClient.query(
+        `INSERT INTO delegated_authorizations(
+           delegation_id,grantor_user_id,grantee_user_id,capability,scope_type,scope_id,
+           valid_from,valid_until,granted_by,grant_reason
+         ) VALUES($1,$2,$3,'own_factory:approve','rework_order','rework-sql-impersonation',
+           CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+interval '1 hour',$4,'管理员伪装老板直接写库')`,
+        [randomUUID(), liOwnerId, zhangId, adminId],
+      )).rejects.toMatchObject({ code: "42501" });
     } finally {
       await directClient.query("ROLLBACK");
       directClient.release();

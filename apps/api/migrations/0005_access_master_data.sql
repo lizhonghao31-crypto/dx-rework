@@ -84,13 +84,11 @@ DECLARE
   actor_roles text[];
   capability_allowed boolean;
 BEGIN
-  SELECT array_agg(DISTINCT ura.role_code ORDER BY ura.role_code),
-         bool_or(rc.capability = required_capability)
-  INTO actor_roles, capability_allowed
+  SELECT array_agg(DISTINCT ura.role_code ORDER BY ura.role_code)
+  INTO actor_roles
   FROM user_role_assignments ura
   JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
   JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
-  LEFT JOIN role_capabilities rc ON rc.role_code=ura.role_code
   WHERE ura.user_id=requested_actor_id AND ura.revoked_at IS NULL
     AND EXISTS (
       SELECT 1
@@ -100,6 +98,48 @@ BEGIN
       WHERE i.user_id=ura.user_id AND i.provider='dingtalk'
         AND i.active=true AND i.employed=true
     );
+
+  SELECT
+    EXISTS (
+      SELECT 1
+      FROM user_role_assignments ura
+      JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+      JOIN role_capabilities rc ON rc.role_code=ura.role_code
+      WHERE ura.user_id=requested_actor_id AND ura.revoked_at IS NULL
+        AND rc.capability=required_capability
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM delegated_authorizations da
+      WHERE da.grantee_user_id=requested_actor_id
+        AND da.capability=required_capability
+        AND da.scope_type='global' AND da.scope_id IS NULL
+        AND da.revoked_at IS NULL
+        AND da.valid_from <= CURRENT_TIMESTAMP
+        AND da.valid_until > CURRENT_TIMESTAMP
+        AND EXISTS (
+          SELECT 1
+          FROM app_users grantor
+          JOIN identity_mappings i ON i.user_id=grantor.id
+          JOIN access_security_policy policy
+            ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+          WHERE grantor.id=da.grantor_user_id AND grantor.enabled=true
+            AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM user_role_assignments grantor_role
+          JOIN business_roles grantor_business_role
+            ON grantor_business_role.role_code=grantor_role.role_code
+            AND grantor_business_role.enabled=true
+          JOIN role_capabilities grantor_capability
+            ON grantor_capability.role_code=grantor_role.role_code
+          WHERE grantor_role.user_id=da.grantor_user_id
+            AND grantor_role.revoked_at IS NULL
+            AND grantor_capability.capability=da.capability
+        )
+    )
+  INTO capability_allowed;
   IF actor_roles IS NULL OR capability_allowed IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'actor is not authorized for capability %', required_capability
       USING ERRCODE = '42501';
@@ -272,6 +312,7 @@ CREATE TABLE business_person_aliases (
   alias text NOT NULL CHECK (length(btrim(alias)) BETWEEN 1 AND 100),
   normalized_alias text NOT NULL CHECK (length(btrim(normalized_alias)) BETWEEN 1 AND 100),
   created_by uuid NOT NULL REFERENCES app_users(id),
+  create_reason text NOT NULL CHECK (length(btrim(create_reason)) BETWEEN 1 AND 500),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   revoked_at timestamptz,
   revoked_by uuid REFERENCES app_users(id),
@@ -289,6 +330,46 @@ CREATE UNIQUE INDEX business_person_aliases_active_alias_idx
 CREATE UNIQUE INDEX business_person_aliases_person_active_idx
   ON business_person_aliases (person_id, normalized_alias)
   WHERE revoked_at IS NULL;
+CREATE OR REPLACE FUNCTION guard_business_person_alias_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.alias_create_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.alias_create_request_id', true), '');
+  audit_actor_roles text[];
+BEGIN
+  IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'new business person aliases cannot start revoked'
+      USING ERRCODE = '23514';
+  END IF;
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'business person alias creation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  audit_actor_roles := access_authorized_actor_roles(NEW.created_by, 'master_data:manage');
+  IF NOT EXISTS (
+    SELECT 1 FROM business_people p WHERE p.person_id=NEW.person_id AND p.active=true
+  ) THEN
+    RAISE EXCEPTION 'business person alias target must be active'
+      USING ERRCODE = '23514';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.created_by,audit_actor_roles,'master_data:manage',
+    'master_data.person_alias.create','business_person_alias',NEW.alias_id::text,
+    jsonb_build_object(
+      'personId',NEW.person_id,
+      'alias',NEW.alias,
+      'normalizedAlias',NEW.normalized_alias
+    ),
+    NEW.create_reason
+  );
+  RETURN NEW;
+END;
+$$;
 CREATE OR REPLACE FUNCTION allow_business_person_alias_revocation_only() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   audit_event_id text := nullif(current_setting('dx_rework.alias_revoke_event_id', true), '');
@@ -302,6 +383,7 @@ BEGIN
      OR NEW.alias IS DISTINCT FROM OLD.alias
      OR NEW.normalized_alias IS DISTINCT FROM OLD.normalized_alias
      OR NEW.created_by IS DISTINCT FROM OLD.created_by
+     OR NEW.create_reason IS DISTINCT FROM OLD.create_reason
      OR NEW.created_at IS DISTINCT FROM OLD.created_at
   THEN
     RAISE EXCEPTION 'business person aliases are immutable except for one audited revocation'
@@ -340,6 +422,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+CREATE TRIGGER business_person_aliases_guard_creation BEFORE INSERT ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION guard_business_person_alias_creation();
 CREATE TRIGGER business_person_aliases_revoke_only BEFORE UPDATE ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION allow_business_person_alias_revocation_only();
 CREATE TRIGGER business_person_aliases_no_delete BEFORE DELETE ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER business_person_aliases_no_truncate BEFORE TRUNCATE ON business_person_aliases FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
@@ -446,6 +529,15 @@ BEGIN
   END IF;
 
   audit_actor_roles := access_authorized_actor_roles(NEW.granted_by, 'delegation:manage');
+  IF NEW.capability='own_factory:approve'
+     AND (
+       NEW.granted_by IS DISTINCT FROM NEW.grantor_user_id
+       OR NOT (audit_actor_roles @> ARRAY['owner_group'])
+     )
+  THEN
+    RAISE EXCEPTION 'own-factory approval must be delegated directly by the operating owner'
+      USING ERRCODE = '42501';
+  END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM app_users u
