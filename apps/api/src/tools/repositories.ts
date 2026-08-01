@@ -17,18 +17,20 @@ const validateClaimOptions = (limit: number, leaseSeconds: number): void => {
 };
 
 export class IdempotencyRepository {
-  async begin(client: SqlClient, input: { scope: string; actorKey: string; key: string; requestHash: string; expiresAt: Date }): Promise<{ kind: "acquired" } | { kind: "completed"; statusCode: number; response: unknown }> {
+  async begin(client: SqlClient, input: { scope: string; actorKey: string; key: string; requestHash: string; expiresAt: Date }): Promise<{ kind: "acquired"; acquisitionToken: string } | { kind: "completed"; statusCode: number; response: unknown }> {
+    const acquisitionToken = randomUUID();
     const acquired = await client.query(
-      `INSERT INTO idempotency_records(scope,actor_key,idempotency_key,request_hash,expires_at)
-       VALUES($1,$2,$3,$4,$5)
+      `INSERT INTO idempotency_records(scope,actor_key,idempotency_key,request_hash,expires_at,acquisition_token)
+       VALUES($1,$2,$3,$4,$5,$6)
        ON CONFLICT(scope,actor_key,idempotency_key) DO UPDATE
        SET request_hash=EXCLUDED.request_hash,status='in_progress',status_code=NULL,response=NULL,
-           created_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,expires_at=EXCLUDED.expires_at
+           acquisition_token=EXCLUDED.acquisition_token,created_at=CURRENT_TIMESTAMP,
+           updated_at=CURRENT_TIMESTAMP,expires_at=EXCLUDED.expires_at
        WHERE idempotency_records.expires_at <= CURRENT_TIMESTAMP
-       RETURNING request_hash`,
-      [input.scope, input.actorKey, input.key, input.requestHash, input.expiresAt],
+       RETURNING acquisition_token`,
+      [input.scope, input.actorKey, input.key, input.requestHash, input.expiresAt, acquisitionToken],
     );
-    if (acquired.rowCount === 1) return { kind: "acquired" };
+    if (acquired.rowCount === 1) return { kind: "acquired", acquisitionToken };
 
     const existing = await client.query<{ request_hash: string; status: string; status_code: number | null; response: unknown }>(
       `SELECT request_hash,status,status_code,response
@@ -47,12 +49,12 @@ export class IdempotencyRepository {
     return { kind: "completed", statusCode: record.status_code!, response: record.response };
   }
 
-  async complete(client: SqlClient, input: { scope: string; actorKey: string; key: string; statusCode: number; response: unknown }): Promise<void> {
+  async complete(client: SqlClient, input: { scope: string; actorKey: string; key: string; acquisitionToken: string; statusCode: number; response: unknown }): Promise<void> {
     const result = await client.query(
       `UPDATE idempotency_records
        SET status='completed',status_code=$4,response=$5,updated_at=CURRENT_TIMESTAMP
-       WHERE scope=$1 AND actor_key=$2 AND idempotency_key=$3 AND status='in_progress'`,
-      [input.scope, input.actorKey, input.key, input.statusCode, input.response],
+       WHERE scope=$1 AND actor_key=$2 AND idempotency_key=$3 AND status='in_progress' AND acquisition_token=$6`,
+      [input.scope, input.actorKey, input.key, input.statusCode, input.response, input.acquisitionToken],
     );
     if (result.rowCount !== 1) {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "Idempotency record is not in progress", 409);
@@ -66,7 +68,7 @@ export class IdempotencyService {
     const begun = await this.records.begin(client, input);
     if (begun.kind === "completed") return { statusCode: begun.statusCode, response: begun.response as T, reused: true };
     const result = await work();
-    await this.records.complete(client, { scope: input.scope, actorKey: input.actorKey, key: input.key, statusCode: result.statusCode, response: result.response });
+    await this.records.complete(client, { scope: input.scope, actorKey: input.actorKey, key: input.key, acquisitionToken: begun.acquisitionToken, statusCode: result.statusCode, response: result.response });
     return { ...result, reused: false };
   }
 }
@@ -110,9 +112,11 @@ export class MessageOutboxRepository {
     payload: unknown;
     recipientKey: string;
     idempotencyKey: string;
+    claimToken: string;
     attempts: number;
   }>> {
     validateClaimOptions(limit, leaseSeconds);
+    const claimToken = randomUUID();
     const result = await client.query<{
       event_id: string;
       topic: string;
@@ -121,6 +125,7 @@ export class MessageOutboxRepository {
       payload: unknown;
       recipient_key: string;
       idempotency_key: string;
+      claim_token: string;
       attempts: number;
     }>(
       `WITH candidates AS (
@@ -131,10 +136,10 @@ export class MessageOutboxRepository {
          FOR UPDATE SKIP LOCKED LIMIT $1
        )
        UPDATE message_outbox o
-       SET status='processing',claimed_at=CURRENT_TIMESTAMP,attempts=o.attempts+1,updated_at=CURRENT_TIMESTAMP
+       SET status='processing',claimed_at=CURRENT_TIMESTAMP,claim_token=$3,attempts=o.attempts+1,updated_at=CURRENT_TIMESTAMP
        FROM candidates c WHERE o.event_id=c.event_id
-       RETURNING o.event_id,o.topic,o.aggregate_type,o.aggregate_id,o.payload,o.recipient_key,o.idempotency_key,o.attempts`,
-      [limit, leaseSeconds],
+       RETURNING o.event_id,o.topic,o.aggregate_type,o.aggregate_id,o.payload,o.recipient_key,o.idempotency_key,o.claim_token,o.attempts`,
+      [limit, leaseSeconds, claimToken],
     );
     return result.rows.map((row) => ({
       eventId: row.event_id,
@@ -144,25 +149,26 @@ export class MessageOutboxRepository {
       payload: row.payload,
       recipientKey: row.recipient_key,
       idempotencyKey: row.idempotency_key,
+      claimToken: row.claim_token,
       attempts: row.attempts,
     }));
   }
 
-  async markSent(client: SqlClient, eventId: string): Promise<void> {
+  async markSent(client: SqlClient, eventId: string, claimToken: string): Promise<void> {
     const result = await client.query(
-      `UPDATE message_outbox SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
-       WHERE event_id=$1 AND status='processing'`,
-      [eventId],
+      `UPDATE message_outbox SET status='sent',claim_token=NULL,sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
+       WHERE event_id=$1 AND status='processing' AND claim_token=$2`,
+      [eventId, claimToken],
     );
     if (result.rowCount !== 1) throw new ApplicationError("INVALID_STATE_TRANSITION", "Outbox event is not processing", 409);
   }
 
-  async markFailed(client: SqlClient, eventId: string, error: unknown, delaySeconds: number): Promise<void> {
+  async markFailed(client: SqlClient, eventId: string, claimToken: string, error: unknown, delaySeconds: number): Promise<void> {
     const result = await client.query(
       `UPDATE message_outbox
-       SET status='failed',available_at=CURRENT_TIMESTAMP + ($2 * interval '1 second'),last_error=$3,claimed_at=NULL,updated_at=CURRENT_TIMESTAMP
-       WHERE event_id=$1 AND status='processing'`,
-      [eventId, delaySeconds, sanitizeOperationalError(error)],
+       SET status='failed',available_at=CURRENT_TIMESTAMP + ($3 * interval '1 second'),last_error=$4,claimed_at=NULL,claim_token=NULL,updated_at=CURRENT_TIMESTAMP
+       WHERE event_id=$1 AND status='processing' AND claim_token=$2`,
+      [eventId, claimToken, delaySeconds, sanitizeOperationalError(error)],
     );
     if (result.rowCount !== 1) throw new ApplicationError("INVALID_STATE_TRANSITION", "Outbox event is not processing", 409);
   }

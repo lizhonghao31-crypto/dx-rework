@@ -5,9 +5,12 @@ import { IdempotencyRepository, MessageOutboxRepository } from "../../apps/api/s
 describe("public tools repository guards", () => {
   it("rejects completion and outbox transitions when no row changes", async () => {
     const client = { query: vi.fn(async () => ({ rowCount: 0, rows: [] })) };
-    await expect(new IdempotencyRepository().complete(client as never, { scope: "s", actorKey: "a", key: "k", statusCode: 200, response: {} })).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
-    await expect(new MessageOutboxRepository().markSent(client as never, "event")).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
-    await expect(new MessageOutboxRepository().markFailed(client as never, "event", new Error("safe"), 10)).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    await expect(new IdempotencyRepository().complete(client as never, { scope: "s", actorKey: "a", key: "k", acquisitionToken: "acquisition", statusCode: 200, response: {} })).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    await expect(new MessageOutboxRepository().markSent(client as never, "event", "lease")).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    await expect(new MessageOutboxRepository().markFailed(client as never, "event", "lease", new Error("safe"), 10)).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    expect(client.query.mock.calls[0]![0]).toContain("acquisition_token=$6");
+    expect(client.query.mock.calls[1]![0]).toContain("claim_token=$2");
+    expect(client.query.mock.calls[2]![0]).toContain("claim_token=$2");
   });
 
   it("bounds leases and emits recovery/semantic comparison SQL", async () => {
@@ -30,6 +33,7 @@ describe("public tools repository guards", () => {
       payload: { quantity: 7 },
       recipient_key: "user-1",
       idempotency_key: "delivery-1",
+      claim_token: "claim-1",
       attempts: 2,
     };
     const client = { query: vi.fn(async () => ({ rowCount: 1, rows: [row] })) };
@@ -41,6 +45,7 @@ describe("public tools repository guards", () => {
       payload: { quantity: 7 },
       recipientKey: "user-1",
       idempotencyKey: "delivery-1",
+      claimToken: "claim-1",
       attempts: 2,
     }]);
     expect(client.query.mock.calls[0]![0]).toContain("o.recipient_key,o.idempotency_key");
@@ -49,9 +54,10 @@ describe("public tools repository guards", () => {
   it("requires a ready, authorized result attachment before export completion", async () => {
     const client = { query: vi.fn(async () => ({ rowCount: 0, rows: [] })) };
     const service = new ExportJobService({} as never);
-    await expect(service.complete(client as never, "export-1", "attachment-1")).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    await expect(service.complete(client as never, "export-1", "claim-1", "attachment-1")).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
     expect(client.query.mock.calls[0]![0]).toContain("a.status='ready'");
     expect(client.query.mock.calls[0]![0]).toContain("a.uploaded_by=j.requested_by");
     expect(client.query.mock.calls[0]![0]).toContain("a.entity_type='export_job'");
+    expect(client.query.mock.calls[0]![0]).toContain("j.claim_token=$2");
   });
 });

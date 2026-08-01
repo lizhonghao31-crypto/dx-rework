@@ -3,6 +3,7 @@ CREATE TABLE idempotency_records (
   actor_key text NOT NULL,
   idempotency_key text NOT NULL,
   request_hash text NOT NULL,
+  acquisition_token uuid NOT NULL,
   status text NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed')),
   status_code integer,
   response jsonb,
@@ -51,12 +52,14 @@ CREATE TABLE message_outbox (
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   available_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   claimed_at timestamptz,
+  claim_token uuid,
   sent_at timestamptz,
   last_error text,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (topic, recipient_key, idempotency_key),
-  CHECK (last_error IS NULL OR length(last_error) <= 500)
+  CHECK (last_error IS NULL OR length(last_error) <= 500),
+  CHECK ((status = 'processing') = (claim_token IS NOT NULL))
 );
 CREATE INDEX message_outbox_claim_idx ON message_outbox (available_at, claimed_at, created_at)
   WHERE status IN ('pending', 'failed', 'processing');
@@ -91,13 +94,15 @@ CREATE TABLE export_jobs (
   result_attachment_id uuid REFERENCES attachments(attachment_id),
   idempotency_key text NOT NULL,
   claimed_at timestamptz,
+  claim_token uuid,
   completed_at timestamptz,
   last_error text,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (requested_by, export_type, idempotency_key),
   CHECK (last_error IS NULL OR length(last_error) <= 500),
-  CHECK ((status = 'succeeded') = (result_attachment_id IS NOT NULL))
+  CHECK ((status = 'succeeded') = (result_attachment_id IS NOT NULL)),
+  CHECK ((status = 'running') = (claim_token IS NOT NULL))
 );
 CREATE INDEX export_jobs_claim_idx ON export_jobs (claimed_at, created_at)
   WHERE status IN ('pending', 'running');

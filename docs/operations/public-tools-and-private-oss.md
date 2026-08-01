@@ -2,7 +2,7 @@
 
 ## 范围
 
-PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的技术契约，不发送钉钉消息、不生成业务 Excel，也不定义返工、工资或审批字段。所有 actor 均来自服务端 session；HTTP 请求不能提交 `uploadedBy`、actor 或 role。
+PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的技术契约，不发送钉钉消息、不生成业务 Excel，也不定义返工、工资或审批字段。所有 actor 均来自服务端 session；HTTP 请求不能提交 `uploadedBy`、actor 或 role。所有 Tools 路由明确要求 `tools:user` capability，其他业务 capability 不能替代。
 
 ## 环境变量（仅变量名，不在仓库填写真实值）
 
@@ -20,13 +20,13 @@ PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的
 2. objectKey 使用独立私有 prefix、日期目录和 192-bit 随机值；不包含原文件名，不保存公开 URL。
 3. 上传意图只返回短时签名 PUT。PUT 必须带服务端约定的 Content-Type、SHA-256 metadata 和 private ACL。
 4. finalize 通过服务端 HEAD 验证对象存在、实际大小、MIME，并在 metadata 可用时验证 SHA-256；不一致会拒绝，不能进入 ready。
-5. 下载只返回短时签名 GET。当前路由只允许上传者；未来业务对象必须通过显式授权决策传入 service，不能仅凭 attachmentId 下载。
+5. 下载只返回短时签名 GET。除上传者外，只有申请人可访问绑定到其 export job 的 ready 结果附件；其他业务对象必须通过显式授权决策传入 service，不能仅凭 attachmentId 下载。
 
 ## outbox、失败与重试
 
-业务服务应在同一个 PostgreSQL transaction/client 中写业务记录、`operation_events` 和 `message_outbox`。worker 使用 `FOR UPDATE SKIP LOCKED` 领取；默认 lease 为 300 秒（允许 30–3600 秒），超时的 `processing` 记录可被重新领取。领取后成功转 `sent`，失败保存最长 500 字符的脱敏错误并将 `availableAt` 推迟后重试。唯一键 `(topic, recipientKey, idempotencyKey)` 仅在 aggregate 与 payload 语义相同时复用，否则返回 409。本 PR 不包含消息发送 worker。
+业务服务应在同一个 PostgreSQL transaction/client 中写业务记录、`operation_events` 和 `message_outbox`。worker 使用 `FOR UPDATE SKIP LOCKED` 领取；默认 lease 为 300 秒（允许 30–3600 秒），超时的 `processing` 记录可被重新领取。每次领取生成新的 `claimToken`，只有持有当前 token 的 worker 才能确认成功或失败，过期 worker 不能覆盖新 owner。领取后成功转 `sent`，失败保存最长 500 字符的脱敏错误并将 `availableAt` 推迟后重试。唯一键 `(topic, recipientKey, idempotencyKey)` 仅在 aggregate 与 payload 语义相同时复用，否则返回 409。本 PR 不包含消息发送 worker。
 
-导出任务使用相同的 `SKIP LOCKED` 与 300 秒默认 lease（允许 30–3600 秒）；超时的 running 任务可重新领取。相同幂等键仅在 filters 相同时复用。成功结果必须引用 ready attachment，失败只保存脱敏错误。本 PR 不生成 Excel。Aliyun SDK 尚未装配时存储实现继续 fail-fast/返回明确 503，不会伪装成已联通。
+导出任务使用相同的 `SKIP LOCKED`、`claimToken` 与 300 秒默认 lease（允许 30–3600 秒）；超时的 running 任务可重新领取，但旧 worker 不能完成或失败新 lease。相同幂等键仅在 filters 相同时复用。幂等请求每次 acquisition 也有独立 token，过期接管后旧请求不能写入新 owner 的响应。成功结果必须引用 ready attachment，失败只保存脱敏错误。本 PR 不生成 Excel。Aliyun SDK 尚未装配时存储实现继续 fail-fast/返回明确 503，不会伪装成已联通。
 
 ## 联调条件与已知风险
 
