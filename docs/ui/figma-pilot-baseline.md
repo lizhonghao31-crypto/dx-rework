@@ -8,7 +8,7 @@ Run ID：`dx-ui-pilot-20260731`
 - UI 基础库：[达兴企业 UI 基础库 · Pilot](https://www.figma.com/design/kgn6PGlRc10OaYD5xazmZd)
 - 产品设计：[内部计件返工系统 · Product](https://www.figma.com/design/UXYXB0VamHidRLy7xBFLV7)
 
-基础变量与通用组件只在基础库定义；业务页面只在 Product 文件组合和验收。Product 尚未开始页面施工，避免在基础组件未稳定前返工。
+基础变量与通用组件只在基础库定义；业务页面只在 Product 文件组合和验收。V2 六页 Product 页面与五个通用组件均已完成设计核验，PR-01A 正在按该基线落地代码。
 
 ## 2. 设计原则
 
@@ -86,9 +86,10 @@ Status Badge 获得产品确认后，依赖顺序为：
 
 每个组件必须单独完成复用扫描、变量绑定、结构检查、视觉检查和用户检查点，不能批量生成后统一补验收。
 
-## 7. 当前阻塞状态
+## 7. 当前交付状态
 
 - Figma 已升级，当前不存在 Starter 调用额度阻塞；
 - 业务需求基线已通过，并新增集体计件平均分摊规则；
-- 当前唯一待产品动作是确认 Status Badge 检查点；
-- Product 页面施工将在基础输入组件与状态组件稳定后开始。
+- Button、Status Badge、Navigation Item、KPI Instrument、Inset Field 已完成设计核验；
+- 管理层共享座舱、李同生现场工作台、返工任务列表、返工详情与责任处理、品控发起返工、集体计件上数六页已完成 V2 设计核验；
+- PR-01A 正在进行代码施工；浏览器截图、360px 溢出、键盘与完整 ARIA 仍须由浏览器 CI / 外部验收提供证据。
