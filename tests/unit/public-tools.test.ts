@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+import { transitionAttachment, transitionExportJob, transitionOutbox, sanitizeOperationalError } from "@dx-rework/domain";
+import { AliyunPrivateObjectStorage, createPrivateObjectKey, DisabledObjectStorage, FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
+import { ApplicationError } from "../../apps/api/src/platform/errors.js";
+
+class MemoryIdempotency {
+  private records=new Map<string,{hash:string;promise:Promise<unknown>}>(); executions=0;
+  execute(key:string,hash:string,work:()=>Promise<unknown>){const prior=this.records.get(key);if(prior){if(prior.hash!==hash)throw new ApplicationError("IDEMPOTENCY_CONFLICT","different payload",409);return prior.promise;}this.executions++;const promise=work();this.records.set(key,{hash,promise});return promise;}
+}
+
+describe("public tools domain contracts",()=>{
+ it("permits only explicit attachment/outbox/export transitions",()=>{expect(transitionAttachment("pending","ready")).toBe("ready");expect(()=>transitionAttachment("ready","pending")).toThrow();expect(transitionOutbox("failed","processing")).toBe("processing");expect(()=>transitionOutbox("sent","processing")).toThrow();expect(transitionExportJob("running","succeeded")).toBe("succeeded");expect(()=>transitionExportJob("failed","running")).toThrow();});
+ it("redacts and bounds operational errors",()=>{const value=sanitizeOperationalError(new Error(`token=private ${"x".repeat(600)}`));expect(value).not.toContain("private");expect(value.length).toBeLessThanOrEqual(500);});
+ it("executes concurrent equal idempotency requests once and rejects a different hash",async()=>{const gate=new MemoryIdempotency();let release!:()=>void;const work=new Promise(resolve=>{release=()=>resolve({ok:true});});const one=gate.execute("actor:key","same",()=>work);const two=gate.execute("actor:key","same",async()=>({bad:true}));expect(gate.executions).toBe(1);expect(()=>gate.execute("actor:key","different",async()=>null)).toThrowError(expect.objectContaining({code:"IDEMPOTENCY_CONFLICT",statusCode:409}));release();await expect(Promise.all([one,two])).resolves.toEqual([{ok:true},{ok:true}]);});
+});
+
+describe("private object storage",()=>{
+ it("creates unpredictable private keys without filenames and rejects traversal/double-extension",()=>{const a=createPrivateObjectKey("private", "evidence.JPG",new Date("2026-08-01T00:00:00Z"));const b=createPrivateObjectKey("private", "evidence.JPG",new Date("2026-08-01T00:00:00Z"));expect(a).toMatch(/^private\/2026\/08\/01\/[0-9a-f]{48}\.jpg$/);expect(a).not.toBe(b);expect(a).not.toContain("evidence");expect(()=>createPrivateObjectKey("private","../x.pdf")).toThrow();expect(()=>createPrivateObjectKey("private","report.exe.pdf")).toThrow();});
+ it("records short signature TTL in the fake and fails explicitly when disabled",async()=>{const fake=new FakeObjectStorage();await fake.createUploadUrl("private/x.pdf",{mimeType:"application/pdf",sizeBytes:1,sha256:"a".repeat(64),ttlSeconds:300});await fake.createDownloadUrl("private/x.pdf",{ttlSeconds:120,filename:"x.pdf"});expect(fake.signed).toEqual([{method:"PUT",objectKey:"private/x.pdf",ttlSeconds:300},{method:"GET",objectKey:"private/x.pdf",ttlSeconds:120}]);await expect(new DisabledObjectStorage().head("x")).rejects.toMatchObject({code:"STORAGE_UNAVAILABLE",statusCode:503});});
+ it("delegates private PUT/GET/HEAD to the official SDK facade",async()=>{const calls:Array<Record<string,unknown>>=[];const client={signatureUrl:(name:string,options:Record<string,unknown>)=>{calls.push({name,...options});return `https://oss.test/${name}`;},head:async()=>({res:{headers:{"content-length":"4","content-type":"image/png","x-oss-meta-sha256":"ABCD"}}})};const storage=new AliyunPrivateObjectStorage(client);await storage.createUploadUrl("private/x.png",{mimeType:"image/png",sizeBytes:4,sha256:"abcd",ttlSeconds:300});await storage.createDownloadUrl("private/x.png",{filename:"x.png",ttlSeconds:60});expect(calls[0]).toMatchObject({method:"PUT",expires:300,headers:{"x-oss-object-acl":"private"}});expect(await storage.head("private/x.png")).toEqual({sizeBytes:4,mimeType:"image/png",sha256:"abcd"});});
+});

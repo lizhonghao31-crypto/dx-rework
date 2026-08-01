@@ -1,0 +1,17 @@
+import { randomUUID } from "node:crypto";
+import type { Pool, PoolClient } from "pg";
+import type { CreateExportJob, ExportJobResponse } from "@dx-rework/contracts";
+import { sanitizeOperationalError } from "@dx-rework/domain";
+import { ApplicationError } from "../platform/errors.js";
+import type { TrustedActorContext } from "./repositories.js";
+import { OperationEventRepository } from "./repositories.js";
+type Row={export_job_id:string;requested_by:string;export_type:string;filters:Record<string,unknown>;status:"pending"|"running"|"succeeded"|"failed";result_attachment_id:string|null;created_at:Date};
+export class ExportJobService{
+ constructor(private readonly pool:Pool,private readonly events=new OperationEventRepository()){}
+ async create(actor:TrustedActorContext,input:CreateExportJob):Promise<ExportJobResponse>{const id=randomUUID();const client=await this.pool.connect();try{await client.query("BEGIN");const result=await client.query<Row>(`INSERT INTO export_jobs(export_job_id,requested_by,export_type,filters,idempotency_key) VALUES($1,$2,$3,$4,$5) ON CONFLICT(requested_by,export_type,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING *`,[id,actor.actorId,input.exportType,input.filters,input.idempotencyKey]);const row=result.rows[0]!;if(row.export_job_id===id)await this.events.append(client,actor,{action:"export.created",entityType:"export_job",entityId:id,after:{exportType:input.exportType}});await client.query("COMMIT");return this.dto(row);}catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}}
+ async query(requestedBy:string,id:string):Promise<ExportJobResponse>{const r=await this.pool.query<Row>(`SELECT * FROM export_jobs WHERE export_job_id=$1`,[id]);const row=r.rows[0];if(!row)throw new ApplicationError("NOT_FOUND","Export job not found",404);if(row.requested_by!==requestedBy)throw new ApplicationError("FORBIDDEN","Export job access denied",403);return this.dto(row);}
+ async claim(client:Pick<PoolClient,"query">,limit=1):Promise<Row[]>{const r=await client.query<Row>(`WITH candidates AS (SELECT export_job_id FROM export_jobs WHERE status='pending' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $1) UPDATE export_jobs j SET status='running',claimed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP FROM candidates c WHERE j.export_job_id=c.export_job_id RETURNING j.*`,[limit]);return r.rows;}
+ async complete(client:Pick<PoolClient,"query">,id:string,attachmentId:string):Promise<void>{const r=await client.query(`UPDATE export_jobs SET status='succeeded',result_attachment_id=$2,completed_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE export_job_id=$1 AND status='running'`,[id,attachmentId]);if(r.rowCount!==1)throw new ApplicationError("INVALID_STATE_TRANSITION","Export job is not running",409);}
+ async fail(client:Pick<PoolClient,"query">,id:string,error:unknown):Promise<void>{const r=await client.query(`UPDATE export_jobs SET status='failed',completed_at=CURRENT_TIMESTAMP,last_error=$2,updated_at=CURRENT_TIMESTAMP WHERE export_job_id=$1 AND status='running'`,[id,sanitizeOperationalError(error)]);if(r.rowCount!==1)throw new ApplicationError("INVALID_STATE_TRANSITION","Export job is not running",409);}
+ private dto(r:Row):ExportJobResponse{return{exportJobId:r.export_job_id,exportType:r.export_type,filters:r.filters,status:r.status,resultAttachmentId:r.result_attachment_id,createdAt:r.created_at.toISOString()};}
+}
