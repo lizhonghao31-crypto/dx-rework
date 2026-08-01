@@ -5,8 +5,10 @@ server {
     ssl_certificate /etc/nginx/tls/preview.example.invalid/fullchain.pem;
     ssl_certificate_key /etc/nginx/tls/preview.example.invalid/privkey.pem;
 
+    autoindex off;
     location ~ ^/pr-([1-9][0-9]*)(/.*)?$ {
         root /opt/dx-rework/previews;
+        disable_symlinks on from=/opt/dx-rework/previews;
         try_files $uri $uri/ /pr-$1/index.html;
         limit_except GET HEAD { deny all; }
         add_header X-Robots-Tag "noindex, nofollow" always;
