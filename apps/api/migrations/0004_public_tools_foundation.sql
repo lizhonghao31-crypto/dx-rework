@@ -20,7 +20,7 @@ CREATE TABLE operation_events (
   event_id uuid PRIMARY KEY,
   request_id text NOT NULL,
   actor_id uuid NOT NULL REFERENCES app_users(id),
-  actor_roles text[] NOT NULL DEFAULT '{}',
+  actor_roles text[] NOT NULL CHECK (cardinality(actor_roles) > 0 AND array_position(actor_roles, NULL) IS NULL AND NOT (actor_roles @> ARRAY[''])),
   authorization_capability text NOT NULL CHECK (authorization_capability <> ''),
   action text NOT NULL,
   entity_type text NOT NULL,
