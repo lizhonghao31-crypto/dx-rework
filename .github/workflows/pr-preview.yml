@@ -1,0 +1,290 @@
+name: PR preview artifact and optional deployment
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  VITE_BASE_PATH: /pr-${{ github.event.pull_request.number }}/
+
+jobs:
+  build:
+    if: github.event.action != 'closed'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Use repository Node version
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Use repository npm version
+        run: npm install --global npm@10.9.9
+      - name: Verify toolchain and exact Head
+        run: |
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          test "$(npm --version)" = "10.9.9"
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+      - name: Install monorepo once from the root lockfile
+        run: npm ci
+      - name: Build original apps/web with preview base
+        run: npm run build:packages && npm run build --workspace @dx-rework/web
+      - name: Generate and validate manifest, fallbacks and checksum
+        run: |
+          node scripts/preview/build.mjs "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID"
+          if find apps/web/dist -type l -print -quit | grep -q .; then
+            echo "symlinks are forbidden in preview artifacts" >&2
+            exit 1
+          fi
+          (cd apps/web/dist && sha256sum --check SHA256SUMS)
+          node -e 'const m=require("./apps/web/dist/preview-manifest.json"); if(m.headSha!==process.env.HEAD_SHA||m.githubPrNumber!==Number(process.env.PR_NUMBER)||m.githubRunId!==process.env.GITHUB_RUN_ID||m.buildStatus!=="success") process.exit(1)'
+      - name: Upload validated original web dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-rework-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    needs: build
+    if: >-
+      vars.PR_PREVIEW_ENABLED == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pr-preview
+    outputs:
+      deployed: ${{ steps.activate.outputs.deployed }}
+      url: ${{ steps.activate.outputs.url }}
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - uses: actions/download-artifact@v4
+        with:
+          name: dx-rework-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: apps/web/dist
+      - name: Revalidate downloaded artifact
+        run: |
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          (cd apps/web/dist && sha256sum --check SHA256SUMS)
+          if find apps/web/dist -type l -print -quit | grep -q .; then exit 1; fi
+          node -e 'const m=require("./apps/web/dist/preview-manifest.json"); if(m.headSha!==process.env.HEAD_SHA||m.githubRunId!==process.env.GITHUB_RUN_ID)process.exit(1)'
+      - name: Confirm this is still the open current Head
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const current = await github.rest.pulls.get({...context.repo, pull_number: context.payload.pull_request.number});
+            if (current.data.state !== 'open' || current.data.head.sha !== process.env.HEAD_SHA) {
+              core.setFailed('Stale or closed PR Head cannot deploy');
+            }
+      - id: prepare
+        name: Upload into a Head-specific isolated staging directory
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_ORIGIN: ${{ vars.PR_PREVIEW_ORIGIN }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          PREVIEW_SSH_KEY: ${{ secrets.PR_PREVIEW_SSH_KEY }}
+          PREVIEW_SSH_HOST_KEY: ${{ secrets.PR_PREVIEW_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$PREVIEW_SSH_USER" =~ ^[A-Za-z_][A-Za-z0-9._-]*$ ]]
+          node -e 'const u=new URL(process.argv[1]); if(u.protocol!=="https:"||u.pathname!=="/"||u.search||u.hash)process.exit(1)' "$PREVIEW_ORIGIN"
+          test -n "$PREVIEW_SSH_KEY" && test -n "$PREVIEW_SSH_HOST_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PREVIEW_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$PREVIEW_SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          stage="$(ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s --' prepare "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID" < scripts/preview/remote-deploy.sh)"
+          [[ "$stage" =~ ^/opt/dx-rework/previews/\.staging/pr-${PR_NUMBER}-${HEAD_SHA}-${GITHUB_RUN_ID}\.[A-Za-z0-9]+$ ]]
+          rsync -rlptDz --delete-delay --safe-links -- apps/web/dist/ "$PREVIEW_SSH_USER@$PREVIEW_HOST:$stage/"
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+      - name: Recheck current Head after upload and before activation
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const current = await github.rest.pulls.get({...context.repo, pull_number: context.payload.pull_request.number});
+            if (current.data.state !== 'open' || current.data.head.sha !== process.env.HEAD_SHA) {
+              core.setFailed('Head changed while uploading; staging will be discarded');
+            }
+      - id: activate
+        name: Activate with a monotonic remote generation guard
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_ORIGIN: ${{ vars.PR_PREVIEW_ORIGIN }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          STAGE: ${{ steps.prepare.outputs.stage }}
+        run: |
+          set -euo pipefail
+          ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s --' activate "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID" "$STAGE" < scripts/preview/remote-deploy.sh
+          url="${PREVIEW_ORIGIN%/}/pr-${PR_NUMBER}/ui/management"
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Discard unactivated staging safely
+        if: always() && steps.prepare.outputs.stage != '' && steps.activate.outcome != 'success'
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          STAGE: ${{ steps.prepare.outputs.stage }}
+        run: ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s --' discard "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID" "$STAGE" < scripts/preview/remote-deploy.sh
+
+  comment:
+    needs: [build, deploy]
+    if: >-
+      always() && needs.build.result == 'success' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR Head for the tested status formatter
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - id: status
+        name: Build an explicit preview status
+        env:
+          DEPLOY_ENABLED: ${{ vars.PR_PREVIEW_ENABLED }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          DEPLOYED: ${{ needs.deploy.outputs.deployed }}
+          PREVIEW_URL: ${{ needs.deploy.outputs.url }}
+          STATUS_FILE: ${{ runner.temp }}/pr-preview-comment.md
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENABLED" != "true" ]]; then
+            state=built-disabled
+          elif [[ "$DEPLOY_RESULT" == "success" && "$DEPLOYED" == "true" ]]; then
+            state=deployed
+          else
+            state=deploy-failed
+          fi
+          node scripts/preview/status.mjs "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID" "$state" "$PREVIEW_URL" "$STATUS_FILE" >/dev/null
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+      - name: Upsert status only for the current open Head
+        uses: actions/github-script@v7
+        env:
+          STATUS_FILE: ${{ runner.temp }}/pr-preview-comment.md
+        with:
+          script: |
+            const fs = require('node:fs');
+            const marker = '<!-- dx-rework-pr-preview -->';
+            const {owner, repo} = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const current = await github.rest.pulls.get({owner, repo, pull_number: issue_number});
+            if (current.data.state !== 'open' || current.data.head.sha !== process.env.HEAD_SHA) {
+              return core.notice('Stale Head status ignored');
+            }
+            const body = fs.readFileSync(process.env.STATUS_FILE, 'utf8');
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
+      - name: Keep deployment failures blocking
+        if: steps.status.outputs.state == 'deploy-failed'
+        run: exit 1
+
+  cleanup:
+    if: >-
+      github.event.action == 'closed' && vars.PR_PREVIEW_ENABLED == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pr-preview
+    steps:
+      - name: Checkout exact closed PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - id: eligible
+        name: Recheck that the PR is still closed at the same Head
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const current = await github.rest.pulls.get({...context.repo, pull_number: context.payload.pull_request.number});
+            const eligible = current.data.state === 'closed' && current.data.head.sha === process.env.HEAD_SHA;
+            core.setOutput('eligible', eligible ? 'true' : 'false');
+            if (!eligible) core.notice('Reopened or changed PR will not be cleaned');
+      - id: cleanup
+        name: Safely remove only this closed Head generation
+        if: steps.eligible.outputs.eligible == 'true'
+        continue-on-error: true
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          PREVIEW_SSH_KEY: ${{ secrets.PR_PREVIEW_SSH_KEY }}
+          PREVIEW_SSH_HOST_KEY: ${{ secrets.PR_PREVIEW_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$PREVIEW_SSH_USER" =~ ^[A-Za-z_][A-Za-z0-9._-]*$ ]]
+          test -n "$PREVIEW_SSH_KEY" && test -n "$PREVIEW_SSH_HOST_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PREVIEW_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$PREVIEW_SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s --' "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID" < scripts/preview/remote-cleanup.sh
+      - id: cleanup_status
+        name: Build cleanup status with the tested formatter
+        if: always() && steps.eligible.outputs.eligible == 'true'
+        env:
+          STATUS_FILE: ${{ runner.temp }}/pr-preview-cleanup-comment.md
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+        run: |
+          if [[ "$CLEANUP_OUTCOME" == "success" ]]; then state=cleaned; else state=cleanup-failed; fi
+          node scripts/preview/status.mjs "$PR_NUMBER" "$HEAD_SHA" "$GITHUB_RUN_ID" "$state" "" "$STATUS_FILE" >/dev/null
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+      - name: Upsert cleanup result only while the PR remains closed
+        if: always() && steps.cleanup_status.outcome == 'success'
+        uses: actions/github-script@v7
+        env:
+          STATUS_FILE: ${{ runner.temp }}/pr-preview-cleanup-comment.md
+        with:
+          script: |
+            const fs = require('node:fs');
+            const marker = '<!-- dx-rework-pr-preview -->';
+            const {owner, repo} = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const current = await github.rest.pulls.get({owner, repo, pull_number: issue_number});
+            if (current.data.state !== 'closed' || current.data.head.sha !== process.env.HEAD_SHA) {
+              return core.notice('Cleanup status ignored because the PR changed or reopened');
+            }
+            const body = fs.readFileSync(process.env.STATUS_FILE, 'utf8');
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
+      - name: Keep cleanup failures blocking and visible
+        if: steps.cleanup_status.outputs.state == 'cleanup-failed'
+        run: exit 1

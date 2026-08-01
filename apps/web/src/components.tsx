@@ -3,8 +3,9 @@ import { Button, KpiInstrument, NavigationItem, StatusBadge, Surface } from "@dx
 import type { Task } from "./types.js";
 
 export function Shell({ active, children }: { active: string; children: ReactNode }) {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const navigation = [["总", "总览", "/ui/management"], ["工", "返工任务", "/ui/tasks"], ["责", "责任处理", "/ui/tasks/RW-2026-0728-003"], ["计", "集体计件", "/ui/piecework/collective"]];
-  return <div className="app-shell"><aside><h2>达兴 · 质检返工</h2><small>李总 · 伍总 · 张文豪<br />同一事实视图</small><nav aria-label="主导航">{navigation.map(([icon, name, href]) => <a href={href} key={name}><NavigationItem icon={icon!} active={active === name}>{name}</NavigationItem></a>)}<button className="nav-disabled" type="button" disabled aria-disabled="true"><NavigationItem icon="审">审计日志</NavigationItem></button></nav><div className="org"><StatusBadge tone="success">组织内已认证</StatusBadge><b>共享事实 · 全量可见</b><small>操作按钮按登录身份开放；<br />所有接管与审批写入日志</small></div></aside><main>{children}</main></div>;
+  return <div className="app-shell"><aside><h2>达兴 · 质检返工</h2><small>李总 · 伍总 · 张文豪<br />同一事实视图</small><nav aria-label="主导航">{navigation.map(([icon, name, href]) => <a href={`${basePath}${href}`} key={name}><NavigationItem icon={icon!} active={active === name}>{name}</NavigationItem></a>)}<button className="nav-disabled" type="button" disabled aria-disabled="true"><NavigationItem icon="审">审计日志</NavigationItem></button></nav><div className="org"><StatusBadge tone="success">组织内已认证</StatusBadge><b>共享事实 · 全量可见</b><small>操作按钮按登录身份开放；<br />所有接管与审批写入日志</small></div></aside><main>{children}</main></div>;
 }
 
 export function Header({ title, subtitle, badge, action }: { title: string; subtitle: string; badge: string; action: string }) {

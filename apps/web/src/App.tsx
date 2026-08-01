@@ -1,7 +1,10 @@
 import { Dashboard, Detail, Foundation, MobileForm, Tasks } from "./pages.js";
 
 export function App() {
-  const path = window.location.pathname;
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const path = window.location.pathname.startsWith(basePath)
+    ? window.location.pathname.slice(basePath.length) || "/"
+    : window.location.pathname;
   if (path === "/ui/management") return <Dashboard />;
   if (path === "/ui/supervisor") return <Dashboard supervisor />;
   if (path === "/ui/tasks") return <Tasks />;
