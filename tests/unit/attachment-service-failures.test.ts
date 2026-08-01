@@ -29,6 +29,9 @@ function poolWithOwnedRow(ownedRow: AttachmentTestRow = row) {
   const client = {
     query: vi.fn(async (sql: string) => {
       operations.push(sql);
+      if (sql.startsWith("UPDATE attachments SET status='ready'")) {
+        return { rowCount: 1, rows: [{ ...ownedRow, status: "ready" as const }] };
+      }
       if (sql.startsWith("UPDATE attachments")) return { rowCount: 1, rows: [ownedRow] };
       return { rowCount: 1, rows: [] };
     }),
@@ -45,6 +48,7 @@ const emptyStorage = (): ObjectStorage => ({
   createExactSizeNonOverwritableUploadGrant: vi.fn(),
   createDownloadGrant: vi.fn(),
   head: vi.fn(),
+  computeSha256: vi.fn(async () => input.sha256),
 });
 
 describe("AttachmentService failure consistency", () => {
@@ -138,6 +142,42 @@ describe("AttachmentService failure consistency", () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
+  it("rejects and audits bytes whose server-computed SHA-256 differs from the declared digest", async () => {
+    const { pool, client, operations } = poolWithOwnedRow();
+    const storage: ObjectStorage = {
+      ...emptyStorage(),
+      head: vi.fn(async () => ({ sizeBytes: 12, mimeType: "application/pdf", sha256: input.sha256 })),
+      computeSha256: vi.fn(async () => "b".repeat(64)),
+    };
+    const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
+
+    await expect(service.finalize(actor, row.attachment_id)).rejects.toMatchObject({
+      code: "ATTACHMENT_METADATA_MISMATCH",
+      statusCode: 422,
+    });
+    expect(storage.computeSha256).toHaveBeenCalledWith(row.object_key);
+    expect(operations).toHaveLength(4);
+    expect(client.query.mock.calls[1]?.[1]).toEqual([row.attachment_id, "content_hash_mismatch"]);
+    expect(client.query.mock.calls[2]?.[1]).toEqual(expect.arrayContaining(["attachment.rejected", "content_hash_mismatch"]));
+  });
+
+  it("marks an attachment ready only after hashing the stored bytes server-side", async () => {
+    const { pool, operations } = poolWithOwnedRow();
+    const storage: ObjectStorage = {
+      ...emptyStorage(),
+      head: vi.fn(async () => ({ sizeBytes: 12, mimeType: "application/pdf", sha256: input.sha256 })),
+      computeSha256: vi.fn(async () => input.sha256),
+    };
+    const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
+
+    await expect(service.finalize(actor, row.attachment_id)).resolves.toMatchObject({ status: "ready" });
+    expect(storage.computeSha256).toHaveBeenCalledWith(row.object_key);
+    expect(operations[0]).toBe("BEGIN");
+    expect(operations[1]).toContain("UPDATE attachments SET status='ready'");
+    expect(operations[2]).toContain("INSERT INTO operation_events");
+    expect(operations[3]).toBe("COMMIT");
+  });
+
   it("treats an already-ready finalize as idempotent without another HEAD or transaction", async () => {
     const readyRow = { ...row, status: "ready" as const };
     const { pool } = poolWithOwnedRow(readyRow);
@@ -151,7 +191,7 @@ describe("AttachmentService failure consistency", () => {
 
   it("returns the exact storage download expiry without recomputing it", async () => {
     const readyRow = { ...row, status: "ready" as const };
-    const { pool } = poolWithOwnedRow(readyRow);
+    const { pool, operations, client } = poolWithOwnedRow(readyRow);
     const storage: ObjectStorage = {
       ...emptyStorage(),
       createDownloadGrant: vi.fn(async () => ({
@@ -161,9 +201,19 @@ describe("AttachmentService failure consistency", () => {
     };
     const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
 
-    await expect(service.createDownloadIntent(actor.actorId, row.attachment_id)).resolves.toEqual({
+    await expect(service.createDownloadIntent(actor, row.attachment_id)).resolves.toEqual({
       downloadUrl: "https://oss.test/private/proof.pdf?signature=signed",
       expiresAt: "2030-01-02T03:04:05.000Z",
     });
+    expect(storage.createDownloadGrant).toHaveBeenCalledOnce();
+    expect(operations).toEqual([
+      "BEGIN",
+      expect.stringContaining("INSERT INTO operation_events"),
+      "COMMIT",
+    ]);
+    expect(client.query.mock.calls[1]?.[1]).toEqual(expect.arrayContaining([
+      "attachment.download_grant_issued",
+      row.attachment_id,
+    ]));
   });
 });
