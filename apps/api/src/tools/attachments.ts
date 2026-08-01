@@ -45,7 +45,7 @@ export class AttachmentService {
     this.validate(input);
     const attachmentId = randomUUID();
     const objectKey = createPrivateObjectKey(this.options.prefix, input.filename);
-    const uploadUrl = await this.storageCall(() => this.storage.createNonOverwritableUploadUrl(objectKey, {
+    const uploadGrant = await this.storageCall(() => this.storage.createExactSizeNonOverwritableUploadGrant(objectKey, {
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       sha256: input.sha256,
@@ -76,13 +76,16 @@ export class AttachmentService {
     return {
       attachmentId,
       objectKey,
-      uploadUrl,
-      expiresAt: new Date(Date.now() + this.options.ttlSeconds * 1000).toISOString(),
+      uploadMethod: uploadGrant.method,
+      uploadUrl: uploadGrant.uploadUrl,
+      uploadFields: uploadGrant.fields,
+      expiresAt: uploadGrant.expiresAt,
     };
   }
 
   async finalize(actor: TrustedActorContext, attachmentId: string): Promise<AttachmentResponse> {
     const row = await this.owned(attachmentId, actor.actorId);
+    if (row.status === "ready") return this.dto(row);
     if (row.status !== "pending") {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "Attachment is not pending", 409);
     }
@@ -102,7 +105,7 @@ export class AttachmentService {
     if (
       metadata.sizeBytes !== Number(row.size_bytes)
       || metadata.mimeType.toLowerCase() !== row.mime_type
-      || (metadata.sha256 !== undefined && metadata.sha256 !== row.sha256)
+      || metadata.sha256 !== row.sha256
     ) {
       await this.rejectMetadata(actor, row, "metadata_mismatch");
       throw new ApplicationError(
@@ -144,11 +147,10 @@ export class AttachmentService {
   ): Promise<DownloadIntentResponse> {
     const row = await this.ownedOrBound(attachmentId, actorId, authorizeBound);
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
-    const downloadUrl = await this.storageCall(() => this.storage.createDownloadUrl(row.object_key, {
+    return this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
       ttlSeconds: this.options.ttlSeconds,
       filename: row.original_filename,
     }));
-    return { downloadUrl, expiresAt: new Date(Date.now() + this.options.ttlSeconds * 1000).toISOString() };
   }
 
   private async rejectMetadata(actor: TrustedActorContext, row: AttachmentRow, reason: string): Promise<void> {
