@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ExportJobService } from "../../apps/api/src/tools/exports.js";
-import { IdempotencyRepository, MessageOutboxRepository } from "../../apps/api/src/tools/repositories.js";
+import { IdempotencyRepository, MessageOutboxRepository, OperationEventRepository } from "../../apps/api/src/tools/repositories.js";
 
 describe("public tools repository guards", () => {
   it("rejects completion and outbox transitions when no row changes", async () => {
@@ -22,6 +22,25 @@ describe("public tools repository guards", () => {
     expect(client.query.mock.calls[0]![0]).toContain("SKIP LOCKED");
     await expect(repository.enqueue(client as never, { topic: "t", aggregateType: "a", aggregateId: "1", payload: {}, recipientKey: "r", idempotencyKey: "k" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
     expect(client.query.mock.calls[1]![0]).toContain("message_outbox.payload=EXCLUDED.payload");
+  });
+
+  it("rejects empty or malformed audit role snapshots before issuing SQL", async () => {
+    const client = { query: vi.fn(async () => ({ rowCount: 1, rows: [] })) };
+    const repository = new OperationEventRepository();
+    const input = { action: "test", entityType: "test", entityId: "1" };
+    await expect(repository.append(client as never, {
+      actorId: "00000000-0000-4000-8000-000000000099",
+      actorRoles: [],
+      authorizationCapability: "tools:user",
+      requestId: "request",
+    }, input)).rejects.toMatchObject({ code: "NO_BUSINESS_ROLE", statusCode: 403 });
+    await expect(repository.append(client as never, {
+      actorId: "00000000-0000-4000-8000-000000000099",
+      actorRoles: ["bad role"],
+      authorizationCapability: "tools:user",
+      requestId: "request",
+    }, input)).rejects.toMatchObject({ code: "NO_BUSINESS_ROLE", statusCode: 403 });
+    expect(client.query).not.toHaveBeenCalled();
   });
 
   it("rejects invalid retry delays before issuing SQL", async () => {
