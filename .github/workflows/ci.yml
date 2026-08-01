@@ -96,7 +96,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
         run: bash scripts/seed-base-migrations.sh
 
-      - name: Apply migrations twice against PostgreSQL
+      - name: Apply and validate exact Head migration history against PostgreSQL
         run: npm run db:migrate:check
 
       - name: Scan repository for committed secret signatures
@@ -113,6 +113,6 @@ jobs:
             echo "- Node: $(node --version)"
             echo "- npm: $(npm --version)"
             echo "- Lint/typecheck/build/tests: passed"
-            echo "- PostgreSQL migration replay: passed"
+            echo "- PostgreSQL exact migration history replay: passed"
             echo "- Secret signature scan: passed"
           } >> "${GITHUB_STEP_SUMMARY}"

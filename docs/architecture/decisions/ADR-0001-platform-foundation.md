@@ -9,7 +9,7 @@
 1. 使用 npm workspaces 管理 `apps/web`、`apps/api` 与独立 packages，锁定 Node 22、npm 10。
 2. 前端沿用 ERP 已验证的 React 19、Vite 8 版本方向，但不复制 ERP 页面或巨型单文件；Vite 使用已修复安全公告的 8.2.0，而不是机械复制 ERP 当时的旧补丁版本。
 3. API 使用 Fastify 与 TypeScript，统一 request ID、错误契约和结构化脱敏日志。
-4. PR-01 以 PostgreSQL 16 为默认关系数据库，迁移采用带 manifest/checksum 的版本化 SQL；readiness 核对完整 migration 历史的版本与 checksum，CI 先回放 base revision migration 再应用 Head；平台首迁移只建立审计、outbox 和幂等基础表，不建立返工业务表。
+4. PR-01 以 PostgreSQL 16 为默认关系数据库，迁移采用带 manifest/checksum 的版本化 SQL；migration runner 与 readiness 都核对完整历史，已应用记录必须是 Head manifest 的精确前缀，修改、插空或删除历史 migration 均失败；CI 先回放 base revision migration 再应用 Head；平台首迁移只建立审计、outbox 和幂等基础表，不建立返工业务表。
 5. liveness 与 readiness 分离；`/version` 同时返回 Git SHA、构建时间、已应用 schema 版本和预期 schema 版本。
 6. ERP 仅保留显式 adapter 接口，默认 disabled；本 PR 不读写 ERP。
 7. ECS 只交付独立目录、端口、PM2、Nginx、日志轮转和备份模板，不执行部署。

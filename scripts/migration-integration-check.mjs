@@ -40,8 +40,29 @@ try {
   }
   if (!checksumDriftRejected) throw new Error("Stored migration checksum drift was not rejected");
 
+  const removedMigration = {
+    version: "9999_ci_removed_migration_fixture",
+    checksum: "f".repeat(64),
+  };
+  await pool.query("INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)", [
+    removedMigration.version,
+    removedMigration.checksum,
+  ]);
+  let removedMigrationRejected = false;
+  try {
+    await applyMigrations(databaseUrl);
+  } catch (error) {
+    removedMigrationRejected =
+      error instanceof Error && error.message.includes("absent from Head manifest");
+  } finally {
+    await pool.query("DELETE FROM schema_migrations WHERE version = $1", [removedMigration.version]);
+  }
+  if (!removedMigrationRejected) {
+    throw new Error("A migration removed from the Head manifest was not rejected");
+  }
+
   process.stdout.write(
-    `${JSON.stringify({ success: true, firstApplied: first.applied, currentVersion: second.currentVersion, checksumDriftRejected, tables: requiredTables })}\n`,
+    `${JSON.stringify({ success: true, firstApplied: first.applied, currentVersion: second.currentVersion, checksumDriftRejected, removedMigrationRejected, tables: requiredTables })}\n`,
   );
 } finally {
   await pool.end();

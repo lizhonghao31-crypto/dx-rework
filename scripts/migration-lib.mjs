@@ -62,6 +62,25 @@ export async function discoverValidatedMigrations() {
   return migrations;
 }
 
+export function assertAppliedMigrationHistory(applied, expected) {
+  if (applied.length > expected.length) {
+    const removed = applied[expected.length];
+    throw new Error(`Applied migration is absent from Head manifest: ${removed?.version ?? "unknown"}`);
+  }
+
+  for (const [index, actual] of applied.entries()) {
+    const target = expected[index];
+    if (!target || actual.version !== target.version) {
+      throw new Error(
+        `Applied migration history diverged at position ${index + 1}: actual=${actual.version}, expected=${target?.version ?? "missing"}`,
+      );
+    }
+    if (actual.checksum !== target.checksum) {
+      throw new Error(`Migration checksum drift detected: ${actual.version}`);
+    }
+  }
+}
+
 export async function applyMigrations(databaseUrl) {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   const client = await pool.connect();
@@ -76,7 +95,13 @@ export async function applyMigrations(databaseUrl) {
       )
     `);
 
-    for (const migration of await discoverValidatedMigrations()) {
+    const migrations = await discoverValidatedMigrations();
+    const storedHistory = await client.query(
+      "SELECT version, checksum FROM schema_migrations ORDER BY version ASC",
+    );
+    assertAppliedMigrationHistory(storedHistory.rows, migrations);
+
+    for (const migration of migrations) {
       const existing = await client.query(
         "SELECT checksum FROM schema_migrations WHERE version = $1",
         [migration.version],
