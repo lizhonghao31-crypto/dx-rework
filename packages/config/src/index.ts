@@ -36,7 +36,10 @@ const EnvironmentSchema = z
     OSS_BUCKET: z.string().min(1).optional(),
     OSS_ACCESS_KEY_ID: z.string().min(1).optional(),
     OSS_ACCESS_KEY_SECRET: z.string().min(1).optional(),
-    OSS_PRIVATE_PREFIX: z.string().regex(/^[A-Za-z0-9/_-]+$/).default("dx-rework/private"),
+    OSS_PRIVATE_PREFIX: z.string()
+      .regex(/^[A-Za-z0-9/_-]+$/)
+      .refine((value) => !value.startsWith("/") && !value.endsWith("/") && !value.includes("//"), "must be a non-root normalized prefix")
+      .default("dx-rework/private"),
     OSS_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     OSS_MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(104857600).default(20971520),
   })
@@ -44,6 +47,14 @@ const EnvironmentSchema = z
     const ossValues = [environment.OSS_REGION, environment.OSS_ENDPOINT, environment.OSS_BUCKET, environment.OSS_ACCESS_KEY_ID, environment.OSS_ACCESS_KEY_SECRET];
     if (ossValues.some(Boolean) && !ossValues.every(Boolean)) context.addIssue({ code: "custom", path: ["OSS_BUCKET"], message: "OSS configuration must be complete or entirely disabled" });
     if (environment.NODE_ENV !== "production") return;
+    if (environment.OSS_ENDPOINT && new URL(environment.OSS_ENDPOINT).protocol !== "https:") {
+      context.addIssue({ code: "custom", path: ["OSS_ENDPOINT"], message: "production requires an HTTPS OSS endpoint" });
+    }
+    for (const key of ["OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET"] as const) {
+      if (environment[key]?.toLowerCase().includes("replace")) {
+        context.addIssue({ code: "custom", path: [key], message: "production rejects placeholder values" });
+      }
+    }
     if (!/^[0-9a-f]{40}$/i.test(environment.GIT_SHA)) {
       context.addIssue({ code: "custom", path: ["GIT_SHA"], message: "production requires a full 40-character Git SHA" });
     }
