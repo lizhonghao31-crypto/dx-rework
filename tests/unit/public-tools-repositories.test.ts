@@ -24,6 +24,14 @@ describe("public tools repository guards", () => {
     expect(client.query.mock.calls[1]![0]).toContain("message_outbox.payload=EXCLUDED.payload");
   });
 
+  it("rejects invalid retry delays before issuing SQL", async () => {
+    const client = { query: vi.fn(async () => ({ rowCount: 1, rows: [] })) };
+    const repository = new MessageOutboxRepository();
+    await expect(repository.markFailed(client as never, "event", "lease", new Error("safe"), 0)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(repository.markFailed(client as never, "event", "lease", new Error("safe"), 86_401)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    expect(client.query).not.toHaveBeenCalled();
+  });
+
   it("returns all routing fields required by a generic outbox worker", async () => {
     const row = {
       event_id: "event-1",
