@@ -35,8 +35,6 @@ export class AuthService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  private readonly revalidations = new Map<string, Promise<AuthUser>>();
-
   async beginQr(): Promise<{ authorizationUrl: string; bindingToken: string }> {
     await this.store.cleanupExpiredAuthArtifacts(this.now());
     const state = randomBytes(32).toString("base64url");
@@ -87,23 +85,17 @@ export class AuthService {
   private hashBinding(token: string): string { return createHmac("sha256", this.sessionSecret).update(`qr-binding:${token}`).digest("hex"); }
 
   private async revalidate(userId: string, identity: SessionIdentity): Promise<AuthUser> {
-    const pending = this.revalidations.get(userId);
-    if (pending) return pending;
-    const operation = (async () => {
-      const member = await this.provider.getOrganizationMember(identity, this.corpId);
-      if (!member || !stableEqual(member.corpId, this.corpId)) {
-        await this.store.deactivateIdentity(userId, this.now());
-        throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
-      }
-      const user = await this.store.upsertIdentity(member);
-      if (!member.active || !member.employed) {
-        await this.store.deactivateIdentity(userId, this.now());
-        throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
-      }
-      return user;
-    })();
-    this.revalidations.set(userId, operation);
-    try { return await operation; } finally { this.revalidations.delete(userId); }
+    const member = await this.provider.getOrganizationMember(identity, this.corpId);
+    if (!member || !stableEqual(member.corpId, this.corpId)) {
+      await this.store.deactivateIdentity(userId, this.now());
+      throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+    }
+    const user = await this.store.upsertIdentity(member);
+    if (!member.active || !member.employed) {
+      await this.store.deactivateIdentity(userId, this.now());
+      throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+    }
+    return user;
   }
 }
 

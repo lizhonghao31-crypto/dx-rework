@@ -49,7 +49,7 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
       return reply.header("set-cookie", [clearQrBinding, setSession(result.token)]).code(303).header("location", options.appBasePath).send();
     } catch {
       request.log.warn({ requestId: request.id }, "QR callback denied");
-      return reply.header("set-cookie", clearQrBinding).code(303).header("location", `${options.appBasePath}auth/denied`).send();
+      return reply.code(303).header("location", `${options.appBasePath}auth/denied`).send();
     }
   });
   app.get("/auth/me", async (request) => {

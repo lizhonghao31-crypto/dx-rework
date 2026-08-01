@@ -46,4 +46,15 @@ describe("production Nginx API routing", () => {
     expect(config).toMatch(/access_log\s+\/opt\/dx-rework\/logs\/nginx-access\.log\s+dx_rework_query_free;/);
     expect(config).not.toMatch(/access_log[^;]*\scombined;/);
   });
+
+  it("suppresses request-line error diagnostics for exact OAuth callbacks", async () => {
+    const config = await readFile("infra/nginx/dx-rework.conf.example", "utf8");
+    for (const path of ["/api/auth/qr/callback", "/rework/api/auth/qr/callback"]) {
+      const start = config.indexOf(`location = ${path} {`);
+      expect(start).toBeGreaterThan(-1);
+      const block = config.slice(start, config.indexOf("\n    }", start) + 6);
+      expect(block).toContain("error_log /dev/null emerg;");
+      expect(block).toContain("proxy_pass http://127.0.0.1:3201/auth/qr/callback;");
+    }
+  });
 });
