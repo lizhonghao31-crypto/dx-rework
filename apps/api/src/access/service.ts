@@ -4,6 +4,7 @@ import type {
   AssignRole,
   CreateBusinessPerson,
   CreateDelegation,
+  CreatePersonAlias,
   CreateProcess,
   CreateSupplier,
   ReviseProcess,
@@ -15,6 +16,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
+type PersonAliasRow = Readonly<{ alias_id: string; person_id: string; alias: string; normalized_alias: string }>;
 
 const normalizeAlias = (value: string): string => value.normalize("NFKC").trim().toLocaleLowerCase("zh-CN");
 
@@ -309,10 +311,20 @@ export class AccessMasterDataService {
       if (!assignment) throw new ApplicationError("NOT_FOUND", "有效角色绑定不存在", 404);
       ensureProtectedRoleAuthority(actor, assignment.role_code);
       if (assignment.role_code === "owner_group") {
-        const owners = await client.query<{ count: string }>(
-          "SELECT count(*)::text count FROM user_role_assignments WHERE role_code='owner_group' AND revoked_at IS NULL",
+        await client.query("SELECT role_code FROM business_roles WHERE role_code='owner_group' FOR UPDATE");
+        const owners = await client.query<{ count: string; target_usable: boolean | null }>(
+          `SELECT count(*)::text count,
+                  bool_or(ura.user_id=$1) target_usable
+           FROM user_role_assignments ura
+           JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+           WHERE ura.role_code='owner_group' AND ura.revoked_at IS NULL
+             AND EXISTS (
+               SELECT 1 FROM identity_mappings i
+               WHERE i.user_id=ura.user_id AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+             )`,
+          [assignment.user_id],
         );
-        if (Number(owners.rows[0]?.count ?? 0) <= 1) {
+        if (owners.rows[0]?.target_usable === true && Number(owners.rows[0].count) <= 1) {
           throw new ApplicationError("CONFLICT", "不能撤销最后一名老板权限组成员", 409);
         }
       }
@@ -361,25 +373,43 @@ export class AccessMasterDataService {
     });
   }
 
+  async addPersonAlias(
+    actor: TrustedActorContext,
+    personId: string,
+    input: CreatePersonAlias,
+  ): Promise<{ aliasId: string }> {
+    return this.transaction(async (client) => {
+      const person = await client.query(
+        "SELECT person_id FROM business_people WHERE person_id=$1 AND active=true FOR SHARE",
+        [personId],
+      );
+      if (!person.rows[0]) throw new ApplicationError("NOT_FOUND", "有效人员档案不存在", 404);
+      const aliasId = randomUUID();
+      const normalizedAlias = normalizeAlias(input.alias);
+      await client.query(
+        "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by) VALUES($1,$2,$3,$4,$5)",
+        [aliasId, personId, input.alias, normalizedAlias, actor.actorId],
+      );
+      await this.events.append(client, actor, {
+        action: "master_data.person_alias.create",
+        entityType: "business_person_alias",
+        entityId: aliasId,
+        after: { personId, alias: input.alias, normalizedAlias },
+        reason: input.reason,
+      });
+      return { aliasId };
+    });
+  }
+
   async revokePersonAlias(actor: TrustedActorContext, aliasId: string, reason: string): Promise<void> {
     await this.transaction(async (client) => {
-      const existing = await client.query<{ person_id: string; alias: string; normalized_alias: string }>(
-        "SELECT person_id,alias,normalized_alias FROM business_person_aliases WHERE alias_id=$1 AND revoked_at IS NULL FOR UPDATE",
+      const existing = await client.query<PersonAliasRow>(
+        "SELECT alias_id,person_id,alias,normalized_alias FROM business_person_aliases WHERE alias_id=$1 AND revoked_at IS NULL FOR UPDATE",
         [aliasId],
       );
       const alias = existing.rows[0];
       if (!alias) throw new ApplicationError("NOT_FOUND", "有效人员别名不存在", 404);
-      await client.query(
-        "UPDATE business_person_aliases SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3 WHERE alias_id=$1",
-        [aliasId, actor.actorId, reason],
-      );
-      await this.events.append(client, actor, {
-        action: "master_data.person_alias.revoke",
-        entityType: "business_person_alias",
-        entityId: aliasId,
-        before: { personId: alias.person_id, alias: alias.alias, normalizedAlias: alias.normalized_alias },
-        reason,
-      });
+      await this.revokePersonAliasRow(client, actor, alias, reason);
     });
   }
 
@@ -394,12 +424,15 @@ export class AccessMasterDataService {
       if (person.person_type !== "temporary") {
         throw new ApplicationError("VALIDATION_ERROR", "内部人员状态必须由钉钉组织在职状态驱动", 400);
       }
-      await client.query(
-        `UPDATE business_person_aliases
-         SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3
-         WHERE person_id=$1 AND revoked_at IS NULL`,
-        [personId, actor.actorId, reason],
+      const aliases = await client.query<PersonAliasRow>(
+        `SELECT alias_id,person_id,alias,normalized_alias
+         FROM business_person_aliases
+         WHERE person_id=$1 AND revoked_at IS NULL
+         ORDER BY alias_id
+         FOR UPDATE`,
+        [personId],
       );
+      for (const alias of aliases.rows) await this.revokePersonAliasRow(client, actor, alias, reason);
       await client.query(
         "UPDATE business_people SET active=false,deactivated_at=CURRENT_TIMESTAMP WHERE person_id=$1",
         [personId],
@@ -476,15 +509,10 @@ export class AccessMasterDataService {
       await ensureActiveOrganizationUser(client, input.granteeUserId, "被授权用户不存在、不在职或已停用");
       const grantorCapability = await client.query(
         `SELECT 1
-         FROM (
-           SELECT capability FROM user_capabilities WHERE user_id=$1
-           UNION
-           SELECT rc.capability FROM user_role_assignments ura
-             JOIN role_capabilities rc ON rc.role_code=ura.role_code
-             JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
-           WHERE ura.user_id=$1 AND ura.revoked_at IS NULL
-         ) effective
-         WHERE capability=$2`,
+         FROM user_role_assignments ura
+         JOIN role_capabilities rc ON rc.role_code=ura.role_code
+         JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+         WHERE ura.user_id=$1 AND ura.revoked_at IS NULL AND rc.capability=$2`,
         [input.grantorUserId, input.capability],
       );
       if (!grantorCapability.rows[0]) throw new ApplicationError("FORBIDDEN", "授权人本身不具备该能力", 403);
@@ -550,6 +578,28 @@ export class AccessMasterDataService {
         reason,
       });
     });
+  }
+
+  private async revokePersonAliasRow(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    alias: PersonAliasRow,
+    reason: string,
+  ): Promise<void> {
+    const actorRoles = [...new Set(actor.actorRoles)].sort();
+    await client.query(
+      `SELECT
+         set_config('dx_rework.alias_revoke_event_id',$1,true),
+         set_config('dx_rework.alias_revoke_request_id',$2,true),
+         set_config('dx_rework.alias_revoke_actor_id',$3,true),
+         set_config('dx_rework.alias_revoke_actor_roles',$4,true),
+         set_config('dx_rework.alias_revoke_capability',$5,true)`,
+      [randomUUID(), actor.requestId, actor.actorId, JSON.stringify(actorRoles), actor.authorizationCapability],
+    );
+    await client.query(
+      "UPDATE business_person_aliases SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3 WHERE alias_id=$1",
+      [alias.alias_id, actor.actorId, reason],
+    );
   }
 
   private async insertProcessVersion(

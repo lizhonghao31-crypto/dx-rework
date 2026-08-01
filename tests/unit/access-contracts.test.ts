@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   CreateBusinessPersonSchema,
   CreateDelegationSchema,
+  CreatePersonAliasSchema,
 } from "@dx-rework/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -33,6 +34,11 @@ describe("access and master-data contracts", () => {
     expect(CreateDelegationSchema.safeParse({ ...base, scopeType: "rework_order" }).success).toBe(false);
   });
 
+  it("requires a reason when rebuilding an alias on an existing person", () => {
+    expect(CreatePersonAliasSchema.safeParse({ alias: "李生", reason: "纠正称呼归属" }).success).toBe(true);
+    expect(CreatePersonAliasSchema.safeParse({ alias: "李生" }).success).toBe(false);
+  });
+
   it("codifies the approved role separation in the immutable migration", async () => {
     const migration = await readFile(
       new URL("../../apps/api/migrations/0005_access_master_data.sql", import.meta.url),
@@ -40,6 +46,8 @@ describe("access and master-data contracts", () => {
     );
     expect(migration).toContain("business_person_aliases_active_alias_idx");
     expect(migration).toContain("allow_business_person_alias_revocation_only");
+    expect(migration).toContain("business person alias revocation requires trusted audit context");
+    expect(migration).toContain("authorization ignores this table from schema 0005 onward");
     expect(migration).toContain("CHECK ((person_type = 'internal') = (app_user_id IS NOT NULL))");
     expect(migration).toContain("('owner_group', 'own_factory:approve')");
     expect(migration).toContain("('owner_group', 'access:admin')");

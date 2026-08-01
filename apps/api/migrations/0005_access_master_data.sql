@@ -45,6 +45,9 @@ CREATE UNIQUE INDEX user_role_assignments_active_idx
 CREATE INDEX user_role_assignments_user_history_idx
   ON user_role_assignments (user_id, granted_at DESC);
 
+COMMENT ON TABLE user_capabilities IS
+  'Legacy pre-role grants retained only for migration traceability; authorization ignores this table from schema 0005 onward.';
+
 CREATE TABLE business_people (
   person_id uuid PRIMARY KEY,
   person_type text NOT NULL CHECK (person_type IN ('internal', 'temporary')),
@@ -83,6 +86,14 @@ CREATE UNIQUE INDEX business_person_aliases_person_active_idx
   ON business_person_aliases (person_id, normalized_alias)
   WHERE revoked_at IS NULL;
 CREATE OR REPLACE FUNCTION allow_business_person_alias_revocation_only() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.alias_revoke_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.alias_revoke_request_id', true), '');
+  audit_actor_id text := nullif(current_setting('dx_rework.alias_revoke_actor_id', true), '');
+  audit_actor_roles_text text := nullif(current_setting('dx_rework.alias_revoke_actor_roles', true), '');
+  audit_capability text := nullif(current_setting('dx_rework.alias_revoke_capability', true), '');
+  audit_actor_roles_json jsonb;
+  audit_actor_roles text[];
 BEGIN
   IF OLD.revoked_at IS NOT NULL
      OR NEW.revoked_at IS NULL OR NEW.revoked_by IS NULL OR NEW.revoke_reason IS NULL
@@ -96,6 +107,56 @@ BEGIN
     RAISE EXCEPTION 'business person aliases are immutable except for one audited revocation'
       USING ERRCODE = '55000';
   END IF;
+
+  IF audit_event_id IS NULL OR audit_request_id IS NULL OR audit_actor_id IS NULL
+     OR audit_actor_roles_text IS NULL OR audit_capability IS NULL
+  THEN
+    RAISE EXCEPTION 'business person alias revocation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+
+  BEGIN
+    audit_actor_roles_json := audit_actor_roles_text::jsonb;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'business person alias revocation has invalid role audit context'
+      USING ERRCODE = '55000';
+  END;
+  IF jsonb_typeof(audit_actor_roles_json) <> 'array' OR jsonb_array_length(audit_actor_roles_json) = 0 THEN
+    RAISE EXCEPTION 'business person alias revocation requires a role snapshot'
+      USING ERRCODE = '55000';
+  END IF;
+  SELECT array_agg(role_name ORDER BY role_name)
+  INTO audit_actor_roles
+  FROM jsonb_array_elements_text(audit_actor_roles_json) AS roles(role_name);
+  IF EXISTS (
+    SELECT 1 FROM unnest(audit_actor_roles) AS roles(role_name)
+    WHERE role_name !~ '^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$'
+  ) THEN
+    RAISE EXCEPTION 'business person alias revocation has an invalid role snapshot'
+      USING ERRCODE = '55000';
+  END IF;
+  IF audit_capability <> 'master_data:manage'
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+     OR audit_actor_id::uuid IS DISTINCT FROM NEW.revoked_by
+  THEN
+    RAISE EXCEPTION 'business person alias revocation audit context does not authorize this mutation'
+      USING ERRCODE = '55000';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,audit_actor_id::uuid,audit_actor_roles,audit_capability,
+    'master_data.person_alias.revoke','business_person_alias',OLD.alias_id::text,
+    jsonb_build_object(
+      'personId',OLD.person_id,
+      'alias',OLD.alias,
+      'normalizedAlias',OLD.normalized_alias
+    ),
+    NULL,
+    NEW.revoke_reason
+  );
   RETURN NEW;
 END;
 $$;

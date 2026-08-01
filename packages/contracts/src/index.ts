@@ -103,6 +103,10 @@ export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
 ]);
 export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
 export const PersonAliasParamsSchema = z.object({ aliasId: IdSchema }).strict();
+export const CreatePersonAliasSchema = z.object({
+  alias: z.string().trim().min(1).max(100),
+  reason: ReasonSchema,
+}).strict();
 
 export const CreateProcessSchema = z.object({
   processCode: CatalogCodeSchema,
@@ -152,6 +156,7 @@ export const CatalogListQuerySchema = z.object({
 
 export type AssignRole = z.infer<typeof AssignRoleSchema>;
 export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
+export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
 export type CreateProcess = z.infer<typeof CreateProcessSchema>;
 export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
 export type CreateSupplier = z.infer<typeof CreateSupplierSchema>;

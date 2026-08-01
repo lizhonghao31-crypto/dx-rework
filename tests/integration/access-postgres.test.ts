@@ -125,6 +125,23 @@ runWithPostgres("role permissions and versioned master data", () => {
     ]);
   });
 
+  it("keeps legacy direct capabilities inert after role migration", async () => {
+    await database.query(
+      "INSERT INTO user_capabilities(user_id,capability) VALUES($1,'access:admin')",
+      [zhangId],
+    );
+    expect((await authStore.findSession("zhang-token", new Date()))?.user.capabilities).not.toContain("access:admin");
+    await expect(service.createDelegation(delegationActor, {
+      grantorUserId: zhangId,
+      granteeUserId: financeId,
+      capability: "access:admin",
+      scopeType: "global",
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+      reason: "旧版直授权限不得继续转授",
+    })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+  });
+
   it("maps 李生 only to 李总 and keeps temporary workers outside login users", async () => {
     const li = await service.createPerson(masterDataActor, {
       personType: "internal",
@@ -159,22 +176,45 @@ runWithPostgres("role permissions and versioned master data", () => {
       [temporary.personId],
     );
     expect(temp.rows[0]).toEqual({ app_user_id: null, person_type: "temporary" });
-    const temporaryAlias = await database.query<{ alias_id: string }>(
-      "SELECT alias_id FROM business_person_aliases WHERE person_id=$1 AND revoked_at IS NULL",
-      [temporary.personId],
-    );
-    await service.revokePersonAlias(masterDataActor, temporaryAlias.rows[0]!.alias_id, "纠正临时工别名归属");
     const correctedTemporary = await service.createPerson(masterDataActor, {
       personType: "temporary",
       displayName: "临时工乙",
-      aliases: ["临工甲"],
+      aliases: [],
+    });
+    const temporaryDirectory = await service.listPeople();
+    const temporaryAliasId = temporaryDirectory
+      .find((person) => person.personId === temporary.personId)?.aliases[0]?.aliasId;
+    expect(temporaryAliasId).toEqual(expect.any(String));
+    await service.revokePersonAlias(masterDataActor, temporaryAliasId!, "纠正临时工别名归属");
+    const correctedAlias = await service.addPersonAlias(masterDataActor, correctedTemporary.personId, {
+      alias: "临工甲",
+      reason: "将别名重建到既有人员档案",
     });
     const currentTemporaryAlias = await database.query<{ person_id: string }>(
       "SELECT person_id FROM business_person_aliases WHERE normalized_alias=$1 AND revoked_at IS NULL",
       ["临工甲".normalize("NFKC").toLocaleLowerCase("zh-CN")],
     );
     expect(currentTemporaryAlias.rows[0]?.person_id).toBe(correctedTemporary.personId);
+    await expect(database.query(
+      `UPDATE business_person_aliases
+       SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='绕过服务直接修改'
+       WHERE alias_id=$1`,
+      [correctedAlias.aliasId, adminId],
+    )).rejects.toMatchObject({ code: "55000" });
+    expect(await database.query(
+      `SELECT 1 FROM operation_events
+       WHERE entity_type='business_person_alias' AND entity_id=$1
+         AND action='master_data.person_alias.revoke'
+         AND actor_id=$2 AND authorization_capability='master_data:manage'`,
+      [temporaryAliasId, adminId],
+    )).toHaveProperty("rowCount", 1);
     await service.deactivatePerson(masterDataActor, correctedTemporary.personId, "临时工离场");
+    expect(await database.query(
+      `SELECT 1 FROM operation_events
+       WHERE entity_type='business_person_alias' AND entity_id=$1
+         AND action='master_data.person_alias.revoke'`,
+      [correctedAlias.aliasId],
+    )).toHaveProperty("rowCount", 1);
     expect((await service.listPeople()).some((person) => person.personId === correctedTemporary.personId)).toBe(false);
     expect(await service.listPeople(true)).toContainEqual(
       expect.objectContaining({ personId: correctedTemporary.personId, active: false, aliases: [] }),
@@ -288,20 +328,40 @@ runWithPostgres("role permissions and versioned master data", () => {
     })).resolves.toMatchObject({ delegationId: expect.any(String) });
   });
 
-  it("prevents removal of the last active owner", async () => {
-    const onlyBootstrap = await database.query<{ assignment_id: string }>(
-      "SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='owner_group' AND revoked_at IS NULL",
-      [bootstrapOwnerId],
+  it("serializes concurrent revocations and preserves the last usable owner", async () => {
+    const usableOwners = await database.query<{ assignment_id: string; user_id: string }>(
+      `SELECT assignment_id,user_id
+       FROM user_role_assignments
+       WHERE role_code='owner_group' AND revoked_at IS NULL AND user_id IN ($1,$2)
+       ORDER BY user_id`,
+      [liOwnerId, wuOwnerId],
     );
-    const otherOwners = await database.query(
-      "UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$1,revoke_reason='test setup' WHERE role_code='owner_group' AND user_id<>$1 AND revoked_at IS NULL",
-      [bootstrapOwnerId],
+    expect(usableOwners.rows).toHaveLength(2);
+
+    const results = await Promise.allSettled(usableOwners.rows.map((assignment) =>
+      service.revokeRole(ownerActor, assignment.assignment_id, "并发撤权校验"),
+    ));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: expect.objectContaining({ code: "CONFLICT", statusCode: 409 }),
+    });
+
+    const remainingUsable = await database.query<{ assignment_id: string }>(
+      `SELECT ura.assignment_id
+       FROM user_role_assignments ura
+       JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+       WHERE ura.role_code='owner_group' AND ura.revoked_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM identity_mappings i
+           WHERE i.user_id=ura.user_id AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+         )`,
     );
-    expect(otherOwners.rowCount).toBeGreaterThan(0);
+    expect(remainingUsable.rows).toHaveLength(1);
     await expect(service.revokeRole(
       ownerActor,
-      onlyBootstrap.rows[0]!.assignment_id,
-      "cannot remove last owner",
+      remainingUsable.rows[0]!.assignment_id,
+      "不能只留下无有效钉钉身份的启动记录",
     )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
   });
 });

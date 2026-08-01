@@ -30,6 +30,7 @@ const create = (capabilities: readonly string[], businessRoles: readonly string[
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
     revokeRole: vi.fn(),
     createPerson: vi.fn(),
+    addPersonAlias: vi.fn(async () => ({ aliasId: "00000000-0000-4000-8000-000000000011" })),
     revokePersonAlias: vi.fn(),
     deactivatePerson: vi.fn(),
     createProcess: vi.fn(),
@@ -96,6 +97,26 @@ describe("access routes", () => {
       authorizationCapability: "access:admin",
       requestId: "access-request-1",
     });
+  });
+
+  it("adds an audited alias to an existing stable person ID", async () => {
+    const { app, service } = create(["master_data:manage"]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/master-data/people/00000000-0000-4000-8000-000000000020/aliases",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "alias-request-1" },
+      payload: { alias: "李生", reason: "纠正称呼归属" },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(service.addPersonAlias).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "00000000-0000-4000-8000-000000000001",
+        authorizationCapability: "master_data:manage",
+        requestId: "alias-request-1",
+      }),
+      "00000000-0000-4000-8000-000000000020",
+      { alias: "李生", reason: "纠正称呼归属" },
+    );
   });
 
   it("uses separate read capabilities for business directory consumers", async () => {

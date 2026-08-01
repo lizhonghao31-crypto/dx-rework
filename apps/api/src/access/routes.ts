@@ -3,6 +3,7 @@ import {
   CatalogListQuerySchema,
   CreateBusinessPersonSchema,
   CreateDelegationSchema,
+  CreatePersonAliasSchema,
   CreateProcessSchema,
   CreateSupplierSchema,
   DelegationParamsSchema,
@@ -136,6 +137,15 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       await dependencies.service.createPerson(
         await actor(request, "master_data:manage"),
         parse(CreateBusinessPersonSchema, request.body),
+      ),
+    ));
+
+  app.post<{ Params: { personId: string } }>("/master-data/people/:personId/aliases", async (request, reply) =>
+    reply.code(201).send(
+      await dependencies.service.addPersonAlias(
+        await actor(request, "master_data:manage"),
+        parse(PersonParamsSchema, request.params).personId,
+        parse(CreatePersonAliasSchema, request.body),
       ),
     ));
 

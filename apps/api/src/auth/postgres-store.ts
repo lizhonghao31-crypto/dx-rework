@@ -194,8 +194,6 @@ export class PostgresAuthStore implements AuthStore {
     const capabilities = await queryable.query<{ capability: string }>(
       `SELECT capability
        FROM (
-         SELECT capability FROM user_capabilities WHERE user_id=$1
-         UNION
          SELECT rc.capability
          FROM user_role_assignments ura
          JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
