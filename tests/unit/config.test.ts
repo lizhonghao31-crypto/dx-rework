@@ -5,6 +5,13 @@ import { ConfigurationError, loadConfig } from "@dx-rework/config";
 const validEnvironment = {
   NODE_ENV: "test",
   DATABASE_URL: "postgresql://user:password@127.0.0.1:5432/dx_rework_test",
+  DINGTALK_CORP_ID: "corp-test",
+  DINGTALK_H5_APP_KEY: "app-key-test",
+  DINGTALK_H5_APP_SECRET: "app-secret-test",
+  DINGTALK_WEB_CLIENT_ID: "qr-client-test",
+  DINGTALK_WEB_CLIENT_SECRET: "web-client-secret-test",
+  DINGTALK_QR_REDIRECT_URI: "https://example.test/auth/qr/callback",
+  SESSION_SECRET: "test-session-secret-at-least-32-characters",
 };
 
 describe("loadConfig", () => {
@@ -34,5 +41,13 @@ describe("loadConfig", () => {
     expect(() =>
       loadConfig({ ...validEnvironment, NODE_ENV: "production", GIT_SHA: "local", BUILD_TIME: "local" }),
     ).toThrow(/full 40-character Git SHA/);
+  });
+
+  it("rejects placeholder credentials in production", () => {
+    expect(() => loadConfig({ ...validEnvironment, NODE_ENV: "production", GIT_SHA: "a".repeat(40), BUILD_TIME: "2026-08-01T00:00:00Z", DINGTALK_H5_APP_KEY: "replace_with_key" })).toThrow(/placeholder/);
+  });
+
+  it.each(["//example.com", "/rework//admin", "/rework?next=/"])("rejects unsafe application base path %s", (appBasePath) => {
+    expect(() => loadConfig({ ...validEnvironment, APP_BASE_PATH: appBasePath })).toThrow(ConfigurationError);
   });
 });

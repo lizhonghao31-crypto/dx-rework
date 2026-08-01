@@ -22,6 +22,15 @@ const EnvironmentSchema = z
     GIT_SHA: z.string().min(1).default("local"),
     BUILD_TIME: z.string().min(1).default("local"),
     SERVICE_NAME: z.string().min(1).default("dx-rework-api"),
+    DINGTALK_CORP_ID: z.string().min(1),
+    DINGTALK_H5_APP_KEY: z.string().min(1),
+    DINGTALK_H5_APP_SECRET: z.string().min(1),
+    DINGTALK_WEB_CLIENT_ID: z.string().min(1),
+    DINGTALK_WEB_CLIENT_SECRET: z.string().min(1),
+    DINGTALK_QR_REDIRECT_URI: z.string().url(),
+    APP_BASE_PATH: z.string().regex(/^\/(?!\/)[^?#\\]*$/).refine((value) => !value.includes("//"), "must not contain empty path segments").default("/"),
+    SESSION_SECRET: z.string().min(32),
+    SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== "production") return;
@@ -30,6 +39,9 @@ const EnvironmentSchema = z
     }
     if (Number.isNaN(Date.parse(environment.BUILD_TIME))) {
       context.addIssue({ code: "custom", path: ["BUILD_TIME"], message: "production requires an ISO build timestamp" });
+    }
+    for (const key of ["DINGTALK_CORP_ID", "DINGTALK_H5_APP_KEY", "DINGTALK_H5_APP_SECRET", "DINGTALK_WEB_CLIENT_ID", "DINGTALK_WEB_CLIENT_SECRET", "DINGTALK_QR_REDIRECT_URI", "SESSION_SECRET"] as const) {
+      if (environment[key].toLowerCase().includes("replace")) context.addIssue({ code: "custom", path: [key], message: "production rejects placeholder values" });
     }
   });
 
@@ -52,6 +64,10 @@ export type AppConfig = Readonly<{
   gitSha: string;
   buildTime: string;
   serviceName: string;
+  dingtalk: Readonly<{ corpId: string; h5AppKey: string; h5AppSecret: string; webClientId: string; webClientSecret: string; qrRedirectUri: string }>;
+  appBasePath: string;
+  sessionSecret: string;
+  sessionTtlSeconds: number;
 }>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -70,5 +86,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     gitSha: result.data.GIT_SHA,
     buildTime: result.data.BUILD_TIME,
     serviceName: result.data.SERVICE_NAME,
+    dingtalk: { corpId: result.data.DINGTALK_CORP_ID, h5AppKey: result.data.DINGTALK_H5_APP_KEY, h5AppSecret: result.data.DINGTALK_H5_APP_SECRET, webClientId: result.data.DINGTALK_WEB_CLIENT_ID, webClientSecret: result.data.DINGTALK_WEB_CLIENT_SECRET, qrRedirectUri: result.data.DINGTALK_QR_REDIRECT_URI },
+    appBasePath: result.data.APP_BASE_PATH.endsWith("/") ? result.data.APP_BASE_PATH : `${result.data.APP_BASE_PATH}/`,
+    sessionSecret: result.data.SESSION_SECRET,
+    sessionTtlSeconds: result.data.SESSION_TTL_SECONDS,
   });
 }

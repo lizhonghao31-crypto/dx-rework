@@ -11,12 +11,16 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import type { AppliedSchemaState } from "./platform/database.js";
 import { ApplicationError } from "./platform/errors.js";
+import { registerAuthRoutes } from "./auth/routes.js";
+import type { AuthService } from "./auth/service.js";
+import { AuthDeniedError } from "./auth/service.js";
 import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/schema-version.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
   checkDatabase: () => Promise<void>;
   getAppliedSchemaHistory: () => Promise<AppliedSchemaState[] | null>;
+  auth?: AuthService;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -57,6 +61,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     service: config.serviceName,
     timestamp: new Date().toISOString(),
   }));
+
+  if (dependencies.auth) registerAuthRoutes(app, dependencies.auth, { secureCookie: config.nodeEnv === "production", ttlSeconds: config.sessionTtlSeconds, appBasePath: config.appBasePath, corpId: config.dingtalk.corpId, mobileClientId: config.dingtalk.h5AppKey });
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {
@@ -113,14 +119,15 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   app.setErrorHandler(async (error, request, reply) => {
     const known = error instanceof ApplicationError;
-    const statusCode = known ? error.statusCode : 500;
+    const denied = error instanceof AuthDeniedError;
+    const statusCode = known ? error.statusCode : denied ? 401 : 500;
     if (statusCode >= 500) {
       request.log.error({ err: error }, "request failed");
     }
     const response: ErrorResponse = {
       error: {
-        code: known ? error.code : "INTERNAL_ERROR",
-        message: known ? error.message : "Internal server error",
+        code: known || denied ? error.code : "INTERNAL_ERROR",
+        message: known || denied ? error.message : "Internal server error",
         requestId: request.id,
       },
     };

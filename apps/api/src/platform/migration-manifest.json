@@ -3,6 +3,14 @@
     {
       "version": "0001_platform_foundation",
       "checksum": "c9f69f74ef47ef8b1bc54db28a6b91c81614949a1e9ee40b8a91212b1fb0b9fe"
+    },
+    {
+      "version": "0002_dingtalk_identity_access",
+      "checksum": "155fd00415e4a15c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f"
+    },
+    {
+      "version": "0003_identity_union_continuity",
+      "checksum": "44def9af2f392049de30b77206ec41f40b238991979724498cf24655c23a5b68"
     }
   ]
 }

@@ -2,6 +2,9 @@ import { loadConfig } from "@dx-rework/config";
 import pg from "pg";
 
 import { buildApp } from "./app.js";
+import { OfficialDingTalkProvider } from "./auth/provider.js";
+import { PostgresAuthStore } from "./auth/postgres-store.js";
+import { AuthService } from "./auth/service.js";
 import {
   checkDatabase,
   getAppliedSchemaHistory,
@@ -22,6 +25,7 @@ const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
+  auth: new AuthService(new OfficialDingTalkProvider(config.dingtalk), new PostgresAuthStore(database), config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret),
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
