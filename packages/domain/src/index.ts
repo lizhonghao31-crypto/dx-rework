@@ -87,7 +87,8 @@ export const transitionOutbox = (from: OutboxStatus, to: OutboxStatus): OutboxSt
 export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus): ExportJobStatus =>
   transitions<ExportJobStatus>({ pending: ["running"], running: ["succeeded", "failed"], succeeded: [], failed: [] }, from, to);
 
-export function sanitizeOperationalError(_error: unknown): string {
+export function sanitizeOperationalError(error: unknown): string {
+  void error;
   // Worker errors are persisted in retry tables. Never attempt to enumerate
   // every vendor credential label here: persist only a fixed public
   // classification and keep diagnostics in access-controlled server telemetry.
