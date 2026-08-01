@@ -39,6 +39,7 @@ END;
 $$;
 CREATE TRIGGER operation_events_no_update BEFORE UPDATE ON operation_events FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER operation_events_no_delete BEFORE DELETE ON operation_events FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER operation_events_no_truncate BEFORE TRUNCATE ON operation_events FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
 CREATE TABLE message_outbox (
   event_id uuid PRIMARY KEY,
@@ -59,7 +60,9 @@ CREATE TABLE message_outbox (
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (topic, recipient_key, idempotency_key),
   CHECK (last_error IS NULL OR length(last_error) <= 500),
-  CHECK ((status = 'processing') = (claim_token IS NOT NULL))
+  CHECK ((status = 'processing') = (claim_token IS NOT NULL AND claimed_at IS NOT NULL)),
+  CHECK ((status = 'sent') = (sent_at IS NOT NULL)),
+  CHECK (status <> 'sent' OR last_error IS NULL)
 );
 CREATE INDEX message_outbox_claim_idx ON message_outbox (available_at, claimed_at, created_at)
   WHERE status IN ('pending', 'failed', 'processing');
@@ -68,7 +71,7 @@ CREATE TABLE attachments (
   attachment_id uuid PRIMARY KEY,
   object_key text NOT NULL UNIQUE,
   original_filename text NOT NULL,
-  mime_type text NOT NULL,
+  mime_type text NOT NULL CHECK (mime_type IN ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')),
   size_bytes bigint NOT NULL CHECK (size_bytes > 0),
   sha256 text NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
   uploaded_by uuid NOT NULL REFERENCES app_users(id),
@@ -80,6 +83,9 @@ CREATE TABLE attachments (
   ready_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK ((entity_type IS NULL) = (entity_id IS NULL)),
+  CHECK (rejection_reason IS NULL OR length(rejection_reason) <= 500),
+  CHECK ((status = 'ready') = (ready_at IS NOT NULL)),
+  CHECK ((status = 'rejected') = (rejection_reason IS NOT NULL)),
   CHECK (position('://' in object_key) = 0 AND object_key !~ '(^|/)\.\.(/|$)')
 );
 CREATE INDEX attachments_owner_idx ON attachments (uploaded_by, created_at DESC);
@@ -102,7 +108,9 @@ CREATE TABLE export_jobs (
   UNIQUE (requested_by, export_type, idempotency_key),
   CHECK (last_error IS NULL OR length(last_error) <= 500),
   CHECK ((status = 'succeeded') = (result_attachment_id IS NOT NULL)),
-  CHECK ((status = 'running') = (claim_token IS NOT NULL))
+  CHECK ((status = 'running') = (claim_token IS NOT NULL AND claimed_at IS NOT NULL)),
+  CHECK ((status IN ('succeeded', 'failed')) = (completed_at IS NOT NULL)),
+  CHECK ((status = 'failed') = (last_error IS NOT NULL))
 );
 CREATE INDEX export_jobs_claim_idx ON export_jobs (claimed_at, created_at)
   WHERE status IN ('pending', 'running');
