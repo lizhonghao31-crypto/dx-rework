@@ -115,6 +115,9 @@ describe("private object storage", () => {
         getCalls.push({ name, ...options });
         return "https://oss.test/private/x.png?signature=signed";
       },
+      createReadStream: async () => (async function* () {
+        yield new TextEncoder().encode("test");
+      })(),
       head: async () => ({
         res: {
           headers: {
@@ -151,12 +154,14 @@ describe("private object storage", () => {
     expect(download.expiresAt).toBe("2026-08-01T00:01:00.000Z");
     expect(getCalls[0]).toMatchObject({ name: "private/x.png", method: "GET", expires: 60 });
     expect(await storage.head("private/x.png")).toEqual({ sizeBytes: 4, mimeType: "image/png", sha256: "abcd" });
+    expect(await storage.computeSha256("private/x.png")).toBe("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
   });
 
   it("rejects a weakened or insecure SDK upload grant", async () => {
     const base = {
       signatureUrl: () => "https://oss.test/x",
       head: async () => ({ res: { headers: {} } }),
+      createReadStream: async () => (async function* () { yield new Uint8Array(); })(),
     };
     const weakened = new AliyunPrivateObjectStorage({
       ...base,
@@ -186,7 +191,9 @@ describe("private object storage", () => {
       createPostObjectUploadGrant: async (options) => ({ uploadUrl: "https://oss.test", fields: options.fields }),
       signatureUrl: () => "https://oss.test",
       head: async () => { throw { status: 404, code: "NoSuchKey" }; },
+      createReadStream: async () => { throw { status: 404, code: "NoSuchKey" }; },
     });
     await expect(storage.head("missing")).rejects.toBeInstanceOf(ObjectStorageObjectNotFoundError);
+    await expect(storage.computeSha256("missing")).rejects.toBeInstanceOf(ObjectStorageObjectNotFoundError);
   });
 });
