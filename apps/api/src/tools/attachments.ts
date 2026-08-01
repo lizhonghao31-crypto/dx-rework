@@ -90,29 +90,19 @@ export class AttachmentService {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "Attachment is not pending", 409);
     }
 
-    let metadata;
-    try {
-      metadata = await this.storage.head(row.object_key);
-    } catch (error) {
-      if (error instanceof ApplicationError) throw error;
-      if (error instanceof ObjectStorageObjectNotFoundError) {
-        await this.rejectMetadata(actor, row, "object_not_found");
-        throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "Uploaded object does not exist", 422);
-      }
-      throw new ApplicationError("STORAGE_UNAVAILABLE", "Object storage is temporarily unavailable", 503);
-    }
+    const metadata = await this.verificationCall(actor, row, () => this.storage.head(row.object_key));
 
     if (
       metadata.sizeBytes !== Number(row.size_bytes)
       || metadata.mimeType.toLowerCase() !== row.mime_type
       || metadata.sha256 !== row.sha256
     ) {
-      await this.rejectMetadata(actor, row, "metadata_mismatch");
-      throw new ApplicationError(
-        "ATTACHMENT_METADATA_MISMATCH",
-        "Uploaded object metadata does not match the upload intent",
-        422,
-      );
+      await this.rejectVerification(actor, row, "metadata_mismatch", "Uploaded object metadata does not match the upload intent");
+    }
+
+    const contentSha256 = await this.verificationCall(actor, row, () => this.storage.computeSha256(row.object_key));
+    if (contentSha256 !== row.sha256) {
+      await this.rejectVerification(actor, row, "content_hash_mismatch", "Uploaded object bytes do not match the declared SHA-256");
     }
 
     const client = await this.pool.connect();
@@ -141,16 +131,62 @@ export class AttachmentService {
   }
 
   async createDownloadIntent(
-    actorId: string,
+    actor: TrustedActorContext,
     attachmentId: string,
     authorizeBound?: (row: Readonly<{ entityType: string; entityId: string; uploadedBy: string }>) => Promise<boolean>,
   ): Promise<DownloadIntentResponse> {
-    const row = await this.ownedOrBound(attachmentId, actorId, authorizeBound);
+    const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound);
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
-    return this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
+    const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
       ttlSeconds: this.options.ttlSeconds,
       filename: row.original_filename,
     }));
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.events.append(client, actor, {
+        action: "attachment.download_grant_issued",
+        entityType: "attachment",
+        entityId: attachmentId,
+        after: {
+          boundEntityType: row.entity_type,
+          boundEntityId: row.entity_id,
+          expiresAt: grant.expiresAt,
+        },
+      });
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    return grant;
+  }
+
+  private async verificationCall<T>(
+    actor: TrustedActorContext,
+    row: AttachmentRow,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      return this.handleVerificationFailure(actor, row, error);
+    }
+  }
+
+  private async handleVerificationFailure(actor: TrustedActorContext, row: AttachmentRow, error: unknown): Promise<never> {
+    if (error instanceof ApplicationError) throw error;
+    if (error instanceof ObjectStorageObjectNotFoundError) {
+      await this.rejectVerification(actor, row, "object_not_found", "Uploaded object does not exist");
+    }
+    throw new ApplicationError("STORAGE_UNAVAILABLE", "Object storage is temporarily unavailable", 503);
+  }
+
+  private async rejectVerification(actor: TrustedActorContext, row: AttachmentRow, reason: string, message: string): Promise<never> {
+    await this.rejectMetadata(actor, row, reason);
+    throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", message, 422);
   }
 
   private async rejectMetadata(actor: TrustedActorContext, row: AttachmentRow, reason: string): Promise<void> {
