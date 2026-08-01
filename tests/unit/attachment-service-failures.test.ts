@@ -6,7 +6,7 @@ import {
   type ObjectStorage,
 } from "../../apps/api/src/tools/storage.js";
 
-const actor = { actorId: "00000000-0000-4000-8000-000000000099", actorRole: "tools:user", requestId: "request-1" };
+const actor = { actorId: "00000000-0000-4000-8000-000000000099", actorRoles: ["tail_supervisor"], authorizationCapability: "tools:user", requestId: "request-1" };
 const input = { filename: "proof.pdf", mimeType: "application/pdf" as const, sizeBytes: 12, sha256: "a".repeat(64) };
 const row = {
   attachment_id: "00000000-0000-4000-8000-000000000001",
