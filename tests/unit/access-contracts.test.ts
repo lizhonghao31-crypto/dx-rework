@@ -50,6 +50,10 @@ describe("access and master-data contracts", () => {
       new URL("../../apps/api/migrations/0005_access_master_data.sql", import.meta.url),
       "utf8",
     );
+    const service = await readFile(
+      new URL("../../apps/api/src/access/service.ts", import.meta.url),
+      "utf8",
+    );
     expect(migration).toContain("business_person_aliases_active_alias_idx");
     expect(migration).toContain("allow_business_person_alias_revocation_only");
     expect(migration).toContain("business person alias revocation requires trusted audit context");
@@ -71,5 +75,7 @@ describe("access and master-data contracts", () => {
     expect(migration).not.toMatch(/\('production_management', 'own_factory:approve'\)/);
     expect(migration).not.toMatch(/\('system_admin', 'own_factory:approve'\)/);
     expect(migration).not.toMatch(/INSERT INTO business_people/i);
+    expect(service).toContain("normalize_business_person_alias(input.alias)");
+    expect(service).not.toContain("toLocaleLowerCase");
   });
 });

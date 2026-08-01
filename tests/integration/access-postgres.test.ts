@@ -251,6 +251,28 @@ runWithPostgres("role permissions and versioned master data", () => {
       aliases: ["临工甲"],
       reason: "临时人员建档",
     });
+    const canonicalAuditPerson = await service.createPerson(masterDataActor, {
+      personType: "temporary",
+      displayName: "审计归一化测试人员",
+      aliases: ["\u200b审计别名\u2060"],
+      reason: "验证父事件复用数据库归一化规范",
+    });
+    const canonicalAudit = await database.query<{
+      event_normalized_alias: string;
+      row_normalized_alias: string;
+    }>(
+      `SELECT
+         e.after_state->'aliases'->0->>'normalizedAlias' AS event_normalized_alias,
+         a.normalized_alias AS row_normalized_alias
+       FROM operation_events e
+       JOIN business_person_aliases a ON a.person_id=e.entity_id::uuid
+       WHERE e.action='master_data.person.create' AND e.entity_id=$1`,
+      [canonicalAuditPerson.personId],
+    );
+    expect(canonicalAudit.rows[0]).toEqual({
+      event_normalized_alias: "审计别名",
+      row_normalized_alias: "审计别名",
+    });
     const alias = await database.query<{ person_id: string }>(
       "SELECT person_id FROM business_person_aliases WHERE normalized_alias=$1",
       ["李生".normalize("NFKC").toLocaleLowerCase("zh-CN")],

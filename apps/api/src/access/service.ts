@@ -18,7 +18,16 @@ import { OperationEventRepository, type TrustedActorContext } from "../tools/rep
 type DatabaseError = Readonly<{ code?: string }>;
 type PersonAliasRow = Readonly<{ alias_id: string; person_id: string; alias: string; normalized_alias: string }>;
 
-const normalizeAlias = (value: string): string => value.normalize("NFKC").trim().toLocaleLowerCase("zh-CN");
+const normalizeAliases = async (client: PoolClient, aliases: readonly string[]): Promise<string[]> => {
+  if (aliases.length === 0) return [];
+  const result = await client.query<{ normalized_alias: string }>(
+    `SELECT normalize_business_person_alias(input.alias) AS normalized_alias
+     FROM unnest($1::text[]) WITH ORDINALITY AS input(alias, position)
+     ORDER BY input.position`,
+    [aliases],
+  );
+  return result.rows.map((row) => row.normalized_alias);
+};
 
 const translateDatabaseError = (error: unknown): never => {
   const code = (error as DatabaseError | null)?.code;
@@ -376,11 +385,11 @@ export class AccessMasterDataService {
   }
 
   async createPerson(actor: TrustedActorContext, input: CreateBusinessPerson): Promise<{ personId: string }> {
-    const normalizedAliases = input.aliases.map(normalizeAlias);
-    if (new Set(normalizedAliases).size !== normalizedAliases.length) {
-      throw new ApplicationError("VALIDATION_ERROR", "同一人员的别名不能重复", 400);
-    }
     return this.transaction(async (client) => {
+      const normalizedAliases = await normalizeAliases(client, input.aliases);
+      if (new Set(normalizedAliases).size !== normalizedAliases.length) {
+        throw new ApplicationError("VALIDATION_ERROR", "同一人员的别名不能重复", 400);
+      }
       const personId = randomUUID();
       const appUserId = input.personType === "internal" ? input.appUserId : null;
       const aliases = input.aliases.map((alias, index) => ({
@@ -437,7 +446,7 @@ export class AccessMasterDataService {
       );
       if (!person.rows[0]) throw new ApplicationError("NOT_FOUND", "有效人员档案不存在", 404);
       const aliasId = randomUUID();
-      const normalizedAlias = normalizeAlias(input.alias);
+      const [normalizedAlias] = await normalizeAliases(client, [input.alias]);
       await client.query(
         `SELECT
            set_config('dx_rework.alias_create_event_id',$1,true),
@@ -446,7 +455,7 @@ export class AccessMasterDataService {
       );
       await client.query(
         "INSERT INTO business_person_aliases(alias_id,person_id,alias,normalized_alias,created_by,create_reason) VALUES($1,$2,$3,$4,$5,$6)",
-        [aliasId, personId, input.alias, normalizedAlias, actor.actorId, input.reason],
+        [aliasId, personId, input.alias, normalizedAlias!, actor.actorId, input.reason],
       );
       return { aliasId };
     });
