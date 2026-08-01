@@ -81,11 +81,19 @@ export class IdempotencyService {
 
 export class OperationEventRepository {
   async append(client: SqlClient, actor: TrustedActorContext, input: { action: string; entityType: string; entityId: string; before?: unknown; after?: unknown; reason?: string }): Promise<string> {
+    const actorRoles = [...new Set(actor.actorRoles)].sort();
+    const safeCode = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
+    if (actorRoles.length === 0 || actorRoles.some((role) => !safeCode.test(role))) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "A non-empty trusted business-role snapshot is required", 403);
+    }
+    if (!safeCode.test(actor.authorizationCapability)) {
+      throw new ApplicationError("FORBIDDEN", "A trusted authorization capability is required", 403);
+    }
     const eventId = randomUUID();
     await client.query(
       `INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,before_state,after_state,reason)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [eventId, actor.requestId, actor.actorId, [...new Set(actor.actorRoles)].sort(), actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
+      [eventId, actor.requestId, actor.actorId, actorRoles, actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
     );
     return eventId;
   }
