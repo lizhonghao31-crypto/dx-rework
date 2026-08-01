@@ -128,13 +128,32 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
     expect((await service.query(actorId, job.exportJobId)).status).toBe("succeeded");
   });
 
+  it("rejects inconsistent persisted states and blocks audit truncation", async () => {
+    const attachmentId = randomUUID();
+    await expect(pool.query(
+      "INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status) VALUES($1,$2,'bad.pdf','application/pdf',1,$3,$4,'ready')",
+      [attachmentId, "private/" + attachmentId + ".pdf", "c".repeat(64), actorId],
+    )).rejects.toMatchObject({ code: "23514" });
+
+    await expect(pool.query(
+      "INSERT INTO message_outbox(event_id,topic,aggregate_type,aggregate_id,payload,recipient_key,idempotency_key,status,claim_token) VALUES($1,'bad','order','1','{}',$2,$3,'processing',$4)",
+      [randomUUID(), actorId, randomUUID(), randomUUID()],
+    )).rejects.toMatchObject({ code: "23514" });
+
+    await expect(pool.query(
+      "INSERT INTO operation_events(event_id,request_id,actor_id,actor_role,action,entity_type,entity_id) VALUES($1,'request',$2,'tools:user','test','test','1')",
+      [randomUUID(), actorId],
+    )).resolves.toMatchObject({ rowCount: 1 });
+    await expect(pool.query("TRUNCATE operation_events")).rejects.toMatchObject({ code: "55000" });
+  });
+
   it("fences stale export completion and failure after lease reclaim",async()=>{
     const service=new ExportJobService(pool);const actor={actorId,actorRole:"employee",requestId:randomUUID()};
     const job=await service.create(actor,{exportType:"lease-fence",filters:{},idempotencyKey:randomUUID()});
     const first=(await service.claim(pool,10,300)).find((row)=>row.export_job_id===job.exportJobId);if(!first?.claim_token)throw new Error("expected first claim");
     await pool.query("UPDATE export_jobs SET claimed_at=CURRENT_TIMESTAMP-interval '10 minutes' WHERE export_job_id=$1",[job.exportJobId]);
     const second=(await service.claim(pool,10,300)).find((row)=>row.export_job_id===job.exportJobId);if(!second?.claim_token)throw new Error("expected reclaimed claim");
-    const attachmentId=randomUUID();await pool.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status) VALUES($1,$2,'lease.pdf','application/pdf',1,$3,$4,'ready')`,[attachmentId,`private/${attachmentId}.pdf`,"b".repeat(64),actorId]);
+    const attachmentId=randomUUID();await pool.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'lease.pdf','application/pdf',1,$3,$4,'ready',CURRENT_TIMESTAMP)`,[attachmentId,`private/${attachmentId}.pdf`,"b".repeat(64),actorId]);
     await expect(service.fail(pool,job.exportJobId,first.claim_token,new Error("stale"))).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION",statusCode:409});
     await expect(service.complete(pool,job.exportJobId,first.claim_token,attachmentId)).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION",statusCode:409});
     await expect(service.complete(pool,job.exportJobId,second.claim_token,attachmentId)).resolves.toBeUndefined();
