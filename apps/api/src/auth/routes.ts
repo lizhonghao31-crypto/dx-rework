@@ -3,24 +3,30 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthService } from "./service.js";
 
 const COOKIE = "dx_rework_session";
-const cookieToken = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((v) => v.trim()).find((v) => v.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
+const QR_COOKIE = "dx_rework_qr_binding";
+const cookieToken = (request: FastifyRequest, name = COOKIE): string | undefined => request.headers.cookie?.split(";").map((v) => v.trim()).find((v) => v.startsWith(`${name}=`))?.slice(name.length + 1);
 
 export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, options: { secureCookie: boolean; ttlSeconds: number; appBasePath: string; corpId: string; mobileClientId: string }): void {
   const { secureCookie, ttlSeconds } = options;
   const cookiePath = options.appBasePath;
   const setSession = (token: string) => `${COOKIE}=${token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=${ttlSeconds}${secureCookie ? "; Secure" : ""}`;
+  const clearQrBinding = `${QR_COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie ? "; Secure" : ""}`;
   app.post<{ Body: { code?: string } }>("/auth/mobile", async (request, reply) => {
     const result = await auth.loginMobile(request.body?.code ?? "");
     return reply.header("set-cookie", setSession(result.token)).send({ user: result.user, status: result.user.capabilities.length ? "authorized" : "no_role" });
   });
-  app.post("/auth/qr/start", async () => auth.beginQr());
+  app.post("/auth/qr/start", async (_request, reply) => {
+    const result = await auth.beginQr();
+    return reply.header("set-cookie", `${QR_COOKIE}=${result.bindingToken}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=300${secureCookie ? "; Secure" : ""}`).send({ authorizationUrl: result.authorizationUrl });
+  });
   app.get("/auth/client-config", async () => ({ corpId: options.corpId, mobileClientId: options.mobileClientId }));
   app.get<{ Querystring: { authCode?: string; code?: string; state?: string } }>("/auth/qr/callback", async (request, reply) => {
     try {
-      const result = await auth.loginQr(request.query.authCode ?? request.query.code ?? "", request.query.state ?? "");
-      return reply.header("set-cookie", setSession(result.token)).code(303).header("location", options.appBasePath).send();
+      const result = await auth.loginQr(request.query.authCode ?? request.query.code ?? "", request.query.state ?? "", cookieToken(request, QR_COOKIE));
+      return reply.header("set-cookie", [clearQrBinding, setSession(result.token)]).code(303).header("location", options.appBasePath).send();
     } catch {
-      return reply.code(303).header("location", `${options.appBasePath}auth/denied`).send();
+      request.log.warn({ requestId: request.id }, "QR callback denied");
+      return reply.header("set-cookie", clearQrBinding).code(303).header("location", `${options.appBasePath}auth/denied`).send();
     }
   });
   app.get("/auth/me", async (request) => {
