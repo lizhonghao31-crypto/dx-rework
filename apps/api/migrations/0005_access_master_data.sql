@@ -335,6 +335,7 @@ DECLARE
   audit_event_id text := nullif(current_setting('dx_rework.alias_create_event_id', true), '');
   audit_request_id text := nullif(current_setting('dx_rework.alias_create_request_id', true), '');
   audit_actor_roles text[];
+  target_person_active boolean;
 BEGIN
   IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
     RAISE EXCEPTION 'new business person aliases cannot start revoked'
@@ -347,12 +348,19 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
   audit_actor_roles := access_authorized_actor_roles(NEW.created_by, 'master_data:manage');
-  IF NOT EXISTS (
-    SELECT 1 FROM business_people p WHERE p.person_id=NEW.person_id AND p.active=true
-  ) THEN
+  SELECT p.active
+  INTO target_person_active
+  FROM business_people p
+  WHERE p.person_id=NEW.person_id
+  FOR UPDATE;
+  IF target_person_active IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'business person alias target must be active'
       USING ERRCODE = '23514';
   END IF;
+
+  -- The displayed alias is the source of truth. Never trust a caller-supplied
+  -- normalization key because the unique indexes use this value.
+  NEW.normalized_alias := lower(btrim(normalize(NEW.alias, NFKC)));
 
   INSERT INTO operation_events(
     event_id,request_id,actor_id,actor_roles,authorization_capability,

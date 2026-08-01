@@ -249,6 +249,20 @@ runWithPostgres("role permissions and versioned master data", () => {
       await expect(directAliasClient.query(
         `INSERT INTO business_person_aliases(
            alias_id,person_id,alias,normalized_alias,created_by,create_reason
+         ) VALUES($1,$2,'李生','caller-controlled-bypass',$3,'验证数据库自行归一化')`,
+        [randomUUID(), liTongshengPerson.personId, adminId],
+      )).rejects.toMatchObject({ code: "23505" });
+      await directAliasClient.query("ROLLBACK");
+      await directAliasClient.query("BEGIN");
+      await directAliasClient.query(
+        `SELECT
+           set_config('dx_rework.alias_create_event_id',$1,true),
+           set_config('dx_rework.alias_create_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      await expect(directAliasClient.query(
+        `INSERT INTO business_person_aliases(
+           alias_id,person_id,alias,normalized_alias,created_by,create_reason
          ) VALUES($1,$2,'李老板','李老板',$3,'伪造审计上下文绑定别名')`,
         [randomUUID(), liTongshengPerson.personId, zhangId],
       )).rejects.toMatchObject({ code: "42501" });
@@ -319,6 +333,71 @@ runWithPostgres("role permissions and versioned master data", () => {
         })],
       }),
     );
+
+    const aliasRaceTarget = await service.createPerson(masterDataActor, {
+      personType: "temporary",
+      displayName: "并发停用测试人员",
+      aliases: [],
+      reason: "验证停用与别名新增互斥",
+    });
+    const deactivationClient = await database.connect();
+    const aliasRaceClient = await database.connect();
+    try {
+      await deactivationClient.query("BEGIN");
+      await deactivationClient.query(
+        "SELECT person_id FROM business_people WHERE person_id=$1 FOR UPDATE",
+        [aliasRaceTarget.personId],
+      );
+      await deactivationClient.query(
+        "UPDATE business_people SET active=false,deactivated_at=CURRENT_TIMESTAMP WHERE person_id=$1",
+        [aliasRaceTarget.personId],
+      );
+
+      await aliasRaceClient.query("BEGIN");
+      await aliasRaceClient.query(
+        `SELECT
+           set_config('dx_rework.alias_create_event_id',$1,true),
+           set_config('dx_rework.alias_create_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      const raceMarker = `alias-race-${randomUUID()}`;
+      const observedInsert = aliasRaceClient.query(
+        `/* ${raceMarker} */
+         INSERT INTO business_person_aliases(
+           alias_id,person_id,alias,normalized_alias,created_by,create_reason
+         ) VALUES($1,$2,'并发别名','caller-value',$3,'验证停用锁')`,
+        [randomUUID(), aliasRaceTarget.personId, adminId],
+      ).then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (error: unknown) => ({ status: "rejected" as const, error }),
+      );
+      let insertReachedLock = false;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const activity = await database.query<{ wait_event_type: string | null }>(
+          `SELECT wait_event_type
+           FROM pg_stat_activity
+           WHERE state='active' AND query LIKE $1`,
+          [`%${raceMarker}%`],
+        );
+        if (activity.rows[0]?.wait_event_type === "Lock") {
+          insertReachedLock = true;
+          break;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      }
+      expect(insertReachedLock).toBe(true);
+      await deactivationClient.query("COMMIT");
+      const insertResult = await observedInsert;
+      expect(insertResult).toMatchObject({
+        status: "rejected",
+        error: expect.objectContaining({ code: "23514" }),
+      });
+    } finally {
+      await deactivationClient.query("ROLLBACK");
+      await aliasRaceClient.query("ROLLBACK");
+      deactivationClient.release();
+      aliasRaceClient.release();
+    }
   });
 
   it("appends process and supplier versions instead of overwriting history", async () => {
