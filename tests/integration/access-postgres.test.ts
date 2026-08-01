@@ -507,7 +507,7 @@ runWithPostgres("role permissions and versioned master data", () => {
            valid_from,valid_until,granted_by,grant_reason
          ) VALUES($1,$2,$3,'own_factory:approve','global',NULL,
            CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+interval '1 hour',$4,'绕过服务创建全局审批代理')`,
-        [randomUUID(), liOwnerId, zhangId, bootstrapOwnerId],
+        [randomUUID(), liOwnerId, zhangId, liOwnerId],
       )).rejects.toMatchObject({ code: "23514" });
       await directClient.query("ROLLBACK");
       await directClient.query("BEGIN");
