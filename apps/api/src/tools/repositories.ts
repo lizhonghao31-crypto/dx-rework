@@ -16,6 +16,12 @@ const validateClaimOptions = (limit: number, leaseSeconds: number): void => {
   }
 };
 
+const validateRetryDelay = (delaySeconds: number): void => {
+  if (!Number.isInteger(delaySeconds) || delaySeconds < 1 || delaySeconds > 86_400) {
+    throw new ApplicationError("VALIDATION_ERROR", "Retry delay must be between 1 and 86400 seconds", 400);
+  }
+};
+
 export class IdempotencyRepository {
   async begin(client: SqlClient, input: { scope: string; actorKey: string; key: string; requestHash: string; expiresAt: Date }): Promise<{ kind: "acquired"; acquisitionToken: string } | { kind: "completed"; statusCode: number; response: unknown }> {
     const acquisitionToken = randomUUID();
@@ -156,7 +162,7 @@ export class MessageOutboxRepository {
 
   async markSent(client: SqlClient, eventId: string, claimToken: string): Promise<void> {
     const result = await client.query(
-      `UPDATE message_outbox SET status='sent',claim_token=NULL,sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
+      `UPDATE message_outbox SET status='sent',claimed_at=NULL,claim_token=NULL,sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
        WHERE event_id=$1 AND status='processing' AND claim_token=$2`,
       [eventId, claimToken],
     );
@@ -164,6 +170,7 @@ export class MessageOutboxRepository {
   }
 
   async markFailed(client: SqlClient, eventId: string, claimToken: string, error: unknown, delaySeconds: number): Promise<void> {
+    validateRetryDelay(delaySeconds);
     const result = await client.query(
       `UPDATE message_outbox
        SET status='failed',available_at=CURRENT_TIMESTAMP + ($3 * interval '1 second'),last_error=$4,claimed_at=NULL,claim_token=NULL,updated_at=CURRENT_TIMESTAMP
