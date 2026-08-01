@@ -10,7 +10,7 @@ export class ObjectStorageObjectNotFoundError extends Error {
   }
 }
 export interface ObjectStorage {
-  createUploadUrl(objectKey: string, options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number }): Promise<string>;
+  createNonOverwritableUploadUrl(objectKey: string, options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number }): Promise<string>;
   createDownloadUrl(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<string>;
   head(objectKey: string): Promise<StoredObjectMetadata>;
 }
@@ -23,7 +23,7 @@ export interface AliyunOssSdkClient {
 
 export class AliyunPrivateObjectStorage implements ObjectStorage {
   constructor(private readonly client: AliyunOssSdkClient) {}
-  async createUploadUrl(objectKey: string, options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number }): Promise<string> {
+  async createNonOverwritableUploadUrl(objectKey: string, options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number }): Promise<string> {
     return this.client.signatureUrl(objectKey, { method: "PUT", expires: options.ttlSeconds, "Content-Type": options.mimeType, headers: { "x-oss-meta-sha256": options.sha256, "x-oss-object-acl": "private", "x-oss-forbid-overwrite": "true" } });
   }
   async createDownloadUrl(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<string> {
@@ -51,7 +51,7 @@ function isObjectNotFound(error: unknown): boolean {
 
 export class DisabledObjectStorage implements ObjectStorage {
   private unavailable(): never { throw new ApplicationError("STORAGE_UNAVAILABLE", "Object storage is not configured", 503); }
-  async createUploadUrl(): Promise<string> { return this.unavailable(); }
+  async createNonOverwritableUploadUrl(): Promise<string> { return this.unavailable(); }
   async createDownloadUrl(): Promise<string> { return this.unavailable(); }
   async head(): Promise<StoredObjectMetadata> { return this.unavailable(); }
 }
@@ -59,7 +59,7 @@ export class DisabledObjectStorage implements ObjectStorage {
 export class FakeObjectStorage implements ObjectStorage {
   readonly objects = new Map<string, StoredObjectMetadata>();
   readonly signed: Array<{ method: "PUT" | "GET"; objectKey: string; ttlSeconds: number }> = [];
-  async createUploadUrl(objectKey: string, options: { ttlSeconds: number }): Promise<string> { this.signed.push({ method: "PUT", objectKey, ttlSeconds: options.ttlSeconds }); return `https://private.example.test/${encodeURIComponent(objectKey)}?method=PUT&ttl=${options.ttlSeconds}`; }
+  async createNonOverwritableUploadUrl(objectKey: string, options: { ttlSeconds: number }): Promise<string> { this.signed.push({ method: "PUT", objectKey, ttlSeconds: options.ttlSeconds }); return `https://private.example.test/${encodeURIComponent(objectKey)}?method=PUT&ttl=${options.ttlSeconds}`; }
   async createDownloadUrl(objectKey: string, options: { ttlSeconds: number }): Promise<string> { this.signed.push({ method: "GET", objectKey, ttlSeconds: options.ttlSeconds }); return `https://private.example.test/${encodeURIComponent(objectKey)}?method=GET&ttl=${options.ttlSeconds}`; }
   async head(objectKey: string): Promise<StoredObjectMetadata> { const value = this.objects.get(objectKey); if (!value) throw new Error("object missing"); return value; }
 }

@@ -39,7 +39,7 @@ describe("AttachmentService failure consistency", () => {
   it("does not write a pending attachment when upload signing fails", async () => {
     const pool = { connect: vi.fn(), query: vi.fn() };
     const storage: ObjectStorage = {
-      createUploadUrl: vi.fn(async () => { throw new Error("temporary OSS failure"); }),
+      createNonOverwritableUploadUrl: vi.fn(async () => { throw new Error("temporary OSS failure"); }),
       createDownloadUrl: vi.fn(),
       head: vi.fn(),
     };
@@ -61,7 +61,7 @@ describe("AttachmentService failure consistency", () => {
   it("maps a temporary HEAD failure to 503 without rejecting the attachment", async () => {
     const { pool } = poolWithOwnedRow();
     const storage: ObjectStorage = {
-      createUploadUrl: vi.fn(),
+      createNonOverwritableUploadUrl: vi.fn(),
       createDownloadUrl: vi.fn(),
       head: vi.fn(async () => { throw new Error("timeout from upstream"); }),
     };
@@ -76,7 +76,7 @@ describe("AttachmentService failure consistency", () => {
     ["metadata mismatch", async () => ({ sizeBytes: 99, mimeType: "application/pdf", sha256: "a".repeat(64) }), "metadata_mismatch"],
   ])("rejects and audits %s in one transaction", async (_name, head, reason) => {
     const { pool, client, operations } = poolWithOwnedRow();
-    const storage: ObjectStorage = { createUploadUrl: vi.fn(), createDownloadUrl: vi.fn(), head };
+    const storage: ObjectStorage = { createNonOverwritableUploadUrl: vi.fn(), createDownloadUrl: vi.fn(), head };
     const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
 
     await expect(service.finalize(actor, row.attachment_id)).rejects.toMatchObject({ code: "ATTACHMENT_METADATA_MISMATCH", statusCode: 422 });

@@ -45,7 +45,7 @@ export class AttachmentService {
     this.validate(input);
     const attachmentId = randomUUID();
     const objectKey = createPrivateObjectKey(this.options.prefix, input.filename);
-    const uploadUrl = await this.storageCall(() => this.storage.createUploadUrl(objectKey, {
+    const uploadUrl = await this.storageCall(() => this.storage.createNonOverwritableUploadUrl(objectKey, {
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       sha256: input.sha256,
