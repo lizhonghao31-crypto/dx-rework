@@ -47,6 +47,38 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...validEnvironment, NODE_ENV: "production", GIT_SHA: "a".repeat(40), BUILD_TIME: "2026-08-01T00:00:00Z", DINGTALK_H5_APP_KEY: "replace_with_key" })).toThrow(/placeholder/);
   });
 
+  it.each(["/", "/private", "private/", "private//nested"])("rejects a root or non-normalized private OSS prefix %s", (privatePrefix) => {
+    expect(() => loadConfig({ ...validEnvironment, OSS_PRIVATE_PREFIX: privatePrefix })).toThrow(ConfigurationError);
+  });
+
+  it("requires HTTPS for a complete production OSS configuration", () => {
+    expect(() => loadConfig({
+      ...validEnvironment,
+      NODE_ENV: "production",
+      GIT_SHA: "a".repeat(40),
+      BUILD_TIME: "2026-08-01T00:00:00Z",
+      OSS_REGION: "oss-cn-hangzhou",
+      OSS_ENDPOINT: "http://oss-cn-hangzhou.aliyuncs.com",
+      OSS_BUCKET: "dx-rework-private",
+      OSS_ACCESS_KEY_ID: "valid-access-key",
+      OSS_ACCESS_KEY_SECRET: "valid-access-secret",
+    })).toThrow(/HTTPS OSS endpoint/);
+  });
+
+  it("rejects placeholder OSS credentials in production", () => {
+    expect(() => loadConfig({
+      ...validEnvironment,
+      NODE_ENV: "production",
+      GIT_SHA: "a".repeat(40),
+      BUILD_TIME: "2026-08-01T00:00:00Z",
+      OSS_REGION: "oss-cn-hangzhou",
+      OSS_ENDPOINT: "https://oss-cn-hangzhou.aliyuncs.com",
+      OSS_BUCKET: "dx-rework-private",
+      OSS_ACCESS_KEY_ID: "valid-access-key",
+      OSS_ACCESS_KEY_SECRET: "replace_with_secret",
+    })).toThrow(/placeholder/);
+  });
+
   it.each(["//example.com", "/rework//admin", "/rework?next=/"])("rejects unsafe application base path %s", (appBasePath) => {
     expect(() => loadConfig({ ...validEnvironment, APP_BASE_PATH: appBasePath })).toThrow(ConfigurationError);
   });
