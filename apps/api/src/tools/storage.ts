@@ -57,7 +57,7 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     objectKey: string,
     options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number },
   ): Promise<UploadGrant> {
-    const expiresAt = new Date(this.now().getTime() + options.ttlSeconds * 1000);
+    const expiresAt = grantExpiry(this.now(), options.ttlSeconds);
     const fields = Object.freeze({
       key: objectKey,
       "Content-Type": options.mimeType,
@@ -76,7 +76,7 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
       ["content-length-range", options.sizeBytes, options.sizeBytes],
     ];
     const signed = await this.client.createPostObjectUploadGrant({
-      expiration: expiresAt.toISOString(),
+      expiration: expiresAt,
       fields,
       conditions,
     });
@@ -92,13 +92,13 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
       method: "POST",
       uploadUrl: signed.uploadUrl,
       fields: Object.freeze({ ...signed.fields }),
-      expiresAt: expiresAt.toISOString(),
+      expiresAt,
     };
   }
 
   async createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<DownloadGrant> {
     // Capture before signing so the advertised timestamp can never exceed the URL's real lifetime.
-    const expiresAt = new Date(this.now().getTime() + options.ttlSeconds * 1000);
+    const expiresAt = grantExpiry(this.now(), options.ttlSeconds);
     const downloadUrl = this.client.signatureUrl(objectKey, {
       method: "GET",
       expires: options.ttlSeconds,
@@ -109,7 +109,7 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     if (!isHttpsUrl(downloadUrl)) {
       throw new ApplicationError("STORAGE_UNAVAILABLE", "Object storage returned an invalid download grant", 503);
     }
-    return { downloadUrl, expiresAt: expiresAt.toISOString() };
+    return { downloadUrl, expiresAt };
   }
 
   async head(objectKey: string): Promise<StoredObjectMetadata> {
@@ -128,6 +128,11 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
       ...(typeof sha256 === "string" ? { sha256: sha256.toLowerCase() } : {}),
     };
   }
+}
+
+function grantExpiry(now: Date, ttlSeconds: number): string {
+  const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+  return new Date((issuedAtSeconds + ttlSeconds) * 1000).toISOString();
 }
 
 function isHttpsUrl(value: string): boolean {
@@ -177,7 +182,7 @@ export class FakeObjectStorage implements ObjectStorage {
         policy: "fake-policy",
         "x-oss-signature": "fake-signature",
       },
-      expiresAt: new Date(this.now().getTime() + options.ttlSeconds * 1000).toISOString(),
+      expiresAt: grantExpiry(this.now(), options.ttlSeconds),
     };
   }
 
@@ -185,7 +190,7 @@ export class FakeObjectStorage implements ObjectStorage {
     this.signed.push({ method: "GET", objectKey, ttlSeconds: options.ttlSeconds });
     return {
       downloadUrl: `https://private.example.test/${encodeURIComponent(objectKey)}?method=GET`,
-      expiresAt: new Date(this.now().getTime() + options.ttlSeconds * 1000).toISOString(),
+      expiresAt: grantExpiry(this.now(), options.ttlSeconds),
     };
   }
 
