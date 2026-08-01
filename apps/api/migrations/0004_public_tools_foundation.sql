@@ -20,7 +20,8 @@ CREATE TABLE operation_events (
   event_id uuid PRIMARY KEY,
   request_id text NOT NULL,
   actor_id uuid NOT NULL REFERENCES app_users(id),
-  actor_role text NOT NULL,
+  actor_roles text[] NOT NULL DEFAULT '{}',
+  authorization_capability text NOT NULL CHECK (authorization_capability <> ''),
   action text NOT NULL,
   entity_type text NOT NULL,
   entity_id text NOT NULL,
@@ -62,7 +63,8 @@ CREATE TABLE message_outbox (
   CHECK (last_error IS NULL OR length(last_error) <= 500),
   CHECK ((status = 'processing') = (claim_token IS NOT NULL AND claimed_at IS NOT NULL)),
   CHECK ((status = 'sent') = (sent_at IS NOT NULL)),
-  CHECK (status <> 'sent' OR last_error IS NULL)
+  CHECK (status <> 'sent' OR last_error IS NULL),
+  CHECK (status <> 'failed' OR last_error IS NOT NULL)
 );
 CREATE INDEX message_outbox_claim_idx ON message_outbox (available_at, claimed_at, created_at)
   WHERE status IN ('pending', 'failed', 'processing');
