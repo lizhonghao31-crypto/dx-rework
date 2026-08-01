@@ -1,6 +1,6 @@
 # PR-00：ERP 只读复用审查 v1.0
 
-> 状态：审查完成，待技术复核与 PR 合并  
+> 状态：代码与公开运行态审查完成；ECS 内部稳定运行基线待补，PR-00 未完成  
 > 审查日期：2026-08-01  
 > 新系统仓库：`lizhonghao31-crypto/dx-rework`  
 > 新系统基线：`main@b5ec95e56e6afe30a219151caeae3c4587c4e23c`  
@@ -22,13 +22,15 @@
 
 **ERP 值得复用的是已经验证过的流程、协议、部署骨架和防错机制，不是把现有代码整块复制过来。**
 
+本结论分两个证据层级：身份、API、存储和公开健康端点的判断已由稳定代码与公开运行态支持；ECS 目录、Nginx、PM2、cron、logrotate、备份、发布和回滚目前只有代码/runbook 证据，尚未与 ECS 当前稳定版本共同核对，以下相关分类均为**候选分类**，不能作为 PR-00 已完成或 PR-01 已解锁的依据。
+
 可以优先复用或抽取：
 
 - React 19、Vite 8、Node 22 的版本方向；
 - 钉钉容器免登与电脑扫码的双入口交互流程；
 - 钉钉授权码在服务端换取用户身份的通信封装；
-- ECS 的 `releases/current/shared/logs` 隔离思路和只读 Deploy Key；
-- Nginx 反向代理、gzip、PM2、健康检查、冒烟检查、发布前备份和回滚思路；
+- ERP 代码/runbook 中的 `releases/current/shared/logs` 隔离思路和只读 Deploy Key；
+- ERP 代码/runbook 中的 Nginx 反向代理、gzip、PM2、健康检查、冒烟检查、发布前备份和回滚思路；
 - OSS 密钥只在服务端、文件类型/大小校验、对象键随机化等上传机制；
 - 乐观版本冲突、幂等保护、追加式审计日志等数据安全经验。
 
@@ -85,7 +87,7 @@
 | [`/api/staging/native-status`](https://staging-api.dxerp.org.cn/api/staging/native-status) | native store 存在且可解析 | 只确认存储健康，不读取业务内容 |
 | [`/api/staging/status`](https://staging-api.dxerp.org.cn/api/staging/status) | 关系数据库未配置，EMAS proxy 回滚路径 ready；OSS/钉钉连接字段为 false | ERP 仍以 JSON store 为主；该页的 OSS/钉钉字段在代码中为固定占位，不能当成真实连通性证据 |
 
-运行态版本标签仍为旧阶段名，且 `/version` 未暴露 Git SHA，因此**不能证明 ECS 当前运行文件与最新 ERP `main` 完全一致**。本审查只把 GitHub 精确提交作为代码证据，把公开端点作为运行模式证据。
+运行态版本标签仍为旧阶段名，且 `/version` 未暴露 Git SHA，因此**不能证明 ECS 当前运行文件与最新 ERP `main` 完全一致**。本审查只把 GitHub 精确提交作为代码证据，把公开端点作为运行模式证据；它们尚不构成需求 v1.2 所要求的 GitHub `main` 与 ECS 当前稳定版本联合核验。
 
 ## 4. 复用矩阵
 
@@ -94,6 +96,7 @@
 - **直接复用**：复用做法、脚本结构或非业务耦合实现，替换项目命名与路径后即可使用；
 - **抽取复用**：保留成熟协议/算法，重写成独立模块并补测试；
 - **重新实现**：现有实现不满足返工系统安全、并发、审计或未来 ERP 接入要求。
+- **候选：直接复用/抽取复用**：代码或 runbook 已支持该方向，但 ECS 当前运行证据未补齐；只能作为设计假设，不能解除 PR-00 门禁。
 
 | 能力 | ERP 当前事实 | 决策 | 新系统落地要求 |
 |---|---|---|---|
@@ -105,17 +108,17 @@
 | API 鉴权 | 当前共享暗号可由前端携带，且接受客户端传来的 operator/role | 重新实现 | 每次请求从服务端 session 取 actor；后端 capability 校验；拒绝客户端指定角色或审批人 |
 | 乐观锁与防重复 | 订单 `version`、`baseVersion` 冲突；部分审计动作去重 | 抽取复用 | 数据库行版本、幂等键和唯一约束；上数并发在事务内原子校验剩余量 |
 | 审计日志 | 追加记录 operator、动作、对象、前后值；当前 actor 仍来自客户端 | 抽取复用 | actor 来自可信 session；使用稳定 event ID，保存前后状态、原因、关联审批/代理和 request ID |
-| ECS 目录布局 | `/opt/daxing-erp/releases/current/shared/logs` 与软链接回滚 | 直接复用模式 | 使用独立 `/opt/dx-rework`；release 以 Git SHA 命名；不共享 ERP current、env、log、backup |
-| GitHub 私库部署 | 只读 Deploy Key，不保存个人密码/token | 直接复用模式 | 新仓库使用独立只读 Deploy Key；禁止 write access；密钥只留 ECS |
-| 环境变量 | `/opt/daxing-erp/shared/.env` 权限 600，仓库只放 `.env.example` | 直接复用模式 | 新系统独立 `.env`；启动时校验必需变量；日志和健康端点只返回是否配置，不返回值 |
-| Nginx | 已验证反代与 gzip；完整 vhost 配置未在当前 `main` 留存 | 抽取复用 | 新域名或独立 location；先 `nginx -t`；不得覆盖 ERP vhost；配置应版本化且可回滚 |
-| PM2 | 独立服务名、restart/save、健康检查 | 抽取复用 | 新进程名 `dx-rework-api`；独立 cwd/env/log；优雅关闭；不得 restart ERP 进程 |
+| ECS 目录布局 | 代码/runbook 描述 `/opt/daxing-erp/releases/current/shared/logs` 与软链接回滚；未核当前 ECS | 候选：直接复用模式 | 使用独立 `/opt/dx-rework`；release 以 Git SHA 命名；不共享 ERP current、env、log、backup |
+| GitHub 私库部署 | runbook 描述只读 Deploy Key；未核当前 ECS key 权限 | 候选：直接复用模式 | 新仓库使用独立只读 Deploy Key；禁止 write access；密钥只留 ECS |
+| 环境变量 | runbook 描述 `/opt/daxing-erp/shared/.env` 权限 600；未核当前 ECS | 候选：直接复用模式 | 新系统独立 `.env`；启动时校验必需变量；日志和健康端点只返回是否配置，不返回值 |
+| Nginx | 公开端点显示反代可用；完整 vhost 与当前加载配置未取证 | 候选：抽取复用 | 新域名或独立 location；先 `nginx -t`；不得覆盖 ERP vhost；配置应版本化且可回滚 |
+| PM2 | 脚本包含独立服务名、restart/save、健康检查；未取得当前 PM2 dump | 候选：抽取复用 | 新进程名 `dx-rework-api`；独立 cwd/env/log；优雅关闭；不得 restart ERP 进程 |
 | OSS 上传 | 服务端签名、白名单、大小限制、随机对象键；返回公开 URL | 抽取复用 | 独立 prefix；对象默认私有；数据库保存 objectKey/元数据；授权后签名读取；不信任扩展名或前端 actor |
 | 应用日志 | PM2/cron 日志路径存在，但业务服务缺少统一结构化日志规范 | 重新实现 | JSON 日志、requestId、actorId、action、duration、result；脱敏；日志轮转与保留期配置 |
 | 健康检查 | health/version/status 已验证 | 抽取复用 | 拆分 live/ready；`/version` 必须返回 Git SHA、构建时间和 schema version；依赖状态不泄密 |
-| 数据备份 | JSON 写前备份、手动备份、cron、30天清理 | 抽取复用原则 | 改为关系数据库备份/PITR 或等价方案；附件不靠 DB 备份；执行恢复演练并记录 RPO/RTO |
-| 发布脚本 | 有 build、备份、Nginx/PM2、smoke、bundle hash 校验；同时存在硬编码旧 release 路径 | 抽取复用 | 精确 SHA 构建、immutable release、迁移前备份、原子软链切换、smoke、失败自动退回；禁止清空 ERP 目录 |
-| 回滚 | API 模式和 release 软链均可回退 | 直接复用思路 | 新系统只回滚自身服务；数据库迁移必须说明向前修复/可逆策略；不依赖 EMAS |
+| 数据备份 | 代码包含 JSON 写前备份、手动备份、cron、30天清理；未核实际任务与恢复记录 | 候选：抽取复用原则 | 改为关系数据库备份/PITR 或等价方案；附件不靠 DB 备份；执行恢复演练并记录 RPO/RTO |
+| 发布脚本 | 代码包含 build、备份、Nginx/PM2、smoke、bundle hash 校验；未核线上实际发布链，且脚本存在硬编码旧路径 | 候选：抽取复用 | 精确 SHA 构建、immutable release、迁移前备份、原子软链切换、smoke、失败自动退回；禁止清空 ERP 目录 |
+| 回滚 | runbook 描述 API 模式和 release 软链回退；未取得当前回滚/恢复记录 | 候选：直接复用思路 | 新系统只回滚自身服务；数据库迁移必须说明向前修复/可逆策略；不依赖 EMAS |
 | 数据存储 | ECS native 单 JSON 根文档，关系数据库未配置 | 重新实现 | 使用关系数据库和迁移；金额、审批、工资、扣款、审计、outbox 分表并保持事务一致性 |
 | CI/GitHub 治理 | 精确 Head、build 与小 PR 经验成熟 | 直接复用模式 | 保留 SHA 证据；增加 lint、unit、integration、迁移检查、权限拒绝测试和 secret scan |
 
@@ -143,7 +146,7 @@ ERP 当前运行态仍为单 JSON store。它不适合作为返工系统的工�
 3. `scripts/deploy-ecs.sh` 写死既有 static release 目录，并直接清空该目录子项；只能借鉴检查顺序，不能复制到新系统。
 4. `/api/staging/status` 的 OSS/钉钉 connected 字段是代码固定值，不是真实 readiness。
 
-处理：这些差异不阻塞 PR-01 开发，但在 PR-17 部署前必须通过 ECS 只读验收补齐；新系统从第一版就记录 Git SHA、独立路径和可恢复证据。
+处理：这些差异阻塞 PR-00 完成，并按已确认路线图继续阻塞 PR-01 启动。取得 ECS 只读证据后，必须把当前稳定运行状态与 GitHub `main` 对照、记录差异，并重新确认部署相关复用分类；新系统从第一版就记录 Git SHA、独立路径和可恢复证据。
 
 ### 5.4 OSS 与附件差异（P1）
 
@@ -155,7 +158,9 @@ ERP 上传实现返回可公开访问 URL。返工 QC 图、扣款材料和责�
 
 ERP 的 raw Node router、巨型 `App.jsx` 和共享根文档是历史演进结果。返工系统需要未来被 ERP 节点调用，因此必须把领域、应用服务、基础设施和 ERP adapter 分开，不能让接口依赖页面状态。
 
-## 6. PR-01 技术基座输入
+## 6. PR-01 技术基座候选输入
+
+本节可用于提前评审技术方向，但在第 8.1 节 ECS 证据门禁关闭前，不授权启动 PR-01 施工。
 
 ### 6.1 推荐工程结构
 
@@ -219,11 +224,28 @@ docs/adr/               数据库、身份、附件和集成决策记录
 | PR-07 上数 | 关系数据库事务、原子余量校验、幂等键、成员快照版本 |
 | PR-13 钉钉消息 | 使用 outbox 和幂等发送；不得与业务事务形成部分成功 |
 | PR-16 ERP 契约 | 只通过 adapter、稳定 ID、版本化合同和幂等键接入 |
-| PR-17 部署 | 复用 ECS 安全步骤，补齐真实 Nginx/PM2/cron/logrotate/restore drill 证据 |
+| PR-17 部署 | 使用 PR-00 经运行态核验后的 ECS 安全步骤，并完成新系统自己的 Nginx/PM2/cron/logrotate/restore drill 验收 |
 
 ## 8. 尚待补齐的信息及阻塞时点
 
-以下信息不阻塞 PR-00 合并，也不阻塞 PR-01 工程骨架，但必须在对应阶段前补齐：
+### 8.1 PR-00 必须补齐的 ECS 只读证据包
+
+以下证据仅需配置和文件元数据，不得包含密钥、环境变量值、业务数据或个人信息：
+
+| 证据 | 最低内容 | 用途 |
+|---|---|---|
+| 当前发布身份 | `current` 实际路径、发布目录名、部署 Git SHA 或等价 release manifest | 将运行态绑定到精确版本；若无法绑定，记录为差异 |
+| Nginx | ERP 相关的已加载 server/location 片段，域名、upstream、静态目录和 gzip；敏感值脱敏 | 核对真实 vhost、端口、路径与隔离边界 |
+| PM2 | ERP 进程名、状态、cwd、script、Node 版本、日志路径；不含 env 值 | 核对进程模型和发布脚本假设 |
+| cron/logrotate | ERP 相关定时任务与日志轮转规则、最近执行状态 | 核对备份和日志保留是否真实启用 |
+| 备份 | 最近备份文件名/时间/大小、保留期和失败记录；不提供文件内容 | 判断备份链是否可复用 |
+| 恢复/回滚 | 最近一次恢复或回滚演练记录；若从未演练，明确记为“无证据” | 避免把 runbook 当成已验证能力 |
+
+验收动作：将上述事实与 ERP `main@2adc6be2b9d7ca59704b28a2b2c89cea1c2e1853` 逐项对照，记录一致、偏差和废弃配置，随后把矩阵中的“候选”改为最终分类并重新触发 Codex Review。该证据包未完成前，PR-00 保持未完成，PR #4 不合并，PR-01 不启动。
+
+### 8.2 后续阶段信息
+
+以下信息不阻塞 PR-00 代码审查，但必须在对应阶段前补齐：
 
 | 信息 | 最迟时点 | 影响 |
 |---|---|---|
@@ -231,14 +253,13 @@ docs/adr/               数据库、身份、附件和集成决策记录
 | 新系统独立域名或 URL path | 首次 staging 部署前 | 扫码回调、Nginx、Cookie scope |
 | PostgreSQL 可用方式（受管实例或 ECS 独立实例） | PR-01 首个 migration 合并前 | 数据库连接、备份与恢复方案 |
 | OSS bucket/prefix、私有读策略和生命周期 | PR-03 联调前 | QC/扣款附件安全 |
-| ECS 真实 Nginx vhost、PM2、cron、logrotate 只读快照 | PR-17 部署设计前 | 避免端口、路径和运维冲突 |
 | 一次数据库恢复演练及 RPO/RTO 记录 | PR-17 上线前 | 可恢复性验收 |
 
 ## 9. 审查判断
 
-**PR-00 已达到进入技术复核的完整度，且足以作为 PR-01 输入。**
+**PR-00 已完成代码与公开运行态审查，但尚未达到合并完整度，也不足以解除 PR-01 前置门禁。**
 
-优势：ERP 的双端钉钉流程、ECS/OSS/健康检查/发布防错经验已经有稳定代码与运行证据，可以显著减少试错。
+优势：ERP 的双端钉钉流程、OSS/健康检查和发布防错经验已有稳定代码证据；公开端点补充确认了 Node 22 和 native 路由运行模式，可以显著减少应用层试错。
 
 主要风险：如果把“复用”误解为复制当前鉴权或 JSON 存储，新系统会把客户端伪造身份、组织准入不足、并发与审计风险一起继承。
 
@@ -250,7 +271,8 @@ docs/adr/               数据库、身份、附件和集成决策记录
 
 最终决定：
 
-1. PR-00 合并后，按路线启动 PR-01；
-2. PR-01 采用独立关系数据库、模块化服务和可信服务端身份；
-3. PR-02/PR-03 分别承接钉钉准入和 OSS/Tools 抽取；
-4. 未经新的书面变更，不修改 ERP，也不把新系统部署到 ERP 的进程、目录或数据中。
+1. PR #4 保持打开，PR-00 状态保持“部分完成”；
+2. 在取得第 8.1 节 ECS 只读证据、处理代码与运行态差异并通过复核前，不合并 PR #4、不启动 PR-01；
+3. 证据补齐后再定稿 ECS/Nginx/PM2/备份/发布/回滚的复用分类；
+4. 后续 PR-01 仍采用独立关系数据库、模块化服务和可信服务端身份；PR-02/PR-03 分别承接钉钉准入和 OSS/Tools 抽取；
+5. 未经新的书面变更，不修改 ERP，也不把新系统部署到 ERP 的进程、目录或数据中。
