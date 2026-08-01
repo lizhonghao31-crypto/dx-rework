@@ -36,16 +36,12 @@ describe("public tools domain contracts", () => {
     expect(() => transitionExportJob("failed", "running")).toThrow();
   });
 
-  it("redacts credentials, signed query parameters and control characters within the bound", () => {
+  it("persists only a fixed safe classification for operational errors", () => {
     const error = new Error(
-      "authorization=Bearer super-secret\nurl=https://oss.test/x?Signature=private-signature&OSSAccessKeyId=private-id token=private-token "
-      + "x".repeat(600),
+      "accessKeySecret=leak client_secret=leak x-oss-credential=leak authorization=Bearer leak",
     );
-    const value = sanitizeOperationalError(error);
-    expect(value).not.toMatch(/super-secret|private-signature|private-id|private-token/);
-    expect(value).not.toMatch(/[\r\n\t]/);
-    expect(value).toContain("[REDACTED]");
-    expect(value.length).toBeLessThanOrEqual(500);
+    expect(sanitizeOperationalError(error)).toBe("Operation failed; inspect protected server logs");
+    expect(sanitizeOperationalError({ accessKeySecret: "leak" })).toBe("Operation failed; inspect protected server logs");
   });
 
   it("executes concurrent equal idempotency requests once and rejects a different hash", async () => {
@@ -65,8 +61,8 @@ describe("public tools domain contracts", () => {
 
 describe("private object storage", () => {
   it("creates unpredictable private keys without filenames and rejects traversal/double-extension", () => {
-    const a = createPrivateObjectKey("private", "evidence.JPG", new Date("2026-08-01T00:00:00Z"));
-    const b = createPrivateObjectKey("private", "evidence.JPG", new Date("2026-08-01T00:00:00Z"));
+    const a = createPrivateObjectKey("private", "evidence.JPG", new Date("2026-08-01T00:00:00.987Z"));
+    const b = createPrivateObjectKey("private", "evidence.JPG", new Date("2026-08-01T00:00:00.987Z"));
     expect(a).toMatch(/^private\/2026\/08\/01\/[0-9a-f]{48}\.jpg$/);
     expect(a).not.toBe(b);
     expect(a).not.toContain("evidence");
@@ -75,7 +71,7 @@ describe("private object storage", () => {
   });
 
   it("records exact-size POST and short GET grants in the fake and fails explicitly when disabled", async () => {
-    const now = () => new Date("2026-08-01T00:00:00Z");
+    const now = () => new Date("2026-08-01T00:00:00.987Z");
     const fake = new FakeObjectStorage(now);
     const upload = await fake.createExactSizeNonOverwritableUploadGrant("private/x.pdf", {
       mimeType: "application/pdf",
@@ -129,7 +125,7 @@ describe("private object storage", () => {
         },
       }),
     };
-    const storage = new AliyunPrivateObjectStorage(client, () => new Date("2026-08-01T00:00:00Z"));
+    const storage = new AliyunPrivateObjectStorage(client, () => new Date("2026-08-01T00:00:00.987Z"));
     const upload = await storage.createExactSizeNonOverwritableUploadGrant("private/x.png", {
       mimeType: "image/png",
       sizeBytes: 4,
