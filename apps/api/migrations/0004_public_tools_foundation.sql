@@ -58,7 +58,8 @@ CREATE TABLE message_outbox (
   UNIQUE (topic, recipient_key, idempotency_key),
   CHECK (last_error IS NULL OR length(last_error) <= 500)
 );
-CREATE INDEX message_outbox_claim_idx ON message_outbox (available_at, created_at) WHERE status IN ('pending', 'failed');
+CREATE INDEX message_outbox_claim_idx ON message_outbox (available_at, claimed_at, created_at)
+  WHERE status IN ('pending', 'failed', 'processing');
 
 CREATE TABLE attachments (
   attachment_id uuid PRIMARY KEY,
@@ -98,4 +99,5 @@ CREATE TABLE export_jobs (
   CHECK (last_error IS NULL OR length(last_error) <= 500),
   CHECK ((status = 'succeeded') = (result_attachment_id IS NOT NULL))
 );
-CREATE INDEX export_jobs_claim_idx ON export_jobs (created_at) WHERE status = 'pending';
+CREATE INDEX export_jobs_claim_idx ON export_jobs (claimed_at, created_at)
+  WHERE status IN ('pending', 'running');

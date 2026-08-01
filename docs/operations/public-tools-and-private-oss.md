@@ -24,9 +24,9 @@ PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的
 
 ## outbox、失败与重试
 
-业务服务应在同一个 PostgreSQL transaction/client 中写业务记录、`operation_events` 和 `message_outbox`。worker 使用 `FOR UPDATE SKIP LOCKED` 领取；领取后成功转 `sent`，失败保存最长 500 字符的脱敏错误并将 `availableAt` 推迟后重试。唯一键 `(topic, recipientKey, idempotencyKey)` 防止重复待办。本 PR 不包含消息发送 worker。
+业务服务应在同一个 PostgreSQL transaction/client 中写业务记录、`operation_events` 和 `message_outbox`。worker 使用 `FOR UPDATE SKIP LOCKED` 领取；默认 lease 为 300 秒（允许 30–3600 秒），超时的 `processing` 记录可被重新领取。领取后成功转 `sent`，失败保存最长 500 字符的脱敏错误并将 `availableAt` 推迟后重试。唯一键 `(topic, recipientKey, idempotencyKey)` 仅在 aggregate 与 payload 语义相同时复用，否则返回 409。本 PR 不包含消息发送 worker。
 
-导出任务使用相同的 `SKIP LOCKED` 模式从 pending 进入 running；成功结果必须引用 ready attachment，失败只保存脱敏错误。本 PR 不生成 Excel。
+导出任务使用相同的 `SKIP LOCKED` 与 300 秒默认 lease（允许 30–3600 秒）；超时的 running 任务可重新领取。相同幂等键仅在 filters 相同时复用。成功结果必须引用 ready attachment，失败只保存脱敏错误。本 PR 不生成 Excel。Aliyun SDK 尚未装配时存储实现继续 fail-fast/返回明确 503，不会伪装成已联通。
 
 ## 联调条件与已知风险
 
