@@ -102,9 +102,27 @@ export class MessageOutboxRepository {
     return row.event_id;
   }
 
-  async claim(client: SqlClient, limit = 1, leaseSeconds = 300): Promise<Array<{ eventId: string; payload: unknown; attempts: number }>> {
+  async claim(client: SqlClient, limit = 1, leaseSeconds = 300): Promise<Array<{
+    eventId: string;
+    topic: string;
+    aggregateType: string;
+    aggregateId: string;
+    payload: unknown;
+    recipientKey: string;
+    idempotencyKey: string;
+    attempts: number;
+  }>> {
     validateClaimOptions(limit, leaseSeconds);
-    const result = await client.query<{ event_id: string; payload: unknown; attempts: number }>(
+    const result = await client.query<{
+      event_id: string;
+      topic: string;
+      aggregate_type: string;
+      aggregate_id: string;
+      payload: unknown;
+      recipient_key: string;
+      idempotency_key: string;
+      attempts: number;
+    }>(
       `WITH candidates AS (
          SELECT event_id FROM message_outbox
          WHERE (status IN ('pending','failed') AND available_at <= CURRENT_TIMESTAMP)
@@ -115,10 +133,19 @@ export class MessageOutboxRepository {
        UPDATE message_outbox o
        SET status='processing',claimed_at=CURRENT_TIMESTAMP,attempts=o.attempts+1,updated_at=CURRENT_TIMESTAMP
        FROM candidates c WHERE o.event_id=c.event_id
-       RETURNING o.event_id,o.payload,o.attempts`,
+       RETURNING o.event_id,o.topic,o.aggregate_type,o.aggregate_id,o.payload,o.recipient_key,o.idempotency_key,o.attempts`,
       [limit, leaseSeconds],
     );
-    return result.rows.map((row) => ({ eventId: row.event_id, payload: row.payload, attempts: row.attempts }));
+    return result.rows.map((row) => ({
+      eventId: row.event_id,
+      topic: row.topic,
+      aggregateType: row.aggregate_type,
+      aggregateId: row.aggregate_id,
+      payload: row.payload,
+      recipientKey: row.recipient_key,
+      idempotencyKey: row.idempotency_key,
+      attempts: row.attempts,
+    }));
   }
 
   async markSent(client: SqlClient, eventId: string): Promise<void> {

@@ -8,7 +8,7 @@ const cookieToken=(request:FastifyRequest):string|undefined=>request.headers.coo
 const parse=<T>(schema:{safeParse(value:unknown):{success:true;data:T}|{success:false}},value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError("VALIDATION_ERROR","Request validation failed",400);return result.data;};
 export type ToolsHttpDependencies=Readonly<{authenticate(token:string|undefined):Promise<AuthUser>;attachments:AttachmentService;exports:ExportJobService}>;
 export function registerToolsRoutes(app:FastifyInstance,deps:ToolsHttpDependencies):void{
- const actor=async(request:FastifyRequest)=>{const user=await deps.authenticate(cookieToken(request));return{actorId:user.id,actorRole:user.capabilities[0]??"authenticated",requestId:request.id};};
+ const actor=async(request:FastifyRequest)=>{const user=await deps.authenticate(cookieToken(request));const capability=user.capabilities[0];if(!capability)throw new ApplicationError("NO_BUSINESS_ROLE","未分配业务权限",403);return{actorId:user.id,actorRole:capability,requestId:request.id};};
  app.post("/tools/attachments/upload-intents",async(request,reply)=>reply.code(201).send(await deps.attachments.createUploadIntent(await actor(request),parse(CreateUploadIntentSchema,request.body))));
  app.post<{Params:{attachmentId:string}}>("/tools/attachments/:attachmentId/finalize",async(request)=>deps.attachments.finalize(await actor(request),parse(AttachmentParamsSchema,request.params).attachmentId));
  app.get<{Params:{attachmentId:string}}>("/tools/attachments/:attachmentId/download",async(request)=>deps.attachments.createDownloadIntent((await actor(request)).actorId,parse(AttachmentParamsSchema,request.params).attachmentId));

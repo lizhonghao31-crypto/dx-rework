@@ -71,6 +71,13 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
     const claimedFirst = await outbox.claim(first, 1, 300);
     const claimedSecond = await outbox.claim(second, 1, 300);
     expect([...claimedFirst, ...claimedSecond].filter((item) => item.eventId === id)).toHaveLength(1);
+    expect(claimedFirst[0]).toMatchObject({
+      eventId: id,
+      topic: "lease",
+      aggregateType: "order",
+      aggregateId: "1",
+      recipientKey: actorId,
+    });
     await first.query("COMMIT");
     await second.query("COMMIT");
     first.release();
@@ -93,5 +100,22 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
     await expect(service.create(actor, { exportType: "test", filters: { a: 2 }, idempotencyKey: key })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT", statusCode: 409 });
     await pool.query("UPDATE export_jobs SET status='running',claimed_at=CURRENT_TIMESTAMP-interval '10 minutes' WHERE export_job_id=$1", [created.exportJobId]);
     expect((await service.claim(pool, 10, 300)).map((row) => row.export_job_id)).toContain(created.exportJobId);
+  });
+
+  it("completes exports only with ready attachments owned by the requester or bound to the job", async () => {
+    const service = new ExportJobService(pool);
+    const actor = { actorId, actorRole: "employee", requestId: randomUUID() };
+    const job = await service.create(actor, { exportType: "ready-check", filters: {}, idempotencyKey: randomUUID() });
+    await service.claim(pool, 10, 300);
+    const attachmentId = randomUUID();
+    await pool.query(
+      `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status)
+       VALUES($1,$2,'result.pdf','application/pdf',1,$3,$4,'pending')`,
+      [attachmentId, `private/${attachmentId}.pdf`, "a".repeat(64), actorId],
+    );
+    await expect(service.complete(pool, job.exportJobId, attachmentId)).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    await pool.query("UPDATE attachments SET status='ready',ready_at=CURRENT_TIMESTAMP WHERE attachment_id=$1", [attachmentId]);
+    await expect(service.complete(pool, job.exportJobId, attachmentId)).resolves.toBeUndefined();
+    expect((await service.query(actorId, job.exportJobId)).status).toBe("succeeded");
   });
 });
