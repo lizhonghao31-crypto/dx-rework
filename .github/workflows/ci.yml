@@ -1,0 +1,109 @@
+name: Technical foundation CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, test, migrate and build exact Head
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci
+      TEST_DATABASE_URL: postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci
+      GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      BUILD_TIME: ${{ github.event.pull_request.updated_at || github.event.repository.updated_at }}
+      SERVICE_NAME: dx-rework-api
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dx_rework
+          POSTGRES_PASSWORD: dx_rework_ci
+          POSTGRES_DB: dx_rework_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dx_rework -d dx_rework_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        run: npm install --global npm@10.9.9
+
+      - name: Verify immutable evidence
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          test "${actual_sha}" = "${EXPECTED_HEAD_SHA}"
+          node --version
+          npm --version
+          printf 'repository=%s\nhead_sha=%s\n' "${GITHUB_REPOSITORY}" "${actual_sha}"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit and API contract tests
+        run: npm test
+
+      - name: Validate migration files
+        run: npm run db:migrate:lint
+
+      - name: Apply migrations twice against PostgreSQL
+        run: npm run db:migrate:check
+
+      - name: Scan repository for committed secret signatures
+        run: npm run secret:scan
+
+      - name: Write validation summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## PR-01 technical foundation"
+            echo
+            echo "- Head SHA: $(git rev-parse HEAD)"
+            echo "- Node: $(node --version)"
+            echo "- npm: $(npm --version)"
+            echo "- Lint/typecheck/build/tests: passed"
+            echo "- PostgreSQL migration replay: passed"
+            echo "- Secret signature scan: passed"
+          } >> "${GITHUB_STEP_SUMMARY}"
