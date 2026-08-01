@@ -15,6 +15,10 @@
     {
       "version": "0004_public_tools_foundation",
       "checksum": "d1bd3c09355e3737f3587583f8d2a9d0c78d73c8099b6d785dc1d887efbeb600"
+    },
+    {
+      "version": "0005_access_master_data",
+      "checksum": "2c50e4d1ad904a9cda979d95750f034f054e5e7ae59aa7b5c2f89343ee4f9420"
     }
   ]
 }

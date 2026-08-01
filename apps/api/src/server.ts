@@ -13,6 +13,7 @@ import {
 import { AttachmentService } from "./tools/attachments.js";
 import { ExportJobService } from "./tools/exports.js";
 import { DisabledObjectStorage } from "./tools/storage.js";
+import { AccessMasterDataService } from "./access/service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -32,6 +33,10 @@ const app = buildApp({
   checkDatabase: () => checkDatabase(database),
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
   auth,
+  access: {
+    authenticate: (token) => auth.authenticate(token),
+    service: new AccessMasterDataService(database),
+  },
   tools: {
     authenticate: (token) => auth.authenticate(token),
     attachments: new AttachmentService(database, storage, { prefix: config.objectStorage.privatePrefix, ttlSeconds: config.objectStorage.signedUrlTtlSeconds, maxUploadBytes: config.objectStorage.maxUploadBytes }),

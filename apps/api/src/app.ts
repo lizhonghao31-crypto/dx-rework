@@ -16,6 +16,7 @@ import type { AuthService } from "./auth/service.js";
 import { AuthDeniedError } from "./auth/service.js";
 import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/schema-version.js";
 import { registerToolsRoutes, type ToolsHttpDependencies } from "./tools/routes.js";
+import { registerAccessRoutes, type AccessHttpDependencies } from "./access/routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -23,6 +24,7 @@ export type AppDependencies = Readonly<{
   getAppliedSchemaHistory: () => Promise<AppliedSchemaState[] | null>;
   auth?: AuthService;
   tools?: ToolsHttpDependencies;
+  access?: AccessHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -78,6 +80,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   if (dependencies.auth) registerAuthRoutes(app, dependencies.auth, { secureCookie: config.nodeEnv === "production", ttlSeconds: config.sessionTtlSeconds, appBasePath: config.appBasePath, corpId: config.dingtalk.corpId, mobileClientId: config.dingtalk.h5AppKey });
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
+  if (dependencies.access) registerAccessRoutes(app, dependencies.access);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {
