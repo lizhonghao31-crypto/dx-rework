@@ -53,6 +53,12 @@ describe("access and master-data contracts", () => {
     expect(migration).toContain("business_person_aliases_active_alias_idx");
     expect(migration).toContain("allow_business_person_alias_revocation_only");
     expect(migration).toContain("business person alias revocation requires trusted audit context");
+    expect(migration).toContain("stable DingTalk identity keys are immutable");
+    expect(migration).toContain("business_people_guard_creation");
+    expect(migration).toContain("business_people_deactivate_only");
+    expect(migration).toContain("process_catalog_versions_guard_creation");
+    expect(migration).toContain("supplier_catalog_versions_guard_creation");
+    expect(migration).toContain("role_capabilities_no_insert");
     expect(migration).toContain("authorization ignores this table from schema 0005 onward");
     expect(migration).toContain("CHECK ((person_type = 'internal') = (app_user_id IS NOT NULL))");
     expect(migration).toContain("('owner_group', 'own_factory:approve')");

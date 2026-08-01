@@ -383,19 +383,32 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const personId = randomUUID();
       const appUserId = input.personType === "internal" ? input.appUserId : null;
-      if (appUserId) {
-        await ensureActiveOrganizationUser(client, appUserId, this.corporationId, "内部人员对应的登录用户不存在、不在职或已停用");
-      }
-      await client.query(
-        "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,created_by) VALUES($1,$2,$3,$4,$5)",
-        [personId, input.personType, appUserId, input.displayName, actor.actorId],
-      );
       const aliases = input.aliases.map((alias, index) => ({
         aliasId: randomUUID(),
         alias,
         normalizedAlias: normalizedAliases[index]!,
         reason: input.reason,
       }));
+      if (appUserId) {
+        await ensureActiveOrganizationUser(client, appUserId, this.corporationId, "内部人员对应的登录用户不存在、不在职或已停用");
+      }
+      const personEventId = await this.events.append(client, actor, {
+        action: "master_data.person.create",
+        entityType: "business_person",
+        entityId: personId,
+        after: { personType: input.personType, appUserId, displayName: input.displayName, active: true, aliases },
+        reason: input.reason,
+      });
+      await client.query(
+        `SELECT
+           set_config('dx_rework.person_create_event_id',$1,true),
+           set_config('dx_rework.person_create_request_id',$2,true)`,
+        [personEventId, actor.requestId],
+      );
+      await client.query(
+        "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,created_by) VALUES($1,$2,$3,$4,$5)",
+        [personId, input.personType, appUserId, input.displayName, actor.actorId],
+      );
       for (const alias of aliases) {
         await client.query(
           `SELECT
@@ -408,13 +421,6 @@ export class AccessMasterDataService {
           [alias.aliasId, personId, alias.alias, alias.normalizedAlias, actor.actorId, input.reason],
         );
       }
-      await this.events.append(client, actor, {
-        action: "master_data.person.create",
-        entityType: "business_person",
-        entityId: personId,
-        after: { personType: input.personType, appUserId, displayName: input.displayName, aliases },
-        reason: input.reason,
-      });
       return { personId };
     });
   }
@@ -426,7 +432,7 @@ export class AccessMasterDataService {
   ): Promise<{ aliasId: string }> {
     return this.transaction(async (client) => {
       const person = await client.query(
-        "SELECT person_id FROM business_people WHERE person_id=$1 AND active=true FOR SHARE",
+        "SELECT person_id FROM business_people WHERE person_id=$1 AND active=true FOR UPDATE",
         [personId],
       );
       if (!person.rows[0]) throw new ApplicationError("NOT_FOUND", "有效人员档案不存在", 404);
@@ -479,17 +485,17 @@ export class AccessMasterDataService {
       );
       for (const alias of aliases.rows) await this.revokePersonAliasRow(client, actor, alias, reason);
       await client.query(
-        "UPDATE business_people SET active=false,deactivated_at=CURRENT_TIMESTAMP WHERE person_id=$1",
-        [personId],
+        `SELECT
+           set_config('dx_rework.person_deactivate_event_id',$1,true),
+           set_config('dx_rework.person_deactivate_request_id',$2,true)`,
+        [randomUUID(), actor.requestId],
       );
-      await this.events.append(client, actor, {
-        action: "master_data.person.deactivate",
-        entityType: "business_person",
-        entityId: personId,
-        before: { personType: person.person_type, appUserId: person.app_user_id, displayName: person.display_name, active: true },
-        after: { active: false },
-        reason,
-      });
+      await client.query(
+        `UPDATE business_people
+         SET active=false,deactivated_at=CURRENT_TIMESTAMP,deactivated_by=$2,deactivate_reason=$3
+         WHERE person_id=$1`,
+        [personId, actor.actorId, reason],
+      );
     });
   }
 
@@ -506,28 +512,14 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const item = await client.query("SELECT process_id FROM process_catalog_items WHERE process_id=$1 FOR UPDATE", [processId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "工序不存在", 404);
-      const current = await client.query<{
-        version: number;
-        process_name: string;
-        pricing_unit: string;
-        active: boolean;
-      }>(
-        "SELECT version,process_name,pricing_unit,active FROM current_process_catalog WHERE process_id=$1",
+      const current = await client.query<{ version: number }>(
+        "SELECT version FROM current_process_catalog WHERE process_id=$1",
         [processId],
       );
       const previous = current.rows[0];
       if (!previous) throw new ApplicationError("CONFLICT", "工序缺少可修订的当前版本", 409);
-      const next = await client.query<{ version: number }>(
-        "SELECT COALESCE(max(version),0)+1 version FROM process_catalog_versions WHERE process_id=$1",
-        [processId],
-      );
-      const version = next.rows[0]?.version ?? 1;
-      await this.insertProcessVersion(client, actor, processId, version, input, {
-        version: previous.version,
-        processName: previous.process_name,
-        pricingUnit: previous.pricing_unit,
-        active: previous.active,
-      });
+      const version = previous.version + 1;
+      await this.insertProcessVersion(client, actor, processId, version, input);
       return { processId, version };
     });
   }
@@ -548,26 +540,14 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const item = await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [supplierId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
-      const current = await client.query<{
-        version: number;
-        supplier_name: string;
-        active: boolean;
-      }>(
-        "SELECT version,supplier_name,active FROM current_supplier_catalog WHERE supplier_id=$1",
+      const current = await client.query<{ version: number }>(
+        "SELECT version FROM current_supplier_catalog WHERE supplier_id=$1",
         [supplierId],
       );
       const previous = current.rows[0];
       if (!previous) throw new ApplicationError("CONFLICT", "供应商缺少可修订的当前版本", 409);
-      const next = await client.query<{ version: number }>(
-        "SELECT COALESCE(max(version),0)+1 version FROM supplier_catalog_versions WHERE supplier_id=$1",
-        [supplierId],
-      );
-      const version = next.rows[0]?.version ?? 1;
-      await this.insertSupplierVersion(client, actor, supplierId, version, input, {
-        version: previous.version,
-        supplierName: previous.supplier_name,
-        active: previous.active,
-      });
+      const version = previous.version + 1;
+      await this.insertSupplierVersion(client, actor, supplierId, version, input);
       return { supplierId, version };
     });
   }
@@ -674,20 +654,17 @@ export class AccessMasterDataService {
     processId: string,
     version: number,
     input: ReviseProcess,
-    before?: { version: number; processName: string; pricingUnit: string; active: boolean },
   ): Promise<void> {
+    await client.query(
+      `SELECT
+         set_config('dx_rework.process_version_event_id',$1,true),
+         set_config('dx_rework.process_version_request_id',$2,true)`,
+      [randomUUID(), actor.requestId],
+    );
     await client.query(
       "INSERT INTO process_catalog_versions(process_id,version,process_name,pricing_unit,active,change_reason,changed_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
       [processId, version, input.processName, input.pricingUnit, input.active, input.changeReason, actor.actorId],
     );
-    await this.events.append(client, actor, {
-      action: version === 1 ? "master_data.process.create" : "master_data.process.revise",
-      entityType: "process_catalog",
-      entityId: processId,
-      ...(before ? { before } : {}),
-      after: { version, processName: input.processName, pricingUnit: input.pricingUnit, active: input.active },
-      reason: input.changeReason,
-    });
   }
 
   private async insertSupplierVersion(
@@ -696,20 +673,17 @@ export class AccessMasterDataService {
     supplierId: string,
     version: number,
     input: ReviseSupplier,
-    before?: { version: number; supplierName: string; active: boolean },
   ): Promise<void> {
+    await client.query(
+      `SELECT
+         set_config('dx_rework.supplier_version_event_id',$1,true),
+         set_config('dx_rework.supplier_version_request_id',$2,true)`,
+      [randomUUID(), actor.requestId],
+    );
     await client.query(
       "INSERT INTO supplier_catalog_versions(supplier_id,version,supplier_name,active,change_reason,changed_by) VALUES($1,$2,$3,$4,$5,$6)",
       [supplierId, version, input.supplierName, input.active, input.changeReason, actor.actorId],
     );
-    await this.events.append(client, actor, {
-      action: version === 1 ? "master_data.supplier.create" : "master_data.supplier.revise",
-      entityType: "supplier_catalog",
-      entityId: supplierId,
-      ...(before ? { before } : {}),
-      after: { version, supplierName: input.supplierName, active: input.active },
-      reason: input.changeReason,
-    });
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {

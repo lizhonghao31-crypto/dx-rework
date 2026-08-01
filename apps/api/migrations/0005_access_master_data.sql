@@ -10,6 +10,13 @@ CREATE TRIGGER access_security_policy_no_truncate BEFORE TRUNCATE ON access_secu
 CREATE OR REPLACE FUNCTION lock_owner_eligibility_change() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_TABLE_NAME='identity_mappings' THEN
+    IF (OLD.id,OLD.user_id,OLD.provider,OLD.corp_id,OLD.provider_user_id,OLD.union_id,OLD.first_verified_at)
+       IS DISTINCT FROM
+       (NEW.id,NEW.user_id,NEW.provider,NEW.corp_id,NEW.provider_user_id,NEW.union_id,NEW.first_verified_at)
+    THEN
+      RAISE EXCEPTION 'stable DingTalk identity keys are immutable'
+        USING ERRCODE = '55000';
+    END IF;
     IF (OLD.active,OLD.employed) IS DISTINCT FROM (NEW.active,NEW.employed) THEN
       PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
     END IF;
@@ -23,6 +30,7 @@ END;
 $$;
 CREATE TRIGGER identity_mappings_owner_guard BEFORE UPDATE ON identity_mappings FOR EACH ROW EXECUTE FUNCTION lock_owner_eligibility_change();
 CREATE TRIGGER app_users_owner_guard BEFORE UPDATE ON app_users FOR EACH ROW EXECUTE FUNCTION lock_owner_eligibility_change();
+CREATE UNIQUE INDEX identity_mappings_user_unique_idx ON identity_mappings(user_id);
 CREATE TRIGGER identity_mappings_no_delete BEFORE DELETE ON identity_mappings FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER identity_mappings_no_truncate BEFORE TRUNCATE ON identity_mappings FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
@@ -301,10 +309,73 @@ CREATE TABLE business_people (
   created_by uuid NOT NULL REFERENCES app_users(id),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   deactivated_at timestamptz,
+  deactivated_by uuid REFERENCES app_users(id),
+  deactivate_reason text,
   CHECK ((person_type = 'internal') = (app_user_id IS NOT NULL)),
-  CHECK ((active = true) = (deactivated_at IS NULL))
+  CHECK (
+    (active=true AND deactivated_at IS NULL AND deactivated_by IS NULL AND deactivate_reason IS NULL)
+    OR
+    (active=false AND deactivated_at IS NOT NULL AND deactivated_by IS NOT NULL AND deactivate_reason IS NOT NULL)
+  ),
+  CHECK (deactivate_reason IS NULL OR length(btrim(deactivate_reason)) BETWEEN 1 AND 500)
 );
 CREATE INDEX business_people_type_active_idx ON business_people (person_type, active, display_name);
+
+CREATE OR REPLACE FUNCTION guard_business_person_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.person_create_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.person_create_request_id', true), '');
+  audit_actor_roles text[];
+BEGIN
+  IF NEW.active IS DISTINCT FROM true
+     OR NEW.deactivated_at IS NOT NULL OR NEW.deactivated_by IS NOT NULL OR NEW.deactivate_reason IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'new business people must start active'
+      USING ERRCODE = '23514';
+  END IF;
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'business person creation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  audit_actor_roles := access_authorized_actor_roles(NEW.created_by, 'master_data:manage');
+  IF NEW.person_type='internal' AND NOT EXISTS (
+    SELECT 1
+    FROM app_users u
+    JOIN identity_mappings i ON i.user_id=u.id
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+    WHERE u.id=NEW.app_user_id AND u.enabled=true
+      AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+  ) THEN
+    RAISE EXCEPTION 'internal business person must use an active employee in the configured corporation'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM operation_events e
+    WHERE e.event_id=audit_event_id::uuid
+      AND e.request_id=audit_request_id
+      AND e.actor_id=NEW.created_by
+      AND e.actor_roles=audit_actor_roles
+      AND e.authorization_capability='master_data:manage'
+      AND e.action='master_data.person.create'
+      AND e.entity_type='business_person'
+      AND e.entity_id=NEW.person_id::text
+      AND e.after_state->>'personType'=NEW.person_type
+      AND (e.after_state->>'appUserId')::uuid IS NOT DISTINCT FROM NEW.app_user_id
+      AND e.after_state->>'displayName'=NEW.display_name
+      AND e.after_state->>'active'='true'
+      AND length(btrim(e.reason)) BETWEEN 1 AND 500
+  ) THEN
+    RAISE EXCEPTION 'business person creation event does not match the row'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER business_people_guard_creation BEFORE INSERT ON business_people FOR EACH ROW EXECUTE FUNCTION guard_business_person_creation();
 
 CREATE TABLE business_person_aliases (
   alias_id uuid PRIMARY KEY,
@@ -336,6 +407,7 @@ DECLARE
   audit_request_id text := nullif(current_setting('dx_rework.alias_create_request_id', true), '');
   audit_actor_roles text[];
   target_person_active boolean;
+  normalized_display_alias text;
 BEGIN
   IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
     RAISE EXCEPTION 'new business person aliases cannot start revoked'
@@ -360,7 +432,8 @@ BEGIN
 
   -- The displayed alias is the source of truth. Never trust a caller-supplied
   -- normalization key because the unique indexes use this value.
-  NEW.normalized_alias := lower(btrim(normalize(NEW.alias, NFKC)));
+  normalized_display_alias := normalize(NEW.alias, NFKC);
+  NEW.normalized_alias := lower(btrim(normalized_display_alias));
 
   INSERT INTO operation_events(
     event_id,request_id,actor_id,actor_roles,authorization_capability,
@@ -435,11 +508,80 @@ CREATE TRIGGER business_person_aliases_revoke_only BEFORE UPDATE ON business_per
 CREATE TRIGGER business_person_aliases_no_delete BEFORE DELETE ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER business_person_aliases_no_truncate BEFORE TRUNCATE ON business_person_aliases FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
+CREATE OR REPLACE FUNCTION guard_business_person_deactivation_only() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.person_deactivate_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.person_deactivate_request_id', true), '');
+  audit_actor_roles text[];
+BEGIN
+  IF OLD.active IS DISTINCT FROM true
+     OR NEW.active IS DISTINCT FROM false
+     OR NEW.deactivated_at IS NULL OR NEW.deactivated_by IS NULL OR NEW.deactivate_reason IS NULL
+     OR NEW.person_id IS DISTINCT FROM OLD.person_id
+     OR NEW.person_type IS DISTINCT FROM OLD.person_type
+     OR NEW.app_user_id IS DISTINCT FROM OLD.app_user_id
+     OR NEW.display_name IS DISTINCT FROM OLD.display_name
+     OR NEW.created_by IS DISTINCT FROM OLD.created_by
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'business person identity is immutable except for one controlled deactivation'
+      USING ERRCODE = '55000';
+  END IF;
+  IF OLD.person_type <> 'temporary' THEN
+    RAISE EXCEPTION 'internal person status is controlled by DingTalk employment state'
+      USING ERRCODE = '23514';
+  END IF;
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'business person deactivation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  audit_actor_roles := access_authorized_actor_roles(NEW.deactivated_by, 'master_data:manage');
+  IF EXISTS (
+    SELECT 1
+    FROM business_person_aliases a
+    WHERE a.person_id=OLD.person_id AND a.revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'active aliases must be revoked before person deactivation'
+      USING ERRCODE = '23514';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.deactivated_by,audit_actor_roles,'master_data:manage',
+    'master_data.person.deactivate','business_person',OLD.person_id::text,
+    jsonb_build_object(
+      'personType',OLD.person_type,
+      'appUserId',OLD.app_user_id,
+      'displayName',OLD.display_name,
+      'active',OLD.active
+    ),
+    jsonb_build_object(
+      'active',NEW.active,
+      'deactivatedAt',NEW.deactivated_at,
+      'deactivatedBy',NEW.deactivated_by,
+      'deactivateReason',NEW.deactivate_reason
+    ),
+    NEW.deactivate_reason
+  );
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER business_people_deactivate_only BEFORE UPDATE ON business_people FOR EACH ROW EXECUTE FUNCTION guard_business_person_deactivation_only();
+CREATE TRIGGER business_people_no_delete BEFORE DELETE ON business_people FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER business_people_no_truncate BEFORE TRUNCATE ON business_people FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+
 CREATE TABLE process_catalog_items (
   process_id uuid PRIMARY KEY,
   process_code text NOT NULL UNIQUE CHECK (process_code ~ '^[A-Z0-9][A-Z0-9_-]{1,31}$'),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TRIGGER process_catalog_items_no_update BEFORE UPDATE ON process_catalog_items FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER process_catalog_items_no_delete BEFORE DELETE ON process_catalog_items FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER process_catalog_items_no_truncate BEFORE TRUNCATE ON process_catalog_items FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TABLE process_catalog_versions (
   process_id uuid NOT NULL REFERENCES process_catalog_items(process_id),
   version integer NOT NULL CHECK (version > 0),
@@ -451,6 +593,82 @@ CREATE TABLE process_catalog_versions (
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (process_id, version)
 );
+CREATE OR REPLACE FUNCTION guard_process_catalog_version_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.process_version_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.process_version_request_id', true), '');
+  audit_actor_roles text[];
+  previous_version integer;
+  previous_process_name text;
+  previous_pricing_unit text;
+  previous_active boolean;
+  stable_process_code text;
+  previous_state jsonb;
+  audit_action text;
+BEGIN
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'process catalog version creation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  audit_actor_roles := access_authorized_actor_roles(NEW.changed_by, 'master_data:manage');
+  SELECT i.process_code
+  INTO stable_process_code
+  FROM process_catalog_items i
+  WHERE i.process_id=NEW.process_id
+  FOR UPDATE;
+  IF stable_process_code IS NULL THEN
+    RAISE EXCEPTION 'process catalog item does not exist'
+      USING ERRCODE = '23503';
+  END IF;
+  SELECT v.version,v.process_name,v.pricing_unit,v.active
+  INTO previous_version,previous_process_name,previous_pricing_unit,previous_active
+  FROM process_catalog_versions v
+  WHERE v.process_id=NEW.process_id
+  ORDER BY v.version DESC
+  LIMIT 1;
+  IF previous_version IS NULL THEN
+    IF NEW.version <> 1 THEN
+      RAISE EXCEPTION 'first process catalog version must be 1'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := NULL;
+    audit_action := 'master_data.process.create';
+  ELSE
+    IF NEW.version <> previous_version + 1 THEN
+      RAISE EXCEPTION 'process catalog versions must be sequential'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := jsonb_build_object(
+      'processCode',stable_process_code,
+      'version',previous_version,
+      'processName',previous_process_name,
+      'pricingUnit',previous_pricing_unit,
+      'active',previous_active
+    );
+    audit_action := 'master_data.process.revise';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.changed_by,audit_actor_roles,'master_data:manage',
+    audit_action,'process_catalog',NEW.process_id::text,previous_state,
+    jsonb_build_object(
+      'processCode',stable_process_code,
+      'version',NEW.version,
+      'processName',NEW.process_name,
+      'pricingUnit',NEW.pricing_unit,
+      'active',NEW.active
+    ),
+    NEW.change_reason
+  );
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER process_catalog_versions_guard_creation BEFORE INSERT ON process_catalog_versions FOR EACH ROW EXECUTE FUNCTION guard_process_catalog_version_creation();
 CREATE TRIGGER process_catalog_versions_no_update BEFORE UPDATE ON process_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER process_catalog_versions_no_delete BEFORE DELETE ON process_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER process_catalog_versions_no_truncate BEFORE TRUNCATE ON process_catalog_versions FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
@@ -467,6 +685,9 @@ CREATE TABLE supplier_catalog_items (
   supplier_type text NOT NULL CHECK (supplier_type IN ('factory', 'embroidery_washing', 'fabric', 'other')),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TRIGGER supplier_catalog_items_no_update BEFORE UPDATE ON supplier_catalog_items FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER supplier_catalog_items_no_delete BEFORE DELETE ON supplier_catalog_items FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER supplier_catalog_items_no_truncate BEFORE TRUNCATE ON supplier_catalog_items FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TABLE supplier_catalog_versions (
   supplier_id uuid NOT NULL REFERENCES supplier_catalog_items(supplier_id),
   version integer NOT NULL CHECK (version > 0),
@@ -477,6 +698,82 @@ CREATE TABLE supplier_catalog_versions (
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (supplier_id, version)
 );
+CREATE OR REPLACE FUNCTION guard_supplier_catalog_version_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.supplier_version_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.supplier_version_request_id', true), '');
+  audit_actor_roles text[];
+  previous_version integer;
+  previous_supplier_name text;
+  previous_active boolean;
+  stable_supplier_code text;
+  stable_supplier_type text;
+  previous_state jsonb;
+  audit_action text;
+BEGIN
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'supplier catalog version creation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  audit_actor_roles := access_authorized_actor_roles(NEW.changed_by, 'master_data:manage');
+  SELECT i.supplier_code,i.supplier_type
+  INTO stable_supplier_code,stable_supplier_type
+  FROM supplier_catalog_items i
+  WHERE i.supplier_id=NEW.supplier_id
+  FOR UPDATE;
+  IF stable_supplier_code IS NULL THEN
+    RAISE EXCEPTION 'supplier catalog item does not exist'
+      USING ERRCODE = '23503';
+  END IF;
+  SELECT v.version,v.supplier_name,v.active
+  INTO previous_version,previous_supplier_name,previous_active
+  FROM supplier_catalog_versions v
+  WHERE v.supplier_id=NEW.supplier_id
+  ORDER BY v.version DESC
+  LIMIT 1;
+  IF previous_version IS NULL THEN
+    IF NEW.version <> 1 THEN
+      RAISE EXCEPTION 'first supplier catalog version must be 1'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := NULL;
+    audit_action := 'master_data.supplier.create';
+  ELSE
+    IF NEW.version <> previous_version + 1 THEN
+      RAISE EXCEPTION 'supplier catalog versions must be sequential'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := jsonb_build_object(
+      'supplierCode',stable_supplier_code,
+      'supplierType',stable_supplier_type,
+      'version',previous_version,
+      'supplierName',previous_supplier_name,
+      'active',previous_active
+    );
+    audit_action := 'master_data.supplier.revise';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.changed_by,audit_actor_roles,'master_data:manage',
+    audit_action,'supplier_catalog',NEW.supplier_id::text,previous_state,
+    jsonb_build_object(
+      'supplierCode',stable_supplier_code,
+      'supplierType',stable_supplier_type,
+      'version',NEW.version,
+      'supplierName',NEW.supplier_name,
+      'active',NEW.active
+    ),
+    NEW.change_reason
+  );
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER supplier_catalog_versions_guard_creation BEFORE INSERT ON supplier_catalog_versions FOR EACH ROW EXECUTE FUNCTION guard_supplier_catalog_version_creation();
 CREATE TRIGGER supplier_catalog_versions_no_update BEFORE UPDATE ON supplier_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER supplier_catalog_versions_no_delete BEFORE DELETE ON supplier_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER supplier_catalog_versions_no_truncate BEFORE TRUNCATE ON supplier_catalog_versions FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
@@ -746,3 +1043,12 @@ INSERT INTO role_capabilities(role_code, capability) VALUES
   ('system_admin', 'tools:user'), ('system_admin', 'dashboard:management:read'), ('system_admin', 'master_data:manage'),
   ('system_admin', 'people:read'), ('system_admin', 'process_catalog:read'), ('system_admin', 'supplier_catalog:read'),
   ('system_admin', 'access:admin'), ('system_admin', 'delegation:manage'), ('system_admin', 'audit:read');
+
+-- Role-to-capability mappings are reviewed seed policy. Runtime writes would
+-- silently change authorization for every holder of a role, so any future
+-- change must arrive as an explicit forward migration that replaces these
+-- guards as part of the reviewed schema change.
+CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER role_capabilities_no_update BEFORE UPDATE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER role_capabilities_no_delete BEFORE DELETE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER role_capabilities_no_truncate BEFORE TRUNCATE ON role_capabilities FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();

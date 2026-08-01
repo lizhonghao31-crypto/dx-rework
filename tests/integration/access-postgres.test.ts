@@ -142,6 +142,9 @@ runWithPostgres("role permissions and versioned master data", () => {
        VALUES($1,$2,'finance_read',$3,'绕过受控服务直接授权')`,
       [randomUUID(), liOwnerId, adminId],
     )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      "INSERT INTO role_capabilities(role_code,capability) VALUES('production_management','own_factory:approve')",
+    )).rejects.toMatchObject({ code: "55000" });
   });
 
   it("keeps legacy direct capabilities inert after role migration", async () => {
@@ -175,6 +178,33 @@ runWithPostgres("role permissions and versioned master data", () => {
       employed: true,
       displayName: "外部组织人员",
     })).rejects.toThrow("different corporation");
+    await expect(authStore.upsertIdentity({
+      corpId: "corp",
+      userId: "rotated-zhang-entry",
+      unionId: `union-${zhangId}`,
+      active: true,
+      employed: true,
+      displayName: "张文豪",
+    })).resolves.toMatchObject({ id: zhangId });
+    expect((await database.query<{ provider_user_id: string; union_id: string }>(
+      "SELECT provider_user_id,union_id FROM identity_mappings WHERE user_id=$1",
+      [zhangId],
+    )).rows[0]).toEqual({
+      provider_user_id: `ding-${zhangId}`,
+      union_id: `union-${zhangId}`,
+    });
+    await expect(database.query(
+      `UPDATE identity_mappings
+       SET user_id=$2,corp_id='foreign-corp',provider_user_id='forged-user',union_id='forged-union'
+       WHERE user_id=$1`,
+      [zhangId, financeId],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','corp','forged-owner-entry','forged-owner-union',true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(), liOwnerId],
+    )).rejects.toMatchObject({ code: "23505" });
     await database.query(
       "INSERT INTO auth_sessions(id,token_hash,user_id,expires_at) VALUES($1,'foreign-token',$2,CURRENT_TIMESTAMP+interval '1 day')",
       [randomUUID(), foreignOwnerId],
@@ -183,6 +213,11 @@ runWithPostgres("role permissions and versioned master data", () => {
   });
 
   it("maps 李生 only to 李总 and keeps temporary workers outside login users", async () => {
+    await expect(database.query(
+      `INSERT INTO business_people(person_id,person_type,display_name,created_by)
+       VALUES($1,'temporary','绕过受控服务的人员',$2)`,
+      [randomUUID(), adminId],
+    )).rejects.toMatchObject({ code: "55000" });
     const li = await service.createPerson(masterDataActor, {
       personType: "internal",
       appUserId: liOwnerId,
@@ -232,6 +267,10 @@ runWithPostgres("role permissions and versioned master data", () => {
       [initialAliasId],
     )).toHaveProperty("rowCount", 1);
     await expect(database.query(
+      "UPDATE business_people SET app_user_id=$2 WHERE person_id=$1",
+      [li.personId, financeId],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
       `INSERT INTO business_person_aliases(
          alias_id,person_id,alias,normalized_alias,created_by,create_reason
        ) VALUES($1,$2,'李老板','李老板',$3,'绕过受控服务直接绑定别名')`,
@@ -249,8 +288,8 @@ runWithPostgres("role permissions and versioned master data", () => {
       await expect(directAliasClient.query(
         `INSERT INTO business_person_aliases(
            alias_id,person_id,alias,normalized_alias,created_by,create_reason
-         ) VALUES($1,$2,'李生','caller-controlled-bypass',$3,'验证数据库自行归一化')`,
-        [randomUUID(), liTongshengPerson.personId, adminId],
+         ) VALUES($1,$2,$3,'caller-controlled-bypass',$4,'验证数据库先兼容归一化再去除边界空格')`,
+        [randomUUID(), liTongshengPerson.personId, "\u00a0李生", adminId],
       )).rejects.toMatchObject({ code: "23505" });
       await directAliasClient.query("ROLLBACK");
       await directAliasClient.query("BEGIN");
@@ -314,6 +353,15 @@ runWithPostgres("role permissions and versioned master data", () => {
       revokedAt: expect.any(String),
     }));
     await service.deactivatePerson(masterDataActor, correctedTemporary.personId, "临时工离场");
+    expect((await database.query<{ after_state: Record<string, unknown> }>(
+      `SELECT after_state FROM operation_events
+       WHERE action='master_data.person.deactivate' AND entity_id=$1`,
+      [correctedTemporary.personId],
+    )).rows[0]?.after_state).toEqual(expect.objectContaining({
+      active: false,
+      deactivatedBy: adminId,
+      deactivateReason: "临时工离场",
+    }));
     expect(await database.query(
       `SELECT 1 FROM operation_events
        WHERE entity_type='business_person_alias' AND entity_id=$1
@@ -334,6 +382,27 @@ runWithPostgres("role permissions and versioned master data", () => {
       }),
     );
 
+    const concurrentAliasTarget = await service.createPerson(masterDataActor, {
+      personType: "temporary",
+      displayName: "并发别名测试人员",
+      aliases: [],
+      reason: "验证同一人员并发别名新增",
+    });
+    const concurrentAliases = await Promise.allSettled([
+      service.addPersonAlias({ ...masterDataActor, requestId: randomUUID() }, concurrentAliasTarget.personId, {
+        alias: "并发别名甲",
+        reason: "并发新增甲",
+      }),
+      service.addPersonAlias({ ...masterDataActor, requestId: randomUUID() }, concurrentAliasTarget.personId, {
+        alias: "并发别名乙",
+        reason: "并发新增乙",
+      }),
+    ]);
+    expect(concurrentAliases).toEqual([
+      expect.objectContaining({ status: "fulfilled" }),
+      expect.objectContaining({ status: "fulfilled" }),
+    ]);
+
     const aliasRaceTarget = await service.createPerson(masterDataActor, {
       personType: "temporary",
       displayName: "并发停用测试人员",
@@ -349,8 +418,16 @@ runWithPostgres("role permissions and versioned master data", () => {
         [aliasRaceTarget.personId],
       );
       await deactivationClient.query(
-        "UPDATE business_people SET active=false,deactivated_at=CURRENT_TIMESTAMP WHERE person_id=$1",
-        [aliasRaceTarget.personId],
+        `SELECT
+           set_config('dx_rework.person_deactivate_event_id',$1,true),
+           set_config('dx_rework.person_deactivate_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      await deactivationClient.query(
+        `UPDATE business_people
+         SET active=false,deactivated_at=CURRENT_TIMESTAMP,deactivated_by=$2,deactivate_reason='验证停用锁'
+         WHERE person_id=$1`,
+        [aliasRaceTarget.personId, adminId],
       );
 
       await aliasRaceClient.query("BEGIN");
@@ -408,6 +485,12 @@ runWithPostgres("role permissions and versioned master data", () => {
       active: true,
       changeReason: "建档",
     });
+    await expect(database.query(
+      `INSERT INTO process_catalog_versions(
+         process_id,version,process_name,pricing_unit,active,change_reason,changed_by
+       ) VALUES($1,2,'绕过审计的工序','piece',true,'绕过受控服务',$2)`,
+      [process.processId, adminId],
+    )).rejects.toMatchObject({ code: "55000" });
     await service.reviseProcess(masterDataActor, process.processId, {
       processName: "成品返查",
       pricingUnit: "piece",
@@ -436,6 +519,12 @@ runWithPostgres("role permissions and versioned master data", () => {
       active: true,
       changeReason: "建档",
     });
+    await expect(database.query(
+      `INSERT INTO supplier_catalog_versions(
+         supplier_id,version,supplier_name,active,change_reason,changed_by
+       ) VALUES($1,2,'绕过审计的供应商',true,'绕过受控服务',$2)`,
+      [supplier.supplierId, adminId],
+    )).rejects.toMatchObject({ code: "55000" });
     await service.reviseSupplier(masterDataActor, supplier.supplierId, {
       supplierName: "加工厂一号",
       active: true,

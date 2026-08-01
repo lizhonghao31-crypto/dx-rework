@@ -100,8 +100,8 @@ export class PostgresAuthStore implements AuthStore {
       }
       if (existing.rows[0]) {
         await client.query(
-          "UPDATE identity_mappings SET provider_user_id=$2,union_id=$3,active=$4,employed=$5,last_verified_at=CURRENT_TIMESTAMP WHERE provider='dingtalk' AND corp_id=$1 AND user_id=$6",
-          [member.corpId, member.userId, member.unionId, member.active, member.employed, userId],
+          "UPDATE identity_mappings SET active=$2,employed=$3,last_verified_at=CURRENT_TIMESTAMP WHERE provider='dingtalk' AND corp_id=$1 AND user_id=$4",
+          [member.corpId, member.active, member.employed, userId],
         );
       } else {
         await client.query(
