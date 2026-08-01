@@ -54,6 +54,12 @@ server {
         proxy_pass http://127.0.0.1:3201/;
     }
 
+    # Vite emits /rework/assets/* URLs, while the artifact stores files in assets/*.
+    # alias strips the public prefix; missing assets return 404 and never the SPA HTML.
+    location ^~ /rework/assets/ {
+        alias /opt/dx-rework/frontend/current/assets/;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }

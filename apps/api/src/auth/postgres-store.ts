@@ -6,6 +6,18 @@ import { stableEqual, type AuthStore, type AuthUser, type QrChallenge, type Sess
 
 export class PostgresAuthStore implements AuthStore {
   constructor(private readonly database: Pool) {}
+  async cleanupExpiredAuthArtifacts(now: Date): Promise<void> {
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM auth_consumed_codes WHERE expires_at <= $1", [now]);
+      await client.query("DELETE FROM auth_qr_challenges WHERE expires_at <= $1", [now]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
   async consumeCode(codeHash: string, expiresAt: Date): Promise<boolean> {
     const result = await this.database.query("INSERT INTO auth_consumed_codes(code_hash, expires_at) VALUES($1,$2) ON CONFLICT DO NOTHING", [codeHash, expiresAt]);
     return result.rowCount === 1;

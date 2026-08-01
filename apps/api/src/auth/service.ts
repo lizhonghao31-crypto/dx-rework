@@ -8,6 +8,7 @@ export type QrChallenge = Readonly<{ stateHash: string; bindingHash: string; exp
 export type SessionIdentity = Readonly<{ userId: string; unionId: string; corpId: string; active: boolean; employed: boolean; lastVerifiedAt: Date }>;
 
 export interface AuthStore {
+  cleanupExpiredAuthArtifacts(now: Date): Promise<void>;
   consumeCode(codeHash: string, expiresAt: Date): Promise<boolean>;
   consumeQrState(stateHash: string, bindingHash: string, now: Date): Promise<boolean>;
   createQrState(challenge: QrChallenge): Promise<void>;
@@ -37,6 +38,7 @@ export class AuthService {
   private readonly revalidations = new Map<string, Promise<AuthUser>>();
 
   async beginQr(): Promise<{ authorizationUrl: string; bindingToken: string }> {
+    await this.store.cleanupExpiredAuthArtifacts(this.now());
     const state = randomBytes(32).toString("base64url");
     const bindingToken = randomBytes(32).toString("base64url");
     await this.store.createQrState({ stateHash: hash(state), bindingHash: this.hashBinding(bindingToken), expiresAt: new Date(this.now().getTime() + 5 * 60_000), usedAt: null });
@@ -44,6 +46,7 @@ export class AuthService {
   }
 
   async loginMobile(code: string): Promise<{ token: string; user: AuthUser }> {
+    await this.store.cleanupExpiredAuthArtifacts(this.now());
     return this.completeCode(code, () => this.provider.exchangeMobileCode(code));
   }
 

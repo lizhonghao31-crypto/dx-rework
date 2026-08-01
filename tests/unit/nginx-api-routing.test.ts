@@ -14,6 +14,25 @@ describe("production Nginx API routing", () => {
     expect(config).toContain("location /api/");
   });
 
+  it("maps prefixed Vite assets to artifact assets without an SPA fallback", async () => {
+    const config = await readFile("infra/nginx/dx-rework.conf.example", "utf8");
+    const assets = config.indexOf("location ^~ /rework/assets/");
+    const spa = config.indexOf("location / {");
+    expect(assets).toBeGreaterThan(-1);
+    expect(assets).toBeLessThan(spa);
+    const block = config.slice(assets, spa);
+    expect(block).toContain("alias /opt/dx-rework/frontend/current/assets/;");
+    expect(block).not.toContain("index.html");
+  });
+
+  it("keeps the external proxy contract aligned with Fastify's stripped route", async () => {
+    const nginx = await readFile("infra/nginx/dx-rework.conf.example", "utf8");
+    const routes = await readFile("apps/api/src/auth/routes.ts", "utf8");
+    expect(nginx.match(/proxy_pass http:\/\/127\.0\.0\.1:3201\/;/g)).toHaveLength(2);
+    expect(routes).toContain('app.get("/protected"');
+    expect(routes).not.toContain('app.get("/api/protected"');
+  });
+
   it("uses a query-free access log format for every location", async () => {
     const config = await readFile("infra/nginx/dx-rework.conf.example", "utf8");
     const format = config.match(/log_format\s+dx_rework_query_free\s+([\s\S]*?);/)?.[1];
