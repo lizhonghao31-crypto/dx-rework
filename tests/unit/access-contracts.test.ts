@@ -58,7 +58,12 @@ describe("access and master-data contracts", () => {
     expect(migration).toContain("business_people_deactivate_only");
     expect(migration).toContain("process_catalog_versions_guard_creation");
     expect(migration).toContain("supplier_catalog_versions_guard_creation");
+    expect(migration).toContain("process_catalog_items_require_initial_version");
+    expect(migration).toContain("supplier_catalog_items_require_initial_version");
+    expect(migration).toContain("normalize_business_person_alias");
     expect(migration).toContain("role_capabilities_no_insert");
+    expect(migration).toContain("business_roles_no_update");
+    expect(migration).toContain("capability_catalog_no_update");
     expect(migration).toContain("authorization ignores this table from schema 0005 onward");
     expect(migration).toContain("CHECK ((person_type = 'internal') = (app_user_id IS NOT NULL))");
     expect(migration).toContain("('owner_group', 'own_factory:approve')");

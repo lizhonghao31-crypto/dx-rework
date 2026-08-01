@@ -401,13 +401,24 @@ CREATE UNIQUE INDEX business_person_aliases_active_alias_idx
 CREATE UNIQUE INDEX business_person_aliases_person_active_idx
   ON business_person_aliases (person_id, normalized_alias)
   WHERE revoked_at IS NULL;
+CREATE OR REPLACE FUNCTION normalize_business_person_alias(raw_alias text) RETURNS text
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+  SELECT lower(btrim(
+    normalize(raw_alias, NFKC),
+    chr(9) || chr(10) || chr(11) || chr(12) || chr(13) || chr(32)
+      || chr(133) || chr(160) || chr(5760) || chr(6158)
+      || chr(8192) || chr(8193) || chr(8194) || chr(8195) || chr(8196)
+      || chr(8197) || chr(8198) || chr(8199) || chr(8200) || chr(8201)
+      || chr(8202) || chr(8203) || chr(8232) || chr(8233) || chr(8239)
+      || chr(8287) || chr(8288) || chr(12288) || chr(65279)
+  ));
+$$;
 CREATE OR REPLACE FUNCTION guard_business_person_alias_creation() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   audit_event_id text := nullif(current_setting('dx_rework.alias_create_event_id', true), '');
   audit_request_id text := nullif(current_setting('dx_rework.alias_create_request_id', true), '');
   audit_actor_roles text[];
   target_person_active boolean;
-  normalized_display_alias text;
 BEGIN
   IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
     RAISE EXCEPTION 'new business person aliases cannot start revoked'
@@ -432,8 +443,7 @@ BEGIN
 
   -- The displayed alias is the source of truth. Never trust a caller-supplied
   -- normalization key because the unique indexes use this value.
-  normalized_display_alias := normalize(NEW.alias, NFKC);
-  NEW.normalized_alias := lower(btrim(normalized_display_alias));
+  NEW.normalized_alias := normalize_business_person_alias(NEW.alias);
 
   INSERT INTO operation_events(
     event_id,request_id,actor_id,actor_roles,authorization_capability,
@@ -672,6 +682,35 @@ CREATE TRIGGER process_catalog_versions_guard_creation BEFORE INSERT ON process_
 CREATE TRIGGER process_catalog_versions_no_update BEFORE UPDATE ON process_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER process_catalog_versions_no_delete BEFORE DELETE ON process_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER process_catalog_versions_no_truncate BEFORE TRUNCATE ON process_catalog_versions FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE OR REPLACE FUNCTION require_process_catalog_initial_version() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM process_catalog_versions v
+    JOIN operation_events e
+      ON e.action='master_data.process.create'
+      AND e.entity_type='process_catalog'
+      AND e.entity_id=NEW.process_id::text
+      AND e.actor_id=v.changed_by
+      AND e.authorization_capability='master_data:manage'
+      AND e.reason=v.change_reason
+    WHERE v.process_id=NEW.process_id AND v.version=1
+      AND e.after_state->>'processCode'=NEW.process_code
+      AND (e.after_state->>'version')::integer=1
+      AND e.after_state->>'processName'=v.process_name
+      AND e.after_state->>'pricingUnit'=v.pricing_unit
+      AND (e.after_state->>'active')::boolean=v.active
+  ) THEN
+    RAISE EXCEPTION 'process catalog item requires an authorized audited initial version in the same transaction'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER process_catalog_items_require_initial_version
+  AFTER INSERT ON process_catalog_items
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION require_process_catalog_initial_version();
 CREATE VIEW current_process_catalog AS
   SELECT DISTINCT ON (i.process_id)
     i.process_id, i.process_code, v.version, v.process_name, v.pricing_unit, v.active, v.created_at
@@ -777,6 +816,35 @@ CREATE TRIGGER supplier_catalog_versions_guard_creation BEFORE INSERT ON supplie
 CREATE TRIGGER supplier_catalog_versions_no_update BEFORE UPDATE ON supplier_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER supplier_catalog_versions_no_delete BEFORE DELETE ON supplier_catalog_versions FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER supplier_catalog_versions_no_truncate BEFORE TRUNCATE ON supplier_catalog_versions FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE OR REPLACE FUNCTION require_supplier_catalog_initial_version() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM supplier_catalog_versions v
+    JOIN operation_events e
+      ON e.action='master_data.supplier.create'
+      AND e.entity_type='supplier_catalog'
+      AND e.entity_id=NEW.supplier_id::text
+      AND e.actor_id=v.changed_by
+      AND e.authorization_capability='master_data:manage'
+      AND e.reason=v.change_reason
+    WHERE v.supplier_id=NEW.supplier_id AND v.version=1
+      AND e.after_state->>'supplierCode'=NEW.supplier_code
+      AND e.after_state->>'supplierType'=NEW.supplier_type
+      AND (e.after_state->>'version')::integer=1
+      AND e.after_state->>'supplierName'=v.supplier_name
+      AND (e.after_state->>'active')::boolean=v.active
+  ) THEN
+    RAISE EXCEPTION 'supplier catalog item requires an authorized audited initial version in the same transaction'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER supplier_catalog_items_require_initial_version
+  AFTER INSERT ON supplier_catalog_items
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION require_supplier_catalog_initial_version();
 CREATE VIEW current_supplier_catalog AS
   SELECT DISTINCT ON (i.supplier_id)
     i.supplier_id, i.supplier_code, i.supplier_type, v.version, v.supplier_name, v.active, v.created_at
@@ -1052,3 +1120,11 @@ CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FO
 CREATE TRIGGER role_capabilities_no_update BEFORE UPDATE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER role_capabilities_no_delete BEFORE DELETE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER role_capabilities_no_truncate BEFORE TRUNCATE ON role_capabilities FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER business_roles_no_insert BEFORE INSERT ON business_roles FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER business_roles_no_update BEFORE UPDATE ON business_roles FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER business_roles_no_delete BEFORE DELETE ON business_roles FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER business_roles_no_truncate BEFORE TRUNCATE ON business_roles FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER capability_catalog_no_insert BEFORE INSERT ON capability_catalog FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER capability_catalog_no_update BEFORE UPDATE ON capability_catalog FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER capability_catalog_no_delete BEFORE DELETE ON capability_catalog FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER capability_catalog_no_truncate BEFORE TRUNCATE ON capability_catalog FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();

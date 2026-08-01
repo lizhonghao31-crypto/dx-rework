@@ -145,6 +145,12 @@ runWithPostgres("role permissions and versioned master data", () => {
     await expect(database.query(
       "INSERT INTO role_capabilities(role_code,capability) VALUES('production_management','own_factory:approve')",
     )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      "UPDATE business_roles SET enabled=false WHERE role_code='owner_group'",
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      "UPDATE capability_catalog SET capability='own_factory:approve_bypass' WHERE capability='own_factory:approve'",
+    )).rejects.toMatchObject({ code: "55000" });
   });
 
   it("keeps legacy direct capabilities inert after role migration", async () => {
@@ -290,6 +296,20 @@ runWithPostgres("role permissions and versioned master data", () => {
            alias_id,person_id,alias,normalized_alias,created_by,create_reason
          ) VALUES($1,$2,$3,'caller-controlled-bypass',$4,'验证数据库先兼容归一化再去除边界空格')`,
         [randomUUID(), liTongshengPerson.personId, "\u00a0李生", adminId],
+      )).rejects.toMatchObject({ code: "23505" });
+      await directAliasClient.query("ROLLBACK");
+      await directAliasClient.query("BEGIN");
+      await directAliasClient.query(
+        `SELECT
+           set_config('dx_rework.alias_create_event_id',$1,true),
+           set_config('dx_rework.alias_create_request_id',$2,true)`,
+        [randomUUID(), randomUUID()],
+      );
+      await expect(directAliasClient.query(
+        `INSERT INTO business_person_aliases(
+           alias_id,person_id,alias,normalized_alias,created_by,create_reason
+         ) VALUES($1,$2,$3,'caller-controlled-bypass',$4,'验证数据库去除完整 Unicode 边界空白')`,
+        [randomUUID(), liTongshengPerson.personId, "\u1680李生", adminId],
       )).rejects.toMatchObject({ code: "23505" });
       await directAliasClient.query("ROLLBACK");
       await directAliasClient.query("BEGIN");
@@ -478,6 +498,15 @@ runWithPostgres("role permissions and versioned master data", () => {
   });
 
   it("appends process and supplier versions instead of overwriting history", async () => {
+    await expect(database.query(
+      "INSERT INTO process_catalog_items(process_id,process_code) VALUES($1,'ORPHAN_PROCESS')",
+      [randomUUID()],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      "INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type) VALUES($1,'ORPHAN_SUPPLIER','factory')",
+      [randomUUID()],
+    )).rejects.toMatchObject({ code: "55000" });
+
     const process = await service.createProcess(masterDataActor, {
       processCode: "QC_RECHECK",
       processName: "返查",
