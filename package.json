@@ -18,7 +18,9 @@
     "apps/web"
   ],
   "scripts": {
+    "predev:api": "npm run build:packages",
     "dev:api": "npm run dev --workspace @dx-rework/api",
+    "predev:web": "npm run build:packages",
     "dev:web": "npm run dev --workspace @dx-rework/web",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "npm run typecheck --workspaces --if-present",

@@ -2,7 +2,7 @@ import { loadConfig } from "@dx-rework/config";
 import pg from "pg";
 
 import { buildApp } from "./app.js";
-import { checkDatabase, getAppliedSchemaVersion } from "./platform/database.js";
+import { checkDatabase, getAppliedSchemaState } from "./platform/database.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -17,7 +17,7 @@ const database = new Pool({
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
-  getAppliedSchemaVersion: () => getAppliedSchemaVersion(database),
+  getAppliedSchemaState: () => getAppliedSchemaState(database),
 });
 
 let shuttingDown = false;

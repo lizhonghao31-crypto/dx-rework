@@ -9,13 +9,14 @@ import type {
 } from "@dx-rework/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
 
+import type { AppliedSchemaState } from "./platform/database.js";
 import { ApplicationError } from "./platform/errors.js";
-import { EXPECTED_SCHEMA_VERSION } from "./platform/schema-version.js";
+import { EXPECTED_SCHEMA_CHECKSUM, EXPECTED_SCHEMA_VERSION } from "./platform/schema-version.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
   checkDatabase: () => Promise<void>;
-  getAppliedSchemaVersion: () => Promise<string | null>;
+  getAppliedSchemaState: () => Promise<AppliedSchemaState | null>;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -60,8 +61,9 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {
       await dependencies.checkDatabase();
-      const schemaVersion = await dependencies.getAppliedSchemaVersion();
-      const schemaCurrent = schemaVersion === EXPECTED_SCHEMA_VERSION;
+      const schema = await dependencies.getAppliedSchemaState();
+      const schemaCurrent =
+        schema?.version === EXPECTED_SCHEMA_VERSION && schema.checksum === EXPECTED_SCHEMA_CHECKSUM;
       const response: ReadyHealthResponse = {
         status: schemaCurrent ? "ready" : "not_ready",
         service: config.serviceName,
@@ -84,9 +86,9 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   });
 
   app.get<{ Reply: VersionResponse }>("/version", async () => {
-    let schemaVersion: string | null = null;
+    let schema: AppliedSchemaState | null = null;
     try {
-      schemaVersion = await dependencies.getAppliedSchemaVersion();
+      schema = await dependencies.getAppliedSchemaState();
     } catch (error: unknown) {
       app.log.warn({ err: error }, "schema version lookup failed");
     }
@@ -94,7 +96,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       service: config.serviceName,
       gitSha: config.gitSha,
       buildTime: config.buildTime,
-      schemaVersion,
+      schemaVersion: schema?.version ?? null,
       expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
     };
   });

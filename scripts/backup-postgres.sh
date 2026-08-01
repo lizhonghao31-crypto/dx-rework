@@ -6,10 +6,14 @@ set -euo pipefail
 
 umask 077
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-target="${DX_REWORK_BACKUP_DIR}/dx-rework-${timestamp}.dump"
+filename="dx-rework-${timestamp}.dump"
+target="${DX_REWORK_BACKUP_DIR}/${filename}"
 
 install -d -m 0700 "${DX_REWORK_BACKUP_DIR}"
 pg_dump --dbname="${DATABASE_URL}" --format=custom --no-owner --no-acl --file="${target}"
-sha256sum "${target}" > "${target}.sha256"
+(
+  cd "${DX_REWORK_BACKUP_DIR}"
+  sha256sum "${filename}" > "${filename}.sha256"
+)
 
 printf '{"success":true,"backup":"%s","checksum":"%s.sha256"}\n' "${target}" "${target}"

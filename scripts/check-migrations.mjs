@@ -1,6 +1,6 @@
-import { discoverMigrations } from "./migration-lib.mjs";
+import { discoverValidatedMigrations } from "./migration-lib.mjs";
 
-const migrations = await discoverMigrations();
+const migrations = await discoverValidatedMigrations();
 if (migrations.length === 0) throw new Error("At least one versioned migration is required");
 
 const destructivePattern = /\b(DROP\s+(TABLE|SCHEMA|DATABASE)|TRUNCATE\s+TABLE|ALTER\s+TABLE[\s\S]*?DROP\s+COLUMN)\b/i;

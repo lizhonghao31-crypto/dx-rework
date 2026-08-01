@@ -7,16 +7,17 @@ import pg from "pg";
 
 const { Pool } = pg;
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const migrationsDirectory = resolve(projectRoot, "apps/api/migrations");
+const defaultMigrationsDirectory = resolve(projectRoot, "apps/api/migrations");
+const defaultManifestPath = resolve(projectRoot, "apps/api/src/platform/migration-manifest.json");
 
-export async function discoverMigrations() {
-  const names = (await readdir(migrationsDirectory))
+export async function discoverMigrations(directory = process.env.DX_REWORK_MIGRATIONS_DIR ?? defaultMigrationsDirectory) {
+  const names = (await readdir(directory))
     .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/.test(name))
     .sort();
 
   return Promise.all(
     names.map(async (name) => {
-      const sql = await readFile(resolve(migrationsDirectory, name), "utf8");
+      const sql = await readFile(resolve(directory, name), "utf8");
       return {
         name,
         version: name.replace(/\.sql$/, ""),
@@ -25,6 +26,40 @@ export async function discoverMigrations() {
       };
     }),
   );
+}
+
+export async function loadMigrationManifest(
+  path = process.env.DX_REWORK_MIGRATION_MANIFEST ?? defaultManifestPath,
+) {
+  const parsed = JSON.parse(await readFile(path, "utf8"));
+  if (!Array.isArray(parsed.migrations) || parsed.migrations.length === 0) {
+    throw new Error("Migration manifest must contain at least one migration");
+  }
+  for (const entry of parsed.migrations) {
+    if (
+      typeof entry?.version !== "string" ||
+      !/^\d{4}_[a-z0-9_]+$/.test(entry.version) ||
+      typeof entry?.checksum !== "string" ||
+      !/^[0-9a-f]{64}$/.test(entry.checksum)
+    ) {
+      throw new Error("Migration manifest contains an invalid entry");
+    }
+  }
+  return parsed.migrations;
+}
+
+export async function discoverValidatedMigrations() {
+  const [migrations, manifest] = await Promise.all([discoverMigrations(), loadMigrationManifest()]);
+  if (migrations.length !== manifest.length) {
+    throw new Error(`Migration manifest count mismatch: files=${migrations.length}, manifest=${manifest.length}`);
+  }
+  for (const [index, migration] of migrations.entries()) {
+    const expected = manifest[index];
+    if (expected.version !== migration.version || expected.checksum !== migration.checksum) {
+      throw new Error(`Migration manifest drift detected: ${migration.version}`);
+    }
+  }
+  return migrations;
 }
 
 export async function applyMigrations(databaseUrl) {
@@ -41,7 +76,7 @@ export async function applyMigrations(databaseUrl) {
       )
     `);
 
-    for (const migration of await discoverMigrations()) {
+    for (const migration of await discoverValidatedMigrations()) {
       const existing = await client.query(
         "SELECT checksum FROM schema_migrations WHERE version = $1",
         [migration.version],

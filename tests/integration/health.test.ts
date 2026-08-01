@@ -10,7 +10,10 @@ import {
 import type { FastifyInstance } from "fastify";
 
 import { buildApp } from "../../apps/api/src/app.js";
-import { EXPECTED_SCHEMA_VERSION } from "../../apps/api/src/platform/schema-version.js";
+import {
+  EXPECTED_SCHEMA_CHECKSUM,
+  EXPECTED_SCHEMA_VERSION,
+} from "../../apps/api/src/platform/schema-version.js";
 
 const apps: FastifyInstance[] = [];
 const config = loadConfig({
@@ -26,12 +29,14 @@ afterEach(async () => {
 
 function createApp(overrides?: {
   checkDatabase?: () => Promise<void>;
-  getAppliedSchemaVersion?: () => Promise<string | null>;
+  getAppliedSchemaState?: () => Promise<{ version: string; checksum: string } | null>;
 }) {
   const app = buildApp({
     config,
     checkDatabase: overrides?.checkDatabase ?? (async () => undefined),
-    getAppliedSchemaVersion: overrides?.getAppliedSchemaVersion ?? (async () => EXPECTED_SCHEMA_VERSION),
+    getAppliedSchemaState:
+      overrides?.getAppliedSchemaState ??
+      (async () => ({ version: EXPECTED_SCHEMA_VERSION, checksum: EXPECTED_SCHEMA_CHECKSUM })),
   });
   apps.push(app);
   return app;
@@ -56,7 +61,21 @@ describe("platform health contract", () => {
   });
 
   it("reports schema drift as not ready", async () => {
-    const app = createApp({ getAppliedSchemaVersion: async () => "0000_old" });
+    const app = createApp({
+      getAppliedSchemaState: async () => ({ version: "0000_old", checksum: EXPECTED_SCHEMA_CHECKSUM }),
+    });
+    const response = await app.inject({ method: "GET", url: "/health/ready" });
+    expect(response.statusCode).toBe(503);
+    expect(ReadyHealthResponseSchema.parse(response.json())).toMatchObject({
+      status: "not_ready",
+      checks: { database: "up", schema: "drift" },
+    });
+  });
+
+  it("reports checksum drift as not ready even when the version matches", async () => {
+    const app = createApp({
+      getAppliedSchemaState: async () => ({ version: EXPECTED_SCHEMA_VERSION, checksum: "0".repeat(64) }),
+    });
     const response = await app.inject({ method: "GET", url: "/health/ready" });
     expect(response.statusCode).toBe(503);
     expect(ReadyHealthResponseSchema.parse(response.json())).toMatchObject({

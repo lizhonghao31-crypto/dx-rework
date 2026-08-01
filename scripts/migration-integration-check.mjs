@@ -1,6 +1,6 @@
 import pg from "pg";
 
-import { applyMigrations } from "./migration-lib.mjs";
+import { applyMigrations, loadMigrationManifest } from "./migration-lib.mjs";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("TEST_DATABASE_URL or DATABASE_URL is required");
@@ -21,8 +21,27 @@ try {
   const missing = requiredTables.filter((table) => !actual.has(table));
   if (missing.length > 0) throw new Error(`Missing migrated tables: ${missing.join(", ")}`);
 
+  const expectedMigration = (await loadMigrationManifest()).at(-1);
+  if (!expectedMigration) throw new Error("Migration manifest is empty");
+  await pool.query("UPDATE schema_migrations SET checksum = $1 WHERE version = $2", [
+    "0".repeat(64),
+    expectedMigration.version,
+  ]);
+  let checksumDriftRejected = false;
+  try {
+    await applyMigrations(databaseUrl);
+  } catch (error) {
+    checksumDriftRejected = error instanceof Error && error.message.includes("checksum drift");
+  } finally {
+    await pool.query("UPDATE schema_migrations SET checksum = $1 WHERE version = $2", [
+      expectedMigration.checksum,
+      expectedMigration.version,
+    ]);
+  }
+  if (!checksumDriftRejected) throw new Error("Stored migration checksum drift was not rejected");
+
   process.stdout.write(
-    `${JSON.stringify({ success: true, firstApplied: first.applied, currentVersion: second.currentVersion, tables: requiredTables })}\n`,
+    `${JSON.stringify({ success: true, firstApplied: first.applied, currentVersion: second.currentVersion, checksumDriftRejected, tables: requiredTables })}\n`,
   );
 } finally {
   await pool.end();

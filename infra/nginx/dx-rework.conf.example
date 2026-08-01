@@ -9,6 +9,11 @@ server {
     access_log /opt/dx-rework/logs/nginx-access.log;
     error_log  /opt/dx-rework/logs/nginx-error.log warn;
 
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types application/javascript application/json text/css text/plain;
+
     location = /health/live {
         proxy_set_header X-Request-Id $request_id;
         proxy_pass http://127.0.0.1:3201/health/live;
@@ -17,6 +22,11 @@ server {
     location = /health/ready {
         proxy_set_header X-Request-Id $request_id;
         proxy_pass http://127.0.0.1:3201/health/ready;
+    }
+
+    location = /version {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/version;
     }
 
     location /api/ {
