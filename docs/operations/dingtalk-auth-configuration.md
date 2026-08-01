@@ -6,7 +6,7 @@
 
 生产 Nginx 模板的 `location ^~ /rework/api/` 必须保留在 SPA fallback 之前；其尾斜杠 `proxy_pass` 会把外部 `/rework/api/auth/me` 与 `/rework/api/protected` 分别剥离为内部 `/auth/me` 与 `/protected`。根路径 `/api/` 代理保持相同的前缀剥离契约，不得修改 ERP 或其他 vhost。`location ^~ /rework/assets/` 必须把 Vite 的前缀资源 URL 映射到 artifact 的 `assets/` 目录，缺失资源不得回落到 `index.html`。模板在 `http` include 层定义并显式使用 `dx_rework_query_free` access log 格式，仅记录 `$request_method` 与不含 query 的 `$uri` 等运维字段；不得改回会记录 OAuth callback query 或完整 Referer 的 `combined` 格式。
 
-公开的移动登录和 QR challenge 创建端点使用有界、按来源与端点隔离的分钟级限流；响应和日志不得回显 OAuth code、state 或 query。服务端在创建这些短期记录前事务清理 `auth_consumed_codes` 与 `auth_qr_challenges` 的过期行，以控制匿名流量产生的持久化数据量。限流是纵深防御，生产入口仍应配置不记录 query 的上游防护策略。
+公开的移动登录和 QR challenge 创建端点使用有界、按来源与端点隔离的分钟级限流；响应和日志不得回显 OAuth code、state 或 query。Fastify 只信任来自本机 loopback（`127.0.0.1`、`::1`）Nginx 的代理链，Nginx 必须保留当前覆盖 `X-Real-IP`、追加 `X-Forwarded-For` 的配置；不得将任意外部代理加入信任范围。服务端在创建这些短期记录前事务清理 `auth_consumed_codes` 与 `auth_qr_challenges` 的过期行，以控制匿名流量产生的持久化数据量。限流是纵深防御，生产入口仍应配置不记录 query 的上游防护策略。
 
 必须在钉钉管理后台核对应用归属公司、移动免登权限、通讯录成员读取范围、浏览器 OAuth 的 `openid corpid` scope、回调白名单及 HTTPS 域名。联调验收须使用本公司在职、离职/禁用、外部组织及未绑定角色的测试账号分别验证；不得用显示姓名绑定身份或角色。
 
