@@ -38,7 +38,8 @@ describe("access and master-data contracts", () => {
       new URL("../../apps/api/migrations/0005_access_master_data.sql", import.meta.url),
       "utf8",
     );
-    expect(migration).toContain("normalized_alias text NOT NULL UNIQUE");
+    expect(migration).toContain("business_person_aliases_active_alias_idx");
+    expect(migration).toContain("allow_business_person_alias_revocation_only");
     expect(migration).toContain("CHECK ((person_type = 'internal') = (app_user_id IS NOT NULL))");
     expect(migration).toContain("('owner_group', 'own_factory:approve')");
     expect(migration).toContain("('owner_group', 'access:admin')");

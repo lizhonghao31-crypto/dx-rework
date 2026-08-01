@@ -105,7 +105,7 @@ export class AccessMasterDataService {
               COALESCE(array_agg(a.alias ORDER BY a.alias)
                 FILTER (WHERE a.alias IS NOT NULL),'{}') aliases
        FROM business_people p
-       LEFT JOIN business_person_aliases a ON a.person_id=p.person_id
+       LEFT JOIN business_person_aliases a ON a.person_id=p.person_id AND a.revoked_at IS NULL
        WHERE ($1::boolean OR p.active=true)
        GROUP BY p.person_id
        ORDER BY p.display_name,p.person_id`,
@@ -269,6 +269,28 @@ export class AccessMasterDataService {
         after: { personType: input.personType, appUserId, displayName: input.displayName, aliases: input.aliases },
       });
       return { personId };
+    });
+  }
+
+  async revokePersonAlias(actor: TrustedActorContext, aliasId: string, reason: string): Promise<void> {
+    await this.transaction(async (client) => {
+      const existing = await client.query<{ person_id: string; alias: string; normalized_alias: string }>(
+        "SELECT person_id,alias,normalized_alias FROM business_person_aliases WHERE alias_id=$1 AND revoked_at IS NULL FOR UPDATE",
+        [aliasId],
+      );
+      const alias = existing.rows[0];
+      if (!alias) throw new ApplicationError("NOT_FOUND", "有效人员别名不存在", 404);
+      await client.query(
+        "UPDATE business_person_aliases SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3 WHERE alias_id=$1",
+        [aliasId, actor.actorId, reason],
+      );
+      await this.events.append(client, actor, {
+        action: "master_data.person_alias.revoke",
+        entityType: "business_person_alias",
+        entityId: aliasId,
+        before: { personId: alias.person_id, alias: alias.alias, normalizedAlias: alias.normalized_alias },
+        reason,
+      });
     });
   }
 

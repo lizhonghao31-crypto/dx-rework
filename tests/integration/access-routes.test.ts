@@ -28,6 +28,7 @@ const create = (capabilities: readonly string[], businessRoles: readonly string[
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
     revokeRole: vi.fn(),
     createPerson: vi.fn(),
+    revokePersonAlias: vi.fn(),
     createProcess: vi.fn(),
     reviseProcess: vi.fn(),
     createSupplier: vi.fn(),

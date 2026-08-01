@@ -7,6 +7,7 @@ import {
   CreateSupplierSchema,
   DelegationParamsSchema,
   ProcessParamsSchema,
+  PersonAliasParamsSchema,
   ReviseProcessSchema,
   ReviseSupplierSchema,
   RevokeAccessSchema,
@@ -116,6 +117,17 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
         parse(CreateBusinessPersonSchema, request.body),
       ),
     ));
+
+  app.delete<{ Params: { aliasId: string } }>("/master-data/people/aliases/:aliasId", async (request, reply) => {
+    const input = parse(PersonAliasParamsSchema, request.params);
+    const body = parse(RevokeAccessSchema, request.body);
+    await dependencies.service.revokePersonAlias(
+      await actor(request, "master_data:manage"),
+      input.aliasId,
+      body.reason,
+    );
+    return reply.code(204).send();
+  });
 
   app.post("/master-data/processes", async (request, reply) =>
     reply.code(201).send(

@@ -156,6 +156,21 @@ runWithPostgres("role permissions and versioned master data", () => {
       [temporary.personId],
     );
     expect(temp.rows[0]).toEqual({ app_user_id: null, person_type: "temporary" });
+    const temporaryAlias = await database.query<{ alias_id: string }>(
+      "SELECT alias_id FROM business_person_aliases WHERE person_id=$1 AND revoked_at IS NULL",
+      [temporary.personId],
+    );
+    await service.revokePersonAlias(masterDataActor, temporaryAlias.rows[0]!.alias_id, "纠正临时工别名归属");
+    const correctedTemporary = await service.createPerson(masterDataActor, {
+      personType: "temporary",
+      displayName: "临时工乙",
+      aliases: ["临工甲"],
+    });
+    const currentTemporaryAlias = await database.query<{ person_id: string }>(
+      "SELECT person_id FROM business_person_aliases WHERE normalized_alias=$1 AND revoked_at IS NULL",
+      ["临工甲".normalize("NFKC").toLocaleLowerCase("zh-CN")],
+    );
+    expect(currentTemporaryAlias.rows[0]?.person_id).toBe(correctedTemporary.personId);
   });
 
   it("appends process and supplier versions instead of overwriting history", async () => {

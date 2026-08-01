@@ -63,12 +63,43 @@ CREATE TABLE business_person_aliases (
   alias_id uuid PRIMARY KEY,
   person_id uuid NOT NULL REFERENCES business_people(person_id),
   alias text NOT NULL CHECK (length(btrim(alias)) BETWEEN 1 AND 100),
-  normalized_alias text NOT NULL UNIQUE CHECK (length(btrim(normalized_alias)) BETWEEN 1 AND 100),
+  normalized_alias text NOT NULL CHECK (length(btrim(normalized_alias)) BETWEEN 1 AND 100),
   created_by uuid NOT NULL REFERENCES app_users(id),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (person_id, normalized_alias)
+  revoked_at timestamptz,
+  revoked_by uuid REFERENCES app_users(id),
+  revoke_reason text,
+  CHECK (
+    (revoked_at IS NULL AND revoked_by IS NULL AND revoke_reason IS NULL)
+    OR
+    (revoked_at IS NOT NULL AND revoked_by IS NOT NULL AND revoke_reason IS NOT NULL)
+  ),
+  CHECK (revoke_reason IS NULL OR length(btrim(revoke_reason)) BETWEEN 1 AND 500)
 );
-CREATE TRIGGER business_person_aliases_no_update BEFORE UPDATE ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE UNIQUE INDEX business_person_aliases_active_alias_idx
+  ON business_person_aliases (normalized_alias)
+  WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX business_person_aliases_person_active_idx
+  ON business_person_aliases (person_id, normalized_alias)
+  WHERE revoked_at IS NULL;
+CREATE OR REPLACE FUNCTION allow_business_person_alias_revocation_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.revoked_at IS NOT NULL
+     OR NEW.revoked_at IS NULL OR NEW.revoked_by IS NULL OR NEW.revoke_reason IS NULL
+     OR NEW.alias_id IS DISTINCT FROM OLD.alias_id
+     OR NEW.person_id IS DISTINCT FROM OLD.person_id
+     OR NEW.alias IS DISTINCT FROM OLD.alias
+     OR NEW.normalized_alias IS DISTINCT FROM OLD.normalized_alias
+     OR NEW.created_by IS DISTINCT FROM OLD.created_by
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'business person aliases are immutable except for one audited revocation'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER business_person_aliases_revoke_only BEFORE UPDATE ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION allow_business_person_alias_revocation_only();
 CREATE TRIGGER business_person_aliases_no_delete BEFORE DELETE ON business_person_aliases FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER business_person_aliases_no_truncate BEFORE TRUNCATE ON business_person_aliases FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 

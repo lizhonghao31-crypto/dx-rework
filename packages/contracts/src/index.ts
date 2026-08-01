@@ -98,6 +98,7 @@ export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
   PersonBaseSchema.extend({ personType: z.literal("temporary") }).strict(),
 ]);
 export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
+export const PersonAliasParamsSchema = z.object({ aliasId: IdSchema }).strict();
 
 export const CreateProcessSchema = z.object({
   processCode: CatalogCodeSchema,
