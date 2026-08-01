@@ -1,0 +1,169 @@
+name: PR preview artifact and optional deployment
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  VITE_BASE_PATH: /pr-${{ github.event.pull_request.number }}/
+
+jobs:
+  build:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+      - run: npm install --global npm@10.9.9
+      - name: Verify exact Head
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+      - run: npm ci
+      - name: Build original apps/web with preview base
+        run: npm run build:packages && npm run build --workspace @dx-rework/web
+      - name: Generate and validate manifest, fallbacks and checksum
+        run: |
+          node scripts/preview/build.mjs "$PR_NUMBER" "$HEAD_SHA"
+          (cd apps/web/dist && sha256sum --check SHA256SUMS)
+          node -e 'const m=require("./apps/web/dist/preview-manifest.json"); if(m.headSha!==process.env.HEAD_SHA||m.githubPrNumber!==Number(process.env.PR_NUMBER)||m.buildStatus!=="success") process.exit(1)'
+      - name: Upload validated original web dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-rework-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    needs: build
+    if: >-
+      vars.PR_PREVIEW_ENABLED == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: pr-preview
+    outputs:
+      deployed: ${{ steps.deploy.outputs.deployed }}
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - uses: actions/download-artifact@v4
+        with:
+          name: dx-rework-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: apps/web/dist
+      - name: Require administrator configuration
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_ORIGIN: ${{ vars.PR_PREVIEW_ORIGIN }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          PREVIEW_SSH_KEY: ${{ secrets.PR_PREVIEW_SSH_KEY }}
+          PREVIEW_SSH_HOST_KEY: ${{ secrets.PR_PREVIEW_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIEW_HOST" && test -n "$PREVIEW_ORIGIN" && test -n "$PREVIEW_SSH_USER" && test -n "$PREVIEW_SSH_KEY" && test -n "$PREVIEW_SSH_HOST_KEY"
+      - id: deploy
+        name: Deploy only to isolated preview root
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_ORIGIN: ${{ vars.PR_PREVIEW_ORIGIN }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          PREVIEW_SSH_KEY: ${{ secrets.PR_PREVIEW_SSH_KEY }}
+          PREVIEW_SSH_HOST_KEY: ${{ secrets.PR_PREVIEW_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          target="/opt/dx-rework/previews/pr-${PR_NUMBER}"
+          node -e 'import("./scripts/preview/lib.mjs").then(m=>m.assertSafeRemoteDirectory(process.argv[1]))' "$target"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PREVIEW_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$PREVIEW_SSH_HOST_KEY" > ~/.ssh/known_hosts; chmod 600 ~/.ssh/known_hosts
+          ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" "install -d -m 0755 '$target'"
+          rsync -rlptDz --delete -- apps/web/dist/ "$PREVIEW_SSH_USER@$PREVIEW_HOST:$target/"
+          url="${PREVIEW_ORIGIN%/}/pr-${PR_NUMBER}/ui/management"
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+  comment:
+    needs: [build, deploy]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upsert exact-Head preview status
+        uses: actions/github-script@v7
+        env:
+          DEPLOYED: ${{ needs.deploy.outputs.deployed }}
+          PREVIEW_URL: ${{ needs.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- dx-rework-pr-preview -->';
+            const {owner, repo} = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const expected = context.payload.pull_request.head.sha;
+            const current = await github.rest.pulls.get({owner, repo, pull_number: issue_number});
+            if (current.data.head.sha !== expected) return core.notice('Stale Head result ignored');
+            const deployed = process.env.DEPLOYED === 'true';
+            const status = deployed ? `部署成功：${process.env.PREVIEW_URL}` : '构建成功；部署未启用';
+            const body = `${marker}\n## BASE-04 PR Preview\n\n- PR: #${issue_number}\n- Head SHA: \`${expected}\`\n- 状态: ${status}\n`;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
+
+  cleanup:
+    if: >-
+      github.event.action == 'closed' && vars.PR_PREVIEW_ENABLED == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: pr-preview
+    steps:
+      - name: Checkout exact closed PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Safely remove isolated PR directory
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          PREVIEW_SSH_KEY: ${{ secrets.PR_PREVIEW_SSH_KEY }}
+          PREVIEW_SSH_HOST_KEY: ${{ secrets.PR_PREVIEW_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIEW_HOST" && test -n "$PREVIEW_SSH_USER" && test -n "$PREVIEW_SSH_KEY" && test -n "$PREVIEW_SSH_HOST_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PREVIEW_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$PREVIEW_SSH_HOST_KEY" > ~/.ssh/known_hosts; chmod 600 ~/.ssh/known_hosts
+          ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s --' "$PR_NUMBER" < scripts/preview/remote-cleanup.sh
+      - name: Upsert cleanup status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- dx-rework-pr-preview -->';
+            const {owner, repo} = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const head = context.payload.pull_request.head.sha;
+            const body = `${marker}\n## BASE-04 PR Preview\n\n- PR: #${issue_number}\n- Head SHA: \`${head}\`\n- 状态: 清理完成\n`;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});

@@ -1,0 +1,15 @@
+# 独立只读验收 vhost 模板；管理员完成 DNS/TLS 后手工启用，本 PR 不修改服务器。
+server {
+    listen 443 ssl http2;
+    server_name preview.example.invalid;
+    ssl_certificate /etc/nginx/tls/preview.example.invalid/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/preview.example.invalid/privkey.pem;
+
+    location ~ ^/pr-([1-9][0-9]*)(/.*)?$ {
+        root /opt/dx-rework/previews;
+        try_files $uri $uri/ /pr-$1/index.html;
+        limit_except GET HEAD { deny all; }
+        add_header X-Robots-Tag "noindex, nofollow" always;
+    }
+    location / { return 404; }
+}
