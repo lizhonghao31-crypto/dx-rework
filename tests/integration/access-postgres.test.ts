@@ -90,6 +90,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       [wuOwnerId, "wu-token"],
       [zhangId, "zhang-token"],
       [liTongshengId, "litongsheng-token"],
+      [financeId, "finance-token"],
     ] as const) await addLogin(userId, token);
   });
 

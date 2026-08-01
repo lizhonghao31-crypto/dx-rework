@@ -32,6 +32,24 @@ const ensureProtectedRoleAuthority = (actor: TrustedActorContext, roleCode: stri
   }
 };
 
+const ensureActiveOrganizationUser = async (
+  client: PoolClient,
+  userId: string,
+  message: string,
+): Promise<void> => {
+  const result = await client.query(
+    `SELECT 1
+     FROM app_users u
+     WHERE u.id=$1 AND u.enabled=true
+       AND EXISTS (
+         SELECT 1 FROM identity_mappings i
+         WHERE i.user_id=u.id AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+       )`,
+    [userId],
+  );
+  if (!result.rows[0]) throw new ApplicationError("NOT_FOUND", message, 404);
+};
+
 export class AccessMasterDataService {
   constructor(
     private readonly database: Pool,
@@ -173,8 +191,7 @@ export class AccessMasterDataService {
       throw new ApplicationError("FORBIDDEN", "不能给自己授予业务角色", 403);
     }
     return this.transaction(async (client) => {
-      const target = await client.query<{ enabled: boolean }>("SELECT enabled FROM app_users WHERE id=$1 FOR SHARE", [input.userId]);
-      if (!target.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "目标用户不存在或已停用", 404);
+      await ensureActiveOrganizationUser(client, input.userId, "目标用户不存在、不在职或已停用");
       const role = await client.query<{ enabled: boolean }>("SELECT enabled FROM business_roles WHERE role_code=$1 FOR SHARE", [input.roleCode]);
       if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用", 404);
       const assignmentId = randomUUID();
@@ -233,8 +250,7 @@ export class AccessMasterDataService {
       const personId = randomUUID();
       const appUserId = input.personType === "internal" ? input.appUserId : null;
       if (appUserId) {
-        const user = await client.query<{ enabled: boolean }>("SELECT enabled FROM app_users WHERE id=$1 FOR SHARE", [appUserId]);
-        if (!user.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "内部人员对应的登录用户不存在或已停用", 404);
+        await ensureActiveOrganizationUser(client, appUserId, "内部人员对应的登录用户不存在、不在职或已停用");
       }
       await client.query(
         "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,created_by) VALUES($1,$2,$3,$4,$5)",
@@ -313,6 +329,8 @@ export class AccessMasterDataService {
       throw new ApplicationError("FORBIDDEN", "不能给自己创建临时授权", 403);
     }
     return this.transaction(async (client) => {
+      await ensureActiveOrganizationUser(client, input.grantorUserId, "授权人不存在、不在职或已停用");
+      await ensureActiveOrganizationUser(client, input.granteeUserId, "被授权用户不存在、不在职或已停用");
       const grantorCapability = await client.query(
         `SELECT 1
          FROM (
@@ -336,8 +354,6 @@ export class AccessMasterDataService {
           throw new ApplicationError("FORBIDDEN", "本厂承担审批代理的授权人必须是老板权限组成员", 403);
         }
       }
-      const grantee = await client.query<{ enabled: boolean }>("SELECT enabled FROM app_users WHERE id=$1 FOR SHARE", [input.granteeUserId]);
-      if (!grantee.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "被授权用户不存在或已停用", 404);
       const delegationId = randomUUID();
       await client.query(
         `INSERT INTO delegated_authorizations(
