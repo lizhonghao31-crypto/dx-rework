@@ -2,7 +2,7 @@
 
 ## 范围
 
-PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的技术契约，不发送钉钉消息、不生成业务 Excel，也不定义返工、工资或审批字段。所有 actor 均来自服务端 session；HTTP 请求不能提交 `uploadedBy`、actor 或 role。审计分别保存认证得到的业务角色快照与本次授权 capability，绝不把 capability 伪装成业务角色。所有 Tools 路由明确要求 `tools:user` capability，其他业务 capability 不能替代。
+PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的技术契约，不发送钉钉消息、不生成业务 Excel，也不定义返工、工资或审批字段。所有 actor 均来自服务端 session；HTTP 请求不能提交 `uploadedBy`、actor 或 role。审计分别保存认证得到的业务角色快照与本次授权 capability，绝不把 capability 伪装成业务角色。所有 Tools 路由明确要求 `tools:user` capability 和非空的可信业务角色快照；PR-04 角色源接入前真实请求会 fail closed 为 `403 NO_BUSINESS_ROLE`，其他业务 capability 不能替代。
 
 ## 环境变量（仅变量名，不在仓库填写真实值）
 
@@ -21,8 +21,8 @@ PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的
 3. 上传意图返回短时签名 `POST` endpoint、固定表单字段及精确过期时间。客户端必须原样附带服务端返回的字段，并把 `file` 作为最后一个表单字段。
 4. Post Policy 必须把 `key`、`Content-Type`、`x-oss-meta-sha256`、private ACL、`x-oss-forbid-overwrite=true` 和成功状态绑定为精确值，并使用 `content-length-range` 将最小值和最大值都设为本次 intent 的 `sizeBytes`。这样超出或小于声明大小的对象会在 OSS 接收前被拒绝，而不是上传后才浪费带宽与存储。
 5. 承载该前缀的 bucket 必须关闭或从未启用 versioning；versioning enabled/suspended 时，OSS 可能忽略防覆盖语义。浏览器 CORS 只允许已批准应用源和所需的 POST/GET/HEAD，不允许通配源。
-6. finalize 通过服务端 HEAD 验证对象存在、实际大小、MIME 和必需 SHA-256 metadata；任一缺失或不一致都会拒绝，不能进入 ready。`ready` 的重复 finalize 按幂等读取处理。
-7. 下载只返回短时签名 GET，响应中的过期时间直接沿用存储 grant，并按 SDK 的整秒签名时钟向下取整，不能在签名完成后重新计算。除上传者外，只有申请人可访问绑定到其 export job 的 ready 结果附件；其他业务对象必须通过显式授权决策传入 service，不能仅凭 attachmentId 下载。
+6. finalize 先通过服务端 HEAD 验证对象存在、实际大小、MIME 和必需 SHA-256 metadata，再由服务端流式读取私有对象并计算真实字节的 SHA-256；只有实际 digest 与 intent 一致才可进入 ready。客户端自报 metadata 不是内容完整性的信任根。任一缺失或不一致都会拒绝；`ready` 的重复 finalize 按幂等读取处理。
+7. 下载只返回短时签名 GET，响应中的过期时间直接沿用存储 grant，并按 SDK 的整秒签名时钟向下取整，不能在签名完成后重新计算。每次成功签发下载 grant 都以可信 actor 角色与授权 capability 写入追加审计，但不记录签名 URL。除上传者外，只有申请人可访问绑定到其 export job 的 ready 结果附件；其他业务对象必须通过显式授权决策传入 service，不能仅凭 attachmentId 下载。
 
 官方实现应使用 `ali-oss` 的 `signPostObjectPolicyV4` 生成 Post Policy，不在业务代码手写签名算法。参考：[服务端签名后直传 OSS](https://www.alibabacloud.com/help/en/oss/user-guide/obtain-signature-information-from-the-server-and-upload-data-to-oss)、[Post Policy 条件](https://www.alibabacloud.com/help/en/oss/policies-for-setting-post-requests-in-oss)和 [PostObject 请求字段](https://www.alibabacloud.com/help/en/oss/developer-reference/postobject)。
 
