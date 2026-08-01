@@ -11,6 +11,9 @@ h1 { margin: 0; font-size: 28px; line-height: 38px; }
 h2 { margin: 0 0 4px; font-size: 18px; line-height: 26px; }
 h3 { font-size: 13px; }
 p { margin: 4px 0 14px; color: var(--dx-v2-color-text-secondary); }
+small { font-size: 12px; }
+.dx-field input { min-height: 44px; }
+.dx-field__control:focus-within { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
 .app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
 .app-shell > aside { position: sticky; top: 0; height: 100vh; padding: var(--dx-v2-space-6); background: var(--dx-v2-color-control); color: #fff; }
 .app-shell > aside h2 { margin: 0 0 20px; font-size: 18px; }
