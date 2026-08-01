@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,11 +24,14 @@ describe("secret scan", () => {
     await writeFile(join(directory, "credential.pem"), ["-----BEGIN ", "PRIVATE KEY-----"].join(""));
     await writeFile(join(directory, ".env"), ["TOKEN=gh", "p_", "a".repeat(30)].join(""));
     await writeFile(join(directory, "notes.txt"), ["AK", "IA", "A".repeat(16)].join(""));
+    await mkdir(join(directory, "upload"));
+    await writeFile(join(directory, "upload", "credential.key"), ["-----BEGIN ", "PRIVATE KEY-----"].join(""));
 
     await expect(findPotentialSecrets(directory, new Set())).resolves.toEqual([
       ".env",
       "credential.pem",
       "notes.txt",
+      "upload/credential.key",
     ]);
   });
 

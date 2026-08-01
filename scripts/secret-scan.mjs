@@ -3,7 +3,7 @@ import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const defaultIgnoredDirectories = new Set([".git", "node_modules", "dist", "coverage", "upload"]);
+const defaultIgnoredDirectories = new Set([".git", "node_modules", "dist", "coverage"]);
 const signatures = [
   /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/,
   /\bgh[pousr]_[A-Za-z0-9]{30,}\b/,

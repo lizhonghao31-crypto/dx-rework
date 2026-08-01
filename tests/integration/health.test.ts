@@ -13,6 +13,7 @@ import { buildApp } from "../../apps/api/src/app.js";
 import {
   EXPECTED_SCHEMA_CHECKSUM,
   EXPECTED_SCHEMA_VERSION,
+  migrationHistoriesMatch,
 } from "../../apps/api/src/platform/schema-version.js";
 
 const apps: FastifyInstance[] = [];
@@ -29,14 +30,14 @@ afterEach(async () => {
 
 function createApp(overrides?: {
   checkDatabase?: () => Promise<void>;
-  getAppliedSchemaState?: () => Promise<{ version: string; checksum: string } | null>;
+  getAppliedSchemaHistory?: () => Promise<Array<{ version: string; checksum: string }> | null>;
 }) {
   const app = buildApp({
     config,
     checkDatabase: overrides?.checkDatabase ?? (async () => undefined),
-    getAppliedSchemaState:
-      overrides?.getAppliedSchemaState ??
-      (async () => ({ version: EXPECTED_SCHEMA_VERSION, checksum: EXPECTED_SCHEMA_CHECKSUM })),
+    getAppliedSchemaHistory:
+      overrides?.getAppliedSchemaHistory ??
+      (async () => [{ version: EXPECTED_SCHEMA_VERSION, checksum: EXPECTED_SCHEMA_CHECKSUM }]),
   });
   apps.push(app);
   return app;
@@ -62,7 +63,7 @@ describe("platform health contract", () => {
 
   it("reports schema drift as not ready", async () => {
     const app = createApp({
-      getAppliedSchemaState: async () => ({ version: "0000_old", checksum: EXPECTED_SCHEMA_CHECKSUM }),
+      getAppliedSchemaHistory: async () => [{ version: "0000_old", checksum: EXPECTED_SCHEMA_CHECKSUM }],
     });
     const response = await app.inject({ method: "GET", url: "/health/ready" });
     expect(response.statusCode).toBe(503);
@@ -74,7 +75,7 @@ describe("platform health contract", () => {
 
   it("reports checksum drift as not ready even when the version matches", async () => {
     const app = createApp({
-      getAppliedSchemaState: async () => ({ version: EXPECTED_SCHEMA_VERSION, checksum: "0".repeat(64) }),
+      getAppliedSchemaHistory: async () => [{ version: EXPECTED_SCHEMA_VERSION, checksum: "0".repeat(64) }],
     });
     const response = await app.inject({ method: "GET", url: "/health/ready" });
     expect(response.statusCode).toBe(503);
@@ -82,6 +83,18 @@ describe("platform health contract", () => {
       status: "not_ready",
       checks: { database: "up", schema: "drift" },
     });
+  });
+
+  it("rejects drift in an older migration even when the newest fingerprint matches", () => {
+    const expected = [
+      { version: "0001_foundation", checksum: "1".repeat(64) },
+      { version: "0002_feature", checksum: "2".repeat(64) },
+    ];
+    const applied = [
+      { version: "0001_foundation", checksum: "0".repeat(64) },
+      { version: "0002_feature", checksum: "2".repeat(64) },
+    ];
+    expect(migrationHistoriesMatch(applied, expected)).toBe(false);
   });
 
   it("does not leak dependency errors from readiness", async () => {
