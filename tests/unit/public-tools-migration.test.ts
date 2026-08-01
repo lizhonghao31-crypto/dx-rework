@@ -14,11 +14,14 @@ describe("public tools migration invariants", () => {
     expect(sql).toContain("operation_events_no_update");
     expect(sql).toContain("operation_events_no_delete");
     expect(sql).toContain("operation_events_no_truncate");
+    expect(sql).toContain("actor_roles text[]");
+    expect(sql).toContain("authorization_capability text");
     expect(repositories).toContain("SKIP LOCKED");
   });
 
   it("enforces database-level state consistency and bounded failure fields", () => {
     expect(sql).toContain("(status = 'processing') = (claim_token IS NOT NULL AND claimed_at IS NOT NULL)");
+    expect(sql).toContain("status <> 'failed' OR last_error IS NOT NULL");
     expect(sql).toContain("(status = 'ready') = (ready_at IS NOT NULL)");
     expect(sql).toContain("(status = 'rejected') = (rejection_reason IS NOT NULL)");
     expect(sql).toContain("(status IN ('succeeded', 'failed')) = (completed_at IS NOT NULL)");
