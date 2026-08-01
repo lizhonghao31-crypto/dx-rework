@@ -18,7 +18,7 @@ PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的
 
 1. 服务端校验 JPEG、PNG、WebP、PDF 的 MIME、扩展名和配置大小上限；扩展名只用于一致性检查，不能替代 MIME/HEAD 校验。
 2. objectKey 使用独立私有 prefix、日期目录和 192-bit 随机值；不包含原文件名，不保存公开 URL。
-3. 上传意图只返回短时签名 PUT。PUT 必须带服务端约定的 Content-Type、SHA-256 metadata 和 private ACL。
+3. 上传意图只返回短时签名 PUT。PUT 必须带服务端约定的 Content-Type、SHA-256 metadata、private ACL 和 `x-oss-forbid-overwrite: true`；首次上传后，同一签名 URL 的重放会被 OSS 拒绝，finalize 后不能覆盖已验证对象。承载该前缀的 bucket 必须关闭或从未启用 versioning，因为 OSS 在 versioning enabled/suspended 时会忽略此防覆盖请求头。
 4. finalize 通过服务端 HEAD 验证对象存在、实际大小、MIME，并在 metadata 可用时验证 SHA-256；不一致会拒绝，不能进入 ready。
 5. 下载只返回短时签名 GET。除上传者外，只有申请人可访问绑定到其 export job 的 ready 结果附件；其他业务对象必须通过显式授权决策传入 service，不能仅凭 attachmentId 下载。
 
@@ -30,7 +30,7 @@ PR-03 只提供附件、幂等、追加事件、消息 outbox 与导出任务的
 
 ## 联调条件与已知风险
 
-- bucket 必须验证为 private，并完成 PUT/HEAD/GET 签名 TTL、metadata、跨网 endpoint 与时钟偏差测试。
+- bucket 必须验证为 private、versioning disabled，并完成 PUT 重放返回 409、PUT/HEAD/GET 签名 TTL、metadata、跨网 endpoint 与时钟偏差测试。
 - OSS 生命周期、病毒扫描、孤立 pending 对象清理及业务附件保留策略留待对应业务/运维 PR 定稿。
 - SHA-256 metadata 可能因上传代理或 SDK 行为缺失；缺失时仍验证 size/MIME，生产联调应确认强制 metadata 策略。
 - 回滚方式是回滚应用提交；migration 0004 为追加迁移，不应直接 DROP。停用新路由后保留表和私有对象，后续通过单独审批的数据迁移处理。

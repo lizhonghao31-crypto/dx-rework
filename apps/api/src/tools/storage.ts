@@ -24,7 +24,7 @@ export interface AliyunOssSdkClient {
 export class AliyunPrivateObjectStorage implements ObjectStorage {
   constructor(private readonly client: AliyunOssSdkClient) {}
   async createUploadUrl(objectKey: string, options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number }): Promise<string> {
-    return this.client.signatureUrl(objectKey, { method: "PUT", expires: options.ttlSeconds, "Content-Type": options.mimeType, headers: { "x-oss-meta-sha256": options.sha256, "x-oss-object-acl": "private" } });
+    return this.client.signatureUrl(objectKey, { method: "PUT", expires: options.ttlSeconds, "Content-Type": options.mimeType, headers: { "x-oss-meta-sha256": options.sha256, "x-oss-object-acl": "private", "x-oss-forbid-overwrite": "true" } });
   }
   async createDownloadUrl(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<string> {
     return this.client.signatureUrl(objectKey, { method: "GET", expires: options.ttlSeconds, response: { "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(options.filename)}` } });
