@@ -6,12 +6,15 @@ import {
   CreateProcessSchema,
   CreateSupplierSchema,
   DelegationParamsSchema,
+  DelegationsQuerySchema,
   ProcessParamsSchema,
   PersonAliasParamsSchema,
+  PersonParamsSchema,
   ReviseProcessSchema,
   ReviseSupplierSchema,
   RevokeAccessSchema,
   RoleAssignmentParamsSchema,
+  RoleAssignmentsQuerySchema,
   SupplierParamsSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -77,6 +80,24 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     return dependencies.service.listRoles();
   });
 
+  app.get("/access/role-assignments", async (request) => {
+    await actor(request, "access:admin");
+    const query = parse(RoleAssignmentsQuerySchema, request.query);
+    return dependencies.service.listRoleAssignments({
+      ...(query.userId ? { userId: query.userId } : {}),
+      includeRevoked: query.includeRevoked === "true",
+    });
+  });
+
+  app.get("/access/delegations", async (request) => {
+    await actor(request, "delegation:manage");
+    const query = parse(DelegationsQuerySchema, request.query);
+    return dependencies.service.listDelegations({
+      ...(query.userId ? { userId: query.userId } : {}),
+      includeRevoked: query.includeRevoked === "true",
+    });
+  });
+
   app.get("/master-data/people", async (request) => {
     await actor(request, "people:read");
     const query = parse(CatalogListQuerySchema, request.query);
@@ -124,6 +145,17 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     await dependencies.service.revokePersonAlias(
       await actor(request, "master_data:manage"),
       input.aliasId,
+      body.reason,
+    );
+    return reply.code(204).send();
+  });
+
+  app.delete<{ Params: { personId: string } }>("/master-data/people/:personId", async (request, reply) => {
+    const input = parse(PersonParamsSchema, request.params);
+    const body = parse(RevokeAccessSchema, request.body);
+    await dependencies.service.deactivatePerson(
+      await actor(request, "master_data:manage"),
+      input.personId,
       body.reason,
     );
     return reply.code(204).send();

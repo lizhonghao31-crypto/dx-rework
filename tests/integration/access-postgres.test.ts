@@ -120,6 +120,9 @@ runWithPostgres("role permissions and versioned master data", () => {
     expect(zhang?.user.capabilities).not.toContain("own_factory:approve");
     expect(liTongsheng?.user.businessRoles).toEqual(["tail_supervisor"]);
     expect(liTongsheng?.user.id).not.toBe(li?.user.id);
+    expect(await service.listRoleAssignments({ userId: zhangId })).toEqual([
+      expect.objectContaining({ userId: zhangId, displayName: "张文豪", roleCode: "production_management", revokedAt: null }),
+    ]);
   });
 
   it("maps 李生 only to 李总 and keeps temporary workers outside login users", async () => {
@@ -171,6 +174,11 @@ runWithPostgres("role permissions and versioned master data", () => {
       ["临工甲".normalize("NFKC").toLocaleLowerCase("zh-CN")],
     );
     expect(currentTemporaryAlias.rows[0]?.person_id).toBe(correctedTemporary.personId);
+    await service.deactivatePerson(masterDataActor, correctedTemporary.personId, "临时工离场");
+    expect((await service.listPeople()).some((person) => person.personId === correctedTemporary.personId)).toBe(false);
+    expect(await service.listPeople(true)).toContainEqual(
+      expect.objectContaining({ personId: correctedTemporary.personId, active: false, aliases: [] }),
+    );
   });
 
   it("appends process and supplier versions instead of overwriting history", async () => {
@@ -242,6 +250,15 @@ runWithPostgres("role permissions and versioned master data", () => {
     });
     expect((await authStore.findSession("zhang-token", new Date()))?.user.capabilities).toContain("finance:read");
     expect((await authStore.findSession("litongsheng-token", new Date()))?.user.capabilities).not.toContain("finance:read");
+    expect(await service.listDelegations({ userId: liTongshengId })).toEqual([
+      expect.objectContaining({
+        granteeUserId: liTongshengId,
+        capability: "finance:read",
+        scopeType: "rework_order",
+        scopeId: "rework-001",
+        revokedAt: null,
+      }),
+    ]);
   });
 
   it("blocks self-escalation and global approval delegation while allowing scoped owner proxy", async () => {

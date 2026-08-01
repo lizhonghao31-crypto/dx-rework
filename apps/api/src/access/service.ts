@@ -85,13 +85,99 @@ export class AccessMasterDataService {
     }));
   }
 
+  async listRoleAssignments(input: { userId?: string; includeRevoked?: boolean } = {}): Promise<Array<{
+    assignmentId: string;
+    userId: string;
+    displayName: string;
+    roleCode: string;
+    grantedAt: Date;
+    revokedAt: Date | null;
+  }>> {
+    const result = await this.database.query<{
+      assignment_id: string;
+      user_id: string;
+      display_name: string;
+      role_code: string;
+      granted_at: Date;
+      revoked_at: Date | null;
+    }>(
+      `SELECT ura.assignment_id,ura.user_id,u.display_name,ura.role_code,ura.granted_at,ura.revoked_at
+       FROM user_role_assignments ura
+       JOIN app_users u ON u.id=ura.user_id
+       WHERE ($1::uuid IS NULL OR ura.user_id=$1)
+         AND ($2::boolean OR ura.revoked_at IS NULL)
+       ORDER BY u.display_name,ura.role_code,ura.granted_at DESC`,
+      [input.userId ?? null, input.includeRevoked ?? false],
+    );
+    return result.rows.map((row) => ({
+      assignmentId: row.assignment_id,
+      userId: row.user_id,
+      displayName: row.display_name,
+      roleCode: row.role_code,
+      grantedAt: row.granted_at,
+      revokedAt: row.revoked_at,
+    }));
+  }
+
+  async listDelegations(input: { userId?: string; includeRevoked?: boolean } = {}): Promise<Array<{
+    delegationId: string;
+    grantorUserId: string;
+    grantorDisplayName: string;
+    granteeUserId: string;
+    granteeDisplayName: string;
+    capability: string;
+    scopeType: string;
+    scopeId: string | null;
+    validFrom: Date;
+    validUntil: Date;
+    revokedAt: Date | null;
+  }>> {
+    const result = await this.database.query<{
+      delegation_id: string;
+      grantor_user_id: string;
+      grantor_display_name: string;
+      grantee_user_id: string;
+      grantee_display_name: string;
+      capability: string;
+      scope_type: string;
+      scope_id: string | null;
+      valid_from: Date;
+      valid_until: Date;
+      revoked_at: Date | null;
+    }>(
+      `SELECT da.delegation_id,da.grantor_user_id,grantor.display_name grantor_display_name,
+              da.grantee_user_id,grantee.display_name grantee_display_name,
+              da.capability,da.scope_type,da.scope_id,da.valid_from,da.valid_until,da.revoked_at
+       FROM delegated_authorizations da
+       JOIN app_users grantor ON grantor.id=da.grantor_user_id
+       JOIN app_users grantee ON grantee.id=da.grantee_user_id
+       WHERE ($1::uuid IS NULL OR da.grantor_user_id=$1 OR da.grantee_user_id=$1)
+         AND ($2::boolean OR da.revoked_at IS NULL)
+       ORDER BY da.created_at DESC,da.delegation_id`,
+      [input.userId ?? null, input.includeRevoked ?? false],
+    );
+    return result.rows.map((row) => ({
+      delegationId: row.delegation_id,
+      grantorUserId: row.grantor_user_id,
+      grantorDisplayName: row.grantor_display_name,
+      granteeUserId: row.grantee_user_id,
+      granteeDisplayName: row.grantee_display_name,
+      capability: row.capability,
+      scopeType: row.scope_type,
+      scopeId: row.scope_id,
+      validFrom: row.valid_from,
+      validUntil: row.valid_until,
+      revokedAt: row.revoked_at,
+    }));
+  }
+
   async listPeople(includeInactive = false): Promise<Array<{
     personId: string;
     personType: string;
     appUserId: string | null;
     displayName: string;
     active: boolean;
-    aliases: string[];
+    aliases: Array<{ aliasId: string; alias: string }>;
   }>> {
     const result = await this.database.query<{
       person_id: string;
@@ -99,11 +185,14 @@ export class AccessMasterDataService {
       app_user_id: string | null;
       display_name: string;
       active: boolean;
-      aliases: string[];
+      aliases: Array<{ aliasId: string; alias: string }>;
     }>(
       `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.active,
-              COALESCE(array_agg(a.alias ORDER BY a.alias)
-                FILTER (WHERE a.alias IS NOT NULL),'{}') aliases
+              COALESCE(
+                jsonb_agg(jsonb_build_object('aliasId',a.alias_id,'alias',a.alias) ORDER BY a.alias)
+                  FILTER (WHERE a.alias_id IS NOT NULL),
+                '[]'::jsonb
+              ) aliases
        FROM business_people p
        LEFT JOIN business_person_aliases a ON a.person_id=p.person_id AND a.revoked_at IS NULL
        WHERE ($1::boolean OR p.active=true)
@@ -289,6 +378,38 @@ export class AccessMasterDataService {
         entityType: "business_person_alias",
         entityId: aliasId,
         before: { personId: alias.person_id, alias: alias.alias, normalizedAlias: alias.normalized_alias },
+        reason,
+      });
+    });
+  }
+
+  async deactivatePerson(actor: TrustedActorContext, personId: string, reason: string): Promise<void> {
+    await this.transaction(async (client) => {
+      const existing = await client.query<{ person_type: string; app_user_id: string | null; display_name: string }>(
+        "SELECT person_type,app_user_id,display_name FROM business_people WHERE person_id=$1 AND active=true FOR UPDATE",
+        [personId],
+      );
+      const person = existing.rows[0];
+      if (!person) throw new ApplicationError("NOT_FOUND", "有效人员档案不存在", 404);
+      if (person.person_type !== "temporary") {
+        throw new ApplicationError("VALIDATION_ERROR", "内部人员状态必须由钉钉组织在职状态驱动", 400);
+      }
+      await client.query(
+        `UPDATE business_person_aliases
+         SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3
+         WHERE person_id=$1 AND revoked_at IS NULL`,
+        [personId, actor.actorId, reason],
+      );
+      await client.query(
+        "UPDATE business_people SET active=false,deactivated_at=CURRENT_TIMESTAMP WHERE person_id=$1",
+        [personId],
+      );
+      await this.events.append(client, actor, {
+        action: "master_data.person.deactivate",
+        entityType: "business_person",
+        entityId: personId,
+        before: { personType: person.person_type, appUserId: person.app_user_id, displayName: person.display_name, active: true },
+        after: { active: false },
         reason,
       });
     });

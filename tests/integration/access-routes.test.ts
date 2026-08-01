@@ -22,6 +22,8 @@ afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 const create = (capabilities: readonly string[], businessRoles: readonly string[] = ["system_admin"]) => {
   const service = {
     listRoles: vi.fn(async () => []),
+    listRoleAssignments: vi.fn(async () => []),
+    listDelegations: vi.fn(async () => []),
     listPeople: vi.fn(async () => []),
     listProcesses: vi.fn(async () => []),
     listSuppliers: vi.fn(async () => []),
@@ -29,6 +31,7 @@ const create = (capabilities: readonly string[], businessRoles: readonly string[
     revokeRole: vi.fn(),
     createPerson: vi.fn(),
     revokePersonAlias: vi.fn(),
+    deactivatePerson: vi.fn(),
     createProcess: vi.fn(),
     reviseProcess: vi.fn(),
     createSupplier: vi.fn(),

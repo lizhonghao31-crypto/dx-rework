@@ -88,6 +88,10 @@ export const AssignRoleSchema = z.object({
 }).strict();
 export const RoleAssignmentParamsSchema = z.object({ assignmentId: IdSchema }).strict();
 export const RevokeAccessSchema = z.object({ reason: ReasonSchema }).strict();
+export const RoleAssignmentsQuerySchema = z.object({
+  userId: IdSchema.optional(),
+  includeRevoked: z.enum(["true", "false"]).optional(),
+}).strict();
 
 const PersonBaseSchema = z.object({
   displayName: z.string().trim().min(1).max(100),
@@ -138,6 +142,10 @@ export const CreateDelegationSchema = z.object({
   }
 });
 export const DelegationParamsSchema = z.object({ delegationId: IdSchema }).strict();
+export const DelegationsQuerySchema = z.object({
+  userId: IdSchema.optional(),
+  includeRevoked: z.enum(["true", "false"]).optional(),
+}).strict();
 export const CatalogListQuerySchema = z.object({
   includeInactive: z.enum(["true", "false"]).optional(),
 }).strict();
