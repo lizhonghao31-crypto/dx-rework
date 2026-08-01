@@ -25,6 +25,7 @@ export interface ObjectStorage {
   ): Promise<UploadGrant>;
   createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<DownloadGrant>;
   head(objectKey: string): Promise<StoredObjectMetadata>;
+  computeSha256(objectKey: string): Promise<string>;
 }
 
 export type AliyunPostPolicyCondition =
@@ -45,6 +46,7 @@ export interface AliyunOssSdkClient {
   }): Promise<{ uploadUrl: string; fields: Readonly<Record<string, string>> }>;
   signatureUrl(name: string, options: Record<string, unknown>): string;
   head(name: string): Promise<{ res: { headers: Record<string, string | number | undefined> } }>;
+  createReadStream(name: string): Promise<AsyncIterable<Uint8Array>>;
 }
 
 export class AliyunPrivateObjectStorage implements ObjectStorage {
@@ -112,6 +114,18 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     return { downloadUrl, expiresAt };
   }
 
+  async computeSha256(objectKey: string): Promise<string> {
+    try {
+      const stream = await this.client.createReadStream(objectKey);
+      const digest = createHash("sha256");
+      for await (const chunk of stream) digest.update(chunk);
+      return digest.digest("hex");
+    } catch (error) {
+      if (isObjectNotFound(error)) throw new ObjectStorageObjectNotFoundError();
+      throw error;
+    }
+  }
+
   async head(objectKey: string): Promise<StoredObjectMetadata> {
     let result;
     try {
@@ -156,10 +170,12 @@ export class DisabledObjectStorage implements ObjectStorage {
   async createExactSizeNonOverwritableUploadGrant(): Promise<UploadGrant> { return this.unavailable(); }
   async createDownloadGrant(): Promise<DownloadGrant> { return this.unavailable(); }
   async head(): Promise<StoredObjectMetadata> { return this.unavailable(); }
+  async computeSha256(): Promise<string> { return this.unavailable(); }
 }
 
 export class FakeObjectStorage implements ObjectStorage {
   readonly objects = new Map<string, StoredObjectMetadata>();
+  readonly contentSha256 = new Map<string, string>();
   readonly signed: Array<{ method: "POST" | "GET"; objectKey: string; ttlSeconds: number; sizeBytes?: number }> = [];
 
   constructor(private readonly now: () => Date = () => new Date()) {}
@@ -192,6 +208,14 @@ export class FakeObjectStorage implements ObjectStorage {
       downloadUrl: `https://private.example.test/${encodeURIComponent(objectKey)}?method=GET`,
       expiresAt: grantExpiry(this.now(), options.ttlSeconds),
     };
+  }
+
+  async computeSha256(objectKey: string): Promise<string> {
+    const value = this.objects.get(objectKey);
+    if (!value) throw new ObjectStorageObjectNotFoundError();
+    const digest = this.contentSha256.get(objectKey) ?? value.sha256;
+    if (!digest) throw new Error("Object content digest is unavailable");
+    return digest.toLowerCase();
   }
 
   async head(objectKey: string): Promise<StoredObjectMetadata> {
