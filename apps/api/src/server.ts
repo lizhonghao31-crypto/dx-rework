@@ -2,7 +2,11 @@ import { loadConfig } from "@dx-rework/config";
 import pg from "pg";
 
 import { buildApp } from "./app.js";
-import { checkDatabase, getAppliedSchemaHistory } from "./platform/database.js";
+import {
+  checkDatabase,
+  getAppliedSchemaHistory,
+  registerDatabasePoolErrorHandler,
+} from "./platform/database.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -19,6 +23,7 @@ const app = buildApp({
   checkDatabase: () => checkDatabase(database),
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
 });
+registerDatabasePoolErrorHandler(database, app.log);
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
