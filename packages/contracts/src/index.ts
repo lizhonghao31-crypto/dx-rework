@@ -38,7 +38,7 @@ export type VersionResponse = z.infer<typeof VersionResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 export const StableErrorCodeSchema = z.enum([
-  "AUTH_REQUIRED", "FORBIDDEN", "NOT_FOUND", "VALIDATION_ERROR", "CONFLICT",
+  "AUTH_REQUIRED", "SESSION_INVALID", "NO_BUSINESS_ROLE", "RATE_LIMITED", "FORBIDDEN", "NOT_FOUND", "VALIDATION_ERROR", "CONFLICT",
   "IDEMPOTENCY_CONFLICT", "IDEMPOTENCY_IN_PROGRESS", "STORAGE_UNAVAILABLE",
   "ATTACHMENT_NOT_READY", "ATTACHMENT_METADATA_MISMATCH", "INVALID_STATE_TRANSITION", "INTERNAL_ERROR",
 ]);
@@ -54,7 +54,14 @@ export const CreateUploadIntentSchema = z.object({
 }).strict();
 export const FinalizeAttachmentSchema = z.object({}).strict();
 export const AttachmentParamsSchema = z.object({ attachmentId: IdSchema }).strict();
-export const UploadIntentResponseSchema = z.object({ attachmentId: IdSchema, objectKey: z.string(), uploadUrl: z.string().url(), expiresAt: z.string().datetime() });
+export const UploadIntentResponseSchema = z.object({
+  attachmentId: IdSchema,
+  objectKey: z.string(),
+  uploadMethod: z.literal("POST"),
+  uploadUrl: z.string().url(),
+  uploadFields: z.record(z.string().min(1), z.string()),
+  expiresAt: z.string().datetime(),
+});
 export const DownloadIntentResponseSchema = z.object({ downloadUrl: z.string().url(), expiresAt: z.string().datetime() });
 export const AttachmentResponseSchema = z.object({ attachmentId: IdSchema, filename: z.string(), mimeType: z.string(), sizeBytes: z.number().int(), sha256: Sha256Schema, status: z.enum(["pending", "ready", "rejected"]), createdAt: z.string().datetime() });
 
