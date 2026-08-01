@@ -102,7 +102,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
   it("rejects changed export filters and reclaims an expired running lease", async () => {
     const service = new ExportJobService(pool);
     const key = randomUUID();
-    const actor = { actorId, actorRole: "employee", requestId: randomUUID() };
+    const actor = { actorId, actorRoles: ["employee"], authorizationCapability: "tools:user", requestId: randomUUID() };
     const created = await service.create(actor, { exportType: "test", filters: { a: 1 }, idempotencyKey: key });
     expect((await service.create(actor, { exportType: "test", filters: { a: 1 }, idempotencyKey: key })).exportJobId).toBe(created.exportJobId);
     await expect(service.create(actor, { exportType: "test", filters: { a: 2 }, idempotencyKey: key })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT", statusCode: 409 });
@@ -112,7 +112,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
 
   it("completes exports only with ready attachments owned by the requester or bound to the job", async () => {
     const service = new ExportJobService(pool);
-    const actor = { actorId, actorRole: "employee", requestId: randomUUID() };
+    const actor = { actorId, actorRoles: ["employee"], authorizationCapability: "tools:user", requestId: randomUUID() };
     const job = await service.create(actor, { exportType: "ready-check", filters: {}, idempotencyKey: randomUUID() });
     const claimed=(await service.claim(pool,10,300)).find((row)=>row.export_job_id===job.exportJobId);
     if(!claimed?.claim_token)throw new Error("expected export claim token");
@@ -141,14 +141,19 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
     )).rejects.toMatchObject({ code: "23514" });
 
     await expect(pool.query(
-      "INSERT INTO operation_events(event_id,request_id,actor_id,actor_role,action,entity_type,entity_id) VALUES($1,'request',$2,'tools:user','test','test','1')",
+      "INSERT INTO message_outbox(event_id,topic,aggregate_type,aggregate_id,payload,recipient_key,idempotency_key,status) VALUES($1,'bad-failure','order','1','{}',$2,$3,'failed')",
+      [randomUUID(), actorId, randomUUID()],
+    )).rejects.toMatchObject({ code: "23514" });
+
+    await expect(pool.query(
+      "INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id) VALUES($1,'request',$2,ARRAY['employee'],'tools:user','test','test','1')",
       [randomUUID(), actorId],
     )).resolves.toMatchObject({ rowCount: 1 });
     await expect(pool.query("TRUNCATE operation_events")).rejects.toMatchObject({ code: "55000" });
   });
 
   it("fences stale export completion and failure after lease reclaim",async()=>{
-    const service=new ExportJobService(pool);const actor={actorId,actorRole:"employee",requestId:randomUUID()};
+    const service=new ExportJobService(pool);const actor={actorId,actorRoles:["employee"],authorizationCapability:"tools:user",requestId:randomUUID()};
     const job=await service.create(actor,{exportType:"lease-fence",filters:{},idempotencyKey:randomUUID()});
     const first=(await service.claim(pool,10,300)).find((row)=>row.export_job_id===job.exportJobId);if(!first?.claim_token)throw new Error("expected first claim");
     await pool.query("UPDATE export_jobs SET claimed_at=CURRENT_TIMESTAMP-interval '10 minutes' WHERE export_job_id=$1",[job.exportJobId]);
