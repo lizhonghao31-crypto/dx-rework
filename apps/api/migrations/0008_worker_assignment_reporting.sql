@@ -47,6 +47,11 @@ CREATE TABLE rework_work_report_member_shares (
   PRIMARY KEY(work_report_id,person_id)
 );
 
+-- Capability grants are deliberately append-only in the base schema. This reviewed
+-- forward migration temporarily replaces only those two guard triggers so its new
+-- capabilities remain explicit and the original protection is restored immediately.
+DROP TRIGGER capability_catalog_no_insert ON capability_catalog;
+DROP TRIGGER role_capabilities_no_insert ON role_capabilities;
 INSERT INTO capability_catalog(capability,display_name,description) VALUES
   ('work:assign','分配返工任务','创建工人个人或集体计件任务'),
   ('work:report','工人上数','提交本人个人或集体计件上数'),
@@ -55,6 +60,8 @@ ON CONFLICT (capability) DO NOTHING;
 INSERT INTO role_capabilities(role_code,capability) VALUES
   ('tail_supervisor','work:assign'),('tail_supervisor','work:report_for_worker'),('worker','work:report')
 ON CONFLICT DO NOTHING;
+CREATE TRIGGER capability_catalog_no_insert BEFORE INSERT ON capability_catalog FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 
 CREATE OR REPLACE FUNCTION guard_rework_work_task_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
