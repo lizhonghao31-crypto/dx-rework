@@ -93,4 +93,26 @@ describe("work reporting routes", () => {
       "proxy-report-1",
     );
   });
+
+  it("honors delegated proxy-report capability for an authorized non-supervisor", async () => {
+    const { app, service } = create(["order_merchandiser"], ["work:report_for_worker"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/work-tasks/${taskId}/reports`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "delegated-proxy-report-1" },
+      payload: { expectedOrderVersion: 2, actualQuantity: 1, completedAt: "2026-08-02T12:00:00.000Z" },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(service.submitReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["order_merchandiser"],
+        authorizationCapability: "work:report_for_worker",
+        authorizationCapabilities: ["work:report_for_worker"],
+      }),
+      taskId,
+      expect.objectContaining({ actualQuantity: 1 }),
+      "delegated-proxy-report-1",
+    );
+  });
 });
