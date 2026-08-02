@@ -189,8 +189,34 @@ BEGIN
       AND event.action=expected_action
       AND event.entity_type='rework_order'
       AND event.entity_id=NEW.rework_order_id::text
-      AND event.after_state->>'status'=NEW.status
-      AND (event.after_state->>'version')::integer=NEW.version
+      AND event.after_state @> jsonb_build_object(
+        'reworkOrderId', NEW.rework_order_id,
+        'reworkNo', NEW.rework_no,
+        'status', NEW.status,
+        'styleNo', NEW.style_no,
+        'orderNo', NEW.order_no,
+        'merchandiserUserId', NEW.merchandiser_user_id,
+        'processingFactory', CASE
+          WHEN NEW.processing_factory_type IS NULL THEN NULL
+          WHEN NEW.processing_factory_type='own_factory' THEN jsonb_build_object('type','own_factory')
+          ELSE jsonb_build_object(
+            'type','supplier',
+            'supplierId',NEW.processing_factory_supplier_id,
+            'supplierVersion',NEW.processing_factory_supplier_version
+          )
+        END,
+        'problemPart', NEW.problem_part,
+        'problemDescription', NEW.problem_description,
+        'reworkQuantity', NEW.rework_quantity,
+        'version', NEW.version
+      )
+      AND (
+        NEW.status<>'cancelled'
+        OR (
+          event.after_state->>'cancelReason'=NEW.cancel_reason
+          AND NEW.cancelled_by=audit_actor_id
+        )
+      )
   ) THEN
     RAISE EXCEPTION 'rework order audit event does not match the write'
       USING ERRCODE = '55000';
