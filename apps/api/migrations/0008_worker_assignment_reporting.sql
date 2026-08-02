@@ -11,13 +11,23 @@ CREATE TABLE rework_work_tasks (
   task_version integer NOT NULL CHECK (task_version>0),
   assignment_mode text NOT NULL CHECK (assignment_mode IN ('individual','collective')),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded')),
+  source_system text NOT NULL DEFAULT 'manual' CHECK (length(btrim(source_system)) BETWEEN 1 AND 100),
+  external_id text,
+  external_idempotency_key text,
+  erp_node_id text,
   created_by uuid NOT NULL REFERENCES app_users(id),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   superseded_at timestamptz,
   UNIQUE(rework_order_id,configuration_item_id,task_version),
-  CHECK ((status='active' AND superseded_at IS NULL) OR (status='superseded' AND superseded_at IS NOT NULL))
+  CHECK ((status='active' AND superseded_at IS NULL) OR (status='superseded' AND superseded_at IS NOT NULL)),
+  CHECK (external_id IS NULL OR length(btrim(external_id)) BETWEEN 1 AND 200),
+  CHECK (external_idempotency_key IS NULL OR length(btrim(external_idempotency_key)) BETWEEN 1 AND 200),
+  CHECK (erp_node_id IS NULL OR length(btrim(erp_node_id)) BETWEEN 1 AND 200),
+  CHECK (source_system='manual' OR external_id IS NOT NULL)
 );
 CREATE UNIQUE INDEX rework_work_tasks_one_active_collective_idx ON rework_work_tasks(rework_order_id,configuration_item_id) WHERE status='active' AND assignment_mode='collective';
+CREATE UNIQUE INDEX rework_work_tasks_external_source_idx ON rework_work_tasks(source_system,external_id) WHERE external_id IS NOT NULL;
+CREATE UNIQUE INDEX rework_work_tasks_external_idempotency_idx ON rework_work_tasks(source_system,external_idempotency_key) WHERE external_idempotency_key IS NOT NULL;
 CREATE TABLE rework_work_task_members (
   work_task_id uuid NOT NULL REFERENCES rework_work_tasks(work_task_id),
   person_id uuid NOT NULL REFERENCES business_people(person_id),
@@ -34,15 +44,25 @@ CREATE TABLE rework_work_reports (
   completed_at timestamptz NOT NULL,
   remark text CHECK (remark IS NULL OR length(btrim(remark)) BETWEEN 1 AND 500),
   status text NOT NULL DEFAULT 'submitted' CHECK (status='submitted'),
-  group_amount numeric(14,4) NOT NULL CHECK (group_amount>0),
+  group_amount numeric(18,8) NOT NULL CHECK (group_amount>0),
+  source_system text NOT NULL DEFAULT 'manual' CHECK (length(btrim(source_system)) BETWEEN 1 AND 100),
+  external_id text,
+  external_idempotency_key text,
+  erp_node_id text,
   submitted_by uuid NOT NULL REFERENCES app_users(id),
-  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (external_id IS NULL OR length(btrim(external_id)) BETWEEN 1 AND 200),
+  CHECK (external_idempotency_key IS NULL OR length(btrim(external_idempotency_key)) BETWEEN 1 AND 200),
+  CHECK (erp_node_id IS NULL OR length(btrim(erp_node_id)) BETWEEN 1 AND 200),
+  CHECK (source_system='manual' OR external_id IS NOT NULL)
 );
 CREATE INDEX rework_work_reports_item_idx ON rework_work_reports(rework_order_id,configuration_item_id,status);
+CREATE UNIQUE INDEX rework_work_reports_external_source_idx ON rework_work_reports(source_system,external_id) WHERE external_id IS NOT NULL;
+CREATE UNIQUE INDEX rework_work_reports_external_idempotency_idx ON rework_work_reports(source_system,external_idempotency_key) WHERE external_idempotency_key IS NOT NULL;
 CREATE TABLE rework_work_report_member_shares (
   work_report_id uuid NOT NULL REFERENCES rework_work_reports(work_report_id),
   person_id uuid NOT NULL REFERENCES business_people(person_id),
-  amount numeric(14,4) NOT NULL CHECK (amount>0),
+  amount numeric(18,8) NOT NULL CHECK (amount>0),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(work_report_id,person_id)
 );
@@ -78,6 +98,8 @@ BEGIN
   IF NEW.work_task_id IS DISTINCT FROM OLD.work_task_id OR NEW.rework_order_id IS DISTINCT FROM OLD.rework_order_id
      OR NEW.configuration_item_id IS DISTINCT FROM OLD.configuration_item_id OR NEW.task_version IS DISTINCT FROM OLD.task_version
      OR NEW.assignment_mode IS DISTINCT FROM OLD.assignment_mode OR NEW.created_by IS DISTINCT FROM OLD.created_by
+     OR NEW.source_system IS DISTINCT FROM OLD.source_system OR NEW.external_id IS DISTINCT FROM OLD.external_id
+     OR NEW.external_idempotency_key IS DISTINCT FROM OLD.external_idempotency_key OR NEW.erp_node_id IS DISTINCT FROM OLD.erp_node_id
      OR NEW.created_at IS DISTINCT FROM OLD.created_at OR OLD.status<>'active' OR NEW.status<>'superseded'
      OR NEW.superseded_at IS NULL OR NOT EXISTS (SELECT 1 FROM operation_events e
        WHERE e.event_id=current_setting('dx_rework.work_event_id',true)::uuid AND e.request_id=current_setting('dx_rework.work_request_id',true)
@@ -126,10 +148,8 @@ CREATE TRIGGER rework_work_report_member_shares_guard_insert BEFORE INSERT ON re
 CREATE TRIGGER rework_work_report_member_shares_no_update BEFORE UPDATE ON rework_work_report_member_shares FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER rework_work_report_member_shares_no_delete BEFORE DELETE ON rework_work_report_member_shares FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 
--- Collective tasks may contain up to forty people. Six decimals preserve every
--- positive share when a three-decimal unit price is divided across the group.
-ALTER TABLE rework_work_reports ALTER COLUMN group_amount TYPE numeric(14,6);
-ALTER TABLE rework_work_report_member_shares ALTER COLUMN amount TYPE numeric(14,6);
+-- Collective tasks may contain up to forty people. Eight decimals preserve every
+-- positive share for the smallest allowed hourly report (0.01 × 0.001 ÷ 40).
 
 CREATE OR REPLACE FUNCTION guard_rework_order_write() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
