@@ -1,5 +1,11 @@
 import type { ReworkOrderResponse } from "@dx-rework/contracts";
 
+export const isReworkFormMutationAllowed = (state: Readonly<{
+  busy: boolean;
+  uploading: boolean;
+  restoringDraft: boolean;
+}>): boolean => !state.busy && !state.uploading && !state.restoringDraft;
+
 export type PendingSubmitAttempt = Readonly<{
   reworkOrderId: string;
   body: Readonly<{ expectedVersion: number }>;
