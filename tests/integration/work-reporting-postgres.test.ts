@@ -93,7 +93,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     await admin.end();
   });
 
-  it("only assigns report-eligible people, preserves 40 positive shares, and advances a completed order", async () => {
+  it("only assigns report-eligible people, preserves 40 hourly shares, advances a completed order, and reserves ERP mappings", async () => {
     const draft = await initiation.createDraft(qc(), {
       styleNo: "PD20700001", merchandiserUserId: ids.merchandiser, processingFactory: { type: "own_factory" },
       problemPart: "袖口", problemDescription: "全量返修", reworkQuantity: 1,
@@ -101,7 +101,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
     const saved = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
       expectedOrderVersion: submitted.value.version,
-      items: [{ source: "custom", customProcessName: "六位分摊工序", pricingUnit: "piece", plannedQuantity: 1, unitPrice: 0.001 }],
+      items: [{ source: "custom", customProcessName: "八位分摊工序", pricingUnit: "hour", plannedQuantity: 0.01, unitPrice: 0.001 }],
     }, randomUUID());
     const queued = await configuration.submit(tail(), submitted.value.reworkOrderId, {
       expectedOrderVersion: saved.value.orderVersion,
@@ -127,7 +127,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     expect(inProgress.reworkStatus).toBe("in_progress");
 
     const report = await reporting.submitReport(worker(ids.workers[0]!), task.value.workTaskId, {
-      expectedOrderVersion: inProgress.orderVersion, actualQuantity: 1, completedAt: new Date().toISOString(),
+      expectedOrderVersion: inProgress.orderVersion, actualQuantity: 0.01, completedAt: new Date().toISOString(),
     }, randomUUID());
     expect(report.value.groupAmount).toBeNull();
     expect(report.value.memberShares).toEqual([{ personId: workerPersonIds[0], amount: 0.000025 }]);
@@ -135,10 +135,19 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     expect((await database.query(
       "SELECT group_amount::text AS group_amount FROM rework_work_reports WHERE work_report_id=$1",
       [report.value.workReportId],
-    )).rows[0]).toEqual({ group_amount: "0.001000" });
+    )).rows[0]).toEqual({ group_amount: "0.00001000" });
     expect((await database.query(
       "SELECT amount::text AS amount FROM rework_work_report_member_shares WHERE work_report_id=$1",
       [report.value.workReportId],
-    )).rows).toEqual(Array.from({ length: 40 }, () => ({ amount: "0.000025" })));
+    )).rows).toEqual(Array.from({ length: 40 }, () => ({ amount: "0.00000025" })));
+    const externalMappings = await database.query<{ table_name: string; column_name: string }>(
+      `SELECT table_name,column_name
+       FROM information_schema.columns
+       WHERE table_schema=$1 AND table_name=ANY($2::text[])
+         AND column_name=ANY($3::text[])
+       ORDER BY table_name,column_name`,
+      [schema, ["rework_work_tasks", "rework_work_reports"], ["source_system", "external_id", "external_idempotency_key", "erp_node_id"]],
+    );
+    expect(externalMappings.rows).toHaveLength(8);
   });
 });
