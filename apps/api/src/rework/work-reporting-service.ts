@@ -202,6 +202,7 @@ export class WorkReportingService {
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
       if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
       const members = await this.members(client, task.work_task_id);
+      const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
       if (!this.canSubmitReport(actor, members)) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       if (task.pricing_unit === "piece" && !Number.isInteger(input.actualQuantity)) error("按件计价的上数必须为整数", 400, "VALIDATION_ERROR");
       if (task.pricing_unit === "hour" && !hasAtMostDecimalPlaces(input.actualQuantity, 2)) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
