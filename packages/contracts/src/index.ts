@@ -388,8 +388,15 @@ export const CreateWorkReportSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   actualQuantity: z.number().finite().positive(),
   completedAt: z.string().datetime(),
-  remark: z.string().trim().max(500).optional(),
+  remark: z.string().trim().min(1).max(500).optional(),
 }).strict();
+export const WorkTaskAssignablePeopleResponseSchema = z.object({
+  people: z.array(z.object({
+    personId: IdSchema,
+    displayName: z.string().min(1),
+    personType: z.enum(["internal", "temporary"]),
+  }).strict()),
+});
 export const WorkTaskResponseSchema = z.object({
   workTaskId: IdSchema,
   reworkOrderId: IdSchema,
@@ -423,6 +430,7 @@ export const ReworkWorkTasksResponseSchema = z.object({
 });
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
 export type CreateWorkReport = z.infer<typeof CreateWorkReportSchema>;
+export type WorkTaskAssignablePeopleResponse = z.infer<typeof WorkTaskAssignablePeopleResponseSchema>;
 export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;
 export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;
 export type ReworkWorkTasksResponse = z.infer<typeof ReworkWorkTasksResponseSchema>;
