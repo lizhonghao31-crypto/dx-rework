@@ -28,13 +28,71 @@ type Result<T> = Readonly<{ value: T; reused: boolean }>;
 const hash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope, payload })).digest("hex");
 const numberValue = (value: string | number): number => Number(value);
-const hours = (value: number): number => Math.trunc(value * 100) / 100;
-const amount = (quantity: number, unitPrice: number): number => Math.trunc(quantity * unitPrice * 10_000) / 10_000;
+type Decimal = Readonly<{ units: bigint; scale: number }>;
+
+const decimal = (value: string | number): Decimal => {
+  const match = /^([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(String(value));
+  if (!match) throw new TypeError("Expected a finite decimal value");
+  const sign = match[1] === "-" ? "-" : "";
+  const whole = match[2]!;
+  const fraction = match[3] ?? "";
+  const exponent = Number(match[4] ?? "0");
+  const digits = whole + fraction;
+  const point = whole.length + exponent;
+  const expanded = point <= 0
+    ? `0.${"0".repeat(-point)}${digits}`
+    : point >= digits.length
+      ? `${digits}${"0".repeat(point - digits.length)}`
+      : `${digits.slice(0, point)}.${digits.slice(point)}`;
+  const [integer, decimalPart = ""] = expanded.split(".");
+  return { units: BigInt(`${sign}${integer}${decimalPart}`), scale: decimalPart.length };
+};
+
+const atScale = (value: Decimal, scale: number): bigint => value.scale <= scale
+  ? value.units * 10n ** BigInt(scale - value.scale)
+  : value.units / 10n ** BigInt(value.scale - scale);
+
+const decimalNumber = (units: bigint, scale: number): number => {
+  const negative = units < 0n;
+  const digits = (negative ? -units : units).toString().padStart(scale + 1, "0");
+  const text = scale === 0 ? digits : `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
+  return Number(negative ? `-${text}` : text);
+};
+
+const compareDecimal = (left: Decimal | string | number, right: Decimal | string | number): number => {
+  const leftDecimal = typeof left === "object" ? left : decimal(left);
+  const rightDecimal = typeof right === "object" ? right : decimal(right);
+  const scale = Math.max(leftDecimal.scale, rightDecimal.scale);
+  const difference = atScale(leftDecimal, scale) - atScale(rightDecimal, scale);
+  return difference === 0n ? 0 : difference < 0n ? -1 : 1;
+};
+
+const addDecimal = (left: string | number, right: string | number): Decimal => {
+  const leftDecimal = decimal(left);
+  const rightDecimal = decimal(right);
+  const scale = Math.max(leftDecimal.scale, rightDecimal.scale);
+  return { units: atScale(leftDecimal, scale) + atScale(rightDecimal, scale), scale };
+};
+
+export const hasAtMostDecimalPlaces = (value: number, maximum: number): boolean =>
+  decimal(value).scale <= maximum;
+
+export const calculateWorkAmount = (quantity: number, unitPrice: string | number): number => {
+  const quantityDecimal = decimal(quantity);
+  const priceDecimal = decimal(unitPrice);
+  const scale = quantityDecimal.scale + priceDecimal.scale;
+  return decimalNumber(
+    atScale({ units: quantityDecimal.units * priceDecimal.units, scale }, 4),
+    4,
+  );
+};
+
 export const splitAmount = (total: number, members: number): number[] => {
-  const units = Math.round(total * 10_000);
-  const base = Math.floor(units / members);
-  const residual = units % members;
-  return Array.from({ length: members }, (_, index) => (base + (index < residual ? 1 : 0)) / 10_000);
+  const units = atScale(decimal(total), 4);
+  const memberCount = BigInt(members);
+  const base = units / memberCount;
+  const residual = units % memberCount;
+  return Array.from({ length: members }, (_, index) => decimalNumber(base + (BigInt(index) < residual ? 1n : 0n), 4));
 };
 const error = (message: string, status = 409, code = "CONFLICT"): never => { throw new ApplicationError(code, message, status); };
 
@@ -107,11 +165,12 @@ export class WorkReportingService {
       const members = await this.members(client, task.work_task_id);
       const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
       const hasTemporary = members.some((person) => person.person_type === "temporary");
-      const ownWorker = actor.actorRoles.includes("worker") && actor.authorizationCapability === "work:report" && ownPerson;
+      const workerCapability = actor.authorizationCapability === "work:report" || actor.authorizationCapability === "work:report_for_worker";
+      const ownWorker = actor.actorRoles.includes("worker") && workerCapability && ownPerson;
       const proxy = actor.actorRoles.includes("tail_supervisor") && actor.authorizationCapability === "work:report_for_worker" && hasTemporary;
       if (!ownWorker && !proxy) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       if (task.pricing_unit === "piece" && !Number.isInteger(input.actualQuantity)) error("按件计价的上数必须为整数", 400, "VALIDATION_ERROR");
-      if (task.pricing_unit === "hour" && hours(input.actualQuantity) !== input.actualQuantity) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
+      if (task.pricing_unit === "hour" && !hasAtMostDecimalPlaces(input.actualQuantity, 2)) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
       const completedAt = new Date(input.completedAt);
       const now = Date.now();
       if (completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
@@ -119,9 +178,9 @@ export class WorkReportingService {
         "SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'",
         [task.rework_order_id, task.configuration_item_id],
       );
-      const nextQuantity = numberValue(used.rows[0]?.quantity ?? "0") + input.actualQuantity;
-      if (nextQuantity > numberValue(task.planned_quantity)) error("上数后将超过工序计划数量", 409, "CONFLICT");
-      const groupAmount = amount(input.actualQuantity, numberValue(task.unit_price));
+      const nextQuantity = addDecimal(used.rows[0]?.quantity ?? "0", input.actualQuantity);
+      if (compareDecimal(nextQuantity, task.planned_quantity) > 0) error("上数后将超过工序计划数量", 409, "CONFLICT");
+      const groupAmount = calculateWorkAmount(input.actualQuantity, task.unit_price);
       const reportId = randomUUID();
       const shares = splitAmount(groupAmount, members.length);
       const event = {
@@ -137,7 +196,7 @@ export class WorkReportingService {
         [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, completedAt, input.remark ?? null, groupAmount, actor.actorId],
       );
       for (const [index, member] of members.entries()) await client.query("INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)", [reportId, member.person_id, shares[index]]);
-      const workerView = actor.authorizationCapability === "work:report";
+      const workerView = actor.actorRoles.includes("worker") && !actor.actorRoles.includes("tail_supervisor");
       const visibleShares = members.map((member, index) => ({ personId: member.person_id, amount: shares[index]! })).filter((share) => !workerView || share.personId === ownPerson?.person_id);
       return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount: workerView ? null : groupAmount, memberShares: visibleShares };
     });
@@ -148,7 +207,7 @@ export class WorkReportingService {
   private async order(client: Pick<Pool, "query"> | PoolClient, id: string, locked: boolean): Promise<OrderRow> { const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version FROM rework_orders WHERE rework_order_id=$1${locked ? " FOR UPDATE" : ""}`, [id]); return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND"); }
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> { const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]); return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND"); }
   private async members(client: Pick<Pool, "query"> | PoolClient, taskId: string): Promise<PersonRow[]> { const result = await client.query<PersonRow>("SELECT member.person_id,member.person_type_snapshot AS person_type,member.display_name_snapshot AS display_name,person.app_user_id FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=$1 ORDER BY member.person_id", [taskId]); return result.rows; }
-  private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> { const task = await this.task(client as PoolClient, id, false); const members = await this.members(client, id); const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]); const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0"); const workerView = actor.authorizationCapability === "work:report"; const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members; if (workerView && visibleMembers.length !== 1) error("当前用户无权读取该任务", 403, "FORBIDDEN"); return { workTaskId: task.work_task_id,reworkOrderId: task.rework_order_id,configurationItemId: task.configuration_item_id,processName: task.process_name,pricingUnit: task.pricing_unit,plannedQuantity:numberValue(task.planned_quantity),unitPrice:numberValue(task.unit_price),mode:task.assignment_mode,version:task.task_version,status:task.status,members:visibleMembers.map(({ person_id, display_name, person_type })=>({personId:person_id,displayName:display_name,personType:person_type})),submittedQuantity,remainingQuantity:Math.max(0,numberValue(task.planned_quantity)-submittedQuantity) }; }
-  private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> { const workerView = actor.authorizationCapability === "work:report"; const result = await client.query<{ work_task_id: string }>(workerView ? "SELECT task.work_task_id FROM rework_work_tasks task JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id JOIN business_people person ON person.person_id=member.person_id WHERE task.rework_order_id=$1 AND task.status='active' AND person.app_user_id=$2 ORDER BY task.created_at,task.work_task_id" : "SELECT work_task_id FROM rework_work_tasks WHERE rework_order_id=$1 AND status='active' ORDER BY created_at,work_task_id", workerView ? [orderId, actor.actorId] : [orderId]); return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor))); }
+  private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> { const task = await this.task(client as PoolClient, id, false); const members = await this.members(client, id); const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]); const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0"); const workerView = actor.actorRoles.includes("worker") && !actor.actorRoles.includes("tail_supervisor"); const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members; if (workerView && visibleMembers.length !== 1) error("当前用户无权读取该任务", 403, "FORBIDDEN"); return { workTaskId: task.work_task_id,reworkOrderId: task.rework_order_id,configurationItemId: task.configuration_item_id,processName: task.process_name,pricingUnit: task.pricing_unit,plannedQuantity:numberValue(task.planned_quantity),unitPrice:numberValue(task.unit_price),mode:task.assignment_mode,version:task.task_version,status:task.status,members:visibleMembers.map(({ person_id, display_name, person_type })=>({personId:person_id,displayName:display_name,personType:person_type})),submittedQuantity,remainingQuantity:Math.max(0,numberValue(task.planned_quantity)-submittedQuantity) }; }
+  private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> { const workerView = actor.actorRoles.includes("worker") && !actor.actorRoles.includes("tail_supervisor"); const result = await client.query<{ work_task_id: string }>(workerView ? "SELECT task.work_task_id FROM rework_work_tasks task JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id JOIN business_people person ON person.person_id=member.person_id WHERE task.rework_order_id=$1 AND task.status='active' AND person.app_user_id=$2 ORDER BY task.created_at,task.work_task_id" : "SELECT work_task_id FROM rework_work_tasks WHERE rework_order_id=$1 AND status='active' ORDER BY created_at,work_task_id", workerView ? [orderId, actor.actorId] : [orderId]); return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor))); }
   private async mutate<T>(actor: TrustedActorContext, action: string, key: string, payload: unknown, statusCode: number, work: (client: PoolClient) => Promise<T>): Promise<Result<T>> { const client = await this.database.connect(); try { await client.query("BEGIN"); const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key, requestHash: hash(action, payload), expiresAt: new Date(Date.now()+24*60*60*1000) }, async () => ({ statusCode, response: await work(client) })); await client.query("COMMIT"); return { value: outcome.response, reused: outcome.reused }; } catch (cause) { await client.query("ROLLBACK"); throw cause; } finally { client.release(); } }
 }
