@@ -466,13 +466,17 @@ export class ReworkInitiationService {
   }
 
   async canDownloadBoundAttachment(
-    actorId: string,
+    actor: Readonly<{ actorId: string; actorRoles: readonly string[]; capabilities: readonly string[] }>,
     binding: Readonly<{ entityType: string; entityId: string }>,
   ): Promise<boolean> {
-    if (binding.entityType !== "rework_order") return false;
+    if (
+      binding.entityType !== "rework_order"
+      || !actor.actorRoles.includes("quality_control")
+      || !actor.capabilities.includes("rework:initiate")
+    ) return false;
     const result = await this.database.query(
       "SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND created_by=$2",
-      [binding.entityId, actorId],
+      [binding.entityId, actor.actorId],
     );
     return result.rowCount === 1;
   }
