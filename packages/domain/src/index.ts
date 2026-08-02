@@ -8,7 +8,8 @@ export type SourceReference = Readonly<{
 export type AuditEventDraft = Readonly<{
   requestId: string;
   actorId?: string;
-  actorRole?: string;
+  actorRoles?: readonly string[];
+  authorizationCapability?: string;
   action: string;
   entityType: string;
   entityId: string;
@@ -57,4 +58,39 @@ export class DisabledErpAdapter implements ErpAdapter {
     void input;
     throw new IntegrationDisabledError("ERP");
   }
+}
+
+export type TrustedActor = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string }>;
+export type IdempotencyStatus = "in_progress" | "completed";
+export type AttachmentStatus = "pending" | "ready" | "rejected";
+export type OutboxStatus = "pending" | "processing" | "sent" | "failed";
+export type ExportJobStatus = "pending" | "running" | "succeeded" | "failed";
+
+export class DomainRuleError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = "DomainRuleError";
+  }
+}
+
+const transitions = <T extends string>(rules: Readonly<Record<T, readonly T[]>>, from: T, to: T): T => {
+  if (!rules[from].includes(to)) throw new DomainRuleError("INVALID_STATE_TRANSITION", `Cannot transition from ${from} to ${to}`);
+  return to;
+};
+
+export const transitionAttachment = (from: AttachmentStatus, to: AttachmentStatus): AttachmentStatus =>
+  transitions<AttachmentStatus>({ pending: ["ready", "rejected"], ready: [], rejected: [] }, from, to);
+
+export const transitionOutbox = (from: OutboxStatus, to: OutboxStatus): OutboxStatus =>
+  transitions<OutboxStatus>({ pending: ["processing"], processing: ["sent", "failed"], failed: ["processing"], sent: [] }, from, to);
+
+export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus): ExportJobStatus =>
+  transitions<ExportJobStatus>({ pending: ["running"], running: ["succeeded", "failed"], succeeded: [], failed: [] }, from, to);
+
+export function sanitizeOperationalError(error: unknown): string {
+  void error;
+  // Worker errors are persisted in retry tables. Never attempt to enumerate
+  // every vendor credential label here: persist only a fixed public
+  // classification and keep diagnostics in access-controlled server telemetry.
+  return "Operation failed; inspect protected server logs";
 }

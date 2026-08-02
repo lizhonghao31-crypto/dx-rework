@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 
 import type { DingTalkIdentity, DingTalkProvider, OrganizationMember } from "./provider.js";
 
-export type AuthUser = Readonly<{ id: string; displayName: string; capabilities: readonly string[] }>;
+export type AuthUser = Readonly<{ id: string; displayName: string; capabilities: readonly string[]; businessRoles?: readonly string[] }>;
 export type SessionRecord = Readonly<{ id: string; tokenHash: string; userId: string; expiresAt: Date; revokedAt: Date | null }>;
 export type QrChallenge = Readonly<{ stateHash: string; bindingHash: string; expiresAt: Date; usedAt: Date | null }>;
 export type SessionIdentity = Readonly<{ userId: string; unionId: string; corpId: string; active: boolean; employed: boolean; lastVerifiedAt: Date }>;
