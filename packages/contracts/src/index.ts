@@ -408,6 +408,7 @@ export const WorkTaskResponseSchema = z.object({
   mode: WorkTaskModeSchema,
   version: z.number().int().positive(),
   status: z.enum(["active", "superseded"]),
+  canSubmitReport: z.boolean(),
   members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1), personType: z.enum(["internal", "temporary"]) }).strict()),
   submittedQuantity: z.number().nonnegative(),
   remainingQuantity: z.number().nonnegative(),
