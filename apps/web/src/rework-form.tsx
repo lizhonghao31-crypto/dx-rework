@@ -11,7 +11,11 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { executeReworkSubmit, type PendingSubmitAttempt } from "./rework-submission.js";
+import {
+  executeReworkSubmit,
+  isReworkFormMutationAllowed,
+  type PendingSubmitAttempt,
+} from "./rework-submission.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -99,14 +103,16 @@ export function ReworkInitiationForm() {
   const [order, setOrder] = useState<ReworkOrderResponse | null>(null);
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [uploadedNames, setUploadedNames] = useState<string[]>([]);
-  const [message, setMessage] = useState("填写中，尚未保存");
+  const [message, setMessage] = useState(initialDraftId ? "草稿加载中…" : "填写中，尚未保存");
   const [busy, setBusy] = useState(false);
+  const [restoringDraft, setRestoringDraft] = useState(Boolean(initialDraftId));
   const [uploading, setUploading] = useState(false);
   const pendingKey = useRef<PendingKey | null>(null);
   const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     void request(
       "rework-orders/initiation-options",
       ReworkInitiationOptionsResponseSchema,
@@ -122,17 +128,23 @@ export function ReworkInitiationForm() {
         ReworkOrderResponseSchema,
         { signal: controller.signal },
       ).then((loaded) => {
+        if (!active) return;
         setOrder(loaded);
         setForm(toForm(loaded));
         setAttachmentIds(loaded.attachmentIds);
         setMessage(statusText(loaded.status));
       }).catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (active && !(error instanceof DOMException && error.name === "AbortError")) {
           setMessage(error instanceof Error ? error.message : "草稿加载失败");
         }
+      }).finally(() => {
+        if (active) setRestoringDraft(false);
       });
     }
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const mutationKey = (action: string, payload: unknown): string => {
@@ -196,6 +208,7 @@ export function ReworkInitiationForm() {
   };
 
   const save = async () => {
+    if (!isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
     setBusy(true);
     try {
       await persistDraft();
@@ -207,6 +220,7 @@ export function ReworkInitiationForm() {
   };
 
   const submit = async () => {
+    if (!isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
     if (!window.confirm("确认提交返工单并通知李同生配置工序？")) return;
     setBusy(true);
     try {
@@ -245,7 +259,7 @@ export function ReworkInitiationForm() {
   };
 
   const transition = async (action: "withdraw" | "cancel") => {
-    if (!order) return;
+    if (!order || !isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
     const reason = window.prompt(action === "withdraw" ? "请输入撤回原因" : "请输入取消原因");
     if (!reason?.trim()) return;
     setBusy(true);
@@ -271,7 +285,7 @@ export function ReworkInitiationForm() {
   };
 
   const uploadFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
+    if (!files?.length || !isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
     setUploading(true);
     try {
       const nextIds = [...attachmentIds];
@@ -321,6 +335,8 @@ export function ReworkInitiationForm() {
 
   const locked = order?.status === "pending_process_configuration"
     || order?.status === "cancelled";
+  const formDisabled = locked || restoringDraft;
+  const mutationDisabled = !isReworkFormMutationAllowed({ busy, uploading, restoringDraft });
   const complete = Boolean(
     form.styleNo.trim()
     && form.merchandiserUserId
@@ -358,13 +374,13 @@ export function ReworkInitiationForm() {
           <InsetField
             label="款号（必填）"
             value={form.styleNo}
-            disabled={locked}
+            disabled={formDisabled}
             onChange={(event) => setForm({ ...form, styleNo: event.target.value })}
           />
           <InsetField
             label="订单号（知道时填写）"
             value={form.orderNo}
-            disabled={locked}
+            disabled={formDisabled}
             onChange={(event) => setForm({ ...form, orderNo: event.target.value })}
           />
           <label className="dx-field">
@@ -373,7 +389,7 @@ export function ReworkInitiationForm() {
               <select
                 aria-label="订单跟单"
                 value={form.merchandiserUserId}
-                disabled={locked}
+                disabled={formDisabled}
                 onChange={(event) => setForm({ ...form, merchandiserUserId: event.target.value })}
               >
                 <option value="">请选择订单跟单</option>
@@ -389,7 +405,7 @@ export function ReworkInitiationForm() {
               <select
                 aria-label="加工厂"
                 value={form.factory}
-                disabled={locked}
+                disabled={formDisabled}
                 onChange={(event) => setForm({ ...form, factory: event.target.value })}
               >
                 <option value="">请选择加工厂</option>
@@ -414,7 +430,7 @@ export function ReworkInitiationForm() {
           <InsetField
             label="问题部位（必填）"
             value={form.problemPart}
-            disabled={locked}
+            disabled={formDisabled}
             onChange={(event) => setForm({ ...form, problemPart: event.target.value })}
           />
           <InsetField
@@ -423,7 +439,7 @@ export function ReworkInitiationForm() {
             min="1"
             step="1"
             value={form.reworkQuantity}
-            disabled={locked}
+            disabled={formDisabled}
             suffix="件"
             onChange={(event) => setForm({ ...form, reworkQuantity: event.target.value })}
           />
@@ -434,7 +450,7 @@ export function ReworkInitiationForm() {
                 aria-label="问题描述"
                 rows={4}
                 value={form.problemDescription}
-                disabled={locked}
+                disabled={formDisabled}
                 onChange={(event) => setForm({ ...form, problemDescription: event.target.value })}
               />
             </span>
@@ -450,7 +466,7 @@ export function ReworkInitiationForm() {
           </StatusBadge>
         </div>
         <p>支持 JPG、PNG、WebP 与 PDF；上传完成后随草稿一并绑定。</p>
-        {!locked && (
+        {!formDisabled && (
           <>
             <label className="qc-file-button">
               <span>{uploading ? "附件上传中…" : "选择QC图片 / PDF"}</span>
@@ -458,14 +474,14 @@ export function ReworkInitiationForm() {
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
                 multiple
-                disabled={uploading || busy}
+                disabled={mutationDisabled}
                 onChange={(event) => void uploadFiles(event.target.files)}
               />
             </label>
             {attachmentIds.length > 0 && (
               <Button
                 className="qc-clear-attachments"
-                disabled={uploading || busy}
+                disabled={mutationDisabled}
                 onClick={() => {
                   setAttachmentIds([]);
                   setUploadedNames([]);
@@ -492,12 +508,12 @@ export function ReworkInitiationForm() {
 
       {!locked && (
         <div className="mobile-actions">
-          <Button disabled={busy || uploading} onClick={() => void save()}>
-            {busy ? "处理中…" : "保存草稿"}
+          <Button disabled={mutationDisabled} onClick={() => void save()}>
+            {busy ? "处理中…" : restoringDraft ? "草稿加载中…" : "保存草稿"}
           </Button>
           <Button
             variant="primary"
-            disabled={busy || uploading || !complete}
+            disabled={mutationDisabled || !complete}
             onClick={() => void submit()}
           >
             预览提交并通知
@@ -507,13 +523,13 @@ export function ReworkInitiationForm() {
 
       {order?.status === "pending_process_configuration" && (
         <div className="qc-secondary-actions">
-          <Button disabled={busy} onClick={() => void transition("withdraw")}>撤回修改</Button>
-          <Button disabled={busy} onClick={() => void transition("cancel")}>取消返工单</Button>
+          <Button disabled={mutationDisabled} onClick={() => void transition("withdraw")}>撤回修改</Button>
+          <Button disabled={mutationDisabled} onClick={() => void transition("cancel")}>取消返工单</Button>
         </div>
       )}
       {order?.status === "draft" && order.reworkOrderId && (
         <div className="qc-cancel-draft">
-          <Button disabled={busy} onClick={() => void transition("cancel")}>取消此草稿</Button>
+          <Button disabled={mutationDisabled} onClick={() => void transition("cancel")}>取消此草稿</Button>
         </div>
       )}
     </main>
