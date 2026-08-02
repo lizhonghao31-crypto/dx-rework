@@ -44,6 +44,7 @@ export function App() {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
       { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredCapability: "work:report_for_worker" },
     ]}>{page}</AuthGate>;
   }
   return <AuthGate>{page}</AuthGate>;
