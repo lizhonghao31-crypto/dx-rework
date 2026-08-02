@@ -17,7 +17,7 @@ CREATE TABLE rework_work_tasks (
   UNIQUE(rework_order_id,configuration_item_id,task_version),
   CHECK ((status='active' AND superseded_at IS NULL) OR (status='superseded' AND superseded_at IS NOT NULL))
 );
-CREATE UNIQUE INDEX rework_work_tasks_one_active_member_mode_idx ON rework_work_tasks(rework_order_id,configuration_item_id,assignment_mode) WHERE status='active';
+CREATE UNIQUE INDEX rework_work_tasks_one_active_collective_idx ON rework_work_tasks(rework_order_id,configuration_item_id) WHERE status='active' AND assignment_mode='collective';
 CREATE TABLE rework_work_task_members (
   work_task_id uuid NOT NULL REFERENCES rework_work_tasks(work_task_id),
   person_id uuid NOT NULL REFERENCES business_people(person_id),

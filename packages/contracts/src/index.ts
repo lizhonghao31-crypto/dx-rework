@@ -412,7 +412,7 @@ export const WorkReportResponseSchema = z.object({
   actualQuantity: z.number().positive(),
   completedAt: z.string().datetime(),
   status: z.literal("submitted"),
-  groupAmount: z.number().positive(),
+  groupAmount: z.number().positive().nullable(),
   memberShares: z.array(z.object({ personId: IdSchema, amount: z.number().positive() }).strict()),
 });
 export const ReworkWorkTasksResponseSchema = z.object({

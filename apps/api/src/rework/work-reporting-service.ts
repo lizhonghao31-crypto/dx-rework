@@ -30,6 +30,12 @@ const hash = (scope: string, payload: unknown): string =>
 const numberValue = (value: string | number): number => Number(value);
 const hours = (value: number): number => Math.trunc(value * 100) / 100;
 const amount = (quantity: number, unitPrice: number): number => Math.trunc(quantity * unitPrice * 10_000) / 10_000;
+export const splitAmount = (total: number, members: number): number[] => {
+  const units = Math.round(total * 10_000);
+  const base = Math.floor(units / members);
+  const residual = units % members;
+  return Array.from({ length: members }, (_, index) => (base + (index < residual ? 1 : 0)) / 10_000);
+};
 const error = (message: string, status = 409, code = "CONFLICT"): never => { throw new ApplicationError(code, message, status); };
 
 export class WorkReportingService {
@@ -64,11 +70,16 @@ export class WorkReportingService {
         [input.members.map((member) => member.personId)],
       );
       if (people.rowCount !== input.members.length) error("存在无效或已停用的作业人员", 400, "VALIDATION_ERROR");
-      const active = await client.query<{ work_task_id: string; task_version: number }>(
-        "SELECT work_task_id,task_version FROM rework_work_tasks WHERE rework_order_id=$1 AND configuration_item_id=$2 AND assignment_mode=$3 AND status='active' FOR UPDATE",
-        [reworkOrderId, input.configurationItemId, input.mode],
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["dx_rework:work-task:" + input.configurationItemId]);
+      const latest = await client.query<{ task_version: number }>(
+        "SELECT task_version FROM rework_work_tasks WHERE rework_order_id=$1 AND configuration_item_id=$2 ORDER BY task_version DESC LIMIT 1 FOR UPDATE",
+        [reworkOrderId, input.configurationItemId],
       );
-      const version = (active.rows[0]?.task_version ?? 0) + 1;
+      const active = input.mode === "collective" ? await client.query<{ work_task_id: string }>(
+        "SELECT work_task_id FROM rework_work_tasks WHERE rework_order_id=$1 AND configuration_item_id=$2 AND assignment_mode='collective' AND status='active' FOR UPDATE",
+        [reworkOrderId, input.configurationItemId],
+      ) : { rows: [] as Array<{ work_task_id: string }> };
+      const version = (latest.rows[0]?.task_version ?? 0) + 1;
       const taskId = randomUUID();
       const eventId = await this.events.append(client, actor, {
         action: "rework.work_task.assign", entityType: "rework_order", entityId: reworkOrderId,
@@ -105,14 +116,14 @@ export class WorkReportingService {
       const now = Date.now();
       if (completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
       const used = await client.query<{ quantity: string }>(
-        "SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted' FOR UPDATE",
+        "SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'",
         [task.rework_order_id, task.configuration_item_id],
       );
       const nextQuantity = numberValue(used.rows[0]?.quantity ?? "0") + input.actualQuantity;
       if (nextQuantity > numberValue(task.planned_quantity)) error("上数后将超过工序计划数量", 409, "CONFLICT");
       const groupAmount = amount(input.actualQuantity, numberValue(task.unit_price));
       const reportId = randomUUID();
-      const share = groupAmount / members.length;
+      const shares = splitAmount(groupAmount, members.length);
       const event = {
         action: "rework.work_report.submit", entityType: "rework_order", entityId: task.rework_order_id,
         before: { submittedQuantity: numberValue(used.rows[0]?.quantity ?? "0"), plannedQuantity: numberValue(task.planned_quantity) },
@@ -125,8 +136,10 @@ export class WorkReportingService {
         "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
         [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, completedAt, input.remark ?? null, groupAmount, actor.actorId],
       );
-      for (const member of members) await client.query("INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)", [reportId, member.person_id, share]);
-      return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount, memberShares: members.map((member) => ({ personId: member.person_id, amount: share })) };
+      for (const [index, member] of members.entries()) await client.query("INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)", [reportId, member.person_id, shares[index]]);
+      const workerView = actor.authorizationCapability === "work:report";
+      const visibleShares = members.map((member, index) => ({ personId: member.person_id, amount: shares[index]! })).filter((share) => !workerView || share.personId === ownPerson?.person_id);
+      return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount: workerView ? null : groupAmount, memberShares: visibleShares };
     });
   }
 
@@ -135,7 +148,7 @@ export class WorkReportingService {
   private async order(client: Pick<Pool, "query"> | PoolClient, id: string, locked: boolean): Promise<OrderRow> { const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version FROM rework_orders WHERE rework_order_id=$1${locked ? " FOR UPDATE" : ""}`, [id]); return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND"); }
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> { const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]); return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND"); }
   private async members(client: Pick<Pool, "query"> | PoolClient, taskId: string): Promise<PersonRow[]> { const result = await client.query<PersonRow>("SELECT member.person_id,member.person_type_snapshot AS person_type,member.display_name_snapshot AS display_name,person.app_user_id FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=$1 ORDER BY member.person_id", [taskId]); return result.rows; }
-  private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> { const task = await this.task(client as PoolClient, id, false); const members = await this.members(client, id); const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]); const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0"); if (actor.actorRoles.includes("worker")) { const self = members.filter((person) => person.app_user_id === actor.actorId); if (self.length === 0) error("当前用户无权读取该任务", 403, "FORBIDDEN"); } return { workTaskId: task.work_task_id,reworkOrderId: task.rework_order_id,configurationItemId: task.configuration_item_id,processName: task.process_name,pricingUnit: task.pricing_unit,plannedQuantity:numberValue(task.planned_quantity),unitPrice:numberValue(task.unit_price),mode:task.assignment_mode,version:task.task_version,status:task.status,members:members.map(({ person_id, display_name, person_type })=>({personId:person_id,displayName:display_name,personType:person_type})),submittedQuantity,remainingQuantity:Math.max(0,numberValue(task.planned_quantity)-submittedQuantity) }; }
-  private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> { const result = await client.query<{ work_task_id: string }>("SELECT work_task_id FROM rework_work_tasks WHERE rework_order_id=$1 AND status='active' ORDER BY created_at,work_task_id", [orderId]); const tasks = await Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor))); return tasks; }
+  private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> { const task = await this.task(client as PoolClient, id, false); const members = await this.members(client, id); const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]); const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0"); const workerView = actor.authorizationCapability === "work:report"; const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members; if (workerView && visibleMembers.length !== 1) error("当前用户无权读取该任务", 403, "FORBIDDEN"); return { workTaskId: task.work_task_id,reworkOrderId: task.rework_order_id,configurationItemId: task.configuration_item_id,processName: task.process_name,pricingUnit: task.pricing_unit,plannedQuantity:numberValue(task.planned_quantity),unitPrice:numberValue(task.unit_price),mode:task.assignment_mode,version:task.task_version,status:task.status,members:visibleMembers.map(({ person_id, display_name, person_type })=>({personId:person_id,displayName:display_name,personType:person_type})),submittedQuantity,remainingQuantity:Math.max(0,numberValue(task.planned_quantity)-submittedQuantity) }; }
+  private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> { const workerView = actor.authorizationCapability === "work:report"; const result = await client.query<{ work_task_id: string }>(workerView ? "SELECT task.work_task_id FROM rework_work_tasks task JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id JOIN business_people person ON person.person_id=member.person_id WHERE task.rework_order_id=$1 AND task.status='active' AND person.app_user_id=$2 ORDER BY task.created_at,task.work_task_id" : "SELECT work_task_id FROM rework_work_tasks WHERE rework_order_id=$1 AND status='active' ORDER BY created_at,work_task_id", workerView ? [orderId, actor.actorId] : [orderId]); return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor))); }
   private async mutate<T>(actor: TrustedActorContext, action: string, key: string, payload: unknown, statusCode: number, work: (client: PoolClient) => Promise<T>): Promise<Result<T>> { const client = await this.database.connect(); try { await client.query("BEGIN"); const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key, requestHash: hash(action, payload), expiresAt: new Date(Date.now()+24*60*60*1000) }, async () => ({ statusCode, response: await work(client) })); await client.query("COMMIT"); return { value: outcome.response, reused: outcome.reused }; } catch (cause) { await client.query("ROLLBACK"); throw cause; } finally { client.release(); } }
 }
