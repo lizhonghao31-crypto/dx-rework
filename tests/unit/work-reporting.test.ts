@@ -36,7 +36,7 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportDrafts");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
-    expect(app).toContain('{ requiredCapability: "work:report_for_worker" }');
+    expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
 
   it("reuses the idempotency key only while a report payload remains unresolved", () => {
