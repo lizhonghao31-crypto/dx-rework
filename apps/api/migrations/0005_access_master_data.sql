@@ -8,6 +8,10 @@ CREATE TRIGGER access_security_policy_no_delete BEFORE DELETE ON access_security
 CREATE TRIGGER access_security_policy_no_truncate BEFORE TRUNCATE ON access_security_policy FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
 CREATE OR REPLACE FUNCTION lock_owner_eligibility_change() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  target_user_id uuid;
+  target_loses_access boolean := false;
+  other_usable_owner_count bigint;
 BEGIN
   IF TG_TABLE_NAME='identity_mappings' THEN
     IF (OLD.id,OLD.user_id,OLD.provider,OLD.corp_id,OLD.provider_user_id,OLD.union_id,OLD.first_verified_at)
@@ -19,10 +23,61 @@ BEGIN
     END IF;
     IF (OLD.active,OLD.employed) IS DISTINCT FROM (NEW.active,NEW.employed) THEN
       PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
+      target_user_id := OLD.user_id;
+      target_loses_access :=
+        OLD.provider='dingtalk'
+        AND OLD.active=true AND OLD.employed=true
+        AND (NEW.active=false OR NEW.employed=false)
+        AND EXISTS (
+          SELECT 1
+          FROM user_role_assignments ura
+          JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+          JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+          JOIN access_security_policy policy
+            ON policy.policy_key='primary' AND policy.dingtalk_corp_id=OLD.corp_id
+          WHERE ura.user_id=OLD.user_id AND ura.role_code='owner_group'
+            AND ura.revoked_at IS NULL
+        );
     END IF;
   ELSIF TG_TABLE_NAME='app_users' THEN
     IF OLD.enabled IS DISTINCT FROM NEW.enabled THEN
       PERFORM pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'));
+      target_user_id := OLD.id;
+      target_loses_access :=
+        OLD.enabled=true AND NEW.enabled=false
+        AND EXISTS (
+          SELECT 1
+          FROM user_role_assignments ura
+          JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+          JOIN identity_mappings i ON i.user_id=ura.user_id
+          JOIN access_security_policy policy
+            ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+          WHERE ura.user_id=OLD.id AND ura.role_code='owner_group'
+            AND ura.revoked_at IS NULL
+            AND i.provider='dingtalk' AND i.active=true AND i.employed=true
+        );
+    END IF;
+  END IF;
+
+  IF target_loses_access THEN
+    SELECT count(*)
+    INTO other_usable_owner_count
+    FROM user_role_assignments ura
+    JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+    JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+    WHERE ura.role_code='owner_group' AND ura.revoked_at IS NULL
+      AND ura.user_id<>target_user_id
+      AND EXISTS (
+        SELECT 1
+        FROM identity_mappings i
+        JOIN access_security_policy policy
+          ON policy.policy_key='primary' AND policy.dingtalk_corp_id=i.corp_id
+        WHERE i.user_id=ura.user_id AND i.provider='dingtalk'
+          AND i.active=true AND i.employed=true
+      );
+    IF other_usable_owner_count=0 THEN
+      RAISE EXCEPTION 'cannot disable the last usable owner'
+        USING ERRCODE = '23514';
     END IF;
   END IF;
   RETURN NEW;
