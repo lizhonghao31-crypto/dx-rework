@@ -17,6 +17,7 @@ import { AccessMasterDataService } from "./access/service.js";
 import { ReworkInitiationService } from "./rework/service.js";
 import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
+import { WholeOrderReviewService } from "./rework/whole-order-review-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -42,6 +43,7 @@ const attachments = new AttachmentService(database, storage, {
 const reworkService = new ReworkInitiationService(database, config.dingtalk.corpId);
 const processConfigurationService = new ProcessConfigurationService(database);
 const workReportingService = new WorkReportingService(database);
+const wholeOrderReviewService = new WholeOrderReviewService(database);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -69,6 +71,10 @@ const app = buildApp({
   workReporting: {
     authenticate: (token) => auth.authenticate(token),
     service: workReportingService,
+  },
+  wholeOrderReview: {
+    authenticate: (token) => auth.authenticate(token),
+    service: wholeOrderReviewService,
   },
 });
 registerDatabasePoolErrorHandler(database, app.log);

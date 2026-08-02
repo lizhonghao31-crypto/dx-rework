@@ -31,6 +31,10 @@
     {
       "version": "0008_worker_assignment_reporting",
       "checksum": "e57037cad35d8f7e09c473a16a3779bfd6623bedbf2ac2a079fc2c486cacad1c"
+    },
+    {
+      "version": "0009_whole_order_review_quantity_adjustment",
+      "checksum": "a83970ba3fa669f06816db39387d6fe07faef9628b98bd48568f2d649c3c24d2"
     }
   ]
 }
