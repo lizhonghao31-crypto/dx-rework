@@ -19,5 +19,12 @@ export function App() {
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
   else if (path === "/system/foundation") page = <Foundation />;
   else page = <Foundation />;
+  if (path === "/ui/qc/new") {
+    return (
+      <AuthGate requiredRole="quality_control" requiredCapability="rework:initiate">
+        {page}
+      </AuthGate>
+    );
+  }
   return <AuthGate>{page}</AuthGate>;
 }

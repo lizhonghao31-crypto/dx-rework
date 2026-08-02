@@ -34,3 +34,18 @@ forbidden files: ERP、生产部署、钉钉配置、PR-06 以后工序/计件/�
   集成测试、全量测试、构建、治理预检和 Preview build。
 - UI：仅增量接入 `/ui/qc/new`；保持现有 token、移动端布局和其他五页行为。
 - S-01 在业务验收和合并前必须关闭，未关闭时不得宣称 PR-05 业务验收完成。
+
+## Codex Review P1 修复预检
+
+```text
+reviewed head: b0992a0d16766b6ef59497246c0de2f401b10049
+task scope: 修复提交响应丢失后的幂等重放，以及 QC 发起页前端角色/能力门禁
+allowed files: apps/web/src/App.tsx、auth.tsx、rework-form.tsx、rework-submission.ts；tests/unit/ui-prototype.test.ts、rework-web-behavior.test.ts；本预检记录
+forbidden files: 数据库迁移、API 业务规则、设计 token、PR-06 以后模块、生产配置
+```
+
+- 提交重试必须在再次保存草稿前重放原 `reworkOrderId`、`expectedVersion`
+  与 `Idempotency-Key`；只有草稿保存成功后才清除旧的待确认提交。
+- `/ui/qc/new` 在渲染业务表单前同时要求 `quality_control` 角色和
+  `rework:initiate` 能力；其他既有页面继续只使用原有组织/角色准入。
+- 不改 API 权限规则、数据库状态机、页面布局、设计 token 或业务字段。

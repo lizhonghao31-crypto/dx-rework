@@ -11,6 +11,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { executeReworkSubmit, type PendingSubmitAttempt } from "./rework-submission.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -102,6 +103,7 @@ export function ReworkInitiationForm() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const pendingKey = useRef<PendingKey | null>(null);
+  const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -181,6 +183,7 @@ export function ReworkInitiationForm() {
       },
     );
     pendingKey.current = null;
+    pendingSubmit.current = null;
     setOrder(saved);
     setAttachmentIds(saved.attachmentIds);
     setMessage(saved.reworkNo ? `${saved.reworkNo} · 草稿已保存` : "草稿已安全保存");
@@ -207,17 +210,30 @@ export function ReworkInitiationForm() {
     if (!window.confirm("确认提交返工单并通知李同生配置工序？")) return;
     setBusy(true);
     try {
-      const saved = await persistDraft();
-      const body = { expectedVersion: saved.version };
-      const submitted = await request(
-        `rework-orders/${saved.reworkOrderId}/submit`,
-        ReworkOrderResponseSchema,
-        {
-          method: "POST",
-          headers: { "idempotency-key": mutationKey(`submit:${saved.reworkOrderId}`, body) },
-          body: JSON.stringify(body),
+      const submitted = await executeReworkSubmit(
+        order,
+        pendingSubmit.current,
+        persistDraft,
+        (saved) => {
+          const attempt: PendingSubmitAttempt = {
+            reworkOrderId: saved.reworkOrderId,
+            body: { expectedVersion: saved.version },
+            key: crypto.randomUUID(),
+          };
+          pendingSubmit.current = attempt;
+          return attempt;
         },
+        (attempt) => request(
+          `rework-orders/${attempt.reworkOrderId}/submit`,
+          ReworkOrderResponseSchema,
+          {
+            method: "POST",
+            headers: { "idempotency-key": attempt.key },
+            body: JSON.stringify(attempt.body),
+          },
+        ),
       );
+      pendingSubmit.current = null;
       pendingKey.current = null;
       setOrder(submitted);
       setMessage(`${submitted.reworkNo ?? ""} 已提交，待李同生配置工序`);

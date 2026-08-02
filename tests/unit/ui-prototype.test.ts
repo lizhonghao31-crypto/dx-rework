@@ -68,8 +68,11 @@ describe("PR-01A UI prototype contract", () => {
   });
   it("turns only the approved QC page into an idempotent real workflow", () => {
     expect(app).toContain('page = <ReworkInitiationForm />');
+    expect(app).toContain('requiredRole="quality_control"');
+    expect(app).toContain('requiredCapability="rework:initiate"');
     expect(reworkForm).toContain('"rework-orders/initiation-options"');
     expect(reworkForm).toContain('"idempotency-key"');
+    expect(reworkForm).toContain("executeReworkSubmit");
     expect(reworkForm).toContain("crypto.subtle.digest");
     expect(reworkForm).toContain('upload.append("file", file)');
     expect(reworkForm).toContain("一单一个款号");
