@@ -49,3 +49,18 @@ forbidden files: 数据库迁移、API 业务规则、设计 token、PR-06 以�
 - `/ui/qc/new` 在渲染业务表单前同时要求 `quality_control` 角色和
   `rework:initiate` 能力；其他既有页面继续只使用原有组织/角色准入。
 - 不改 API 权限规则、数据库状态机、页面布局、设计 token 或业务字段。
+
+
+## Codex Review P1/P2 修复预检
+
+```text
+reviewed head: 518068b2e6b1c03c82433ceb3a6de2617045ec46
+task scope: 修复已绑定 QC 证据下载在角色/能力撤销后的越权，以及返工单审计事件快照校验不完整
+allowed files: apps/api/src/tools/{routes.ts,attachments.ts}、apps/api/src/rework/service.ts、apps/api/src/server.ts、0006 迁移及清单、公共 Tools/返工 PostgreSQL 回归测试、本预检记录
+forbidden files: 返工业务字段、PR-06 以后模块、设计 token、ERP、钉钉或生产部署配置
+```
+
+- 已绑定 QC 证据无论上传人是否相同，下载时均须重新验证当前用户仍有
+  `quality_control` 角色、`rework:initiate` 能力及该返工单本人归属。
+- 返工单写入触发器必须把审计 `after_state` 中的所有业务字段与待写入行逐项核对；
+  证据清单仍由既有附件绑定触发器独立核对，避免创建草稿时的先后顺序误判。
