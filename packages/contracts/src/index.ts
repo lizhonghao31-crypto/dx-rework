@@ -170,6 +170,8 @@ export type CreateDelegation = z.infer<typeof CreateDelegationSchema>;
 export const ReworkOrderStatusSchema = z.enum([
   "draft",
   "pending_process_configuration",
+  "pending_ie_review",
+  "pending_task_assignment",
   "cancelled",
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
@@ -259,3 +261,106 @@ export type SubmitReworkOrder = z.infer<typeof SubmitReworkOrderSchema>;
 export type TransitionReworkOrder = z.infer<typeof TransitionReworkOrderSchema>;
 export type ReworkOrderResponse = z.infer<typeof ReworkOrderResponseSchema>;
 export type ReworkInitiationOptionsResponse = z.infer<typeof ReworkInitiationOptionsResponseSchema>;
+
+export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);
+export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("catalog"),
+    processId: IdSchema,
+    plannedQuantity: z.number().finite().positive(),
+    pricingUnit: ProcessPricingUnitSchema,
+    unitPrice: z.number().finite().positive(),
+  }).strict(),
+  z.object({
+    source: z.literal("custom"),
+    customProcessName: z.string().trim().min(1).max(100),
+    plannedQuantity: z.number().finite().positive(),
+    pricingUnit: ProcessPricingUnitSchema,
+    unitPrice: z.number().finite().positive(),
+  }).strict(),
+]).superRefine((value, context) => {
+  if (value.pricingUnit === "piece" && !Number.isInteger(value.plannedQuantity)) {
+    context.addIssue({
+      code: "custom",
+      path: ["plannedQuantity"],
+      message: "Piece-based planned quantity must be an integer",
+    });
+  }
+});
+
+export const SaveProcessConfigurationSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  items: z.array(ProcessConfigurationItemSchema).min(1).max(100),
+  changeReason: ReasonSchema.optional(),
+}).strict().superRefine((value, context) => {
+  const duplicateKeys = value.items.map((item) =>
+    item.source === "catalog"
+      ? `catalog:${item.processId}`
+      : `custom:${item.customProcessName.trim().toLocaleLowerCase("zh-CN")}`,
+  );
+  if (new Set(duplicateKeys).size !== duplicateKeys.length) {
+    context.addIssue({ code: "custom", path: ["items"], message: "A process can appear only once in one configuration" });
+  }
+});
+
+export const SubmitProcessConfigurationSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  expectedConfigurationVersion: z.number().int().positive(),
+}).strict();
+
+export const ReviewProcessConfigurationSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  expectedConfigurationVersion: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+  }
+});
+
+export const ProcessConfigurationParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const ProcessConfigurationItemResponseSchema = z.object({
+  configurationItemId: IdSchema,
+  source: z.enum(["catalog", "custom"]),
+  processId: IdSchema.nullable(),
+  processVersion: z.number().int().positive().nullable(),
+  processName: z.string().min(1),
+  pricingUnit: ProcessPricingUnitSchema,
+  plannedQuantity: z.number().positive(),
+  unitPrice: z.number().positive(),
+  promotedProcessId: IdSchema.nullable(),
+});
+export const ProcessConfigurationResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkNo: z.string().nullable(),
+  reworkStatus: ReworkOrderStatusSchema,
+  orderVersion: z.number().int().positive(),
+  configuration: z.object({
+    configurationId: IdSchema,
+    configurationVersion: z.number().int().positive(),
+    kind: z.enum(["initial", "change"]),
+    status: z.enum(["draft", "pending_ie_review", "approved", "rejected", "superseded"]),
+    changeReason: z.string().nullable(),
+    reviewReason: z.string().nullable(),
+    createdAt: z.string().datetime(),
+    submittedAt: z.string().datetime().nullable(),
+    reviewedAt: z.string().datetime().nullable(),
+    items: z.array(ProcessConfigurationItemResponseSchema),
+  }).nullable(),
+});
+export const ProcessConfigurationOptionsResponseSchema = z.object({
+  processes: z.array(z.object({
+    processId: IdSchema,
+    version: z.number().int().positive(),
+    processName: z.string().min(1),
+    pricingUnit: ProcessPricingUnitSchema,
+  }).strict()),
+});
+
+export type ProcessConfigurationItem = z.infer<typeof ProcessConfigurationItemSchema>;
+export type SaveProcessConfiguration = z.infer<typeof SaveProcessConfigurationSchema>;
+export type SubmitProcessConfiguration = z.infer<typeof SubmitProcessConfigurationSchema>;
+export type ReviewProcessConfiguration = z.infer<typeof ReviewProcessConfigurationSchema>;
+export type ProcessConfigurationResponse = z.infer<typeof ProcessConfigurationResponseSchema>;
+export type ProcessConfigurationOptionsResponse = z.infer<typeof ProcessConfigurationOptionsResponseSchema>;

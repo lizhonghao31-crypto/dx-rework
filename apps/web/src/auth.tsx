@@ -36,17 +36,25 @@ export function AuthGate({
   children,
   requiredRole,
   requiredCapability,
+  requiredAnyOf,
 }: {
   children: ReactNode;
   requiredRole?: string | undefined;
   requiredCapability?: string | undefined;
+  requiredAnyOf?: readonly PageAccessRequirement[] | undefined;
 }) {
   const [state, setState] = useState<"loading" | "denied" | Me>("loading");
   useEffect(() => { void fetch(apiUrl("auth/me"), { credentials: "include" }).then(async (response) => response.ok ? setState(await response.json() as Me) : setState("denied")).catch(() => setState("denied")); }, []);
   if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在通过服务端核验钉钉组织与账号状态，请稍候。" />;
   if (state === "denied") return <LoginPage />;
   if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的公司组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><Button onClick={() => void fetch(apiUrl("auth/logout"), { method: "POST", credentials: "include" }).then(() => window.location.assign(base))}>退出登录</Button></StatePage>;
-  if (!hasPageAccess(state.user, { requiredRole, requiredCapability })) {
+  if (
+    !hasPageAccess(state.user, { requiredRole, requiredCapability })
+    || (
+      requiredAnyOf !== undefined
+      && !requiredAnyOf.some((requirement) => hasPageAccess(state.user, requirement))
+    )
+  ) {
     return <StatePage tone="warning" title="无权访问此页面" detail="当前业务角色或权限不包含此页面；如需操作，请联系管理员核对岗位权限。" />;
   }
   return children;

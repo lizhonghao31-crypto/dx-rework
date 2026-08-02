@@ -23,6 +23,10 @@
     {
       "version": "0006_rework_initiation",
       "checksum": "290c5dfba0f67c0c1d3c20cd2cc3d6dd4b086bbec6c499e7f01fbaaeff5e4fd6"
+    },
+    {
+      "version": "0007_process_configuration_ie_review",
+      "checksum": "174955cd25c251347ef8336c6051890e21ced81f68d3a620beccd3bc19c60747"
     }
   ]
 }
