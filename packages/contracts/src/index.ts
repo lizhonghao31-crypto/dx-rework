@@ -172,6 +172,8 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_process_configuration",
   "pending_ie_review",
   "pending_task_assignment",
+  "in_progress",
+  "pending_order_review",
   "cancelled",
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
@@ -364,3 +366,63 @@ export type SubmitProcessConfiguration = z.infer<typeof SubmitProcessConfigurati
 export type ReviewProcessConfiguration = z.infer<typeof ReviewProcessConfigurationSchema>;
 export type ProcessConfigurationResponse = z.infer<typeof ProcessConfigurationResponseSchema>;
 export type ProcessConfigurationOptionsResponse = z.infer<typeof ProcessConfigurationOptionsResponseSchema>;
+
+export const WorkTaskModeSchema = z.enum(["individual", "collective"]);
+export const WorkTaskMemberSchema = z.object({ personId: IdSchema }).strict();
+export const CreateWorkTaskSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  configurationItemId: IdSchema,
+  mode: WorkTaskModeSchema,
+  members: z.array(WorkTaskMemberSchema).min(1).max(40),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.members.map((member) => member.personId)).size !== value.members.length) {
+    context.addIssue({ code: "custom", path: ["members"], message: "Task members cannot contain duplicates" });
+  }
+  if (value.mode === "individual" && value.members.length !== 1) {
+    context.addIssue({ code: "custom", path: ["members"], message: "An individual task has exactly one worker" });
+  }
+});
+export const WorkTaskParamsSchema = z.object({ workTaskId: IdSchema }).strict();
+export const ReworkWorkTasksParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const CreateWorkReportSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  actualQuantity: z.number().finite().positive(),
+  completedAt: z.string().datetime(),
+  remark: z.string().trim().max(500).optional(),
+}).strict();
+export const WorkTaskResponseSchema = z.object({
+  workTaskId: IdSchema,
+  reworkOrderId: IdSchema,
+  configurationItemId: IdSchema,
+  processName: z.string().min(1),
+  pricingUnit: ProcessPricingUnitSchema,
+  plannedQuantity: z.number().positive(),
+  unitPrice: z.number().positive(),
+  mode: WorkTaskModeSchema,
+  version: z.number().int().positive(),
+  status: z.enum(["active", "superseded"]),
+  members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1), personType: z.enum(["internal", "temporary"]) }).strict()),
+  submittedQuantity: z.number().nonnegative(),
+  remainingQuantity: z.number().nonnegative(),
+});
+export const WorkReportResponseSchema = z.object({
+  workReportId: IdSchema,
+  workTaskId: IdSchema,
+  reworkOrderId: IdSchema,
+  actualQuantity: z.number().positive(),
+  completedAt: z.string().datetime(),
+  status: z.literal("submitted"),
+  groupAmount: z.number().positive(),
+  memberShares: z.array(z.object({ personId: IdSchema, amount: z.number().positive() }).strict()),
+});
+export const ReworkWorkTasksResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkStatus: ReworkOrderStatusSchema,
+  orderVersion: z.number().int().positive(),
+  tasks: z.array(WorkTaskResponseSchema),
+});
+export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
+export type CreateWorkReport = z.infer<typeof CreateWorkReportSchema>;
+export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;
+export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;
+export type ReworkWorkTasksResponse = z.infer<typeof ReworkWorkTasksResponseSchema>;

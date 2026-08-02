@@ -2,6 +2,7 @@ import { Dashboard, Detail, Foundation, MobileForm, Tasks } from "./pages.js";
 import { AuthGate, DeniedPage, LoginPage, QrLoginPage } from "./auth.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
+import { WorkReportingForm } from "./work-reporting-form.js";
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -18,6 +19,7 @@ export function App() {
   else if (path.startsWith("/ui/tasks/")) page = <Detail />;
   else if (path === "/ui/qc/new") page = <ReworkInitiationForm />;
   else if (path === "/ui/process-configuration") page = <ProcessConfigurationForm />;
+  else if (path === "/ui/work-reporting") page = <WorkReportingForm />;
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
   else if (path === "/system/foundation") page = <Foundation />;
   else page = <Foundation />;
@@ -37,6 +39,12 @@ export function App() {
         {page}
       </AuthGate>
     );
+  }
+  if (path === "/ui/work-reporting") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
+      { requiredRole: "worker", requiredCapability: "work:report" },
+    ]}>{page}</AuthGate>;
   }
   return <AuthGate>{page}</AuthGate>;
 }

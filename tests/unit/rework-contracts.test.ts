@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import {
   CreateReworkDraftSchema,
+  CreateWorkReportSchema,
+  CreateWorkTaskSchema,
   ReviewProcessConfigurationSchema,
   SaveProcessConfigurationSchema,
   UpdateReworkDraftSchema,
@@ -94,6 +96,24 @@ describe("rework initiation contracts", () => {
     expect(migration).toContain("process configuration identity and business fields are immutable");
     expect(migration).toContain("custom process catalog promotion requires approved IE audit context");
     expect(migration).not.toMatch(/ALTER TABLE\s+.*000[1-6]/i);
+  });
+
+  it("enforces individual versus collective task snapshots and report precision", () => {
+    const personId = "00000000-0000-4000-8000-000000000010";
+    const itemId = "00000000-0000-4000-8000-000000000011";
+    expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "individual", members: [{ personId }] }).success).toBe(true);
+    expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "individual", members: [{ personId }, { personId: "00000000-0000-4000-8000-000000000012" }] }).success).toBe(false);
+    expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "collective", members: [{ personId }, { personId }] }).success).toBe(false);
+    expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.25, completedAt: "2026-08-02T12:00:00.000Z" }).success).toBe(true);
+  });
+
+  it("adds PR-07 task, snapshot and report storage without modifying earlier migrations", async () => {
+    const migration = await readFile(new URL("../../apps/api/migrations/0008_worker_assignment_reporting.sql", import.meta.url), "utf8");
+    expect(migration).toContain("rework_work_tasks");
+    expect(migration).toContain("rework_work_task_members");
+    expect(migration).toContain("rework_work_reports");
+    expect(migration).toContain("rework_work_report_member_shares");
+    expect(migration).toContain("work:report_for_worker");
   });
 
   it("keeps migration-level audit, attachment and identity guards", async () => {
