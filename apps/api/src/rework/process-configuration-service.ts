@@ -89,8 +89,30 @@ const requestHash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify(canonicalize({ scope, payload }))).digest("hex");
 
 const numberValue = (value: string | number): number => Number(value);
-const truncate = (value: number, scale: number): number =>
-  Math.trunc(value * (10 ** scale)) / (10 ** scale);
+const decimalSource = (value: number): string => {
+  const source = String(value);
+  const exponentAt = source.search(/[eE]/);
+  if (exponentAt === -1) return source;
+
+  const coefficient = source.slice(0, exponentAt);
+  const exponent = Number(source.slice(exponentAt + 1));
+  const negative = coefficient.startsWith("-");
+  const unsignedCoefficient = negative ? coefficient.slice(1) : coefficient;
+  const [whole = "", fraction = ""] = unsignedCoefficient.split(".");
+  const digits = whole + fraction;
+  const decimalAt = whole.length + exponent;
+  const expanded = decimalAt <= 0
+    ? "0." + "0".repeat(-decimalAt) + digits
+    : decimalAt >= digits.length
+      ? digits + "0".repeat(decimalAt - digits.length)
+      : digits.slice(0, decimalAt) + "." + digits.slice(decimalAt);
+  return (negative ? "-" : "") + expanded;
+};
+
+export const truncateDecimal = (value: number, scale: number): number => {
+  const [whole = "", fraction = ""] = decimalSource(value).split(".");
+  return Number(fraction.length === 0 ? whole : whole + "." + fraction.slice(0, scale));
+};
 
 const translateDatabaseError = (error: unknown): never => {
   if (error instanceof ApplicationError) throw error;
@@ -408,8 +430,8 @@ export class ProcessConfigurationService {
     const prepared: PreparedItem[] = [];
     const names = new Set<string>();
     for (const item of input) {
-      const plannedQuantity = item.pricingUnit === "hour" ? truncate(item.plannedQuantity, 2) : item.plannedQuantity;
-      const unitPrice = truncate(item.unitPrice, 3);
+      const plannedQuantity = item.pricingUnit === "hour" ? truncateDecimal(item.plannedQuantity, 2) : item.plannedQuantity;
+      const unitPrice = truncateDecimal(item.unitPrice, 3);
       if (plannedQuantity <= 0 || unitPrice <= 0) {
         throw new ApplicationError("VALIDATION_ERROR", "数量和单价经规则截位后必须大于0", 400);
       }
@@ -461,6 +483,10 @@ export class ProcessConfigurationService {
     const promotions: Array<{ configurationItemId: string; processId: string; processCode: string }> = [];
     for (const item of items) {
       if (item.source !== "custom") continue;
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext('dx_rework:custom-process:' || lower($1) || ':' || $2))",
+        [item.process_name, item.pricing_unit],
+      );
       const exists = await client.query(
         "SELECT 1 FROM current_process_catalog WHERE lower(process_name)=lower($1) AND pricing_unit=$2 AND active=true",
         [item.process_name, item.pricing_unit],
