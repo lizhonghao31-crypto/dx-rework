@@ -105,6 +105,7 @@ describe("rework initiation contracts", () => {
     expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "individual", members: [{ personId }, { personId: "00000000-0000-4000-8000-000000000012" }] }).success).toBe(false);
     expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "collective", members: [{ personId }, { personId }] }).success).toBe(false);
     expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.25, completedAt: "2026-08-02T12:00:00.000Z" }).success).toBe(true);
+    expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.25, completedAt: "2026-08-02T12:00:00.000Z", remark: "   " }).success).toBe(false);
   });
 
   it("adds PR-07 task, snapshot and report storage without modifying earlier migrations", async () => {
@@ -114,6 +115,8 @@ describe("rework initiation contracts", () => {
     expect(migration).toContain("rework_work_reports");
     expect(migration).toContain("rework_work_report_member_shares");
     expect(migration).toContain("work:report_for_worker");
+    expect(migration).toContain("numeric(14,6)");
+    expect(migration).toContain("pending_order_review");
   });
 
   it("keeps migration-level audit, attachment and identity guards", async () => {
