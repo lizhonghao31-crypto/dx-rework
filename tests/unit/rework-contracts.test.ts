@@ -115,8 +115,10 @@ describe("rework initiation contracts", () => {
     expect(migration).toContain("rework_work_reports");
     expect(migration).toContain("rework_work_report_member_shares");
     expect(migration).toContain("work:report_for_worker");
-    expect(migration).toContain("numeric(14,6)");
+    expect(migration).toContain("numeric(18,8)");
     expect(migration).toContain("pending_order_review");
+    expect(migration).toContain("rework_work_tasks_external_source_idx");
+    expect(migration).toContain("rework_work_reports_external_source_idx");
   });
 
   it("keeps migration-level audit, attachment and identity guards", async () => {
