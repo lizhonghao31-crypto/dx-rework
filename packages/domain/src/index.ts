@@ -87,6 +87,18 @@ export const transitionOutbox = (from: OutboxStatus, to: OutboxStatus): OutboxSt
 export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus): ExportJobStatus =>
   transitions<ExportJobStatus>({ pending: ["running"], running: ["succeeded", "failed"], succeeded: [], failed: [] }, from, to);
 
+export type ReworkOrderStatus = "draft" | "pending_process_configuration" | "cancelled";
+
+export const transitionReworkOrder = (
+  from: ReworkOrderStatus,
+  to: ReworkOrderStatus,
+): ReworkOrderStatus =>
+  transitions<ReworkOrderStatus>({
+    draft: ["draft", "pending_process_configuration", "cancelled"],
+    pending_process_configuration: ["draft", "cancelled"],
+    cancelled: [],
+  }, from, to);
+
 export function sanitizeOperationalError(error: unknown): string {
   void error;
   // Worker errors are persisted in retry tables. Never attempt to enumerate

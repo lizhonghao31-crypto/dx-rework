@@ -12,6 +12,7 @@ const tokens = read("../../packages/ui/src/tokens.css");
 const components = read("../../packages/ui/src/components.css");
 const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
+const reworkForm = read("../../apps/web/src/rework-form.tsx");
 
 describe("PR-01A UI prototype contract", () => {
   it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/piecework/collective", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
@@ -64,5 +65,18 @@ describe("PR-01A UI prototype contract", () => {
     expect(pages).toContain("张文豪无本厂承担最终审批权");
     expect(components).toContain("min-height: 44px");
     expect(pages).not.toContain('href="#"');
+  });
+  it("turns only the approved QC page into an idempotent real workflow", () => {
+    expect(app).toContain('page = <ReworkInitiationForm />');
+    expect(reworkForm).toContain('"rework-orders/initiation-options"');
+    expect(reworkForm).toContain('"idempotency-key"');
+    expect(reworkForm).toContain("crypto.subtle.digest");
+    expect(reworkForm).toContain('upload.append("file", file)');
+    expect(reworkForm).toContain("一单一个款号");
+    expect(reworkForm).toContain("订单号（知道时填写）");
+    expect(reworkForm).toContain("撤回修改");
+    expect(reworkForm).toContain("取消返工单");
+    expect(reworkForm).not.toContain("styleNos");
+    expect(webCss).not.toContain("--dx-v2-color-primary:");
   });
 });
