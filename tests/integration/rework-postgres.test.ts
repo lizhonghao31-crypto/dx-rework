@@ -258,4 +258,47 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       statusCode: 409,
     });
   });
+
+  it("rejects a trusted-looking audit event when its complete business snapshot differs", async () => {
+    const draft = await service.createDraft(qcActor(), {
+      styleNo: "PD20611309",
+      problemDescription: "已审计的问题描述",
+    }, randomUUID());
+    const client = await database.connect();
+    const eventId = randomUUID();
+    const requestId = randomUUID();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO operation_events(
+           event_id,request_id,actor_id,actor_roles,authorization_capability,
+           action,entity_type,entity_id,after_state
+         ) VALUES(
+           $1,$2,$3,ARRAY['quality_control'],'rework:initiate',
+           'rework.draft.update','rework_order',$4,
+           jsonb_build_object(
+             'reworkOrderId',$4,'reworkNo',NULL,'status','draft',
+             'styleNo','PD20611309','orderNo',NULL,'merchandiserUserId',NULL,
+             'processingFactory',NULL,'problemPart',NULL,
+             'problemDescription','已审计的问题描述','reworkQuantity',NULL,
+             'attachmentIds',jsonb_build_array(),'version',2
+           )
+         )`,
+        [eventId, requestId, qcId, draft.value.reworkOrderId],
+      );
+      await client.query(
+        "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
+        [eventId, requestId],
+      );
+      await expect(client.query(
+        `UPDATE rework_orders
+         SET problem_description='未审计的篡改',updated_by=$2,version=version+1
+         WHERE rework_order_id=$1`,
+        [draft.value.reworkOrderId, qcId],
+      )).rejects.toMatchObject({ code: "55000" });
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+  });
 });
