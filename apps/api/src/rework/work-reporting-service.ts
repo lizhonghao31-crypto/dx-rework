@@ -205,7 +205,7 @@ export class WorkReportingService {
       const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
       const reportingCapability = this.reportCapability(actor, members);
       if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
-      const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability };
+      const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability! };
       if (task.pricing_unit === "piece" && !Number.isInteger(input.actualQuantity)) error("按件计价的上数必须为整数", 400, "VALIDATION_ERROR");
       if (task.pricing_unit === "hour" && !hasAtMostDecimalPlaces(input.actualQuantity, 2)) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
       const completedAt = new Date(input.completedAt);
