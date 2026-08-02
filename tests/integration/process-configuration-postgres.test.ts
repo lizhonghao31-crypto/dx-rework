@@ -298,4 +298,124 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
       blocker.release();
     }
   });
+
+  it("separates IE review from both the order initiator and the configuration creator", async () => {
+    const firstOrder = await submittedOrder();
+    const firstDraft = await configuration.saveDraft(tail(), firstOrder.value.reworkOrderId, {
+      expectedOrderVersion: firstOrder.value.version,
+      items: [{
+        source: "custom",
+        customProcessName: "审核岗位分离一",
+        pricingUnit: "piece",
+        plannedQuantity: 1,
+        unitPrice: 1,
+      }],
+    }, randomUUID());
+    const firstQueued = await configuration.submit(tail(), firstOrder.value.reworkOrderId, {
+      expectedOrderVersion: firstDraft.value.orderVersion,
+      expectedConfigurationVersion: firstDraft.value.configuration!.configurationVersion,
+    }, randomUUID());
+    await expect(configuration.review(
+      actor(ids.qc, ["quality_control", "tail_supervisor", "ie_reviewer"], "process:review"),
+      firstOrder.value.reworkOrderId,
+      {
+        expectedOrderVersion: firstQueued.value.orderVersion,
+        expectedConfigurationVersion: firstQueued.value.configuration!.configurationVersion,
+        decision: "approved",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+    const secondOrder = await submittedOrder();
+    const secondDraft = await configuration.saveDraft(tail(), secondOrder.value.reworkOrderId, {
+      expectedOrderVersion: secondOrder.value.version,
+      items: [{
+        source: "custom",
+        customProcessName: "审核岗位分离二",
+        pricingUnit: "piece",
+        plannedQuantity: 1,
+        unitPrice: 1,
+      }],
+    }, randomUUID());
+    const secondQueued = await configuration.submit(tail(), secondOrder.value.reworkOrderId, {
+      expectedOrderVersion: secondDraft.value.orderVersion,
+      expectedConfigurationVersion: secondDraft.value.configuration!.configurationVersion,
+    }, randomUUID());
+    await expect(configuration.review(
+      actor(ids.tail, ["tail_supervisor", "ie_reviewer"], "process:review"),
+      secondOrder.value.reworkOrderId,
+      {
+        expectedOrderVersion: secondQueued.value.orderVersion,
+        expectedConfigurationVersion: secondQueued.value.configuration!.configurationVersion,
+        decision: "approved",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+  });
+
+  it("completes opposite multi-process promotions without duplicate catalog items", async () => {
+    const queueForReview = async (reverse: boolean) => {
+      const submitted = await submittedOrder();
+      const items = [
+        {
+          source: "custom" as const,
+          customProcessName: "锁顺序甲",
+          pricingUnit: "piece" as const,
+          plannedQuantity: 1,
+          unitPrice: 1,
+        },
+        {
+          source: "custom" as const,
+          customProcessName: "锁顺序乙",
+          pricingUnit: "piece" as const,
+          plannedQuantity: 1,
+          unitPrice: 1,
+        },
+      ];
+      if (reverse) items.reverse();
+      const draft = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
+        expectedOrderVersion: submitted.value.version,
+        items,
+      }, randomUUID());
+      return {
+        orderId: submitted.value.reworkOrderId,
+        orderVersion: draft.value.orderVersion,
+        configurationVersion: draft.value.configuration!.configurationVersion,
+      };
+    };
+
+    const [firstDraft, secondDraft] = await Promise.all([queueForReview(false), queueForReview(true)]);
+    const [firstQueued, secondQueued] = await Promise.all([
+      configuration.submit(tail(), firstDraft.orderId, {
+        expectedOrderVersion: firstDraft.orderVersion,
+        expectedConfigurationVersion: firstDraft.configurationVersion,
+      }, randomUUID()),
+      configuration.submit(tail(), secondDraft.orderId, {
+        expectedOrderVersion: secondDraft.orderVersion,
+        expectedConfigurationVersion: secondDraft.configurationVersion,
+      }, randomUUID()),
+    ]);
+    const reviewed = await Promise.all([
+      configuration.review(ie(), firstDraft.orderId, {
+        expectedOrderVersion: firstQueued.value.orderVersion,
+        expectedConfigurationVersion: firstQueued.value.configuration!.configurationVersion,
+        decision: "approved",
+      }, randomUUID()),
+      configuration.review(ie(), secondDraft.orderId, {
+        expectedOrderVersion: secondQueued.value.orderVersion,
+        expectedConfigurationVersion: secondQueued.value.configuration!.configurationVersion,
+        decision: "approved",
+      }, randomUUID()),
+    ]);
+    expect(reviewed.map((result) => result.value.reworkStatus)).toEqual([
+      "pending_task_assignment",
+      "pending_task_assignment",
+    ]);
+    const catalog = await database.query<{ process_name: string }>(
+      "SELECT process_name FROM current_process_catalog WHERE process_name=ANY($1::text[]) AND active=true",
+      [["锁顺序甲", "锁顺序乙"]],
+    );
+    expect(catalog.rows.map((row) => row.process_name).sort()).toEqual(["锁顺序甲", "锁顺序乙"].sort());
+  });
+
 });
