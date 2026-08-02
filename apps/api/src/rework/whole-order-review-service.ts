@@ -534,7 +534,7 @@ export class WholeOrderReviewService {
              (delegation.scope_type='global' AND delegation.scope_id IS NULL)
              OR (delegation.scope_type='rework_order' AND delegation.scope_id=$3)
              OR (delegation.scope_type='process' AND delegation.scope_id=$4)
-             OR (delegation.scope_type='supplier' AND $5 IS NOT NULL AND delegation.scope_id=$5)
+             OR (delegation.scope_type='supplier' AND $5::uuid IS NOT NULL AND delegation.scope_id=$5::uuid)
            )
        ) AS permitted`,
       [actorId, capability, order.rework_order_id, configurationItemId ?? null, order.processing_factory_supplier_id, grantorId ?? null],
