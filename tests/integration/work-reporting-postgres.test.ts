@@ -130,7 +130,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       expectedOrderVersion: inProgress.orderVersion, actualQuantity: 0.01, completedAt: new Date().toISOString(),
     }, randomUUID());
     expect(report.value.groupAmount).toBeNull();
-    expect(report.value.memberShares).toEqual([{ personId: workerPersonIds[0], amount: 0.000025 }]);
+    expect(report.value.memberShares).toEqual([{ personId: workerPersonIds[0], amount: 0.00000025 }]);
     expect((await reporting.list(tailAssign(), submitted.value.reworkOrderId)).reworkStatus).toBe("pending_order_review");
     expect((await database.query(
       "SELECT group_amount::text AS group_amount FROM rework_work_reports WHERE work_report_id=$1",
