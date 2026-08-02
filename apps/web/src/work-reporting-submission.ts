@@ -11,6 +11,7 @@ export type WorkTaskPayload = Readonly<{
 }>;
 export type PendingWorkReport = Readonly<{ signature: string; key: string }>;
 export type PendingWorkTask = Readonly<{ signature: string; key: string }>;
+export type WorkReportDraft = Readonly<{ quantity: string; completedAt: string }>;
 
 const attempt = <T,>(
   existing: Readonly<{ signature: string; key: string }> | undefined,
@@ -39,3 +40,9 @@ const pad = (value: number): string => String(value).padStart(2, "0");
 
 export const localDateTimeValue = (date: Date = new Date()): string =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+export const workReportDraft = (
+  drafts: Readonly<Record<string, WorkReportDraft>>,
+  taskId: string,
+  date: Date = new Date(),
+): WorkReportDraft => drafts[taskId] ?? { quantity: "", completedAt: localDateTimeValue(date) };
