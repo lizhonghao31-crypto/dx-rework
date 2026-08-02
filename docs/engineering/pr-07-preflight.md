@@ -14,16 +14,16 @@
 3. 临时工无登录入口，只能由具有 `work:report_for_worker` 的尾部主管代录。
 4. 工人只能读取并上报本人已分配任务；完工时间最多补录七天。
 
-## 第三轮 Codex Review 修复预检
+## 第四轮 Codex Review 修复预检
 
 ```text
 repository: lizhonghao31-crypto/dx-rework
 base branch: main
 base SHA: 2dd6fb538a64e1319231d7064fd3a0d7d4c63090
 working branch: codex/pr-07-worker-assignment-reporting
-current review head: e667cba9af3a2d459ad086775233288c89ab6b23
-task scope: 修复工单状态推进、上数重试幂等、可分配人员资格、40 人精确分摊和空白备注校验
-allowed files: apps/api/migrations/0008_worker_assignment_reporting.sql, apps/api/src/platform/migration-manifest.json, apps/api/src/rework/work-reporting-service.ts, apps/api/src/rework/work-reporting-routes.ts, apps/web/src/work-reporting-form.tsx, apps/web/src/work-reporting-submission.ts, packages/contracts/src/index.ts, tests/unit/work-reporting.test.ts, tests/unit/rework-contracts.test.ts, tests/integration/work-reporting-routes.test.ts, tests/integration/work-reporting-postgres.test.ts, docs/engineering/pr-07-preflight.md
+current review head: a1337920beda0079de9d2deca58a63a160c2b692
+task scope: 修复本地完工时间、任务分配重试幂等、工作事实 ERP 映射预留及最小小时数的 40 人精确分摊
+allowed files: apps/api/migrations/0008_worker_assignment_reporting.sql, apps/api/src/platform/migration-manifest.json, apps/api/src/rework/work-reporting-service.ts, apps/web/src/work-reporting-form.tsx, apps/web/src/work-reporting-submission.ts, tests/unit/work-reporting.test.ts, tests/unit/rework-contracts.test.ts, tests/integration/work-reporting-postgres.test.ts, docs/engineering/pr-07-preflight.md
 forbidden files: 0001–0007 历史迁移、领域状态机定义、设计 token、生产配置、PR-08 及后续的审核/责任/工资模块
 ```
 
