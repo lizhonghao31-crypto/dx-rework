@@ -819,5 +819,13 @@ runWithPostgres("role permissions and versioned master data", () => {
       remainingUsable.rows[0]!.assignment_id,
       "外部组织老板不能计入本公司保底人数",
     )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    await expect(database.query(
+      "UPDATE identity_mappings SET active=false,employed=false WHERE user_id=$1",
+      [remainingUsable.rows[0]!.user_id],
+    )).rejects.toMatchObject({ code: "23514" });
+    await expect(database.query(
+      "UPDATE app_users SET enabled=false WHERE id=$1",
+      [remainingUsable.rows[0]!.user_id],
+    )).rejects.toMatchObject({ code: "23514" });
   });
 });
