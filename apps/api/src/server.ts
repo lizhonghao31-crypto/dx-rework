@@ -14,6 +14,7 @@ import { AttachmentService } from "./tools/attachments.js";
 import { ExportJobService } from "./tools/exports.js";
 import { DisabledObjectStorage } from "./tools/storage.js";
 import { AccessMasterDataService } from "./access/service.js";
+import { ReworkInitiationService } from "./rework/service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -31,6 +32,12 @@ await accessService.ensureOrganizationPolicy();
 const auth = new AuthService(new OfficialDingTalkProvider(config.dingtalk), authStore, config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret);
 const storage = new DisabledObjectStorage();
 if (config.objectStorage.enabled) throw new Error("OSS is configured but the official Aliyun OSS SDK client has not been injected");
+const attachments = new AttachmentService(database, storage, {
+  prefix: config.objectStorage.privatePrefix,
+  ttlSeconds: config.objectStorage.signedUrlTtlSeconds,
+  maxUploadBytes: config.objectStorage.maxUploadBytes,
+});
+const reworkService = new ReworkInitiationService(database, config.dingtalk.corpId);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -42,8 +49,14 @@ const app = buildApp({
   },
   tools: {
     authenticate: (token) => auth.authenticate(token),
-    attachments: new AttachmentService(database, storage, { prefix: config.objectStorage.privatePrefix, ttlSeconds: config.objectStorage.signedUrlTtlSeconds, maxUploadBytes: config.objectStorage.maxUploadBytes }),
+    attachments,
     exports: new ExportJobService(database),
+    canDownloadBoundAttachment: (actor, binding) =>
+      reworkService.canDownloadBoundAttachment(actor, binding),
+  },
+  rework: {
+    authenticate: (token) => auth.authenticate(token),
+    service: reworkService,
   },
 });
 registerDatabasePoolErrorHandler(database, app.log);

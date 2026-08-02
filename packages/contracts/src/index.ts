@@ -166,3 +166,96 @@ export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
 export type CreateSupplier = z.infer<typeof CreateSupplierSchema>;
 export type ReviseSupplier = z.infer<typeof ReviseSupplierSchema>;
 export type CreateDelegation = z.infer<typeof CreateDelegationSchema>;
+
+export const ReworkOrderStatusSchema = z.enum([
+  "draft",
+  "pending_process_configuration",
+  "cancelled",
+]);
+export const IdempotencyKeySchema = z.string().min(1).max(200)
+  .regex(/^[A-Za-z0-9._:-]+$/);
+
+const DraftTextSchema = (maximum: number) =>
+  z.string().trim().min(1).max(maximum).nullable().optional();
+export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("own_factory") }).strict(),
+  z.object({ type: z.literal("supplier"), supplierId: IdSchema }).strict(),
+]);
+const ReworkAttachmentIdsSchema = z.array(IdSchema).superRefine((ids, context) => {
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: "custom", message: "attachmentIds cannot contain duplicates" });
+  }
+});
+const ReworkDraftFieldsSchema = z.object({
+  styleNo: DraftTextSchema(100),
+  orderNo: DraftTextSchema(100),
+  merchandiserUserId: IdSchema.nullable().optional(),
+  processingFactory: ReworkProcessingFactorySchema.nullable().optional(),
+  problemPart: DraftTextSchema(200),
+  problemDescription: DraftTextSchema(2000),
+  reworkQuantity: z.number().int().positive().nullable().optional(),
+  attachmentIds: ReworkAttachmentIdsSchema.optional(),
+});
+
+export const CreateReworkDraftSchema = ReworkDraftFieldsSchema.strict();
+export const UpdateReworkDraftSchema = ReworkDraftFieldsSchema.extend({
+  expectedVersion: z.number().int().positive(),
+}).strict();
+export const SubmitReworkOrderSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+}).strict();
+export const TransitionReworkOrderSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  reason: ReasonSchema,
+}).strict();
+export const ReworkOrderParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const ReworkOrdersQuerySchema = z.object({
+  status: ReworkOrderStatusSchema.optional(),
+}).strict();
+export const ReworkOrderResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkNo: z.string().nullable(),
+  status: ReworkOrderStatusSchema,
+  styleNo: z.string().nullable(),
+  orderNo: z.string().nullable(),
+  merchandiserUserId: IdSchema.nullable(),
+  processingFactory: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("own_factory") }).strict(),
+    z.object({
+      type: z.literal("supplier"),
+      supplierId: IdSchema,
+      supplierVersion: z.number().int().positive(),
+    }).strict(),
+  ]).nullable(),
+  problemPart: z.string().nullable(),
+  problemDescription: z.string().nullable(),
+  reworkQuantity: z.number().int().positive().nullable(),
+  attachmentIds: z.array(IdSchema),
+  hasOtherOpenStyleOrder: z.boolean(),
+  version: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  submittedAt: z.string().datetime().nullable(),
+  cancelledAt: z.string().datetime().nullable(),
+  cancelReason: z.string().nullable(),
+});
+export const ReworkInitiationOptionsResponseSchema = z.object({
+  merchandisers: z.array(z.object({
+    userId: IdSchema,
+    displayName: z.string().min(1),
+  }).strict()),
+  factories: z.array(z.object({
+    supplierId: IdSchema,
+    supplierVersion: z.number().int().positive(),
+    supplierName: z.string().min(1),
+  }).strict()),
+});
+
+export type ReworkOrderStatus = z.infer<typeof ReworkOrderStatusSchema>;
+export type ReworkProcessingFactory = z.infer<typeof ReworkProcessingFactorySchema>;
+export type CreateReworkDraft = z.infer<typeof CreateReworkDraftSchema>;
+export type UpdateReworkDraft = z.infer<typeof UpdateReworkDraftSchema>;
+export type SubmitReworkOrder = z.infer<typeof SubmitReworkOrderSchema>;
+export type TransitionReworkOrder = z.infer<typeof TransitionReworkOrderSchema>;
+export type ReworkOrderResponse = z.infer<typeof ReworkOrderResponseSchema>;
+export type ReworkInitiationOptionsResponse = z.infer<typeof ReworkInitiationOptionsResponseSchema>;

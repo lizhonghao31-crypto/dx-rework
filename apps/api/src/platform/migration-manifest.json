@@ -19,6 +19,10 @@
     {
       "version": "0005_access_master_data",
       "checksum": "13a8fff97ce6fd21ca5da835a4378576a5d28b8e4148b8115c9ac1cf97a51d47"
+    },
+    {
+      "version": "0006_rework_initiation",
+      "checksum": "290c5dfba0f67c0c1d3c20cd2cc3d6dd4b086bbec6c499e7f01fbaaeff5e4fd6"
     }
   ]
 }
