@@ -6,15 +6,16 @@ import {
   splitAmount,
 } from "../../apps/api/src/rework/work-reporting-service.js";
 import { canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
-import { reportAttempt } from "../../apps/web/src/work-reporting-submission.js";
+import { localDateTimeValue, reportAttempt, taskAttempt } from "../../apps/web/src/work-reporting-submission.js";
 import { describe, expect, it } from "vitest";
 
 describe("work reporting monetary snapshots", () => {
-  it("allocates the six-decimal residual deterministically so member shares equal the group total", () => {
+  it("allocates the eight-decimal residual deterministically so every valid collective share stays positive", () => {
     const shares = splitAmount(0.1, 3);
-    expect(shares).toEqual([0.033334, 0.033333, 0.033333]);
-    expect(shares.reduce((total, share) => total + share, 0)).toBeCloseTo(0.1, 8);
+    expect(shares).toEqual([0.03333334, 0.03333333, 0.03333333]);
+    expect(shares.reduce((total, share) => total + share, 0)).toBeCloseTo(0.1, 10);
     expect(splitAmount(0.001, 40)).toEqual(Array.from({ length: 40 }, () => 0.000025));
+    expect(splitAmount(0.00001, 40)).toEqual(Array.from({ length: 40 }, () => 0.00000025));
   });
 
   it("validates hour quantities and calculates report amounts from decimal values rather than binary products", () => {
@@ -42,5 +43,18 @@ describe("work reporting monetary snapshots", () => {
       signature: JSON.stringify({ ...payload, actualQuantity: 2 }),
       key: "changed-key",
     });
+  });
+
+  it("reuses task assignment keys across uncertain responses and initializes local wall time", () => {
+    const payload = {
+      expectedOrderVersion: 2,
+      configurationItemId: "00000000-0000-4000-8000-000000000011",
+      mode: "individual" as const,
+      members: [{ personId: "00000000-0000-4000-8000-000000000010" }],
+    };
+    const first = taskAttempt(undefined, payload, () => "task-key");
+    expect(taskAttempt(first, payload, () => "new-task-key")).toEqual(first);
+    expect(taskAttempt(first, { ...payload, members: [] }, () => "changed-task-key")).toMatchObject({ key: "changed-task-key" });
+    expect(localDateTimeValue(new Date(2026, 7, 2, 22, 3, 4))).toBe("2026-08-02T22:03");
   });
 });
