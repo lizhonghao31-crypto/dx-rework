@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { hasPageAccess } from "../../apps/web/src/auth.js";
 import {
   executeReworkSubmit,
+  isReworkFormMutationAllowed,
   type PendingSubmitAttempt,
 } from "../../apps/web/src/rework-submission.js";
 
@@ -76,6 +77,29 @@ describe("PR-05 web behavior", () => {
     expect(persistDraft).toHaveBeenCalledOnce();
     expect(createAttempt).toHaveBeenCalledWith(saved);
     expect(send).toHaveBeenCalledWith(attempt);
+  });
+
+  it("blocks every form mutation until an existing draft has finished restoring", () => {
+    expect(isReworkFormMutationAllowed({
+      busy: false,
+      uploading: false,
+      restoringDraft: true,
+    })).toBe(false);
+    expect(isReworkFormMutationAllowed({
+      busy: true,
+      uploading: false,
+      restoringDraft: false,
+    })).toBe(false);
+    expect(isReworkFormMutationAllowed({
+      busy: false,
+      uploading: true,
+      restoringDraft: false,
+    })).toBe(false);
+    expect(isReworkFormMutationAllowed({
+      busy: false,
+      uploading: false,
+      restoringDraft: false,
+    })).toBe(true);
   });
 
   it("requires both the QC role and initiation capability only on the QC page", () => {
