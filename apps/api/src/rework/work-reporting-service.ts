@@ -35,7 +35,7 @@ const hash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope, payload })).digest("hex");
 const numberValue = (value: string | number): number => Number(value);
 type Decimal = Readonly<{ units: bigint; scale: number }>;
-const MONEY_SCALE = 6;
+const MONEY_SCALE = 8;
 
 const decimal = (value: string | number): Decimal => {
   const match = /^([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(String(value));
