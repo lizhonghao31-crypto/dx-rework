@@ -51,8 +51,8 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     attachments,
     exports: new ExportJobService(database),
-    canDownloadBoundAttachment: (actorId, binding) =>
-      reworkService.canDownloadBoundAttachment(actorId, binding),
+    canDownloadBoundAttachment: (actor, binding) =>
+      reworkService.canDownloadBoundAttachment(actor, binding),
   },
   rework: {
     authenticate: (token) => auth.authenticate(token),
