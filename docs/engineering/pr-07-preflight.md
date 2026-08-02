@@ -28,3 +28,17 @@ forbidden files: 0001–0007 历史迁移、领域状态机定义、设计 token
 ```
 
 - 回滚：未部署时关闭 PR；已部署时保留任务、上数与金额快照事实，仅通过前向补丁停用入口，不删除业务记录。
+
+
+## 第五轮 Codex Review 修复预检
+
+```text
+repository: lizhonghao31-crypto/dx-rework
+base branch: main
+base SHA: 2dd6fb538a64e1319231d7064fd3a0d7d4c63090
+working branch: codex/pr-07-worker-assignment-reporting
+current review head: c8bb823d584efae083fec0d091b4174b5480e073
+task scope: 修复授权人员临时工代录、按任务隔离上数草稿、前后端上数资格一致和完工时间输入校验
+allowed files: apps/api/src/tools/repositories.ts, apps/api/src/rework/work-reporting-routes.ts, apps/api/src/rework/work-reporting-service.ts, apps/web/src/App.tsx, apps/web/src/work-reporting-form.tsx, apps/web/src/work-reporting-submission.ts, packages/contracts/src/index.ts, tests/integration/work-reporting-routes.test.ts, tests/integration/work-reporting-postgres.test.ts, tests/unit/work-reporting.test.ts, docs/engineering/pr-07-preflight.md
+forbidden files: 0001–0007 历史迁移、领域状态机定义、设计 token、生产配置、PR-08 及后续的审核/责任/工资模块
+```
