@@ -44,3 +44,20 @@ forbidden files: 历史迁移、ERP、生产部署、钉钉配置、PR-07及以�
 - P1：按十进制表示截位，禁止二进制浮点乘除造成合法单价或工时少一位最小精度。
 - P2：同名同单位自定义工序提升公共库前取得事务级顾问锁；锁内重新查询，确保并发审核只产生一个可选公共工序。
 - 回滚：未部署时关闭 PR；部署后仅前向修复，仍不改写历史迁移或审计数据。
+
+## Codex Review 修正预检（二次）
+
+```text
+repository: lizhonghao31-crypto/dx-rework
+base branch: main
+base SHA: 9109bb67395177c0d858988f50510c52b908a6fb
+working branch: codex/pr-06-process-configuration-ie-review
+task scope: 修复审核岗位分离与自定义工序多锁顺序死锁
+allowed files: apps/api/src/rework/process-configuration-service.ts、tests/integration/process-configuration-postgres.test.ts、tests/unit/process-configuration-decimal.test.ts、docs/engineering/pr-06-preflight.md
+forbidden files: 数据库迁移、前端/UI、领域状态机定义、生产配置、PR-07及以后模块
+```
+
+- P1：IE 审核人不得同时是该返工单发起人或当前配置创建人；拒绝不改变单据、配置、审计或目录数据。
+- P2：先标准化、去重并排序当前审核涉及的全部自定义工序锁键，再逐一取得事务级锁；锁内的目录查询及后续提升逻辑保持不变。
+- 回归：验证发起人、配置人两类审核拒绝；验证相反工序顺序的并发审核可完成且公共目录无重复项；并固定锁键去重、排序规则。
+- 回滚：未部署时关闭 PR；部署后仅前向修复，不改写历史迁移、审计、工序目录或返工数据。
