@@ -147,4 +147,32 @@ describe("process configuration routes", () => {
       "process-review-3",
     );
   });
+
+  it("uses the IE capability for review when a user holds both workstation roles", async () => {
+    const { app, service } = create(
+      ["tail_supervisor", "ie_reviewer"],
+      ["process:configure", "process:review"],
+    );
+    const result = await app.inject({
+      method: "POST",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/process-configuration/review",
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "process-review-both-roles" },
+      payload: {
+        expectedOrderVersion: 2,
+        expectedConfigurationVersion: 1,
+        decision: "approved",
+      },
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(service.review).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["tail_supervisor", "ie_reviewer"],
+        authorizationCapability: "process:review",
+      }),
+      "00000000-0000-4000-8000-000000000010",
+      expect.objectContaining({ decision: "approved" }),
+      "process-review-both-roles",
+    );
+  });
 });

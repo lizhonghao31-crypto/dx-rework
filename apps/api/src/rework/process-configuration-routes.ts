@@ -64,7 +64,9 @@ export function registerProcessConfigurationRoutes(
     return {
       actorId: user.id,
       actorRoles: user.businessRoles,
-      authorizationCapability: isSupervisor ? "process:configure" : "process:review",
+      authorizationCapability: mode === "review"
+        ? "process:review"
+        : isSupervisor ? "process:configure" : "process:review",
       requestId: request.id,
     };
   };
@@ -126,4 +128,3 @@ export function registerProcessConfigurationRoutes(
     },
   );
 }
-
