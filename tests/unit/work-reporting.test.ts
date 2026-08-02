@@ -6,7 +6,7 @@ import {
   splitAmount,
 } from "../../apps/api/src/rework/work-reporting-service.js";
 import { canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
-import { localDateTimeValue, reportAttempt, taskAttempt } from "../../apps/web/src/work-reporting-submission.js";
+import { localDateTimeValue, reportAttempt, taskAttempt, workReportDraft } from "../../apps/web/src/work-reporting-submission.js";
 import { describe, expect, it } from "vitest";
 
 describe("work reporting monetary snapshots", () => {
@@ -33,6 +33,10 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("request(\"work-task-options\"");
     expect(form).toContain("data && canAssign && <Surface>");
     expect(form).toContain("你的本次分摊 ¥");
+    expect(form).toContain("task.canSubmitReport");
+    expect(form).toContain("reportDrafts");
+    const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
+    expect(app).toContain('{ requiredCapability: "work:report_for_worker" }');
   });
 
   it("reuses the idempotency key only while a report payload remains unresolved", () => {
@@ -45,7 +49,12 @@ describe("work reporting monetary snapshots", () => {
     });
   });
 
-  it("reuses task assignment keys across uncertain responses and initializes local wall time", () => {
+  it("keeps report drafts separate by task and reuses task assignment keys across uncertain responses", () => {
+    const firstDraft = workReportDraft({}, "task-1", new Date(2026, 7, 2, 22, 3, 4));
+    const secondDraft = workReportDraft({ "task-1": { ...firstDraft, quantity: "1" } }, "task-2", new Date(2026, 7, 2, 22, 4, 4));
+    expect(firstDraft).toEqual({ quantity: "", completedAt: "2026-08-02T22:03" });
+    expect(secondDraft).toEqual({ quantity: "", completedAt: "2026-08-02T22:04" });
+
     const payload = {
       expectedOrderVersion: 2,
       configurationItemId: "00000000-0000-4000-8000-000000000011",
