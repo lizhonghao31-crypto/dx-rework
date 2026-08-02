@@ -4,6 +4,7 @@ import {
   IdempotencyKeySchema,
   ReworkWorkTasksParamsSchema,
   ReworkWorkTasksResponseSchema,
+  WorkTaskAssignablePeopleResponseSchema,
   WorkReportResponseSchema,
   WorkTaskParamsSchema,
   WorkTaskResponseSchema,
@@ -31,6 +32,7 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     return { actorId: user.id, actorRoles: user.businessRoles, authorizationCapability: mode === "assign" ? "work:assign" : mode === "report" ? proxy ? "work:report_for_worker" : "work:report" : supervisor ? "work:assign" : worker ? "work:report" : "work:report_for_worker", requestId: request.id };
   };
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request) => ReworkWorkTasksResponseSchema.parse(await dependencies.service.list(await actor(request, "read"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId)));
+  app.get("/work-task-options", async (request) => WorkTaskAssignablePeopleResponseSchema.parse({ people: await dependencies.service.listAssignablePeople(await actor(request, "assign")) }));
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request, reply) => { const result = await dependencies.service.createTask(await actor(request, "assign"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId, parse(CreateWorkTaskSchema, request.body), key(request)); if (result.reused) void reply.header("idempotency-replayed", "true"); return reply.code(201).send(WorkTaskResponseSchema.parse(result.value)); });
   app.post<{ Params: { workTaskId: string } }>("/work-tasks/:workTaskId/reports", async (request, reply) => { const result = await dependencies.service.submitReport(await actor(request, "report"), parse(WorkTaskParamsSchema, request.params).workTaskId, parse(CreateWorkReportSchema, request.body), key(request)); if (result.reused) void reply.header("idempotency-replayed", "true"); return reply.code(201).send(WorkReportResponseSchema.parse(result.value)); });
 }
