@@ -13,9 +13,10 @@ const components = read("../../packages/ui/src/components.css");
 const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
 const reworkForm = read("../../apps/web/src/rework-form.tsx");
+const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
 
 describe("PR-01A UI prototype contract", () => {
-  it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/piecework/collective", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
+  it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/process-configuration", "/ui/piecework/collective", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
   it("exports and explicitly imports reusable UI styles", () => {
     expect(existsSync(new URL("../../packages/ui/src/tokens.css", import.meta.url))).toBe(true);
     expect(existsSync(new URL("../../packages/ui/src/components.css", import.meta.url))).toBe(true);
@@ -81,5 +82,17 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkForm).toContain("取消返工单");
     expect(reworkForm).not.toContain("styleNos");
     expect(webCss).not.toContain("--dx-v2-color-primary:");
+  });
+  it("adds the PR-06 process page without replacing the established layout", () => {
+    expect(app).toContain("requiredAnyOf");
+    expect(app).toContain('requiredRole: "tail_supervisor"');
+    expect(app).toContain('requiredRole: "ie_reviewer"');
+    expect(processConfigurationForm).toContain('"rework-process-configurations/options"');
+    expect(processConfigurationForm).toContain("/process-configuration/draft");
+    expect(processConfigurationForm).toContain("/process-configuration/submit");
+    expect(processConfigurationForm).toContain("/process-configuration/review");
+    expect(processConfigurationForm).toContain("只舍不入");
+    expect(processConfigurationForm).toContain("驳回必须填写原因");
+    expect(webCss).toContain(".process-line__grid");
   });
 });

@@ -320,6 +320,7 @@ export class ReworkInitiationService {
       if (current.status !== "pending_process_configuration") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "只有待配置工序的返工单可以撤回", 409);
       }
+      await this.ensureNoProcessConfigurationStarted(client, reworkOrderId);
       const nextVersion = current.version + 1;
       const before = await this.auditState(client, current);
       const after = { ...before, status: "draft" as const, version: nextVersion };
@@ -360,6 +361,9 @@ export class ReworkInitiationService {
       const current = await this.lockOwned(client, actor.actorId, reworkOrderId);
       this.ensureVersion(current, input.expectedVersion);
       transitionReworkOrder(current.status, "cancelled");
+      if (current.status === "pending_process_configuration") {
+        await this.ensureNoProcessConfigurationStarted(client, reworkOrderId);
+      }
       const nextVersion = current.version + 1;
       const before = await this.auditState(client, current);
       const after = {
@@ -469,16 +473,27 @@ export class ReworkInitiationService {
     actor: Readonly<{ actorId: string; actorRoles: readonly string[]; capabilities: readonly string[] }>,
     binding: Readonly<{ entityType: string; entityId: string }>,
   ): Promise<boolean> {
-    if (
-      binding.entityType !== "rework_order"
-      || !actor.actorRoles.includes("quality_control")
-      || !actor.capabilities.includes("rework:initiate")
-    ) return false;
-    const result = await this.database.query(
-      "SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND created_by=$2",
-      [binding.entityId, actor.actorId],
+    if (binding.entityType !== "rework_order") return false;
+    const result = await this.database.query<{
+      created_by: string;
+      status: ReworkOrderStatus;
+    }>(
+      "SELECT created_by,status FROM rework_orders WHERE rework_order_id=$1",
+      [binding.entityId],
     );
-    return result.rowCount === 1;
+    const order = result.rows[0];
+    if (!order) return false;
+    const isOwnQcEvidence = actor.actorRoles.includes("quality_control")
+      && actor.capabilities.includes("rework:initiate")
+      && order.created_by === actor.actorId;
+    const isSupervisorConfigurationEvidence = actor.actorRoles.includes("tail_supervisor")
+      && actor.capabilities.includes("process:configure")
+      && order.status !== "draft"
+      && order.status !== "cancelled";
+    const isIeReviewEvidence = actor.actorRoles.includes("ie_reviewer")
+      && actor.capabilities.includes("process:review")
+      && order.status === "pending_ie_review";
+    return isOwnQcEvidence || isSupervisorConfigurationEvidence || isIeReviewEvidence;
   }
 
   private async mutate<T>(
@@ -612,6 +627,23 @@ export class ReworkInitiationService {
       throw new ApplicationError("FORBIDDEN", "只能查看和维护本人发起的返工单", 403);
     }
     return row;
+  }
+
+  private async ensureNoProcessConfigurationStarted(
+    client: PoolClient,
+    reworkOrderId: string,
+  ): Promise<void> {
+    const configuration = await client.query(
+      "SELECT 1 FROM rework_process_configurations WHERE rework_order_id=$1 LIMIT 1 FOR SHARE",
+      [reworkOrderId],
+    );
+    if (configuration.rowCount !== 0) {
+      throw new ApplicationError(
+        "INVALID_STATE_TRANSITION",
+        "尾部主管已开始配置工序，品控不能再撤回或取消该返工单",
+        409,
+      );
+    }
   }
 
   private async getOwnedWithClient(

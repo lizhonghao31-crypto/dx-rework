@@ -87,7 +87,12 @@ export const transitionOutbox = (from: OutboxStatus, to: OutboxStatus): OutboxSt
 export const transitionExportJob = (from: ExportJobStatus, to: ExportJobStatus): ExportJobStatus =>
   transitions<ExportJobStatus>({ pending: ["running"], running: ["succeeded", "failed"], succeeded: [], failed: [] }, from, to);
 
-export type ReworkOrderStatus = "draft" | "pending_process_configuration" | "cancelled";
+export type ReworkOrderStatus =
+  | "draft"
+  | "pending_process_configuration"
+  | "pending_ie_review"
+  | "pending_task_assignment"
+  | "cancelled";
 
 export const transitionReworkOrder = (
   from: ReworkOrderStatus,
@@ -95,7 +100,9 @@ export const transitionReworkOrder = (
 ): ReworkOrderStatus =>
   transitions<ReworkOrderStatus>({
     draft: ["draft", "pending_process_configuration", "cancelled"],
-    pending_process_configuration: ["draft", "cancelled"],
+    pending_process_configuration: ["draft", "pending_ie_review", "cancelled"],
+    pending_ie_review: ["pending_process_configuration", "pending_task_assignment"],
+    pending_task_assignment: ["pending_ie_review"],
     cancelled: [],
   }, from, to);
 

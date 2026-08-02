@@ -15,6 +15,7 @@ import { ExportJobService } from "./tools/exports.js";
 import { DisabledObjectStorage } from "./tools/storage.js";
 import { AccessMasterDataService } from "./access/service.js";
 import { ReworkInitiationService } from "./rework/service.js";
+import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -38,6 +39,7 @@ const attachments = new AttachmentService(database, storage, {
   maxUploadBytes: config.objectStorage.maxUploadBytes,
 });
 const reworkService = new ReworkInitiationService(database, config.dingtalk.corpId);
+const processConfigurationService = new ProcessConfigurationService(database);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -57,6 +59,10 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+  },
+  processConfiguration: {
+    authenticate: (token) => auth.authenticate(token),
+    service: processConfigurationService,
   },
 });
 registerDatabasePoolErrorHandler(database, app.log);

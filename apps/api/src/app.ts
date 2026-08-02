@@ -18,6 +18,10 @@ import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/sch
 import { registerToolsRoutes, type ToolsHttpDependencies } from "./tools/routes.js";
 import { registerAccessRoutes, type AccessHttpDependencies } from "./access/routes.js";
 import { registerReworkRoutes, type ReworkHttpDependencies } from "./rework/routes.js";
+import {
+  registerProcessConfigurationRoutes,
+  type ProcessConfigurationHttpDependencies,
+} from "./rework/process-configuration-routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -27,6 +31,7 @@ export type AppDependencies = Readonly<{
   tools?: ToolsHttpDependencies;
   access?: AccessHttpDependencies;
   rework?: ReworkHttpDependencies;
+  processConfiguration?: ProcessConfigurationHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -84,6 +89,9 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
   if (dependencies.access) registerAccessRoutes(app, dependencies.access);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);
+  if (dependencies.processConfiguration) {
+    registerProcessConfigurationRoutes(app, dependencies.processConfiguration);
+  }
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {
