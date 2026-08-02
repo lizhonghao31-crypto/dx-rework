@@ -75,3 +75,94 @@ export type DownloadIntentResponse = z.infer<typeof DownloadIntentResponseSchema
 export type AttachmentResponse = z.infer<typeof AttachmentResponseSchema>;
 export type CreateExportJob = z.infer<typeof CreateExportJobSchema>;
 export type ExportJobResponse = z.infer<typeof ExportJobResponseSchema>;
+
+export const CapabilitySchema = z.string().regex(/^[a-z][a-z0-9:_-]{2,127}$/);
+export const RoleCodeSchema = z.string().regex(/^[a-z][a-z0-9:_-]{2,63}$/);
+export const CatalogCodeSchema = z.string().regex(/^[A-Z0-9][A-Z0-9_-]{1,31}$/);
+const ReasonSchema = z.string().trim().min(1).max(500);
+
+export const AssignRoleSchema = z.object({
+  userId: IdSchema,
+  roleCode: RoleCodeSchema,
+  reason: ReasonSchema,
+}).strict();
+export const RoleAssignmentParamsSchema = z.object({ assignmentId: IdSchema }).strict();
+export const RevokeAccessSchema = z.object({ reason: ReasonSchema }).strict();
+export const RoleAssignmentsQuerySchema = z.object({
+  userId: IdSchema.optional(),
+  includeRevoked: z.enum(["true", "false"]).optional(),
+}).strict();
+
+const PersonBaseSchema = z.object({
+  displayName: z.string().trim().min(1).max(100),
+  aliases: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
+  reason: ReasonSchema,
+});
+export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
+  PersonBaseSchema.extend({ personType: z.literal("internal"), appUserId: IdSchema }).strict(),
+  PersonBaseSchema.extend({ personType: z.literal("temporary") }).strict(),
+]);
+export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
+export const PersonAliasParamsSchema = z.object({ aliasId: IdSchema }).strict();
+export const CreatePersonAliasSchema = z.object({
+  alias: z.string().trim().min(1).max(100),
+  reason: ReasonSchema,
+}).strict();
+
+export const CreateProcessSchema = z.object({
+  processCode: CatalogCodeSchema,
+  processName: z.string().trim().min(1).max(100),
+  pricingUnit: z.enum(["piece", "hour"]),
+  active: z.boolean().default(true),
+  changeReason: ReasonSchema,
+}).strict();
+export const ReviseProcessSchema = CreateProcessSchema.omit({ processCode: true });
+export const ProcessParamsSchema = z.object({ processId: IdSchema }).strict();
+
+export const CreateSupplierSchema = z.object({
+  supplierCode: CatalogCodeSchema,
+  supplierType: z.enum(["factory", "embroidery_washing", "fabric", "other"]),
+  supplierName: z.string().trim().min(1).max(200),
+  active: z.boolean().default(true),
+  changeReason: ReasonSchema,
+}).strict();
+export const ReviseSupplierSchema = CreateSupplierSchema.omit({ supplierCode: true, supplierType: true });
+export const SupplierParamsSchema = z.object({ supplierId: IdSchema }).strict();
+
+export const CreateDelegationSchema = z.object({
+  grantorUserId: IdSchema,
+  granteeUserId: IdSchema,
+  capability: CapabilitySchema,
+  scopeType: z.enum(["global", "rework_order", "process", "supplier"]),
+  scopeId: z.string().trim().min(1).max(200).optional(),
+  validFrom: z.string().datetime(),
+  validUntil: z.string().datetime(),
+  reason: ReasonSchema,
+}).strict().superRefine((value, context) => {
+  if ((value.scopeType === "global") !== (value.scopeId === undefined)) {
+    context.addIssue({ code: "custom", path: ["scopeId"], message: "Global scope must omit scopeId; non-global scope must provide it" });
+  }
+  if (Date.parse(value.validUntil) <= Date.parse(value.validFrom)) {
+    context.addIssue({ code: "custom", path: ["validUntil"], message: "validUntil must be later than validFrom" });
+  }
+});
+export const DelegationParamsSchema = z.object({ delegationId: IdSchema }).strict();
+export const DelegationsQuerySchema = z.object({
+  userId: IdSchema.optional(),
+  includeRevoked: z.enum(["true", "false"]).optional(),
+}).strict();
+export const CatalogListQuerySchema = z.object({
+  includeInactive: z.enum(["true", "false"]).optional(),
+}).strict();
+export const PeopleListQuerySchema = CatalogListQuerySchema.extend({
+  includeRevokedAliases: z.enum(["true", "false"]).optional(),
+}).strict();
+
+export type AssignRole = z.infer<typeof AssignRoleSchema>;
+export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
+export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
+export type CreateProcess = z.infer<typeof CreateProcessSchema>;
+export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
+export type CreateSupplier = z.infer<typeof CreateSupplierSchema>;
+export type ReviseSupplier = z.infer<typeof ReviseSupplierSchema>;
+export type CreateDelegation = z.infer<typeof CreateDelegationSchema>;

@@ -13,6 +13,7 @@ import {
 import { AttachmentService } from "./tools/attachments.js";
 import { ExportJobService } from "./tools/exports.js";
 import { DisabledObjectStorage } from "./tools/storage.js";
+import { AccessMasterDataService } from "./access/service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -24,7 +25,10 @@ const database = new Pool({
   idleTimeoutMillis: 30_000,
 });
 
-const auth = new AuthService(new OfficialDingTalkProvider(config.dingtalk), new PostgresAuthStore(database), config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret);
+const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
+const accessService = new AccessMasterDataService(database, config.dingtalk.corpId);
+await accessService.ensureOrganizationPolicy();
+const auth = new AuthService(new OfficialDingTalkProvider(config.dingtalk), authStore, config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret);
 const storage = new DisabledObjectStorage();
 if (config.objectStorage.enabled) throw new Error("OSS is configured but the official Aliyun OSS SDK client has not been injected");
 const app = buildApp({
@@ -32,6 +36,10 @@ const app = buildApp({
   checkDatabase: () => checkDatabase(database),
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
   auth,
+  access: {
+    authenticate: (token) => auth.authenticate(token),
+    service: accessService,
+  },
   tools: {
     authenticate: (token) => auth.authenticate(token),
     attachments: new AttachmentService(database, storage, { prefix: config.objectStorage.privatePrefix, ttlSeconds: config.objectStorage.signedUrlTtlSeconds, maxUploadBytes: config.objectStorage.maxUploadBytes }),
