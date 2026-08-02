@@ -275,9 +275,9 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
            action,entity_type,entity_id,after_state
          ) VALUES(
            $1,$2,$3,ARRAY['quality_control'],'rework:initiate',
-           'rework.draft.update','rework_order',$4,
+           'rework.draft.update','rework_order',$4::text,
            jsonb_build_object(
-             'reworkOrderId',$4,'reworkNo',NULL,'status','draft',
+             'reworkOrderId',$4::text,'reworkNo',NULL,'status','draft',
              'styleNo','PD20611309','orderNo',NULL,'merchandiserUserId',NULL,
              'processingFactory',NULL,'problemPart',NULL,
              'problemDescription','已审计的问题描述','reworkQuantity',NULL,
