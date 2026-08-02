@@ -46,6 +46,7 @@ type ConfigurationRow = Readonly<{
   status: "draft" | "pending_ie_review" | "approved" | "rejected" | "superseded";
   change_reason: string | null;
   review_reason: string | null;
+  created_by: string;
   created_at: Date;
   submitted_at: Date | null;
   reviewed_at: Date | null;
@@ -72,6 +73,22 @@ type PreparedItem = Readonly<{
   plannedQuantity: number;
   unitPrice: number;
 }>;
+
+type PromotionLockInput = Readonly<{
+  source: "catalog" | "custom";
+  processName: string;
+  pricingUnit: "piece" | "hour";
+}>;
+
+export const customPromotionLockKeys = (
+  items: readonly PromotionLockInput[],
+): string[] => Array.from(
+  new Set(
+    items
+      .filter((item) => item.source === "custom")
+      .map((item) => "dx_rework:custom-process:" + item.processName.toLocaleLowerCase("zh-CN") + ":" + item.pricingUnit),
+  ),
+).sort();
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -316,6 +333,9 @@ export class ProcessConfigurationService {
       if (!configuration || configuration.status !== "pending_ie_review" || configuration.configuration_version !== input.expectedConfigurationVersion) {
         throw new ApplicationError("CONFLICT", "待审核工序配置已发生变化，请刷新后处理", 409);
       }
+      if (order.created_by === actor.actorId || configuration.created_by === actor.actorId) {
+        throw new ApplicationError("FORBIDDEN", "IE审核人不得是返工单发起人或当前工序配置人", 403);
+      }
       const items = await this.items(client, configuration.configuration_id);
       const approved = input.decision === "approved";
       const nextStatus = approved
@@ -480,13 +500,17 @@ export class ProcessConfigurationService {
     client: PoolClient,
     items: readonly ConfigurationItemRow[],
   ): Promise<Array<{ configurationItemId: string; processId: string; processCode: string }>> {
+    const customItems = items.filter((item) => item.source === "custom");
+    for (const lockKey of customPromotionLockKeys(customItems.map((item) => ({
+      source: item.source,
+      processName: item.process_name,
+      pricingUnit: item.pricing_unit,
+    })))) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [lockKey]);
+    }
+
     const promotions: Array<{ configurationItemId: string; processId: string; processCode: string }> = [];
-    for (const item of items) {
-      if (item.source !== "custom") continue;
-      await client.query(
-        "SELECT pg_advisory_xact_lock(hashtext('dx_rework:custom-process:' || lower($1) || ':' || $2))",
-        [item.process_name, item.pricing_unit],
-      );
+    for (const item of customItems) {
       const exists = await client.query(
         "SELECT 1 FROM current_process_catalog WHERE lower(process_name)=lower($1) AND pricing_unit=$2 AND active=true",
         [item.process_name, item.pricing_unit],
