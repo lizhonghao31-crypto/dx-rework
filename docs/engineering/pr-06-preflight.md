@@ -29,3 +29,18 @@ forbidden files: ERP、生产部署、钉钉配置、PR-07分工/上数/计件�
 
 未部署时关闭PR即可。0007一旦应用，不修改历史迁移；仅通过后续前向迁移停用入口或修复结构。不得删除返工单、配置版本、IE意见、公共工序映射、附件、审计事件或发件箱记录。
 
+## Codex Review 修正预检
+
+```text
+repository: lizhonghao31-crypto/dx-rework
+base branch: main
+base SHA: 9109bb67395177c0d858988f50510c52b908a6fb
+working branch: codex/pr-06-process-configuration-ie-review
+task scope: 修复 Codex Review 的 P1 十进制截位与 P2 自定义工序并发去重
+allowed files: apps/api/src/rework/process-configuration-service.ts、tests/unit/process-configuration-decimal.test.ts、tests/integration/process-configuration-postgres.test.ts、docs/engineering/pr-06-preflight.md
+forbidden files: 历史迁移、ERP、生产部署、钉钉配置、PR-07及以后业务、设计 token、既有页面布局
+```
+
+- P1：按十进制表示截位，禁止二进制浮点乘除造成合法单价或工时少一位最小精度。
+- P2：同名同单位自定义工序提升公共库前取得事务级顾问锁；锁内重新查询，确保并发审核只产生一个可选公共工序。
+- 回滚：未部署时关闭 PR；部署后仅前向修复，仍不改写历史迁移或审计数据。
