@@ -113,10 +113,10 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
         customProcessName: "特殊翻边返修",
         pricingUnit: "piece",
         plannedQuantity: 281,
-        unitPrice: 0.5569,
+        unitPrice: 1.005,
       }],
     }, randomUUID());
-    expect(draft.value.configuration?.items[0]?.unitPrice).toBe(0.556);
+    expect(draft.value.configuration?.items[0]?.unitPrice).toBe(1.005);
     const draftAgain = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
       expectedOrderVersion: draft.value.orderVersion,
       items: [{
@@ -124,7 +124,7 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
         customProcessName: "特殊翻边返修",
         pricingUnit: "piece",
         plannedQuantity: 281,
-        unitPrice: 0.5569,
+        unitPrice: 1.005,
       }],
     }, "stable-process-draft");
     const replay = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
@@ -134,7 +134,7 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
         customProcessName: "特殊翻边返修",
         pricingUnit: "piece",
         plannedQuantity: 281,
-        unitPrice: 0.5569,
+        unitPrice: 1.005,
       }],
     }, "stable-process-draft");
     expect(replay.reused).toBe(true);
@@ -171,7 +171,7 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
         source: "custom",
         customProcessName: "压线返修",
         pricingUnit: "hour",
-        plannedQuantity: 2.239,
+        plannedQuantity: 1.15,
         unitPrice: 8.1269,
       }],
     }, randomUUID());
@@ -184,6 +184,7 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
       expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
       decision: "approved",
     }, randomUUID());
+    expect(approved.value.configuration?.items[0]?.plannedQuantity).toBe(1.15);
 
     const change = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
       expectedOrderVersion: approved.value.orderVersion,
@@ -216,5 +217,85 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
       "SELECT count(*)::int count FROM rework_process_configurations WHERE rework_order_id=$1 AND status='approved'",
       [submitted.value.reworkOrderId],
     )).rows[0]?.count).toBe(1);
+  });
+
+  it("serializes simultaneous same-name custom promotions into one public process", async () => {
+    const [firstOrder, secondOrder] = await Promise.all([submittedOrder(), submittedOrder()]);
+    const [firstDraft, secondDraft] = await Promise.all([
+      configuration.saveDraft(tail(), firstOrder.value.reworkOrderId, {
+        expectedOrderVersion: firstOrder.value.version,
+        items: [{
+          source: "custom",
+          customProcessName: "并发共享工序",
+          pricingUnit: "piece",
+          plannedQuantity: 10,
+          unitPrice: 1.005,
+        }],
+      }, randomUUID()),
+      configuration.saveDraft(tail(), secondOrder.value.reworkOrderId, {
+        expectedOrderVersion: secondOrder.value.version,
+        items: [{
+          source: "custom",
+          customProcessName: "并发共享工序",
+          pricingUnit: "piece",
+          plannedQuantity: 10,
+          unitPrice: 1.005,
+        }],
+      }, randomUUID()),
+    ]);
+    const [firstQueued, secondQueued] = await Promise.all([
+      configuration.submit(tail(), firstOrder.value.reworkOrderId, {
+        expectedOrderVersion: firstDraft.value.orderVersion,
+        expectedConfigurationVersion: firstDraft.value.configuration!.configurationVersion,
+      }, randomUUID()),
+      configuration.submit(tail(), secondOrder.value.reworkOrderId, {
+        expectedOrderVersion: secondDraft.value.orderVersion,
+        expectedConfigurationVersion: secondDraft.value.configuration!.configurationVersion,
+      }, randomUUID()),
+    ]);
+
+    const blocker = await database.connect();
+    let transactionOpen = false;
+    try {
+      await blocker.query("BEGIN");
+      transactionOpen = true;
+      await blocker.query(
+        "SELECT pg_advisory_xact_lock(hashtext('dx_rework:custom-process:' || lower($1) || ':' || $2))",
+        ["并发共享工序", "piece"],
+      );
+      let completed = false;
+      const reviews = Promise.all([
+        configuration.review(ie(), firstOrder.value.reworkOrderId, {
+          expectedOrderVersion: firstQueued.value.orderVersion,
+          expectedConfigurationVersion: firstQueued.value.configuration!.configurationVersion,
+          decision: "approved",
+        }, randomUUID()),
+        configuration.review(ie(), secondOrder.value.reworkOrderId, {
+          expectedOrderVersion: secondQueued.value.orderVersion,
+          expectedConfigurationVersion: secondQueued.value.configuration!.configurationVersion,
+          decision: "approved",
+        }, randomUUID()),
+      ]).then((result) => {
+        completed = true;
+        return result;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(completed).toBe(false);
+      await blocker.query("COMMIT");
+      transactionOpen = false;
+
+      const approved = await reviews;
+      expect(approved.map((result) => result.value.reworkStatus)).toEqual([
+        "pending_task_assignment",
+        "pending_task_assignment",
+      ]);
+      expect((await database.query(
+        "SELECT 1 FROM current_process_catalog WHERE lower(process_name)=lower($1) AND pricing_unit=$2 AND active=true",
+        ["并发共享工序", "piece"],
+      )).rowCount).toBe(1);
+    } finally {
+      if (transactionOpen) await blocker.query("ROLLBACK");
+      blocker.release();
+    }
   });
 });
