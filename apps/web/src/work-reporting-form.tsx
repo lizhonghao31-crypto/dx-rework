@@ -53,7 +53,7 @@ export function WorkReportingForm() {
       const result = await request("work-tasks/" + taskId + "/reports", WorkReportResponseSchema.parse, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(payload) });
       await reload();
       delete reportAttempts.current[taskId];
-      setReportDrafts((current) => { const { [taskId]: _completed, ...remaining } = current; return remaining; });
+      setReportDrafts((current) => { const remaining = { ...current }; delete remaining[taskId]; return remaining; });
       const share = personalShare(result);
       setMessage(result.groupAmount === null && share !== undefined ? "上数已提交：你的本次分摊 ¥" + share.toFixed(8) + "。" : result.groupAmount === null ? "上数已提交；你的个人分摊已生成。" : "上数已提交：组总额 ¥" + result.groupAmount.toFixed(8) + "；成员快照分摊已生成，不会因后续换人反算。");
     } catch (cause) {
