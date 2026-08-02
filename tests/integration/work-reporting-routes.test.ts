@@ -28,6 +28,7 @@ const create = (
 ) => {
   const service = {
     list: vi.fn(async () => ({ reworkOrderId: orderId, reworkStatus: "in_progress", orderVersion: 2, tasks: [] })),
+    listAssignablePeople: vi.fn(async () => [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" as const }]),
     createTask: vi.fn(),
     submitReport: vi.fn(async (_actor, submittedTaskId) => ({
       value: {
@@ -60,6 +61,15 @@ const create = (
 };
 
 describe("work reporting routes", () => {
+  it("exposes only server-filtered assignees to a supervisor", async () => {
+    const { app, service } = create(["tail_supervisor"], ["work:assign"]);
+    const response = await app.inject({ method: "GET", url: "/work-task-options", headers: { cookie: "dx_rework_session=trusted" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ people: [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" }] });
+    expect(service.listAssignablePeople).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "work:assign" }));
+  });
+
   it("keeps temporary-worker proxy reporting available to a supervisor who also has the worker role", async () => {
     const { app, service } = create(
       ["tail_supervisor", "worker"],
