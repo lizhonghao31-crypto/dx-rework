@@ -125,3 +125,65 @@ END; $$;
 CREATE TRIGGER rework_work_report_member_shares_guard_insert BEFORE INSERT ON rework_work_report_member_shares FOR EACH ROW EXECUTE FUNCTION guard_rework_work_report_share_insert();
 CREATE TRIGGER rework_work_report_member_shares_no_update BEFORE UPDATE ON rework_work_report_member_shares FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER rework_work_report_member_shares_no_delete BEFORE DELETE ON rework_work_report_member_shares FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+
+-- Collective tasks may contain up to forty people. Six decimals preserve every
+-- positive share when a three-decimal unit price is divided across the group.
+ALTER TABLE rework_work_reports ALTER COLUMN group_amount TYPE numeric(14,6);
+ALTER TABLE rework_work_report_member_shares ALTER COLUMN amount TYPE numeric(14,6);
+
+CREATE OR REPLACE FUNCTION guard_rework_order_write() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.rework_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.rework_request_id', true), '');
+  expected_action text;
+  expected_capability text;
+  audit_actor_id uuid;
+BEGIN
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN RAISE EXCEPTION 'rework order write requires trusted audit context' USING ERRCODE='55000'; END IF;
+  IF TG_OP='INSERT' THEN
+    IF NEW.status<>'draft' OR NEW.version<>1 OR NEW.rework_no IS NOT NULL OR NEW.submitted_at IS NOT NULL
+       OR NEW.created_by<>NEW.updated_by OR NEW.source_system<>'manual' OR NEW.external_id IS NOT NULL
+       OR NEW.external_idempotency_key IS NOT NULL OR NEW.erp_node_id IS NOT NULL
+    THEN RAISE EXCEPTION 'new manual rework orders must start as an unsubmitted draft' USING ERRCODE='23514'; END IF;
+    expected_action := 'rework.draft.create'; expected_capability := 'rework:initiate'; audit_actor_id := NEW.created_by;
+  ELSE
+    IF NEW.rework_order_id IS DISTINCT FROM OLD.rework_order_id OR NEW.created_by IS DISTINCT FROM OLD.created_by
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at OR NEW.source_system IS DISTINCT FROM OLD.source_system
+       OR NEW.external_id IS DISTINCT FROM OLD.external_id OR NEW.external_idempotency_key IS DISTINCT FROM OLD.external_idempotency_key
+       OR NEW.erp_node_id IS DISTINCT FROM OLD.erp_node_id OR NEW.version<>OLD.version+1
+    THEN RAISE EXCEPTION 'stable rework order identity and origin fields are immutable' USING ERRCODE='55000'; END IF;
+    IF OLD.rework_no IS NOT NULL AND NEW.rework_no IS DISTINCT FROM OLD.rework_no THEN RAISE EXCEPTION 'allocated rework number is immutable' USING ERRCODE='55000'; END IF;
+    IF OLD.submitted_at IS NOT NULL AND NEW.submitted_at IS DISTINCT FROM OLD.submitted_at THEN RAISE EXCEPTION 'first submission timestamp is immutable' USING ERRCODE='55000'; END IF;
+    IF OLD.status='draft' AND NEW.status='draft' THEN expected_action := 'rework.draft.update'; expected_capability := 'rework:initiate';
+    ELSIF OLD.status='draft' AND NEW.status='pending_process_configuration' THEN expected_action := 'rework.submit'; expected_capability := 'rework:initiate';
+    ELSIF OLD.status='pending_process_configuration' AND NEW.status='draft' THEN expected_action := 'rework.withdraw'; expected_capability := 'rework:initiate';
+    ELSIF OLD.status='pending_process_configuration' AND NEW.status='pending_ie_review' THEN expected_action := 'rework.process_configuration.submit'; expected_capability := 'process:configure';
+    ELSIF OLD.status='pending_process_configuration' AND NEW.status='pending_process_configuration' THEN expected_action := 'rework.process_configuration.save'; expected_capability := 'process:configure';
+    ELSIF OLD.status='pending_ie_review' AND NEW.status='pending_process_configuration' THEN expected_action := 'rework.process_configuration.review'; expected_capability := 'process:review';
+    ELSIF OLD.status='pending_ie_review' AND NEW.status='pending_task_assignment' THEN expected_action := 'rework.process_configuration.review'; expected_capability := 'process:review';
+    ELSIF OLD.status='pending_task_assignment' AND NEW.status='pending_ie_review' THEN expected_action := 'rework.process_configuration.submit'; expected_capability := 'process:configure';
+    ELSIF OLD.status='pending_task_assignment' AND NEW.status='pending_task_assignment' THEN expected_action := 'rework.process_configuration.save'; expected_capability := 'process:configure';
+    ELSIF OLD.status='pending_task_assignment' AND NEW.status='in_progress' THEN expected_action := 'rework.work_task.assign'; expected_capability := 'work:assign';
+    ELSIF OLD.status='in_progress' AND NEW.status='pending_order_review' THEN expected_action := 'rework.work_report.submit'; expected_capability := 'work:report';
+    ELSIF OLD.status IN ('draft','pending_process_configuration') AND NEW.status='cancelled' THEN expected_action := 'rework.cancel'; expected_capability := 'rework:initiate';
+    ELSE RAISE EXCEPTION 'invalid rework order state transition: % to %', OLD.status, NEW.status USING ERRCODE='23514'; END IF;
+    audit_actor_id := NEW.updated_by;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM operation_events event
+    WHERE event.event_id=audit_event_id::uuid AND event.request_id=audit_request_id AND event.actor_id=audit_actor_id
+      AND event.action=expected_action AND event.entity_type='rework_order' AND event.entity_id=NEW.rework_order_id::text
+      AND (event.authorization_capability=expected_capability OR (expected_action='rework.work_report.submit' AND event.authorization_capability IN ('work:report','work:report_for_worker')))
+      AND event.after_state @> jsonb_build_object(
+        'reworkOrderId',NEW.rework_order_id,'reworkNo',NEW.rework_no,'status',NEW.status,'styleNo',NEW.style_no,
+        'orderNo',NEW.order_no,'merchandiserUserId',NEW.merchandiser_user_id,
+        'processingFactory',CASE WHEN NEW.processing_factory_type IS NULL THEN NULL WHEN NEW.processing_factory_type='own_factory' THEN jsonb_build_object('type','own_factory') ELSE jsonb_build_object('type','supplier','supplierId',NEW.processing_factory_supplier_id,'supplierVersion',NEW.processing_factory_supplier_version) END,
+        'problemPart',NEW.problem_part,'problemDescription',NEW.problem_description,'reworkQuantity',NEW.rework_quantity,'version',NEW.version
+      )
+      AND (NEW.status<>'cancelled' OR (event.after_state->>'cancelReason'=NEW.cancel_reason AND NEW.cancelled_by=audit_actor_id))
+  ) THEN RAISE EXCEPTION 'rework order audit event does not match the write' USING ERRCODE='55000'; END IF;
+  RETURN NEW;
+END;
+$$;
