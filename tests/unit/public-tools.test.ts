@@ -7,6 +7,7 @@ import {
   FakeObjectStorage,
   ObjectStorageObjectNotFoundError,
 } from "../../apps/api/src/tools/storage.js";
+import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 
 class MemoryIdempotency {
@@ -195,5 +196,46 @@ describe("private object storage", () => {
     });
     await expect(storage.head("missing")).rejects.toBeInstanceOf(ObjectStorageObjectNotFoundError);
     await expect(storage.computeSha256("missing")).rejects.toBeInstanceOf(ObjectStorageObjectNotFoundError);
+  });
+});
+
+describe("bound evidence download authorization", () => {
+  const attachmentId = "00000000-0000-4000-8000-000000000001";
+  const uploaderId = "00000000-0000-4000-8000-000000000099";
+  const boundRow = {
+    attachment_id: attachmentId,
+    object_key: "private/evidence.pdf",
+    original_filename: "evidence.pdf",
+    mime_type: "application/pdf",
+    size_bytes: "12",
+    sha256: "a".repeat(64),
+    uploaded_by: uploaderId,
+    entity_type: "rework_order",
+    entity_id: "00000000-0000-4000-8000-000000000010",
+    status: "ready" as const,
+    created_at: new Date("2026-08-02T00:00:00.000Z"),
+  };
+
+  const service = () => {
+    const client = { query: async () => ({ rows: [], rowCount: 1 }), release: () => {} };
+    const pool = {
+      query: async () => ({ rows: [boundRow], rowCount: 1 }),
+      connect: async () => client,
+    };
+    const storage = {
+      createDownloadGrant: async () => ({ downloadUrl: "https://private.test/evidence", expiresAt: new Date(0).toISOString() }),
+    };
+    return new AttachmentService(pool as never, storage as never, { prefix: "private", ttlSeconds: 60, maxUploadBytes: 1024 });
+  };
+
+  it("does not let a bound evidence uploader bypass current rework authorization", async () => {
+    const actor = { actorId: uploaderId, actorRoles: ["tail_supervisor"], authorizationCapability: "tools:user", requestId: "attachment-download-1" };
+    await expect(service().createDownloadIntent(actor, attachmentId, async () => false)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      statusCode: 403,
+    });
+    await expect(service().createDownloadIntent(actor, attachmentId, async (binding) => binding.entityType === "rework_order")).resolves.toMatchObject({
+      downloadUrl: "https://private.test/evidence",
+    });
   });
 });
