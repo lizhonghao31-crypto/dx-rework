@@ -203,7 +203,9 @@ export class WorkReportingService {
       if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
       const members = await this.members(client, task.work_task_id);
       const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
-      if (!this.canSubmitReport(actor, members)) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
+      const reportingCapability = this.reportCapability(actor, members);
+      if (!reportingCapability) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
+      const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability };
       if (task.pricing_unit === "piece" && !Number.isInteger(input.actualQuantity)) error("按件计价的上数必须为整数", 400, "VALIDATION_ERROR");
       if (task.pricing_unit === "hour" && !hasAtMostDecimalPlaces(input.actualQuantity, 2)) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
       const completedAt = new Date(input.completedAt);
@@ -243,7 +245,7 @@ export class WorkReportingService {
         after: { ...this.orderAuditState(order, completedOrder ? "pending_order_review" : order.status, completedOrder ? order.version + 1 : order.version), workReportId: reportId, workTaskId, actualQuantity: input.actualQuantity, groupAmount, memberIds: members.map((member) => member.person_id) },
         ...(input.remark ? { reason: input.remark } : {}),
       };
-      const eventId = await this.events.append(client, actor, event);
+      const eventId = await this.events.append(client, reportingActor, event);
       await this.context(client, eventId, actor.requestId);
       await client.query(
         "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
@@ -254,28 +256,121 @@ export class WorkReportingService {
         "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
         [task.rework_order_id, actor.actorId],
       );
-      const workerView = actor.actorRoles.includes("worker") && !actor.actorRoles.includes("tail_supervisor");
+      const workerView = reportingCapability === "work:report" && !this.isSupervisor(actor);
       const visibleShares = members.map((member, index) => ({ personId: member.person_id, amount: shares[index]! })).filter((share) => !workerView || share.personId === ownPerson?.person_id);
       return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount: workerView ? null : groupAmount, memberShares: visibleShares };
     });
   }
 
-  private canSubmitReport(actor: TrustedActorContext, members: readonly PersonRow[]): boolean {
-    const capabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
-    const ownWorker = actor.actorRoles.includes("worker")
-      && capabilities.includes("work:report")
-      && members.some((person) => person.app_user_id === actor.actorId);
-    const proxy = capabilities.includes("work:report_for_worker")
-      && members.some((person) => person.person_type === "temporary");
-    return ownWorker || proxy;
+  private capabilities(actor: TrustedActorContext): readonly string[] {
+    return actor.authorizationCapabilities ?? [actor.authorizationCapability];
   }
-  private ensure(actor: TrustedActorContext, capability: string): void { if (!actor.actorRoles.includes("tail_supervisor") || actor.authorizationCapability !== capability) error("当前角色无权分配任务", 403, "FORBIDDEN"); }
-  private async context(client: PoolClient, eventId: string, requestId: string): Promise<void> { await client.query("SELECT set_config('dx_rework.work_event_id',$1,true),set_config('dx_rework.work_request_id',$2,true),set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)", [eventId, requestId]); }
-  private orderAuditState(order: OrderRow, status: string, version: number): Record<string, unknown> { return { reworkOrderId: order.rework_order_id, reworkNo: order.rework_no, status, styleNo: order.style_no, orderNo: order.order_no, merchandiserUserId: order.merchandiser_user_id, processingFactory: order.processing_factory_type === null ? null : order.processing_factory_type === "own_factory" ? { type: "own_factory" } : { type: "supplier", supplierId: order.processing_factory_supplier_id, supplierVersion: order.processing_factory_supplier_version }, problemPart: order.problem_part, problemDescription: order.problem_description, reworkQuantity: order.rework_quantity, version }; }
-  private async order(client: Pick<Pool, "query"> | PoolClient, id: string, locked: boolean): Promise<OrderRow> { const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity FROM rework_orders WHERE rework_order_id=$1${locked ? " FOR UPDATE" : ""}`, [id]); return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND"); }
-  private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> { const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]); return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND"); }
-  private async members(client: Pick<Pool, "query"> | PoolClient, taskId: string): Promise<PersonRow[]> { const result = await client.query<PersonRow>("SELECT member.person_id,member.person_type_snapshot AS person_type,member.display_name_snapshot AS display_name,person.app_user_id FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=$1 ORDER BY member.person_id", [taskId]); return result.rows; }
-  private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> { const task = await this.task(client as PoolClient, id, false); const members = await this.members(client, id); const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]); const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0"); const workerView = actor.actorRoles.includes("worker") && !actor.actorRoles.includes("tail_supervisor"); const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members; if (workerView && visibleMembers.length !== 1) error("当前用户无权读取该任务", 403, "FORBIDDEN"); return { workTaskId: task.work_task_id,reworkOrderId: task.rework_order_id,configurationItemId: task.configuration_item_id,processName: task.process_name,pricingUnit: task.pricing_unit,plannedQuantity:numberValue(task.planned_quantity),unitPrice:numberValue(task.unit_price),mode:task.assignment_mode,version:task.task_version,status:task.status,canSubmitReport:this.canSubmitReport(actor,members),members:visibleMembers.map(({ person_id, display_name, person_type })=>({personId:person_id,displayName:display_name,personType:person_type})),submittedQuantity,remainingQuantity:Math.max(0,numberValue(task.planned_quantity)-submittedQuantity) }; }
-  private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> { const workerView = actor.actorRoles.includes("worker") && !actor.actorRoles.includes("tail_supervisor"); const result = await client.query<{ work_task_id: string }>(workerView ? "SELECT task.work_task_id FROM rework_work_tasks task JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id JOIN business_people person ON person.person_id=member.person_id WHERE task.rework_order_id=$1 AND task.status='active' AND person.app_user_id=$2 ORDER BY task.created_at,task.work_task_id" : "SELECT work_task_id FROM rework_work_tasks WHERE rework_order_id=$1 AND status='active' ORDER BY created_at,work_task_id", workerView ? [orderId, actor.actorId] : [orderId]); return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor))); }
+
+  private isSupervisor(actor: TrustedActorContext): boolean {
+    return actor.actorRoles.includes("tail_supervisor") && this.capabilities(actor).includes("work:assign");
+  }
+
+  private isWorker(actor: TrustedActorContext): boolean {
+    return actor.actorRoles.includes("worker") && this.capabilities(actor).includes("work:report");
+  }
+
+  private canProxyReport(actor: TrustedActorContext, members?: readonly PersonRow[]): boolean {
+    return this.capabilities(actor).includes("work:report_for_worker")
+      && (members === undefined || members.some((person) => person.person_type === "temporary"));
+  }
+
+  private isOwnWorker(actor: TrustedActorContext, members: readonly PersonRow[]): boolean {
+    return this.isWorker(actor) && members.some((person) => person.app_user_id === actor.actorId);
+  }
+
+  private reportCapability(actor: TrustedActorContext, members: readonly PersonRow[]): "work:report" | "work:report_for_worker" | undefined {
+    if (this.isOwnWorker(actor, members)) return "work:report";
+    if (this.canProxyReport(actor, members)) return "work:report_for_worker";
+    return undefined;
+  }
+
+  private canSubmitReport(actor: TrustedActorContext, members: readonly PersonRow[]): boolean {
+    return this.reportCapability(actor, members) !== undefined;
+  }
+
+  private ensure(actor: TrustedActorContext, capability: string): void {
+    if (!actor.actorRoles.includes("tail_supervisor") || actor.authorizationCapability !== capability) {
+      error("当前角色无权分配任务", 403, "FORBIDDEN");
+    }
+  }
+
+  private async context(client: PoolClient, eventId: string, requestId: string): Promise<void> {
+    await client.query(
+      "SELECT set_config('dx_rework.work_event_id',$1,true),set_config('dx_rework.work_request_id',$2,true),set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
+      [eventId, requestId],
+    );
+  }
+
+  private orderAuditState(order: OrderRow, status: string, version: number): Record<string, unknown> {
+    return {
+      reworkOrderId: order.rework_order_id, reworkNo: order.rework_no, status, styleNo: order.style_no, orderNo: order.order_no,
+      merchandiserUserId: order.merchandiser_user_id,
+      processingFactory: order.processing_factory_type === null ? null : order.processing_factory_type === "own_factory"
+        ? { type: "own_factory" }
+        : { type: "supplier", supplierId: order.processing_factory_supplier_id, supplierVersion: order.processing_factory_supplier_version },
+      problemPart: order.problem_part, problemDescription: order.problem_description, reworkQuantity: order.rework_quantity, version,
+    };
+  }
+
+  private async order(client: Pick<Pool, "query"> | PoolClient, id: string, locked: boolean): Promise<OrderRow> {
+    const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity FROM rework_orders WHERE rework_order_id=$1${locked ? " FOR UPDATE" : ""}`, [id]);
+    return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");
+  }
+
+  private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
+    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
+    return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
+  }
+
+  private async members(client: Pick<Pool, "query"> | PoolClient, taskId: string): Promise<PersonRow[]> {
+    const result = await client.query<PersonRow>("SELECT member.person_id,member.person_type_snapshot AS person_type,member.display_name_snapshot AS display_name,person.app_user_id FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=$1 ORDER BY member.person_id", [taskId]);
+    return result.rows;
+  }
+
+  private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> {
+    const task = await this.task(client as PoolClient, id, false);
+    const members = await this.members(client, id);
+    const ownWorker = this.isOwnWorker(actor, members);
+    const proxyTask = this.canProxyReport(actor, members);
+    const supervisor = this.isSupervisor(actor);
+    if (!supervisor && !ownWorker && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
+    const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]);
+    const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0");
+    const workerView = ownWorker && !supervisor && !proxyTask;
+    const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
+    return {
+      workTaskId: task.work_task_id, reworkOrderId: task.rework_order_id, configurationItemId: task.configuration_item_id,
+      processName: task.process_name, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
+      unitPrice: numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
+      canSubmitReport: this.canSubmitReport(actor, members),
+      members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),
+      submittedQuantity, remainingQuantity: Math.max(0, numberValue(task.planned_quantity) - submittedQuantity),
+    };
+  }
+
+  private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> {
+    const supervisor = this.isSupervisor(actor);
+    const filters: string[] = [];
+    const values: string[] = [orderId];
+    if (this.isWorker(actor)) {
+      values.push(actor.actorId);
+      filters.push(`EXISTS (SELECT 1 FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=task.work_task_id AND person.app_user_id=$${values.length})`);
+    }
+    if (this.canProxyReport(actor)) {
+      filters.push("EXISTS (SELECT 1 FROM rework_work_task_members member WHERE member.work_task_id=task.work_task_id AND member.person_type_snapshot='temporary')");
+    }
+    if (!supervisor && filters.length === 0) error("当前用户无权读取工人任务", 403, "FORBIDDEN");
+    const access = supervisor ? "" : ` AND (${filters.join(" OR ")})`;
+    const result = await client.query<{ work_task_id: string }>(
+      `SELECT task.work_task_id FROM rework_work_tasks task WHERE task.rework_order_id=$1 AND task.status='active'${access} ORDER BY task.created_at,task.work_task_id`,
+      values,
+    );
+    return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor)));
+  }
   private async mutate<T>(actor: TrustedActorContext, action: string, key: string, payload: unknown, statusCode: number, work: (client: PoolClient) => Promise<T>): Promise<Result<T>> { const client = await this.database.connect(); try { await client.query("BEGIN"); const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key, requestHash: hash(action, payload), expiresAt: new Date(Date.now()+24*60*60*1000) }, async () => ({ statusCode, response: await work(client) })); await client.query("COMMIT"); return { value: outcome.response, reused: outcome.reused }; } catch (cause) { await client.query("ROLLBACK"); throw cause; } finally { client.release(); } }
 }

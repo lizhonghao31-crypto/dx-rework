@@ -29,7 +29,7 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     const worker = user.businessRoles?.includes("worker") && user.capabilities.includes("work:report");
     const proxy = user.capabilities.includes("work:report_for_worker");
     if (!user.businessRoles?.length || (mode === "assign" && !supervisor) || (mode === "report" && !worker && !proxy) || (mode === "read" && !supervisor && !worker && !proxy)) throw new ApplicationError("FORBIDDEN", "当前角色无权处理工人任务或上数", 403);
-    return { actorId: user.id, actorRoles: user.businessRoles, authorizationCapability: mode === "assign" ? "work:assign" : mode === "report" ? proxy ? "work:report_for_worker" : "work:report" : supervisor ? "work:assign" : worker ? "work:report" : "work:report_for_worker", authorizationCapabilities: user.capabilities, requestId: request.id };
+    return { actorId: user.id, actorRoles: user.businessRoles, authorizationCapability: mode === "assign" ? "work:assign" : mode === "report" ? worker ? "work:report" : "work:report_for_worker" : supervisor ? "work:assign" : worker ? "work:report" : "work:report_for_worker", authorizationCapabilities: user.capabilities, requestId: request.id };
   };
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request) => ReworkWorkTasksResponseSchema.parse(await dependencies.service.list(await actor(request, "read"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId)));
   app.get("/work-task-options", async (request) => WorkTaskAssignablePeopleResponseSchema.parse({ people: await dependencies.service.listAssignablePeople(await actor(request, "assign")) }));

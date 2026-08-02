@@ -70,7 +70,7 @@ describe("work reporting routes", () => {
     expect(service.listAssignablePeople).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "work:assign" }));
   });
 
-  it("keeps temporary-worker proxy reporting available to a supervisor who also has the worker role", async () => {
+  it("passes both report capabilities to the service for task-specific authorization", async () => {
     const { app, service } = create(
       ["tail_supervisor", "worker"],
       ["work:assign", "work:report", "work:report_for_worker"],
@@ -86,7 +86,8 @@ describe("work reporting routes", () => {
     expect(service.submitReport).toHaveBeenCalledWith(
       expect.objectContaining({
         actorRoles: ["tail_supervisor", "worker"],
-        authorizationCapability: "work:report_for_worker",
+        authorizationCapability: "work:report",
+        authorizationCapabilities: ["work:assign", "work:report", "work:report_for_worker"],
       }),
       taskId,
       expect.objectContaining({ actualQuantity: 1 }),

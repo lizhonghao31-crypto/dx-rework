@@ -131,7 +131,11 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     const inProgress = await reporting.list(tailAssign(), submitted.value.reworkOrderId);
     expect(inProgress.reworkStatus).toBe("in_progress");
 
-    const report = await reporting.submitReport(worker(ids.workers[0]!), task.value.workTaskId, {
+    const dualWorker: TrustedActorContext = {
+      ...worker(ids.workers[0]!),
+      authorizationCapabilities: ["work:report", "work:report_for_worker"],
+    };
+    const report = await reporting.submitReport(dualWorker, task.value.workTaskId, {
       expectedOrderVersion: inProgress.orderVersion, actualQuantity: 0.01, completedAt: new Date().toISOString(),
     }, randomUUID());
     expect(report.value.groupAmount).toBeNull();
@@ -145,6 +149,11 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       "SELECT amount::text AS amount FROM rework_work_report_member_shares WHERE work_report_id=$1",
       [report.value.workReportId],
     )).rows).toEqual(Array.from({ length: 40 }, () => ({ amount: "0.00000025" })));
+    expect((await database.query<{ authorization_capability: string }>(
+      "SELECT authorization_capability FROM operation_events WHERE entity_id=$1 AND action='rework.work_report.submit'",
+      [submitted.value.reworkOrderId],
+    )).rows).toEqual([{ authorization_capability: "work:report" }]);
+
     const externalMappings = await database.query<{ table_name: string; column_name: string }>(
       `SELECT table_name,column_name
        FROM information_schema.columns
@@ -175,19 +184,34 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
       decision: "approved",
     }, randomUUID());
-    const task = await reporting.createTask(tailAssign(), submitted.value.reworkOrderId, {
+    const internalTask = await reporting.createTask(tailAssign(), submitted.value.reworkOrderId, {
       expectedOrderVersion: approved.value.orderVersion,
+      configurationItemId: approved.value.configuration!.items[0]!.configurationItemId,
+      mode: "individual", members: [{ personId: workerPersonIds[1]! }],
+    }, randomUUID());
+    const inProgress = await reporting.list(tailAssign(), submitted.value.reworkOrderId);
+    const task = await reporting.createTask(tailAssign(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: inProgress.orderVersion,
       configurationItemId: approved.value.configuration!.items[0]!.configurationItemId,
       mode: "individual", members: [{ personId: temporaryPersonId }],
     }, randomUUID());
-    const inProgress = await reporting.list(tailAssign(), submitted.value.reworkOrderId);
+    const proxy: TrustedActorContext = {
+      ...actor(ids.proxy, ["order_merchandiser"], "work:report"),
+      authorizationCapabilities: ["work:report", "work:report_for_worker"],
+    };
+    const delegatedTasks = await reporting.list(proxy, submitted.value.reworkOrderId);
+    expect(delegatedTasks.tasks.map((assigned) => assigned.workTaskId)).toEqual([task.value.workTaskId]);
+    expect(delegatedTasks.tasks.map((assigned) => assigned.workTaskId)).not.toContain(internalTask.value.workTaskId);
     const report = await reporting.submitReport(
-      actor(ids.proxy, ["order_merchandiser"], "work:report_for_worker"),
+      proxy,
       task.value.workTaskId,
-      { expectedOrderVersion: inProgress.orderVersion, actualQuantity: 1, completedAt: new Date().toISOString() },
+      { expectedOrderVersion: delegatedTasks.orderVersion, actualQuantity: 1, completedAt: new Date().toISOString() },
       randomUUID(),
     );
-
+    expect((await database.query<{ authorization_capability: string }>(
+      "SELECT authorization_capability FROM operation_events WHERE entity_id=$1 AND action='rework.work_report.submit'",
+      [submitted.value.reworkOrderId],
+    )).rows).toEqual([{ authorization_capability: "work:report_for_worker" }]);
     expect(report.value.groupAmount).toBe(1);
     expect(report.value.memberShares).toEqual([{ personId: temporaryPersonId, amount: 1 }]);
   });
