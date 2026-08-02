@@ -29,9 +29,11 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     ie: randomUUID(),
     merchandiser: randomUUID(),
     ineligibleWorker: randomUUID(),
+    proxy: randomUUID(),
     workers: Array.from({ length: 40 }, () => randomUUID()),
   };
   let ineligiblePersonId = "";
+  let temporaryPersonId = "";
   let workerPersonIds: string[] = [];
 
   const actor = (actorId: string, actorRoles: readonly string[], authorizationCapability: string): TrustedActorContext => ({
@@ -55,7 +57,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     }
     const users = [
       [ids.admin, "系统管理员"], [ids.qc, "品控一"], [ids.tail, "李同生"],
-      [ids.ie, "郎飞"], [ids.merchandiser, "订单跟单"], [ids.ineligibleWorker, "未授权员工"],
+      [ids.ie, "郎飞"], [ids.merchandiser, "订单跟单"], [ids.ineligibleWorker, "未授权员工"], [ids.proxy, "授权代录"],
       ...ids.workers.map((userId, index) => [userId, "工人" + String(index + 1)]),
     ] as const;
     for (const [userId, displayName] of users) {
@@ -67,7 +69,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     }
     const assignments: Array<readonly [string, string]> = [
       [ids.admin, "system_admin"], [ids.qc, "quality_control"], [ids.tail, "tail_supervisor"],
-      [ids.ie, "ie_reviewer"], [ids.merchandiser, "order_merchandiser"],
+      [ids.ie, "ie_reviewer"], [ids.merchandiser, "order_merchandiser"], [ids.proxy, "order_merchandiser"],
       ...ids.workers.map((userId) => [userId, "worker"] as const),
     ];
     for (const [userId, roleCode] of assignments) {
@@ -79,6 +81,9 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     await access.ensureOrganizationPolicy();
     ineligiblePersonId = (await access.createPerson(administrator(), {
       personType: "internal", appUserId: ids.ineligibleWorker, displayName: "未授权员工", aliases: [], reason: "验证无工人角色不可分配",
+    })).personId;
+    temporaryPersonId = (await access.createPerson(administrator(), {
+      personType: "temporary", displayName: "临时工一", aliases: [], reason: "验证授权人员代录",
     })).personId;
     workerPersonIds = await Promise.all(ids.workers.map(async (userId, index) => (
       await access.createPerson(administrator(), {
@@ -149,5 +154,41 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       [schema, ["rework_work_tasks", "rework_work_reports"], ["source_system", "external_id", "external_idempotency_key", "erp_node_id"]],
     );
     expect(externalMappings.rows).toHaveLength(8);
+  });
+
+  it("allows a delegated non-supervisor to proxy report a temporary worker task", async () => {
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "PD20700002", merchandiserUserId: ids.merchandiser, processingFactory: { type: "own_factory" },
+      problemPart: "袖口", problemDescription: "临时工返修", reworkQuantity: 1,
+    }, randomUUID());
+    const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
+    const saved = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: submitted.value.version,
+      items: [{ source: "custom", customProcessName: "临时工代录工序", pricingUnit: "piece", plannedQuantity: 1, unitPrice: 1 }],
+    }, randomUUID());
+    const queued = await configuration.submit(tail(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: saved.value.orderVersion,
+      expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+    }, randomUUID());
+    const approved = await configuration.review(ie(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: queued.value.orderVersion,
+      expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
+      decision: "approved",
+    }, randomUUID());
+    const task = await reporting.createTask(tailAssign(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: approved.value.orderVersion,
+      configurationItemId: approved.value.configuration!.items[0]!.configurationItemId,
+      mode: "individual", members: [{ personId: temporaryPersonId }],
+    }, randomUUID());
+    const inProgress = await reporting.list(tailAssign(), submitted.value.reworkOrderId);
+    const report = await reporting.submitReport(
+      actor(ids.proxy, ["order_merchandiser"], "work:report_for_worker"),
+      task.value.workTaskId,
+      { expectedOrderVersion: inProgress.orderVersion, actualQuantity: 1, completedAt: new Date().toISOString() },
+      randomUUID(),
+    );
+
+    expect(report.value.groupAmount).toBe(1);
+    expect(report.value.memberShares).toEqual([{ personId: temporaryPersonId, amount: 1 }]);
   });
 });
