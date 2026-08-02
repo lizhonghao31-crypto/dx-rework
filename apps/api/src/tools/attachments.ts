@@ -254,15 +254,12 @@ export class AttachmentService {
     const result = await this.pool.query<AttachmentRow>(`SELECT * FROM attachments WHERE attachment_id=$1`, [id]);
     const row = result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "Attachment not found", 404);
-    if (row.uploaded_by !== userId) {
-      if (
-        !row.entity_type
-        || !row.entity_id
-        || !authorizeBound
-        || !(await authorizeBound({ entityType: row.entity_type, entityId: row.entity_id, uploadedBy: row.uploaded_by }))
-      ) {
+    if (row.entity_type && row.entity_id) {
+      if (!authorizeBound || !(await authorizeBound({ entityType: row.entity_type, entityId: row.entity_id, uploadedBy: row.uploaded_by }))) {
         throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
       }
+    } else if (row.uploaded_by !== userId) {
+      throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
     }
     return row;
   }
