@@ -92,6 +92,8 @@ export type ReworkOrderStatus =
   | "pending_process_configuration"
   | "pending_ie_review"
   | "pending_task_assignment"
+  | "in_progress"
+  | "pending_order_review"
   | "cancelled";
 
 export const transitionReworkOrder = (
@@ -102,7 +104,9 @@ export const transitionReworkOrder = (
     draft: ["draft", "pending_process_configuration", "cancelled"],
     pending_process_configuration: ["draft", "pending_ie_review", "cancelled"],
     pending_ie_review: ["pending_process_configuration", "pending_task_assignment"],
-    pending_task_assignment: ["pending_ie_review"],
+    pending_task_assignment: ["pending_ie_review", "in_progress"],
+    in_progress: ["in_progress", "pending_order_review"],
+    pending_order_review: ["in_progress"],
     cancelled: [],
   }, from, to);
 

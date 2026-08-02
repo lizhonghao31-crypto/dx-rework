@@ -27,6 +27,10 @@
     {
       "version": "0007_process_configuration_ie_review",
       "checksum": "174955cd25c251347ef8336c6051890e21ced81f68d3a620beccd3bc19c60747"
+    },
+    {
+      "version": "0008_worker_assignment_reporting",
+      "checksum": "e57037cad35d8f7e09c473a16a3779bfd6623bedbf2ac2a079fc2c486cacad1c"
     }
   ]
 }

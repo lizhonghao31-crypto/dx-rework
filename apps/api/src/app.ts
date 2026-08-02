@@ -22,6 +22,7 @@ import {
   registerProcessConfigurationRoutes,
   type ProcessConfigurationHttpDependencies,
 } from "./rework/process-configuration-routes.js";
+import { registerWorkReportingRoutes, type WorkReportingHttpDependencies } from "./rework/work-reporting-routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -32,6 +33,7 @@ export type AppDependencies = Readonly<{
   access?: AccessHttpDependencies;
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
+  workReporting?: WorkReportingHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -92,6 +94,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.processConfiguration) {
     registerProcessConfigurationRoutes(app, dependencies.processConfiguration);
   }
+  if (dependencies.workReporting) registerWorkReportingRoutes(app, dependencies.workReporting);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {

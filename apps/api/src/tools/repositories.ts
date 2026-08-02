@@ -5,7 +5,7 @@ import { sanitizeOperationalError } from "@dx-rework/domain";
 import { ApplicationError } from "../platform/errors.js";
 
 export type SqlClient = Pick<PoolClient, "query">;
-export type TrustedActorContext = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string; requestId: string }>;
+export type TrustedActorContext = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string; authorizationCapabilities?: readonly string[]; requestId: string }>;
 
 const validateClaimOptions = (limit: number, leaseSeconds: number): void => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
