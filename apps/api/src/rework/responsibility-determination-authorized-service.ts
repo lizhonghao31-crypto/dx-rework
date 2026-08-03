@@ -15,13 +15,14 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
+import { OwnFactoryApprovalService } from "./own-factory-approval-service.js";
 
 type Result<T> = { value: T; reused: boolean };
 type Queryable = Pool | PoolClient;
 type OrderRow = {
   rework_order_id: string;
   rework_no: string | null;
-  status: string;
+  status: ResponsibilityDeterminationResponse["reworkStatus"];
   version: number;
   style_no: string | null;
   order_no: string | null;
@@ -64,11 +65,13 @@ const capabilities = (actor: TrustedActorContext): readonly string[] =>
 
 export class AuthorizedResponsibilityDeterminationService {
   private readonly base: ResponsibilityDeterminationService;
+  private readonly ownFactoryApprovals: OwnFactoryApprovalService;
   private readonly idempotency = new IdempotencyService();
   private readonly events = new OperationEventRepository();
 
   constructor(private readonly database: Pool) {
     this.base = new ResponsibilityDeterminationService(database);
+    this.ownFactoryApprovals = new OwnFactoryApprovalService(database);
   }
 
   async get(
@@ -161,6 +164,12 @@ export class AuthorizedResponsibilityDeterminationService {
                 report_snapshot,$2,$3
          FROM rework_responsibility_amount_lines WHERE determination_id=$4`,
         [id, eventId, actor.requestId, current.determination_id],
+      );
+      await this.ownFactoryApprovals.ensureForFinalized(
+        client,
+        actor,
+        order,
+        id,
       );
       await this.advance(client, orderId, actor.actorId, "pending_responsibility_action");
       return this.get(actor, orderId, client);
@@ -393,7 +402,7 @@ export class AuthorizedResponsibilityDeterminationService {
     action: string,
     capability: string,
     order: OrderRow,
-    status: string,
+    status: ResponsibilityDeterminationResponse["reworkStatus"],
     reason?: string,
   ): Promise<string> {
     const eventId = await this.events.append(client, { ...actor, authorizationCapability: capability }, {
@@ -414,7 +423,12 @@ export class AuthorizedResponsibilityDeterminationService {
     return eventId;
   }
 
-  private async advance(client: PoolClient, orderId: string, actorId: string, status: string): Promise<void> {
+  private async advance(
+    client: PoolClient,
+    orderId: string,
+    actorId: string,
+    status: ResponsibilityDeterminationResponse["reworkStatus"],
+  ): Promise<void> {
     await client.query(
       `UPDATE rework_orders SET status=$3,version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP
        WHERE rework_order_id=$1`,
