@@ -47,7 +47,7 @@ runWithPostgres("external responsibility migration replay", () => {
         "external_responsibility_can_sign", "external_responsibility_can_payables",
         "external_responsibility_can_view_case", "guard_external_responsibility_attachment_binding",
       ]]),
-      database.query<{ definition: string }>(`SELECT pg_get_constraintdef(constraint.oid) definition FROM pg_constraint constraint JOIN pg_class relation ON relation.oid=constraint.conrelid WHERE relation.relname='rework_orders' AND constraint.conname='rework_orders_status_check'`),
+      database.query<{ definition: string }>(`SELECT pg_get_constraintdef(constraint_row.oid) definition FROM pg_constraint constraint_row JOIN pg_class relation ON relation.oid=constraint_row.conrelid WHERE relation.relname='rework_orders' AND constraint_row.conname='rework_orders_status_check'`),
       database.query<{ count: number }>("SELECT count(*)::int count FROM capability_catalog WHERE capability='external_responsibility:approve_revision'"),
     ]);
     expect(tables.rows.map((row) => row.table_name)).toHaveLength(6);
