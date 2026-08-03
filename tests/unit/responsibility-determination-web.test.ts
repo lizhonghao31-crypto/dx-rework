@@ -19,18 +19,10 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain(
       "rework-orders/${reworkOrderId}/responsibility-determination",
     );
-    expect(source).toContain(
-      "responsibility-determinations/drafts",
-    );
-    expect(source).toContain(
-      "responsibility-determinations/finalize",
-    );
-    expect(source).toContain(
-      "responsibility-determinations/transfer",
-    );
-    expect(source).toContain(
-      "responsibility-determinations/takeover",
-    );
+    expect(source).toContain("responsibility-determinations/drafts");
+    expect(source).toContain("responsibility-determinations/finalize");
+    expect(source).toContain("responsibility-determinations/transfer");
+    expect(source).toContain("responsibility-determinations/takeover");
     expect(source).toContain("high-multiplier-confirm");
     expect(source).toContain('"idempotency-key": crypto.randomUUID()');
   });
@@ -40,7 +32,7 @@ describe("responsibility determination web integration", () => {
     expect(source).not.toContain("154.55");
     expect(source).not.toContain("parseFloat(");
     expect(source).not.toContain("Number(process.multiplier");
-    expect(source).not.toMatch(/responsibilityAmount\s*[*\/+-]/);
+    expect(source).not.toMatch(/responsibilityAmount\s*[/+*-]/);
     expect(source).toContain("current.responsibilityAmount");
     expect(source).toContain("determination.calculationTotal");
   });
