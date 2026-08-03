@@ -24,6 +24,7 @@ import {
 } from "./rework/process-configuration-routes.js";
 import { registerWorkReportingRoutes, type WorkReportingHttpDependencies } from "./rework/work-reporting-routes.js";
 import { registerWholeOrderReviewRoutes, type WholeOrderReviewHttpDependencies } from "./rework/whole-order-review-routes.js";
+import { registerResponsibilityDeterminationRoutes, type ResponsibilityDeterminationHttpDependencies } from "./rework/responsibility-determination-routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -36,6 +37,7 @@ export type AppDependencies = Readonly<{
   processConfiguration?: ProcessConfigurationHttpDependencies;
   workReporting?: WorkReportingHttpDependencies;
   wholeOrderReview?: WholeOrderReviewHttpDependencies;
+  responsibilityDetermination?: ResponsibilityDeterminationHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -98,6 +100,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   }
   if (dependencies.workReporting) registerWorkReportingRoutes(app, dependencies.workReporting);
   if (dependencies.wholeOrderReview) registerWholeOrderReviewRoutes(app, dependencies.wholeOrderReview);
+  if (dependencies.responsibilityDetermination) registerResponsibilityDeterminationRoutes(app, dependencies.responsibilityDetermination);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {

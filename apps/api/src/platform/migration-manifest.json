@@ -35,6 +35,10 @@
     {
       "version": "0009_whole_order_review_quantity_adjustment",
       "checksum": "01f542e7ec7610620ea72f51f67a2afc07d56435aa8aa60a992fd10b838dc575"
+    },
+    {
+      "version": "0010_responsibility_determination_amount_engine",
+      "checksum": "e023c40e36276b16c2b49a02458843c5cd4d63e9bce2ae920e890cbcf2032719"
     }
   ]
 }

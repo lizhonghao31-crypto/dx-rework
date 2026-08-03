@@ -176,6 +176,7 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_order_review",
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
+  "pending_responsibility_action",
   "cancelled",
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
@@ -545,3 +546,44 @@ export type ConfirmQuantityIncrease = z.infer<typeof ConfirmQuantityIncreaseSche
 export type ReviewQuantityIncrease = z.infer<typeof ReviewQuantityIncreaseSchema>;
 export type QuantityAdjustmentResponse = z.infer<typeof QuantityAdjustmentResponseSchema>;
 export type WholeOrderReviewResponse = z.infer<typeof WholeOrderReviewResponseSchema>;
+
+const ResponsibilityMultiplierSchema = z.string().regex(/^(?:[1-9]\d*)(?:\.\d{1,3})?$/, "Multiplier must be a decimal with at most 3 places");
+export const ResponsibilityTypeSchema = z.enum(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]);
+export const ResponsibilityAllocationInputSchema = z.object({
+  responsibilityType: ResponsibilityTypeSchema,
+  shareBps: z.number().int().min(1).max(10_000),
+}).strict();
+export const ResponsibilityProcessInputSchema = z.object({
+  configurationItemId: IdSchema,
+  multiplier: ResponsibilityMultiplierSchema,
+  highMultiplierReason: ReasonSchema.optional(),
+  allocations: z.array(ResponsibilityAllocationInputSchema).min(1).max(5),
+}).strict().superRefine((value, context) => {
+  if (value.allocations.reduce((sum, row) => sum + row.shareBps, 0) !== 10_000) context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility shares must total 10000 bps" });
+  if (new Set(value.allocations.map((row) => row.responsibilityType)).size !== value.allocations.length) context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility types cannot repeat" });
+  const [whole, fraction = ""] = value.multiplier.split(".");
+  if (BigInt(whole!) * 1000n + BigInt(fraction.padEnd(3, "0")) > 2000n && !value.highMultiplierReason) context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: "A reason is required above 2x" });
+});
+export const CreateResponsibilityDraftSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  expectedCurrentDeterminationVersion: z.number().int().positive().nullable(),
+  handlerUserId: IdSchema,
+  reason: ReasonSchema.optional(),
+  processes: z.array(ResponsibilityProcessInputSchema).min(1),
+}).strict();
+export const FinalizeResponsibilitySchema = z.object({ expectedOrderVersion: z.number().int().positive(), expectedCurrentDeterminationVersion: z.number().int().positive() }).strict();
+export const TransferResponsibilitySchema = z.object({ expectedOrderVersion: z.number().int().positive(), expectedCurrentDeterminationVersion: z.number().int().positive().nullable(), toUserId: IdSchema, reason: ReasonSchema }).strict();
+export const TakeoverResponsibilitySchema = z.object({ expectedOrderVersion: z.number().int().positive(), expectedCurrentDeterminationVersion: z.number().int().positive().nullable(), reason: ReasonSchema }).strict();
+export const ConfirmHighMultiplierSchema = z.object({ expectedOrderVersion: z.number().int().positive(), expectedCurrentDeterminationVersion: z.number().int().positive(), reason: ReasonSchema }).strict();
+export const ResponsibilityDeterminationResponseSchema = z.object({
+  reworkOrderId: IdSchema, reworkStatus: ReworkOrderStatusSchema, orderVersion: z.number().int().positive(),
+  handlerUserId: IdSchema.nullable(), canDetermine: z.boolean(), canTakeover: z.boolean(), canConfirmHighMultiplier: z.boolean(),
+  determination: z.object({ determinationId: IdSchema, version: z.number().int().positive(), stage: z.enum(["draft", "finalized"]), reason: z.string().nullable(), calculationTotal: z.string(), highMultiplierConfirmed: z.boolean(), processes: z.array(z.object({ configurationItemId: IdSchema, processName: z.string(), pricingUnit: ProcessPricingUnitSchema, multiplier: z.string(), highMultiplierReason: z.string().nullable(), baseAmount: z.string(), responsibilityAmount: z.string(), allocations: z.array(z.object({ responsibilityType: ResponsibilityTypeSchema, shareBps: z.number().int(), roundedAmount: z.string() })) })) }).nullable(),
+});
+export type ResponsibilityType = z.infer<typeof ResponsibilityTypeSchema>;
+export type CreateResponsibilityDraft = z.infer<typeof CreateResponsibilityDraftSchema>;
+export type FinalizeResponsibility = z.infer<typeof FinalizeResponsibilitySchema>;
+export type TransferResponsibility = z.infer<typeof TransferResponsibilitySchema>;
+export type TakeoverResponsibility = z.infer<typeof TakeoverResponsibilitySchema>;
+export type ConfirmHighMultiplier = z.infer<typeof ConfirmHighMultiplierSchema>;
+export type ResponsibilityDeterminationResponse = z.infer<typeof ResponsibilityDeterminationResponseSchema>;

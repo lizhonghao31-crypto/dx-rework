@@ -18,6 +18,7 @@ import { ReworkInitiationService } from "./rework/service.js";
 import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { WholeOrderReviewService } from "./rework/whole-order-review-service.js";
+import { ResponsibilityDeterminationService } from "./rework/responsibility-determination-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -44,6 +45,7 @@ const reworkService = new ReworkInitiationService(database, config.dingtalk.corp
 const processConfigurationService = new ProcessConfigurationService(database);
 const workReportingService = new WorkReportingService(database);
 const wholeOrderReviewService = new WholeOrderReviewService(database);
+const responsibilityDeterminationService = new ResponsibilityDeterminationService(database);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -75,6 +77,10 @@ const app = buildApp({
   wholeOrderReview: {
     authenticate: (token) => auth.authenticate(token),
     service: wholeOrderReviewService,
+  },
+  responsibilityDetermination: {
+    authenticate: (token) => auth.authenticate(token),
+    service: responsibilityDeterminationService,
   },
 });
 registerDatabasePoolErrorHandler(database, app.log);

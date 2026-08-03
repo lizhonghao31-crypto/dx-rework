@@ -3,6 +3,7 @@ import { VersionResponseSchema, type VersionResponse } from "@dx-rework/contract
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Header, Kpis, Queue, Shell, TaskCard } from "./components.js";
 import { members, tasks } from "./fixtures.js";
+import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 
 type LoadState = { kind: "loading" } | { kind: "ready"; version: VersionResponse } | { kind: "unavailable" };
 
@@ -15,7 +16,7 @@ export function Tasks() {
 }
 
 export function Detail() {
-  return <Shell active="责任处理"><Header title="RW-2026-0801-012 · PD20529725" subtitle="尾部返工 · 281 件 · 当前节点 N08-A 本厂承担审批" badge="待李总 / 伍总任一人终审" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>节点时间线与返工摘要</h2><div className="queue">{["N01 品控发起 · 08:42", "N02 李同生配置工序 · 09:18", "N03 IE 审核 · 09:46", "N04 动态分派 · 成员快照 V1", "N05 集体上数完成 · 281 件", "N06 李同生整单审核 · 已通过"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">已完成</StatusBadge></div>)}</div></Surface><Surface><h2>责任判断与审批</h2><p>李总、伍总、张文豪看到同一事实；仅李总或伍总可完成本厂承担最终审批。</p><TaskCard task={tasks[0]!} /><Button variant="primary">预览审批操作</Button> <Button>返回补充证据</Button></Surface></div></Shell>;
+  return <Shell active="责任处理"><Header title="RW-2026-0801-012 · PD20529725" subtitle="尾部返工 · 281 件 · 当前节点 N07 责任判定" badge="生产管理处理中" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>节点时间线与返工摘要</h2><div className="queue">{["N01 品控发起 · 08:42", "N02 李同生配置工序 · 09:18", "N03 IE 审核 · 09:46", "N04 动态分派 · 成员快照 V1", "N05 集体上数完成 · 281 件", "N06 李同生整单审核 · 已通过"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">已完成</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel /></div></Shell>;
 }
 
 export function MobileForm({ piecework = false }: { piecework?: boolean }) {

@@ -1,0 +1,5 @@
+import { describe,expect,it,vi } from "vitest";
+import { buildApp } from "../../apps/api/src/app.js";
+import { loadConfig } from "@dx-rework/config";
+const testConfig=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgresql://test:test@localhost/test",DINGTALK_CORP_ID:"corp",DINGTALK_H5_APP_KEY:"key",DINGTALK_H5_APP_SECRET:"secret",DINGTALK_WEB_CLIENT_ID:"web",DINGTALK_WEB_CLIENT_SECRET:"secret",DINGTALK_QR_REDIRECT_URI:"https://example.test/callback",SESSION_SECRET:"a-test-session-secret-with-at-least-32-characters"});
+describe("responsibility routes",()=>{it("requires an idempotency key on writes",async()=>{const app=buildApp({config:testConfig,checkDatabase:vi.fn(),getAppliedSchemaHistory:vi.fn(),responsibilityDetermination:{authenticate:vi.fn().mockResolvedValue({id:crypto.randomUUID(),businessRoles:["production_management"],capabilities:["responsibility:determine"]}),service:{} as never}});const r=await app.inject({method:"POST",url:`/rework-orders/${crypto.randomUUID()}/responsibility-determinations/drafts`,payload:{}});expect(r.statusCode).toBe(400);await app.close()})});
