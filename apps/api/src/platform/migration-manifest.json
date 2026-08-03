@@ -43,6 +43,10 @@
     {
       "version": "0011_responsibility_authorization_handler_closure",
       "checksum": "dfc909a56dedae61531c26bc3269123d983a1a9f99a02fedeeda2babffa2ed13"
+    },
+    {
+      "version": "0012_responsibility_direct_delegation",
+      "checksum": "5e40152c10bab23cac1f2c1a07679f1f1a4ffededd07983dc9517dfcc808ecf0"
     }
   ]
 }
