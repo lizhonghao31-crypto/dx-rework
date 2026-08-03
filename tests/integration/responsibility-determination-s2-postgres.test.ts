@@ -4,6 +4,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { AuthorizedResponsibilityDeterminationService } from "../../apps/api/src/rework/responsibility-determination-authorized-service.js";
+import { OwnFactoryApprovalService } from "../../apps/api/src/rework/own-factory-approval-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-review-service.js";
@@ -25,6 +26,9 @@ const migrations = [
   "0010_responsibility_determination_amount_engine.sql",
   "0011_responsibility_authorization_handler_closure.sql",
   "0012_responsibility_direct_delegation.sql",
+  "0013_responsibility_review_closure.sql",
+  "0014_responsibility_source_share_coverage.sql",
+  "0015_own_factory_responsibility_approval.sql",
 ] as const;
 
 type ReviewedOrder = { orderId: string; itemId: string; orderVersion: number };
@@ -42,6 +46,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
   const reporting = new WorkReportingService(database);
   const review = new WholeOrderReviewService(database);
   const responsibility = new AuthorizedResponsibilityDeterminationService(database);
+  const ownFactoryApproval = new OwnFactoryApprovalService(database);
   const ids = {
     admin: randomUUID(), ownerOne: randomUUID(), ownerTwo: randomUUID(),
     productionOne: randomUUID(), productionTwo: randomUUID(), delegate: randomUUID(),
@@ -479,5 +484,312 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       handlerUserId: ids.ownerOne,
       determination: { stage: "finalized", version: 2 },
     });
+    const approvalSnapshot = await ownFactoryApproval.get(
+      actor(ids.ownerOne, ["owner_group"], "own_factory:view", "own_factory:approve"),
+      order.orderId,
+    );
+    expect(approvalSnapshot.approval!.sourceSnapshot.finalizedDetermination)
+      .toMatchObject({
+        determinationVersion: 2,
+        highMultiplierConfirmation: {
+          confirmedBy: ids.ownerTwo,
+          reason: "第二位老板复核",
+        },
+      });
+  });
+
+  it("creates one immutable own-factory approval, notifies the other owner, and rejects non-owners", async () => {
+    const order = await createReviewedOrder("own-factory-approve");
+    const production = actor(
+      ids.productionOne,
+      ["production_management"],
+      "responsibility:determine",
+    );
+    const draft = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      draftInput(order.orderVersion, order.itemId, ids.productionOne),
+      "s2-own-factory-draft",
+    );
+    const finalized = await responsibility.finalize(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: draft.value.orderVersion,
+        expectedCurrentDeterminationVersion: 1,
+      },
+      "s2-own-factory-finalize",
+    );
+    const ownerOne = actor(
+      ids.ownerOne,
+      ["owner_group"],
+      "own_factory:view",
+      "own_factory:approve",
+    );
+    const ownerTwo = actor(
+      ids.ownerTwo,
+      ["owner_group"],
+      "own_factory:view",
+      "own_factory:approve",
+    );
+    const now = new Date();
+    await access.createDelegation(
+      actor(ids.ownerOne, ["owner_group"], "delegation:manage", "own_factory:approve"),
+      {
+        grantorUserId: ids.ownerOne,
+        granteeUserId: ids.delegate,
+        capability: "own_factory:approve",
+        scopeType: "rework_order",
+        scopeId: order.orderId,
+        validFrom: new Date(now.getTime() - 60_000).toISOString(),
+        validUntil: new Date(now.getTime() + 60 * 60_000).toISOString(),
+        reason: "本单临时授权",
+      },
+    );
+    const delegatedView = await ownFactoryApproval.get(
+      actor(ids.delegate, ["worker"], "work:report"),
+      order.orderId,
+    );
+    expect(delegatedView).toMatchObject({ canView: true, canDecide: true });
+    await expect(access.createDelegation(
+      actor(ids.ownerOne, ["owner_group"], "delegation:manage", "own_factory:approve"),
+      {
+        grantorUserId: ids.ownerOne,
+        granteeUserId: ids.delegate,
+        capability: "own_factory:approve",
+        scopeType: "global",
+        validFrom: now.toISOString(),
+        validUntil: new Date(now.getTime() + 60 * 60_000).toISOString(),
+        reason: "不得使用全局授权",
+      },
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    const view = await ownFactoryApproval.get(ownerOne, order.orderId);
+    expect(view).toMatchObject({
+      reworkStatus: "pending_responsibility_action",
+      canDecide: true,
+      approval: {
+        finalizedDeterminationVersion: 2,
+        status: "pending",
+        ownFactoryTotalAmount: "1.00",
+      },
+    });
+    expect(view.approval!.sourceSnapshot.processes).toHaveLength(1);
+    await expect(ownFactoryApproval.approve(
+      actor(ids.admin, ["system_admin"], "own_factory:view", "own_factory:approve"),
+      view.approval!.approvalId,
+      {
+        expectedOrderVersion: finalized.value.orderVersion,
+        expectedApprovalVersion: view.approval!.approvalVersion,
+      },
+      "s2-own-factory-forged-admin",
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    const approved = await ownFactoryApproval.approve(
+      ownerOne,
+      view.approval!.approvalId,
+      {
+        expectedOrderVersion: view.orderVersion,
+        expectedApprovalVersion: view.approval!.approvalVersion,
+        opinion: "同意本厂承担",
+      },
+      "s2-own-factory-approve",
+    );
+    expect(approved.value).toMatchObject({
+      reworkStatus: "pending_responsibility_action",
+      approval: {
+        status: "approved",
+        approvalVersion: 2,
+        decision: { actedBy: ids.ownerOne, decision: "approved", otherOwnersNotified: true },
+      },
+    });
+    await expect(ownFactoryApproval.approve(
+      ownerTwo,
+      view.approval!.approvalId,
+      {
+        expectedOrderVersion: view.orderVersion,
+        expectedApprovalVersion: view.approval!.approvalVersion,
+      },
+      "s2-own-factory-late-owner",
+    )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    const notices = await database.query<{ recipient_key: string }>(
+      `SELECT recipient_key FROM message_outbox
+       WHERE aggregate_id=$1 AND topic='rework.own_factory_approval.result'`,
+      [view.approval!.approvalId],
+    );
+    expect(notices.rows).toEqual([{ recipient_key: ids.ownerTwo }]);
+    await expect(database.query(
+      `UPDATE rework_own_factory_approval_decisions
+       SET decision='rejected' WHERE approval_id=$1`,
+      [view.approval!.approvalId],
+    )).rejects.toThrow();
+    await expect(database.query(
+      `UPDATE rework_own_factory_approvals
+       SET own_factory_total_amount=0 WHERE approval_id=$1`,
+      [view.approval!.approvalId],
+    )).rejects.toThrow();
+  });
+
+  it("does not create N08-A when the finalized version has no own-factory money", async () => {
+    const order = await createReviewedOrder("no-own-factory-amount");
+    const production = actor(
+      ids.productionOne,
+      ["production_management"],
+      "responsibility:determine",
+    );
+    const draft = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      {
+        ...draftInput(order.orderVersion, order.itemId, ids.productionOne),
+        processes: [{
+          configurationItemId: order.itemId,
+          multiplier: "1.000",
+          highMultiplierReason: null,
+          allocations: [{ responsibilityType: "processing_factory", shareBps: 10000 }],
+        }],
+      },
+      "s2-no-own-factory-draft",
+    );
+    await responsibility.finalize(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: draft.value.orderVersion,
+        expectedCurrentDeterminationVersion: 1,
+      },
+      "s2-no-own-factory-finalize",
+    );
+    const ownerView = await ownFactoryApproval.get(
+      actor(ids.ownerOne, ["owner_group"], "own_factory:view", "own_factory:approve"),
+      order.orderId,
+    );
+    expect(ownerView).toMatchObject({
+      reworkStatus: "pending_responsibility_action",
+      approval: null,
+      history: [],
+    });
+  });
+
+  it("allows exactly one concurrent terminal owner action and sends a rejection back to N07", async () => {
+    const order = await createReviewedOrder("own-factory-reject");
+    const production = actor(
+      ids.productionTwo,
+      ["production_management"],
+      "responsibility:determine",
+    );
+    const draft = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      draftInput(order.orderVersion, order.itemId, ids.productionTwo),
+      "s2-own-factory-reject-draft",
+    );
+    await responsibility.finalize(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: draft.value.orderVersion,
+        expectedCurrentDeterminationVersion: 1,
+      },
+      "s2-own-factory-reject-finalize",
+    );
+    const ownerOne = actor(ids.ownerOne, ["owner_group"], "own_factory:view", "own_factory:approve");
+    const ownerTwo = actor(ids.ownerTwo, ["owner_group"], "own_factory:view", "own_factory:approve");
+    const before = await ownFactoryApproval.get(ownerOne, order.orderId);
+    const approval = before.approval!;
+    const results = await Promise.allSettled([
+      ownFactoryApproval.reject(
+        ownerOne,
+        approval.approvalId,
+        {
+          expectedOrderVersion: before.orderVersion,
+          expectedApprovalVersion: approval.approvalVersion,
+          opinion: "请重新核对责任比例",
+        },
+        "s2-own-factory-reject",
+      ),
+      ownFactoryApproval.approve(
+        ownerTwo,
+        approval.approvalId,
+        {
+          expectedOrderVersion: before.orderVersion,
+          expectedApprovalVersion: approval.approvalVersion,
+        },
+        "s2-own-factory-concurrent-approve",
+      ),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const current = await ownFactoryApproval.get(ownerOne, order.orderId);
+    expect(current.approval!.status).toMatch(/^(approved|rejected)$/);
+    if (current.approval!.status === "rejected") {
+      expect(current.reworkStatus).toBe("pending_responsibility_determination");
+      expect(current.approval!.decision!.opinion).toBe("请重新核对责任比例");
+    }
+  });
+
+  it("requires a rejection reason, returns to N07, and preserves the rejected approval before a new version", async () => {
+    const order = await createReviewedOrder("own-factory-revision");
+    const production = actor(
+      ids.productionOne,
+      ["production_management"],
+      "responsibility:determine",
+    );
+    const draft = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      draftInput(order.orderVersion, order.itemId, ids.productionOne),
+      "s2-own-factory-revision-draft",
+    );
+    await responsibility.finalize(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: draft.value.orderVersion,
+        expectedCurrentDeterminationVersion: 1,
+      },
+      "s2-own-factory-revision-finalize",
+    );
+    const owner = actor(ids.ownerOne, ["owner_group"], "own_factory:view", "own_factory:approve");
+    const pending = await ownFactoryApproval.get(owner, order.orderId);
+    await expect(ownFactoryApproval.reject(
+      owner,
+      pending.approval!.approvalId,
+      {
+        expectedOrderVersion: pending.orderVersion,
+        expectedApprovalVersion: pending.approval!.approvalVersion,
+        opinion: "",
+      },
+      "s2-own-factory-missing-reason",
+    )).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    const rejected = await ownFactoryApproval.reject(
+      owner,
+      pending.approval!.approvalId,
+      {
+        expectedOrderVersion: pending.orderVersion,
+        expectedApprovalVersion: pending.approval!.approvalVersion,
+        opinion: "请重新核实本厂责任范围",
+      },
+      "s2-own-factory-revision-reject",
+    );
+    expect(rejected.value).toMatchObject({
+      reworkStatus: "pending_responsibility_determination",
+      approval: {
+        status: "rejected",
+        decision: { opinion: "请重新核实本厂责任范围" },
+      },
+      history: [{ status: "rejected", finalizedDeterminationVersion: 2 }],
+    });
+    const revised = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      {
+        ...draftInput(rejected.value.orderVersion, order.itemId, ids.productionOne),
+        expectedCurrentDeterminationVersion: 2,
+        reason: "按驳回意见重建责任版本",
+      },
+      "s2-own-factory-revision-draft-v3",
+    );
+    expect(revised.value.determination).toMatchObject({ stage: "draft", version: 3 });
+    const history = await ownFactoryApproval.get(owner, order.orderId);
+    expect(history.history).toHaveLength(1);
+    expect(history.history[0]).toMatchObject({ status: "rejected", finalizedDeterminationVersion: 2 });
   });
 });
