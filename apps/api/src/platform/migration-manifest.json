@@ -47,6 +47,10 @@
     {
       "version": "0012_responsibility_direct_delegation",
       "checksum": "5e40152c10bab23cac1f2c1a07679f1f1a4ffededd07983dc9517dfcc808ecf0"
+    },
+    {
+      "version": "0013_responsibility_review_closure",
+      "checksum": "b5703c4525791a3c1784af468576ba82882badbf186df55ea860dfcdf335c794"
     }
   ]
 }
