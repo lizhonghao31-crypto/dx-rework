@@ -8,8 +8,6 @@ import type { Pool } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { OwnFactoryApprovalService } from "./own-factory-approval-service.js";
 
-type Result<T> = { value: T; reused: boolean };
-
 export class OwnFactoryApprovalApplicationService {
   private readonly service: OwnFactoryApprovalService;
 
@@ -31,36 +29,22 @@ export class OwnFactoryApprovalApplicationService {
     );
   }
 
-  async approve(
+  approve(
     actor: TrustedActorContext,
     approvalId: string,
     input: ApproveOwnFactoryApproval,
     key: string,
-  ): Promise<Result<OwnFactoryApprovalResponse>> {
-    const result = await this.service.approve(actor, approvalId, input, key);
-    return {
-      ...result,
-      value: await this.onlyCurrent(
-        result.value,
-        result.value.reworkOrderId,
-      ),
-    };
+  ) {
+    return this.service.approve(actor, approvalId, input, key);
   }
 
-  async reject(
+  reject(
     actor: TrustedActorContext,
     approvalId: string,
     input: RejectOwnFactoryApproval,
     key: string,
-  ): Promise<Result<OwnFactoryApprovalResponse>> {
-    const result = await this.service.reject(actor, approvalId, input, key);
-    return {
-      ...result,
-      value: await this.onlyCurrent(
-        result.value,
-        result.value.reworkOrderId,
-      ),
-    };
+  ) {
+    return this.service.reject(actor, approvalId, input, key);
   }
 
   private async onlyCurrent(
