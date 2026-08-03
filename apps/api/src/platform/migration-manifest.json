@@ -59,6 +59,10 @@
     {
       "version": "0015_own_factory_responsibility_approval",
       "checksum": "4904e7efd14a4e7a68212f67aff06881dc4c7e20144f61940c00c7f66fca1d49"
+    },
+    {
+      "version": "0016_responsibility_amount_contract_restore",
+      "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925"
     }
   ]
 }
