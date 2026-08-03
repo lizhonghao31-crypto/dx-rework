@@ -29,6 +29,7 @@ const migrations = [
   "0013_responsibility_review_closure.sql",
   "0014_responsibility_source_share_coverage.sql",
   "0015_own_factory_responsibility_approval.sql",
+  "0016_responsibility_amount_contract_restore.sql",
 ] as const;
 
 type ReviewedOrder = {
@@ -529,7 +530,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     });
   });
 
-  it("creates one immutable own-factory approval, notifies the other owner, and rejects non-owners", async () => {
+  it("creates one immutable own-factory approval, queues the other owner result notice, and rejects non-owners", async () => {
     const order = await createReviewedOrder("own-factory-approve");
     const production = actor(
       ids.productionOne,
@@ -700,21 +701,21 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     });
   });
 
-  it("preserves legal 0.00 own-factory details beside a positive N08-A total", async () => {
+  it("rejects zero-bps allocations and preserves legal 0.00 lines from a positive share", async () => {
     const order = await createReviewedOrder("own-factory-zero-detail", 2);
     const production = actor(
       ids.productionOne,
       ["production_management"],
       "responsibility:determine",
     );
-    const draft = await responsibility.saveDraft(
+    await expect(responsibility.saveDraft(
       production,
       order.orderId,
       {
         expectedOrderVersion: order.orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.productionOne,
-        reason: "保留零金额责任明细",
+        reason: "零比例必须拒绝",
         processes: [
           {
             configurationItemId: order.itemIds[0]!,
@@ -722,6 +723,33 @@ runWithPostgres("responsibility authorization and handler closure", () => {
             allocations: [
               { responsibilityType: "own_factory", shareBps: 0 },
               { responsibilityType: "processing_factory", shareBps: 10000 },
+            ],
+          },
+          {
+            configurationItemId: order.itemIds[1]!,
+            multiplier: "1.000",
+            allocations: [{ responsibilityType: "own_factory", shareBps: 10000 }],
+          },
+        ],
+      },
+      "s2-own-factory-zero-bps-rejected",
+    )).rejects.toThrow();
+
+    const draft = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: order.orderVersion,
+        expectedCurrentDeterminationVersion: null,
+        handlerUserId: ids.productionOne,
+        reason: "保留正比例舍入零金额明细",
+        processes: [
+          {
+            configurationItemId: order.itemIds[0]!,
+            multiplier: "1.000",
+            allocations: [
+              { responsibilityType: "own_factory", shareBps: 1 },
+              { responsibilityType: "processing_factory", shareBps: 9999 },
             ],
           },
           {
@@ -753,14 +781,14 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     expect(approval.approval!.sourceSnapshot.processes).toContainEqual(
       expect.objectContaining({
         configurationItemId: order.itemIds[0],
-        ownFactoryShareBps: 0,
+        ownFactoryShareBps: 1,
         ownFactoryRoundedAmount: "0.00",
       }),
     );
     expect(approval.approval!.sourceSnapshot.amountLines).toContainEqual(
       expect.objectContaining({
         configurationItemId: order.itemIds[0],
-        shareBps: 0,
+        shareBps: 1,
         roundedAmount: "0.00",
       }),
     );
@@ -778,7 +806,16 @@ runWithPostgres("responsibility authorization and handler closure", () => {
          AND allocation.responsibility_type='own_factory'`,
       [order.orderId, order.itemIds[0]],
     );
-    expect(persisted.rows).toEqual([{ share_bps: 0, rounded_amount: "0.00" }]);
+    expect(persisted.rows).toEqual([{ share_bps: 1, rounded_amount: "0.00" }]);
+
+    const guard = await database.query<{ definition: string }>(
+      "SELECT pg_get_functiondef('guard_responsibility_line()'::regprocedure) definition",
+    );
+    expect(guard.rows[0]!.definition).toContain("parent_multiplier");
+    expect(guard.rows[0]!.definition).toContain("parent_share_bps");
+    expect(guard.rows[0]!.definition).toContain(
+      "amount line inputs must match parent responsibility snapshots",
+    );
   });
 
   it("allows exactly one concurrent terminal owner action and sends a rejection back to N07", async () => {
