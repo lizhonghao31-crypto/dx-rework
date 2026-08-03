@@ -58,7 +58,7 @@ export class ResponsibilityDeterminationQueueService {
                 'responsibility:takeover',
                 ARRAY['owner_group']
               ) direct_takeover,
-              (
+              coalesce(
                 leaf.stage='draft'
                 AND EXISTS(
                   SELECT 1
@@ -70,7 +70,8 @@ export class ResponsibilityDeterminationQueueService {
                   SELECT 1
                   FROM rework_responsibility_high_multiplier_confirmations confirmation
                   WHERE confirmation.determination_id=leaf.determination_id
-                )
+                ),
+                false
               ) high_multiplier_pending
        FROM rework_orders order_record
        LEFT JOIN LATERAL (
