@@ -27,6 +27,9 @@ describe("own-factory approval web integration", () => {
     expect(source).toContain('"idempotency-key": crypto.randomUUID()');
     expect(source).toContain("sourceSnapshot.processes");
     expect(source).toContain("sourceSnapshot.amountLines");
+    expect(source).toContain("sourceSnapshot.qualityControl");
+    expect(source).toContain("sourceSnapshot.wholeOrderReview");
+    expect(source).toContain("reviewSnapshotSummary");
     expect(source).not.toContain("parseFloat(");
     expect(source).not.toMatch(/ownFactoryTotalAmount\s*[/+*-]/);
   });
