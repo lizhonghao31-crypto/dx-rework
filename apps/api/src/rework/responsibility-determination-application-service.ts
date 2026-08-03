@@ -7,6 +7,7 @@ import type {
 } from "@dx-rework/contracts";
 import type { Pool } from "pg";
 
+import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
 import { ResponsibilityDeterminationQueueService } from "./responsibility-determination-queue-service.js";
@@ -46,6 +47,17 @@ export class ResponsibilityDeterminationApplicationService {
     input: CreateResponsibilityDraft,
     key: string,
   ) {
+    if (
+      input.processes.some((process) =>
+        process.allocations.some((allocation) => allocation.shareBps <= 0),
+      )
+    ) {
+      throw new ApplicationError(
+        "VALIDATION_ERROR",
+        "Responsibility shares must be greater than zero",
+        400,
+      );
+    }
     return this.draftEngine.saveDraft(actor, orderId, input, key);
   }
 
