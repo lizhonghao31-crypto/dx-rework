@@ -1,14 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash, randomUUID } from "node:crypto";
 import type {
-  ConfirmHighMultiplier,
   CreateResponsibilityDraft,
   FinalizeResponsibility,
   ResponsibilityDeterminationResponse,
-  TakeoverResponsibility,
-  TransferResponsibility,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
+
 import { ApplicationError } from "../platform/errors.js";
 import {
   IdempotencyService,
@@ -19,25 +16,42 @@ import {
 const fail = (message: string, status = 409, code = "CONFLICT"): never => {
   throw new ApplicationError(code, message, status);
 };
+
 export const decimalToScaled = (value: string, scale: number): bigint => {
-  if (!/^\d+(?:\.\d+)?$/.test(value))
+  if (!/^\d+(?:\.\d+)?$/.test(value)) {
     fail("Invalid decimal", 400, "VALIDATION_ERROR");
+  }
   const [whole, fraction = ""] = value.split(".");
-  if (fraction.length > scale)
+  if (fraction.length > scale) {
     fail("Decimal precision exceeded", 400, "VALIDATION_ERROR");
+  }
   return (
-    BigInt(whole!) * 10n ** BigInt(scale) + BigInt(fraction.padEnd(scale, "0"))
+    BigInt(whole!) * 10n ** BigInt(scale) +
+    BigInt(fraction.padEnd(scale, "0"))
   );
 };
+
 export const halfUp2 = (numerator: bigint, denominator: bigint): bigint =>
   ((numerator * 100n * 2n) / denominator + 1n) / 2n;
+
 export const cents = (value: bigint): string =>
   `${value / 100n}.${(value % 100n).toString().padStart(2, "0")}`;
-export const validateBps = (rows: readonly { shareBps: number }[]): void => {
-  if (rows.reduce((s, r) => s + r.shareBps, 0) !== 10000)
-    fail("Responsibility shares must total 10000 bps", 400, "VALIDATION_ERROR");
+
+export const validateBps = (
+  rows: readonly { shareBps: number }[],
+): void => {
+  if (rows.reduce((sum, row) => sum + row.shareBps, 0) !== 10000) {
+    fail(
+      "Responsibility shares must total 10000 bps",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
 };
-export const applyBatchMultiplier = <T extends { configurationItemId: string }>(
+
+export const applyBatchMultiplier = <
+  T extends { configurationItemId: string },
+>(
   rows: readonly T[],
   ids: readonly string[],
   multiplier: string,
@@ -50,11 +64,22 @@ export const applyBatchMultiplier = <T extends { configurationItemId: string }>(
         ? String(row.multiplier)
         : "1",
   }));
+
 type Result<T> = { value: T; reused: boolean };
+type ReworkStatus = ResponsibilityDeterminationResponse["reworkStatus"];
+type PricingUnit =
+  ResponsibilityDeterminationResponse["sourceProcesses"][number]["pricingUnit"];
+type DeterminationView = NonNullable<
+  ResponsibilityDeterminationResponse["determination"]
+>;
+type DeterminationStage = DeterminationView["stage"];
+type AllocationView =
+  DeterminationView["processes"][number]["allocations"][number];
+
 type OrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
-  status: string;
+  status: ReworkStatus;
   version: number;
   style_no: string | null;
   order_no: string | null;
@@ -66,642 +91,754 @@ type OrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
 }>;
+
+type DeterminationRow = Readonly<{
+  determination_id: string;
+  rework_order_id: string;
+  determination_version: number;
+  replaces_determination_id: string | null;
+  source_order_review_id: string;
+  stage: DeterminationStage;
+  handler_user_id: string;
+  created_by: string;
+  reason: string | null;
+  calculation_total: string;
+  confirmed: boolean;
+}>;
+
+type ProcessViewRow = Readonly<{
+  configuration_item_id: string;
+  process_name_snapshot: string;
+  pricing_unit_snapshot: PricingUnit;
+  multiplier: string;
+  high_multiplier_reason: string | null;
+  base_amount: string;
+  responsibility_amount: string;
+  allocations: AllocationView[];
+}>;
+
+type SourceProcessRow = Readonly<{
+  configuration_item_id: string;
+  process_name: string;
+  pricing_unit: PricingUnit;
+  base_amount: string;
+}>;
+
 type ApprovedProcessRow = Readonly<{
   configuration_item_id: string;
   process_name: string;
-  pricing_unit: string;
+  pricing_unit: PricingUnit;
 }>;
+
 type WorkReportShareRow = Readonly<{
   work_report_id: string;
   person_id: string;
   amount: string;
   display_name_snapshot: string;
-  assignment_mode: string;
+  assignment_mode: "individual" | "collective";
 }>;
-type ResponsibilityProcessInput = CreateResponsibilityDraft["processes"][number];
+
+type ResponsibilityProcessInput =
+  CreateResponsibilityDraft["processes"][number];
 type ResponsibilityAllocationInput =
   ResponsibilityProcessInput["allocations"][number];
+
 type ResponsibilityAmountLine = Readonly<{
-  s: WorkReportShareRow;
-  a: ResponsibilityAllocationInput;
-  base: bigint;
+  share: WorkReportShareRow;
+  allocation: ResponsibilityAllocationInput;
   rounded: bigint;
-  unroundedScaled: bigint;
   unrounded: string;
 }>;
-type ResponsibilityProcessRow = Readonly<{
-  p: ResponsibilityProcessInput;
-  item: ApprovedProcessRow;
+
+type ResponsibilityProcessCalculation = Readonly<{
+  input: ResponsibilityProcessInput;
+  approved: ApprovedProcessRow;
   shares: WorkReportShareRow[];
   lines: ResponsibilityAmountLine[];
   processTotal: bigint;
 }>;
+
+/**
+ * Exact-decimal responsibility draft engine.
+ *
+ * Production HTTP routes are wired through
+ * ResponsibilityDeterminationApplicationService. This class owns the amount
+ * engine and the S1 snapshot-finalization primitive used by database closure
+ * tests; authorization for production commands is enforced by the application
+ * and authorized services plus database guards.
+ */
 export class ResponsibilityDeterminationService {
   constructor(
-    private readonly db: Pool,
+    private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
   ) {}
+
   async get(
     actor: TrustedActorContext,
     orderId: string,
-    executor: Pool | PoolClient = this.db,
+    executor: Pool | PoolClient = this.database,
   ): Promise<ResponsibilityDeterminationResponse> {
-    const order = await executor.query<{ status: string; version: number }>(
-      "SELECT status,version FROM rework_orders WHERE rework_order_id=$1",
+    const orderResult = await executor.query<{
+      status: ReworkStatus;
+      version: number;
+    }>("SELECT status,version FROM rework_orders WHERE rework_order_id=$1", [
+      orderId,
+    ]);
+    const order =
+      orderResult.rows[0] ?? fail("返工单不存在", 404, "NOT_FOUND");
+
+    const determinationResult = await executor.query<DeterminationRow>(
+      `SELECT d.*,
+              EXISTS(
+                SELECT 1
+                FROM rework_responsibility_high_multiplier_confirmations confirmation
+                WHERE confirmation.determination_id=d.determination_id
+              ) confirmed
+       FROM rework_responsibility_determinations d
+       WHERE d.rework_order_id=$1
+         AND NOT EXISTS(
+           SELECT 1
+           FROM rework_responsibility_determinations successor
+           WHERE successor.replaces_determination_id=d.determination_id
+         )`,
       [orderId],
     );
-    if (!order.rows[0]) fail("返工单不存在", 404, "NOT_FOUND");
-    const d = await executor.query<any>(
-      `SELECT d.*,EXISTS(SELECT 1 FROM rework_responsibility_high_multiplier_confirmations c WHERE c.determination_id=d.determination_id) confirmed FROM rework_responsibility_determinations d WHERE d.rework_order_id=$1 AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations n WHERE n.replaces_determination_id=d.determination_id)`,
-      [orderId],
-    );
-    const row = d.rows[0];
-    const processes = row
-      ? await executor.query<any>(
-          `SELECT p.*,COALESCE(json_agg(json_build_object('responsibilityType',a.responsibility_type,'shareBps',a.share_bps,'roundedAmount',a.rounded_amount::text) ORDER BY a.responsibility_type) FILTER(WHERE a.responsibility_type IS NOT NULL),'[]') allocations FROM rework_responsibility_processes p LEFT JOIN rework_responsibility_allocations a USING(determination_id,configuration_item_id) WHERE p.determination_id=$1 GROUP BY p.determination_id,p.configuration_item_id`,
-          [row.determination_id],
+    const determination = determinationResult.rows[0] ?? null;
+
+    const processRows: ProcessViewRow[] = determination
+      ? (
+          await executor.query<ProcessViewRow>(
+            `SELECT process.*,
+                    COALESCE(
+                      json_agg(
+                        json_build_object(
+                          'responsibilityType',allocation.responsibility_type,
+                          'shareBps',allocation.share_bps,
+                          'roundedAmount',allocation.rounded_amount::text
+                        )
+                        ORDER BY allocation.responsibility_type
+                      ) FILTER (WHERE allocation.responsibility_type IS NOT NULL),
+                      '[]'
+                    ) allocations
+             FROM rework_responsibility_processes process
+             LEFT JOIN rework_responsibility_allocations allocation
+               USING(determination_id,configuration_item_id)
+             WHERE process.determination_id=$1
+             GROUP BY process.determination_id,process.configuration_item_id`,
+            [determination.determination_id],
+          )
+        ).rows
+      : [];
+
+    const sourceRows = await executor.query<SourceProcessRow>(
+      `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
+              COALESCE(sum(share.amount),0)::text base_amount
+       FROM rework_process_configurations configuration
+       JOIN rework_process_configuration_items item USING(configuration_id)
+       LEFT JOIN rework_work_reports report
+         ON report.rework_order_id=configuration.rework_order_id
+        AND report.configuration_item_id=item.configuration_item_id
+        AND report.status='submitted'
+        AND NOT EXISTS(
+          SELECT 1 FROM rework_work_report_rejections rejection
+          WHERE rejection.work_report_id=report.work_report_id
         )
-      : { rows: [] };
-    const source = await executor.query<any>(
-      `SELECT i.configuration_item_id,i.process_name,i.pricing_unit,COALESCE(sum(s.amount),0)::text base_amount FROM rework_process_configurations c JOIN rework_process_configuration_items i USING(configuration_id) LEFT JOIN rework_work_reports r ON r.rework_order_id=c.rework_order_id AND r.configuration_item_id=i.configuration_item_id AND r.status='submitted' AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections x WHERE x.work_report_id=r.work_report_id) LEFT JOIN rework_work_report_member_shares s USING(work_report_id) WHERE c.rework_order_id=$1 AND c.status='approved' GROUP BY i.configuration_item_id,i.process_name,i.pricing_unit ORDER BY i.configuration_item_id`,
+       LEFT JOIN rework_work_report_member_shares share USING(work_report_id)
+       WHERE configuration.rework_order_id=$1
+         AND configuration.status='approved'
+       GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit
+       ORDER BY item.configuration_item_id`,
       [orderId],
     );
-    const orderRow = order.rows[0]!;
-    const caps = actor.authorizationCapabilities ?? [];
+
+    const actorCapabilities = actor.authorizationCapabilities ?? [];
     return {
       reworkOrderId: orderId,
-      reworkStatus: orderRow.status as any,
-      orderVersion: orderRow.version,
-      handlerUserId: row?.handler_user_id ?? null,
-      canDetermine: caps.includes("responsibility:determine"),
-      canTakeover: caps.includes("responsibility:takeover"),
-      canConfirmHighMultiplier: caps.includes(
+      reworkStatus: order.status,
+      orderVersion: order.version,
+      handlerUserId: determination?.handler_user_id ?? null,
+      canDetermine: actorCapabilities.includes("responsibility:determine"),
+      canTakeover: actorCapabilities.includes("responsibility:takeover"),
+      canConfirmHighMultiplier: actorCapabilities.includes(
         "responsibility:confirm_high_multiplier",
       ),
-      sourceProcesses: source.rows.map((p) => ({
-        configurationItemId: p.configuration_item_id,
-        processName: p.process_name,
-        pricingUnit: p.pricing_unit,
-        baseAmount: p.base_amount,
+      sourceProcesses: sourceRows.rows.map((row) => ({
+        configurationItemId: row.configuration_item_id,
+        processName: row.process_name,
+        pricingUnit: row.pricing_unit,
+        baseAmount: row.base_amount,
       })),
-      determination: row
+      determination: determination
         ? {
-            determinationId: row.determination_id,
-            version: row.determination_version,
-            stage: row.stage,
-            reason: row.reason,
-            calculationTotal: String(row.calculation_total),
-            highMultiplierConfirmed: row.confirmed,
-            processes: processes.rows.map((p) => ({
-              configurationItemId: p.configuration_item_id,
-              processName: p.process_name_snapshot,
-              pricingUnit: p.pricing_unit_snapshot,
-              multiplier: String(p.multiplier),
-              highMultiplierReason: p.high_multiplier_reason,
-              baseAmount: String(p.base_amount),
-              responsibilityAmount: String(p.responsibility_amount),
-              allocations: p.allocations,
+            determinationId: determination.determination_id,
+            version: determination.determination_version,
+            stage: determination.stage,
+            reason: determination.reason,
+            calculationTotal: determination.calculation_total,
+            highMultiplierConfirmed: determination.confirmed,
+            processes: processRows.map((row) => ({
+              configurationItemId: row.configuration_item_id,
+              processName: row.process_name_snapshot,
+              pricingUnit: row.pricing_unit_snapshot,
+              multiplier: row.multiplier,
+              highMultiplierReason: row.high_multiplier_reason,
+              baseAmount: row.base_amount,
+              responsibilityAmount: row.responsibility_amount,
+              allocations: row.allocations,
             })),
           }
         : null,
     };
   }
+
   saveDraft(
     actor: TrustedActorContext,
     orderId: string,
     input: CreateResponsibilityDraft,
     key: string,
-  ) {
+  ): Promise<Result<ResponsibilityDeterminationResponse>> {
     return this.mutate(
       actor,
       "rework.responsibility.draft",
       key,
       { orderId, input },
       201,
-      async (c) => this.create(c, actor, orderId, input),
+      async (client) => this.create(client, actor, orderId, input),
     );
   }
+
   finalize(
     actor: TrustedActorContext,
     orderId: string,
     input: FinalizeResponsibility,
     key: string,
-  ) {
+  ): Promise<Result<ResponsibilityDeterminationResponse>> {
     return this.mutate(
       actor,
       "rework.responsibility.finalize",
       key,
       { orderId, input },
       200,
-      async (c) => {
-        this.require(actor, "responsibility:determine");
-        const o = await this.lock(c, orderId, input.expectedOrderVersion);
-        if (o.status !== "pending_responsibility_determination")
+      async (client) => {
+        this.requireCapability(actor, "responsibility:determine");
+        const order = await this.lockOrder(
+          client,
+          orderId,
+          input.expectedOrderVersion,
+        );
+        if (order.status !== "pending_responsibility_determination") {
           fail("返工单不在待判责状态");
-        const d = await c.query<any>(
-          `SELECT d.* FROM rework_responsibility_determinations d WHERE d.rework_order_id=$1 AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations n WHERE n.replaces_determination_id=d.determination_id) FOR UPDATE`,
+        }
+
+        const determinationResult = await client.query<DeterminationRow>(
+          `SELECT d.*,
+                  EXISTS(
+                    SELECT 1
+                    FROM rework_responsibility_high_multiplier_confirmations confirmation
+                    WHERE confirmation.determination_id=d.determination_id
+                  ) confirmed
+           FROM rework_responsibility_determinations d
+           WHERE d.rework_order_id=$1
+             AND NOT EXISTS(
+               SELECT 1
+               FROM rework_responsibility_determinations successor
+               WHERE successor.replaces_determination_id=d.determination_id
+             )
+           FOR UPDATE`,
           [orderId],
         );
-        const old = d.rows[0];
+        const draft = determinationResult.rows[0];
         if (
-          !old ||
-          old.stage !== "draft" ||
-          old.determination_version !==
+          !draft ||
+          draft.stage !== "draft" ||
+          draft.determination_version !==
             input.expectedCurrentDeterminationVersion
-        )
+        ) {
           fail("判责版本冲突");
-        const confirmation = await c.query<{ confirmation_id: string }>(
-          `SELECT h.confirmation_id FROM rework_responsibility_high_multiplier_confirmations h WHERE h.determination_id=$1`,
-          [old.determination_id],
+        }
+
+        const confirmation = await client.query<{
+          confirmation_id: string;
+        }>(
+          `SELECT confirmation_id
+           FROM rework_responsibility_high_multiplier_confirmations
+           WHERE determination_id=$1`,
+          [draft.determination_id],
         );
-        if (
-          (
-            await c.query(
-              `SELECT 1 FROM rework_responsibility_processes WHERE determination_id=$1 AND multiplier>2`,
-              [old.determination_id],
-            )
-          ).rowCount &&
-          !confirmation.rows[0]
-        )
+        const highMultiplier = await client.query(
+          `SELECT 1
+           FROM rework_responsibility_processes
+           WHERE determination_id=$1 AND multiplier>2
+           LIMIT 1`,
+          [draft.determination_id],
+        );
+        if (highMultiplier.rowCount && !confirmation.rows[0]) {
           fail("高倍率尚未完成独立确认");
-        const id = randomUUID();
-        const event = await this.event(
-          c,
+        }
+
+        const finalizedId = randomUUID();
+        const eventId = await this.appendEvent(
+          client,
           actor,
           "rework.responsibility.finalize",
           orderId,
           undefined,
-          o,
+          order,
           "pending_responsibility_action",
         );
-        await c.query(
-          `INSERT INTO rework_responsibility_determinations(determination_id,rework_order_id,determination_version,replaces_determination_id,source_order_review_id,stage,handler_user_id,created_by,reason,source_high_multiplier_confirmation_id,input_snapshot,calculation_total,operation_event_id,request_id) SELECT $1,rework_order_id,determination_version+1,determination_id,source_order_review_id,'finalized',handler_user_id,$2,reason,$3,input_snapshot,calculation_total,$4,$5 FROM rework_responsibility_determinations WHERE determination_id=$6`,
+        await client.query(
+          `INSERT INTO rework_responsibility_determinations(
+             determination_id,rework_order_id,determination_version,
+             replaces_determination_id,source_order_review_id,stage,
+             handler_user_id,created_by,reason,
+             source_high_multiplier_confirmation_id,input_snapshot,
+             calculation_total,operation_event_id,request_id
+           )
+           SELECT $1,rework_order_id,determination_version+1,determination_id,
+                  source_order_review_id,'finalized',handler_user_id,$2,reason,
+                  $3,input_snapshot,calculation_total,$4,$5
+           FROM rework_responsibility_determinations
+           WHERE determination_id=$6`,
           [
-            id,
+            finalizedId,
             actor.actorId,
             confirmation.rows[0]?.confirmation_id ?? null,
-            event,
+            eventId,
             actor.requestId,
-            old.determination_id,
+            draft.determination_id,
           ],
         );
-        await c.query(
-          `INSERT INTO rework_responsibility_processes SELECT $1,configuration_item_id,process_name_snapshot,pricing_unit_snapshot,multiplier,high_multiplier_reason,base_amount,responsibility_amount,$2,$3 FROM rework_responsibility_processes WHERE determination_id=$4`,
-          [id, event, actor.requestId, old.determination_id],
+        await client.query(
+          `INSERT INTO rework_responsibility_processes
+           SELECT $1,configuration_item_id,process_name_snapshot,
+                  pricing_unit_snapshot,multiplier,high_multiplier_reason,
+                  base_amount,responsibility_amount,$2,$3
+           FROM rework_responsibility_processes
+           WHERE determination_id=$4`,
+          [finalizedId, eventId, actor.requestId, draft.determination_id],
         );
-        await c.query(
-          `INSERT INTO rework_responsibility_allocations SELECT $1,configuration_item_id,responsibility_type,share_bps,rounded_amount,$2,$3 FROM rework_responsibility_allocations WHERE determination_id=$4`,
-          [id, event, actor.requestId, old.determination_id],
+        await client.query(
+          `INSERT INTO rework_responsibility_allocations
+           SELECT $1,configuration_item_id,responsibility_type,share_bps,
+                  rounded_amount,$2,$3
+           FROM rework_responsibility_allocations
+           WHERE determination_id=$4`,
+          [finalizedId, eventId, actor.requestId, draft.determination_id],
         );
-        await c.query(
-          `INSERT INTO rework_responsibility_amount_lines SELECT $1,configuration_item_id,work_report_id,person_id,responsibility_type,base_member_share_amount,multiplier,share_bps,unrounded_amount,rounded_amount,rounding_rule,worker_display_name_snapshot,task_mode_snapshot,member_snapshot,report_snapshot,$2,$3 FROM rework_responsibility_amount_lines WHERE determination_id=$4`,
-          [id, event, actor.requestId, old.determination_id],
+        await client.query(
+          `INSERT INTO rework_responsibility_amount_lines
+           SELECT $1,configuration_item_id,work_report_id,person_id,
+                  responsibility_type,base_member_share_amount,multiplier,
+                  share_bps,unrounded_amount,rounded_amount,rounding_rule,
+                  worker_display_name_snapshot,task_mode_snapshot,
+                  member_snapshot,report_snapshot,$2,$3
+           FROM rework_responsibility_amount_lines
+           WHERE determination_id=$4`,
+          [finalizedId, eventId, actor.requestId, draft.determination_id],
         );
-        await c.query(
-          "UPDATE rework_orders SET status='pending_responsibility_action',version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
+        await client.query(
+          `UPDATE rework_orders
+           SET status='pending_responsibility_action',version=version+1,
+               updated_by=$2,updated_at=CURRENT_TIMESTAMP
+           WHERE rework_order_id=$1`,
           [orderId, actor.actorId],
         );
-        return this.get(actor, orderId, c);
+        return this.get(actor, orderId, client);
       },
     );
   }
-  transfer(
-    actor: TrustedActorContext,
-    orderId: string,
-    input: TransferResponsibility,
-    key: string,
-  ) {
-    return this.handler(
-      actor,
-      orderId,
-      input,
-      key,
-      "transferred",
-      input.toUserId,
-      "responsibility:determine",
-    );
-  }
-  takeover(
-    actor: TrustedActorContext,
-    orderId: string,
-    input: TakeoverResponsibility,
-    key: string,
-  ) {
-    return this.handler(
-      actor,
-      orderId,
-      input,
-      key,
-      "taken_over",
-      actor.actorId,
-      "responsibility:takeover",
-    );
-  }
-  confirmHighMultiplier(
-    actor: TrustedActorContext,
-    determinationId: string,
-    input: ConfirmHighMultiplier,
-    key: string,
-  ) {
-    return this.mutate(
-      actor,
-      "rework.responsibility.high_multiplier.confirm",
-      key,
-      { determinationId, input },
-      200,
-      async (c) => {
-        this.require(actor, "responsibility:confirm_high_multiplier");
-        const d = await c.query<any>(
-          "SELECT * FROM rework_responsibility_determinations WHERE determination_id=$1 FOR SHARE",
-          [determinationId],
-        );
-        const row = d.rows[0];
-        if (!row) fail("判责版本不存在", 404, "NOT_FOUND");
-        await this.lock(c, row.rework_order_id, input.expectedOrderVersion);
-        if (
-          row.determination_version !==
-            input.expectedCurrentDeterminationVersion ||
-          row.created_by === actor.actorId
-        )
-          fail("确认人必须是不同老板");
-        if (
-          !(
-            await c.query(
-              "SELECT 1 FROM rework_responsibility_processes WHERE determination_id=$1 AND multiplier>2",
-              [determinationId],
-            )
-          ).rowCount
-        )
-          fail("该版本不存在高倍率");
-        const event = await this.event(
-          c,
-          actor,
-          "rework.responsibility.high_multiplier.confirm",
-          row.rework_order_id,
-          input.reason,
-        );
-        await c.query(
-          "INSERT INTO rework_responsibility_high_multiplier_confirmations VALUES($1,$2,$3,DEFAULT,$4,$5,$6,$7)",
-          [
-            randomUUID(),
-            determinationId,
-            actor.actorId,
-            input.reason,
-            { determinationId },
-            event,
-            actor.requestId,
-          ],
-        );
-        await c.query(
-          "UPDATE rework_orders SET version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
-          [row.rework_order_id, actor.actorId],
-        );
-        return this.get(actor, row.rework_order_id, c);
-      },
-    );
-  }
+
   private async create(
-    c: PoolClient,
+    client: PoolClient,
     actor: TrustedActorContext,
     orderId: string,
     input: CreateResponsibilityDraft,
-  ) {
-    this.require(actor, "responsibility:determine");
-    const o = await this.lock(c, orderId, input.expectedOrderVersion);
-    if (o.status !== "pending_responsibility_determination")
+  ): Promise<ResponsibilityDeterminationResponse> {
+    this.requireCapability(actor, "responsibility:determine");
+    const order = await this.lockOrder(
+      client,
+      orderId,
+      input.expectedOrderVersion,
+    );
+    if (order.status !== "pending_responsibility_determination") {
       fail("只有整单审核后的返工单可判责");
-    await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-      "responsibility:" + orderId,
+    }
+
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `responsibility:${orderId}`,
     ]);
-    const current = await c.query<any>(
-      `SELECT * FROM rework_responsibility_determinations d WHERE d.rework_order_id=$1 AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations n WHERE n.replaces_determination_id=d.determination_id)`,
+    const currentResult = await client.query<DeterminationRow>(
+      `SELECT d.*,
+              EXISTS(
+                SELECT 1
+                FROM rework_responsibility_high_multiplier_confirmations confirmation
+                WHERE confirmation.determination_id=d.determination_id
+              ) confirmed
+       FROM rework_responsibility_determinations d
+       WHERE d.rework_order_id=$1
+         AND NOT EXISTS(
+           SELECT 1
+           FROM rework_responsibility_determinations successor
+           WHERE successor.replaces_determination_id=d.determination_id
+         )`,
       [orderId],
     );
-    const previous = current.rows[0];
+    const previous = currentResult.rows[0] ?? null;
     if (
       (previous?.determination_version ?? null) !==
       input.expectedCurrentDeterminationVersion
-    )
+    ) {
       fail("判责版本冲突");
-    if (previous?.stage === "finalized" && !input.reason)
+    }
+    if (previous?.stage === "finalized" && !input.reason) {
       fail("变更正式判责必须填写原因", 400, "VALIDATION_ERROR");
-    const approved = await c.query<ApprovedProcessRow>(
-      `SELECT i.configuration_item_id,i.process_name,i.pricing_unit FROM rework_process_configurations x JOIN rework_process_configuration_items i USING(configuration_id) WHERE x.rework_order_id=$1 AND x.status='approved'`,
+    }
+
+    const approvedResult = await client.query<ApprovedProcessRow>(
+      `SELECT item.configuration_item_id,item.process_name,item.pricing_unit
+       FROM rework_process_configurations configuration
+       JOIN rework_process_configuration_items item USING(configuration_id)
+       WHERE configuration.rework_order_id=$1
+         AND configuration.status='approved'`,
       [orderId],
     );
     if (
-      new Set(input.processes.map((p) => p.configurationItemId)).size !==
-        approved.rows.length ||
-      approved.rows.some(
-        (i) =>
+      new Set(input.processes.map((row) => row.configurationItemId)).size !==
+        approvedResult.rows.length ||
+      approvedResult.rows.some(
+        (approved) =>
           !input.processes.some(
-            (p) => p.configurationItemId === i.configuration_item_id,
+            (row) =>
+              row.configurationItemId === approved.configuration_item_id,
           ),
       )
-    )
+    ) {
       fail("必须提交全部 approved 工序", 400, "VALIDATION_ERROR");
-    input.processes.forEach((p) => validateBps(p.allocations));
-    const review = await c.query<{ order_review_id: string }>(
-      "SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1",
+    }
+    input.processes.forEach((row) => validateBps(row.allocations));
+
+    const reviewResult = await client.query<{ order_review_id: string }>(
+      `SELECT order_review_id
+       FROM rework_order_reviews
+       WHERE rework_order_id=$1`,
       [orderId],
     );
-    if (!review.rows[0]) fail("整单审核不存在");
-    const event = await this.event(
-      c,
+    const review = reviewResult.rows[0] ?? fail("整单审核不存在");
+
+    const eventId = await this.appendEvent(
+      client,
       actor,
       "rework.responsibility.draft",
       orderId,
       input.reason,
-      o,
-      o.status,
+      order,
+      order.status,
     );
-    const id = randomUUID(),
-      version = (previous?.determination_version ?? 0) + 1;
+    const determinationId = randomUUID();
+    const version = (previous?.determination_version ?? 0) + 1;
     let total = 0n;
-    const processRows: ResponsibilityProcessRow[] = [];
-    for (const p of input.processes) {
-      const item =
-        approved.rows.find(
-          (i) => i.configuration_item_id === p.configurationItemId,
+    const calculations: ResponsibilityProcessCalculation[] = [];
+
+    for (const processInput of input.processes) {
+      const approved =
+        approvedResult.rows.find(
+          (row) =>
+            row.configuration_item_id === processInput.configurationItemId,
         ) ?? fail("工序不属于 approved 配置", 400, "VALIDATION_ERROR");
-      const shares = await c.query<WorkReportShareRow>(
-        `SELECT r.work_report_id,s.person_id,s.amount::text,m.display_name_snapshot,t.assignment_mode FROM rework_work_reports r JOIN rework_work_report_member_shares s USING(work_report_id) JOIN rework_work_tasks t USING(work_task_id) JOIN rework_work_task_members m ON m.work_task_id=t.work_task_id AND m.person_id=s.person_id LEFT JOIN rework_work_report_rejections x USING(work_report_id) WHERE r.rework_order_id=$1 AND r.configuration_item_id=$2 AND r.status='submitted' AND x.work_report_id IS NULL`,
-        [orderId, p.configurationItemId],
+      const shareResult = await client.query<WorkReportShareRow>(
+        `SELECT report.work_report_id,share.person_id,share.amount::text,
+                member.display_name_snapshot,task.assignment_mode
+         FROM rework_work_reports report
+         JOIN rework_work_report_member_shares share USING(work_report_id)
+         JOIN rework_work_tasks task USING(work_task_id)
+         JOIN rework_work_task_members member
+           ON member.work_task_id=task.work_task_id
+          AND member.person_id=share.person_id
+         LEFT JOIN rework_work_report_rejections rejection USING(work_report_id)
+         WHERE report.rework_order_id=$1
+           AND report.configuration_item_id=$2
+           AND report.status='submitted'
+           AND rejection.work_report_id IS NULL`,
+        [orderId, processInput.configurationItemId],
       );
-      const mult = decimalToScaled(p.multiplier, 3);
+      const multiplier = decimalToScaled(processInput.multiplier, 3);
       let processTotal = 0n;
       const lines: ResponsibilityAmountLine[] = [];
-      for (const s of shares.rows)
-        for (const a of p.allocations) {
-          const base = decimalToScaled(s.amount, 8);
-          const rounded = halfUp2(base * mult * BigInt(a.shareBps), 10n ** 15n);
+
+      for (const share of shareResult.rows) {
+        for (const allocation of processInput.allocations) {
+          const base = decimalToScaled(share.amount, 8);
+          const unroundedScaled =
+            base * multiplier * BigInt(allocation.shareBps);
+          const rounded = halfUp2(unroundedScaled, 10n ** 15n);
           processTotal += rounded;
           lines.push({
-            s,
-            a,
-            base,
+            share,
+            allocation,
             rounded,
-            unroundedScaled: base * mult * BigInt(a.shareBps),
-            unrounded: `${(base * mult * BigInt(a.shareBps)) / 1000000000000000n}.${((base * mult * BigInt(a.shareBps)) % 1000000000000000n).toString().padStart(15, "0")}`,
+            unrounded: `${unroundedScaled / 1_000_000_000_000_000n}.${(
+              unroundedScaled % 1_000_000_000_000_000n
+            )
+              .toString()
+              .padStart(15, "0")}`,
           });
         }
-      processRows.push({ p, item, shares: shares.rows, lines, processTotal });
+      }
+      calculations.push({
+        input: processInput,
+        approved,
+        shares: shareResult.rows,
+        lines,
+        processTotal,
+      });
       total += processTotal;
     }
-    await c.query(
-      `INSERT INTO rework_responsibility_determinations(determination_id,rework_order_id,determination_version,replaces_determination_id,source_order_review_id,stage,handler_user_id,created_by,reason,source_high_multiplier_confirmation_id,input_snapshot,calculation_total,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10,$11,$12,$13)`,
+
+    await client.query(
+      `INSERT INTO rework_responsibility_determinations(
+         determination_id,rework_order_id,determination_version,
+         replaces_determination_id,source_order_review_id,stage,
+         handler_user_id,created_by,reason,
+         source_high_multiplier_confirmation_id,input_snapshot,
+         calculation_total,operation_event_id,request_id
+       ) VALUES($1,$2,$3,$4,$5,'draft',$6,$7,$8,NULL,$9,$10,$11,$12)`,
       [
-        id,
+        determinationId,
         orderId,
         version,
         previous?.determination_id ?? null,
-        review.rows[0]!.order_review_id,
-        "draft",
+        review.order_review_id,
         input.handlerUserId,
         actor.actorId,
         input.reason ?? null,
         input,
         cents(total),
-        event,
+        eventId,
         actor.requestId,
       ],
     );
-    for (const x of processRows) {
-      const base = x.shares.reduce(
-        (s, r) => s + decimalToScaled(r.amount, 8),
+
+    for (const calculation of calculations) {
+      const baseAmount = calculation.shares.reduce(
+        (sum, share) => sum + decimalToScaled(share.amount, 8),
         0n,
       );
-      await c.query(
-        `INSERT INTO rework_responsibility_processes VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      await client.query(
+        `INSERT INTO rework_responsibility_processes(
+           determination_id,configuration_item_id,process_name_snapshot,
+           pricing_unit_snapshot,multiplier,high_multiplier_reason,
+           base_amount,responsibility_amount,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
-          id,
-          x.p.configurationItemId,
-          x.item.process_name,
-          x.item.pricing_unit,
-          x.p.multiplier,
-          x.p.highMultiplierReason ?? null,
-          `${base / 100000000n}.${(base % 100000000n).toString().padStart(8, "0")}`,
-          cents(x.processTotal),
-          event,
+          determinationId,
+          calculation.input.configurationItemId,
+          calculation.approved.process_name,
+          calculation.approved.pricing_unit,
+          calculation.input.multiplier,
+          calculation.input.highMultiplierReason ?? null,
+          `${baseAmount / 100_000_000n}.${(baseAmount % 100_000_000n)
+            .toString()
+            .padStart(8, "0")}`,
+          cents(calculation.processTotal),
+          eventId,
           actor.requestId,
         ],
       );
-      for (const a of x.p.allocations) {
-        const amount = x.lines
-          .filter((l) => l.a.responsibilityType === a.responsibilityType)
-          .reduce((s, l) => s + l.rounded, 0n);
-        await c.query(
-          `INSERT INTO rework_responsibility_allocations VALUES($1,$2,$3,$4,$5,$6,$7)`,
+
+      for (const allocation of calculation.input.allocations) {
+        const allocationAmount = calculation.lines
+          .filter(
+            (line) =>
+              line.allocation.responsibilityType ===
+              allocation.responsibilityType,
+          )
+          .reduce((sum, line) => sum + line.rounded, 0n);
+        await client.query(
+          `INSERT INTO rework_responsibility_allocations(
+             determination_id,configuration_item_id,responsibility_type,
+             share_bps,rounded_amount,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
           [
-            id,
-            x.p.configurationItemId,
-            a.responsibilityType,
-            a.shareBps,
-            cents(amount),
-            event,
+            determinationId,
+            calculation.input.configurationItemId,
+            allocation.responsibilityType,
+            allocation.shareBps,
+            cents(allocationAmount),
+            eventId,
             actor.requestId,
           ],
         );
       }
-      for (const l of x.lines)
-        await c.query(
-          `INSERT INTO rework_responsibility_amount_lines VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'half_up_2',$11,$12,$13,$14,$15,$16)`,
+
+      for (const line of calculation.lines) {
+        await client.query(
+          `INSERT INTO rework_responsibility_amount_lines(
+             determination_id,configuration_item_id,work_report_id,person_id,
+             responsibility_type,base_member_share_amount,multiplier,share_bps,
+             unrounded_amount,rounded_amount,rounding_rule,
+             worker_display_name_snapshot,task_mode_snapshot,member_snapshot,
+             report_snapshot,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'half_up_2',$11,$12,$13,$14,$15,$16)`,
           [
-            id,
-            x.p.configurationItemId,
-            l.s.work_report_id,
-            l.s.person_id,
-            l.a.responsibilityType,
-            l.s.amount,
-            x.p.multiplier,
-            l.a.shareBps,
-            l.unrounded,
-            cents(l.rounded),
-            l.s.display_name_snapshot,
-            l.s.assignment_mode,
-            { personId: l.s.person_id, amount: l.s.amount },
-            { workReportId: l.s.work_report_id },
-            event,
+            determinationId,
+            calculation.input.configurationItemId,
+            line.share.work_report_id,
+            line.share.person_id,
+            line.allocation.responsibilityType,
+            line.share.amount,
+            calculation.input.multiplier,
+            line.allocation.shareBps,
+            line.unrounded,
+            cents(line.rounded),
+            line.share.display_name_snapshot,
+            line.share.assignment_mode,
+            {
+              personId: line.share.person_id,
+              amount: line.share.amount,
+            },
+            { workReportId: line.share.work_report_id },
+            eventId,
             actor.requestId,
           ],
         );
+      }
     }
-    await c.query(
-      "UPDATE rework_orders SET version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
+
+    await client.query(
+      `UPDATE rework_orders
+       SET version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP
+       WHERE rework_order_id=$1`,
       [orderId, actor.actorId],
     );
-    return this.get(actor, orderId, c);
+    return this.get(actor, orderId, client);
   }
-  private handler(
+
+  private requireCapability(
     actor: TrustedActorContext,
-    orderId: string,
-    input: TransferResponsibility | TakeoverResponsibility,
-    key: string,
-    type: string,
-    to: string,
-    cap: string,
-  ) {
-    return this.mutate(
-      actor,
-      "rework.responsibility." + type,
-      key,
-      { orderId, input },
-      200,
-      async (c) => {
-        this.require(actor, cap);
-        await this.lock(c, orderId, input.expectedOrderVersion);
-        const target = await c.query(
-          `SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL JOIN role_capabilities rc ON rc.role_code=a.role_code AND rc.capability='responsibility:determine' WHERE u.id=$1 AND u.enabled=true`,
-          [to],
-        );
-        if (!target.rowCount)
-          fail("目标处理人无效或无判责能力", 400, "VALIDATION_ERROR");
-        const current = await c.query<any>(
-          `SELECT * FROM rework_responsibility_determinations d WHERE d.rework_order_id=$1 AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations n WHERE n.replaces_determination_id=d.determination_id)`,
-          [orderId],
-        );
-        if (
-          (current.rows[0]?.determination_version ?? null) !==
-          input.expectedCurrentDeterminationVersion
-        )
-          fail("判责版本冲突");
-        const event = await this.event(
-          c,
-          actor,
-          "rework.responsibility." + type,
-          orderId,
-          input.reason,
-        );
-        await c.query(
-          "INSERT INTO rework_responsibility_handler_events VALUES($1,$2,$3,$4,$5,$6,$7,$8,DEFAULT,$9,$10)",
-          [
-            randomUUID(),
-            orderId,
-            current.rows[0]?.determination_id ?? null,
-            type,
-            current.rows[0]?.handler_user_id ?? null,
-            to,
-            actor.actorId,
-            input.reason,
-            event,
-            actor.requestId,
-          ],
-        );
-        await c.query(
-          "UPDATE rework_orders SET version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
-          [orderId, actor.actorId],
-        );
-        return this.get(actor, orderId, c);
-      },
-    );
-  }
-  private require(a: TrustedActorContext, c: string) {
-    if (!(a.authorizationCapabilities ?? []).includes(c))
+    capability: string,
+  ): void {
+    if (!(actor.authorizationCapabilities ?? []).includes(capability)) {
       fail("当前用户无权执行该操作", 403, "FORBIDDEN");
+    }
   }
-  private async lock(c: PoolClient, id: string, v: number) {
-    const q = await c.query<OrderRow>(
-      "SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity FROM rework_orders WHERE rework_order_id=$1 FOR UPDATE",
-      [id],
+
+  private async lockOrder(
+    client: PoolClient,
+    orderId: string,
+    expectedVersion: number,
+  ): Promise<OrderRow> {
+    const result = await client.query<OrderRow>(
+      `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
+              merchandiser_user_id,processing_factory_type,
+              processing_factory_supplier_id,
+              processing_factory_supplier_version,problem_part,
+              problem_description,rework_quantity
+       FROM rework_orders
+       WHERE rework_order_id=$1
+       FOR UPDATE`,
+      [orderId],
     );
-    const row = q.rows[0] ?? fail("返工单不存在", 404, "NOT_FOUND");
-    if (row.version !== v) fail("返工单版本冲突");
-    return row;
+    const order = result.rows[0] ?? fail("返工单不存在", 404, "NOT_FOUND");
+    if (order.version !== expectedVersion) {
+      fail("返工单版本冲突");
+    }
+    return order;
   }
-  private orderAudit(o: OrderRow, status = o.status, version = o.version) {
+
+  private orderAudit(
+    order: OrderRow,
+    status: ReworkStatus = order.status,
+    version = order.version,
+  ): Record<string, unknown> {
     return {
-      reworkOrderId: o.rework_order_id,
-      reworkNo: o.rework_no,
+      reworkOrderId: order.rework_order_id,
+      reworkNo: order.rework_no,
       status,
-      styleNo: o.style_no,
-      orderNo: o.order_no,
-      merchandiserUserId: o.merchandiser_user_id,
+      styleNo: order.style_no,
+      orderNo: order.order_no,
+      merchandiserUserId: order.merchandiser_user_id,
       processingFactory:
-        o.processing_factory_type === null
+        order.processing_factory_type === null
           ? null
-          : o.processing_factory_type === "own_factory"
+          : order.processing_factory_type === "own_factory"
             ? { type: "own_factory" }
             : {
                 type: "supplier",
-                supplierId: o.processing_factory_supplier_id,
-                supplierVersion: o.processing_factory_supplier_version,
+                supplierId: order.processing_factory_supplier_id,
+                supplierVersion:
+                  order.processing_factory_supplier_version,
               },
-      problemPart: o.problem_part,
-      problemDescription: o.problem_description,
-      reworkQuantity: o.rework_quantity,
+      problemPart: order.problem_part,
+      problemDescription: order.problem_description,
+      reworkQuantity: order.rework_quantity,
       version,
     };
   }
-  private async event(
-    c: PoolClient,
-    a: TrustedActorContext,
+
+  private async appendEvent(
+    client: PoolClient,
+    actor: TrustedActorContext,
     action: string,
-    id: string,
+    orderId: string,
     reason: string | undefined,
-    order?: OrderRow,
-    status = order?.status,
-  ) {
+    order: OrderRow,
+    status: ReworkStatus,
+  ): Promise<string> {
     const eventId = await this.events.append(
-      c,
-      {
-        ...a,
-        authorizationCapability: action.includes("take")
-          ? "responsibility:takeover"
-          : action.includes("confirm")
-            ? "responsibility:confirm_high_multiplier"
-            : "responsibility:determine",
-      },
+      client,
+      { ...actor, authorizationCapability: "responsibility:determine" },
       {
         action,
         entityType: "rework_order",
-        entityId: id,
-        ...(order
-          ? {
-              before: this.orderAudit(order),
-              after: this.orderAudit(order, status, order.version + 1),
-            }
-          : {}),
+        entityId: orderId,
+        before: this.orderAudit(order),
+        after: this.orderAudit(order, status, order.version + 1),
         ...(reason ? { reason } : {}),
       },
     );
-    await c.query(
-      "SELECT set_config('dx_rework.responsibility_event_id',$1,true),set_config('dx_rework.responsibility_request_id',$2,true),set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
-      [eventId, a.requestId],
+    await client.query(
+      `SELECT
+         set_config('dx_rework.responsibility_event_id',$1,true),
+         set_config('dx_rework.responsibility_request_id',$2,true),
+         set_config('dx_rework.rework_event_id',$1,true),
+         set_config('dx_rework.rework_request_id',$2,true)`,
+      [eventId, actor.requestId],
     );
     return eventId;
   }
+
   private async mutate<T>(
-    a: TrustedActorContext,
+    actor: TrustedActorContext,
     scope: string,
     key: string,
     payload: unknown,
-    status: number,
-    work: (c: PoolClient) => Promise<T>,
+    statusCode: number,
+    work: (client: PoolClient) => Promise<T>,
   ): Promise<Result<T>> {
-    const c = await this.db.connect();
+    const client = await this.database.connect();
     try {
-      await c.query("BEGIN");
-      const r = await this.idempotency.execute(
-        c,
+      await client.query("BEGIN");
+      const result = await this.idempotency.execute(
+        client,
         {
           scope,
-          actorKey: a.actorId,
+          actorKey: actor.actorId,
           key,
           requestHash: createHash("sha256")
             .update(JSON.stringify(payload))
             .digest("hex"),
-          expiresAt: new Date(Date.now() + 2592000000),
+          expiresAt: new Date(Date.now() + 2_592_000_000),
         },
-        async () => ({ statusCode: status, response: await work(c) }),
+        async () => ({ statusCode, response: await work(client) }),
       );
-      await c.query("COMMIT");
-      return { value: r.response, reused: r.reused };
-    } catch (e) {
-      await c.query("ROLLBACK");
-      throw e;
+      await client.query("COMMIT");
+      return { value: result.response, reused: result.reused };
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
     } finally {
-      c.release();
+      client.release();
     }
   }
 }
