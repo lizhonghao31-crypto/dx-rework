@@ -15,7 +15,8 @@ const migrations = [
   "0011_responsibility_authorization_handler_closure.sql", "0012_responsibility_direct_delegation.sql",
   "0013_responsibility_review_closure.sql", "0014_responsibility_source_share_coverage.sql",
   "0015_own_factory_responsibility_approval.sql", "0016_responsibility_amount_contract_restore.sql",
-  "0017_external_responsibility_deduction.sql",
+  "0017_external_responsibility_deduction.sql", "0018_external_responsibility_review_closure.sql",
+  "0019_external_revision_seed_ordering.sql",
 ] as const;
 
 runWithPostgres("external responsibility migration replay", () => {
@@ -36,8 +37,8 @@ runWithPostgres("external responsibility migration replay", () => {
     await admin.end();
   });
 
-  it("replays the forward ledger, completion state and non-delegable revision guard", async () => {
-    const [tables, functions, completed, revisionCapability] = await Promise.all([
+  it("replays the reviewed ledger, capabilities, version triggers, and draft link", async () => {
+    const [tables, functions, completed, revisionCapability, roleCapabilities, seededColumn, triggers, signDefinition] = await Promise.all([
       database.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=ANY($1::text[]) ORDER BY table_name`, [[
         "rework_external_responsibility_batches", "rework_external_responsibility_items",
         "rework_external_responsibility_cases", "rework_external_deduction_entries",
@@ -46,14 +47,31 @@ runWithPostgres("external responsibility migration replay", () => {
       database.query<{ proname: string }>(`SELECT proname FROM pg_proc WHERE pronamespace=current_schema()::regnamespace AND proname=ANY($1::text[]) ORDER BY proname`, [[
         "external_responsibility_can_sign", "external_responsibility_can_payables",
         "external_responsibility_can_view_case", "guard_external_responsibility_attachment_binding",
+        "bump_external_case_version_from_ledger",
       ]]),
       database.query<{ definition: string }>(`SELECT pg_get_constraintdef(constraint_row.oid) definition FROM pg_constraint constraint_row JOIN pg_class relation ON relation.oid=constraint_row.conrelid WHERE relation.relname='rework_orders' AND constraint_row.conname='rework_orders_status_check'`),
       database.query<{ count: number }>("SELECT count(*)::int count FROM capability_catalog WHERE capability='external_responsibility:approve_revision'"),
+      database.query<{ capability: string }>(`SELECT capability FROM role_capabilities WHERE role_code='embroidery_washing_merchandiser' AND capability=ANY($1::text[]) ORDER BY capability`, [["supplier_catalog:read", "tools:user"]]),
+      database.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='rework_external_responsibility_revision_requests' AND column_name='seeded_determination_id'`),
+      database.query<{ tgname: string }>(`SELECT tgname FROM pg_trigger WHERE tgrelid=ANY(ARRAY['rework_external_deduction_follow_ups'::regclass,'rework_external_deduction_entries'::regclass]) AND NOT tgisinternal AND tgname=ANY($1::text[]) ORDER BY tgname`, [["external_deductions_bump_case_version", "external_followups_bump_case_version"]]),
+      database.query<{ definition: string }>("SELECT pg_get_functiondef('external_responsibility_can_sign(uuid,uuid,text)'::regprocedure) definition"),
     ]);
     expect(tables.rows.map((row) => row.table_name)).toHaveLength(6);
-    expect(functions.rows.map((row) => row.proname)).toHaveLength(4);
+    expect(functions.rows.map((row) => row.proname)).toHaveLength(5);
     expect(completed.rows[0]?.definition).toContain("completed");
     expect(revisionCapability.rows[0]).toEqual({ count: 1 });
+    expect(roleCapabilities.rows.map((row) => row.capability)).toEqual([
+      "supplier_catalog:read",
+      "tools:user",
+    ]);
+    expect(seededColumn.rows).toEqual([{ column_name: "seeded_determination_id" }]);
+    expect(triggers.rows.map((row) => row.tgname)).toEqual([
+      "external_deductions_bump_case_version",
+      "external_followups_bump_case_version",
+    ]);
+    expect(signDefinition.rows[0]?.definition).toContain(
+      "order_record.merchandiser_user_id = delegation.grantor_user_id",
+    );
     await expect(database.query(
       `INSERT INTO delegated_authorizations(
          delegation_id,grantor_user_id,grantee_user_id,capability,scope_type,scope_id,
