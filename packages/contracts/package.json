@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./responsibility-queue": {
+      "types": "./src/responsibility-queue.ts",
+      "import": "./dist/responsibility-queue.js"
     }
   },
   "scripts": {

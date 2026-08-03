@@ -3,8 +3,12 @@ import { VersionResponseSchema, type VersionResponse } from "@dx-rework/contract
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Header, Kpis, Queue, Shell, TaskCard } from "./components.js";
 import { members, tasks } from "./fixtures.js";
+import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 
-type LoadState = { kind: "loading" } | { kind: "ready"; version: VersionResponse } | { kind: "unavailable" };
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "ready"; version: VersionResponse }
+  | { kind: "unavailable" };
 
 export function Dashboard({ supervisor = false }: { supervisor?: boolean }) {
   return <Shell active="总览"><Header title={supervisor ? "李同生 · 现场返工工作台" : "管理层共享座舱"} subtitle={supervisor ? "配置工序与单价、动态分派成员、整单审核、工资初核" : "李总、伍总、张文豪查看同一事实；本厂承担最终审批仅李总 / 伍总"} badge={supervisor ? "N01–N10-A 现场节点" : "N00–N09 实时同步"} action={supervisor ? "开始处理下一单" : "导出当前视图"} /><Kpis supervisor={supervisor} /><div className="dashboard-grid"><div className="dashboard-main"><Queue supervisor={supervisor} />{!supervisor && <Surface className="lifecycle"><div className="section-title"><h2>最近返工与双生命周期</h2><Button>查看明细</Button></div><div className="lifecycle-record"><b>RW-2026-0801-012 · PD20529725 · 集体 7 人 · ¥512.25</b><small>工资：已审核待月结 | 外部扣款：签收跟进中 | 操作链：18 条</small></div><StatusBadge tone="info">外部扣款未完成，不阻塞返工业务完结</StatusBadge></Surface>}</div><Surface className="decisions"><h2>{supervisor ? "快捷操作与现场异常" : "待决策与异常"}</h2><p>{supervisor ? "李同生仅展示现场动作，不混入老板终审" : "事实对三人完全共享；操作按钮按登录身份开放"}</p>{!supervisor && <StatusBadge tone="warning">张文豪无本厂承担最终审批权</StatusBadge>}{tasks.slice(0, 3).map((task) => <TaskCard key={task.id} task={task} />)}{!supervisor && <Button variant="primary" className="all-decisions">查看全部待决</Button>}</Surface></div></Shell>;
@@ -14,8 +18,20 @@ export function Tasks() {
   return <Shell active="返工任务"><Header title="返工任务列表" subtitle="统一查询返工单、当前节点、责任链、计件与扣款状态" badge="28 条 · N01–N10-B" action="发起返工" /><Surface className="filters"><InsetField label="关键词" aria-label="关键词" placeholder="单号 / 款号 / 发起人 / 责任人" /><Button variant="primary">全部 28</Button><Button>待处理 12</Button><Button>进行中 8</Button><Button>待责任 5</Button></Surface><h2>任务结果（28）</h2><div className="task-grid">{tasks.map((task) => <TaskCard key={task.id} task={task} />)}</div></Shell>;
 }
 
+const detailOrderId = (): string | null => {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const currentPath = window.location.pathname.startsWith(basePath)
+    ? window.location.pathname.slice(basePath.length) || "/"
+    : window.location.pathname;
+  const match = currentPath.match(
+    /^\/ui\/tasks\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i,
+  );
+  return match?.[1] ?? new URLSearchParams(window.location.search).get("rework");
+};
+
 export function Detail() {
-  return <Shell active="责任处理"><Header title="RW-2026-0801-012 · PD20529725" subtitle="尾部返工 · 281 件 · 当前节点 N08-A 本厂承担审批" badge="待李总 / 伍总任一人终审" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>节点时间线与返工摘要</h2><div className="queue">{["N01 品控发起 · 08:42", "N02 李同生配置工序 · 09:18", "N03 IE 审核 · 09:46", "N04 动态分派 · 成员快照 V1", "N05 集体上数完成 · 281 件", "N06 李同生整单审核 · 已通过"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">已完成</StatusBadge></div>)}</div></Surface><Surface><h2>责任判断与审批</h2><p>李总、伍总、张文豪看到同一事实；仅李总或伍总可完成本厂承担最终审批。</p><TaskCard task={tasks[0]!} /><Button variant="primary">预览审批操作</Button> <Button>返回补充证据</Button></Surface></div></Shell>;
+  const reworkOrderId = detailOrderId();
+  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="当前节点 N07 · 责任判定、转交、接管与高倍率确认" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成整单审核后进入待判责", "保存草稿时按上数成员快照逐行计算", "正式判定原样复制草稿，不读取实时上数", "转交与接管立即改变本单有效处理人", "超过 2 倍必须由不同老板独立确认"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /></div></Shell>;
 }
 
 export function MobileForm({ piecework = false }: { piecework?: boolean }) {
