@@ -63,6 +63,10 @@
     {
       "version": "0016_responsibility_amount_contract_restore",
       "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925"
+    },
+    {
+      "version": "0017_external_responsibility_deduction",
+      "checksum": "f487323df210a3627564de0b2a916bbf873d257cf3d8009ad091ae0fcdc1b383"
     }
   ]
 }

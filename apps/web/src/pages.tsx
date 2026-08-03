@@ -5,6 +5,7 @@ import { Header, Kpis, Queue, Shell, TaskCard } from "./components.js";
 import { members, tasks } from "./fixtures.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
+import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 
 type LoadState =
   | { kind: "loading" }
@@ -32,7 +33,7 @@ const detailOrderId = (): string | null => {
 
 export function Detail() {
   const reworkOrderId = detailOrderId();
-  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 责任判定与 N08-A 本厂承担审批均按服务端实际权限逐单开放" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成整单审核后进入待判责", "保存草稿时按上数成员快照逐行计算", "正式判定原样复制当前草稿", "本厂承担进入 N08-A 终局审批", "超过 2 倍必须由不同老板独立确认"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /><OwnFactoryApprovalPanel reworkOrderId={reworkOrderId} /></div></Shell>;
+  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07、N08-A 与 N08-B 均按服务端实际权限逐单开放；实扣跟进不阻塞生产完结" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成整单审核后进入待判责", "保存草稿时按上数成员快照逐行计算", "正式判定原样复制当前草稿", "本厂承担进入 N08-A 终局审批", "外部责任必须完成签收与应付确认", "实际扣款在 N10-B 独立持续跟进"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /><OwnFactoryApprovalPanel reworkOrderId={reworkOrderId} /><ExternalResponsibilityPanel reworkOrderId={reworkOrderId} /></div></Shell>;
 }
 
 export function MobileForm({ piecework = false }: { piecework?: boolean }) {

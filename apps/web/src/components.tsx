@@ -21,6 +21,7 @@ export function Shell({
     ["工", "返工任务", "/ui/tasks"],
     ["责", "责任处理", "/ui/responsibility"],
     ["审", "本厂审批", "/ui/own-factory-approvals"],
+    ["扣", "外部扣款", "/ui/external-responsibilities"],
     ["计", "集体计件", "/ui/piecework/collective"],
   ];
   return (

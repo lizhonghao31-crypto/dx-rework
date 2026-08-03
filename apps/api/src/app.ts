@@ -26,6 +26,7 @@ import { registerWorkReportingRoutes, type WorkReportingHttpDependencies } from 
 import { registerWholeOrderReviewRoutes, type WholeOrderReviewHttpDependencies } from "./rework/whole-order-review-routes.js";
 import { registerResponsibilityDeterminationRoutes, type ResponsibilityDeterminationHttpDependencies } from "./rework/responsibility-determination-routes.js";
 import { registerOwnFactoryApprovalRoutes, type OwnFactoryApprovalHttpDependencies } from "./rework/own-factory-approval-routes.js";
+import { registerExternalResponsibilityRoutes, type ExternalResponsibilityHttpDependencies } from "./rework/external-responsibility-routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -40,6 +41,7 @@ export type AppDependencies = Readonly<{
   wholeOrderReview?: WholeOrderReviewHttpDependencies;
   responsibilityDetermination?: ResponsibilityDeterminationHttpDependencies;
   ownFactoryApproval?: OwnFactoryApprovalHttpDependencies;
+  externalResponsibility?: ExternalResponsibilityHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -104,6 +106,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.wholeOrderReview) registerWholeOrderReviewRoutes(app, dependencies.wholeOrderReview);
   if (dependencies.responsibilityDetermination) registerResponsibilityDeterminationRoutes(app, dependencies.responsibilityDetermination);
   if (dependencies.ownFactoryApproval) registerOwnFactoryApprovalRoutes(app, dependencies.ownFactoryApproval);
+  if (dependencies.externalResponsibility) registerExternalResponsibilityRoutes(app, dependencies.externalResponsibility);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {
