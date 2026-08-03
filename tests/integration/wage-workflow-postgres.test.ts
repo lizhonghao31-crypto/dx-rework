@@ -71,17 +71,19 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
   const actor = (
     actorId: string,
     actorRoles: readonly string[],
+    authorizationCapability: string,
     ...authorizationCapabilities: string[]
   ): TrustedActorContext => ({
     actorId,
     actorRoles,
-    authorizationCapability: authorizationCapabilities[0]!,
+    authorizationCapability,
     authorizationCapabilities,
     requestId: randomUUID(),
   });
-  const tailActor = () => actor(
+  const tailActor = (primary = "process:configure") => actor(
     ids.tail,
     ["order_merchandiser", "tail_supervisor"],
+    primary,
     "process:configure",
     "work:assign",
     "submission:audit",
@@ -94,6 +96,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     ids.administrative,
     ["administrative_clerk"],
     "wage:view",
+    "wage:view",
     "wage:administrative_review",
     "wage:adjustment_approve",
     "wage:export",
@@ -102,13 +105,14 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     ids.monthClose,
     ["wage_month_close_accountant"],
     "wage:view",
+    "wage:view",
     "wage:month_close",
     "wage:export",
   );
 
   async function createCompletedWork(label: string) {
     const draft = await initiation.createDraft(
-      actor(ids.qc, ["quality_control"], "rework:initiate"),
+      actor(ids.qc, ["quality_control"], "rework:initiate", "rework:initiate"),
       {
         styleNo: `WAGE-${label}`,
         merchandiserUserId: ids.tail,
@@ -120,7 +124,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       randomUUID(),
     );
     const submitted = await initiation.submit(
-      actor(ids.qc, ["quality_control"], "rework:initiate"),
+      actor(ids.qc, ["quality_control"], "rework:initiate", "rework:initiate"),
       draft.value.reworkOrderId,
       { expectedVersion: draft.value.version },
       randomUUID(),
@@ -150,7 +154,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       randomUUID(),
     );
     const approved = await configuration.review(
-      actor(ids.ie, ["ie_reviewer"], "process:review"),
+      actor(ids.ie, ["ie_reviewer"], "process:review", "process:review"),
       draft.value.reworkOrderId,
       {
         expectedOrderVersion: queued.value.orderVersion,
@@ -161,7 +165,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     );
     const itemId = approved.value.configuration!.items[0]!.configurationItemId;
     const task = await reporting.createTask(
-      tailActor(),
+      tailActor("work:assign"),
       draft.value.reworkOrderId,
       {
         expectedOrderVersion: approved.value.orderVersion,
@@ -171,9 +175,12 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       },
       randomUUID(),
     );
-    const beforeReport = await reporting.list(tailActor(), draft.value.reworkOrderId);
+    const beforeReport = await reporting.list(
+      tailActor("work:assign"),
+      draft.value.reworkOrderId,
+    );
     await reporting.submitReport(
-      actor(ids.worker, ["worker"], "work:report"),
+      actor(ids.worker, ["worker"], "work:report", "work:report"),
       task.value.workTaskId,
       {
         expectedOrderVersion: beforeReport.orderVersion,
@@ -187,16 +194,19 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
 
   async function createPastReviewedWage(label: string) {
     const orderId = await createCompletedWork(label);
-    const reviewView = await orderReview.get(tailActor(), orderId);
+    const reviewView = await orderReview.get(
+      tailActor("submission:audit"),
+      orderId,
+    );
     expect(reviewView.orderStatus).toBe("pending_order_review");
     const client = await database.connect();
     try {
       await client.query("BEGIN");
       const reviewId = randomUUID();
-      const tail = tailActor();
+      const tail = tailActor("submission:audit");
       const eventId = await events.append(
         client,
-        { ...tail, authorizationCapability: "submission:audit" },
+        tail,
         {
           action: "rework.whole_order.approve",
           entityType: "rework_order",
@@ -225,7 +235,9 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       client.release();
     }
     const periods = await wage.list(tailActor());
-    return periods.find((period) => period.periodMonth < new Date().toISOString().slice(0, 7))!;
+    return periods.find((period) =>
+      period.periodMonth < new Date().toISOString().slice(0, 7)
+    )!;
   }
 
   beforeAll(async () => {
@@ -274,7 +286,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     await access.ensureOrganizationPolicy();
     workerPersonId = (
       await access.createPerson(
-        actor(ids.admin, ["system_admin"], "master_data:manage"),
+        actor(ids.admin, ["system_admin"], "master_data:manage", "master_data:manage"),
         {
           personType: "internal",
           appUserId: ids.worker,
@@ -360,7 +372,13 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       finalTotal: "1.01",
     });
     await expect(wage.review(
-      actor(ids.otherAdmin, ["system_admin"], "wage:view", "wage:tail_review"),
+      actor(
+        ids.otherAdmin,
+        ["system_admin"],
+        "wage:view",
+        "wage:view",
+        "wage:tail_review",
+      ),
       period.periodId,
       restarted.period.periodVersion,
       "tail",
@@ -400,12 +418,20 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
 
   it("rejects locking the current natural month", async () => {
     const orderId = await createCompletedWork("current");
-    const view = await orderReview.get(tailActor(), orderId);
+    const view = await orderReview.get(
+      tailActor("submission:audit"),
+      orderId,
+    );
     await orderReview.approve(
-      tailActor(), orderId, { expectedOrderVersion: view.orderVersion }, randomUUID(),
+      tailActor("submission:audit"),
+      orderId,
+      { expectedOrderVersion: view.orderVersion },
+      randomUUID(),
     );
     const current = (await wage.list(tailActor()))
-      .find((period) => period.periodMonth.startsWith(new Date().toISOString().slice(0, 7)))!;
+      .find((period) =>
+        period.periodMonth.startsWith(new Date().toISOString().slice(0, 7))
+      )!;
     const tailApproved = await wage.review(
       tailActor(), current.periodId, current.periodVersion,
       "tail", null, randomUUID(),
