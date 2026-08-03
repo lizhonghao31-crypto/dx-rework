@@ -40,7 +40,7 @@ describe("own-factory approval web integration", () => {
     expect(source).not.toContain("已收到一次结果通知");
   });
 
-  it("adds a live N08-A queue and injects the permission-safe panel into the real order detail", async () => {
+  it("keeps the live N08-A queue synchronized and uses real order routes", async () => {
     const [queue, app, pages] = await Promise.all([
       readFile(queueUrl, "utf8"),
       readFile(appUrl, "utf8"),
@@ -48,6 +48,10 @@ describe("own-factory approval web integration", () => {
     ]);
     expect(queue).toContain('apiUrl("own-factory-approvals/queue")');
     expect(queue).toContain("item.reworkOrderId");
+    expect(queue).toContain("window.setInterval");
+    expect(queue).toContain("queueRefreshMilliseconds");
+    expect(queue).toContain('window.addEventListener("focus", refresh)');
+    expect(queue).toContain('window.removeEventListener("focus", refresh)');
     expect(app).toContain('path === "/ui/own-factory-approvals"');
     expect(pages).toContain("<OwnFactoryApprovalPanel reworkOrderId={reworkOrderId} />");
   });
