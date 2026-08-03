@@ -79,6 +79,10 @@
     {
       "version": "0020_external_responsibility_codex_closure",
       "checksum": "7df9f581820a1fe5c96db916c9bc2856445fd81d081e9abcbea95ca9ad35c831"
+    },
+    {
+      "version": "0021_external_processing_factory_override_closure",
+      "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
     }
   ]
 }
