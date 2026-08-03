@@ -12,15 +12,15 @@ import type {
 import type { Pool } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { ReviewedExternalResponsibilityService } from "./reviewed-external-responsibility-service.js";
+import { FinalExternalResponsibilityService } from "./final-external-responsibility-service.js";
 
 /** HTTP-facing facade: database authorization remains the source of truth. */
 export class ExternalResponsibilityApplicationService {
-  private readonly service: ReviewedExternalResponsibilityService;
-  constructor(database: Pool) { this.service = new ReviewedExternalResponsibilityService(database); }
-  listQueue(...args: Parameters<ReviewedExternalResponsibilityService["listQueue"]>) { return this.service.listQueue(...args); }
-  get(...args: Parameters<ReviewedExternalResponsibilityService["get"]>) { return this.service.get(...args); }
-  getCase(...args: Parameters<ReviewedExternalResponsibilityService["getCase"]>) { return this.service.getCase(...args); }
+  private readonly service: FinalExternalResponsibilityService;
+  constructor(database: Pool) { this.service = new FinalExternalResponsibilityService(database); }
+  listQueue(...args: Parameters<FinalExternalResponsibilityService["listQueue"]>) { return this.service.listQueue(...args); }
+  get(...args: Parameters<FinalExternalResponsibilityService["get"]>) { return this.service.get(...args); }
+  getCase(...args: Parameters<FinalExternalResponsibilityService["getCase"]>) { return this.service.getCase(...args); }
   allocateSuppliers(actor: TrustedActorContext, batchId: string, input: AllocateExternalSuppliers, key: string) { return this.service.allocateSuppliers(actor,batchId,input,key); }
   submit(actor: TrustedActorContext, caseId: string, input: SubmitExternalResponsibilityCase, key: string) { return this.service.submit(actor,caseId,input,key); }
   payablesAccept(actor: TrustedActorContext, caseId: string, input: PayablesAcceptExternalResponsibilityCase, key: string) { return this.service.payablesAccept(actor,caseId,input,key); }
