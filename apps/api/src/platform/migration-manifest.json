@@ -67,6 +67,10 @@
     {
       "version": "0017_external_responsibility_deduction",
       "checksum": "11320eebff234300d7243897fbcab90144dd2c61cb450b957def3a0394887e97"
+    },
+    {
+      "version": "0018_external_responsibility_review_closure",
+      "checksum": "ccaf2c0f99451a27502db18a270ddaa94c7e997228ad85f5b602608cb016b010"
     }
   ]
 }
