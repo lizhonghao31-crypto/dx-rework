@@ -25,7 +25,9 @@ const fail = (message: string, status = 409, code = "CONFLICT"): never => {
 };
 const first = <T>(rows: T[], message: string): T => {
   const value = rows[0];
-  if (value === undefined) fail(message, 404, "NOT_FOUND");
+  if (value === undefined) {
+    throw new ApplicationError("NOT_FOUND", message, 404);
+  }
   return value;
 };
 const escapeXml = (value: string): string => value
