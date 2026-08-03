@@ -12,9 +12,15 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
-import type { FinalExternalResponsibilityService } from "./final-external-responsibility-service.js";
 
 type Result<T> = { value: T; reused: boolean };
+type CaseReader = {
+  getCase(
+    actor: TrustedActorContext,
+    caseId: string,
+    executor: PoolClient,
+  ): Promise<ExternalResponsibilityCaseResponse>;
+};
 type ResponsibilityType =
   | "processing_factory"
   | "embroidery_factory"
@@ -89,7 +95,7 @@ export class ExternalResponsibilityCloseService {
 
   constructor(
     private readonly database: Pool,
-    private readonly reader: FinalExternalResponsibilityService,
+    private readonly reader: CaseReader,
   ) {}
 
   async close(
