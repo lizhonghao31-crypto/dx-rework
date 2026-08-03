@@ -1,3 +1,3 @@
 export {
-  FinalExternalResponsibilityService as ReviewedExternalResponsibilityService,
-} from "./final-external-responsibility-service.js";
+  ProductionExternalResponsibilityService as ReviewedExternalResponsibilityService,
+} from "./production-external-responsibility-service.js";
