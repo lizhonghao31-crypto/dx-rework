@@ -12,31 +12,25 @@ import type {
 import type { Pool } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { ExternalResponsibilityCloseService } from "./external-responsibility-close-service.js";
-import { FinalExternalResponsibilityService } from "./final-external-responsibility-service.js";
+import { ProductionExternalResponsibilityService } from "./production-external-responsibility-service.js";
 
 /** HTTP-facing facade: database authorization remains the source of truth. */
 export class ExternalResponsibilityApplicationService {
-  private readonly service: FinalExternalResponsibilityService;
-  private readonly closeService: ExternalResponsibilityCloseService;
+  private readonly service: ProductionExternalResponsibilityService;
 
   constructor(database: Pool) {
-    this.service = new FinalExternalResponsibilityService(database);
-    this.closeService = new ExternalResponsibilityCloseService(
-      database,
-      this.service,
-    );
+    this.service = new ProductionExternalResponsibilityService(database);
   }
 
-  listQueue(...args: Parameters<FinalExternalResponsibilityService["listQueue"]>) {
+  listQueue(...args: Parameters<ProductionExternalResponsibilityService["listQueue"]>) {
     return this.service.listQueue(...args);
   }
 
-  get(...args: Parameters<FinalExternalResponsibilityService["get"]>) {
+  get(...args: Parameters<ProductionExternalResponsibilityService["get"]>) {
     return this.service.get(...args);
   }
 
-  getCase(...args: Parameters<FinalExternalResponsibilityService["getCase"]>) {
+  getCase(...args: Parameters<ProductionExternalResponsibilityService["getCase"]>) {
     return this.service.getCase(...args);
   }
 
@@ -100,7 +94,7 @@ export class ExternalResponsibilityApplicationService {
     input: CloseExternalDeductionCase,
     key: string,
   ) {
-    return this.closeService.close(actor, caseId, input, key);
+    return this.service.close(actor, caseId, input, key);
   }
 
   requestRevision(
