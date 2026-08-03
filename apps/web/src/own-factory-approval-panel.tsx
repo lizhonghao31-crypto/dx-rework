@@ -25,6 +25,21 @@ const requestError = async (response: Response): Promise<string> => {
   }
 };
 
+const reviewSnapshotSummary = (snapshot: unknown): string => {
+  if (!snapshot || typeof snapshot !== "object") return "整单审核快照已锁定";
+  const source = snapshot as {
+    processes?: unknown;
+    reports?: Array<{ members?: unknown }>;
+  };
+  const processes = Array.isArray(source.processes) ? source.processes.length : 0;
+  const reports = Array.isArray(source.reports) ? source.reports : [];
+  const members = reports.reduce(
+    (total, report) => total + (Array.isArray(report.members) ? report.members.length : 0),
+    0,
+  );
+  return `已锁定 ${processes} 道工序、${reports.length} 条上数、${members} 位成员快照`;
+};
+
 export function OwnFactoryApprovalPanel({
   reworkOrderId,
 }: {
@@ -147,6 +162,17 @@ export function OwnFactoryApprovalPanel({
         <span>本厂承担合计</span>
         <strong>¥{approval.ownFactoryTotalAmount}</strong>
       </div>
+
+      <section className="own-factory-approval-section">
+        <h3>QC 与整单审核来源</h3>
+        <p>
+          QC 发起：{approval.sourceSnapshot.qualityControl.initiatedBy} · {approval.sourceSnapshot.qualityControl.initiatedAt}
+        </p>
+        <p>
+          整单审核：{approval.sourceSnapshot.wholeOrderReview.reviewedBy} · {approval.sourceSnapshot.wholeOrderReview.reviewedAt}
+        </p>
+        <small>{reviewSnapshotSummary(approval.sourceSnapshot.wholeOrderReview.reviewSnapshot)}</small>
+      </section>
 
       <section className="own-factory-approval-section">
         <h3>锁定工序与责任金额</h3>
