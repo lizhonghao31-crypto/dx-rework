@@ -66,6 +66,36 @@ type OrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
 }>;
+type ApprovedProcessRow = Readonly<{
+  configuration_item_id: string;
+  process_name: string;
+  pricing_unit: string;
+}>;
+type WorkReportShareRow = Readonly<{
+  work_report_id: string;
+  person_id: string;
+  amount: string;
+  display_name_snapshot: string;
+  assignment_mode: string;
+}>;
+type ResponsibilityProcessInput = CreateResponsibilityDraft["processes"][number];
+type ResponsibilityAllocationInput =
+  ResponsibilityProcessInput["allocations"][number];
+type ResponsibilityAmountLine = Readonly<{
+  s: WorkReportShareRow;
+  a: ResponsibilityAllocationInput;
+  base: bigint;
+  rounded: bigint;
+  unroundedScaled: bigint;
+  unrounded: string;
+}>;
+type ResponsibilityProcessRow = Readonly<{
+  p: ResponsibilityProcessInput;
+  item: ApprovedProcessRow;
+  shares: WorkReportShareRow[];
+  lines: ResponsibilityAmountLine[];
+  processTotal: bigint;
+}>;
 export class ResponsibilityDeterminationService {
   constructor(
     private readonly db: Pool,
@@ -356,7 +386,7 @@ export class ResponsibilityDeterminationService {
       fail("判责版本冲突");
     if (previous?.stage === "finalized" && !input.reason)
       fail("变更正式判责必须填写原因", 400, "VALIDATION_ERROR");
-    const approved = await c.query<any>(
+    const approved = await c.query<ApprovedProcessRow>(
       `SELECT i.configuration_item_id,i.process_name,i.pricing_unit FROM rework_process_configurations x JOIN rework_process_configuration_items i USING(configuration_id) WHERE x.rework_order_id=$1 AND x.status='approved'`,
       [orderId],
     );
@@ -389,18 +419,19 @@ export class ResponsibilityDeterminationService {
     const id = randomUUID(),
       version = (previous?.determination_version ?? 0) + 1;
     let total = 0n;
-    const processRows = [] as any[];
+    const processRows: ResponsibilityProcessRow[] = [];
     for (const p of input.processes) {
-      const item = approved.rows.find(
-        (i) => i.configuration_item_id === p.configurationItemId,
-      );
-      const shares = await c.query<any>(
+      const item =
+        approved.rows.find(
+          (i) => i.configuration_item_id === p.configurationItemId,
+        ) ?? fail("工序不属于 approved 配置", 400, "VALIDATION_ERROR");
+      const shares = await c.query<WorkReportShareRow>(
         `SELECT r.work_report_id,s.person_id,s.amount::text,m.display_name_snapshot,t.assignment_mode FROM rework_work_reports r JOIN rework_work_report_member_shares s USING(work_report_id) JOIN rework_work_tasks t USING(work_task_id) JOIN rework_work_task_members m ON m.work_task_id=t.work_task_id AND m.person_id=s.person_id LEFT JOIN rework_work_report_rejections x USING(work_report_id) WHERE r.rework_order_id=$1 AND r.configuration_item_id=$2 AND r.status='submitted' AND x.work_report_id IS NULL`,
         [orderId, p.configurationItemId],
       );
       const mult = decimalToScaled(p.multiplier, 3);
       let processTotal = 0n;
-      const lines = [] as any[];
+      const lines: ResponsibilityAmountLine[] = [];
       for (const s of shares.rows)
         for (const a of p.allocations) {
           const base = decimalToScaled(s.amount, 8);
@@ -415,7 +446,7 @@ export class ResponsibilityDeterminationService {
             unrounded: `${(base * mult * BigInt(a.shareBps)) / 1000000000000000n}.${((base * mult * BigInt(a.shareBps)) % 1000000000000000n).toString().padStart(15, "0")}`,
           });
         }
-      processRows.push({ p, item, shares, lines, processTotal });
+      processRows.push({ p, item, shares: shares.rows, lines, processTotal });
       total += processTotal;
     }
     await c.query(
@@ -438,7 +469,7 @@ export class ResponsibilityDeterminationService {
     );
     for (const x of processRows) {
       const base = x.shares.reduce(
-        (s: bigint, r: any) => s + decimalToScaled(r.amount, 8),
+        (s, r) => s + decimalToScaled(r.amount, 8),
         0n,
       );
       await c.query(
@@ -458,8 +489,8 @@ export class ResponsibilityDeterminationService {
       );
       for (const a of x.p.allocations) {
         const amount = x.lines
-          .filter((l: any) => l.a.responsibilityType === a.responsibilityType)
-          .reduce((s: bigint, l: any) => s + l.rounded, 0n);
+          .filter((l) => l.a.responsibilityType === a.responsibilityType)
+          .reduce((s, l) => s + l.rounded, 0n);
         await c.query(
           `INSERT INTO rework_responsibility_allocations VALUES($1,$2,$3,$4,$5,$6,$7)`,
           [
