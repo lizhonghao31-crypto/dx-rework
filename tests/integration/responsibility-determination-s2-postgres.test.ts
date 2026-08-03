@@ -391,7 +391,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       "s2-owner-finalize",
     );
     expect(finalized.value).toMatchObject({
-      reworkStatus: "completed",
+      reworkStatus: "pending_responsibility_action",
       handlerUserId: ids.ownerOne,
       determination: { version: 2, stage: "finalized" },
     });
@@ -627,7 +627,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       "s2-own-factory-approve",
     );
     expect(approved.value).toMatchObject({
-      reworkStatus: "pending_responsibility_action",
+      reworkStatus: "completed",
       approval: {
         status: "approved",
         approvalVersion: 2,
