@@ -114,7 +114,7 @@ export function OwnFactoryApprovalPanel({
         value: OwnFactoryApprovalResponseSchema.parse(await response.json()),
       });
       setOpinion("");
-      setMessage(decision === "approved" ? "审批已通过，另一位老板已收到一次结果通知。" : "已驳回并退回 N07；请形成新的责任版本后重新发起审批。");
+      setMessage(decision === "approved" ? "审批已通过，另一位老板的结果知会已进入发送队列。" : "已驳回并退回 N07；另一位老板的结果知会已进入发送队列。请形成新的责任版本后重新发起审批。");
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "审批操作失败");
     } finally {
