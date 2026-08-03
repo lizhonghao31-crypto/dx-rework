@@ -1,3 +1,4 @@
+import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import {
   AllocateExternalSuppliersSchema,
   CloseExternalDeductionCaseSchema,
@@ -12,11 +13,10 @@ import {
   ExternalResponsibilityOrderParamsSchema,
   ExternalResponsibilityQueueResponseSchema,
   ExternalResponsibilityRevisionParamsSchema,
-  IdempotencyKeySchema,
   PayablesAcceptExternalResponsibilityCaseSchema,
   PayablesReturnExternalResponsibilityCaseSchema,
   SubmitExternalResponsibilityCaseSchema,
-} from "@dx-rework/contracts";
+} from "@dx-rework/contracts/external-responsibility";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { AuthUser } from "../auth/service.js";
