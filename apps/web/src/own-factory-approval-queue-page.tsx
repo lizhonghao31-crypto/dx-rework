@@ -10,6 +10,7 @@ import { Header, Shell, TaskCard } from "./components.js";
 import "./responsibility-queue.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const queueRefreshMilliseconds = 15_000;
 
 type QueueState =
   | { kind: "loading" }
@@ -22,22 +23,50 @@ export function OwnFactoryApprovalQueuePage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(apiUrl("own-factory-approvals/queue"), {
-      credentials: "include",
-      signal: controller.signal,
-      headers: { accept: "application/json" },
-    })
-      .then(async (response) => {
+    let requestInFlight = false;
+
+    const load = async (initial: boolean): Promise<void> => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const response = await fetch(apiUrl("own-factory-approvals/queue"), {
+          credentials: "include",
+          signal: controller.signal,
+          headers: { accept: "application/json" },
+        });
         if (!response.ok) throw new Error("本厂承担审批队列加载失败");
-        return OwnFactoryApprovalQueueResponseSchema.parse(await response.json());
-      })
-      .then((value) => setState({ kind: "ready", value }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setState({ kind: "unavailable", message: error instanceof Error ? error.message : "本厂承担审批队列加载失败" });
+        const value = OwnFactoryApprovalQueueResponseSchema.parse(
+          await response.json(),
+        );
+        setState({ kind: "ready", value });
+      } catch (error: unknown) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (initial) {
+          setState({
+            kind: "unavailable",
+            message: error instanceof Error
+              ? error.message
+              : "本厂承担审批队列加载失败",
+          });
         }
-      });
-    return () => controller.abort();
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    const refresh = (): void => {
+      void load(false);
+    };
+
+    void load(true);
+    const intervalId = window.setInterval(refresh, queueRefreshMilliseconds);
+    window.addEventListener("focus", refresh);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
   const items = state.kind === "ready" ? state.value.items : [];
