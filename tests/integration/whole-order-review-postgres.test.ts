@@ -90,7 +90,7 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
 
     const incomplete = await createOrder(5, [3]);
     const incompleteView = await review.get(tailAudit(), incomplete.reworkOrderId);
-    await expect(review.approve(tailAudit(), incomplete.reworkOrderId, { expectedOrderVersion: incompleteView.orderVersion }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(review.approve(tailAudit(), incomplete.reworkOrderId, { expectedOrderVersion: incompleteView.orderVersion }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
   });
 
   it("rejects only the selected report, invalidates completion, and keeps the historical version when resubmitted", async () => {
@@ -121,7 +121,7 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     const completed = await createOrder(2, [2]);
     const completedView = await review.get(tailAdjust(), completed.reworkOrderId);
     const requested = await review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: completedView.orderVersion, configurationItemId: completed.configurationItemId, newPlannedQuantity: 4, reason: "补料", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: true }, "increase-once");
-    const replay = await review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: completedView.orderVersion, configurationItemId: completed.configurationItemId, newPlannedQuantity: 4, reason: "补料", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: true }, "increase-once");
+    const replay = await review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: completedView.orderVersion, configurationItemId: completed.configurationItemId, newPlannedQuantity: 4, reason: "补料", expiresAt: requested.value.expiresAt!, requiresIeReview: true }, "increase-once");
     expect(replay.reused).toBe(true);
     await expect(review.confirmIncrease(actor(ids.outsider, ["system_admin"], "quantity:confirm"), requested.value.adjustmentId, { expectedOrderVersion: requested.value.adjustmentVersion, expectedAdjustmentVersion: requested.value.adjustmentVersion, decision: "confirmed", actualCutQuantity: 4, actualReturnQuantity: 4, allowedMaximumQuantity: 4 }, randomUUID())).rejects.toMatchObject({ code: "FORBIDDEN" });
     const confirmView = await review.get(merch(), completed.reworkOrderId);
