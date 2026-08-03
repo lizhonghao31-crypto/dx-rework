@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { loadConfig } from "@dx-rework/config";
 import type { ResponsibilityDeterminationResponse } from "@dx-rework/contracts";
+import type { ResponsibilityQueueResponse } from "@dx-rework/contracts/responsibility-queue";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../../apps/api/src/app.js";
@@ -67,6 +68,26 @@ const response: ResponsibilityDeterminationResponse = {
   },
 };
 
+const queueResponse: ResponsibilityQueueResponse = {
+  items: [
+    {
+      reworkOrderId: orderId,
+      reworkNo: "RW-2026-0803-001",
+      styleNo: "PD-QUEUE",
+      orderNo: null,
+      problemPart: "袖口",
+      problemDescription: "待判责",
+      orderVersion: 8,
+      handlerUserId: actorId,
+      determinationVersion: 1,
+      determinationStage: "draft",
+      canDetermine: true,
+      canTakeover: false,
+      highMultiplierPending: false,
+    },
+  ],
+};
+
 const user = {
   id: actorId,
   businessRoles: ["production_management", "owner_group"],
@@ -94,6 +115,7 @@ const draftBody = {
 
 function buildService() {
   return {
+    listQueue: vi.fn().mockResolvedValue(queueResponse),
     get: vi.fn().mockResolvedValue(response),
     saveDraft: vi.fn().mockResolvedValue({ value: response, reused: false }),
     finalize: vi.fn().mockResolvedValue({ value: response, reused: false }),
@@ -117,6 +139,23 @@ function buildTestApp(service = buildService()) {
 }
 
 describe("responsibility routes", () => {
+  it("lists the authorized responsibility queue with real order UUIDs", async () => {
+    const { app, service } = buildTestApp();
+    const result = await app.inject({
+      method: "GET",
+      url: "/responsibility-determinations/queue",
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toEqual(queueResponse);
+    expect(service.listQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId,
+        authorizationCapability: "responsibility:determine",
+      }),
+    );
+    await app.close();
+  });
+
   it("serves the authorized GET response for the concrete order", async () => {
     const { app, service } = buildTestApp();
     const result = await app.inject({
