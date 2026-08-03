@@ -83,6 +83,10 @@
     {
       "version": "0021_external_processing_factory_override_closure",
       "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
+    },
+    {
+      "version": "0022_wage_reconciliation_month_close",
+      "checksum": "829a9c5cc4610b4005fc6092405313cc6bed7c2b18fcbc1b767784c9ca301e1b"
     }
   ]
 }

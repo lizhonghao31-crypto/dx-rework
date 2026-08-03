@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./wages.js";
+
 export const LiveHealthResponseSchema = z.object({
   status: z.literal("ok"),
   service: z.string().min(1),
