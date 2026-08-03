@@ -22,8 +22,8 @@ CREATE TABLE rework_responsibility_determinations (
  determination_version integer NOT NULL CHECK(determination_version>0), replaces_determination_id uuid REFERENCES rework_responsibility_determinations,
  source_order_review_id uuid NOT NULL REFERENCES rework_order_reviews, stage text NOT NULL CHECK(stage IN ('draft','finalized')),
  handler_user_id uuid NOT NULL REFERENCES app_users, created_by uuid NOT NULL REFERENCES app_users, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
- reason text, input_snapshot jsonb NOT NULL, calculation_total numeric(18,2) NOT NULL CHECK(calculation_total>=0),
- operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL,
+ reason text, source_high_multiplier_confirmation_id uuid, input_snapshot jsonb NOT NULL, calculation_total numeric(18,2) NOT NULL CHECK(calculation_total>=0),
+ operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL CHECK (request_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
  UNIQUE(rework_order_id,determination_version), UNIQUE(replaces_determination_id),
  CHECK(reason IS NULL OR length(btrim(reason)) BETWEEN 1 AND 500)
 );
@@ -31,22 +31,22 @@ CREATE TABLE rework_responsibility_processes (
  determination_id uuid NOT NULL REFERENCES rework_responsibility_determinations, configuration_item_id uuid NOT NULL REFERENCES rework_process_configuration_items,
  process_name_snapshot text NOT NULL, pricing_unit_snapshot text NOT NULL CHECK(pricing_unit_snapshot IN ('piece','hour')),
  multiplier numeric(8,3) NOT NULL CHECK(multiplier>=1), high_multiplier_reason text, base_amount numeric(18,8) NOT NULL CHECK(base_amount>=0),
- responsibility_amount numeric(18,2) NOT NULL CHECK(responsibility_amount>=0), operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL,
+ responsibility_amount numeric(18,2) NOT NULL CHECK(responsibility_amount>=0), operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL CHECK (request_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
  PRIMARY KEY(determination_id,configuration_item_id), CHECK(multiplier<=2 OR length(btrim(high_multiplier_reason))>0)
 );
 CREATE TABLE rework_responsibility_allocations (
  determination_id uuid NOT NULL, configuration_item_id uuid NOT NULL, responsibility_type text NOT NULL CHECK(responsibility_type IN ('own_factory','processing_factory','embroidery_factory','washing_factory','fabric_supplier')),
  share_bps integer NOT NULL CHECK(share_bps BETWEEN 1 AND 10000), rounded_amount numeric(18,2) NOT NULL CHECK(rounded_amount>=0),
- operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL,
+ operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL CHECK (request_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
  PRIMARY KEY(determination_id,configuration_item_id,responsibility_type), FOREIGN KEY(determination_id,configuration_item_id) REFERENCES rework_responsibility_processes
 );
 CREATE TABLE rework_responsibility_amount_lines (
  determination_id uuid NOT NULL, configuration_item_id uuid NOT NULL, work_report_id uuid NOT NULL REFERENCES rework_work_reports,
  person_id uuid NOT NULL REFERENCES business_people, responsibility_type text NOT NULL CHECK(responsibility_type IN ('own_factory','processing_factory','embroidery_factory','washing_factory','fabric_supplier')),
  base_member_share_amount numeric(18,8) NOT NULL, multiplier numeric(8,3) NOT NULL, share_bps integer NOT NULL,
- unrounded_amount numeric(30,12) NOT NULL, rounded_amount numeric(18,2) NOT NULL, rounding_rule text NOT NULL CHECK(rounding_rule='half_up_2'),
+ unrounded_amount numeric(30,15) NOT NULL, rounded_amount numeric(18,2) NOT NULL, rounding_rule text NOT NULL CHECK(rounding_rule='half_up_2'),
  worker_display_name_snapshot text NOT NULL, task_mode_snapshot text NOT NULL CHECK(task_mode_snapshot IN ('individual','collective')),
- member_snapshot jsonb NOT NULL, report_snapshot jsonb NOT NULL, operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL,
+ member_snapshot jsonb NOT NULL, report_snapshot jsonb NOT NULL, operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL CHECK (request_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
  PRIMARY KEY(determination_id,configuration_item_id,work_report_id,person_id,responsibility_type),
  FOREIGN KEY(determination_id,configuration_item_id,responsibility_type) REFERENCES rework_responsibility_allocations
 );
@@ -54,13 +54,15 @@ CREATE TABLE rework_responsibility_high_multiplier_confirmations (
  confirmation_id uuid PRIMARY KEY, determination_id uuid NOT NULL UNIQUE REFERENCES rework_responsibility_determinations,
  confirmed_by uuid NOT NULL REFERENCES app_users, confirmed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
  reason text NOT NULL CHECK(length(btrim(reason)) BETWEEN 1 AND 500), confirmation_snapshot jsonb NOT NULL,
- operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL
+ operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL CHECK (request_id ~ '^[A-Za-z0-9._:-]{1,128}$')
 );
+ALTER TABLE rework_responsibility_determinations ADD CONSTRAINT responsibility_source_confirmation_fk FOREIGN KEY(source_high_multiplier_confirmation_id) REFERENCES rework_responsibility_high_multiplier_confirmations(confirmation_id);
+
 CREATE TABLE rework_responsibility_handler_events (
  handler_event_id uuid PRIMARY KEY, rework_order_id uuid NOT NULL REFERENCES rework_orders, determination_id uuid REFERENCES rework_responsibility_determinations,
  event_type text NOT NULL CHECK(event_type IN ('assigned','transferred','taken_over')), from_user_id uuid REFERENCES app_users,
  to_user_id uuid NOT NULL REFERENCES app_users, acted_by uuid NOT NULL REFERENCES app_users, reason text NOT NULL CHECK(length(btrim(reason)) BETWEEN 1 AND 500),
- created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL
+ created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, operation_event_id uuid NOT NULL REFERENCES operation_events(event_id), request_id text NOT NULL CHECK (request_id ~ '^[A-Za-z0-9._:-]{1,128}$')
 );
 
 CREATE FUNCTION require_responsibility_event(event_id uuid, req text, order_id uuid, persisted_actor uuid) RETURNS void LANGUAGE plpgsql AS $$
@@ -107,3 +109,151 @@ CREATE TRIGGER allocation_insert BEFORE INSERT ON rework_responsibility_allocati
 CREATE TRIGGER confirmation_insert BEFORE INSERT ON rework_responsibility_high_multiplier_confirmations FOR EACH ROW EXECUTE FUNCTION guard_responsibility_insert();
 CREATE TRIGGER handler_insert BEFORE INSERT ON rework_responsibility_handler_events FOR EACH ROW EXECUTE FUNCTION guard_responsibility_insert();
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['rework_responsibility_determinations','rework_responsibility_processes','rework_responsibility_allocations','rework_responsibility_amount_lines','rework_responsibility_high_multiplier_confirmations','rework_responsibility_handler_events'] LOOP EXECUTE format('CREATE TRIGGER %I_no_update BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION reject_responsibility_mutation()',t,t); EXECUTE format('CREATE TRIGGER %I_no_delete BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION reject_responsibility_mutation()',t,t); EXECUTE format('CREATE TRIGGER %I_no_truncate BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION reject_responsibility_mutation()',t,t); END LOOP; END $$;
+
+-- PR-09 closure: trusted transaction context and exact event semantics.
+CREATE OR REPLACE FUNCTION responsibility_expected_capability(action_name text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE action_name
+    WHEN 'rework.responsibility.draft' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.reopen' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.finalize' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.transfer' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.takeover' THEN 'responsibility:takeover'
+    WHEN 'rework.responsibility.high_multiplier.confirm' THEN 'responsibility:confirm_high_multiplier'
+  END
+$$;
+
+CREATE OR REPLACE FUNCTION responsibility_actor_is_active(candidate uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM app_users u JOIN identity_mappings m ON m.user_id=u.id
+    WHERE u.id=candidate AND u.enabled AND m.provider='dingtalk' AND m.active AND m.employed
+      AND EXISTS (SELECT 1 FROM access_security_policy policy WHERE policy.policy_key='primary' AND policy.dingtalk_corp_id=m.corp_id)
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION responsibility_actor_has_direct_role(candidate uuid, required_capability text, allowed_roles text[]) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT responsibility_actor_is_active(candidate) AND EXISTS (
+    SELECT 1 FROM user_role_assignments a
+    JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
+    JOIN role_capabilities rc ON rc.role_code=a.role_code AND rc.capability=required_capability
+    WHERE a.user_id=candidate AND a.role_code=ANY(allowed_roles) AND a.revoked_at IS NULL
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION responsibility_can_determine(candidate uuid, order_id uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT responsibility_actor_has_direct_role(candidate,'responsibility:determine',ARRAY['production_management','owner_group'])
+  OR (responsibility_actor_is_active(candidate) AND EXISTS (
+    SELECT 1 FROM delegated_authorizations d
+    WHERE d.grantee_user_id=candidate AND d.capability='responsibility:determine'
+      AND d.scope_type='rework_order' AND d.scope_id=order_id::text
+      AND d.revoked_at IS NULL AND CURRENT_TIMESTAMP BETWEEN d.valid_from AND d.valid_until
+      AND responsibility_actor_has_direct_role(d.grantor_user_id,'responsibility:determine',ARRAY['production_management','owner_group'])
+  ))
+$$;
+
+CREATE FUNCTION guard_responsibility_delegation_scope() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.capability='responsibility:determine' AND (NEW.scope_type<>'rework_order' OR NEW.scope_id IS NULL) THEN
+    RAISE EXCEPTION 'responsibility determine delegation requires rework_order scope' USING ERRCODE='23514';
+  ELSIF NEW.capability IN ('responsibility:takeover','responsibility:confirm_high_multiplier') THEN
+    RAISE EXCEPTION 'owner responsibility capabilities cannot be delegated' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER responsibility_delegation_scope BEFORE INSERT ON delegated_authorizations
+FOR EACH ROW EXECUTE FUNCTION guard_responsibility_delegation_scope();
+
+CREATE OR REPLACE FUNCTION require_responsibility_event(event_id uuid, req text, order_id uuid, persisted_actor uuid) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE e operation_events%ROWTYPE; context_event text; context_request text; expected text;
+BEGIN
+ context_event:=nullif(current_setting('dx_rework.responsibility_event_id',true),'');
+ context_request:=nullif(current_setting('dx_rework.responsibility_request_id',true),'');
+ IF context_event IS NULL OR context_request IS NULL OR context_event::uuid<>event_id OR context_request<>req
+    OR req !~ '^[A-Za-z0-9._:-]{1,128}$' THEN
+   RAISE EXCEPTION 'responsibility write requires trusted transaction context' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO e FROM operation_events WHERE operation_events.event_id=$1 AND request_id=req;
+ expected:=responsibility_expected_capability(e.action);
+ IF e.event_id IS NULL OR expected IS NULL OR e.authorization_capability<>expected
+    OR e.actor_id<>persisted_actor OR e.entity_type<>'rework_order' OR e.entity_id<>order_id::text THEN
+   RAISE EXCEPTION 'responsibility operation event does not match write' USING ERRCODE='55000';
+ END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION guard_responsibility_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE order_id uuid; persisted_actor uuid; parent_actor uuid; leaf_id uuid;
+BEGIN
+ IF TG_TABLE_NAME='rework_responsibility_determinations' THEN order_id:=NEW.rework_order_id; persisted_actor:=NEW.created_by;
+ ELSIF TG_TABLE_NAME='rework_responsibility_handler_events' THEN
+   order_id:=NEW.rework_order_id; persisted_actor:=NEW.acted_by;
+   SELECT d.determination_id INTO leaf_id FROM rework_responsibility_determinations d WHERE d.rework_order_id=order_id
+    AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations n WHERE n.replaces_determination_id=d.determination_id);
+   IF NEW.determination_id IS NOT NULL AND NEW.determination_id IS DISTINCT FROM leaf_id THEN RAISE EXCEPTION 'handler event must reference current leaf' USING ERRCODE='23514'; END IF;
+   IF NOT responsibility_can_determine(NEW.to_user_id,order_id) THEN RAISE EXCEPTION 'handler is not eligible' USING ERRCODE='42501'; END IF;
+ ELSE
+   SELECT rework_order_id,created_by INTO order_id,parent_actor FROM rework_responsibility_determinations WHERE determination_id=NEW.determination_id;
+   persisted_actor:=CASE WHEN TG_TABLE_NAME='rework_responsibility_high_multiplier_confirmations' THEN NEW.confirmed_by ELSE parent_actor END;
+ END IF;
+ PERFORM require_responsibility_event(NEW.operation_event_id,NEW.request_id,order_id,persisted_actor);
+ RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION guard_responsibility_process() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE order_id uuid; parent_actor uuid;
+BEGIN
+ SELECT d.rework_order_id,d.created_by INTO order_id,parent_actor FROM rework_responsibility_determinations d WHERE d.determination_id=NEW.determination_id;
+ IF NOT EXISTS(SELECT 1 FROM rework_process_configurations c JOIN rework_process_configuration_items i USING(configuration_id)
+   WHERE c.rework_order_id=order_id AND c.status='approved' AND i.configuration_item_id=NEW.configuration_item_id
+     AND i.process_name=NEW.process_name_snapshot AND i.pricing_unit=NEW.pricing_unit_snapshot)
+ THEN RAISE EXCEPTION 'process snapshot is not approved' USING ERRCODE='23514'; END IF;
+ PERFORM require_responsibility_event(NEW.operation_event_id,NEW.request_id,order_id,parent_actor); RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION guard_responsibility_line() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE order_id uuid; parent_actor uuid;
+BEGIN
+ SELECT rework_order_id,created_by INTO order_id,parent_actor FROM rework_responsibility_determinations WHERE determination_id=NEW.determination_id;
+ IF NOT EXISTS(SELECT 1 FROM rework_work_reports r JOIN rework_work_report_member_shares s ON s.work_report_id=r.work_report_id AND s.person_id=NEW.person_id
+   LEFT JOIN rework_work_report_rejections x ON x.work_report_id=r.work_report_id
+   WHERE r.work_report_id=NEW.work_report_id AND r.status='submitted' AND x.work_report_id IS NULL
+     AND r.rework_order_id=order_id AND r.configuration_item_id=NEW.configuration_item_id AND s.amount=NEW.base_member_share_amount)
+ THEN RAISE EXCEPTION 'amount line does not match submitted member share snapshot' USING ERRCODE='23514'; END IF;
+ IF NEW.unrounded_amount<>round(NEW.base_member_share_amount*NEW.multiplier*NEW.share_bps/10000,15)
+    OR NEW.rounded_amount<>round(NEW.unrounded_amount,2) OR NEW.rounded_amount<=0 THEN
+   RAISE EXCEPTION 'amount line calculation is invalid' USING ERRCODE='23514'; END IF;
+ PERFORM require_responsibility_event(NEW.operation_event_id,NEW.request_id,order_id,parent_actor); RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION validate_responsibility_version(version_id uuid) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE d rework_responsibility_determinations%ROWTYPE; approved_count int; process_count int; high_count int; confirmation_record rework_responsibility_high_multiplier_confirmations%ROWTYPE;
+BEGIN
+ SELECT * INTO d FROM rework_responsibility_determinations WHERE determination_id=version_id;
+ IF d.determination_id IS NULL THEN RETURN; END IF;
+ SELECT count(*) INTO approved_count FROM rework_process_configurations c JOIN rework_process_configuration_items i USING(configuration_id) WHERE c.rework_order_id=d.rework_order_id AND c.status='approved';
+ SELECT count(*) INTO process_count FROM rework_responsibility_processes WHERE determination_id=version_id;
+ IF process_count<>approved_count THEN RAISE EXCEPTION 'responsibility processes must exactly cover approved configuration' USING ERRCODE='23514'; END IF;
+ IF EXISTS(SELECT 1 FROM rework_responsibility_processes p WHERE p.determination_id=version_id AND
+   (NOT EXISTS(SELECT 1 FROM rework_responsibility_allocations a WHERE a.determination_id=p.determination_id AND a.configuration_item_id=p.configuration_item_id)
+    OR (SELECT sum(a.share_bps) FROM rework_responsibility_allocations a WHERE a.determination_id=p.determination_id AND a.configuration_item_id=p.configuration_item_id)<>10000))
+ THEN RAISE EXCEPTION 'responsibility allocations must total 10000 bps' USING ERRCODE='23514'; END IF;
+ IF EXISTS(SELECT 1 FROM rework_responsibility_allocations a WHERE a.determination_id=version_id AND a.rounded_amount<>(SELECT sum(l.rounded_amount) FROM rework_responsibility_amount_lines l WHERE l.determination_id=a.determination_id AND l.configuration_item_id=a.configuration_item_id AND l.responsibility_type=a.responsibility_type))
+ THEN RAISE EXCEPTION 'allocation total differs from amount lines' USING ERRCODE='23514'; END IF;
+ IF EXISTS(SELECT 1 FROM rework_responsibility_processes p WHERE p.determination_id=version_id AND (p.responsibility_amount<>(SELECT sum(l.rounded_amount) FROM rework_responsibility_amount_lines l WHERE l.determination_id=p.determination_id AND l.configuration_item_id=p.configuration_item_id) OR p.base_amount<>(SELECT sum(DISTINCT s.amount) FROM rework_responsibility_amount_lines l JOIN rework_work_report_member_shares s ON s.work_report_id=l.work_report_id AND s.person_id=l.person_id WHERE l.determination_id=p.determination_id AND l.configuration_item_id=p.configuration_item_id)))
+ THEN RAISE EXCEPTION 'process totals differ from source lines' USING ERRCODE='23514'; END IF;
+ IF d.calculation_total<>(SELECT coalesce(sum(responsibility_amount),0) FROM rework_responsibility_processes WHERE determination_id=version_id) THEN RAISE EXCEPTION 'determination total differs from processes' USING ERRCODE='23514'; END IF;
+ SELECT count(*) INTO high_count FROM rework_responsibility_processes WHERE determination_id=version_id AND multiplier>2;
+ IF d.stage='finalized' AND ((high_count=0 AND d.source_high_multiplier_confirmation_id IS NOT NULL) OR (high_count>0 AND d.source_high_multiplier_confirmation_id IS NULL)) THEN RAISE EXCEPTION 'finalized high multiplier confirmation is invalid' USING ERRCODE='23514'; END IF;
+ IF d.stage='finalized' AND d.replaces_determination_id IS NOT NULL AND EXISTS(
+   (SELECT configuration_item_id,process_name_snapshot,pricing_unit_snapshot,multiplier,high_multiplier_reason,base_amount,responsibility_amount FROM rework_responsibility_processes WHERE determination_id=d.determination_id EXCEPT SELECT configuration_item_id,process_name_snapshot,pricing_unit_snapshot,multiplier,high_multiplier_reason,base_amount,responsibility_amount FROM rework_responsibility_processes WHERE determination_id=d.replaces_determination_id)
+   UNION ALL
+   (SELECT configuration_item_id,process_name_snapshot,pricing_unit_snapshot,multiplier,high_multiplier_reason,base_amount,responsibility_amount FROM rework_responsibility_processes WHERE determination_id=d.replaces_determination_id EXCEPT SELECT configuration_item_id,process_name_snapshot,pricing_unit_snapshot,multiplier,high_multiplier_reason,base_amount,responsibility_amount FROM rework_responsibility_processes WHERE determination_id=d.determination_id))
+ THEN RAISE EXCEPTION 'finalized version must copy draft processes' USING ERRCODE='23514'; END IF;
+END $$;
+CREATE FUNCTION run_responsibility_version_validation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM validate_responsibility_version(CASE WHEN TG_OP='DELETE' THEN OLD.determination_id ELSE NEW.determination_id END); RETURN NULL; END $$;
+CREATE CONSTRAINT TRIGGER determination_complete AFTER INSERT ON rework_responsibility_determinations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION run_responsibility_version_validation();
+CREATE CONSTRAINT TRIGGER process_complete AFTER INSERT ON rework_responsibility_processes DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION run_responsibility_version_validation();
+CREATE CONSTRAINT TRIGGER allocation_complete AFTER INSERT ON rework_responsibility_allocations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION run_responsibility_version_validation();
+CREATE CONSTRAINT TRIGGER amount_line_complete AFTER INSERT ON rework_responsibility_amount_lines DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION run_responsibility_version_validation();
