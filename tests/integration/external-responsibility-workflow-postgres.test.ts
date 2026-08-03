@@ -516,7 +516,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
   it("persists an immutable reason when a different processing factory is selected", async () => {
     const alternateSupplierId = (
       await access.createSupplier(adminActor(), {
-        supplierCode: `ALT${randomUUID().slice(0, 8)}`,
+        supplierCode: "ALTFAC02",
         supplierType: "factory",
         supplierName: "Alternate Factory",
         active: true,
