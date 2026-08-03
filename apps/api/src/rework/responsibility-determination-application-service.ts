@@ -9,6 +9,7 @@ import type { Pool } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
+import { ResponsibilityDeterminationQueueService } from "./responsibility-determination-queue-service.js";
 import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
 
 /**
@@ -16,15 +17,23 @@ import { ResponsibilityDeterminationService } from "./responsibility-determinati
  *
  * Draft creation stays in the exact-decimal engine and returns the response
  * persisted by the idempotency repository. All reads and subsequent commands
- * go through the database-authorized service.
+ * go through database-authorized services.
  */
 export class ResponsibilityDeterminationApplicationService {
   private readonly draftEngine: ResponsibilityDeterminationService;
   private readonly authorized: AuthorizedResponsibilityDeterminationService;
+  private readonly queue: ResponsibilityDeterminationQueueService;
 
   constructor(database: Pool) {
     this.draftEngine = new ResponsibilityDeterminationService(database);
     this.authorized = new AuthorizedResponsibilityDeterminationService(database);
+    this.queue = new ResponsibilityDeterminationQueueService(database);
+  }
+
+  listQueue(
+    ...args: Parameters<ResponsibilityDeterminationQueueService["list"]>
+  ) {
+    return this.queue.list(...args);
   }
 
   get(...args: Parameters<AuthorizedResponsibilityDeterminationService["get"]>) {
