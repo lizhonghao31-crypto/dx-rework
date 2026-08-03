@@ -8,7 +8,7 @@ import type {
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
   SubmitExternalResponsibilityCase,
-} from "@dx-rework/contracts";
+} from "@dx-rework/contracts/external-responsibility";
 import type { Pool } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
