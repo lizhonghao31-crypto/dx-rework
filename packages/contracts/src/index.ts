@@ -559,7 +559,7 @@ export const ResponsibilityDeterminationParamsSchema = z.object({ determinationI
 export const ResponsibilityTypeSchema = z.enum(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]);
 export const ResponsibilityAllocationInputSchema = z.object({
   responsibilityType: ResponsibilityTypeSchema,
-  shareBps: z.number().int().min(1).max(10_000),
+  shareBps: z.number().int().min(0).max(10_000),
 }).strict();
 export const ResponsibilityProcessInputSchema = z.object({
   configurationItemId: IdSchema,
@@ -625,7 +625,7 @@ export const OwnFactoryApprovalSourceProcessSchema = z.object({
   baseAmount: z.string(),
   responsibilityAmount: z.string(),
   multiplier: z.string(),
-  ownFactoryShareBps: z.number().int().min(1).max(10_000),
+  ownFactoryShareBps: z.number().int().min(0).max(10_000),
   ownFactoryRoundedAmount: z.string(),
 }).strict();
 export const OwnFactoryApprovalSourceSnapshotSchema = z.object({
@@ -643,6 +643,16 @@ export const OwnFactoryApprovalSourceSnapshotSchema = z.object({
       snapshot: z.unknown(),
     }).strict().nullable(),
   }).strict(),
+  qualityControl: z.object({
+    initiatedBy: IdSchema,
+    initiatedAt: z.string().datetime(),
+  }).strict(),
+  wholeOrderReview: z.object({
+    orderReviewId: IdSchema,
+    reviewedBy: IdSchema,
+    reviewedAt: z.string().datetime(),
+    reviewSnapshot: z.unknown(),
+  }).strict(),
   order: z.object({
     reworkOrderId: IdSchema,
     reworkNo: z.string().nullable(),
@@ -658,7 +668,7 @@ export const OwnFactoryApprovalSourceSnapshotSchema = z.object({
     personId: IdSchema,
     baseMemberShareAmount: z.string(),
     multiplier: z.string(),
-    shareBps: z.number().int().min(1).max(10_000),
+    shareBps: z.number().int().min(0).max(10_000),
     roundedAmount: z.string(),
     workerDisplayName: z.string(),
     taskMode: WorkTaskModeSchema,
