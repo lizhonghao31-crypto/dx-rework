@@ -52,6 +52,19 @@ const response: OwnFactoryApprovalResponse = {
         determinedBy: actorId,
         highMultiplierConfirmation: null,
       },
+      qualityControl: {
+        initiatedBy: actorId,
+        initiatedAt: "2026-08-02T00:00:00.000Z",
+      },
+      wholeOrderReview: {
+        orderReviewId: reviewId,
+        reviewedBy: actorId,
+        reviewedAt: "2026-08-03T00:00:00.000Z",
+        reviewSnapshot: {
+          processes: [{ configurationItemId }],
+          reports: [{ workReportId, members: [{ personId }] }],
+        },
+      },
       order: {
         reworkOrderId: orderId,
         reworkNo: "RW-2026-0803-010",
