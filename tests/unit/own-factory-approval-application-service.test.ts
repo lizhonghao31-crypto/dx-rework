@@ -136,4 +136,29 @@ describe("OwnFactoryApprovalApplicationService", () => {
     expect(result.approval).toBeNull();
     expect(result.history).toEqual(response.history);
   });
+
+  it("returns the stored command response unchanged on idempotent replay", async () => {
+    const stored = { value: response, reused: true };
+    const approve = vi
+      .spyOn(OwnFactoryApprovalService.prototype, "approve")
+      .mockResolvedValue(stored);
+    const query = vi.fn();
+    const service = new OwnFactoryApprovalApplicationService({ query } as unknown as Pool);
+
+    const result = await service.approve(
+      actor,
+      approvalId,
+      { expectedOrderVersion: 10, expectedApprovalVersion: 1 },
+      "stable-approval-key",
+    );
+
+    expect(result).toBe(stored);
+    expect(approve).toHaveBeenCalledWith(
+      actor,
+      approvalId,
+      { expectedOrderVersion: 10, expectedApprovalVersion: 1 },
+      "stable-approval-key",
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
 });
