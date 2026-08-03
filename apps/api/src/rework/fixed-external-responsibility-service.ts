@@ -120,10 +120,10 @@ export class FixedExternalResponsibilityService
       [head.batch_id, actor.actorId],
     );
     const caseValues = await Promise.all(
-      cases.rows.map((item) =>
-        super.getCase(actor, item.case_id, executor)
-          as Promise<ExternalResponsibilityCaseResponse>
-      ),
+      cases.rows.map(async (item) => {
+        const value = await super.getCase(actor, item.case_id, executor);
+        return value as ExternalResponsibilityCaseResponse;
+      }),
     );
     return {
       batchId: head.batch_id,
