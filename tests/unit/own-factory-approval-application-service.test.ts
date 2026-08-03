@@ -10,6 +10,7 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 
 const orderId = randomUUID();
 const approvalId = randomUUID();
+const decisionId = randomUUID();
 const finalizedId = randomUUID();
 const currentFinalizedId = randomUUID();
 const configurationItemId = randomUUID();
@@ -26,6 +27,16 @@ const actor: TrustedActorContext = {
   requestId: "own-factory-application-test",
 };
 
+const decision = {
+  decisionId,
+  decision: "rejected" as const,
+  actedBy: actorId,
+  actorRoleSnapshot: ["owner_group"],
+  opinion: "重新核对",
+  decidedAt: "2026-08-03T00:01:00.000Z",
+  otherOwnersNotified: true,
+};
+
 const response: OwnFactoryApprovalResponse = {
   reworkOrderId: orderId,
   reworkStatus: "pending_responsibility_action",
@@ -40,7 +51,7 @@ const response: OwnFactoryApprovalResponse = {
     status: "rejected",
     ownFactoryTotalAmount: "1.00",
     createdAt: "2026-08-03T00:00:00.000Z",
-    decision: null,
+    decision,
     sourceSnapshot: {
       finalizedDetermination: {
         determinationId: finalizedId,
@@ -101,14 +112,32 @@ const response: OwnFactoryApprovalResponse = {
     status: "rejected",
     ownFactoryTotalAmount: "1.00",
     createdAt: "2026-08-03T00:00:00.000Z",
-    decision: null,
+    decision,
   }],
+};
+
+const deliverySafeResponse: OwnFactoryApprovalResponse = {
+  ...response,
+  approval: response.approval
+    ? {
+        ...response.approval,
+        decision: response.approval.decision
+          ? { ...response.approval.decision, otherOwnersNotified: false }
+          : null,
+      }
+    : null,
+  history: response.history.map((item) => ({
+    ...item,
+    decision: item.decision
+      ? { ...item.decision, otherOwnersNotified: false }
+      : null,
+  })),
 };
 
 describe("OwnFactoryApprovalApplicationService", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("keeps the approval only when it belongs to the current finalized leaf", async () => {
+  it("keeps only the current approval and never claims outbox delivery", async () => {
     vi.spyOn(OwnFactoryApprovalService.prototype, "get")
       .mockResolvedValue(response);
     const database = {
@@ -118,7 +147,9 @@ describe("OwnFactoryApprovalApplicationService", () => {
     } as unknown as Pool;
     const service = new OwnFactoryApprovalApplicationService(database);
 
-    await expect(service.get(actor, orderId)).resolves.toEqual(response);
+    await expect(service.get(actor, orderId)).resolves.toEqual(
+      deliverySafeResponse,
+    );
   });
 
   it("moves a superseded approval to history when the current leaf changed", async () => {
@@ -134,16 +165,18 @@ describe("OwnFactoryApprovalApplicationService", () => {
     const result = await service.get(actor, orderId);
 
     expect(result.approval).toBeNull();
-    expect(result.history).toEqual(response.history);
+    expect(result.history).toEqual(deliverySafeResponse.history);
   });
 
-  it("returns the stored command response unchanged on idempotent replay", async () => {
+  it("keeps idempotent command payloads stable while suppressing false delivery claims", async () => {
     const stored = { value: response, reused: true };
     const approve = vi
       .spyOn(OwnFactoryApprovalService.prototype, "approve")
       .mockResolvedValue(stored);
     const query = vi.fn();
-    const service = new OwnFactoryApprovalApplicationService({ query } as unknown as Pool);
+    const service = new OwnFactoryApprovalApplicationService(
+      { query } as unknown as Pool,
+    );
 
     const result = await service.approve(
       actor,
@@ -152,7 +185,7 @@ describe("OwnFactoryApprovalApplicationService", () => {
       "stable-approval-key",
     );
 
-    expect(result).toBe(stored);
+    expect(result).toEqual({ value: deliverySafeResponse, reused: true });
     expect(approve).toHaveBeenCalledWith(
       actor,
       approvalId,
