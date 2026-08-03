@@ -19,11 +19,7 @@ export function Shell({
   const navigation = [
     ["总", "总览", "/ui/management"],
     ["工", "返工任务", "/ui/tasks"],
-    [
-      "责",
-      "责任处理",
-      "/ui/tasks?status=pending_responsibility_determination",
-    ],
+    ["责", "责任处理", "/ui/responsibility"],
     ["计", "集体计件", "/ui/piecework/collective"],
   ];
   return (
