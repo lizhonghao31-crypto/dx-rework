@@ -193,9 +193,12 @@ BEGIN
     AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations n WHERE n.replaces_determination_id=d.determination_id);
    IF NEW.determination_id IS NOT NULL AND NEW.determination_id IS DISTINCT FROM leaf_id THEN RAISE EXCEPTION 'handler event must reference current leaf' USING ERRCODE='23514'; END IF;
    IF NOT responsibility_can_determine(NEW.to_user_id,order_id) THEN RAISE EXCEPTION 'handler is not eligible' USING ERRCODE='42501'; END IF;
+ ELSIF TG_TABLE_NAME='rework_responsibility_high_multiplier_confirmations' THEN
+   SELECT rework_order_id INTO order_id FROM rework_responsibility_determinations WHERE determination_id=NEW.determination_id;
+   persisted_actor:=NEW.confirmed_by;
  ELSE
    SELECT rework_order_id,created_by INTO order_id,parent_actor FROM rework_responsibility_determinations WHERE determination_id=NEW.determination_id;
-   persisted_actor:=CASE WHEN TG_TABLE_NAME='rework_responsibility_high_multiplier_confirmations' THEN NEW.confirmed_by ELSE parent_actor END;
+   persisted_actor:=parent_actor;
  END IF;
  PERFORM require_responsibility_event(NEW.operation_event_id,NEW.request_id,order_id,persisted_actor);
  RETURN NEW;
