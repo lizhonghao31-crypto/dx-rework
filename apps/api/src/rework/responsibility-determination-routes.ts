@@ -9,14 +9,16 @@ import {
   TakeoverResponsibilitySchema,
   TransferResponsibilitySchema,
 } from "@dx-rework/contracts";
+import { ResponsibilityQueueResponseSchema } from "@dx-rework/contracts/responsibility-queue";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import type { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
+import type { ResponsibilityDeterminationApplicationService } from "./responsibility-determination-application-service.js";
 
 type ResponsibilityDeterminationHttpService = Pick<
-  AuthorizedResponsibilityDeterminationService,
+  ResponsibilityDeterminationApplicationService,
+  | "listQueue"
   | "get"
   | "saveDraft"
   | "finalize"
@@ -82,6 +84,13 @@ export function registerResponsibilityDeterminationRoutes(
   };
   const key = (request: FastifyRequest): string =>
     parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
+
+  app.get("/responsibility-determinations/queue", async (request) =>
+    ResponsibilityQueueResponseSchema.parse(
+      await dependencies.service.listQueue(
+        await actor(request, "responsibility:determine"),
+      ),
+    ));
 
   app.get(
     "/rework-orders/:reworkOrderId/responsibility-determination",
