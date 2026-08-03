@@ -596,3 +596,120 @@ export type TransferResponsibility = z.infer<typeof TransferResponsibilitySchema
 export type TakeoverResponsibility = z.infer<typeof TakeoverResponsibilitySchema>;
 export type ConfirmHighMultiplier = z.infer<typeof ConfirmHighMultiplierSchema>;
 export type ResponsibilityDeterminationResponse = z.infer<typeof ResponsibilityDeterminationResponseSchema>;
+
+export const OwnFactoryApprovalParamsSchema = z.object({ approvalId: IdSchema }).strict();
+export const OwnFactoryApprovalOrderParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+const OwnFactoryApprovalVersionSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  expectedApprovalVersion: z.number().int().positive(),
+}).strict();
+export const ApproveOwnFactoryApprovalSchema = OwnFactoryApprovalVersionSchema.extend({
+  opinion: ReasonSchema.optional(),
+}).strict();
+export const RejectOwnFactoryApprovalSchema = OwnFactoryApprovalVersionSchema.extend({
+  opinion: ReasonSchema,
+}).strict();
+export const OwnFactoryApprovalDecisionSchema = z.object({
+  decisionId: IdSchema,
+  decision: z.enum(["approved", "rejected"]),
+  actedBy: IdSchema,
+  actorRoleSnapshot: z.array(z.string().min(1)).min(1),
+  opinion: z.string().nullable(),
+  decidedAt: z.string().datetime(),
+  otherOwnersNotified: z.boolean(),
+}).strict();
+export const OwnFactoryApprovalSourceProcessSchema = z.object({
+  configurationItemId: IdSchema,
+  processName: z.string().min(1),
+  pricingUnit: ProcessPricingUnitSchema,
+  baseAmount: z.string(),
+  responsibilityAmount: z.string(),
+  multiplier: z.string(),
+  ownFactoryShareBps: z.number().int().min(1).max(10_000),
+  ownFactoryRoundedAmount: z.string(),
+}).strict();
+export const OwnFactoryApprovalSourceSnapshotSchema = z.object({
+  finalizedDetermination: z.object({
+    determinationId: IdSchema,
+    determinationVersion: z.number().int().positive(),
+    sourceOrderReviewId: IdSchema,
+    calculationTotal: z.string(),
+    determinedBy: IdSchema,
+    highMultiplierConfirmation: z.object({
+      confirmationId: IdSchema,
+      confirmedBy: IdSchema,
+      confirmedAt: z.string().datetime(),
+      reason: z.string().min(1),
+      snapshot: z.unknown(),
+    }).strict().nullable(),
+  }).strict(),
+  order: z.object({
+    reworkOrderId: IdSchema,
+    reworkNo: z.string().nullable(),
+    styleNo: z.string().nullable(),
+    orderNo: z.string().nullable(),
+    problemPart: z.string().nullable(),
+    problemDescription: z.string().nullable(),
+  }).strict(),
+  processes: z.array(OwnFactoryApprovalSourceProcessSchema),
+  amountLines: z.array(z.object({
+    configurationItemId: IdSchema,
+    workReportId: IdSchema,
+    personId: IdSchema,
+    baseMemberShareAmount: z.string(),
+    multiplier: z.string(),
+    shareBps: z.number().int().min(1).max(10_000),
+    roundedAmount: z.string(),
+    workerDisplayName: z.string(),
+    taskMode: WorkTaskModeSchema,
+    memberSnapshot: z.unknown(),
+    reportSnapshot: z.unknown(),
+  }).strict()),
+}).strict();
+export const OwnFactoryApprovalResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkStatus: ReworkOrderStatusSchema,
+  orderVersion: z.number().int().positive(),
+  canView: z.boolean(),
+  canDecide: z.boolean(),
+  approval: z.object({
+    approvalId: IdSchema,
+    finalizedDeterminationId: IdSchema,
+    finalizedDeterminationVersion: z.number().int().positive(),
+    approvalVersion: z.number().int().positive(),
+    status: z.enum(["pending", "approved", "rejected"]),
+    ownFactoryTotalAmount: z.string(),
+    sourceSnapshot: OwnFactoryApprovalSourceSnapshotSchema,
+    createdAt: z.string().datetime(),
+    decision: OwnFactoryApprovalDecisionSchema.nullable(),
+  }).strict().nullable(),
+  history: z.array(z.object({
+    approvalId: IdSchema,
+    finalizedDeterminationId: IdSchema,
+    finalizedDeterminationVersion: z.number().int().positive(),
+    approvalVersion: z.number().int().positive(),
+    status: z.enum(["pending", "approved", "rejected"]),
+    ownFactoryTotalAmount: z.string(),
+    createdAt: z.string().datetime(),
+    decision: OwnFactoryApprovalDecisionSchema.nullable(),
+  }).strict()),
+}).strict();
+export const OwnFactoryApprovalQueueResponseSchema = z.object({
+  items: z.array(z.object({
+    approvalId: IdSchema,
+    reworkOrderId: IdSchema,
+    reworkNo: z.string().nullable(),
+    styleNo: z.string().nullable(),
+    orderNo: z.string().nullable(),
+    problemPart: z.string().nullable(),
+    orderVersion: z.number().int().positive(),
+    approvalVersion: z.number().int().positive(),
+    status: z.enum(["pending", "approved", "rejected"]),
+    ownFactoryTotalAmount: z.string(),
+    canDecide: z.boolean(),
+  }).strict()),
+}).strict();
+export type ApproveOwnFactoryApproval = z.infer<typeof ApproveOwnFactoryApprovalSchema>;
+export type RejectOwnFactoryApproval = z.infer<typeof RejectOwnFactoryApprovalSchema>;
+export type OwnFactoryApprovalResponse = z.infer<typeof OwnFactoryApprovalResponseSchema>;
+export type OwnFactoryApprovalQueueResponse = z.infer<typeof OwnFactoryApprovalQueueResponseSchema>;
