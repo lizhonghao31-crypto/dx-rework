@@ -77,4 +77,32 @@ describe("ResponsibilityDeterminationApplicationService", () => {
     );
     expect(authorizedGet).not.toHaveBeenCalled();
   });
+
+  it("rejects zero-bps responsibility allocations before the amount engine", () => {
+    const saveDraft = vi.spyOn(
+      ResponsibilityDeterminationService.prototype,
+      "saveDraft",
+    );
+    const service = new ResponsibilityDeterminationApplicationService(
+      {} as Pool,
+    );
+    const invalid: CreateResponsibilityDraft = {
+      ...input,
+      processes: [{
+        ...input.processes[0]!,
+        allocations: [
+          { responsibilityType: "own_factory", shareBps: 0 },
+          { responsibilityType: "processing_factory", shareBps: 10000 },
+        ],
+      }],
+    };
+
+    expect(() => service.saveDraft(
+      actor,
+      storedResponse.reworkOrderId,
+      invalid,
+      "zero-bps-key",
+    )).toThrow("Responsibility shares must be greater than zero");
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
 });
