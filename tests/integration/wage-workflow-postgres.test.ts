@@ -42,6 +42,7 @@ const migrations = [
   "0021_external_processing_factory_override_closure.sql",
   "0022_wage_reconciliation_month_close.sql",
   "0023_wage_materialization_closure.sql",
+  "0024_wage_adjustment_attachment_closure.sql",
 ] as const;
 
 runWithPostgres("wage reconciliation reviewed workflow", () => {
