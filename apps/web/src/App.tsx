@@ -2,6 +2,7 @@ import { Dashboard, Detail, Foundation, MobileForm, Tasks } from "./pages.js";
 import { AuthGate, DeniedPage, LoginPage, QrLoginPage } from "./auth.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
+import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 
 export function App() {
@@ -15,6 +16,7 @@ export function App() {
   let page;
   if (path === "/ui/management") page = <Dashboard />;
   else if (path === "/ui/supervisor") page = <Dashboard supervisor />;
+  else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/tasks") page = <Tasks />;
   else if (path.startsWith("/ui/tasks/")) page = <Detail />;
   else if (path === "/ui/qc/new") page = <ReworkInitiationForm />;
