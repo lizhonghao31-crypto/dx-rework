@@ -97,6 +97,7 @@ export type ReworkOrderStatus =
   | "pending_quantity_adjustment_ie_review"
   | "pending_responsibility_determination"
   | "pending_responsibility_action"
+  | "completed"
   | "cancelled";
 
 export const transitionReworkOrder = (
@@ -112,7 +113,8 @@ export const transitionReworkOrder = (
     pending_order_review: ["in_progress", "pending_order_review", "pending_quantity_adjustment_ie_review", "pending_responsibility_determination"],
     pending_quantity_adjustment_ie_review: ["in_progress", "pending_order_review"],
     pending_responsibility_determination: ["pending_responsibility_action"],
-    pending_responsibility_action: ["pending_responsibility_determination"],
+    pending_responsibility_action: ["pending_responsibility_determination", "completed"],
+    completed: ["pending_responsibility_determination"],
     cancelled: [],
   }, from, to);
 

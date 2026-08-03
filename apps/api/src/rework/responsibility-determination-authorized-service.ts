@@ -16,6 +16,7 @@ import {
 } from "../tools/repositories.js";
 import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
 import { OwnFactoryApprovalService } from "./own-factory-approval-service.js";
+import { ExternalResponsibilityService, maybeCompleteResponsibilityAction } from "./external-responsibility-service.js";
 
 type Result<T> = { value: T; reused: boolean };
 type Queryable = Pool | PoolClient;
@@ -66,12 +67,14 @@ const capabilities = (actor: TrustedActorContext): readonly string[] =>
 export class AuthorizedResponsibilityDeterminationService {
   private readonly base: ResponsibilityDeterminationService;
   private readonly ownFactoryApprovals: OwnFactoryApprovalService;
+  private readonly externalResponsibilities: ExternalResponsibilityService;
   private readonly idempotency = new IdempotencyService();
   private readonly events = new OperationEventRepository();
 
   constructor(private readonly database: Pool) {
     this.base = new ResponsibilityDeterminationService(database);
     this.ownFactoryApprovals = new OwnFactoryApprovalService(database);
+    this.externalResponsibilities = new ExternalResponsibilityService(database);
   }
 
   async get(
@@ -171,7 +174,18 @@ export class AuthorizedResponsibilityDeterminationService {
         order,
         id,
       );
+      await this.externalResponsibilities.ensureForFinalized(
+        client,
+        actor,
+        order,
+        id,
+      );
       await this.advance(client, orderId, actor.actorId, "pending_responsibility_action");
+      await maybeCompleteResponsibilityAction(client, actor, {
+        ...order,
+        status: "pending_responsibility_action",
+        version: order.version + 1,
+      });
       return this.get(actor, orderId, client);
     });
   }

@@ -8,6 +8,7 @@ import type {
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
+import { maybeCompleteResponsibilityAction } from "./external-responsibility-service.js";
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -404,6 +405,9 @@ export class OwnFactoryApprovalService {
          WHERE rework_order_id=$1`,
         [order.rework_order_id, actor.actorId],
       );
+    }
+    if (decision === "approved") {
+      await maybeCompleteResponsibilityAction(client, actor, order);
     }
     await this.enqueueResultNotices(
       client,

@@ -63,6 +63,26 @@
     {
       "version": "0016_responsibility_amount_contract_restore",
       "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925"
+    },
+    {
+      "version": "0017_external_responsibility_deduction",
+      "checksum": "11320eebff234300d7243897fbcab90144dd2c61cb450b957def3a0394887e97"
+    },
+    {
+      "version": "0018_external_responsibility_review_closure",
+      "checksum": "ccaf2c0f99451a27502db18a270ddaa94c7e997228ad85f5b602608cb016b010"
+    },
+    {
+      "version": "0019_external_revision_seed_ordering",
+      "checksum": "199c2fc265628ed0cf40bb86ecd25ec823f081f06f880d15e84eb6e9bdf19ecc"
+    },
+    {
+      "version": "0020_external_responsibility_codex_closure",
+      "checksum": "7df9f581820a1fe5c96db916c9bc2856445fd81d081e9abcbea95ca9ad35c831"
+    },
+    {
+      "version": "0021_external_processing_factory_override_closure",
+      "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
     }
   ]
 }

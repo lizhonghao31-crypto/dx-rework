@@ -11,6 +11,10 @@
     "./responsibility-queue": {
       "types": "./src/responsibility-queue.ts",
       "import": "./dist/responsibility-queue.js"
+    },
+    "./external-responsibility": {
+      "types": "./src/external-responsibility.ts",
+      "import": "./dist/external-responsibility.js"
     }
   },
   "scripts": {
