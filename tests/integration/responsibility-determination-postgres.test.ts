@@ -454,7 +454,7 @@ runWithPostgres("responsibility PostgreSQL closure", () => {
       who,
       b.orderId,
       {
-        expectedOrderVersion: b.orderVersion - 1,
+        expectedOrderVersion: b.orderVersion - 2,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
         reason: null,
