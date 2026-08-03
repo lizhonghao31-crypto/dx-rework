@@ -1,2 +1,274 @@
-import { Button, StatusBadge, Surface } from "@dx-rework/ui";import type { WageItem, WagePeriod } from "@dx-rework/contracts/wages";
-type Props={period:WagePeriod;items:WageItem[];roles:readonly string[]};export function WagePeriodDetail({period,items,roles}:Props){return <main className="wage-page"><h1>{period.periodMonth} 工资详情</h1><StatusBadge tone={period.status==="locked"?"success":"info"}>{period.status}</StatusBadge><div className="wage-actions">{roles.includes("tail_supervisor")&&<><Button variant="primary">初核通过</Button><Button>发起调整</Button></>}{roles.includes("administrative_clerk")&&<><Button variant="primary">复核通过</Button><Button>退回</Button><Button>审批调整</Button></>}{roles.includes("wage_month_close_accountant")&&<Button variant="primary">锁定</Button>}</div>{items.map(i=><Surface key={i.wageItemId}><h2>{i.personNameSnapshot} · ¥{i.payableAmount}</h2><p>{i.processNameSnapshot} · {i.assignmentMode} · 组总额 ¥{i.groupAmount}</p><p>高精度份额 {i.exactPersonShare} · 尾差排名 {i.remainderRank}/{i.memberCount}</p><pre>{JSON.stringify(i.memberSnapshot,null,2)}</pre></Surface>)}<Surface><h2>核对历史 / 调整历史 / 锁定信息</h2><p>{period.lockedAt??"尚未锁定"}</p></Surface></main>}
+import {
+  WagePeriodDetailSchema,
+  WagePeriodSchema,
+  type WageAdjustment,
+  type WagePeriod,
+  type WagePeriodDetail,
+} from "@dx-rework/contracts/wages";
+import { Button, StatusBadge, Surface } from "@dx-rework/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { z } from "zod";
+
+import { createWebUrls } from "../../url-contract.js";
+import { WageAdjustmentForm } from "./wage-adjustment-form.js";
+
+const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const PeriodListSchema = z.array(WagePeriodSchema);
+
+const responseError = async (response: Response): Promise<string> => {
+  try {
+    const body = await response.json() as { error?: { message?: string } };
+    return body.error?.message ?? "工资操作失败";
+  } catch {
+    return "工资操作失败";
+  }
+};
+
+export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
+  const [detail, setDetail] = useState<WagePeriodDetail | null>(null);
+  const [periods, setPeriods] = useState<WagePeriod[]>([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const refreshing = useRef(false);
+  const mounted = useRef(true);
+
+  const load = useCallback(async () => {
+    if (refreshing.current) return;
+    refreshing.current = true;
+    try {
+      const [detailResponse, periodResponse] = await Promise.all([
+        fetch(apiUrl(`wage-periods/${periodId}`), {
+          credentials: "include",
+          headers: { accept: "application/json" },
+        }),
+        fetch(apiUrl("wage-periods"), {
+          credentials: "include",
+          headers: { accept: "application/json" },
+        }),
+      ]);
+      if (!detailResponse.ok) throw new Error(await responseError(detailResponse));
+      if (!periodResponse.ok) throw new Error(await responseError(periodResponse));
+      const nextDetail = WagePeriodDetailSchema.parse(await detailResponse.json());
+      const nextPeriods = PeriodListSchema.parse(await periodResponse.json());
+      if (mounted.current) {
+        setDetail(nextDetail);
+        setPeriods(nextPeriods);
+      }
+    } catch (error: unknown) {
+      if (mounted.current) {
+        setMessage(error instanceof Error ? error.message : "工资详情加载失败");
+      }
+    } finally {
+      refreshing.current = false;
+    }
+  }, [periodId]);
+
+  useEffect(() => {
+    mounted.current = true;
+    void load();
+    const timer = window.setInterval(() => void load(), 15_000);
+    const focus = () => void load();
+    window.addEventListener("focus", focus);
+    return () => {
+      mounted.current = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", focus);
+    };
+  }, [load]);
+
+  const command = async (
+    path: string,
+    body: unknown,
+    success: string,
+  ): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(apiUrl(path), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      await load();
+      setMessage(success);
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "工资操作失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const decideAdjustment = async (
+    adjustment: WageAdjustment,
+    approved: boolean,
+  ): Promise<void> => {
+    const reason = approved
+      ? null
+      : window.prompt("请输入拒绝原因")?.trim() ?? "";
+    if (!approved && !reason) return;
+    await command(
+      `wage-adjustments/${adjustment.adjustmentId}/${approved ? "approve" : "reject"}`,
+      { expectedVersion: adjustment.version, reason },
+      approved ? "工资调整已批准，月份已重新进入李同生初核。" : "工资调整已拒绝。",
+    );
+  };
+
+  if (!detail) {
+    return (
+      <main className="wage-page">
+        <h1>工资详情</h1>
+        <Surface><p>{message || "正在加载工资期间…"}</p></Surface>
+      </main>
+    );
+  }
+  const { period, items, adjustments, reviewActions } = detail;
+  const statusLabel = period.status === "pending_tail_review"
+    ? "待李同生初核"
+    : period.status === "pending_admin_review"
+      ? "待梁少萍复核"
+      : period.status === "ready_to_lock"
+        ? "待欧阳俊珺月结"
+        : "已锁定";
+
+  return (
+    <main className="wage-page">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">N10-A · {period.periodMonth.slice(0, 7)}</p>
+          <h1>返工工资核对</h1>
+        </div>
+        <StatusBadge tone={period.status === "locked" ? "success" : "info"}>
+          {statusLabel}
+        </StatusBadge>
+      </header>
+
+      <Surface className="wage-summary">
+        <dl>
+          <dt>工人 / 明细</dt><dd>{period.personCount} / {period.sourceItemCount}</dd>
+          <dt>原始金额</dt><dd>¥{period.originalTotal}</dd>
+          <dt>调整金额</dt><dd>¥{period.adjustmentTotal}</dd>
+          <dt>最终金额</dt><dd><strong>¥{period.finalTotal}</strong></dd>
+        </dl>
+        <div className="wage-actions">
+          {period.canTailReview && (
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() => void command(
+                `wage-periods/${period.periodId}/tail-approve`,
+                { expectedVersion: period.periodVersion },
+                "李同生初核已完成，现进入梁少萍复核。",
+              )}
+            >初核通过</Button>
+          )}
+          {period.canAdministrativeReview && (
+            <>
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => void command(
+                  `wage-periods/${period.periodId}/administrative-approve`,
+                  { expectedVersion: period.periodVersion },
+                  "梁少萍复核已完成，月份已具备月结条件。",
+                )}
+              >复核通过</Button>
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  const reason = window.prompt("请输入退回李同生的原因")?.trim();
+                  if (reason) void command(
+                    `wage-periods/${period.periodId}/administrative-return`,
+                    { expectedVersion: period.periodVersion, reason },
+                    "工资月份已退回李同生重新初核。",
+                  );
+                }}
+              >退回</Button>
+            </>
+          )}
+          {period.canLock && (
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() => void command(
+                `wage-periods/${period.periodId}/lock`,
+                { expectedVersion: period.periodVersion, lockNote: null },
+                "工资月份已锁定。",
+              )}
+            >月结锁定</Button>
+          )}
+          {period.canExport && (
+            <Button
+              onClick={() => window.location.assign(
+                apiUrl(`wage-periods/${period.periodId}/export.xlsx`),
+              )}
+            >导出 Excel</Button>
+          )}
+        </div>
+      </Surface>
+
+      {message && <p role="status" className="form-message">{message}</p>}
+
+      <section className="wage-grid">
+        {items.map((item) => (
+          <Surface key={item.wageItemId} className="wage-item-card">
+            <h2>{item.personNameSnapshot} · ¥{item.payableAmount}</h2>
+            <p>{item.reworkNoSnapshot} · {item.styleNoSnapshot}</p>
+            <p>{item.processNameSnapshot} · {item.actualQuantitySnapshot} {item.pricingUnitSnapshot} · 单价 ¥{item.unitPriceSnapshot}</p>
+            <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 ¥{item.groupAmount}</p>
+            <p>高精度份额 {item.exactPersonShare} · 尾差排名 {item.remainderRank}/{item.memberCount}</p>
+            {period.canRequestAdjustment && (
+              <WageAdjustmentForm
+                item={item}
+                sourcePeriod={period}
+                periods={periods}
+                disabled={busy}
+                onCompleted={async (success) => {
+                  await load();
+                  setMessage(success);
+                }}
+              />
+            )}
+          </Surface>
+        ))}
+      </section>
+
+      <Surface>
+        <h2>工资调整</h2>
+        {adjustments.length === 0 && <p>暂无调整记录。</p>}
+        {adjustments.map((adjustment) => (
+          <div key={adjustment.adjustmentId} className="wage-history-row">
+            <span>{adjustment.adjustmentAmount} 元 · {adjustment.reason}</span>
+            <StatusBadge tone={adjustment.status === "approved" ? "success" : adjustment.status === "rejected" ? "danger" : "warning"}>
+              {adjustment.status}
+            </StatusBadge>
+            {adjustment.status === "pending" && period.canApproveAdjustment && (
+              <span className="wage-actions">
+                <Button disabled={busy} onClick={() => void decideAdjustment(adjustment, true)}>批准</Button>
+                <Button disabled={busy} onClick={() => void decideAdjustment(adjustment, false)}>拒绝</Button>
+              </span>
+            )}
+          </div>
+        ))}
+      </Surface>
+
+      <Surface>
+        <h2>核对历史</h2>
+        {reviewActions.length === 0 && <p>尚未开始核对。</p>}
+        {reviewActions.map((action) => (
+          <p key={action.reviewActionId}>
+            {action.actedAt} · {action.stage} · {action.decision}
+            {action.reason ? ` · ${action.reason}` : ""}
+          </p>
+        ))}
+        {period.lockedAt && <p>锁定时间：{period.lockedAt}</p>}
+      </Surface>
+    </main>
+  );
+}
