@@ -69,8 +69,8 @@ runWithPostgres("external responsibility migration replay", () => {
       "external_deductions_bump_case_version",
       "external_followups_bump_case_version",
     ]);
-    expect(signDefinition.rows[0]?.definition).toContain(
-      "order_record.merchandiser_user_id = delegation.grantor_user_id",
+    expect(signDefinition.rows[0]?.definition).toMatch(
+      /order_record\.merchandiser_user_id\s*=\s*delegation\.grantor_user_id/,
     );
     await expect(database.query(
       `INSERT INTO delegated_authorizations(
