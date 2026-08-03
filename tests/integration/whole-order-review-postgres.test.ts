@@ -60,10 +60,10 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
 
   afterAll(async () => { await database.end(); await admin.query("DROP SCHEMA IF EXISTS " + schema + " CASCADE"); await admin.end(); });
 
-  const createOrder = async (plan: number, reports: readonly number[]) => {
-    const draft = await initiation.createDraft(qc(), { styleNo: "PD" + randomUUID().slice(0, 8), merchandiserUserId: ids.merch, processingFactory: { type: "own_factory" }, problemPart: "袖口", problemDescription: "PR-08", reworkQuantity: plan }, randomUUID());
+  const createOrder = async (plan: number, reports: readonly number[], pricingUnit: "piece" | "hour" = "piece") => {
+    const draft = await initiation.createDraft(qc(), { styleNo: "PD" + randomUUID().slice(0, 8), merchandiserUserId: ids.merch, processingFactory: { type: "own_factory" }, problemPart: "袖口", problemDescription: "PR-08", reworkQuantity: Math.ceil(plan) }, randomUUID());
     const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
-    const saved = await configuration.saveDraft(tailConfigure(), draft.value.reworkOrderId, { expectedOrderVersion: submitted.value.version, items: [{ source: "custom", customProcessName: "审核工序" + randomUUID().slice(0, 4), pricingUnit: "piece", plannedQuantity: plan, unitPrice: 1 }] }, randomUUID());
+    const saved = await configuration.saveDraft(tailConfigure(), draft.value.reworkOrderId, { expectedOrderVersion: submitted.value.version, items: [{ source: "custom", customProcessName: "审核工序" + randomUUID().slice(0, 4), pricingUnit, plannedQuantity: plan, unitPrice: 1 }] }, randomUUID());
     const queued = await configuration.submit(tailConfigure(), draft.value.reworkOrderId, { expectedOrderVersion: saved.value.orderVersion, expectedConfigurationVersion: saved.value.configuration!.configurationVersion }, randomUUID());
     const approved = await configuration.review(ie(), draft.value.reworkOrderId, { expectedOrderVersion: queued.value.orderVersion, expectedConfigurationVersion: queued.value.configuration!.configurationVersion, decision: "approved" }, randomUUID());
     const itemId = approved.value.configuration!.items[0]!.configurationItemId;
@@ -123,6 +123,11 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     const requested = await review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: completedView.orderVersion, configurationItemId: completed.configurationItemId, newPlannedQuantity: 4, reason: "补料", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: true }, "increase-once");
     const replay = await review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: completedView.orderVersion, configurationItemId: completed.configurationItemId, newPlannedQuantity: 4, reason: "补料", expiresAt: requested.value.expiresAt!, requiresIeReview: true }, "increase-once");
     expect(replay.reused).toBe(true);
+    const concurrent = await Promise.allSettled([
+      review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: requested.value.adjustmentVersion + 1, configurationItemId: completed.configurationItemId, newPlannedQuantity: 5, reason: "重复补料", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID()),
+      review.requestIncrease(tailAdjust(), completed.reworkOrderId, { expectedOrderVersion: requested.value.adjustmentVersion + 1, configurationItemId: completed.configurationItemId, newPlannedQuantity: 6, reason: "并发补料", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID()),
+    ]);
+    expect(concurrent.every((outcome) => outcome.status === "rejected")).toBe(true);
     await expect(review.confirmIncrease(actor(ids.outsider, ["system_admin"], "quantity:confirm"), requested.value.adjustmentId, { expectedOrderVersion: requested.value.adjustmentVersion, expectedAdjustmentVersion: requested.value.adjustmentVersion, decision: "confirmed", actualCutQuantity: 4, actualReturnQuantity: 4, allowedMaximumQuantity: 4 }, randomUUID())).rejects.toMatchObject({ code: "FORBIDDEN" });
     const confirmView = await review.get(merch(), completed.reworkOrderId);
     const confirmed = await review.confirmIncrease(merch(), requested.value.adjustmentId, { expectedOrderVersion: confirmView.orderVersion, expectedAdjustmentVersion: requested.value.adjustmentVersion, decision: "confirmed", actualCutQuantity: 4, actualReturnQuantity: 4, allowedMaximumQuantity: 4 }, randomUUID());
@@ -131,6 +136,13 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     const reviewed = await review.reviewIncrease(ie(), requested.value.adjustmentId, { expectedOrderVersion: ieView.orderVersion, expectedAdjustmentVersion: confirmed.value.adjustmentVersion, decision: "approved" }, randomUUID());
     expect(reviewed.value.status).toBe("effective");
     expect((await review.get(tailAudit(), completed.reworkOrderId)).reworkStatus).toBe("in_progress");
+
+    const rejectedOrder = await createOrder(2, [2]);
+    const rejectedView = await review.get(tailAdjust(), rejectedOrder.reworkOrderId);
+    const rejectedRequest = await review.requestIncrease(tailAdjust(), rejectedOrder.reworkOrderId, { expectedOrderVersion: rejectedView.orderVersion, configurationItemId: rejectedOrder.configurationItemId, newPlannedQuantity: 4, reason: "补料后取消", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
+    const merchView = await review.get(merch(), rejectedOrder.reworkOrderId);
+    const rejectedDecision = await review.confirmIncrease(merch(), rejectedRequest.value.adjustmentId, { expectedOrderVersion: merchView.orderVersion, expectedAdjustmentVersion: rejectedRequest.value.adjustmentVersion, decision: "rejected", actualCutQuantity: 0, actualReturnQuantity: 0, allowedMaximumQuantity: 1, reason: "不再补料" }, randomUUID());
+    expect(rejectedDecision.value.status).toBe("rejected");
   });
 
   it("honors active scoped delegation while rejecting an administrator bypass", async () => {
@@ -140,5 +152,31 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     const overview = await review.get(delegated, order.reworkOrderId);
     expect(overview.canReview).toBe(true);
     await expect(review.get(actor(ids.outsider, ["system_admin"], "access:admin"), order.reworkOrderId)).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await access.createDelegation(owner(), { grantorUserId: ids.tail, granteeUserId: ids.delegate, capability: "quantity:adjust", scopeType: "process", scopeId: order.configurationItemId, validFrom: new Date(Date.now() - 1_000).toISOString(), validUntil: new Date(Date.now() + 60_000).toISOString(), reason: "工序级数量代理" });
+    const processDelegate = actor(ids.delegate, ["quality_control"], "quantity:adjust");
+    const scoped = await review.get(processDelegate, order.reworkOrderId, order.configurationItemId);
+    expect(scoped).toEqual(expect.objectContaining({ canReview: false, reviewId: null }));
+    expect(scoped.processes.map((process) => process.configurationItemId)).toEqual([order.configurationItemId]);
+    expect(scoped.reports.every((report) => report.configurationItemId === order.configurationItemId)).toBe(true);
+    await expect(review.get(processDelegate, order.reworkOrderId)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const anotherOrder = await createOrder(1, [1]);
+    await expect(review.get(processDelegate, anotherOrder.reworkOrderId, order.configurationItemId)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("accepts canonical two-decimal hour quantities and rejects three decimals", async () => {
+    const first = await createOrder(1, [1], "hour");
+    const firstView = await review.get(tailAdjust(), first.reworkOrderId);
+    const firstIncrease = await review.requestIncrease(tailAdjust(), first.reworkOrderId, { expectedOrderVersion: firstView.orderVersion, configurationItemId: first.configurationItemId, newPlannedQuantity: 1.15, reason: "小时补量", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
+    expect(firstIncrease.value.requestedPlannedQuantity).toBe(1.15);
+
+    const second = await createOrder(0.2, [0.2], "hour");
+    const secondView = await review.get(tailAdjust(), second.reworkOrderId);
+    const secondIncrease = await review.requestIncrease(tailAdjust(), second.reworkOrderId, { expectedOrderVersion: secondView.orderVersion, configurationItemId: second.configurationItemId, newPlannedQuantity: 0.29, reason: "小时补量", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
+    expect(secondIncrease.value.requestedPlannedQuantity).toBe(0.29);
+
+    const third = await createOrder(1, [1], "hour");
+    const thirdView = await review.get(tailAdjust(), third.reworkOrderId);
+    await expect(review.requestIncrease(tailAdjust(), third.reworkOrderId, { expectedOrderVersion: thirdView.orderVersion, configurationItemId: third.configurationItemId, newPlannedQuantity: 1.151, reason: "精度错误", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });

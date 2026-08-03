@@ -47,6 +47,13 @@ describe("whole order review routes", () => {
     expect(service.get).toHaveBeenCalledWith(expect.objectContaining({ actorRoles: ["order_merchandiser"], authorizationCapabilities: ["quantity:confirm"] }), orderId);
   });
 
+  it("passes the optional process scope to the service without widening the response", async () => {
+    const { app, service } = create(["quality_control"], ["quantity:adjust"]);
+    const result = await app.inject({ method: "GET", url: "/rework-orders/" + orderId + "/whole-order-review?configurationItemId=" + reportId, headers: { cookie: "dx_rework_session=trusted" } });
+    expect(result.statusCode).toBe(200);
+    expect(service.get).toHaveBeenCalledWith(expect.any(Object), orderId, reportId);
+  });
+
   it("requires idempotency and validates a targeted rejection before service execution", async () => {
     const { app, service } = create();
     const invalid = await app.inject({ method: "POST", url: "/work-reports/" + reportId + "/reject", headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "reject-1" }, payload: { expectedOrderVersion: 2, rejectedPersonId: orderId, reason: " " } });

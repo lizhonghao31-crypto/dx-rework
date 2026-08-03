@@ -35,6 +35,7 @@ type PlanRow = Readonly<{
 type ReportRow = Readonly<{
   work_report_id: string; work_task_id: string; configuration_item_id: string; actual_quantity: string;
   completed_at: Date; submitted_by: string; resubmits_work_report_id: string | null;
+  assignment_mode: "individual" | "collective"; report_rejection_id: string | null;
   rejected_person_id: string | null; rejection_reason: string | null;
 }>;
 type MemberRow = Readonly<{ work_report_id: string; person_id: string; display_name: string }>;
@@ -70,6 +71,13 @@ export class WholeOrderReviewService {
   async get(actor: TrustedActorContext, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse> {
     const order = await this.order(this.database, reworkOrderId, false);
     if (configurationItemId) {
+      const scopedItem = await this.database.query(
+        `SELECT 1 FROM rework_process_configurations configuration
+         JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
+         WHERE configuration.rework_order_id=$1 AND configuration.status='approved' AND item.configuration_item_id=$2`,
+        [reworkOrderId, configurationItemId],
+      );
+      if (!scopedItem.rowCount) error("工序不存在或不属于该返工单当前生效配置", 404, "NOT_FOUND");
       const canAdjustQuantity = await this.can(actor, "tail_supervisor", "quantity:adjust", order, configurationItemId);
       const canConfirmQuantity = await this.canConfirm(actor, order, configurationItemId);
       const canReviewQuantityIncrease = await this.can(actor, "ie_reviewer", "process:review", order, configurationItemId);
@@ -130,7 +138,7 @@ export class WholeOrderReviewService {
       const report = await client.query<ReportRow & { rework_order_id: string }>(
         `SELECT report.work_report_id,report.work_task_id,report.configuration_item_id,report.actual_quantity,report.completed_at,
                 report.submitted_by,report.resubmits_work_report_id,report.rework_order_id,
-                rejection.rejected_person_id,rejection.reason AS rejection_reason
+                rejection.report_rejection_id,rejection.rejected_person_id,rejection.reason AS rejection_reason
          FROM rework_work_reports report
          LEFT JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
          WHERE report.work_report_id=$1 FOR UPDATE OF report`,
@@ -142,9 +150,9 @@ export class WholeOrderReviewService {
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_order_review") error("当前返工单不在整单审核节点", 409, "INVALID_STATE_TRANSITION");
-      if (row.rejected_person_id) error("该上数记录已经被驳回", 409, "CONFLICT");
-      const task = await client.query<{ mode: "individual" | "collective" }>("SELECT mode FROM rework_work_tasks WHERE work_task_id=$1 FOR SHARE", [row.work_task_id]);
-      const collective = task.rows[0]?.mode === "collective";
+      if (row.report_rejection_id) error("该上数记录已经被驳回", 409, "CONFLICT");
+      const task = await client.query<{ assignment_mode: "individual" | "collective" }>("SELECT assignment_mode FROM rework_work_tasks WHERE work_task_id=$1 FOR SHARE", [row.work_task_id]);
+      const collective = task.rows[0]?.assignment_mode === "collective";
       if (collective && input.rejectedPersonId !== null) error("集体计件只能驳回整条集体记录", 400, "VALIDATION_ERROR");
       if (!collective) {
         if (!input.rejectedPersonId) error("个人计件必须指定记录对应人员", 400, "VALIDATION_ERROR");
@@ -335,7 +343,9 @@ export class WholeOrderReviewService {
     const plans = await this.plans(client, order.rework_order_id);
     const [reports, adjustments, reviews] = await Promise.all([
       this.reports(client, order.rework_order_id, configurationItemId), this.adjustments(client, order.rework_order_id, configurationItemId),
-      client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
+      configurationItemId
+        ? Promise.resolve({ rows: [] as Array<{ order_review_id: string }> })
+        : client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
     ]);
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
@@ -385,8 +395,9 @@ export class WholeOrderReviewService {
       client.query<ReportRow>(
         `SELECT report.work_report_id,report.work_task_id,report.configuration_item_id,report.actual_quantity,
                 report.completed_at,report.submitted_by,report.resubmits_work_report_id,
-                rejection.rejected_person_id,rejection.reason AS rejection_reason
+                task.assignment_mode,rejection.report_rejection_id,rejection.rejected_person_id,rejection.reason AS rejection_reason
          FROM rework_work_reports report
+         JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
          LEFT JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
          WHERE report.rework_order_id=$1 AND ($2::uuid IS NULL OR report.configuration_item_id=$2) ORDER BY report.completed_at,report.work_report_id`,
         [reworkOrderId, configurationItemId ?? null],
@@ -410,7 +421,8 @@ export class WholeOrderReviewService {
     return reports.rows.map((report) => ({
       workReportId: report.work_report_id, workTaskId: report.work_task_id, configurationItemId: report.configuration_item_id,
       actualQuantity: numberValue(report.actual_quantity), completedAt: report.completed_at.toISOString(), submittedBy: report.submitted_by,
-      members: membersByReport.get(report.work_report_id) ?? [], rejected: report.rejected_person_id !== null,
+      members: membersByReport.get(report.work_report_id) ?? [], assignmentMode: report.assignment_mode,
+      rejected: report.report_rejection_id !== null,
       rejectedPersonId: report.rejected_person_id, rejectionReason: report.rejection_reason, resubmitsWorkReportId: report.resubmits_work_report_id,
     }));
   }
@@ -432,9 +444,12 @@ export class WholeOrderReviewService {
   }
 
   private adjustmentRow(row: AdjustmentRow): QuantityAdjustmentResponse {
+    const status = row.status === "pending_merchandiser_confirmation"
+      && row.expires_at !== null && row.expires_at.getTime() <= Date.now()
+      ? "expired" : row.status;
     return {
       adjustmentId: row.adjustment_id, configurationItemId: row.configuration_item_id, adjustmentVersion: row.adjustment_version,
-      kind: row.adjustment_kind, status: row.status, previousPlannedQuantity: numberValue(row.previous_planned_quantity),
+      kind: row.adjustment_kind, status, previousPlannedQuantity: numberValue(row.previous_planned_quantity),
       requestedPlannedQuantity: numberValue(row.requested_planned_quantity), reason: row.reason, requiresIeReview: row.requires_ie_review,
       expiresAt: iso(row.expires_at), requestedBy: row.requested_by, requestedAt: row.requested_at.toISOString(),
       confirmedBy: row.confirmed_by, confirmedAt: iso(row.confirmed_at), reviewedBy: row.reviewed_by, reviewedAt: iso(row.reviewed_at),

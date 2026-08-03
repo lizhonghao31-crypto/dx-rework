@@ -527,6 +527,7 @@ export const WholeOrderReviewResponseSchema = z.object({
     actualQuantity: z.number().positive(),
     completedAt: z.string().datetime(),
     submittedBy: IdSchema,
+    assignmentMode: z.enum(["individual", "collective"]),
     members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1) }).strict()),
     rejected: z.boolean(),
     rejectedPersonId: IdSchema.nullable(),
