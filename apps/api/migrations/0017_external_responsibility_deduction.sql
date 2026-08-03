@@ -672,7 +672,7 @@ BEGIN
   ELSIF NEW.status IN ('deduction_follow_up','returned') AND OLD.status='pending_payables_confirmation' THEN
     SELECT * INTO decision FROM rework_external_payables_actions WHERE case_id=NEW.case_id ORDER BY created_at DESC LIMIT 1;
     expected_action:=CASE NEW.status WHEN 'deduction_follow_up' THEN 'rework.external_responsibility.payables_accept' ELSE 'rework.external_responsibility.payables_return' END;
-    IF decision.payables_action_id IS NULL OR decision.action<>CASE NEW.status WHEN 'deduction_follow_up' THEN 'accepted' ELSE 'returned' END THEN
+    IF decision.payables_action_id IS NULL OR decision.action<>(CASE NEW.status WHEN 'deduction_follow_up' THEN 'accepted' ELSE 'returned' END) THEN
       RAISE EXCEPTION 'payables transition requires matching append-only action' USING ERRCODE='55000';
     END IF;
     PERFORM require_external_responsibility_event(expected_action,'external_responsibility:payables_confirm',NEW.rework_order_id,decision.acted_by);

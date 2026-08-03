@@ -30,6 +30,7 @@ const migrations = [
   "0014_responsibility_source_share_coverage.sql",
   "0015_own_factory_responsibility_approval.sql",
   "0016_responsibility_amount_contract_restore.sql",
+  "0017_external_responsibility_deduction.sql",
 ] as const;
 
 type ReviewedOrder = {
