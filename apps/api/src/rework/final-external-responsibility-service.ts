@@ -125,9 +125,9 @@ export class FinalExternalResponsibilityService
     caseId: string,
     executor: Pool | PoolClient = this.finalDatabase,
   ): Promise<ExternalResponsibilityCaseResponse> {
+    const baseValue = await super.getCase(actor, caseId, executor);
     return this.enrichCase(
-      await super.getCase(actor, caseId, executor)
-        as ExternalResponsibilityCaseResponse,
+      baseValue as ExternalResponsibilityCaseResponse,
       executor,
     );
   }
