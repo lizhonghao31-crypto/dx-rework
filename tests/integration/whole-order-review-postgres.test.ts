@@ -153,8 +153,8 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     expect(overview.canReview).toBe(true);
     await expect(review.get(actor(ids.outsider, ["system_admin"], "access:admin"), order.reworkOrderId)).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-    await access.createDelegation(owner(), { grantorUserId: ids.tail, granteeUserId: ids.delegate, capability: "quantity:adjust", scopeType: "process", scopeId: order.configurationItemId, validFrom: new Date(Date.now() - 1_000).toISOString(), validUntil: new Date(Date.now() + 60_000).toISOString(), reason: "工序级数量代理" });
-    const processDelegate = actor(ids.delegate, ["quality_control"], "quantity:adjust");
+    await access.createDelegation(owner(), { grantorUserId: ids.tail, granteeUserId: ids.outsider, capability: "quantity:adjust", scopeType: "process", scopeId: order.configurationItemId, validFrom: new Date(Date.now() - 1_000).toISOString(), validUntil: new Date(Date.now() + 60_000).toISOString(), reason: "工序级数量代理" });
+    const processDelegate = actor(ids.outsider, ["system_admin"], "quantity:adjust");
     const scoped = await review.get(processDelegate, order.reworkOrderId, order.configurationItemId);
     expect(scoped).toEqual(expect.objectContaining({ canReview: false, reviewId: null }));
     expect(scoped.processes.map((process) => process.configurationItemId)).toEqual([order.configurationItemId]);
