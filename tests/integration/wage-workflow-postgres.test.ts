@@ -81,7 +81,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
   });
   const tailActor = () => actor(
     ids.tail,
-    ["tail_supervisor"],
+    ["order_merchandiser", "tail_supervisor"],
     "process:configure",
     "work:assign",
     "submission:audit",
@@ -265,6 +265,12 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
         [randomUUID(), userId, role],
       );
     }
+    await database.query(
+      `INSERT INTO user_role_assignments(
+         assignment_id,user_id,role_code,granted_by,grant_reason
+       ) VALUES($1,$2,'order_merchandiser',$2,'fixture merchandiser')`,
+      [randomUUID(), ids.tail],
+    );
     await access.ensureOrganizationPolicy();
     workerPersonId = (
       await access.createPerson(
