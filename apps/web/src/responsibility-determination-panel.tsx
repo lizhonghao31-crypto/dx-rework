@@ -108,11 +108,13 @@ const processValid = (process: ProcessForm): boolean => {
   const scaled = multiplierScaled(process.multiplier);
   if (scaled === null || scaled < 1000n) return false;
   if (scaled > 2000n && !process.highMultiplierReason.trim()) return false;
-  const parsed = process.allocations.map((allocation) =>
-    parseBps(allocation.shareBps),
-  );
-  if (parsed.some((value) => value === null)) return false;
-  return parsed.reduce((sum, value) => sum + (value ?? 0n), 0n) === 10000n;
+  let total = 0n;
+  for (const allocation of process.allocations) {
+    const share = parseBps(allocation.shareBps);
+    if (share === null) return false;
+    total += share;
+  }
+  return total === 10000n;
 };
 
 export function ResponsibilityDeterminationPanel({
