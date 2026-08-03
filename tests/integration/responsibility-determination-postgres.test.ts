@@ -376,7 +376,7 @@ runWithPostgres("responsibility PostgreSQL closure", () => {
       "s1-finalize",
     );
     const copyIndex = finalizeSql.findIndex((sql) =>
-      sql.includes("INSERT INTO rework_responsibility_processes SELECT"),
+      /INSERT INTO\s+rework_responsibility_processes\s+SELECT/.test(sql),
     );
     expect(copyIndex).toBeGreaterThan(0);
     expect(
