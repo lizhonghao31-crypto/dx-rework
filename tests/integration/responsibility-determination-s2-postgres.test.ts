@@ -31,7 +31,12 @@ const migrations = [
   "0015_own_factory_responsibility_approval.sql",
 ] as const;
 
-type ReviewedOrder = { orderId: string; itemId: string; orderVersion: number };
+type ReviewedOrder = {
+  orderId: string;
+  itemId: string;
+  itemIds: string[];
+  orderVersion: number;
+};
 
 runWithPostgres("responsibility authorization and handler closure", () => {
   const schema = "responsibility_s2_" + randomUUID().replaceAll("-", "");
@@ -86,7 +91,10 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     }],
   });
 
-  async function createReviewedOrder(label: string): Promise<ReviewedOrder> {
+  async function createReviewedOrder(
+    label: string,
+    processCount = 1,
+  ): Promise<ReviewedOrder> {
     const created = await initiation.createDraft(
       actor(ids.qc, ["quality_control"], "rework:initiate"),
       {
@@ -110,13 +118,13 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       created.value.reworkOrderId,
       {
         expectedOrderVersion: submitted.value.version,
-        items: [{
-          source: "custom",
-          customProcessName: "S2 process " + label,
-          pricingUnit: "piece",
+        items: Array.from({ length: processCount }, (_, index) => ({
+          source: "custom" as const,
+          customProcessName: `S2 process ${label}-${index + 1}`,
+          pricingUnit: "piece" as const,
           plannedQuantity: 1,
           unitPrice: 1,
-        }],
+        })),
       },
       randomUUID(),
     );
@@ -139,32 +147,40 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       },
       randomUUID(),
     );
-    const itemId = approved.value.configuration!.items[0]!.configurationItemId;
-    const task = await reporting.createTask(
-      actor(ids.tail, ["tail_supervisor"], "work:assign"),
-      created.value.reworkOrderId,
-      {
-        expectedOrderVersion: approved.value.orderVersion,
-        configurationItemId: itemId,
-        mode: "individual",
-        members: [{ personId: workerPersonId }],
-      },
-      randomUUID(),
+    const itemIds = approved.value.configuration!.items.map(
+      (item) => item.configurationItemId,
     );
-    const listed = await reporting.list(
-      actor(ids.tail, ["tail_supervisor"], "work:assign"),
-      created.value.reworkOrderId,
-    );
-    await reporting.submitReport(
-      actor(ids.worker, ["worker"], "work:report"),
-      task.value.workTaskId,
-      {
-        expectedOrderVersion: listed.orderVersion,
-        actualQuantity: 1,
-        completedAt: new Date().toISOString(),
-      },
-      randomUUID(),
-    );
+    for (const itemId of itemIds) {
+      const beforeTask = await reporting.list(
+        actor(ids.tail, ["tail_supervisor"], "work:assign"),
+        created.value.reworkOrderId,
+      );
+      const task = await reporting.createTask(
+        actor(ids.tail, ["tail_supervisor"], "work:assign"),
+        created.value.reworkOrderId,
+        {
+          expectedOrderVersion: beforeTask.orderVersion,
+          configurationItemId: itemId,
+          mode: "individual",
+          members: [{ personId: workerPersonId }],
+        },
+        randomUUID(),
+      );
+      const beforeReport = await reporting.list(
+        actor(ids.tail, ["tail_supervisor"], "work:assign"),
+        created.value.reworkOrderId,
+      );
+      await reporting.submitReport(
+        actor(ids.worker, ["worker"], "work:report"),
+        task.value.workTaskId,
+        {
+          expectedOrderVersion: beforeReport.orderVersion,
+          actualQuantity: 1,
+          completedAt: new Date().toISOString(),
+        },
+        randomUUID(),
+      );
+    }
     const view = await review.get(
       actor(ids.tail, ["tail_supervisor"], "submission:audit"),
       created.value.reworkOrderId,
@@ -175,7 +191,12 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       { expectedOrderVersion: view.orderVersion },
       randomUUID(),
     );
-    return { orderId: created.value.reworkOrderId, itemId, orderVersion: reviewed.value.orderVersion };
+    return {
+      orderId: created.value.reworkOrderId,
+      itemId: itemIds[0]!,
+      itemIds,
+      orderVersion: reviewed.value.orderVersion,
+    };
   }
 
   beforeAll(async () => {
@@ -496,6 +517,16 @@ runWithPostgres("responsibility authorization and handler closure", () => {
           reason: "第二位老板复核",
         },
       });
+    expect(approvalSnapshot.approval!.sourceSnapshot).toMatchObject({
+      qualityControl: { initiatedBy: ids.qc },
+      wholeOrderReview: {
+        reviewedBy: ids.tail,
+        reviewSnapshot: {
+          processes: expect.any(Array),
+          reports: expect.any(Array),
+        },
+      },
+    });
   });
 
   it("creates one immutable own-factory approval, notifies the other owner, and rejects non-owners", async () => {
@@ -667,6 +698,87 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       approval: null,
       history: [],
     });
+  });
+
+  it("preserves legal 0.00 own-factory details beside a positive N08-A total", async () => {
+    const order = await createReviewedOrder("own-factory-zero-detail", 2);
+    const production = actor(
+      ids.productionOne,
+      ["production_management"],
+      "responsibility:determine",
+    );
+    const draft = await responsibility.saveDraft(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: order.orderVersion,
+        expectedCurrentDeterminationVersion: null,
+        handlerUserId: ids.productionOne,
+        reason: "保留零金额责任明细",
+        processes: [
+          {
+            configurationItemId: order.itemIds[0]!,
+            multiplier: "1.000",
+            allocations: [
+              { responsibilityType: "own_factory", shareBps: 0 },
+              { responsibilityType: "processing_factory", shareBps: 10000 },
+            ],
+          },
+          {
+            configurationItemId: order.itemIds[1]!,
+            multiplier: "1.000",
+            allocations: [{ responsibilityType: "own_factory", shareBps: 10000 }],
+          },
+        ],
+      },
+      "s2-own-factory-zero-detail-draft",
+    );
+    await responsibility.finalize(
+      production,
+      order.orderId,
+      {
+        expectedOrderVersion: draft.value.orderVersion,
+        expectedCurrentDeterminationVersion: 1,
+      },
+      "s2-own-factory-zero-detail-finalize",
+    );
+    const owner = actor(
+      ids.ownerOne,
+      ["owner_group"],
+      "own_factory:view",
+      "own_factory:approve",
+    );
+    const approval = await ownFactoryApproval.get(owner, order.orderId);
+    expect(approval.approval).toMatchObject({ ownFactoryTotalAmount: "1.00" });
+    expect(approval.approval!.sourceSnapshot.processes).toContainEqual(
+      expect.objectContaining({
+        configurationItemId: order.itemIds[0],
+        ownFactoryShareBps: 0,
+        ownFactoryRoundedAmount: "0.00",
+      }),
+    );
+    expect(approval.approval!.sourceSnapshot.amountLines).toContainEqual(
+      expect.objectContaining({
+        configurationItemId: order.itemIds[0],
+        shareBps: 0,
+        roundedAmount: "0.00",
+      }),
+    );
+    const persisted = await database.query<{
+      share_bps: number;
+      rounded_amount: string;
+    }>(
+      `SELECT allocation.share_bps,allocation.rounded_amount::text
+       FROM rework_responsibility_allocations allocation
+       JOIN rework_responsibility_determinations determination
+         ON determination.determination_id=allocation.determination_id
+       WHERE determination.rework_order_id=$1
+         AND determination.stage='finalized'
+         AND allocation.configuration_item_id=$2
+         AND allocation.responsibility_type='own_factory'`,
+      [order.orderId, order.itemIds[0]],
+    );
+    expect(persisted.rows).toEqual([{ share_bps: 0, rounded_amount: "0.00" }]);
   });
 
   it("allows exactly one concurrent terminal owner action and sends a rejection back to N07", async () => {
