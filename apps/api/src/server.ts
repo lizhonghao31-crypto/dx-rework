@@ -19,6 +19,7 @@ import { ProcessConfigurationService } from "./rework/process-configuration-serv
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { WholeOrderReviewService } from "./rework/whole-order-review-service.js";
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
+import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -46,6 +47,7 @@ const processConfigurationService = new ProcessConfigurationService(database);
 const workReportingService = new WorkReportingService(database);
 const wholeOrderReviewService = new WholeOrderReviewService(database);
 const responsibilityDeterminationService = new ResponsibilityDeterminationApplicationService(database);
+const ownFactoryApprovalService = new OwnFactoryApprovalApplicationService(database);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -81,6 +83,10 @@ const app = buildApp({
   responsibilityDetermination: {
     authenticate: (token) => auth.authenticate(token),
     service: responsibilityDeterminationService,
+  },
+  ownFactoryApproval: {
+    authenticate: (token) => auth.authenticate(token),
+    service: ownFactoryApprovalService,
   },
 });
 registerDatabasePoolErrorHandler(database, app.log);

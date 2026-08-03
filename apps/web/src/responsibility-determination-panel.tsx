@@ -262,7 +262,7 @@ export function ResponsibilityDeterminationPanel({
               (allocation): allocation is {
                 responsibilityType: ResponsibilityType;
                 shareBps: bigint;
-              } => allocation.shareBps !== null && allocation.shareBps > 0n,
+              } => allocation.shareBps !== null && allocation.shareBps >= 0n,
             )
             .map((allocation) => ({
               responsibilityType: allocation.responsibilityType,
