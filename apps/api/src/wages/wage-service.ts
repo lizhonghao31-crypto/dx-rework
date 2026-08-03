@@ -63,7 +63,9 @@ const fail = (message: string, status = 409, code = "CONFLICT"): never => {
 };
 const first = <T>(rows: T[], message: string, status = 404): T => {
   const value = rows[0];
-  if (value === undefined) fail(message, status, "NOT_FOUND");
+  if (value === undefined) {
+    throw new ApplicationError("NOT_FOUND", message, status);
+  }
   return value;
 };
 const parseDecimal = (value: string, scale: number) => {
