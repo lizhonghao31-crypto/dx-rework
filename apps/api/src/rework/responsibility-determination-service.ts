@@ -348,9 +348,9 @@ export class ResponsibilityDeterminationService {
            FOR UPDATE`,
           [orderId],
         );
-        const draft = determinationResult.rows[0];
+        const draft =
+          determinationResult.rows[0] ?? fail("判责版本冲突");
         if (
-          !draft ||
           draft.stage !== "draft" ||
           draft.determination_version !==
             input.expectedCurrentDeterminationVersion
