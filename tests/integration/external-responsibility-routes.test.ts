@@ -5,7 +5,7 @@ import type {
   ExternalResponsibilityBatchResponse,
   ExternalResponsibilityCaseResponse,
   ExternalResponsibilityQueueResponse,
-} from "@dx-rework/contracts";
+} from "@dx-rework/contracts/external-responsibility";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../../apps/api/src/app.js";
@@ -35,7 +35,7 @@ const caseResponse: ExternalResponsibilityCaseResponse = {
   canClose: false, canRequestRevision: false, canApproveRevision: true,
   items: [{ externalItemId: ids.item, configurationItemId: ids.configuration, responsibilityType: "processing_factory", processSnapshot: {}, multiplierSnapshot: "1.000", shareBpsSnapshot: 10000, proposedAmount: "12.00", amountLineSnapshot: {} }],
   deductions: [], followUps: [], closure: null,
-  revisionRequests: [{ revisionRequestId: ids.revision, revisionVersion: 1, status: "pending", reason: "需重判", requestedChange: { responsibilityType: "fabric_supplier" }, requestedBy: ids.actor, decidedBy: null, decisionReason: null, createdAt: now, decidedAt: null }],
+  revisionRequests: [{ revisionRequestId: ids.revision, revisionVersion: 1, status: "pending", reason: "需重判", requestedChange: { kind: "responsibility_type", configurationItemIds: [ids.configuration], targetResponsibilityType: "fabric_supplier" }, requestedBy: ids.actor, decidedBy: null, decisionReason: null, seededDeterminationId: null, createdAt: now, decidedAt: null }],
 };
 const batch: ExternalResponsibilityBatchResponse = {
   batchId: ids.batch, reworkOrderId: ids.order, finalizedDeterminationId: ids.determination,
@@ -103,6 +103,31 @@ describe("external responsibility routes", () => {
     expect(target.allocateSuppliers).not.toHaveBeenCalled();
     expect(target.submit).not.toHaveBeenCalled();
     expect(target.rejectRevision).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("rejects unstructured responsibility revision requests", async () => {
+    const target = service();
+    const app = buildApp({
+      config, checkDatabase: vi.fn(), getAppliedSchemaHistory: vi.fn(),
+      externalResponsibility: {
+        authenticate: vi.fn().mockResolvedValue({ id: ids.actor, businessRoles: ["order_merchandiser"], capabilities: ["external_responsibility:request_revision"] }),
+        service: target,
+      },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/external-responsibility-cases/${ids.case}/revision-requests`,
+      headers: { "idempotency-key": "structured-revision" },
+      payload: {
+        expectedCaseVersion: 3,
+        requestedChange: { requestedByBusinessHandler: true },
+        reason: "需重判",
+        attachmentIds: [],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(target.requestRevision).not.toHaveBeenCalled();
     await app.close();
   });
 });
