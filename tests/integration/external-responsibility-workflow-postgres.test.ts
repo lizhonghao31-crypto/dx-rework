@@ -35,6 +35,7 @@ const migrations = [
   "0017_external_responsibility_deduction.sql",
   "0018_external_responsibility_review_closure.sql",
   "0019_external_revision_seed_ordering.sql",
+  "0020_external_responsibility_codex_closure.sql",
 ] as const;
 
 type ReviewedOrder = {
@@ -279,7 +280,11 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       [ids.delegate, "Delegate", "worker"],
       [ids.payables, "Factory Payables", "factory_payables"],
       [ids.production, "Production", "production_management"],
-      [ids.embroideryMerch, "Embroidery Merch", "embroidery_washing_merchandiser"],
+      [
+        ids.embroideryMerch,
+        "Embroidery Merch",
+        "embroidery_washing_merchandiser",
+      ],
     ] as const;
     for (const [userId, displayName, role] of users) {
       await database.query(
@@ -378,6 +383,41 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     );
     expect(completed.rows[0]).toEqual({ status: "completed" });
 
+    const now = Date.now();
+    await access.createDelegation(adminActor(), {
+      grantorUserId: ids.payables,
+      granteeUserId: ids.delegate,
+      capability: "external_responsibility:payables_confirm",
+      scopeType: "rework_order",
+      scopeId: order.orderId,
+      validFrom: new Date(now - 60_000).toISOString(),
+      validUntil: new Date(now + 3_600_000).toISOString(),
+      reason: "confirm-only payables proxy",
+    });
+    const confirmOnly = actor(
+      ids.delegate,
+      ["worker"],
+      "external_responsibility:payables_confirm",
+    );
+    const delegatedView = await external.getCase(confirmOnly, pending.caseId);
+    expect(delegatedView).toMatchObject({
+      canRecordDeduction: false,
+      canClose: false,
+      canFollowUp: false,
+    });
+    await expect(external.recordDeduction(
+      confirmOnly,
+      pending.caseId,
+      {
+        expectedCaseVersion: 3,
+        entryType: "deduction",
+        amount: "0.01",
+        deductedOn: "2026-08-03",
+        attachmentIds: [],
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
     const recorded = await external.recordDeduction(
       payablesActor(),
       pending.caseId,
@@ -463,6 +503,79 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       [ids.delegate, order.orderId],
     );
     expect(allowed.rows[0]).toEqual({ permitted: true });
+    const supplierOptions = await external.listSupplierOptions(
+      actor(ids.delegate, ["worker"], "external_responsibility:sign"),
+      order.orderId,
+    );
+    expect(supplierOptions).toContainEqual(expect.objectContaining({
+      supplierId,
+      supplierType: "factory",
+    }));
+  });
+
+  it("persists an immutable reason when a different processing factory is selected", async () => {
+    const alternateSupplierId = (
+      await access.createSupplier(adminActor(), {
+        supplierCode: `ALT${randomUUID().slice(0, 8)}`,
+        supplierType: "factory",
+        supplierName: "Alternate Factory",
+        active: true,
+        changeReason: "override reason fixture",
+      })
+    ).supplierId;
+    const order = await createReviewedOrder("factory-override");
+    await finalizeExternal(order);
+    const batch = await external.get(merchActor(), order.orderId);
+
+    await expect(external.allocateSuppliers(
+      merchActor(),
+      batch!.batchId,
+      {
+        expectedBatchVersion: batch!.batchVersion,
+        allocations: [{
+          responsibilityType: "processing_factory",
+          supplierId: alternateSupplierId,
+          externalItemIds: [batch!.items[0]!.externalItemId],
+        }],
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400,
+    });
+
+    const allocated = await external.allocateSuppliers(
+      merchActor(),
+      batch!.batchId,
+      {
+        expectedBatchVersion: batch!.batchVersion,
+        allocations: [{
+          responsibilityType: "processing_factory",
+          supplierId: alternateSupplierId,
+          externalItemIds: [batch!.items[0]!.externalItemId],
+          processingFactoryOverrideReason: "原加工厂拒绝承担本次返工扣款",
+        }],
+      },
+      randomUUID(),
+    );
+    const targetCase = allocated.value!.cases[0]!;
+    const persisted = await database.query<{
+      processing_factory_override_reason: string;
+    }>(
+      `SELECT processing_factory_override_reason
+       FROM rework_external_responsibility_cases
+       WHERE case_id=$1`,
+      [targetCase.caseId],
+    );
+    expect(persisted.rows[0]).toEqual({
+      processing_factory_override_reason: "原加工厂拒绝承担本次返工扣款",
+    });
+    await expect(database.query(
+      `UPDATE rework_external_responsibility_cases
+       SET processing_factory_override_reason='被覆盖的原因'
+       WHERE case_id=$1`,
+      [targetCase.caseId],
+    )).rejects.toMatchObject({ code: "55000" });
   });
 
   it("approves a structured revision and atomically creates its executable N07 draft", async () => {
@@ -540,7 +653,11 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       stage: "draft",
       replaces_determination_id: batch!.finalizedDeterminationId,
     });
-    const copied = await database.query<{ process_count: number; allocation_count: number; line_count: number }>(
+    const copied = await database.query<{
+      process_count: number;
+      allocation_count: number;
+      line_count: number;
+    }>(
       `SELECT
          (SELECT count(*)::int FROM rework_responsibility_processes WHERE determination_id=$1) process_count,
          (SELECT count(*)::int FROM rework_responsibility_allocations WHERE determination_id=$1) allocation_count,
