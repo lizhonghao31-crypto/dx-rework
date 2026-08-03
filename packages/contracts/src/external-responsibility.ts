@@ -1,0 +1,380 @@
+import { z } from "zod";
+
+const IdSchema = z.string().uuid();
+const ReasonSchema = z.string().trim().min(1).max(500);
+const MoneyStringSchema = z.string()
+  .regex(/^-?\d+(?:\.\d{1,2})?$/, "Amount must be a 2-decimal string");
+const AttachmentIdsSchema = z.array(IdSchema).max(50).default([])
+  .superRefine((value, context) => {
+    if (new Set(value).size !== value.length) {
+      context.addIssue({
+        code: "custom",
+        message: "attachmentIds cannot contain duplicates",
+      });
+    }
+  });
+const UniqueIdsSchema = z.array(IdSchema).min(1).max(100)
+  .superRefine((value, context) => {
+    if (new Set(value).size !== value.length) {
+      context.addIssue({
+        code: "custom",
+        message: "IDs cannot contain duplicates",
+      });
+    }
+  });
+
+export const ExternalResponsibilityTypeSchema = z.enum([
+  "processing_factory",
+  "embroidery_factory",
+  "washing_factory",
+  "fabric_supplier",
+]);
+const FullResponsibilityTypeSchema = z.enum([
+  "own_factory",
+  "processing_factory",
+  "embroidery_factory",
+  "washing_factory",
+  "fabric_supplier",
+]);
+export const ExternalResponsibilityCaseStatusSchema = z.enum([
+  "pending_business_signoff",
+  "pending_payables_confirmation",
+  "deduction_follow_up",
+  "returned",
+  "pending_responsibility_revision",
+  "closed",
+  "superseded",
+]);
+
+export const ExternalResponsibilityBatchParamsSchema = z.object({
+  batchId: IdSchema,
+}).strict();
+export const ExternalResponsibilityCaseParamsSchema = z.object({
+  caseId: IdSchema,
+}).strict();
+export const ExternalResponsibilityRevisionParamsSchema = z.object({
+  requestId: IdSchema,
+}).strict();
+export const ExternalResponsibilityOrderParamsSchema = z.object({
+  reworkOrderId: IdSchema,
+}).strict();
+
+export const AllocateExternalSuppliersSchema = z.object({
+  expectedBatchVersion: z.number().int().positive(),
+  allocations: z.array(z.object({
+    responsibilityType: ExternalResponsibilityTypeSchema,
+    supplierId: IdSchema,
+    externalItemIds: UniqueIdsSchema,
+    processingFactoryOverrideReason: ReasonSchema.optional(),
+  }).strict()).min(1).max(100),
+}).strict().superRefine((value, context) => {
+  const all = value.allocations.flatMap((item) => item.externalItemIds);
+  if (new Set(all).size !== all.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["allocations"],
+      message: "An external item can only be assigned once",
+    });
+  }
+});
+
+export const SubmitExternalResponsibilityCaseSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  remark: ReasonSchema.optional(),
+  attachmentIds: AttachmentIdsSchema,
+}).strict();
+export const PayablesAcceptExternalResponsibilityCaseSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+}).strict();
+export const PayablesReturnExternalResponsibilityCaseSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  reason: ReasonSchema,
+  attachmentIds: AttachmentIdsSchema,
+}).strict();
+export const CreateExternalDeductionFollowUpSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  content: z.string().trim().min(1).max(2000),
+  supplierFeedback: z.string().trim().min(1).max(2000).optional(),
+  nextFollowUpAt: z.string().datetime().optional(),
+  attachmentIds: AttachmentIdsSchema,
+}).strict();
+export const CreateExternalDeductionEntrySchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  entryType: z.enum(["deduction", "adjustment", "reversal"]),
+  amount: MoneyStringSchema.refine(
+    (value) => !/^-?0(?:\.0{1,2})?$/.test(value),
+    "Amount must be non-zero",
+  ),
+  deductedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  referenceNo: z.string().trim().min(1).max(200).optional(),
+  attachmentIds: AttachmentIdsSchema,
+  reversesEntryId: IdSchema.optional(),
+}).strict().superRefine((value, context) => {
+  if (
+    value.entryType === "deduction"
+    && (value.reversesEntryId !== undefined || value.amount.startsWith("-"))
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["reversesEntryId"],
+      message: "A deduction must be a positive new entry",
+    });
+  }
+  if (value.entryType !== "deduction" && value.reversesEntryId === undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["reversesEntryId"],
+      message: "An adjustment or reversal must reference an entry",
+    });
+  }
+});
+export const CloseExternalDeductionCaseSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  result: z.enum(["full", "partial", "not_deducted"]),
+  reason: ReasonSchema.optional(),
+  evidenceAttachmentIds: AttachmentIdsSchema,
+  remainingDifferenceDisposition: z.string().trim().min(1).max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (
+    value.result === "full"
+    && (
+      value.reason !== undefined
+      || value.evidenceAttachmentIds.length !== 0
+      || value.remainingDifferenceDisposition !== undefined
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "A full deduction cannot provide failure evidence or a remaining-difference disposition",
+    });
+  }
+  if (
+    value.result !== "full"
+    && (
+      value.reason === undefined
+      || value.evidenceAttachmentIds.length === 0
+      || value.remainingDifferenceDisposition === undefined
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "Partial and failed deductions require a reason, ready evidence, and a remaining-difference disposition",
+    });
+  }
+});
+
+const AllocationChangeSchema = z.object({
+  responsibilityType: FullResponsibilityTypeSchema,
+  shareBps: z.number().int().min(1).max(10_000),
+}).strict();
+const ProcessAllocationChangeSchema = z.object({
+  configurationItemId: IdSchema,
+  allocations: z.array(AllocationChangeSchema).min(1).max(5),
+}).strict().superRefine((value, context) => {
+  if (value.allocations.reduce((sum, item) => sum + item.shareBps, 0) !== 10_000) {
+    context.addIssue({
+      code: "custom",
+      path: ["allocations"],
+      message: "Responsibility shares must total 10000 bps",
+    });
+  }
+  if (
+    new Set(value.allocations.map((item) => item.responsibilityType)).size
+    !== value.allocations.length
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["allocations"],
+      message: "Responsibility types cannot repeat",
+    });
+  }
+});
+export const ExternalResponsibilityRequestedChangeSchema =
+  z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("responsibility_type"),
+      configurationItemIds: UniqueIdsSchema,
+      targetResponsibilityType: FullResponsibilityTypeSchema,
+    }).strict(),
+    z.object({
+      kind: z.literal("multiplier"),
+      configurationItemIds: UniqueIdsSchema,
+      targetMultiplier: z.string()
+        .regex(/^(?:[1-9]\d{0,4})(?:\.\d{1,3})?$/),
+      highMultiplierReason: ReasonSchema.optional(),
+    }).strict(),
+    z.object({
+      kind: z.literal("allocation"),
+      processChanges: z.array(ProcessAllocationChangeSchema).min(1).max(100),
+    }).strict(),
+    z.object({
+      kind: z.literal("remaining_difference_to_own_factory"),
+      configurationItemIds: UniqueIdsSchema,
+    }).strict(),
+    z.object({
+      kind: z.literal("other"),
+      configurationItemIds: UniqueIdsSchema,
+      summary: z.string().trim().min(1).max(2000),
+    }).strict(),
+  ]);
+
+export const CreateExternalResponsibilityRevisionSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  requestedChange: ExternalResponsibilityRequestedChangeSchema,
+  reason: z.string().trim().min(1).max(2000),
+  attachmentIds: AttachmentIdsSchema,
+}).strict();
+export const DecideExternalResponsibilityRevisionSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  expectedRevisionVersion: z.number().int().positive(),
+  reason: z.string().trim().min(1).max(2000).optional(),
+}).strict();
+
+const ExternalItemResponseSchema = z.object({
+  externalItemId: IdSchema,
+  configurationItemId: IdSchema,
+  responsibilityType: ExternalResponsibilityTypeSchema,
+  processSnapshot: z.record(z.string(), z.unknown()),
+  multiplierSnapshot: z.string(),
+  shareBpsSnapshot: z.number().int(),
+  proposedAmount: z.string(),
+  amountLineSnapshot: z.record(z.string(), z.unknown()),
+}).strict();
+const ExternalDeductionEntryResponseSchema = z.object({
+  deductionEntryId: IdSchema,
+  entryType: z.enum(["deduction", "adjustment", "reversal"]),
+  amount: z.string(),
+  deductedOn: z.string(),
+  referenceNo: z.string().nullable(),
+  attachmentIds: z.array(IdSchema),
+  reversesEntryId: IdSchema.nullable(),
+  recordedBy: IdSchema,
+  createdAt: z.string().datetime(),
+}).strict();
+const ExternalRevisionResponseSchema = z.object({
+  revisionRequestId: IdSchema,
+  revisionVersion: z.number().int().positive(),
+  status: z.enum(["pending", "approved", "rejected"]),
+  reason: z.string(),
+  requestedChange: ExternalResponsibilityRequestedChangeSchema,
+  requestedBy: IdSchema,
+  decidedBy: IdSchema.nullable(),
+  decisionReason: z.string().nullable(),
+  seededDeterminationId: IdSchema.nullable(),
+  createdAt: z.string().datetime(),
+  decidedAt: z.string().datetime().nullable(),
+}).strict();
+
+export const ExternalResponsibilityCaseResponseSchema = z.object({
+  caseId: IdSchema,
+  batchId: IdSchema,
+  reworkOrderId: IdSchema,
+  responsibilityType: ExternalResponsibilityTypeSchema,
+  supplier: z.object({
+    supplierId: IdSchema,
+    version: z.number().int().positive(),
+    code: z.string(),
+    name: z.string(),
+    type: z.enum(["factory", "embroidery_washing", "fabric"]),
+  }).strict(),
+  businessHandlerUserId: IdSchema,
+  payablesHandlerRole: z.string(),
+  proposedDeductionAmount: z.string(),
+  actualDeductedAmount: z.string(),
+  remainingAmount: z.string(),
+  caseVersion: z.number().int().positive(),
+  status: ExternalResponsibilityCaseStatusSchema,
+  submittedAt: z.string().datetime().nullable(),
+  payablesConfirmedAt: z.string().datetime().nullable(),
+  canSign: z.boolean(),
+  canPayablesConfirm: z.boolean(),
+  canFollowUp: z.boolean(),
+  canRecordDeduction: z.boolean(),
+  canClose: z.boolean(),
+  canRequestRevision: z.boolean(),
+  canApproveRevision: z.boolean(),
+  items: z.array(ExternalItemResponseSchema),
+  deductions: z.array(ExternalDeductionEntryResponseSchema),
+  followUps: z.array(z.object({
+    followUpId: IdSchema,
+    content: z.string(),
+    supplierFeedback: z.string().nullable(),
+    nextFollowUpAt: z.string().datetime().nullable(),
+    attachmentIds: z.array(IdSchema),
+    createdBy: IdSchema,
+    createdAt: z.string().datetime(),
+  }).strict()),
+  closure: z.object({
+    result: z.enum(["full", "partial", "not_deducted"]),
+    proposedAmount: z.string(),
+    actualDeductedAmount: z.string(),
+    remainingAmount: z.string(),
+    reason: z.string().nullable(),
+    evidenceAttachmentIds: z.array(IdSchema),
+    remainingDifferenceDisposition: z.string().nullable(),
+    closedBy: IdSchema,
+    closedAt: z.string().datetime(),
+  }).strict().nullable(),
+  revisionRequests: z.array(ExternalRevisionResponseSchema),
+}).strict();
+
+export const ExternalResponsibilityBatchResponseSchema = z.object({
+  batchId: IdSchema,
+  reworkOrderId: IdSchema,
+  finalizedDeterminationId: IdSchema,
+  finalizedDeterminationVersion: z.number().int().positive(),
+  batchVersion: z.number().int().positive(),
+  status: z.enum(["active", "superseded"]),
+  sourceSnapshot: z.record(z.string(), z.unknown()),
+  items: z.array(ExternalItemResponseSchema),
+  cases: z.array(ExternalResponsibilityCaseResponseSchema),
+}).strict().nullable();
+
+export const ExternalResponsibilityQueueResponseSchema = z.object({
+  items: z.array(z.object({
+    caseId: IdSchema,
+    reworkOrderId: IdSchema,
+    reworkNo: z.string().nullable(),
+    styleNo: z.string().nullable(),
+    orderNo: z.string().nullable(),
+    problemPart: z.string().nullable(),
+    responsibilityType: ExternalResponsibilityTypeSchema,
+    supplierName: z.string(),
+    status: ExternalResponsibilityCaseStatusSchema,
+    proposedDeductionAmount: z.string(),
+    actualDeductedAmount: z.string(),
+    remainingAmount: z.string(),
+    caseVersion: z.number().int().positive(),
+    overdue: z.boolean(),
+    canAct: z.boolean(),
+  }).strict()),
+}).strict();
+
+export type AllocateExternalSuppliers =
+  z.infer<typeof AllocateExternalSuppliersSchema>;
+export type SubmitExternalResponsibilityCase =
+  z.infer<typeof SubmitExternalResponsibilityCaseSchema>;
+export type PayablesAcceptExternalResponsibilityCase =
+  z.infer<typeof PayablesAcceptExternalResponsibilityCaseSchema>;
+export type PayablesReturnExternalResponsibilityCase =
+  z.infer<typeof PayablesReturnExternalResponsibilityCaseSchema>;
+export type CreateExternalDeductionFollowUp =
+  z.infer<typeof CreateExternalDeductionFollowUpSchema>;
+export type CreateExternalDeductionEntry =
+  z.infer<typeof CreateExternalDeductionEntrySchema>;
+export type CloseExternalDeductionCase =
+  z.infer<typeof CloseExternalDeductionCaseSchema>;
+export type CreateExternalResponsibilityRevision =
+  z.infer<typeof CreateExternalResponsibilityRevisionSchema>;
+export type DecideExternalResponsibilityRevision =
+  z.infer<typeof DecideExternalResponsibilityRevisionSchema>;
+export type ExternalResponsibilityRequestedChange =
+  z.infer<typeof ExternalResponsibilityRequestedChangeSchema>;
+export type ExternalResponsibilityCaseResponse =
+  z.infer<typeof ExternalResponsibilityCaseResponseSchema>;
+export type ExternalResponsibilityBatchResponse =
+  z.infer<typeof ExternalResponsibilityBatchResponseSchema>;
+export type ExternalResponsibilityQueueResponse =
+  z.infer<typeof ExternalResponsibilityQueueResponseSchema>;
