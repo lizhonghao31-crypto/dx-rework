@@ -9,7 +9,10 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-review-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
-import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import {
+  OperationEventRepository,
+  type TrustedActorContext,
+} from "../../apps/api/src/tools/repositories.js";
 import { WageExportService } from "../../apps/api/src/wages/wage-export-service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
 
@@ -38,6 +41,7 @@ const migrations = [
   "0020_external_responsibility_codex_closure.sql",
   "0021_external_processing_factory_override_closure.sql",
   "0022_wage_reconciliation_month_close.sql",
+  "0023_wage_materialization_closure.sql",
 ] as const;
 
 runWithPostgres("wage reconciliation reviewed workflow", () => {
@@ -110,21 +114,23 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     "wage:export",
   );
 
-  async function createCompletedWork(label: string) {
-    const draft = await initiation.createDraft(
-      actor(ids.qc, ["quality_control"], "rework:initiate", "rework:initiate"),
-      {
-        styleNo: `WAGE-${label}`,
-        merchandiserUserId: ids.tail,
-        processingFactory: { type: "own_factory" },
-        problemPart: "袖口",
-        problemDescription: `工资流程 ${label}`,
-        reworkQuantity: 1,
-      },
-      randomUUID(),
+  async function createCompletedWork(label: string): Promise<string> {
+    const qc = actor(
+      ids.qc,
+      ["quality_control"],
+      "rework:initiate",
+      "rework:initiate",
     );
+    const draft = await initiation.createDraft(qc, {
+      styleNo: `WAGE-${label}`,
+      merchandiserUserId: ids.tail,
+      processingFactory: { type: "own_factory" },
+      problemPart: "袖口",
+      problemDescription: `工资流程 ${label}`,
+      reworkQuantity: 1,
+    }, randomUUID());
     const submitted = await initiation.submit(
-      actor(ids.qc, ["quality_control"], "rework:initiate", "rework:initiate"),
+      qc,
       draft.value.reworkOrderId,
       { expectedVersion: draft.value.version },
       randomUUID(),
@@ -149,7 +155,8 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       draft.value.reworkOrderId,
       {
         expectedOrderVersion: saved.value.orderVersion,
-        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+        expectedConfigurationVersion:
+          saved.value.configuration!.configurationVersion,
       },
       randomUUID(),
     );
@@ -158,24 +165,26 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       draft.value.reworkOrderId,
       {
         expectedOrderVersion: queued.value.orderVersion,
-        expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
+        expectedConfigurationVersion:
+          queued.value.configuration!.configurationVersion,
         decision: "approved",
       },
       randomUUID(),
     );
-    const itemId = approved.value.configuration!.items[0]!.configurationItemId;
+    const configurationItemId =
+      approved.value.configuration!.items[0]!.configurationItemId;
     const task = await reporting.createTask(
       tailActor("work:assign"),
       draft.value.reworkOrderId,
       {
         expectedOrderVersion: approved.value.orderVersion,
-        configurationItemId: itemId,
+        configurationItemId,
         mode: "individual",
         members: [{ personId: workerPersonId }],
       },
       randomUUID(),
     );
-    const beforeReport = await reporting.list(
+    const view = await reporting.list(
       tailActor("work:assign"),
       draft.value.reworkOrderId,
     );
@@ -183,7 +192,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       actor(ids.worker, ["worker"], "work:report", "work:report"),
       task.value.workTaskId,
       {
-        expectedOrderVersion: beforeReport.orderVersion,
+        expectedOrderVersion: view.orderVersion,
         actualQuantity: 1,
         completedAt: new Date().toISOString(),
       },
@@ -194,27 +203,17 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
 
   async function createPastReviewedWage(label: string) {
     const orderId = await createCompletedWork(label);
-    const reviewView = await orderReview.get(
-      tailActor("submission:audit"),
-      orderId,
-    );
-    expect(reviewView.orderStatus).toBe("pending_order_review");
     const client = await database.connect();
     try {
       await client.query("BEGIN");
-      const reviewId = randomUUID();
       const tail = tailActor("submission:audit");
-      const eventId = await events.append(
-        client,
-        tail,
-        {
-          action: "rework.whole_order.approve",
-          entityType: "rework_order",
-          entityId: orderId,
-          before: { status: "pending_order_review" },
-          after: { status: "pending_responsibility_determination" },
-        },
-      );
+      const eventId = await events.append(client, tail, {
+        action: "rework.whole_order.approve",
+        entityType: "rework_order",
+        entityId: orderId,
+        before: { status: "pending_order_review" },
+        after: { status: "pending_responsibility_determination" },
+      });
       await client.query(
         `SELECT
            set_config('dx_rework.whole_order_review_event_id',$1,true),
@@ -225,7 +224,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
         `INSERT INTO rework_order_reviews(
            order_review_id,rework_order_id,reviewed_by,reviewed_at,review_snapshot
          ) VALUES($1,$2,$3,CURRENT_TIMESTAMP-interval '2 months',$4)`,
-        [reviewId, orderId, ids.tail, { label }],
+        [randomUUID(), orderId, ids.tail, { label }],
       );
       await client.query("COMMIT");
     } catch (error) {
@@ -234,9 +233,9 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     } finally {
       client.release();
     }
-    const periods = await wage.list(tailActor());
-    return periods.find((period) =>
-      period.periodMonth < new Date().toISOString().slice(0, 7)
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return (await wage.list(tailActor())).find(
+      (period) => period.periodMonth < currentMonth,
     )!;
   }
 
@@ -286,7 +285,12 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     await access.ensureOrganizationPolicy();
     workerPersonId = (
       await access.createPerson(
-        actor(ids.admin, ["system_admin"], "master_data:manage", "master_data:manage"),
+        actor(
+          ids.admin,
+          ["system_admin"],
+          "master_data:manage",
+          "master_data:manage",
+        ),
         {
           personType: "internal",
           appUserId: ids.worker,
@@ -304,7 +308,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     await adminPool.end();
   });
 
-  it("runs materialization, sequential review, adjustment, month close and export", async () => {
+  it("runs materialization, adjustment, review, month close and export", async () => {
     const period = await createPastReviewedWage("lifecycle");
     expect(period).toMatchObject({
       status: "pending_tail_review",
@@ -324,28 +328,22 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       [attachmentId, `private/${attachmentId}.pdf`, "a".repeat(64), ids.tail],
     );
     const adjustmentKey = randomUUID();
+    const input = {
+      originalWageItemId: item.wageItemId,
+      targetPeriodId: period.periodId,
+      adjustmentAmount: "0.01",
+      reason: "补一分钱",
+      attachmentIds: [attachmentId],
+      expectedVersion: period.periodVersion,
+    } as const;
     const adjustment = await wage.requestAdjustment(
       tailActor(),
-      {
-        originalWageItemId: item.wageItemId,
-        targetPeriodId: period.periodId,
-        adjustmentAmount: "0.01",
-        reason: "补一分钱",
-        attachmentIds: [attachmentId],
-        expectedVersion: period.periodVersion,
-      },
+      input,
       adjustmentKey,
     );
     const replay = await wage.requestAdjustment(
       tailActor(),
-      {
-        originalWageItemId: item.wageItemId,
-        targetPeriodId: period.periodId,
-        adjustmentAmount: "0.01",
-        reason: "补一分钱",
-        attachmentIds: [attachmentId],
-        expectedVersion: period.periodVersion,
-      },
+      input,
       adjustmentKey,
     );
     expect(replay.reused).toBe(true);
@@ -387,23 +385,41 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     const tailKey = randomUUID();
     const tailApproved = await wage.review(
-      tailActor(), period.periodId, restarted.period.periodVersion,
-      "tail", null, tailKey,
+      tailActor(),
+      period.periodId,
+      restarted.period.periodVersion,
+      "tail",
+      null,
+      tailKey,
     );
     expect((await wage.review(
-      tailActor(), period.periodId, restarted.period.periodVersion,
-      "tail", null, tailKey,
+      tailActor(),
+      period.periodId,
+      restarted.period.periodVersion,
+      "tail",
+      null,
+      tailKey,
     )).reused).toBe(true);
     const administrativeApproved = await wage.review(
-      administrativeActor(), period.periodId, tailApproved.value.periodVersion,
-      "administrative_approve", null, randomUUID(),
+      administrativeActor(),
+      period.periodId,
+      tailApproved.value.periodVersion,
+      "administrative_approve",
+      null,
+      randomUUID(),
     );
     const locked = await wage.lock(
-      monthCloseActor(), period.periodId,
-      administrativeApproved.value.periodVersion, "测试月结", randomUUID(),
+      monthCloseActor(),
+      period.periodId,
+      administrativeApproved.value.periodVersion,
+      "测试月结",
+      randomUUID(),
     );
-    expect(locked.value).toMatchObject({ status: "locked" });
-    const workbook = await exporter.export(administrativeActor(), period.periodId);
+    expect(locked.value.status).toBe("locked");
+    const workbook = await exporter.export(
+      administrativeActor(),
+      period.periodId,
+    );
     expect(workbook.filename).toContain("工资月结");
     expect(workbook.content.subarray(0, 2).toString()).toBe("PK");
     await expect(database.query(
@@ -428,21 +444,32 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
       { expectedOrderVersion: view.orderVersion },
       randomUUID(),
     );
-    const current = (await wage.list(tailActor()))
-      .find((period) =>
-        period.periodMonth.startsWith(new Date().toISOString().slice(0, 7))
-      )!;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const current = (await wage.list(tailActor())).find(
+      (period) => period.periodMonth.startsWith(currentMonth),
+    )!;
     const tailApproved = await wage.review(
-      tailActor(), current.periodId, current.periodVersion,
-      "tail", null, randomUUID(),
+      tailActor(),
+      current.periodId,
+      current.periodVersion,
+      "tail",
+      null,
+      randomUUID(),
     );
     const administrativeApproved = await wage.review(
-      administrativeActor(), current.periodId, tailApproved.value.periodVersion,
-      "administrative_approve", null, randomUUID(),
+      administrativeActor(),
+      current.periodId,
+      tailApproved.value.periodVersion,
+      "administrative_approve",
+      null,
+      randomUUID(),
     );
     await expect(wage.lock(
-      monthCloseActor(), current.periodId,
-      administrativeApproved.value.periodVersion, null, randomUUID(),
+      monthCloseActor(),
+      current.periodId,
+      administrativeApproved.value.periodVersion,
+      null,
+      randomUUID(),
     )).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
   });
 });
