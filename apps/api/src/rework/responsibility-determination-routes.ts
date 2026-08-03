@@ -85,14 +85,19 @@ export function registerResponsibilityDeterminationRoutes(
 
   app.get(
     "/rework-orders/:reworkOrderId/responsibility-determination",
-    async (request) =>
-      ResponsibilityDeterminationResponseSchema.parse(
-        await dependencies.service.get(
-          await actor(request, "responsibility:determine"),
-          parse(ResponsibilityOrderParamsSchema, request.params)
-            .reworkOrderId,
-        ),
-      ),
+    async (request) => {
+      const currentActor = await actor(request, "responsibility:determine");
+      const result = await dependencies.service.get(
+        currentActor,
+        parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId,
+      );
+      return ResponsibilityDeterminationResponseSchema.parse({
+        ...result,
+        handlerUserId:
+          result.handlerUserId ??
+          (result.canDetermine ? currentActor.actorId : null),
+      });
+    },
   );
   app.post(
     "/rework-orders/:reworkOrderId/responsibility-determinations/drafts",
