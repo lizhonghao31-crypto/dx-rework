@@ -243,8 +243,10 @@ export class ExternalResponsibilityAllocationService {
 
       const processingFactoryChanged =
         allocation.responsibilityType === "processing_factory"
-        && order.processing_factory_type === "supplier"
-        && allocation.supplierId !== order.processing_factory_supplier_id;
+        && (
+          order.processing_factory_type !== "supplier"
+          || allocation.supplierId !== order.processing_factory_supplier_id
+        );
       const overrideReason = processingFactoryChanged
         ? allocation.processingFactoryOverrideReason ?? null
         : null;
