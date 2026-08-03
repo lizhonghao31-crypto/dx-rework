@@ -62,6 +62,8 @@ const money = (cents: bigint): string => {
   const absolute = negative ? -cents : cents;
   return `${negative ? "-" : ""}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, "0")}`;
 };
+const jsonbParameter = (value: unknown): string =>
+  JSON.stringify(typeof value === "string" ? JSON.parse(value) : value);
 
 /**
  * N09 is intentionally based on the current finalized leaf and only N08-A/B
@@ -184,13 +186,13 @@ export class ExternalResponsibilityService {
     await client.query(
       `INSERT INTO rework_external_responsibility_batches(batch_id,rework_order_id,finalized_determination_id,finalized_determination_version,source_snapshot,created_by,operation_event_id,request_id)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [batchId, order.rework_order_id, determinationId, finalized.determination_version, finalized.source_snapshot, finalized.created_by, finalized.operation_event_id, finalized.request_id],
+      [batchId, order.rework_order_id, determinationId, finalized.determination_version, jsonbParameter(finalized.source_snapshot), finalized.created_by, finalized.operation_event_id, finalized.request_id],
     );
     for (const item of external.rows) {
       await client.query(
         `INSERT INTO rework_external_responsibility_items(external_item_id,batch_id,determination_id,configuration_item_id,responsibility_type,process_snapshot,multiplier_snapshot,share_bps_snapshot,proposed_amount,amount_line_snapshot,operation_event_id,request_id)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [randomUUID(), batchId, determinationId, item.configuration_item_id, item.responsibility_type, item.process_snapshot, item.multiplier, item.share_bps, item.proposed_amount, item.amount_line_snapshot, finalized.operation_event_id, finalized.request_id],
+        [randomUUID(), batchId, determinationId, item.configuration_item_id, item.responsibility_type, jsonbParameter(item.process_snapshot), item.multiplier, item.share_bps, item.proposed_amount, jsonbParameter(item.amount_line_snapshot), finalized.operation_event_id, finalized.request_id],
       );
     }
     return batchId;
