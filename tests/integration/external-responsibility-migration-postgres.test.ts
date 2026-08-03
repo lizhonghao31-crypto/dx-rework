@@ -27,6 +27,7 @@ const migrations = [
   "0018_external_responsibility_review_closure.sql",
   "0019_external_revision_seed_ordering.sql",
   "0020_external_responsibility_codex_closure.sql",
+  "0021_external_processing_factory_override_closure.sql",
 ] as const;
 
 runWithPostgres("external responsibility migration replay", () => {
@@ -69,6 +70,7 @@ runWithPostgres("external responsibility migration replay", () => {
       payablesDefinition,
       recordGuard,
       closureGuard,
+      ownFactoryOverrideGuard,
     ] = await Promise.all([
       database.query<{ table_name: string }>(
         `SELECT table_name
@@ -97,6 +99,7 @@ runWithPostgres("external responsibility migration replay", () => {
           "external_responsibility_can_view_case",
           "guard_external_responsibility_attachment_binding",
           "bump_external_case_version_from_ledger",
+          "guard_external_case_own_factory_override_reason",
         ]],
       ),
       database.query<{ definition: string }>(
@@ -148,6 +151,7 @@ runWithPostgres("external responsibility migration replay", () => {
           "external_deductions_bump_case_version",
           "external_followups_bump_case_version",
           "external_case_override_reason_immutable",
+          "aaa_external_case_own_factory_override_reason",
         ]],
       ),
       database.query<{ definition: string }>(
@@ -170,6 +174,11 @@ runWithPostgres("external responsibility migration replay", () => {
            'guard_external_closure_insert()'::regprocedure
          ) definition`,
       ),
+      database.query<{ definition: string }>(
+        `SELECT pg_get_functiondef(
+           'guard_external_case_own_factory_override_reason()'::regprocedure
+         ) definition`,
+      ),
     ]);
 
     expect(tables.rows.map((row) => row.table_name)).toHaveLength(6);
@@ -179,6 +188,7 @@ runWithPostgres("external responsibility migration replay", () => {
       "external_responsibility_can_view_case",
       "guard_external_responsibility_attachment_binding",
       "bump_external_case_version_from_ledger",
+      "guard_external_case_own_factory_override_reason",
     ]));
     expect(completed.rows[0]?.definition).toContain("completed");
     expect(revisionCapability.rows[0]).toEqual({ count: 1 });
@@ -193,6 +203,7 @@ runWithPostgres("external responsibility migration replay", () => {
       { column_name: "processing_factory_override_reason" },
     ]);
     expect(triggers.rows.map((row) => row.tgname)).toEqual([
+      "aaa_external_case_own_factory_override_reason",
       "external_case_override_reason_immutable",
       "external_deductions_bump_case_version",
       "external_followups_bump_case_version",
@@ -208,6 +219,9 @@ runWithPostgres("external responsibility migration replay", () => {
     );
     expect(closureGuard.rows[0]?.definition).toContain(
       "external_deduction:close",
+    );
+    expect(ownFactoryOverrideGuard.rows[0]?.definition).toContain(
+      "IS DISTINCT FROM 'supplier'",
     );
 
     await expect(database.query(
