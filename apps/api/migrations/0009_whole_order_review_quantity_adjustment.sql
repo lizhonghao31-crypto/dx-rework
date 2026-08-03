@@ -15,7 +15,7 @@ CREATE TABLE rework_work_report_rejections (
   report_rejection_id uuid PRIMARY KEY,
   work_report_id uuid NOT NULL UNIQUE REFERENCES rework_work_reports(work_report_id),
   rework_order_id uuid NOT NULL REFERENCES rework_orders(rework_order_id),
-  rejected_person_id uuid NOT NULL REFERENCES business_people(person_id),
+  rejected_person_id uuid REFERENCES business_people(person_id),
   rejected_by uuid NOT NULL REFERENCES app_users(id),
   reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 500),
   report_snapshot jsonb NOT NULL,
@@ -85,7 +85,8 @@ CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FO
 CREATE OR REPLACE FUNCTION require_whole_order_review_event(
   expected_action text,
   expected_capability text,
-  order_id uuid
+  order_id uuid,
+  expected_actor uuid
 ) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
   audit_event_id text := nullif(current_setting('dx_rework.whole_order_review_event_id', true), '');
@@ -98,7 +99,7 @@ BEGIN
     SELECT 1 FROM operation_events event
     WHERE event.event_id=audit_event_id::uuid AND event.request_id=audit_request_id
       AND event.action=expected_action AND event.authorization_capability=expected_capability
-      AND event.entity_type='rework_order' AND event.entity_id=order_id::text
+      AND event.entity_type='rework_order' AND event.entity_id=order_id::text AND event.actor_id=expected_actor
   ) THEN RAISE EXCEPTION 'whole-order review audit event does not match the write' USING ERRCODE='55000'; END IF;
 END;
 $$;
@@ -106,7 +107,8 @@ $$;
 CREATE OR REPLACE FUNCTION require_quantity_adjustment_event(
   expected_action text,
   expected_capability text,
-  order_id uuid
+  order_id uuid,
+  expected_actor uuid
 ) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
   audit_event_id text := nullif(current_setting('dx_rework.quantity_adjustment_event_id', true), '');
@@ -119,7 +121,7 @@ BEGIN
     SELECT 1 FROM operation_events event
     WHERE event.event_id=audit_event_id::uuid AND event.request_id=audit_request_id
       AND event.action=expected_action AND event.authorization_capability=expected_capability
-      AND event.entity_type='rework_order' AND event.entity_id=order_id::text
+      AND event.entity_type='rework_order' AND event.entity_id=order_id::text AND event.actor_id=expected_actor
   ) THEN RAISE EXCEPTION 'quantity adjustment audit event does not match the write' USING ERRCODE='55000'; END IF;
 END;
 $$;
@@ -147,12 +149,12 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM rework_work_reports report
-    JOIN rework_work_task_members member ON member.work_task_id=report.work_task_id
-    WHERE report.work_report_id=NEW.work_report_id
-      AND report.rework_order_id=NEW.rework_order_id
-      AND member.person_id=NEW.rejected_person_id
-  ) THEN RAISE EXCEPTION 'rejection must name a member of the submitted report' USING ERRCODE='23514'; END IF;
-  PERFORM require_whole_order_review_event('rework.work_report.reject','submission:audit',NEW.rework_order_id);
+    JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+    LEFT JOIN rework_work_task_members member ON member.work_task_id=report.work_task_id AND member.person_id=NEW.rejected_person_id
+    WHERE report.work_report_id=NEW.work_report_id AND report.rework_order_id=NEW.rework_order_id
+      AND ((task.mode='collective' AND NEW.rejected_person_id IS NULL) OR (task.mode='individual' AND member.person_id IS NOT NULL))
+  ) THEN RAISE EXCEPTION 'rejection target does not match report mode' USING ERRCODE='23514'; END IF;
+  PERFORM require_whole_order_review_event('rework.work_report.reject','submission:audit',NEW.rework_order_id,NEW.rejected_by);
   RETURN NEW;
 END;
 $$;
@@ -175,6 +177,10 @@ DECLARE
   expected_capability text;
 BEGIN
   IF TG_OP='INSERT' THEN
+    IF NOT EXISTS (SELECT 1 FROM rework_process_configuration_items item JOIN rework_process_configurations configuration ON configuration.configuration_id=item.configuration_id WHERE item.configuration_item_id=NEW.configuration_item_id AND configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved') THEN RAISE EXCEPTION 'adjustment process does not belong to approved order configuration' USING ERRCODE='23514'; END IF;
+    IF NEW.previous_planned_quantity IS DISTINCT FROM COALESCE((SELECT requested_planned_quantity FROM rework_process_quantity_adjustments WHERE configuration_item_id=NEW.configuration_item_id AND status='effective' ORDER BY adjustment_version DESC LIMIT 1),(SELECT planned_quantity FROM rework_process_configuration_items WHERE configuration_item_id=NEW.configuration_item_id)) THEN RAISE EXCEPTION 'adjustment previous plan is stale' USING ERRCODE='23514'; END IF;
+    IF NEW.adjustment_kind='decrease' AND NEW.requested_planned_quantity < COALESCE((SELECT sum(report.actual_quantity) FROM rework_work_reports report WHERE report.rework_order_id=NEW.rework_order_id AND report.configuration_item_id=NEW.configuration_item_id AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)),0) THEN RAISE EXCEPTION 'decrease is below submitted quantity' USING ERRCODE='23514'; END IF;
+    IF NEW.adjustment_kind='increase' AND (NEW.requires_ie_review IS NOT TRUE OR EXISTS (SELECT 1 FROM rework_process_quantity_adjustments active WHERE active.configuration_item_id=NEW.configuration_item_id AND active.adjustment_kind='increase' AND (active.status='pending_ie_review' OR (active.status='pending_merchandiser_confirmation' AND active.expires_at>CURRENT_TIMESTAMP)))) THEN RAISE EXCEPTION 'increase must require IE review and be the only active request' USING ERRCODE='23514'; END IF;
     IF NEW.adjustment_kind='decrease' THEN
       expected_action := 'rework.quantity.decrease'; expected_capability := 'quantity:adjust';
     ELSE
@@ -200,12 +206,14 @@ BEGIN
       IF NEW.confirmed_by IS NULL OR NEW.confirmed_at IS NULL OR NEW.actual_cut_quantity IS NULL
          OR NEW.actual_return_quantity IS NULL OR NEW.allowed_maximum_quantity IS NULL
       THEN RAISE EXCEPTION 'confirmation snapshot is required' USING ERRCODE='23514'; END IF;
+      IF OLD.expires_at<=CURRENT_TIMESTAMP OR NEW.actual_cut_quantity<=0 OR NEW.actual_return_quantity<=0 OR NEW.allowed_maximum_quantity<=0 OR NEW.requested_planned_quantity>NEW.actual_cut_quantity OR NEW.requested_planned_quantity>NEW.actual_return_quantity OR NEW.requested_planned_quantity>NEW.allowed_maximum_quantity THEN RAISE EXCEPTION 'confirmation evidence is expired or insufficient' USING ERRCODE='23514'; END IF;
     ELSIF OLD.status='pending_ie_review' AND NEW.status IN ('effective','rejected') THEN
       expected_action := 'rework.quantity.increase.ie_review'; expected_capability := 'process:review';
+      IF NEW.confirmed_by IS DISTINCT FROM OLD.confirmed_by OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at OR NEW.actual_cut_quantity IS DISTINCT FROM OLD.actual_cut_quantity OR NEW.actual_return_quantity IS DISTINCT FROM OLD.actual_return_quantity OR NEW.allowed_maximum_quantity IS DISTINCT FROM OLD.allowed_maximum_quantity OR NEW.confirmation_reason IS DISTINCT FROM OLD.confirmation_reason THEN RAISE EXCEPTION 'confirmation snapshot is immutable' USING ERRCODE='55000'; END IF;
       IF NEW.reviewed_by IS NULL OR NEW.reviewed_at IS NULL THEN RAISE EXCEPTION 'IE review snapshot is required' USING ERRCODE='23514'; END IF;
     ELSE RAISE EXCEPTION 'invalid quantity adjustment state transition' USING ERRCODE='23514'; END IF;
   END IF;
-  PERFORM require_quantity_adjustment_event(expected_action,expected_capability,NEW.rework_order_id);
+  PERFORM require_quantity_adjustment_event(expected_action,expected_capability,NEW.rework_order_id,CASE WHEN TG_OP='INSERT' THEN NEW.requested_by WHEN OLD.status='pending_merchandiser_confirmation' THEN NEW.confirmed_by ELSE NEW.reviewed_by END);
   RETURN NEW;
 END;
 $$;
@@ -224,7 +232,9 @@ CREATE TRIGGER rework_process_quantity_adjustments_no_truncate
 
 CREATE OR REPLACE FUNCTION guard_rework_order_review_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM require_whole_order_review_event('rework.whole_order.approve','submission:audit',NEW.rework_order_id);
+  IF EXISTS (SELECT 1 FROM rework_process_quantity_adjustments adjustment WHERE adjustment.rework_order_id=NEW.rework_order_id AND adjustment.adjustment_kind='increase' AND (adjustment.status='pending_ie_review' OR (adjustment.status='pending_merchandiser_confirmation' AND adjustment.expires_at>CURRENT_TIMESTAMP))) THEN RAISE EXCEPTION 'active increase blocks whole-order review' USING ERRCODE='23514'; END IF;
+  IF EXISTS (SELECT 1 FROM rework_process_configurations configuration JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id LEFT JOIN LATERAL (SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1) plan ON true LEFT JOIN LATERAL (SELECT sum(report.actual_quantity) quantity FROM rework_work_reports report WHERE report.rework_order_id=NEW.rework_order_id AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)) completed ON true WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' AND COALESCE(completed.quantity,0)<COALESCE(plan.requested_planned_quantity,item.planned_quantity)) THEN RAISE EXCEPTION 'incomplete order cannot be reviewed' USING ERRCODE='23514'; END IF;
+  PERFORM require_whole_order_review_event('rework.whole_order.approve','submission:audit',NEW.rework_order_id,NEW.reviewed_by);
   RETURN NEW;
 END;
 $$;

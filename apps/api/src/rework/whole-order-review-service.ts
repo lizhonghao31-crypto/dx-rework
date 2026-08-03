@@ -67,11 +67,15 @@ export class WholeOrderReviewService {
     private readonly outbox = new MessageOutboxRepository(),
   ) {}
 
-  async get(actor: TrustedActorContext, reworkOrderId: string): Promise<WholeOrderReviewResponse> {
+  async get(actor: TrustedActorContext, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse> {
     const order = await this.order(this.database, reworkOrderId, false);
-    // This endpoint returns the entire order, including all workers and prices. A
-    // process-scoped delegation is therefore deliberately insufficient here; it
-    // may be used only by the specific process mutation endpoints below.
+    if (configurationItemId) {
+      const canAdjustQuantity = await this.can(actor, "tail_supervisor", "quantity:adjust", order, configurationItemId);
+      const canConfirmQuantity = await this.canConfirm(actor, order, configurationItemId);
+      const canReviewQuantityIncrease = await this.can(actor, "ie_reviewer", "process:review", order, configurationItemId);
+      if (!canAdjustQuantity && !canConfirmQuantity && !canReviewQuantityIncrease) error("当前用户无权读取该工序信息", 403, "FORBIDDEN");
+      return this.dto(this.database, order, { canReview: false, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease }, configurationItemId);
+    }
     const canReview = await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order);
     const canAdjustQuantity = await this.canOrderWide(actor, "tail_supervisor", "quantity:adjust", order);
     const canConfirmQuantity = await this.canConfirm(actor, order);
@@ -90,6 +94,8 @@ export class WholeOrderReviewService {
       if (order.status !== "pending_order_review") error("当前返工单尚未进入整单审核节点", 409, "INVALID_STATE_TRANSITION");
       const existing = await client.query("SELECT 1 FROM rework_order_reviews WHERE rework_order_id=$1 FOR SHARE", [reworkOrderId]);
       if (existing.rowCount) error("该返工单已经完成整单审核", 409, "CONFLICT");
+      const pending = await client.query(`SELECT 1 FROM rework_process_quantity_adjustments WHERE rework_order_id=$1 AND adjustment_kind='increase' AND (status='pending_ie_review' OR (status='pending_merchandiser_confirmation' AND expires_at>CURRENT_TIMESTAMP)) LIMIT 1`, [reworkOrderId]);
+      if (pending.rowCount) error("存在待处理的计划数量增加申请，暂不能整单审核", 409, "CONFLICT");
       const plans = await this.plans(client, reworkOrderId);
       if (plans.length === 0 || plans.some((plan) => numberValue(plan.completed_quantity) < numberValue(plan.planned_quantity))) {
         error("所有工序达到当前有效计划数量后才能整单审核", 409, "CONFLICT");
@@ -137,8 +143,14 @@ export class WholeOrderReviewService {
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_order_review") error("当前返工单不在整单审核节点", 409, "INVALID_STATE_TRANSITION");
       if (row.rejected_person_id) error("该上数记录已经被驳回", 409, "CONFLICT");
-      const member = await client.query("SELECT 1 FROM rework_work_task_members WHERE work_task_id=$1 AND person_id=$2 FOR SHARE", [row.work_task_id, input.rejectedPersonId]);
-      if (!member.rowCount) error("只能驳回该上数记录中的指定成员", 400, "VALIDATION_ERROR");
+      const task = await client.query<{ mode: "individual" | "collective" }>("SELECT mode FROM rework_work_tasks WHERE work_task_id=$1 FOR SHARE", [row.work_task_id]);
+      const collective = task.rows[0]?.mode === "collective";
+      if (collective && input.rejectedPersonId !== null) error("集体计件只能驳回整条集体记录", 400, "VALIDATION_ERROR");
+      if (!collective) {
+        if (!input.rejectedPersonId) error("个人计件必须指定记录对应人员", 400, "VALIDATION_ERROR");
+        const member = await client.query("SELECT 1 FROM rework_work_task_members WHERE work_task_id=$1 AND person_id=$2 FOR SHARE", [row.work_task_id, input.rejectedPersonId]);
+        if (!member.rowCount) error("只能驳回该上数记录对应人员", 400, "VALIDATION_ERROR");
+      }
       const rejectionId = randomUUID();
       const eventId = await this.events.append(client, this.withCapability(actor, "submission:audit"), {
         action: "rework.work_report.reject", entityType: "rework_order", entityId: order.rework_order_id,
@@ -207,6 +219,9 @@ export class WholeOrderReviewService {
       const expiresAt = new Date(input.expiresAt);
       if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) error("增加申请的确认截止时间必须晚于现在", 400, "VALIDATION_ERROR");
       const item = await this.item(client, reworkOrderId, input.configurationItemId);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["dx_rework:quantity-adjustment:" + input.configurationItemId]);
+      const active = await client.query(`SELECT 1 FROM rework_process_quantity_adjustments WHERE configuration_item_id=$1 AND adjustment_kind='increase' AND (status='pending_ie_review' OR (status='pending_merchandiser_confirmation' AND expires_at>CURRENT_TIMESTAMP)) LIMIT 1`, [input.configurationItemId]);
+      if (active.rowCount) error("该工序已有活动中的计划数量增加申请", 409, "CONFLICT");
       this.ensureQuantityPrecision(item, input.newPlannedQuantity);
       const { currentPlan, nextVersion } = await this.quantityState(client, reworkOrderId, input.configurationItemId, item.planned_quantity);
       if (input.newPlannedQuantity <= currentPlan) error("增加后的计划数量必须大于当前有效计划数量", 400, "VALIDATION_ERROR");
@@ -214,7 +229,7 @@ export class WholeOrderReviewService {
       const eventId = await this.events.append(client, this.withCapability(actor, "quantity:adjust"), {
         action: "rework.quantity.increase.request", entityType: "rework_order", entityId: reworkOrderId,
         before: { ...this.orderAudit(order), configurationItemId: input.configurationItemId, plannedQuantity: currentPlan },
-        after: { ...this.orderAudit(order, "pending_order_review", order.version + 1), configurationItemId: input.configurationItemId, plannedQuantity: currentPlan, requestedPlannedQuantity: input.newPlannedQuantity, adjustmentId, adjustmentVersion: nextVersion, requiresIeReview: input.requiresIeReview },
+        after: { ...this.orderAudit(order, "pending_order_review", order.version + 1), configurationItemId: input.configurationItemId, plannedQuantity: currentPlan, requestedPlannedQuantity: input.newPlannedQuantity, adjustmentId, adjustmentVersion: nextVersion, requiresIeReview: true },
         reason: input.reason,
       });
       await this.context(client, eventId, actor.requestId, "quantity_adjustment");
@@ -223,7 +238,7 @@ export class WholeOrderReviewService {
            adjustment_id,rework_order_id,configuration_item_id,adjustment_version,adjustment_kind,status,
            previous_planned_quantity,requested_planned_quantity,reason,requires_ie_review,expires_at,requested_by
          ) VALUES($1,$2,$3,$4,'increase','pending_merchandiser_confirmation',$5,$6,$7,$8,$9,$10)`,
-        [adjustmentId, reworkOrderId, input.configurationItemId, nextVersion, currentPlan, input.newPlannedQuantity, input.reason, input.requiresIeReview, expiresAt, actor.actorId],
+        [adjustmentId, reworkOrderId, input.configurationItemId, nextVersion, currentPlan, input.newPlannedQuantity, input.reason, true, expiresAt, actor.actorId],
       );
       await client.query("UPDATE rework_orders SET updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1", [reworkOrderId, actor.actorId]);
       await this.outbox.enqueue(client, {
@@ -315,16 +330,17 @@ export class WholeOrderReviewService {
     client: Pick<Pool, "query"> | PoolClient,
     order: OrderRow,
     permissions: Readonly<{ canReview: boolean; canAdjustQuantity: boolean; canConfirmQuantity: boolean; canReviewQuantityIncrease: boolean }>,
+    configurationItemId?: string,
   ): Promise<WholeOrderReviewResponse> {
     const plans = await this.plans(client, order.rework_order_id);
     const [reports, adjustments, reviews] = await Promise.all([
-      this.reports(client, order.rework_order_id), this.adjustments(client, order.rework_order_id),
+      this.reports(client, order.rework_order_id, configurationItemId), this.adjustments(client, order.rework_order_id, configurationItemId),
       client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
     ]);
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
       ...permissions,
-      processes: plans.map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) >= numberValue(plan.planned_quantity) })),
+      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) >= numberValue(plan.planned_quantity) })),
       reports,
       adjustments,
       reviewId: reviews.rows[0]?.order_review_id ?? null,
@@ -364,7 +380,7 @@ export class WholeOrderReviewService {
     return result.rows;
   }
 
-  private async reports(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string): Promise<WholeOrderReviewResponse["reports"]> {
+  private async reports(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse["reports"]> {
     const [reports, members] = await Promise.all([
       client.query<ReportRow>(
         `SELECT report.work_report_id,report.work_task_id,report.configuration_item_id,report.actual_quantity,
@@ -372,8 +388,8 @@ export class WholeOrderReviewService {
                 rejection.rejected_person_id,rejection.reason AS rejection_reason
          FROM rework_work_reports report
          LEFT JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
-         WHERE report.rework_order_id=$1 ORDER BY report.completed_at,report.work_report_id`,
-        [reworkOrderId],
+         WHERE report.rework_order_id=$1 AND ($2::uuid IS NULL OR report.configuration_item_id=$2) ORDER BY report.completed_at,report.work_report_id`,
+        [reworkOrderId, configurationItemId ?? null],
       ),
       client.query<MemberRow>(
         `SELECT share.work_report_id,person.person_id,member.display_name_snapshot AS display_name
@@ -381,8 +397,8 @@ export class WholeOrderReviewService {
          JOIN rework_work_reports report ON report.work_report_id=share.work_report_id
          JOIN rework_work_task_members member ON member.work_task_id=report.work_task_id AND member.person_id=share.person_id
          JOIN business_people person ON person.person_id=share.person_id
-         WHERE report.rework_order_id=$1 ORDER BY share.work_report_id,person.person_id`,
-        [reworkOrderId],
+         WHERE report.rework_order_id=$1 AND ($2::uuid IS NULL OR report.configuration_item_id=$2) ORDER BY share.work_report_id,person.person_id`,
+        [reworkOrderId, configurationItemId ?? null],
       ),
     ]);
     const membersByReport = new Map<string, Array<{ personId: string; displayName: string }>>();
@@ -399,13 +415,13 @@ export class WholeOrderReviewService {
     }));
   }
 
-  private async adjustments(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string): Promise<QuantityAdjustmentResponse[]> {
+  private async adjustments(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<QuantityAdjustmentResponse[]> {
     const result = await client.query<AdjustmentRow>(
       `SELECT adjustment_id,configuration_item_id,adjustment_version,adjustment_kind,status,previous_planned_quantity,
               requested_planned_quantity,reason,requires_ie_review,expires_at,requested_by,requested_at,
               confirmed_by,confirmed_at,reviewed_by,reviewed_at
-       FROM rework_process_quantity_adjustments WHERE rework_order_id=$1 ORDER BY requested_at,adjustment_id`,
-      [reworkOrderId],
+       FROM rework_process_quantity_adjustments WHERE rework_order_id=$1 AND ($2::uuid IS NULL OR configuration_item_id=$2) ORDER BY requested_at,adjustment_id`,
+      [reworkOrderId, configurationItemId ?? null],
     );
     return result.rows.map((row) => this.adjustmentRow(row));
   }
@@ -552,7 +568,7 @@ export class WholeOrderReviewService {
 
   private ensureQuantityPrecision(item: ItemRow, quantity: number): void {
     if (item.pricing_unit === "piece" && !Number.isInteger(quantity)) error("按件工序的计划数量必须为整数", 400, "VALIDATION_ERROR");
-    if (item.pricing_unit === "hour" && Math.round(quantity * 100) !== quantity * 100) error("按小时工序的计划数量最多保留两位小数", 400, "VALIDATION_ERROR");
+    if (item.pricing_unit === "hour" && !/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(String(quantity))) error("按小时工序的计划数量最多保留两位小数", 400, "VALIDATION_ERROR");
   }
 
   private orderAudit(order: OrderRow, status = order.status, version = order.version): Record<string, unknown> {

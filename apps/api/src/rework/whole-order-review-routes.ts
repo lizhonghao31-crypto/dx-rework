@@ -9,6 +9,7 @@ import {
   ReviewQuantityIncreaseSchema,
   ReviewWholeOrderSchema,
   WholeOrderReviewParamsSchema,
+  WholeOrderReviewQuerySchema,
   WholeOrderReviewResponseSchema,
   WorkReportRejectionParamsSchema,
 } from "@dx-rework/contracts";
@@ -44,8 +45,14 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
       requestId: request.id,
     };
   };
-  app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/whole-order-review", async (request) =>
-    WholeOrderReviewResponseSchema.parse(await dependencies.service.get(await actor(request, "submission:audit"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId)));
+  app.get<{ Params: { reworkOrderId: string }; Querystring: { configurationItemId?: string } }>("/rework-orders/:reworkOrderId/whole-order-review", async (request) => {
+    const query = parse(WholeOrderReviewQuerySchema, request.query);
+    const serviceActor = await actor(request, "submission:audit");
+    const orderId = parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId;
+    return WholeOrderReviewResponseSchema.parse(query.configurationItemId
+      ? await dependencies.service.get(serviceActor, orderId, query.configurationItemId)
+      : await dependencies.service.get(serviceActor, orderId));
+  });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/whole-order-review/approve", async (request, reply) => {
     const result = await dependencies.service.approve(await actor(request, "submission:audit"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(ReviewWholeOrderSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");

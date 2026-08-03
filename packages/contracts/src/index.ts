@@ -440,10 +440,11 @@ export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;
 export type ReworkWorkTasksResponse = z.infer<typeof ReworkWorkTasksResponseSchema>;
 
 export const WholeOrderReviewParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const WholeOrderReviewQuerySchema = z.object({ configurationItemId: IdSchema.optional() }).strict();
 export const WorkReportRejectionParamsSchema = z.object({ workReportId: IdSchema }).strict();
 export const RejectWorkReportSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
-  rejectedPersonId: IdSchema,
+  rejectedPersonId: IdSchema.nullable(),
   reason: ReasonSchema,
 }).strict();
 export const ReviewWholeOrderSchema = z.object({ expectedOrderVersion: z.number().int().positive() }).strict();
