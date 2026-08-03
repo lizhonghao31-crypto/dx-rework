@@ -55,6 +55,10 @@
     {
       "version": "0014_responsibility_source_share_coverage",
       "checksum": "78ab96bde7e029cfc1683839e6efd9ccb5de9a5601f98e615c6bd0373720afa4"
+    },
+    {
+      "version": "0015_own_factory_responsibility_approval",
+      "checksum": "e0eed5f58d45a0f3fbee1bfaa10566c1478683dd10457ec53331b9081bbdcd07"
     }
   ]
 }
