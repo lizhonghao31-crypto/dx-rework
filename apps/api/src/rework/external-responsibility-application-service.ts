@@ -26,6 +26,12 @@ export class ExternalResponsibilityApplicationService {
     return this.service.listQueue(...args);
   }
 
+  listSupplierOptions(
+    ...args: Parameters<ProductionExternalResponsibilityService["listSupplierOptions"]>
+  ) {
+    return this.service.listSupplierOptions(...args);
+  }
+
   get(...args: Parameters<ProductionExternalResponsibilityService["get"]>) {
     return this.service.get(...args);
   }
