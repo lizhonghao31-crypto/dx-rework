@@ -39,6 +39,10 @@
     {
       "version": "0010_responsibility_determination_amount_engine",
       "checksum": "c1883196817a777fb61e941f61e3385d4665ea101f4a3a0d29887cdd10ccab4e"
+    },
+    {
+      "version": "0011_responsibility_authorization_handler_closure",
+      "checksum": "dfc909a56dedae61531c26bc3269123d983a1a9f99a02fedeeda2babffa2ed13"
     }
   ]
 }
