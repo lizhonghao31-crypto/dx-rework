@@ -24,27 +24,65 @@ export class OwnFactoryApprovalApplicationService {
     orderId: string,
   ): Promise<OwnFactoryApprovalResponse> {
     return this.onlyCurrent(
-      await this.service.get(actor, orderId),
+      this.withTruthfulDeliveryState(await this.service.get(actor, orderId)),
       orderId,
     );
   }
 
-  approve(
+  async approve(
     actor: TrustedActorContext,
     approvalId: string,
     input: ApproveOwnFactoryApproval,
     key: string,
   ) {
-    return this.service.approve(actor, approvalId, input, key);
+    const result = await this.service.approve(actor, approvalId, input, key);
+    return {
+      ...result,
+      value: this.withTruthfulDeliveryState(result.value),
+    };
   }
 
-  reject(
+  async reject(
     actor: TrustedActorContext,
     approvalId: string,
     input: RejectOwnFactoryApproval,
     key: string,
   ) {
-    return this.service.reject(actor, approvalId, input, key);
+    const result = await this.service.reject(actor, approvalId, input, key);
+    return {
+      ...result,
+      value: this.withTruthfulDeliveryState(result.value),
+    };
+  }
+
+  /**
+   * PR-10 creates an outbox intent but does not own delivery receipts.
+   * Until the notification delivery integration records a sent state, the
+   * public API must not claim that another owner has been notified.
+   */
+  private withTruthfulDeliveryState(
+    response: OwnFactoryApprovalResponse,
+  ): OwnFactoryApprovalResponse {
+    return {
+      ...response,
+      approval: response.approval
+        ? {
+            ...response.approval,
+            decision: response.approval.decision
+              ? {
+                  ...response.approval.decision,
+                  otherOwnersNotified: false,
+                }
+              : null,
+          }
+        : null,
+      history: response.history.map((item) => ({
+        ...item,
+        decision: item.decision
+          ? { ...item.decision, otherOwnersNotified: false }
+          : null,
+      })),
+    };
   }
 
   private async onlyCurrent(
