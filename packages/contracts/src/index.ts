@@ -177,7 +177,6 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
   "pending_responsibility_action",
-  "completed",
   "cancelled",
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
