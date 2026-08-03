@@ -20,7 +20,7 @@ describe("responsibility review navigation closure", () => {
   it("opens the live responsibility workspace only for a concrete UUID", async () => {
     const source = await readFile(pagesUrl, "utf8");
     expect(source).toContain("detailOrderId");
-    expect(source).toMatch(/\\/ui\\/tasks\\/\(\[0-9a-f\]/);
+    expect(source).toContain("^\\/ui\\/tasks\\/([0-9a-f]");
     expect(source).toContain(
       "<ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} />",
     );
