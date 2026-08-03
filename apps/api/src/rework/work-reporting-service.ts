@@ -141,7 +141,11 @@ export class WorkReportingService {
       if (order.status !== "pending_task_assignment" && order.status !== "in_progress") error("当前返工单不在分配任务节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
       const configuration = await client.query<{ configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string }>(
-        `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price
+        `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
+                COALESCE((SELECT adjustment.requested_planned_quantity
+                  FROM rework_process_quantity_adjustments adjustment
+                  WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective'
+                  ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price
          FROM rework_process_configurations configuration JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
          WHERE configuration.rework_order_id=$1 AND configuration.status='approved' AND item.configuration_item_id=$2 FOR UPDATE`,
         [reworkOrderId, input.configurationItemId],
@@ -210,9 +214,9 @@ export class WorkReportingService {
       if (task.pricing_unit === "hour" && !hasAtMostDecimalPlaces(input.actualQuantity, 2)) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
       const completedAt = new Date(input.completedAt);
       const now = Date.now();
-      if (completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
+      if (Number.isNaN(completedAt.getTime()) || completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
       const used = await client.query<{ quantity: string }>(
-        "SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'",
+        "SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.rework_order_id=$1 AND report.configuration_item_id=$2 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)",
         [task.rework_order_id, task.configuration_item_id],
       );
       const nextQuantity = addDecimal(used.rows[0]?.quantity ?? "0", input.actualQuantity);
@@ -225,31 +229,48 @@ export class WorkReportingService {
            JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
            LEFT JOIN (
              SELECT configuration_item_id,sum(actual_quantity) AS quantity
-             FROM rework_work_reports
+             FROM rework_work_reports report
              WHERE rework_order_id=$1 AND status='submitted'
+               AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
              GROUP BY configuration_item_id
            ) report ON report.configuration_item_id=item.configuration_item_id
+           LEFT JOIN LATERAL (
+             SELECT adjustment.requested_planned_quantity
+             FROM rework_process_quantity_adjustments adjustment
+             WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective'
+             ORDER BY adjustment.adjustment_version DESC LIMIT 1
+           ) plan ON true
            WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
              AND CASE WHEN item.configuration_item_id=$2
-               THEN COALESCE(report.quantity,0)+$3::numeric < item.planned_quantity
-               ELSE COALESCE(report.quantity,0) < item.planned_quantity END
+               THEN COALESCE(report.quantity,0)+$3::numeric < COALESCE(plan.requested_planned_quantity,item.planned_quantity)
+               ELSE COALESCE(report.quantity,0) < COALESCE(plan.requested_planned_quantity,item.planned_quantity) END
          ) AS complete`,
         [task.rework_order_id, task.configuration_item_id, input.actualQuantity],
       );
       const completedOrder = completion.rows[0]?.complete === true;
+      if (input.resubmitsWorkReportId) {
+        const rejected = await client.query<{ work_report_id: string }>(
+          `SELECT report.work_report_id FROM rework_work_reports report
+           JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
+           WHERE report.work_report_id=$1 AND report.work_task_id=$2 AND report.rework_order_id=$3
+             AND report.configuration_item_id=$4 FOR SHARE`,
+          [input.resubmitsWorkReportId, workTaskId, task.rework_order_id, task.configuration_item_id],
+        );
+        if (!rejected.rows[0]) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
+      }
       const reportId = randomUUID();
       const shares = splitAmount(groupAmount, members.length);
       const event = {
         action: "rework.work_report.submit", entityType: "rework_order", entityId: task.rework_order_id,
         before: { submittedQuantity: numberValue(used.rows[0]?.quantity ?? "0"), plannedQuantity: numberValue(task.planned_quantity) },
-        after: { ...this.orderAuditState(order, completedOrder ? "pending_order_review" : order.status, completedOrder ? order.version + 1 : order.version), workReportId: reportId, workTaskId, actualQuantity: input.actualQuantity, groupAmount, memberIds: members.map((member) => member.person_id) },
+        after: { ...this.orderAuditState(order, completedOrder ? "pending_order_review" : order.status, completedOrder ? order.version + 1 : order.version), workReportId: reportId, workTaskId, actualQuantity: input.actualQuantity, groupAmount, memberIds: members.map((member) => member.person_id), resubmitsWorkReportId: input.resubmitsWorkReportId ?? null },
         ...(input.remark ? { reason: input.remark } : {}),
       };
       const eventId = await this.events.append(client, reportingActor, event);
       await this.context(client, eventId, actor.requestId);
       await client.query(
-        "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, completedAt, input.remark ?? null, groupAmount, actor.actorId],
+        "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, completedAt, input.remark ?? null, groupAmount, actor.actorId, input.resubmitsWorkReportId ?? null],
       );
       for (const [index, member] of members.entries()) await client.query("INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)", [reportId, member.person_id, shares[index]]);
       if (completedOrder) await client.query(
@@ -323,7 +344,7 @@ export class WorkReportingService {
   }
 
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
-    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
+    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
   }
 
@@ -339,7 +360,7 @@ export class WorkReportingService {
     const proxyTask = this.canProxyReport(actor, members);
     const supervisor = this.isSupervisor(actor);
     if (!supervisor && !ownWorker && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
-    const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(actual_quantity),0) AS quantity FROM rework_work_reports WHERE rework_order_id=$1 AND configuration_item_id=$2 AND status='submitted'", [task.rework_order_id, task.configuration_item_id]);
+    const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.rework_order_id=$1 AND report.configuration_item_id=$2 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)", [task.rework_order_id, task.configuration_item_id]);
     const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0");
     const workerView = ownWorker && !supervisor && !proxyTask;
     const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members;

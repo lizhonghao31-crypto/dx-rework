@@ -52,6 +52,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       "0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0006_rework_initiation.sql",
       "0007_process_configuration_ie_review.sql", "0008_worker_assignment_reporting.sql",
+      "0009_whole_order_review_quantity_adjustment.sql",
     ]) {
       await database.query(await readFile(new URL("../../apps/api/migrations/" + migration, import.meta.url), "utf8"));
     }

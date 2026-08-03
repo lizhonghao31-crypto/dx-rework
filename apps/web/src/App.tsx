@@ -41,11 +41,10 @@ export function App() {
     );
   }
   if (path === "/ui/work-reporting") {
-    return <AuthGate requiredAnyOf={[
-      { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
-      { requiredRole: "worker", requiredCapability: "work:report" },
-      { requiredCapability: "work:report_for_worker" },
-    ]}>{page}</AuthGate>;
+    // Rework-order and process-scoped delegations cannot be evaluated from the
+    // session-wide capability list. The workspace contains no protected data
+    // until its API calls independently authorize the concrete rework order.
+    return <AuthGate>{page}</AuthGate>;
   }
   return <AuthGate>{page}</AuthGate>;
 }

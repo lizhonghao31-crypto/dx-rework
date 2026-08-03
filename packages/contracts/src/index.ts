@@ -174,6 +174,8 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_task_assignment",
   "in_progress",
   "pending_order_review",
+  "pending_quantity_adjustment_ie_review",
+  "pending_responsibility_determination",
   "cancelled",
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
@@ -389,6 +391,7 @@ export const CreateWorkReportSchema = z.object({
   actualQuantity: z.number().finite().positive(),
   completedAt: z.string().datetime(),
   remark: z.string().trim().min(1).max(500).optional(),
+  resubmitsWorkReportId: IdSchema.optional(),
 }).strict();
 export const WorkTaskAssignablePeopleResponseSchema = z.object({
   people: z.array(z.object({
@@ -435,3 +438,110 @@ export type WorkTaskAssignablePeopleResponse = z.infer<typeof WorkTaskAssignable
 export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;
 export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;
 export type ReworkWorkTasksResponse = z.infer<typeof ReworkWorkTasksResponseSchema>;
+
+export const WholeOrderReviewParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const WholeOrderReviewQuerySchema = z.object({ configurationItemId: IdSchema.optional() }).strict();
+export const WorkReportRejectionParamsSchema = z.object({ workReportId: IdSchema }).strict();
+export const RejectWorkReportSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  rejectedPersonId: IdSchema.nullable(),
+  reason: ReasonSchema,
+}).strict();
+export const ReviewWholeOrderSchema = z.object({ expectedOrderVersion: z.number().int().positive() }).strict();
+export const CreateQuantityDecreaseSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  configurationItemId: IdSchema,
+  newPlannedQuantity: z.number().finite().positive(),
+  reason: ReasonSchema,
+}).strict();
+export const CreateQuantityIncreaseSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  configurationItemId: IdSchema,
+  newPlannedQuantity: z.number().finite().positive(),
+  reason: ReasonSchema,
+  expiresAt: z.string().datetime(),
+  requiresIeReview: z.boolean().default(false),
+}).strict();
+export const QuantityAdjustmentParamsSchema = z.object({ adjustmentId: IdSchema }).strict();
+export const ConfirmQuantityIncreaseSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  expectedAdjustmentVersion: z.number().int().positive(),
+  decision: z.enum(["confirmed", "rejected"]),
+  actualCutQuantity: z.number().finite().nonnegative(),
+  actualReturnQuantity: z.number().finite().nonnegative(),
+  allowedMaximumQuantity: z.number().finite().positive(),
+  reason: z.string().trim().max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+  }
+});
+export const ReviewQuantityIncreaseSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  expectedAdjustmentVersion: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+  }
+});
+export const QuantityAdjustmentResponseSchema = z.object({
+  adjustmentId: IdSchema,
+  configurationItemId: IdSchema,
+  adjustmentVersion: z.number().int().positive(),
+  kind: z.enum(["decrease", "increase"]),
+  status: z.enum(["effective", "pending_merchandiser_confirmation", "pending_ie_review", "rejected", "expired"]),
+  previousPlannedQuantity: z.number().positive(),
+  requestedPlannedQuantity: z.number().positive(),
+  reason: z.string().min(1),
+  requiresIeReview: z.boolean(),
+  expiresAt: z.string().datetime().nullable(),
+  requestedBy: IdSchema,
+  requestedAt: z.string().datetime(),
+  confirmedBy: IdSchema.nullable(),
+  confirmedAt: z.string().datetime().nullable(),
+  reviewedBy: IdSchema.nullable(),
+  reviewedAt: z.string().datetime().nullable(),
+});
+export const WholeOrderReviewResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkStatus: ReworkOrderStatusSchema,
+  orderVersion: z.number().int().positive(),
+  canReview: z.boolean(),
+  canAdjustQuantity: z.boolean(),
+  canConfirmQuantity: z.boolean(),
+  canReviewQuantityIncrease: z.boolean(),
+  processes: z.array(z.object({
+    configurationItemId: IdSchema,
+    processName: z.string().min(1),
+    pricingUnit: ProcessPricingUnitSchema,
+    plannedQuantity: z.number().positive(),
+    completedQuantity: z.number().nonnegative(),
+    complete: z.boolean(),
+  }).strict()),
+  reports: z.array(z.object({
+    workReportId: IdSchema,
+    workTaskId: IdSchema,
+    configurationItemId: IdSchema,
+    actualQuantity: z.number().positive(),
+    completedAt: z.string().datetime(),
+    submittedBy: IdSchema,
+    assignmentMode: z.enum(["individual", "collective"]),
+    members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1) }).strict()),
+    rejected: z.boolean(),
+    rejectedPersonId: IdSchema.nullable(),
+    rejectionReason: z.string().nullable(),
+    resubmitsWorkReportId: IdSchema.nullable(),
+  }).strict()),
+  adjustments: z.array(QuantityAdjustmentResponseSchema),
+  reviewId: IdSchema.nullable(),
+});
+export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
+export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
+export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;
+export type CreateQuantityIncrease = z.infer<typeof CreateQuantityIncreaseSchema>;
+export type ConfirmQuantityIncrease = z.infer<typeof ConfirmQuantityIncreaseSchema>;
+export type ReviewQuantityIncrease = z.infer<typeof ReviewQuantityIncreaseSchema>;
+export type QuantityAdjustmentResponse = z.infer<typeof QuantityAdjustmentResponseSchema>;
+export type WholeOrderReviewResponse = z.infer<typeof WholeOrderReviewResponseSchema>;
