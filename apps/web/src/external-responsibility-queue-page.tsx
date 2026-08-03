@@ -1,7 +1,7 @@
 import {
   ExternalResponsibilityQueueResponseSchema,
   type ExternalResponsibilityQueueResponse,
-} from "@dx-rework/contracts";
+} from "@dx-rework/contracts/external-responsibility";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
