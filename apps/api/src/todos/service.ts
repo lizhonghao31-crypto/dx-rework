@@ -26,6 +26,7 @@ type TodoRow = Readonly<{
   recipient_user_id: string;
   required_role: string | null;
   required_capability: string | null;
+  delegation_id: string | null;
   delegation_scope_id: string | null;
   route_descriptor: TodoRouteDescriptor;
   policy_key: TodoResponse["policyKey"];
@@ -39,7 +40,6 @@ type TodoRow = Readonly<{
 }>;
 
 type ExistingTodoRow = TodoRow & Readonly<{
-  delegation_id: string | null;
   dedupe_key: string;
 }>;
 
@@ -48,6 +48,8 @@ type RoutingExceptionRow = Readonly<{
   todo_id: string;
   routing_todo_id: string;
   assigned_to_user_id: string;
+  original_recipient_user_id: string;
+  created_operation_event_id: string;
   status: "pending" | "resolved" | "cancelled";
 }>;
 
@@ -156,7 +158,7 @@ export class TodoService {
     this.requireCapability(actor, "todo:view");
     const result = await this.database.query<TodoRow>(
       `SELECT todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
-              recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
+              recipient_user_id,required_role,required_capability,delegation_id,delegation_scope_id,route_descriptor,policy_key,
               due_at,reminder_count,status,blocked_reason,version,created_at,updated_at
        FROM rework_todos
        WHERE recipient_user_id=$1
@@ -266,7 +268,7 @@ export class TodoService {
          END,
          $16,$17,$18
        ) RETURNING todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
-                   recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
+                   recipient_user_id,required_role,required_capability,delegation_id,delegation_scope_id,route_descriptor,policy_key,
                    due_at,reminder_count,status,blocked_reason,version,created_at,updated_at`,
       [
         todoId, input.todoType, input.category.trim(), input.sourceEventId, input.sourceAction,
@@ -298,7 +300,8 @@ export class TodoService {
     try {
       await client.query("BEGIN");
       const routing = await client.query<RoutingExceptionRow>(
-        `SELECT routing_exception_id,todo_id,routing_todo_id,assigned_to_user_id,status
+        `SELECT routing_exception_id,todo_id,routing_todo_id,assigned_to_user_id,
+                original_recipient_user_id,created_operation_event_id,status
          FROM todo_recipient_routing_exceptions
          WHERE routing_exception_id=$1 FOR UPDATE`,
         [input.routingExceptionId],
@@ -309,8 +312,30 @@ export class TodoService {
       if (exception.assigned_to_user_id !== actor.actorId) throw new ApplicationError("FORBIDDEN", "This routing exception is assigned to another manager", 403);
 
       const todo = await this.todoById(client, exception.todo_id, true);
-      if (todo.status !== "blocked_recipient" || !todo.required_role || !todo.required_capability) {
+      if (
+        todo.status !== "blocked_recipient"
+        || !todo.required_role
+        || !todo.required_capability
+        || todo.recipient_user_id !== exception.original_recipient_user_id
+      ) {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "Todo is not eligible for controlled transfer", 409);
+      }
+      const routingTodo = await this.todoById(client, exception.routing_todo_id, true);
+      if (
+        routingTodo.status !== "pending"
+        || routingTodo.todo_type !== "recipient_routing_exception"
+        || routingTodo.category !== "recipient_routing_exception"
+        || routingTodo.source_event_id !== exception.created_operation_event_id
+        || routingTodo.source_action !== "todo.recipient_blocked"
+        || routingTodo.recipient_user_id !== exception.assigned_to_user_id
+        || routingTodo.entity_type !== todo.entity_type
+        || routingTodo.entity_id !== todo.entity_id
+      ) {
+        throw new ApplicationError(
+          "INVALID_STATE_TRANSITION",
+          "Routing exception todo does not match the protected routing fact",
+          409,
+        );
       }
       const eligible = await this.isEligibleRecipient(
         client,
@@ -358,10 +383,6 @@ export class TodoService {
         [exception.routing_exception_id, input.reason.trim(), actor.actorId, transferEventId],
       );
       const transferred = await this.todoById(client, todo.todo_id);
-      const routingTodo = await this.todoById(client, exception.routing_todo_id, true);
-      if (routingTodo.status !== "pending") {
-        throw new ApplicationError("INVALID_STATE_TRANSITION", "Routing exception todo is no longer pending", 409);
-      }
       const routingTodoCompletionEventId = await this.events.append(client, actor, {
         action: "todo.complete",
         entityType: "rework_todo",
@@ -374,7 +395,7 @@ export class TodoService {
       await client.query(
         `UPDATE rework_todos
          SET status='completed',completed_at=CURRENT_TIMESTAMP,completed_by=$2,
-             completed_operation_event_id=$3
+             completed_operation_event_id=$3,blocked_at=NULL,blocked_reason=NULL
          WHERE todo_id=$1`,
         [routingTodo.todo_id, actor.actorId, routingTodoCompletionEventId],
       );
@@ -431,6 +452,47 @@ export class TodoService {
   }
 
   /**
+   * Revalidates current identity, direct-role and order-delegation authority
+   * immediately before a pending actionable todo is delivered or timed. A
+   * stale recipient is atomically blocked and routed to the one approved
+   * production-management exception owner; it is never silently reassigned.
+   */
+  async ensureOpenRecipientEligibleInTransaction(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    todoId: string,
+  ): Promise<boolean> {
+    const todo = await this.todoById(client, todoId, true);
+    if (todo.status !== "pending") return false;
+    if (todo.todo_type !== "business_action") return true;
+    if (!todo.required_role || !todo.required_capability) {
+      throw new ApplicationError(
+        "INTERNAL_ERROR",
+        "Actionable todo is missing its authority facts",
+        500,
+      );
+    }
+    const eligible = await this.isEligibleRecipient(
+      client,
+      todo.recipient_user_id,
+      todo.required_role,
+      todo.required_capability,
+      todo.delegation_id ?? undefined,
+      todo.delegation_scope_id ?? todo.entity_id,
+    );
+    if (eligible) return true;
+
+    const managerId = await this.uniqueRoutingManager(client);
+    await this.blockInvalidRecipientInTransaction(client, actor, todo, {
+      reason: todo.delegation_id
+        ? "recipient_delegation_no_longer_active"
+        : "recipient_no_longer_directly_eligible",
+      assignedToUserId: managerId,
+    });
+    return false;
+  }
+
+  /**
    * Applies at most one due action using the database clock and the persisted
    * policy row. The caller owns the scheduler cadence; this method owns the
    * durable state transition, audit event and outbox enqueue atomically.
@@ -440,6 +502,9 @@ export class TodoService {
     actor: TrustedActorContext,
     todoId: string,
   ): Promise<TimedTodoAction | null> {
+    if (!(await this.ensureOpenRecipientEligibleInTransaction(client, actor, todoId))) {
+      return null;
+    }
     const result = await client.query<TodoRow & {
       due_after_seconds: number | null;
       first_reminder_after_due_seconds: number | null;
@@ -450,7 +515,8 @@ export class TodoService {
     }>(
       `SELECT todo.todo_id,todo.todo_type,todo.category,todo.source_event_id,todo.source_action,
               todo.entity_type,todo.entity_id,todo.recipient_user_id,todo.required_role,
-              todo.required_capability,todo.delegation_scope_id,todo.route_descriptor,todo.policy_key,
+              todo.required_capability,todo.delegation_id,todo.delegation_scope_id,
+              todo.route_descriptor,todo.policy_key,
               todo.due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
               todo.created_at,todo.updated_at,policy.due_after_seconds,
               policy.first_reminder_after_due_seconds,policy.second_reminder_after_due_seconds,
@@ -559,6 +625,28 @@ export class TodoService {
     return closed;
   }
 
+  private async uniqueRoutingManager(client: PoolClient): Promise<string> {
+    const managers = await client.query<{ user_id: string }>(
+      `SELECT DISTINCT assignment.user_id
+       FROM user_role_assignments assignment
+       WHERE assignment.role_code='production_management'
+         AND assignment.revoked_at IS NULL
+         AND todo_user_has_direct_role(
+           assignment.user_id,'production_management','todo:routing_exception_manage'
+         )
+       ORDER BY assignment.user_id
+       LIMIT 2`,
+    );
+    if (managers.rows.length !== 1) {
+      throw new ApplicationError(
+        "CONFLICT",
+        "Recipient revalidation requires one direct production-management routing owner",
+        409,
+      );
+    }
+    return managers.rows[0]!.user_id;
+  }
+
   private async blockInvalidRecipientInTransaction(
     client: PoolClient,
     actor: TrustedActorContext,
@@ -606,18 +694,18 @@ export class TodoService {
     const routingTodo = await client.query<TodoRow>(
       `INSERT INTO rework_todos(
          todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
-         recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,due_at,
+         recipient_user_id,required_role,required_capability,delegation_id,delegation_scope_id,route_descriptor,policy_key,due_at,
          dedupe_key,created_operation_event_id,created_request_id
        ) VALUES(
          $1,'recipient_routing_exception','recipient_routing_exception',$2,'todo.recipient_blocked',$3,$4,
-         $5,'production_management','todo:routing_exception_manage',$6,$7,'general',
+         $5,'production_management','todo:routing_exception_manage',NULL,$6,$7,'general',
          CURRENT_TIMESTAMP + (
            SELECT policy.due_after_seconds * interval '1 second'
            FROM todo_policies policy WHERE policy.policy_key='general' AND policy.enabled=true
          ),
          $8,$9,$10
        ) RETURNING todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
-                   recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
+                   recipient_user_id,required_role,required_capability,delegation_id,delegation_scope_id,route_descriptor,policy_key,
                    due_at,reminder_count,status,blocked_reason,version,created_at,updated_at`,
       [
         routingTodoId, eventId, todo.entity_type, todo.entity_id,
@@ -628,6 +716,54 @@ export class TodoService {
     const routingTodoRow = routingTodo.rows[0];
     if (!routingTodoRow) throw new ApplicationError("INTERNAL_ERROR", "Routing exception todo was not created", 500);
     await this.enqueueDelivery(client, routingTodoRow, routingTodoCreationEventId, actor.requestId, "create");
+  }
+
+  private async cancelPendingRoutingExceptionForTodo(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    todoId: string,
+    reason: string,
+  ): Promise<void> {
+    const result = await client.query<{
+      routing_exception_id: string;
+      routing_todo_id: string;
+      status: "pending" | "resolved" | "cancelled";
+    }>(
+      `SELECT routing_exception_id,routing_todo_id,status
+       FROM todo_recipient_routing_exceptions
+       WHERE todo_id=$1
+       FOR UPDATE`,
+      [todoId],
+    );
+    const exception = result.rows[0];
+    if (!exception || exception.status !== "pending") return;
+
+    const routingTodo = await this.todoById(client, exception.routing_todo_id, true);
+    const eventId = await this.events.append(client, actor, {
+      action: "todo.cancel",
+      entityType: "rework_todo",
+      entityId: routingTodo.todo_id,
+      before: { status: routingTodo.status, routingExceptionId: exception.routing_exception_id },
+      after: { status: "cancelled", routingExceptionId: exception.routing_exception_id },
+      reason,
+    });
+    await this.setTodoContext(client, eventId, actor.requestId);
+    if (routingTodo.status === "pending" || routingTodo.status === "blocked_recipient") {
+      await client.query(
+        `UPDATE rework_todos
+         SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP,
+             cancelled_reason=$2,cancelled_operation_event_id=$3,
+             blocked_at=NULL,blocked_reason=NULL
+         WHERE todo_id=$1`,
+        [routingTodo.todo_id, reason, eventId],
+      );
+    }
+    await client.query(
+      `UPDATE todo_recipient_routing_exceptions
+       SET status='cancelled',resolution_reason=$2
+       WHERE routing_exception_id=$1`,
+      [exception.routing_exception_id, reason],
+    );
   }
 
   private async closeOpenByDedupeKey(
@@ -648,6 +784,9 @@ export class TodoService {
     if (!todo || (todo.status !== "pending" && todo.status !== "blocked_recipient")) {
       return false;
     }
+    if (todo.status === "blocked_recipient") {
+      await this.cancelPendingRoutingExceptionForTodo(client, actor, todo.todo_id, reason);
+    }
     const action = status === "completed" ? "todo.complete" : "todo.cancel";
     const eventId = await this.events.append(client, actor, {
       action,
@@ -662,7 +801,7 @@ export class TodoService {
       await client.query(
         `UPDATE rework_todos
          SET status='completed',completed_at=CURRENT_TIMESTAMP,completed_by=$2,
-             completed_operation_event_id=$3
+             completed_operation_event_id=$3,blocked_at=NULL,blocked_reason=NULL
          WHERE todo_id=$1`,
         [todo.todo_id, actor.actorId, eventId],
       );
@@ -670,7 +809,8 @@ export class TodoService {
       await client.query(
         `UPDATE rework_todos
          SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP,
-             cancelled_reason=$2,cancelled_operation_event_id=$3
+             cancelled_reason=$2,cancelled_operation_event_id=$3,
+             blocked_at=NULL,blocked_reason=NULL
          WHERE todo_id=$1`,
         [todo.todo_id, reason, eventId],
       );
@@ -728,15 +868,31 @@ export class TodoService {
     reworkOrderId: string,
   ): Promise<boolean> {
     const result = await client.query<{ eligible: boolean }>(
-      `SELECT todo_user_has_direct_role($1::uuid,$2::text,$3::text) OR EXISTS(
-         SELECT 1 FROM delegated_authorizations delegation
-         WHERE delegation.delegation_id=$4::uuid
-           AND delegation.grantee_user_id=$1
-           AND delegation.capability=$3
-           AND delegation.revoked_at IS NULL
-           AND CURRENT_TIMESTAMP BETWEEN delegation.valid_from AND delegation.valid_until
-           AND delegation.scope_type='rework_order' AND delegation.scope_id=$5
-       ) AS eligible`,
+      `SELECT CASE
+         WHEN $4::uuid IS NULL THEN todo_user_has_direct_role($1::uuid,$2::text,$3::text)
+         ELSE EXISTS(
+           SELECT 1
+           FROM delegated_authorizations delegation
+           JOIN app_users grantee
+             ON grantee.id=delegation.grantee_user_id AND grantee.enabled=true
+           JOIN identity_mappings identity
+             ON identity.user_id=grantee.id AND identity.provider='dingtalk'
+            AND identity.active=true AND identity.employed=true
+           JOIN access_security_policy policy
+             ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+           JOIN user_role_assignments grantor_assignment
+             ON grantor_assignment.user_id=delegation.grantor_user_id
+            AND grantor_assignment.role_code=$2
+            AND grantor_assignment.revoked_at IS NULL
+           WHERE delegation.delegation_id=$4::uuid
+             AND delegation.grantee_user_id=$1
+             AND delegation.capability=$3
+             AND delegation.revoked_at IS NULL
+             AND CURRENT_TIMESTAMP BETWEEN delegation.valid_from AND delegation.valid_until
+             AND delegation.scope_type='rework_order' AND delegation.scope_id=$5
+             AND todo_user_has_direct_role(delegation.grantor_user_id,$2,$3)
+         )
+       END AS eligible`,
       [recipientUserId, role, capability, delegationId ?? null, reworkOrderId],
     );
     return result.rows[0]?.eligible === true;
@@ -745,7 +901,7 @@ export class TodoService {
   private async todoById(client: PoolClient, todoId: string, lock = false): Promise<TodoRow> {
     const result = await client.query<TodoRow>(
       `SELECT todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
-              recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
+              recipient_user_id,required_role,required_capability,delegation_id,delegation_scope_id,route_descriptor,policy_key,
               due_at,reminder_count,status,blocked_reason,version,created_at,updated_at
        FROM rework_todos WHERE todo_id=$1${lock ? " FOR UPDATE" : ""}`,
       [todoId],

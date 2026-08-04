@@ -37,6 +37,8 @@ type Cursor = Readonly<{ lastKey: string }>;
 type Candidate = Readonly<{
   kind: CandidateKind;
   cursorKey: string;
+  authorityId: string;
+  authorityVersion?: number;
   sourceEventId: string | null;
   sourceAction: string;
   entityType: string;
@@ -231,70 +233,83 @@ export class TodoBackfillService {
     }
 
     const client = await this.database.connect();
-    let blockedRecipient = false;
     try {
       await client.query("BEGIN");
-      const existing = await client.query<{ todo_id: string }>(
-        "SELECT todo_id FROM rework_todos WHERE dedupe_key=$1 FOR KEY SHARE",
-        [candidate.dedupeKey],
-      );
-      if (existing.rowCount) {
-        counters.existing = 1;
-      } else {
-        const uniqueRecipientCount = await this.uniqueDirectRecipientCount(client, candidate);
-        if (uniqueRecipientCount !== null && uniqueRecipientCount !== 1) {
-          await client.query("ROLLBACK");
-          counters.ambiguousRecipient = 1;
-          if (mode === "apply" && runId) {
-            await this.recordException(
-              runId,
-              candidate,
-              candidate.sourceEventId,
-              "skipped_ambiguous_recipient",
-              { requiredRole: candidate.requiredRole, recipientCount: uniqueRecipientCount },
-            );
-          }
-          return counters;
-        }
+      const existing = await this.projectedTodos(client, candidate);
+      if (existing.length > 0) {
+        counters.existing = existing.length;
+        if (mode === "dry_run") await client.query("ROLLBACK");
+        else await client.query("COMMIT");
+        return counters;
+      }
 
-        const projectionActor = actor ?? await this.sourceActor(
-          client,
-          candidate.sourceEventId,
-          `todo-backfill-dry-${randomUUID()}`,
-        );
-        await this.project(client, projectionActor, candidate);
-        counters.eligible = 1;
-        const projected = await client.query<{
-          status: string;
-          created_request_id: string;
-        }>(
-          "SELECT status,created_request_id FROM rework_todos WHERE dedupe_key=$1 FOR KEY SHARE",
-          [candidate.dedupeKey],
-        );
-        const todo = projected.rows[0];
-        if (!todo) {
-          throw new ApplicationError(
-            "INTERNAL_ERROR",
-            "Backfill projection returned without a durable todo result",
-            500,
+      if (!(await this.candidateStillApplicable(client, candidate))) {
+        await client.query("ROLLBACK");
+        counters.inapplicableState = 1;
+        if (mode === "apply" && runId) {
+          await this.recordException(
+            runId,
+            candidate,
+            candidate.sourceEventId,
+            "skipped_inapplicable_state",
+            { cursorKey: candidate.cursorKey },
           );
         }
-        blockedRecipient = todo.status === "blocked_recipient";
+        return counters;
+      }
+
+      const uniqueRecipientCount = await this.uniqueDirectRecipientCount(client, candidate);
+      if (uniqueRecipientCount !== null && uniqueRecipientCount !== 1) {
+        await client.query("ROLLBACK");
+        counters.ambiguousRecipient = 1;
+        if (mode === "apply" && runId) {
+          await this.recordException(
+            runId,
+            candidate,
+            candidate.sourceEventId,
+            "skipped_ambiguous_recipient",
+            { requiredRole: candidate.requiredRole, recipientCount: uniqueRecipientCount },
+          );
+        }
+        return counters;
+      }
+
+      const projectionActor = actor ?? await this.sourceActor(
+        client,
+        candidate.sourceEventId,
+        `todo-backfill-dry-${randomUUID()}`,
+      );
+      await this.project(client, projectionActor, candidate);
+      counters.eligible = 1;
+      const projected = await this.projectedTodos(client, candidate);
+      if (projected.length === 0) {
+        throw new ApplicationError(
+          "INTERNAL_ERROR",
+          "Backfill projection returned without a durable todo result",
+          500,
+        );
+      }
+      for (const todo of projected) {
+        if (todo.status === "blocked_recipient") counters.recipientBlocked += 1;
         if (mode === "dry_run" || todo.created_request_id === projectionActor.requestId) {
-          counters.created = 1;
+          counters.created += 1;
         } else {
-          counters.existing = 1;
+          counters.existing += 1;
         }
       }
       if (mode === "dry_run") await client.query("ROLLBACK");
       else await client.query("COMMIT");
-      if (blockedRecipient) {
-        counters.recipientBlocked = 1;
-        if (mode === "apply" && runId) {
-          await this.recordException(runId, candidate, candidate.sourceEventId, "skipped_recipient_inactive", {
+      if (counters.recipientBlocked > 0 && mode === "apply" && runId) {
+        await this.recordException(
+          runId,
+          candidate,
+          candidate.sourceEventId,
+          "skipped_recipient_inactive",
+          {
             outcome: "blocked_recipient_with_routing_exception",
-          });
-        }
+            blockedTodoCount: counters.recipientBlocked,
+          },
+        );
       }
       return counters;
     } catch (error: unknown) {
@@ -313,6 +328,245 @@ export class TodoBackfillService {
       client.release();
     }
   }
+
+  private async projectedTodos(
+    client: PoolClient,
+    candidate: Candidate,
+  ): Promise<Array<{
+    status: string;
+    created_request_id: string;
+    dedupe_key: string;
+  }>> {
+    const escapedPrefix = candidate.dedupeKey
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_");
+    const result = await client.query<{
+      status: string;
+      created_request_id: string;
+      dedupe_key: string;
+    }>(
+      `SELECT status,created_request_id,dedupe_key
+       FROM rework_todos
+       WHERE (dedupe_key=$1 OR dedupe_key LIKE $2 ESCAPE '\\')
+         AND source_event_id=$3
+         AND source_action=$4
+         AND entity_type=$5
+         AND entity_id=$6
+         AND category=$7
+       ORDER BY dedupe_key
+       FOR KEY SHARE`,
+      [
+        candidate.dedupeKey,
+        `${escapedPrefix}:%`,
+        candidate.sourceEventId,
+        candidate.sourceAction,
+        candidate.entityType,
+        candidate.entityId,
+        candidate.category,
+      ],
+    );
+    return result.rows;
+  }
+
+  private async candidateStillApplicable(
+    client: PoolClient,
+    candidate: Candidate,
+  ): Promise<boolean> {
+    const source = await client.query(
+      `SELECT 1
+       FROM operation_events
+       WHERE event_id=$1 AND action=$2 AND entity_type=$3 AND entity_id=$4
+       FOR KEY SHARE`,
+      [
+        candidate.sourceEventId,
+        candidate.sourceAction,
+        candidate.entityType,
+        candidate.entityId,
+      ],
+    );
+    if (source.rowCount !== 1) return false;
+
+    switch (candidate.kind) {
+      case "process_configuration": {
+        const result = await client.query(
+          `SELECT 1 FROM rework_orders
+           WHERE rework_order_id=$1 AND status='pending_process_configuration' AND version=$2
+           FOR UPDATE`,
+          [candidate.authorityId, candidate.authorityVersion],
+        );
+        return result.rowCount === 1;
+      }
+      case "ie_review": {
+        const result = await client.query(
+          `SELECT 1
+           FROM rework_process_configurations configuration
+           JOIN rework_orders order_record USING(rework_order_id)
+           WHERE configuration.configuration_id=$1
+             AND configuration.status='pending_ie_review'
+             AND configuration.configuration_version=$2
+             AND order_record.status='pending_ie_review'
+           FOR UPDATE OF configuration,order_record`,
+          [candidate.authorityId, candidate.authorityVersion],
+        );
+        return result.rowCount === 1;
+      }
+      case "process_configuration_return": {
+        const result = await client.query(
+          `SELECT 1
+           FROM rework_process_configurations configuration
+           JOIN rework_orders order_record USING(rework_order_id)
+           WHERE configuration.configuration_id=$1
+             AND configuration.status='rejected'
+             AND configuration.configuration_version=$2
+             AND order_record.status='pending_process_configuration'
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_process_configurations successor
+               WHERE successor.rework_order_id=configuration.rework_order_id
+                 AND successor.configuration_version>configuration.configuration_version
+             )
+           FOR UPDATE OF configuration,order_record`,
+          [candidate.authorityId, candidate.authorityVersion],
+        );
+        return result.rowCount === 1;
+      }
+      case "whole_order_review": {
+        const result = await client.query(
+          `SELECT 1 FROM rework_orders
+           WHERE rework_order_id=$1 AND status='pending_order_review' AND version=$2
+           FOR UPDATE`,
+          [candidate.authorityId, candidate.authorityVersion],
+        );
+        return result.rowCount === 1;
+      }
+      case "work_report_return": {
+        const result = await client.query(
+          `SELECT 1
+           FROM rework_work_reports report
+           JOIN rework_work_report_rejections rejection USING(work_report_id)
+           WHERE report.work_report_id=$1 AND rejection.rework_order_id=$2
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_reports resubmission
+               WHERE resubmission.resubmits_work_report_id=report.work_report_id
+             )
+           FOR UPDATE OF report`,
+          [candidate.authorityId, candidate.entityId],
+        );
+        return result.rowCount === 1;
+      }
+      case "responsibility_determination":
+      case "high_multiplier_confirmation": {
+        const result = await client.query(
+          `SELECT 1
+           FROM rework_responsibility_determinations determination
+           JOIN rework_orders order_record USING(rework_order_id)
+           WHERE determination.determination_id=$1
+             AND determination.determination_version=$2
+             AND determination.stage='draft'
+             AND order_record.status IN (
+               'pending_responsibility_determination','pending_responsibility_action'
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_responsibility_determinations successor
+               WHERE successor.replaces_determination_id=determination.determination_id
+             )
+             AND ($3::boolean=false OR (
+               EXISTS (
+                 SELECT 1 FROM rework_responsibility_processes process
+                 WHERE process.determination_id=determination.determination_id
+                   AND process.multiplier>2
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM rework_responsibility_high_multiplier_confirmations confirmation
+                 WHERE confirmation.determination_id=determination.determination_id
+               )
+             ))
+           FOR UPDATE OF determination,order_record`,
+          [
+            candidate.authorityId,
+            candidate.authorityVersion,
+            candidate.kind === "high_multiplier_confirmation",
+          ],
+        );
+        return result.rowCount === 1;
+      }
+      case "own_factory_approval": {
+        const result = await client.query(
+          `SELECT 1 FROM rework_own_factory_approvals
+           WHERE approval_id=$1 AND status='pending'
+           FOR UPDATE`,
+          [candidate.authorityId],
+        );
+        return result.rowCount === 1;
+      }
+      case "external_business_signoff":
+      case "external_payables_confirmation":
+      case "external_payables_return":
+      case "external_deduction_follow_up":
+      case "external_deduction_overdue": {
+        const expectedStatus = candidate.kind === "external_business_signoff"
+          ? "pending_business_signoff"
+          : candidate.kind === "external_payables_confirmation"
+            ? "pending_payables_confirmation"
+            : candidate.kind === "external_payables_return"
+              ? "returned"
+              : "deduction_follow_up";
+        const result = await client.query(
+          `SELECT 1 FROM rework_external_responsibility_cases
+           WHERE case_id=$1 AND status=$2 AND case_version=$3
+           FOR UPDATE`,
+          [candidate.authorityId, expectedStatus, candidate.authorityVersion],
+        );
+        if (result.rowCount !== 1) return false;
+        if (candidate.kind !== "external_deduction_overdue") return true;
+        const followUp = await client.query<{
+          next_follow_up_at: Date;
+          is_due: boolean;
+        }>(
+          `SELECT next_follow_up_at,CURRENT_TIMESTAMP>=next_follow_up_at AS is_due
+           FROM rework_external_deduction_follow_ups
+           WHERE case_id=$1 AND operation_event_id=$2 AND next_follow_up_at IS NOT NULL
+           ORDER BY created_at DESC,follow_up_id DESC
+           LIMIT 1
+           FOR UPDATE`,
+          [candidate.authorityId, candidate.sourceEventId],
+        );
+        const row = followUp.rows[0];
+        return Boolean(
+          row
+          && candidate.authoritativeDueAt
+          && row.next_follow_up_at.getTime() === candidate.authoritativeDueAt.getTime()
+          && row.is_due
+        );
+      }
+      case "wage_tail_review":
+      case "wage_administrative_review":
+      case "wage_month_close": {
+        const expectedStatus = candidate.kind === "wage_tail_review"
+          ? "pending_tail_review"
+          : candidate.kind === "wage_administrative_review"
+            ? "pending_admin_review"
+            : "ready_to_lock";
+        const result = await client.query(
+          `SELECT 1 FROM rework_wage_periods
+           WHERE period_id=$1 AND status=$2 AND period_version=$3
+           FOR UPDATE`,
+          [candidate.authorityId, expectedStatus, candidate.authorityVersion],
+        );
+        return result.rowCount === 1;
+      }
+      case "wage_adjustment_approval": {
+        const result = await client.query(
+          `SELECT 1 FROM rework_wage_adjustments
+           WHERE adjustment_id=$1 AND status='pending' AND version=$2
+           FOR UPDATE`,
+          [candidate.authorityId, candidate.authorityVersion],
+        );
+        return result.rowCount === 1;
+      }
+    }
+  }
+
 
   private async uniqueDirectRecipientCount(
     client: PoolClient,
@@ -473,6 +727,7 @@ export class TodoBackfillService {
       sourceAction: "rework.submit", entityType: "rework_order", entityId: row.rework_order_id,
       category: "process_configuration", route: { routeName: "process_configuration", entityId: row.rework_order_id },
       policyKey: "general", requiredRole: "tail_supervisor", requiredCapability: "process:configure",
+      authorityVersion: row.version,
       dedupeKey: `process-config:${row.rework_order_id}:${row.version}`,
     }));
   }
@@ -507,6 +762,7 @@ export class TodoBackfillService {
       sourceAction: "rework.process_configuration.submit", entityType: "rework_order", entityId: row.rework_order_id,
       category: "ie_review", route: { routeName: "process_configuration", entityId: row.rework_order_id },
       policyKey: "general", requiredRole: "ie_reviewer", requiredCapability: "process:review",
+      authorityVersion: row.configuration_version,
       dedupeKey: `ie-review:${row.rework_order_id}:${row.configuration_version}`,
     }));
   }
@@ -544,6 +800,7 @@ export class TodoBackfillService {
       category: "process_configuration_return", route: { routeName: "process_configuration", entityId: row.rework_order_id },
       policyKey: "general", requiredRole: "tail_supervisor", requiredCapability: "process:configure",
       recipientUserId: row.created_by,
+      authorityVersion: row.configuration_version,
       dedupeKey: `process-config-return:${row.configuration_id}:${row.configuration_version}`,
     }));
   }
@@ -571,6 +828,7 @@ export class TodoBackfillService {
       sourceAction: "rework.work_report.submit", entityType: "rework_order", entityId: row.rework_order_id,
       category: "whole_order_review", route: { routeName: "rework_detail", entityId: row.rework_order_id, tab: "whole_order_review" },
       policyKey: "general", requiredRole: "tail_supervisor", requiredCapability: "submission:audit",
+      authorityVersion: row.version,
       dedupeKey: `whole-order-review:${row.rework_order_id}:${row.version}`,
     }));
   }
@@ -621,7 +879,8 @@ export class TodoBackfillService {
   private async pendingResponsibility(watermark: Watermark): Promise<Candidate[]> {
     const result = await this.database.query<{
       determination_id: string; rework_order_id: string; determination_version: number; handler_user_id: string;
-      created_by: string; source_event_id: string | null; actor_roles: string[] | null; has_high_multiplier: boolean;
+      created_by: string; source_event_id: string | null; actor_roles: string[] | null;
+      has_high_multiplier: boolean; high_multiplier_confirmed: boolean;
     }>(
       `SELECT determination.determination_id,determination.rework_order_id,determination.determination_version,
               COALESCE(handler_event.to_user_id,determination.handler_user_id) handler_user_id,
@@ -629,7 +888,11 @@ export class TodoBackfillService {
               EXISTS(
                 SELECT 1 FROM rework_responsibility_processes process
                 WHERE process.determination_id=determination.determination_id AND process.multiplier>2
-              ) has_high_multiplier
+              ) has_high_multiplier,
+              EXISTS(
+                SELECT 1 FROM rework_responsibility_high_multiplier_confirmations confirmation
+                WHERE confirmation.determination_id=determination.determination_id
+              ) high_multiplier_confirmed
        FROM rework_responsibility_determinations determination
        JOIN rework_orders order_record ON order_record.rework_order_id=determination.rework_order_id
        LEFT JOIN LATERAL (
@@ -649,10 +912,6 @@ export class TodoBackfillService {
            SELECT 1 FROM rework_responsibility_determinations successor
            WHERE successor.replaces_determination_id=determination.determination_id
          )
-         AND NOT EXISTS (
-           SELECT 1 FROM rework_responsibility_high_multiplier_confirmations confirmation
-           WHERE confirmation.determination_id=determination.determination_id
-         )
        ORDER BY determination.determination_id`,
       [watermark.createdAt, watermark.eventId],
     );
@@ -663,9 +922,10 @@ export class TodoBackfillService {
         category: "responsibility_determination", route: { routeName: "responsibility_detail", entityId: row.rework_order_id },
         policyKey: "general", requiredRole: "responsibility_handler", requiredCapability: "responsibility:determine",
         recipientUserId: row.handler_user_id,
+        authorityVersion: row.determination_version,
         dedupeKey: `responsibility:${row.rework_order_id}:${row.determination_version}`,
       });
-      if (!row.has_high_multiplier) return [base];
+      if (!row.has_high_multiplier || row.high_multiplier_confirmed) return [base];
       return [
         base,
         this.candidate({
@@ -675,6 +935,7 @@ export class TodoBackfillService {
           policyKey: "general", requiredRole: "owner_group", requiredCapability: "responsibility:confirm_high_multiplier",
           highMultiplierAuthorIsOwner: row.actor_roles?.includes("owner_group") ?? false,
           excludeUserId: row.created_by, expectedRecipientCount: 2,
+          authorityId: row.determination_id, authorityVersion: row.determination_version,
           dedupeKey: `high-multiplier:${row.determination_id}:${row.determination_version}`,
         }),
       ];
@@ -712,13 +973,15 @@ export class TodoBackfillService {
       payables_handler_role_snapshot: string; allocation_event_id: string | null; allocation_actor_id: string | null;
       source_event_id: string | null; signoff_event_id: string | null; return_event_id: string | null;
       accept_event_id: string | null; follow_up_event_id: string | null; next_follow_up_at: Date | null;
+      follow_up_overdue: boolean;
     }>(
       `SELECT target_case.case_id,target_case.rework_order_id,target_case.status,target_case.case_version,
               target_case.business_handler_user_id,target_case.payables_handler_role_snapshot,
               allocation_event.event_id allocation_event_id,allocation_event.actor_id allocation_actor_id,
               allocation_event.event_id source_event_id,signoff.operation_event_id signoff_event_id,
               payables_return.operation_event_id return_event_id,payables_accept.operation_event_id accept_event_id,
-              follow_up.operation_event_id follow_up_event_id,follow_up.next_follow_up_at
+              follow_up.operation_event_id follow_up_event_id,follow_up.next_follow_up_at,
+              coalesce(follow_up.next_follow_up_at<=CURRENT_TIMESTAMP,false) follow_up_overdue
        FROM rework_external_responsibility_cases target_case
        JOIN rework_external_responsibility_batches batch
          ON batch.batch_id=target_case.batch_id AND batch.status='active'
@@ -765,6 +1028,7 @@ export class TodoBackfillService {
     payables_handler_role_snapshot: string; allocation_event_id: string | null; allocation_actor_id: string | null;
     source_event_id: string | null; signoff_event_id: string | null; return_event_id: string | null;
     accept_event_id: string | null; follow_up_event_id: string | null; next_follow_up_at: Date | null;
+    follow_up_overdue: boolean;
   }): Candidate[] {
     const route = { routeName: "external_responsibility_detail", entityId: row.case_id } as const;
     const base = {
@@ -777,6 +1041,7 @@ export class TodoBackfillService {
         requiredRole: "external_signoff", requiredCapability: "external_responsibility:sign",
         recipientUserId: row.business_handler_user_id,
         ...(row.allocation_event_id ? { sourceActorEventId: row.allocation_event_id } : {}),
+        authorityVersion: row.case_version,
         dedupeKey: `external-signoff:${row.case_id}:${row.case_version}`, policyKey: "general", ...base,
       })];
     }
@@ -785,6 +1050,7 @@ export class TodoBackfillService {
         kind: "external_payables_confirmation", id: row.case_id, sourceEventId: row.signoff_event_id,
         sourceAction: "rework.external_responsibility.submit", category: "external_payables_confirmation",
         requiredRole: row.payables_handler_role_snapshot, requiredCapability: "external_responsibility:payables_confirm",
+        authorityVersion: row.case_version,
         dedupeKey: `external-payables:${row.case_id}:${row.case_version}`, policyKey: "general", ...base,
       })];
     }
@@ -796,6 +1062,7 @@ export class TodoBackfillService {
         requiredRole: "external_signoff", requiredCapability: "external_responsibility:sign",
         recipientUserId: row.business_handler_user_id,
         ...(row.signoff_event_id ? { sourceActorEventId: row.signoff_event_id } : {}),
+        authorityVersion: row.case_version,
         dedupeKey: `external-return:${row.case_id}:${row.case_version}`, policyKey: "general", ...base,
       })];
     }
@@ -804,15 +1071,17 @@ export class TodoBackfillService {
       kind: "external_deduction_follow_up", id: row.case_id, sourceEventId: row.accept_event_id,
       sourceAction: "rework.external_responsibility.payables_accept", category: "external_deduction_follow_up",
       requiredRole: row.payables_handler_role_snapshot, requiredCapability: "external_deduction:follow_up",
+      authorityVersion: row.case_version,
       dedupeKey: `deduction-follow-up:${row.case_id}:${row.case_version}`, policyKey: "general", ...base,
     });
-    if (!row.next_follow_up_at || row.next_follow_up_at.getTime() > Date.now()) return [followUp];
+    if (!row.next_follow_up_at || !row.follow_up_overdue) return [followUp];
     return [
       followUp,
       this.candidate({
         kind: "external_deduction_overdue", id: `${row.case_id}:overdue`, sourceEventId: row.follow_up_event_id,
         sourceAction: "rework.external_deduction.follow_up", category: "external_deduction_overdue",
         requiredRole: row.payables_handler_role_snapshot, requiredCapability: "external_deduction:follow_up",
+        authorityId: row.case_id, authorityVersion: row.case_version,
         authoritativeDueAt: row.next_follow_up_at,
         dedupeKey: `deduction-overdue:${row.case_id}:${row.next_follow_up_at.toISOString()}`,
         policyKey: "deduction_follow_up", ...base,
@@ -878,6 +1147,7 @@ export class TodoBackfillService {
         entityType: row.created_entity_type ?? "rework_order", entityId: row.created_entity_id ?? row.period_id,
         category: "wage_tail_review", route: { routeName: "wage_period_detail", entityId: row.period_id },
         policyKey: "finance_return_or_wage_review", requiredRole: "tail_supervisor", requiredCapability: "wage:tail_review",
+        authorityVersion: row.period_version,
         dedupeKey: `wage-tail-review:${row.period_id}:${row.period_version}`,
       });
       if (row.status === "pending_admin_review") return this.candidate({
@@ -885,6 +1155,7 @@ export class TodoBackfillService {
         sourceAction: "wage.tail_approve", entityType: "wage_period", entityId: row.period_id,
         category: "wage_administrative_review", route: { routeName: "wage_period_detail", entityId: row.period_id },
         policyKey: "finance_return_or_wage_review", requiredRole: "administrative_clerk", requiredCapability: "wage:administrative_review",
+        authorityVersion: row.period_version,
         dedupeKey: `wage-admin-review:${row.period_id}:${row.period_version}`,
       });
       return this.candidate({
@@ -892,6 +1163,7 @@ export class TodoBackfillService {
         sourceAction: "wage.administrative_approve", entityType: "wage_period", entityId: row.period_id,
         category: "wage_month_close", route: { routeName: "wage_period_detail", entityId: row.period_id },
         policyKey: "finance_return_or_wage_review", requiredRole: "wage_month_close_accountant", requiredCapability: "wage:month_close",
+        authorityVersion: row.period_version,
         dedupeKey: `wage-month-lock:${row.period_id}:${row.period_version}`,
       });
     });
@@ -902,14 +1174,20 @@ export class TodoBackfillService {
         sourceAction: "wage.adjustment.request", entityType: "wage_adjustment", entityId: row.adjustment_id,
         category: "wage_adjustment_approval", route: { routeName: "wage_period_detail", entityId: row.target_period_id },
         policyKey: "finance_return_or_wage_review", requiredRole: "administrative_clerk", requiredCapability: "wage:adjustment_approve",
-        excludeUserId: row.requested_by, dedupeKey: `wage-adjustment:${row.adjustment_id}:${row.version}`,
+        excludeUserId: row.requested_by, authorityVersion: row.version,
+        dedupeKey: `wage-adjustment:${row.adjustment_id}:${row.version}`,
       })),
     ];
   }
 
-  private candidate(input: Omit<Candidate, "cursorKey"> & Readonly<{ id: string }>): Candidate {
-    const { id, ...candidate } = input;
-    return { ...candidate, cursorKey: `${candidate.kind}:${id}` };
+  private candidate(
+    input: Omit<Candidate, "cursorKey" | "authorityId"> & Readonly<{
+      id: string;
+      authorityId?: string;
+    }>,
+  ): Candidate {
+    const { id, authorityId = id, ...candidate } = input;
+    return { ...candidate, authorityId, cursorKey: `${candidate.kind}:${id}` };
   }
 
   private async captureWatermark(): Promise<Watermark> {
@@ -1057,7 +1335,11 @@ export class TodoBackfillService {
     runId: string,
     candidate: Candidate,
     sourceEventId: string | null,
-    result: "skipped_missing_source_event" | "skipped_ambiguous_recipient" | "skipped_recipient_inactive",
+    result:
+      | "skipped_missing_source_event"
+      | "skipped_ambiguous_recipient"
+      | "skipped_recipient_inactive"
+      | "skipped_inapplicable_state",
     detail: Record<string, unknown>,
   ): Promise<void> {
     await this.database.query(

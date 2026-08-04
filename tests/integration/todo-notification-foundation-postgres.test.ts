@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -310,20 +311,32 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     });
   });
 
-  it("blocks an ineligible recipient, exposes only a routing exception, and requires an audited transfer", async () => {
+  it("revalidates stale recipients and keeps routing transfer facts intact", async () => {
     const actorId = randomUUID();
     const managerId = randomUUID();
-    const inactiveRecipientId = randomUUID();
+    const staleRecipientId = randomUUID();
+    const invalidReplacementId = randomUUID();
     const replacementRecipientId = randomUUID();
-    const entityId = randomUUID();
-    const sourceEventId = randomUUID();
+    const delegationGrantorId = randomUUID();
+    const delegatedRecipientId = randomUUID();
+    const staleDelegatedRecipientId = randomUUID();
+    const firstEntityId = randomUUID();
+    const secondEntityId = randomUUID();
     await database.query(
       `INSERT INTO app_users(id,display_name,enabled) VALUES
          ($1,'Todo actor',true),($2,'Routing manager',true),
-         ($3,'Inactive recipient',false),($4,'Replacement recipient',true)`,
-      [actorId, managerId, inactiveRecipientId, replacementRecipientId],
+         ($3,'Recipient active at creation',true),($4,'Invalid replacement',false),
+         ($5,'Replacement recipient',true),($6,'Delegation grantor',true),
+         ($7,'Delegated recipient',true),($8,'Stale delegated recipient',true)`,
+      [
+        actorId, managerId, staleRecipientId, invalidReplacementId, replacementRecipientId,
+        delegationGrantorId, delegatedRecipientId, staleDelegatedRecipientId,
+      ],
     );
-    for (const userId of [actorId, managerId, replacementRecipientId]) {
+    for (const userId of [
+      actorId, managerId, staleRecipientId, replacementRecipientId, delegationGrantorId,
+      delegatedRecipientId, staleDelegatedRecipientId,
+    ]) {
       await database.query(
         `INSERT INTO identity_mappings(
            id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
@@ -333,8 +346,11 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     }
     for (const [userId, roleCode] of [
       [actorId, "tail_supervisor"],
+      [actorId, "owner_group"],
       [managerId, "production_management"],
+      [staleRecipientId, "tail_supervisor"],
       [replacementRecipientId, "tail_supervisor"],
+      [delegationGrantorId, "tail_supervisor"],
     ] as const) {
       await database.query(
         `INSERT INTO user_role_assignments(
@@ -344,16 +360,39 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       );
     }
     await database.query(
-      "INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','todo-corp')",
+      `INSERT INTO access_security_policy(policy_key,dingtalk_corp_id)
+       VALUES('primary','todo-corp')
+       ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id=EXCLUDED.dingtalk_corp_id`,
     );
-    await database.query(
-      `INSERT INTO operation_events(
-         event_id,request_id,actor_id,actor_roles,authorization_capability,
-         action,entity_type,entity_id
-       ) VALUES($1,$2,$3,ARRAY['tail_supervisor'],'process:configure',
-         'rework.pending_process_configuration','rework_order',$4)`,
-      [sourceEventId, `source-${sourceEventId}`, actorId, entityId],
-    );
+    const delegationActor: TrustedActorContext = {
+      actorId,
+      actorRoles: ["owner_group"],
+      authorizationCapability: "delegation:manage",
+      authorizationCapabilities: ["delegation:manage"],
+      requestId: `todo-delegation-${randomUUID()}`,
+    };
+    const access = new AccessMasterDataService(database, "todo-corp");
+    const staleDelegation = await access.createDelegation(delegationActor, {
+      grantorUserId: delegationGrantorId,
+      granteeUserId: staleDelegatedRecipientId,
+      capability: "process:configure",
+      scopeType: "rework_order",
+      scopeId: firstEntityId,
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+      reason: "验证失效代理不可接收待办",
+    });
+    const validDelegation = await access.createDelegation(delegationActor, {
+      grantorUserId: delegationGrantorId,
+      granteeUserId: delegatedRecipientId,
+      capability: "process:configure",
+      scopeType: "rework_order",
+      scopeId: firstEntityId,
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+      reason: "验证完整代理链允许受控转交",
+    });
+
     const actor: TrustedActorContext = {
       actorId,
       actorRoles: ["tail_supervisor"],
@@ -362,37 +401,63 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       requestId: `todo-routing-${randomUUID()}`,
     };
     const service = new TodoService(database);
-    const client = await database.connect();
-    let blockedTodoId: string;
-    try {
-      await client.query("BEGIN");
-      const blocked = await service.createInTransaction(client, actor, {
-        todoType: "business_action",
-        category: "process_configuration",
-        sourceEventId,
-        sourceAction: "rework.pending_process_configuration",
-        entityType: "rework_order",
-        entityId,
-        recipientUserId: inactiveRecipientId,
-        requiredRole: "tail_supervisor",
-        requiredCapability: "process:configure",
-        route: { routeName: "process_configuration", entityId },
-        policyKey: "general",
-        dedupeKey: `todo:${entityId}:recipient-blocked`,
-        invalidRecipientRouting: {
-          reason: "recipient_disabled",
-          assignedToUserId: managerId,
-        },
-      });
-      blockedTodoId = blocked.todoId;
-      expect(blocked.status).toBe("blocked_recipient");
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+    const createActionable = async (entityId: string, suffix: string) => {
+      const sourceEventId = randomUUID();
+      await database.query(
+        `INSERT INTO operation_events(
+           event_id,request_id,actor_id,actor_roles,authorization_capability,
+           action,entity_type,entity_id
+         ) VALUES($1,$2,$3,ARRAY['tail_supervisor'],'process:configure',
+           'rework.pending_process_configuration','rework_order',$4)`,
+        [sourceEventId, `source-${sourceEventId}`, actorId, entityId],
+      );
+      const client = await database.connect();
+      try {
+        await client.query("BEGIN");
+        const todo = await service.createInTransaction(client, actor, {
+          todoType: "business_action",
+          category: "process_configuration",
+          sourceEventId,
+          sourceAction: "rework.pending_process_configuration",
+          entityType: "rework_order",
+          entityId,
+          recipientUserId: staleRecipientId,
+          requiredRole: "tail_supervisor",
+          requiredCapability: "process:configure",
+          route: { routeName: "process_configuration", entityId },
+          policyKey: "general",
+          dedupeKey: `todo:${entityId}:${suffix}`,
+        });
+        await client.query("COMMIT");
+        return todo;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    };
+
+    const deliveryTodo = await createActionable(firstEntityId, "delivery-revalidation");
+    const closingTodo = await createActionable(secondEntityId, "closure-revalidation");
+    await database.query("UPDATE app_users SET enabled=false WHERE id=ANY($1::uuid[])", [
+      [staleRecipientId, staleDelegatedRecipientId],
+    ]);
+
+    let providerCalls = 0;
+    expect(await new TodoDeliveryWorker(database, {
+      deliver: async () => {
+        providerCalls += 1;
+        throw new Error("stale recipient must be suppressed before provider delivery");
+      },
+    }, "/").runOnce(1)).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 0,
+      suppressed: 1,
+    });
+    expect(providerCalls).toBe(0);
+
     const manager: TrustedActorContext = {
       actorId: managerId,
       actorRoles: ["production_management"],
@@ -401,36 +466,81 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       requestId: `todo-transfer-${randomUUID()}`,
     };
     const exceptions = await service.listRoutingExceptionsForActor(manager);
-    expect(exceptions).toHaveLength(1);
-    expect(exceptions[0]).toMatchObject({
-      todoId: blockedTodoId!,
-      originalRecipientUserId: inactiveRecipientId,
+    const deliveryException = exceptions.find((row) => row.todoId === deliveryTodo.todoId);
+    expect(deliveryException).toMatchObject({
+      originalRecipientUserId: staleRecipientId,
       assignedToUserId: managerId,
       status: "pending",
     });
+
+    await expect(database.query(
+      `UPDATE todo_recipient_routing_exceptions
+       SET routing_todo_id=$2 WHERE routing_exception_id=$1`,
+      [deliveryException!.routingExceptionId, deliveryTodo.todoId],
+    )).rejects.toMatchObject({ code: "55000" });
+
+    await expect(service.transferRoutingException(manager, {
+      routingExceptionId: deliveryException!.routingExceptionId,
+      recipientUserId: invalidReplacementId,
+      reason: "失效人员不可接收转交",
+    })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    await expect(service.transferRoutingException(manager, {
+      routingExceptionId: deliveryException!.routingExceptionId,
+      recipientUserId: staleDelegatedRecipientId,
+      delegationId: staleDelegation.delegationId,
+      reason: "停用代理人员不可接收转交",
+    })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
     const transferred = await service.transferRoutingException(manager, {
-      routingExceptionId: exceptions[0]!.routingExceptionId,
-      recipientUserId: replacementRecipientId,
-      reason: "已核验尾部主管角色后转交",
+      routingExceptionId: deliveryException!.routingExceptionId,
+      recipientUserId: delegatedRecipientId,
+      delegationId: validDelegation.delegationId,
+      reason: "已核验完整订单代理链后转交",
     });
     expect(transferred).toMatchObject({
-      todoId: blockedTodoId!,
-      recipientUserId: replacementRecipientId,
+      todoId: deliveryTodo.todoId,
+      recipientUserId: delegatedRecipientId,
       status: "pending",
     });
     await expect(database.query(
+      "SELECT delegation_id FROM rework_todos WHERE todo_id=$1",
+      [deliveryTodo.todoId],
+    )).resolves.toMatchObject({ rows: [{ delegation_id: validDelegation.delegationId }] });
+
+    const closeClient = await database.connect();
+    try {
+      await closeClient.query("BEGIN");
+      expect(await service.ensureOpenRecipientEligibleInTransaction(
+        closeClient,
+        actor,
+        closingTodo.todoId,
+      )).toBe(false);
+      expect(await service.cancelOpenByDedupeKey(
+        closeClient,
+        actor,
+        `todo:${secondEntityId}:closure-revalidation`,
+        "业务版本已替代",
+      )).toBe(true);
+      await closeClient.query("COMMIT");
+    } catch (error) {
+      await closeClient.query("ROLLBACK");
+      throw error;
+    } finally {
+      closeClient.release();
+    }
+
+    await expect(database.query(
       `SELECT original.status AS original_status,routing.status AS routing_status,
-              transfer.delegation_scope_id
+              exception.status AS exception_status
        FROM todo_recipient_routing_exceptions exception
        JOIN rework_todos original ON original.todo_id=exception.todo_id
        JOIN rework_todos routing ON routing.todo_id=exception.routing_todo_id
-       JOIN todo_recipient_transfers transfer ON transfer.routing_exception_id=exception.routing_exception_id
        WHERE exception.todo_id=$1`,
-      [blockedTodoId],
+      [closingTodo.todoId],
     )).resolves.toMatchObject({ rows: [{
-      original_status: "pending",
-      routing_status: "completed",
-      delegation_scope_id: entityId,
+      original_status: "cancelled",
+      routing_status: "cancelled",
+      exception_status: "cancelled",
     }] });
   });
 });

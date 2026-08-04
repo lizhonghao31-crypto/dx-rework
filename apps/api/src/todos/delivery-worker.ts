@@ -7,8 +7,12 @@ import type { Pool, PoolClient } from "pg";
 import { buildTodoDeepLink } from "./deep-link.js";
 import type { DingTalkTodoProvider } from "./provider.js";
 import { ApplicationError } from "../platform/errors.js";
-import { MessageOutboxRepository, type SqlClient } from "../tools/repositories.js";
-import { TODO_DELIVERY_TOPIC } from "./service.js";
+import {
+  MessageOutboxRepository,
+  type SqlClient,
+  type TrustedActorContext,
+} from "../tools/repositories.js";
+import { TodoService, TODO_DELIVERY_TOPIC } from "./service.js";
 
 type ClaimedDelivery = Readonly<{
   eventId: string;
@@ -90,6 +94,7 @@ export class TodoDeliveryWorker {
     private readonly appBasePath: string,
     private readonly outbox = new MessageOutboxRepository(),
     private readonly retryDelaySeconds = 300,
+    private readonly todos = new TodoService(database),
   ) {}
 
   async runOnce(limit = 10): Promise<TodoDeliveryRunResult> {
@@ -138,6 +143,10 @@ export class TodoDeliveryWorker {
       input = payload(claimed.payload);
       this.assertPayloadMatchesTodo(claimed, input, todo);
       await this.assertDeliveryEvent(todo, input);
+      if (!(await this.ensureRecipientEligible(input))) {
+        await this.markSuppressed(claimed);
+        return "suppressed";
+      }
     } catch (error: unknown) {
       await this.markFailedWithoutAttempt(claimed, error);
       return "failed";
@@ -158,6 +167,58 @@ export class TodoDeliveryWorker {
       await this.recordAttempt(claimed, input, "failed", undefined, error);
       return "failed";
     }
+  }
+
+  private async ensureRecipientEligible(input: DeliveryPayload): Promise<boolean> {
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const actor = await this.deliveryAuditActor(client, input);
+      const eligible = await this.todos.ensureOpenRecipientEligibleInTransaction(
+        client,
+        actor,
+        input.todoId,
+      );
+      await client.query("COMMIT");
+      return eligible;
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async deliveryAuditActor(
+    client: PoolClient,
+    input: DeliveryPayload,
+  ): Promise<TrustedActorContext> {
+    const result = await client.query<{
+      actor_id: string;
+      actor_roles: string[];
+      authorization_capability: string;
+    }>(
+      `SELECT actor_id,actor_roles,authorization_capability
+       FROM operation_events
+       WHERE event_id=$1 AND request_id=$2
+       FOR KEY SHARE`,
+      [input.operationEventId, input.operationRequestId],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new ApplicationError(
+        "CONFLICT",
+        "Todo delivery audit actor cannot be reconstructed",
+        409,
+      );
+    }
+    return {
+      actorId: row.actor_id,
+      actorRoles: row.actor_roles,
+      authorizationCapability: row.authorization_capability,
+      authorizationCapabilities: [row.authorization_capability],
+      requestId: `todo-recipient-revalidation-${randomUUID()}`,
+    };
   }
 
   private async todo(todoId: string): Promise<TodoDeliveryRow | null> {

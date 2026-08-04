@@ -416,7 +416,8 @@ CREATE OR REPLACE FUNCTION guard_todo_routing_exception_update()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE current_event operation_events%ROWTYPE;
 BEGIN
-  IF NEW.todo_id<>OLD.todo_id OR NEW.original_recipient_user_id<>OLD.original_recipient_user_id
+  IF NEW.todo_id<>OLD.todo_id OR NEW.routing_todo_id<>OLD.routing_todo_id
+     OR NEW.original_recipient_user_id<>OLD.original_recipient_user_id
      OR NEW.assigned_to_user_id<>OLD.assigned_to_user_id OR NEW.reason<>OLD.reason
      OR NEW.created_operation_event_id<>OLD.created_operation_event_id THEN
     RAISE EXCEPTION 'todo routing exception source facts are immutable' USING ERRCODE='55000';
@@ -455,27 +456,59 @@ BEGIN
     RAISE EXCEPTION 'todo transfer must match the blocked todo and audit context'
       USING ERRCODE='23514';
   END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM todo_recipient_routing_exceptions routing
+  IF NEW.delegation_scope_id<>todo_record.delegation_scope_id OR NOT EXISTS (
+    SELECT 1
+    FROM todo_recipient_routing_exceptions routing
+    JOIN rework_todos routing_todo ON routing_todo.todo_id=routing.routing_todo_id
     WHERE routing.routing_exception_id=NEW.routing_exception_id
       AND routing.todo_id=NEW.todo_id
       AND routing.original_recipient_user_id=NEW.from_recipient_user_id
       AND routing.status='pending'
+      AND routing_todo.status='pending'
+      AND routing_todo.todo_type='recipient_routing_exception'
+      AND routing_todo.category='recipient_routing_exception'
+      AND routing_todo.source_event_id=routing.created_operation_event_id
+      AND routing_todo.source_action='todo.recipient_blocked'
+      AND routing_todo.recipient_user_id=routing.assigned_to_user_id
+      AND routing_todo.entity_type=todo_record.entity_type
+      AND routing_todo.entity_id=todo_record.entity_id
   ) THEN
-    RAISE EXCEPTION 'todo transfer requires its pending routing exception' USING ERRCODE='23514';
+    RAISE EXCEPTION 'todo transfer requires its intact pending routing exception'
+      USING ERRCODE='23514';
   END IF;
-  IF NOT todo_user_has_direct_role(
-    NEW.to_recipient_user_id,NEW.required_role,NEW.required_capability
-  ) AND NOT EXISTS (
-    SELECT 1 FROM delegated_authorizations delegation
+  IF NEW.delegation_id IS NULL THEN
+    IF NOT todo_user_has_direct_role(
+      NEW.to_recipient_user_id,NEW.required_role,NEW.required_capability
+    ) THEN
+      RAISE EXCEPTION 'todo transfer target lacks the required direct role'
+        USING ERRCODE='42501';
+    END IF;
+  ELSIF NOT EXISTS (
+    SELECT 1
+    FROM delegated_authorizations delegation
+    JOIN app_users grantee
+      ON grantee.id=delegation.grantee_user_id AND grantee.enabled=true
+    JOIN identity_mappings identity
+      ON identity.user_id=grantee.id AND identity.provider='dingtalk'
+     AND identity.active=true AND identity.employed=true
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+    JOIN user_role_assignments grantor_assignment
+      ON grantor_assignment.user_id=delegation.grantor_user_id
+     AND grantor_assignment.role_code=NEW.required_role
+     AND grantor_assignment.revoked_at IS NULL
     WHERE delegation.delegation_id=NEW.delegation_id
       AND delegation.grantee_user_id=NEW.to_recipient_user_id
       AND delegation.capability=NEW.required_capability
       AND delegation.revoked_at IS NULL
       AND CURRENT_TIMESTAMP BETWEEN delegation.valid_from AND delegation.valid_until
-      AND delegation.scope_type='rework_order' AND delegation.scope_id=todo_record.delegation_scope_id
+      AND delegation.scope_type='rework_order'
+      AND delegation.scope_id=NEW.delegation_scope_id
+      AND todo_user_has_direct_role(
+        delegation.grantor_user_id,NEW.required_role,NEW.required_capability
+      )
   ) THEN
-    RAISE EXCEPTION 'todo transfer target lacks required direct role or active order-scope delegation'
+    RAISE EXCEPTION 'todo transfer target lacks a valid full delegation chain'
       USING ERRCODE='42501';
   END IF;
   RETURN NEW;
