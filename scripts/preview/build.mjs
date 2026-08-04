@@ -24,14 +24,15 @@ await copyFile(
   "apps/api/migrations/0026_todo_notification_foundation.sql",
   path.join(sourceRoot, "apps/api/migrations/0026_todo_notification_foundation.sql"),
 );
-await mkdir(path.join(sourceRoot, "apps/api/src/platform"), { recursive: true });
+await mkdir(path.join(sourceRoot, "apps/api/src"), { recursive: true });
 await copyFile(
-  "apps/api/src/platform/server.ts",
-  path.join(sourceRoot, "apps/api/src/platform/server.ts"),
+  "apps/api/src/server.ts",
+  path.join(sourceRoot, "apps/api/src/server.ts"),
 );
 await copyFile("package.json", path.join(sourceRoot, "package.json"));
 await mkdir(path.join(sourceRoot, "apps/api"), { recursive: true });
 await copyFile("apps/api/package.json", path.join(sourceRoot, "apps/api/package.json"));
+await mkdir(path.join(sourceRoot, "apps/api/src/platform"), { recursive: true });
 await copyFile(
   "apps/api/src/platform/migration-manifest.json",
   path.join(sourceRoot, "apps/api/src/platform/migration-manifest.json"),
