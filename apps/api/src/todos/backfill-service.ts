@@ -240,28 +240,51 @@ export class TodoBackfillService {
       );
       if (existing.rowCount) {
         counters.existing = 1;
-      } else if (!actor) {
-        // Dry-run validates actual projections in a transaction, but needs no
-        // persisted production-management actor. A source event snapshot is a
-        // complete audit actor for this rollback-only simulation.
-        const simulated = await this.sourceActor(client, candidate.sourceEventId, `todo-backfill-dry-${randomUUID()}`);
-        await this.project(client, simulated, candidate);
-        counters.eligible = 1;
-        counters.created = 1;
-        const created = await client.query<{ status: string }>(
-          "SELECT status FROM rework_todos WHERE dedupe_key=$1 FOR KEY SHARE",
-          [candidate.dedupeKey],
-        );
-        blockedRecipient = created.rows[0]?.status === "blocked_recipient";
       } else {
-        await this.project(client, actor, candidate);
+        const uniqueRecipientCount = await this.uniqueDirectRecipientCount(client, candidate);
+        if (uniqueRecipientCount !== null && uniqueRecipientCount !== 1) {
+          await client.query("ROLLBACK");
+          counters.ambiguousRecipient = 1;
+          if (mode === "apply" && runId) {
+            await this.recordException(
+              runId,
+              candidate,
+              candidate.sourceEventId,
+              "skipped_ambiguous_recipient",
+              { requiredRole: candidate.requiredRole, recipientCount: uniqueRecipientCount },
+            );
+          }
+          return counters;
+        }
+
+        const projectionActor = actor ?? await this.sourceActor(
+          client,
+          candidate.sourceEventId,
+          `todo-backfill-dry-${randomUUID()}`,
+        );
+        await this.project(client, projectionActor, candidate);
         counters.eligible = 1;
-        const created = await client.query<{ status: string }>(
-          "SELECT status FROM rework_todos WHERE dedupe_key=$1 FOR KEY SHARE",
+        const projected = await client.query<{
+          status: string;
+          created_request_id: string;
+        }>(
+          "SELECT status,created_request_id FROM rework_todos WHERE dedupe_key=$1 FOR KEY SHARE",
           [candidate.dedupeKey],
         );
-        counters.created = 1;
-        blockedRecipient = created.rows[0]?.status === "blocked_recipient";
+        const todo = projected.rows[0];
+        if (!todo) {
+          throw new ApplicationError(
+            "INTERNAL_ERROR",
+            "Backfill projection returned without a durable todo result",
+            500,
+          );
+        }
+        blockedRecipient = todo.status === "blocked_recipient";
+        if (mode === "dry_run" || todo.created_request_id === projectionActor.requestId) {
+          counters.created = 1;
+        } else {
+          counters.existing = 1;
+        }
       }
       if (mode === "dry_run") await client.query("ROLLBACK");
       else await client.query("COMMIT");
@@ -288,6 +311,33 @@ export class TodoBackfillService {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  private async uniqueDirectRecipientCount(
+    client: PoolClient,
+    candidate: Candidate,
+  ): Promise<number | null> {
+    switch (candidate.kind) {
+      case "process_configuration":
+      case "ie_review":
+      case "whole_order_review":
+      case "wage_tail_review":
+      case "wage_administrative_review":
+      case "wage_month_close": {
+        const recipients = await client.query<{ user_id: string }>(
+          `SELECT DISTINCT assignment.user_id
+           FROM user_role_assignments assignment
+           WHERE assignment.role_code=$1 AND assignment.revoked_at IS NULL
+             AND todo_user_has_direct_role(assignment.user_id,$1,$2)
+           ORDER BY assignment.user_id
+           LIMIT 2`,
+          [candidate.requiredRole, candidate.requiredCapability],
+        );
+        return recipients.rows.length;
+      }
+      default:
+        return null;
     }
   }
 

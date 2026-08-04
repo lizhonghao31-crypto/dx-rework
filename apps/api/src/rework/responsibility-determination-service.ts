@@ -737,7 +737,10 @@ export class ResponsibilityDeterminationService {
       route: { routeName: "responsibility_detail", entityId: orderId },
       dedupeKey: `responsibility:${orderId}:${version}`,
     });
-    if (input.processes.some((process) => Number(process.multiplier) > 2)) {
+    if (
+      this.todos
+      && input.processes.some((process) => Number(process.multiplier) > 2)
+    ) {
       const sourceAuthorIsDirectOwner = await client.query<{ eligible: boolean }>(
         `SELECT todo_user_has_direct_role(
            $1::uuid,'owner_group'::text,'responsibility:confirm_high_multiplier'::text
@@ -757,7 +760,7 @@ export class ResponsibilityDeterminationService {
         dedupeKey: `high-multiplier:${determinationId}:${version}`,
       } as const;
       if (sourceAuthorIsDirectOwner.rows[0]?.eligible) {
-        await this.todos?.actionableForIndependentOwner(client, actor, {
+        await this.todos.actionableForIndependentOwner(client, actor, {
           ...highMultiplierProjection,
           dedupeKey: `${highMultiplierProjection.dedupeKey}:${actor.actorId}`,
           excludeUserId: actor.actorId,
@@ -767,12 +770,12 @@ export class ResponsibilityDeterminationService {
         // a draft. In that case both direct owners are independently already
         // authorized to provide the one required confirmation, so both see
         // the same fact and the first confirmation closes both todos.
-        await this.todos?.actionableForParallelDirectRole(client, actor, {
+        await this.todos.actionableForParallelDirectRole(client, actor, {
           ...highMultiplierProjection,
           expectedRecipientCount: 2,
         });
       }
-      await this.todos?.information(client, actor, {
+      await this.todos.information(client, actor, {
         category: "high_multiplier_confirmation_requested",
         sourceEventId: eventId,
         sourceAction: "rework.responsibility.draft",
