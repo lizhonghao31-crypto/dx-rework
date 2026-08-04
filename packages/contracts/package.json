@@ -15,6 +15,10 @@
     "./external-responsibility": {
       "types": "./src/external-responsibility.ts",
       "import": "./dist/external-responsibility.js"
+    },
+    "./wages": {
+      "types": "./src/wages.ts",
+      "import": "./dist/wages.js"
     }
   },
   "scripts": {

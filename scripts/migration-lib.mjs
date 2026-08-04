@@ -53,11 +53,21 @@ export async function discoverValidatedMigrations() {
   if (migrations.length !== manifest.length) {
     throw new Error(`Migration manifest count mismatch: files=${migrations.length}, manifest=${manifest.length}`);
   }
-  for (const [index, migration] of migrations.entries()) {
+  const drifts = migrations.flatMap((migration, index) => {
     const expected = manifest[index];
-    if (expected.version !== migration.version || expected.checksum !== migration.checksum) {
-      throw new Error(`Migration manifest drift detected: ${migration.version}`);
-    }
+    return expected.version === migration.version && expected.checksum === migration.checksum
+      ? []
+      : [{
+          version: migration.version,
+          expectedVersion: expected.version,
+          expectedChecksum: expected.checksum,
+          actualChecksum: migration.checksum,
+        }];
+  });
+  if (drifts.length > 0) {
+    throw new Error(`Migration manifest drift detected:\n${drifts
+      .map((drift) => `${drift.version}: expectedVersion=${drift.expectedVersion} expectedChecksum=${drift.expectedChecksum} actualChecksum=${drift.actualChecksum}`)
+      .join("\n")}`);
   }
   return migrations;
 }

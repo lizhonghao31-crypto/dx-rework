@@ -21,6 +21,9 @@ import { WholeOrderReviewService } from "./rework/whole-order-review-service.js"
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
 import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
+import { canDownloadWageAttachment } from "./wages/wage-attachment-access.js";
+import { WageService } from "./wages/wage-service.js";
+import { WageExportService } from "./wages/wage-export-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -50,6 +53,7 @@ const wholeOrderReviewService = new WholeOrderReviewService(database);
 const responsibilityDeterminationService = new ResponsibilityDeterminationApplicationService(database);
 const ownFactoryApprovalService = new OwnFactoryApprovalApplicationService(database);
 const externalResponsibilityService = new ExternalResponsibilityApplicationService(database);
+const wageService = new WageService(database);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -63,8 +67,10 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     attachments,
     exports: new ExportJobService(database),
-    canDownloadBoundAttachment: (actor, binding) =>
-      reworkService.canDownloadBoundAttachment(actor, binding),
+    canDownloadBoundAttachment: async (actor, binding) => {
+      if (await reworkService.canDownloadBoundAttachment(actor, binding)) return true;
+      return canDownloadWageAttachment(database, actor, binding);
+    },
   },
   rework: {
     authenticate: (token) => auth.authenticate(token),
@@ -94,6 +100,7 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: externalResponsibilityService,
   },
+  wages: { authenticate: (token) => auth.authenticate(token), service: wageService, exportService: new WageExportService(database) },
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
