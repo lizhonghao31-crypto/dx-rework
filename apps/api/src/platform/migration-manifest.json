@@ -86,15 +86,15 @@
     },
     {
       "version": "0022_wage_reconciliation_month_close",
-      "checksum": "0000000000000000000000000000000000000000000000000000000000000000"
+      "checksum": "4c2063864df0ee1791a8eecb59fdef2857fccd5c2dfb2dde3a5ea60a0671d1af"
     },
     {
       "version": "0023_wage_materialization_closure",
-      "checksum": "0000000000000000000000000000000000000000000000000000000000000000"
+      "checksum": "a4cad0d4d5387b438cb3cd0f933103805bb467d7656f2960860319caf1b80ddb"
     },
     {
       "version": "0024_wage_adjustment_attachment_closure",
-      "checksum": "0000000000000000000000000000000000000000000000000000000000000000"
+      "checksum": "73672ecd1d44f46ffd58e3409d80eb0b7315d48e4c3753a2f950e5d88b1fe852"
     }
   ]
 }
