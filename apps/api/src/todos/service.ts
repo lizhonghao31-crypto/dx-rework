@@ -728,7 +728,7 @@ export class TodoService {
     reworkOrderId: string,
   ): Promise<boolean> {
     const result = await client.query<{ eligible: boolean }>(
-      `SELECT todo_user_has_direct_role($1,$2,$3) OR EXISTS(
+      `SELECT todo_user_has_direct_role($1::uuid,$2::text,$3::text) OR EXISTS(
          SELECT 1 FROM delegated_authorizations delegation
          WHERE delegation.delegation_id=$4::uuid
            AND delegation.grantee_user_id=$1

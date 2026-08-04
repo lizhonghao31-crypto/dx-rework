@@ -238,7 +238,7 @@ export class TodoProjectionService {
     }>,
   ): Promise<void> {
     const eligible = await client.query<{ eligible: boolean }>(
-      "SELECT todo_user_has_direct_role($1,$2,$3) AS eligible",
+      "SELECT todo_user_has_direct_role($1::uuid,$2::text,$3::text) AS eligible",
       [projection.recipientUserId, projection.requiredRole, projection.requiredCapability],
     );
     if (eligible.rows[0]?.eligible) {

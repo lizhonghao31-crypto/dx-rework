@@ -883,7 +883,7 @@ export class TodoBackfillService {
     const roles = [...new Set(result.rows.map((row) => row.role_code))];
     const capabilities = [...new Set(result.rows.map((row) => row.capability))];
     const allowed = await this.database.query<{ allowed: boolean }>(
-      "SELECT todo_user_has_direct_role($1,'production_management','todo:routing_exception_manage') allowed",
+      "SELECT todo_user_has_direct_role($1::uuid,'production_management'::text,'todo:routing_exception_manage'::text) allowed",
       [actorUserId],
     );
     if (!allowed.rows[0]?.allowed) {

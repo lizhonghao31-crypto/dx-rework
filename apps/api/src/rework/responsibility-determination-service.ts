@@ -740,7 +740,7 @@ export class ResponsibilityDeterminationService {
     if (input.processes.some((process) => Number(process.multiplier) > 2)) {
       const sourceAuthorIsDirectOwner = await client.query<{ eligible: boolean }>(
         `SELECT todo_user_has_direct_role(
-           $1,'owner_group','responsibility:confirm_high_multiplier'
+           $1::uuid,'owner_group'::text,'responsibility:confirm_high_multiplier'::text
          ) AS eligible`,
         [actor.actorId],
       );
