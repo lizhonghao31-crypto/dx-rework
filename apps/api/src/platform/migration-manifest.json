@@ -95,6 +95,10 @@
     {
       "version": "0024_wage_adjustment_attachment_closure",
       "checksum": "73672ecd1d44f46ffd58e3409d80eb0b7315d48e4c3753a2f950e5d88b1fe852"
+    },
+    {
+      "version": "0025_wage_completion_month_backfill_access",
+      "checksum": "0a52386e46a6ffa650398f490c8ba84d092084bb5c6bf2c6c1c62caf6de4e261"
     }
   ]
 }

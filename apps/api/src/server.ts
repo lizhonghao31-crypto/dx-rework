@@ -21,6 +21,7 @@ import { WholeOrderReviewService } from "./rework/whole-order-review-service.js"
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
 import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
+import { canDownloadWageAttachment } from "./wages/wage-attachment-access.js";
 import { WageService } from "./wages/wage-service.js";
 import { WageExportService } from "./wages/wage-export-service.js";
 
@@ -66,8 +67,10 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     attachments,
     exports: new ExportJobService(database),
-    canDownloadBoundAttachment: (actor, binding) =>
-      reworkService.canDownloadBoundAttachment(actor, binding),
+    canDownloadBoundAttachment: async (actor, binding) => {
+      if (await reworkService.canDownloadBoundAttachment(actor, binding)) return true;
+      return canDownloadWageAttachment(database, actor, binding);
+    },
   },
   rework: {
     authenticate: (token) => auth.authenticate(token),
