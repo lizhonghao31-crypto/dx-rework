@@ -161,11 +161,32 @@ runWithPostgres("PR-13 controlled todo backfill", () => {
   it("reports an unavailable historical recipient instead of inventing a replacement", async () => {
     const pending = await createSubmittedOrder("BACKFILL-NO-RECIPIENT");
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [tailSupervisorId]);
+    const [precondition] = (await Promise.all([
+      database.query<{
+        order_status: string;
+        source_count: number;
+        eligible: boolean;
+      }>(
+        `SELECT order_record.status order_status,
+                (SELECT count(*)::int FROM operation_events event
+                 WHERE event.action='rework.submit'
+                   AND event.entity_type='rework_order'
+                   AND event.entity_id=order_record.rework_order_id::text) source_count,
+                todo_user_has_direct_role(
+                  $2::uuid,'tail_supervisor'::text,'process:configure'::text
+                ) eligible
+         FROM rework_orders order_record
+         WHERE order_record.rework_order_id=$1`,
+        [pending.value.reworkOrderId, tailSupervisorId],
+      ),
+    ])).map((result) => result.rows[0]);
     const result = await new TodoBackfillService(database).run({
       mode: "apply",
       actorUserId: productionManagementId,
     });
-    expect(result.counters.ambiguousRecipient).toBe(1);
+    if (result.counters.ambiguousRecipient !== 1) {
+      throw new Error(JSON.stringify({ precondition, counters: result.counters }));
+    }
     await expect(database.query(
       `SELECT result FROM todo_backfill_exceptions
        WHERE entity_id=$1 ORDER BY created_at DESC`,
