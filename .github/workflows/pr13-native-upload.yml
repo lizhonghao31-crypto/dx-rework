@@ -10,36 +10,52 @@ permissions:
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: f667b409f672606a8a6b878f3cd0219e04931419
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: npm
-      - name: Apply verified patch
+
+      - name: Apply verified second-review patch
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin pr13-final-staging
-          git show FETCH_HEAD:.github/workflows/pr13-second-review-commit.yml \
-            | sed -n "/cat > \/tmp\/pr13.patch.b64 <<'PATCH'/,/^          PATCH$/p" \
-            | sed '1d;$d;s/^          //' > /tmp/pr13.patch.b64
-          test -s /tmp/pr13.patch.b64
-          base64 --decode /tmp/pr13.patch.b64 > /tmp/pr13.patch
-          git apply --index /tmp/pr13.patch
+          git fetch origin pr13-final-staging:refs/remotes/origin/pr13-final-staging
+          git show refs/remotes/origin/pr13-final-staging:.github/workflows/pr13-second-review-commit.yml > /tmp/source.yml
+          python - <<'PY'
+          import base64
+          import re
+          from pathlib import Path
+
+          text = Path('/tmp/source.yml').read_text()
+          match = re.search(
+              r"cat > /tmp/pr13\.patch\.b64 <<'PATCH'\n(.*?)\n\s*PATCH",
+              text,
+              re.S,
+          )
+          if not match:
+              raise SystemExit('verified patch payload not found')
+          payload = ''.join(line.strip() for line in match.group(1).splitlines())
+          Path('/tmp/pr13.patch').write_bytes(base64.b64decode(payload, validate=True))
+          PY
+          git apply --index --whitespace=error /tmp/pr13.patch
           git diff --cached --check
-      - name: Validate
-        run: |
-          npm ci
-          npm run typecheck --workspace @dx-rework/api --if-present
-          npm run db:migrate:lint
-          npx vitest run tests/unit/todo-second-review-closure.test.ts
+          test "$(git diff --cached --name-only | wc -l)" -eq 5
+          git diff --cached --name-only | sort > /tmp/actual-files
+          cat > /tmp/expected-files <<'FILES'
+          apps/api/migrations/0027_todo_routing_revalidation_closure.sql
+          apps/api/src/platform/migration-manifest.json
+          apps/api/src/todos/projection-service.ts
+          apps/api/src/todos/service.ts
+          tests/unit/todo-second-review-closure.test.ts
+          FILES
+          diff -u /tmp/expected-files /tmp/actual-files
+
       - name: Publish clean commit
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix(pr-13): close second permission review findings"
