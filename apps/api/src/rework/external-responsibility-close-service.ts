@@ -12,6 +12,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Result<T> = { value: T; reused: boolean };
 type CaseReader = {
@@ -96,6 +97,7 @@ export class ExternalResponsibilityCloseService {
   constructor(
     private readonly database: Pool,
     private readonly reader: CaseReader,
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async close(
@@ -302,6 +304,12 @@ export class ExternalResponsibilityCloseService {
        SET status='closed',case_version=case_version+1
        WHERE case_id=$1`,
       [caseId],
+    );
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `deduction-follow-up:${caseId}:`,
+      "External deduction case was closed",
     );
     return this.reader.getCase(actor, caseId, client);
   }
