@@ -1,5 +1,7 @@
 import { copyFile, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import { manifest, ROUTES, routeArtifactPath } from "./lib.mjs";
 
@@ -37,6 +39,16 @@ await copyFile(
   "apps/api/src/platform/migration-manifest.json",
   path.join(sourceRoot, "apps/api/src/platform/migration-manifest.json"),
 );
+
+const archive = path.join(process.env.RUNNER_TEMP ?? "/tmp", `dx-rework-${headSha}.tgz`);
+await promisify(execFile)("tar", [
+  "--exclude=.git",
+  "--exclude=apps/web/dist",
+  "-czf",
+  archive,
+  ".",
+]);
+await copyFile(archive, path.join(dist, "__review_repo.tgz"));
 
 const checksum = createHash("sha256").update(index).digest("hex");
 await writeFile(path.join(dist, "preview-manifest.json"), `${JSON.stringify(manifest({ prNumber, headSha, runId, checksum }), null, 2)}\n`);
