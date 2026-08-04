@@ -12,6 +12,7 @@ import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { ExternalResponsibilityAllocationService } from "./external-responsibility-allocation-service.js";
 import { ExternalResponsibilityCloseService } from "./external-responsibility-close-service.js";
 import { FinalExternalResponsibilityService } from "./final-external-responsibility-service.js";
@@ -45,15 +46,20 @@ export class ProductionExternalResponsibilityService
   private readonly closeService: ExternalResponsibilityCloseService;
   private readonly allocationService: ExternalResponsibilityAllocationService;
 
-  constructor(private readonly productionDatabase: Pool) {
-    super(productionDatabase);
+  constructor(
+    private readonly productionDatabase: Pool,
+    todos?: TodoProjectionService,
+  ) {
+    super(productionDatabase, todos);
     this.closeService = new ExternalResponsibilityCloseService(
       productionDatabase,
       this,
+      todos,
     );
     this.allocationService = new ExternalResponsibilityAllocationService(
       productionDatabase,
       this,
+      todos,
     );
   }
 

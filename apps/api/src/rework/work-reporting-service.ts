@@ -15,6 +15,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type WorkTaskRow = Readonly<{
   work_task_id: string; rework_order_id: string; configuration_item_id: string;
@@ -108,6 +109,7 @@ export class WorkReportingService {
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async list(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkWorkTasksResponse> {
@@ -277,6 +279,20 @@ export class WorkReportingService {
         "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
         [task.rework_order_id, actor.actorId],
       );
+      if (completedOrder) {
+        await this.todos?.actionableForUniqueDirectRole(client, reportingActor, {
+          category: "whole_order_review",
+          sourceEventId: eventId,
+          sourceAction: "rework.work_report.submit",
+          entityType: "rework_order",
+          entityId: task.rework_order_id,
+          requiredRole: "tail_supervisor",
+          requiredCapability: "submission:audit",
+          route: { routeName: "rework_detail", entityId: task.rework_order_id, tab: "whole_order_review" },
+          policyKey: "general",
+          dedupeKey: `whole-order-review:${task.rework_order_id}:${order.version + 1}`,
+        });
+      }
       const workerView = reportingCapability === "work:report" && !this.isSupervisor(actor);
       const visibleShares = members.map((member, index) => ({ personId: member.person_id, amount: shares[index]! })).filter((share) => !workerView || share.personId === ownPerson?.person_id);
       return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount: workerView ? null : groupAmount, memberShares: visibleShares };

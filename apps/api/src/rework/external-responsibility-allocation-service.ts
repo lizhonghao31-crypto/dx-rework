@@ -13,6 +13,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Result<T> = { value: T; reused: boolean };
 type ResponsibilityType =
@@ -102,6 +103,7 @@ export class ExternalResponsibilityAllocationService {
   constructor(
     private readonly database: Pool,
     private readonly reader: BatchReader,
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async allocateSuppliers(
@@ -329,6 +331,22 @@ export class ExternalResponsibilityAllocationService {
           reworkOrderId: order.rework_order_id,
           delivery: "intent_only",
         },
+      });
+      await this.todos?.actionableForNamedSourceActor(client, actor, {
+        category: "external_business_signoff",
+        sourceEventId: eventId,
+        sourceAction: "rework.external_responsibility.allocate",
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        recipientUserId: actor.actorId,
+        sourceActorEventId: eventId,
+        permittedCapabilities: ["external_responsibility:sign"],
+        route: {
+          routeName: "external_responsibility_detail",
+          entityId: caseId,
+        },
+        policyKey: "general",
+        dedupeKey: `external-signoff:${caseId}:1`,
       });
     }
 

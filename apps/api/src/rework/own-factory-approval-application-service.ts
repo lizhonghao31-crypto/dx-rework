@@ -6,13 +6,14 @@ import type {
 import type { Pool } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { OwnFactoryApprovalService } from "./own-factory-approval-service.js";
 
 export class OwnFactoryApprovalApplicationService {
   private readonly service: OwnFactoryApprovalService;
 
-  constructor(private readonly database: Pool) {
-    this.service = new OwnFactoryApprovalService(database);
+  constructor(private readonly database: Pool, todos?: TodoProjectionService) {
+    this.service = new OwnFactoryApprovalService(database, todos);
   }
 
   listQueue(...args: Parameters<OwnFactoryApprovalService["listQueue"]>) {

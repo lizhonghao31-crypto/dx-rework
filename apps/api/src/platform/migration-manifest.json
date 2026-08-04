@@ -99,6 +99,10 @@
     {
       "version": "0025_wage_completion_month_backfill_access",
       "checksum": "0a52386e46a6ffa650398f490c8ba84d092084bb5c6bf2c6c1c62caf6de4e261"
+    },
+    {
+      "version": "0026_todo_notification_foundation",
+      "checksum": "9b69f0246e4644349f41636940bb268bf2057f70ded563227b0c2d14e47a3297"
     }
   ]
 }

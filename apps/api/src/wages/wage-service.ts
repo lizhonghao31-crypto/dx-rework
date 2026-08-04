@@ -17,6 +17,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type Status = "pending_tail_review" | "pending_admin_review" | "ready_to_lock" | "locked";
@@ -123,6 +124,7 @@ export class WageService {
     private readonly db: Pool,
     private readonly idem = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async list(actor: TrustedActorContext): Promise<WagePeriod[]> {
@@ -216,6 +218,84 @@ export class WageService {
         `UPDATE rework_wage_periods SET status=$2,period_version=period_version+1,
           updated_at=CURRENT_TIMESTAMP WHERE period_id=$1`, [periodId, next],
       );
+      if (kind === "tail") {
+        await this.todos?.completeOpenByDedupeKey(
+          client,
+          actor,
+          `wage-tail-review:${periodId}:${period.period_version}`,
+          "Tail wage review was approved",
+        );
+        await this.todos?.actionableForUniqueDirectRole(client, actor, {
+          category: "wage_administrative_review",
+          sourceEventId: eventId,
+          sourceAction: "wage.tail_approve",
+          entityType: "wage_period",
+          entityId: periodId,
+          requiredRole: "administrative_clerk",
+          requiredCapability: "wage:administrative_review",
+          route: { routeName: "wage_period_detail", entityId: periodId },
+          policyKey: "finance_return_or_wage_review",
+          dedupeKey: `wage-admin-review:${periodId}:${period.period_version + 1}`,
+        });
+        await this.todos?.information(client, actor, {
+          category: "wage_tail_review_submitted",
+          sourceEventId: eventId,
+          sourceAction: "wage.tail_approve",
+          entityType: "wage_period",
+          entityId: periodId,
+          recipientUserId: actor.actorId,
+          route: { routeName: "wage_period_detail", entityId: periodId },
+          dedupeKey: `wage-tail-submitted:${periodId}:${period.period_version + 1}:${actor.actorId}`,
+        });
+      } else if (kind === "administrative_approve") {
+        await this.todos?.completeOpenByDedupeKey(
+          client,
+          actor,
+          `wage-admin-review:${periodId}:${period.period_version}`,
+          "Administrative wage review was approved",
+        );
+        await this.todos?.actionableForUniqueDirectRole(client, actor, {
+          category: "wage_month_close",
+          sourceEventId: eventId,
+          sourceAction: "wage.administrative_approve",
+          entityType: "wage_period",
+          entityId: periodId,
+          requiredRole: "wage_month_close_accountant",
+          requiredCapability: "wage:month_close",
+          route: { routeName: "wage_period_detail", entityId: periodId },
+          policyKey: "finance_return_or_wage_review",
+          dedupeKey: `wage-month-lock:${periodId}:${period.period_version + 1}`,
+        });
+        await this.todos?.information(client, actor, {
+          category: "wage_administrative_review_submitted",
+          sourceEventId: eventId,
+          sourceAction: "wage.administrative_approve",
+          entityType: "wage_period",
+          entityId: periodId,
+          recipientUserId: actor.actorId,
+          route: { routeName: "wage_period_detail", entityId: periodId },
+          dedupeKey: `wage-admin-submitted:${periodId}:${period.period_version + 1}:${actor.actorId}`,
+        });
+      } else {
+        await this.todos?.completeOpenByDedupeKey(
+          client,
+          actor,
+          `wage-admin-review:${periodId}:${period.period_version}`,
+          "Administrative wage review was returned",
+        );
+        await this.todos?.actionableForUniqueDirectRole(client, actor, {
+          category: "wage_tail_review",
+          sourceEventId: eventId,
+          sourceAction: "wage.administrative_return",
+          entityType: "wage_period",
+          entityId: periodId,
+          requiredRole: "tail_supervisor",
+          requiredCapability: "wage:tail_review",
+          route: { routeName: "wage_period_detail", entityId: periodId },
+          policyKey: "finance_return_or_wage_review",
+          dedupeKey: `wage-tail-review:${periodId}:${period.period_version + 1}`,
+        });
+      }
       return this.periodDto(await this.period(client, periodId), await this.permissions(actor, client));
     });
   }
@@ -271,6 +351,35 @@ export class WageService {
           [input.attachmentIds, adjustmentId],
         );
       }
+      await this.todos?.actionableForUniqueDirectRoleExcluding(client, actor, {
+        category: "wage_adjustment_approval",
+        sourceEventId: eventId,
+        sourceAction: "wage.adjustment.request",
+        entityType: "wage_adjustment",
+        entityId: adjustmentId,
+        requiredRole: "administrative_clerk",
+        requiredCapability: "wage:adjustment_approve",
+        route: {
+          routeName: "wage_period_detail",
+          entityId: target.period_id,
+        },
+        policyKey: "finance_return_or_wage_review",
+        dedupeKey: `wage-adjustment:${adjustmentId}:1`,
+        excludeUserId: actor.actorId,
+      });
+      await this.todos?.information(client, actor, {
+        category: "wage_adjustment_requested",
+        sourceEventId: eventId,
+        sourceAction: "wage.adjustment.request",
+        entityType: "wage_adjustment",
+        entityId: adjustmentId,
+        recipientUserId: actor.actorId,
+        route: {
+          routeName: "wage_period_detail",
+          entityId: target.period_id,
+        },
+        dedupeKey: `wage-adjustment-requested:${adjustmentId}:${actor.actorId}`,
+      });
       return this.adjustmentDto(await this.adjustmentRow(client, adjustmentId, false));
     }, 201);
   }
@@ -316,6 +425,12 @@ export class WageService {
           version=version+1 WHERE adjustment_id=$1`,
         [adjustmentId, approved ? "approved" : "rejected", actor.actorId, reason, eventId, actor.requestId],
       );
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `wage-adjustment:${adjustmentId}:${adjustment.version}`,
+        approved ? "Wage adjustment was approved" : "Wage adjustment was rejected",
+      );
       if (approved) {
         await client.query(
           `UPDATE rework_wage_periods SET
@@ -324,8 +439,29 @@ export class WageService {
              final_total=original_total+(SELECT COALESCE(sum(adjustment_amount),0)
                FROM rework_wage_adjustments WHERE target_period_id=$1 AND status='approved'),
              status='pending_tail_review',period_version=period_version+1,
-             updated_at=CURRENT_TIMESTAMP WHERE period_id=$1`, [target.period_id],
+          updated_at=CURRENT_TIMESTAMP WHERE period_id=$1`, [target.period_id],
         );
+        await this.todos?.cancelOpenByDedupePrefix(
+          client,
+          actor,
+          `wage-tail-review:${target.period_id}:`,
+          "An approved wage adjustment requires a new tail review",
+        );
+        await this.todos?.actionableForUniqueDirectRole(client, actor, {
+          category: "wage_tail_review",
+          sourceEventId: eventId,
+          sourceAction: "wage.adjustment.approve",
+          entityType: "wage_adjustment",
+          entityId: adjustmentId,
+          requiredRole: "tail_supervisor",
+          requiredCapability: "wage:tail_review",
+          route: {
+            routeName: "wage_period_detail",
+            entityId: target.period_id,
+          },
+          policyKey: "finance_return_or_wage_review",
+          dedupeKey: `wage-tail-review:${target.period_id}:${target.period_version + 1}`,
+        });
       }
       return this.adjustmentDto(await this.adjustmentRow(client, adjustmentId, false));
     });
@@ -402,6 +538,12 @@ export class WageService {
           locked_request_id=$5,period_version=period_version+1,
           updated_at=CURRENT_TIMESTAMP WHERE period_id=$1`,
         [periodId, actor.actorId, note, eventId, actor.requestId],
+      );
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `wage-month-lock:${periodId}:${period.period_version}`,
+        "Wage month was locked",
       );
       return { closureId, periodId, status: "locked" as const, periodVersion: expectedVersion + 1 };
     });

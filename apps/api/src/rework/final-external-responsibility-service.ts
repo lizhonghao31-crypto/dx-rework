@@ -13,6 +13,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { FixedExternalResponsibilityService } from "./fixed-external-responsibility-service.js";
 
 type Result<T> = { value: T; reused: boolean };
@@ -101,8 +102,11 @@ export class FinalExternalResponsibilityService
   private readonly reviewIdempotency = new IdempotencyService();
   private readonly reviewEvents = new OperationEventRepository();
 
-  constructor(private readonly finalDatabase: Pool) {
-    super(finalDatabase);
+  constructor(
+    private readonly finalDatabase: Pool,
+    todos?: TodoProjectionService,
+  ) {
+    super(finalDatabase, todos);
   }
 
   override async get(

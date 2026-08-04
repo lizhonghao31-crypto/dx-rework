@@ -35,6 +35,7 @@
     "db:migrate": "node scripts/migrate.mjs",
     "db:migrate:lint": "node scripts/check-migrations.mjs",
     "db:migrate:check": "node scripts/migration-integration-check.mjs",
+    "todos:backfill": "npm run build:packages && npm run build --workspace @dx-rework/api && node scripts/todos-backfill.mjs",
     "secret:scan": "node scripts/secret-scan.mjs",
     "check": "npm run lint && npm run typecheck && npm run build && npm run test && npm run db:migrate:lint && npm run secret:scan",
     "preview:dry-run": "bash scripts/preview/dry-run.sh"

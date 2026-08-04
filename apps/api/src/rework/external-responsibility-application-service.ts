@@ -12,14 +12,15 @@ import type {
 import type { Pool } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { ProductionExternalResponsibilityService } from "./production-external-responsibility-service.js";
 
 /** HTTP-facing facade: database authorization remains the source of truth. */
 export class ExternalResponsibilityApplicationService {
   private readonly service: ProductionExternalResponsibilityService;
 
-  constructor(database: Pool) {
-    this.service = new ProductionExternalResponsibilityService(database);
+  constructor(database: Pool, todos?: TodoProjectionService) {
+    this.service = new ProductionExternalResponsibilityService(database, todos);
   }
 
   listQueue(...args: Parameters<ProductionExternalResponsibilityService["listQueue"]>) {

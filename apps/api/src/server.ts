@@ -24,6 +24,8 @@ import { ExternalResponsibilityApplicationService } from "./rework/external-resp
 import { canDownloadWageAttachment } from "./wages/wage-attachment-access.js";
 import { WageService } from "./wages/wage-service.js";
 import { WageExportService } from "./wages/wage-export-service.js";
+import { TodoService } from "./todos/service.js";
+import { TodoProjectionService } from "./todos/projection-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -46,14 +48,49 @@ const attachments = new AttachmentService(database, storage, {
   ttlSeconds: config.objectStorage.signedUrlTtlSeconds,
   maxUploadBytes: config.objectStorage.maxUploadBytes,
 });
-const reworkService = new ReworkInitiationService(database, config.dingtalk.corpId);
-const processConfigurationService = new ProcessConfigurationService(database);
-const workReportingService = new WorkReportingService(database);
-const wholeOrderReviewService = new WholeOrderReviewService(database);
-const responsibilityDeterminationService = new ResponsibilityDeterminationApplicationService(database);
-const ownFactoryApprovalService = new OwnFactoryApprovalApplicationService(database);
-const externalResponsibilityService = new ExternalResponsibilityApplicationService(database);
-const wageService = new WageService(database);
+const todoService = new TodoService(database);
+const todoProjection = new TodoProjectionService(todoService);
+const reworkService = new ReworkInitiationService(
+  database,
+  config.dingtalk.corpId,
+  undefined,
+  undefined,
+  undefined,
+  todoProjection,
+);
+const processConfigurationService = new ProcessConfigurationService(
+  database,
+  undefined,
+  undefined,
+  undefined,
+  todoProjection,
+);
+const workReportingService = new WorkReportingService(
+  database,
+  undefined,
+  undefined,
+  todoProjection,
+);
+const wholeOrderReviewService = new WholeOrderReviewService(
+  database,
+  undefined,
+  undefined,
+  undefined,
+  todoProjection,
+);
+const responsibilityDeterminationService = new ResponsibilityDeterminationApplicationService(
+  database,
+  todoProjection,
+);
+const ownFactoryApprovalService = new OwnFactoryApprovalApplicationService(
+  database,
+  todoProjection,
+);
+const externalResponsibilityService = new ExternalResponsibilityApplicationService(
+  database,
+  todoProjection,
+);
+const wageService = new WageService(database, undefined, undefined, todoProjection);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -101,6 +138,7 @@ const app = buildApp({
     service: externalResponsibilityService,
   },
   wages: { authenticate: (token) => auth.authenticate(token), service: wageService, exportService: new WageExportService(database) },
+  todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
 });
 registerDatabasePoolErrorHandler(database, app.log);
 

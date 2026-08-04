@@ -14,6 +14,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
 import { OwnFactoryApprovalService } from "./own-factory-approval-service.js";
 import { ExternalResponsibilityService, maybeCompleteResponsibilityAction } from "./external-responsibility-service.js";
@@ -71,10 +72,13 @@ export class AuthorizedResponsibilityDeterminationService {
   private readonly idempotency = new IdempotencyService();
   private readonly events = new OperationEventRepository();
 
-  constructor(private readonly database: Pool) {
+  constructor(
+    private readonly database: Pool,
+    private readonly todos?: TodoProjectionService,
+  ) {
     this.base = new ResponsibilityDeterminationService(database);
-    this.ownFactoryApprovals = new OwnFactoryApprovalService(database);
-    this.externalResponsibilities = new ExternalResponsibilityService(database);
+    this.ownFactoryApprovals = new OwnFactoryApprovalService(database, todos);
+    this.externalResponsibilities = new ExternalResponsibilityService(database, todos);
   }
 
   async get(
@@ -186,6 +190,12 @@ export class AuthorizedResponsibilityDeterminationService {
         status: "pending_responsibility_action",
         version: order.version + 1,
       });
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `responsibility:${orderId}:${current.determination_version}`,
+        "Responsibility determination was finalized",
+      );
       return this.get(actor, orderId, client);
     });
   }
@@ -218,6 +228,22 @@ export class AuthorizedResponsibilityDeterminationService {
          VALUES($1,$2,$3,'transferred',$4,$5,$6,$7,DEFAULT,$8,$9)`,
         [randomUUID(), orderId, current?.determination_id ?? null, permission.handlerUserId, input.toUserId, actor.actorId, input.reason, eventId, actor.requestId],
       );
+      await this.todos?.cancelOpenByDedupePrefix(
+        client,
+        actor,
+        `responsibility:${orderId}:`,
+        "Responsibility handler transferred",
+      );
+      await this.todos?.actionableForResponsibilityHandler(client, actor, {
+        category: "responsibility_determination",
+        sourceEventId: eventId,
+        sourceAction: "rework.responsibility.transfer",
+        entityType: "rework_order",
+        entityId: orderId,
+        recipientUserId: input.toUserId,
+        route: { routeName: "responsibility_detail", entityId: orderId },
+        dedupeKey: `responsibility:${orderId}:transfer:${eventId}`,
+      });
       await this.advance(client, orderId, actor.actorId, order.status);
       return this.get(actor, orderId, client);
     });
@@ -246,6 +272,22 @@ export class AuthorizedResponsibilityDeterminationService {
          VALUES($1,$2,$3,'taken_over',$4,$5,$5,$6,DEFAULT,$7,$8)`,
         [randomUUID(), orderId, current?.determination_id ?? null, permission.handlerUserId, actor.actorId, input.reason, eventId, actor.requestId],
       );
+      await this.todos?.cancelOpenByDedupePrefix(
+        client,
+        actor,
+        `responsibility:${orderId}:`,
+        "Responsibility handler taken over",
+      );
+      await this.todos?.actionableForResponsibilityHandler(client, actor, {
+        category: "responsibility_determination",
+        sourceEventId: eventId,
+        sourceAction: "rework.responsibility.takeover",
+        entityType: "rework_order",
+        entityId: orderId,
+        recipientUserId: actor.actorId,
+        route: { routeName: "responsibility_detail", entityId: orderId },
+        dedupeKey: `responsibility:${orderId}:takeover:${eventId}`,
+      });
       await this.advance(client, orderId, actor.actorId, order.status);
       return this.get(actor, orderId, client);
     });
@@ -301,6 +343,12 @@ export class AuthorizedResponsibilityDeterminationService {
            confirmation_snapshot,operation_event_id,request_id)
          VALUES($1,$2,$3,DEFAULT,$4,$5,$6,$7)`,
         [randomUUID(), determinationId, actor.actorId, input.reason, snapshot, eventId, actor.requestId],
+      );
+      await this.todos?.completeOpenByDedupePrefix(
+        client,
+        actor,
+        `high-multiplier:${determinationId}:${current.determination_version}:`,
+        "Independent high-multiplier confirmation completed",
       );
       await this.advance(client, order.rework_order_id, actor.actorId, order.status);
       return this.get(actor, order.rework_order_id, client);
