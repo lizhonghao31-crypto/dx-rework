@@ -913,12 +913,12 @@ export class TodoBackfillService {
   }
 
   private async captureWatermark(): Promise<Watermark> {
-    const result = await this.database.query<{ created_at: Date; event_id: string }>(
-      "SELECT created_at,event_id FROM operation_events ORDER BY created_at DESC,event_id DESC LIMIT 1",
+    const result = await this.database.query<{ created_at: string; event_id: string }>(
+      "SELECT created_at::text created_at,event_id FROM operation_events ORDER BY created_at DESC,event_id DESC LIMIT 1",
     );
     const row = result.rows[0];
     if (!row) throw new ApplicationError("CONFLICT", "Backfill requires an existing operation-event history", 409);
-    return { createdAt: row.created_at.toISOString(), eventId: row.event_id };
+    return { createdAt: row.created_at, eventId: row.event_id };
   }
 
   private async resolveActor(actorUserId: string): Promise<TrustedActorContext> {
