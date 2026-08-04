@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin pr13-final-staging
-          git show origin/pr13-final-staging:.github/workflows/pr13-second-review-commit.yml \
+          git show FETCH_HEAD:.github/workflows/pr13-second-review-commit.yml \
             | sed -n "/cat > \/tmp\/pr13.patch.b64 <<'PATCH'/,/^          PATCH$/p" \
             | sed '1d;$d;s/^          //' > /tmp/pr13.patch.b64
           test -s /tmp/pr13.patch.b64
