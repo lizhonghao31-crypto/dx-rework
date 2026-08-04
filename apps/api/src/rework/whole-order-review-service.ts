@@ -132,40 +132,42 @@ export class WholeOrderReviewService {
         `whole-order-review:${reworkOrderId}:${order.version}`,
         "Whole-order review was approved",
       );
-      const wagePeriods = await client.query<{
-        period_id: string;
-        period_version: number;
-      }>(
-        `SELECT DISTINCT period.period_id,period.period_version
-         FROM rework_wage_periods period
-         JOIN rework_wage_items item ON item.period_id=period.period_id
-         WHERE item.order_review_id=$1
-           AND period.status='pending_tail_review'
-         ORDER BY period.period_id`,
-        [reviewId],
-      );
-      for (const wagePeriod of wagePeriods.rows) {
-        await this.todos?.cancelOpenByDedupePrefix(
-          client,
-          actor,
-          `wage-tail-review:${wagePeriod.period_id}:`,
-          "Newly materialized wage facts require a fresh tail review",
+      if (this.todos) {
+        const wagePeriods = await client.query<{
+          period_id: string;
+          period_version: number;
+        }>(
+          `SELECT DISTINCT period.period_id,period.period_version
+           FROM rework_wage_periods period
+           JOIN rework_wage_items item ON item.period_id=period.period_id
+           WHERE item.order_review_id=$1
+             AND period.status='pending_tail_review'
+           ORDER BY period.period_id`,
+          [reviewId],
         );
-        await this.todos?.actionableForUniqueDirectRole(client, actor, {
-          category: "wage_tail_review",
-          sourceEventId: eventId,
-          sourceAction: "rework.whole_order.approve",
-          entityType: "rework_order",
-          entityId: reworkOrderId,
-          requiredRole: "tail_supervisor",
-          requiredCapability: "wage:tail_review",
-          route: {
-            routeName: "wage_period_detail",
-            entityId: wagePeriod.period_id,
-          },
-          policyKey: "finance_return_or_wage_review",
-          dedupeKey: `wage-tail-review:${wagePeriod.period_id}:${wagePeriod.period_version}`,
-        });
+        for (const wagePeriod of wagePeriods.rows) {
+          await this.todos.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            `wage-tail-review:${wagePeriod.period_id}:`,
+            "Newly materialized wage facts require a fresh tail review",
+          );
+          await this.todos.actionableForUniqueDirectRole(client, actor, {
+            category: "wage_tail_review",
+            sourceEventId: eventId,
+            sourceAction: "rework.whole_order.approve",
+            entityType: "rework_order",
+            entityId: reworkOrderId,
+            requiredRole: "tail_supervisor",
+            requiredCapability: "wage:tail_review",
+            route: {
+              routeName: "wage_period_detail",
+              entityId: wagePeriod.period_id,
+            },
+            policyKey: "finance_return_or_wage_review",
+            dedupeKey: `wage-tail-review:${wagePeriod.period_id}:${wagePeriod.period_version}`,
+          });
+        }
       }
       await this.outbox.enqueue(client, {
         topic: "rework.pending_responsibility_determination", aggregateType: "rework_order", aggregateId: reworkOrderId,
