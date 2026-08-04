@@ -159,8 +159,8 @@ runWithPostgres("PR-13 controlled todo backfill", () => {
   });
 
   it("reports an unavailable historical recipient instead of inventing a replacement", async () => {
-    await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [tailSupervisorId]);
     const pending = await createSubmittedOrder("BACKFILL-NO-RECIPIENT");
+    await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [tailSupervisorId]);
     const result = await new TodoBackfillService(database).run({
       mode: "apply",
       actorUserId: productionManagementId,
