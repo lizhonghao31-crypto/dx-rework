@@ -1,0 +1,145 @@
+name: PR-13 DingTalk read-only smoke preflight
+
+on:
+  push:
+    branches:
+      - codex/pr-13-todo-notification-v2-validation
+    paths:
+      - .github/workflows/pr13-dingtalk-readonly-smoke.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr13-dingtalk-readonly-smoke
+  cancel-in-progress: true
+
+jobs:
+  readonly-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pr-preview
+    steps:
+      - name: Checkout validation branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify validation branch contains the reviewed PR Head
+        env:
+          REVIEWED_HEAD: 82a2990ef53fec9d4722db55e9ed4dce22d4129a
+        run: git merge-base --is-ancestor "$REVIEWED_HEAD" HEAD
+
+      - name: Configure pinned ECS SSH identity
+        env:
+          PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
+          PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
+          PREVIEW_SSH_KEY: ${{ secrets.PR_PREVIEW_SSH_KEY }}
+          PREVIEW_SSH_HOST_KEY: ${{ secrets.PR_PREVIEW_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$PREVIEW_SSH_USER" =~ ^[A-Za-z_][A-Za-z0-9._-]*$ ]]
+          test -n "$PREVIEW_SSH_KEY" && test -n "$PREVIEW_SSH_HOST_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PREVIEW_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$PREVIEW_SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          printf 'PREVIEW_HOST=%s\nPREVIEW_SSH_USER=%s\n' "$PREVIEW_HOST" "$PREVIEW_SSH_USER" >> "$GITHUB_ENV"
+
+      - name: Run non-mutating token, identity and Todo lookup preflight
+        run: |
+          set -euo pipefail
+          ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/opt/dx-rework
+          [[ -d "$root" && ! -L "$root" ]] || { echo 'dx-rework root unavailable' >&2; exit 66; }
+
+          env_file=''
+          for candidate in "$root/shared/.env" "$root/.env" "$root/current/.env"; do
+            if [[ -f "$candidate" && ! -L "$candidate" ]]; then env_file="$candidate"; break; fi
+          done
+          [[ -n "$env_file" ]] || { echo 'dx-rework environment file not found' >&2; exit 66; }
+
+          set -a
+          # shellcheck disable=SC1090
+          source "$env_file"
+          set +a
+          : "${DATABASE_URL:?DATABASE_URL missing}"
+          : "${DINGTALK_H5_APP_KEY:?DINGTALK_H5_APP_KEY missing}"
+          : "${DINGTALK_H5_APP_SECRET:?DINGTALK_H5_APP_SECRET missing}"
+
+          cd "$root/current"
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+
+          const required = (name) => {
+            const value = process.env[name]?.trim();
+            if (!value) throw new Error(`${name} missing`);
+            return value;
+          };
+          const safeJson = async (response) => {
+            try {
+              const value = await response.json();
+              return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+            } catch {
+              return {};
+            }
+          };
+
+          const database = new pg.Pool({ connectionString: required('DATABASE_URL'), max: 1 });
+          try {
+            const identity = await database.query(`
+              SELECT mapping.union_id
+              FROM app_users user_record
+              JOIN identity_mappings mapping
+                ON mapping.user_id=user_record.id
+               AND mapping.provider='dingtalk'
+               AND mapping.active=true
+               AND mapping.employed=true
+              JOIN access_security_policy policy
+                ON policy.policy_key='primary'
+               AND policy.dingtalk_corp_id=mapping.corp_id
+              WHERE user_record.enabled=true
+              ORDER BY CASE
+                WHEN nullif($1,'') IS NOT NULL
+                 AND user_record.id::text=nullif($1,'') THEN 0 ELSE 1 END,
+                user_record.id
+              LIMIT 1
+            `, [process.env.TODO_RUNTIME_ACTOR_ID ?? '']);
+            const unionId = identity.rows[0]?.union_id;
+            if (typeof unionId !== 'string' || !unionId.trim()) {
+              throw new Error('No active primary-corporation DingTalk identity is available');
+            }
+
+            const tokenUrl = new URL('https://oapi.dingtalk.com/gettoken');
+            tokenUrl.searchParams.set('appkey', required('DINGTALK_H5_APP_KEY'));
+            tokenUrl.searchParams.set('appsecret', required('DINGTALK_H5_APP_SECRET'));
+            const tokenResponse = await fetch(tokenUrl, { signal: AbortSignal.timeout(5000) });
+            const tokenBody = await safeJson(tokenResponse);
+            if (!tokenResponse.ok || tokenBody.errcode !== 0 || typeof tokenBody.access_token !== 'string') {
+              throw new Error(`DingTalk token preflight rejected (HTTP ${tokenResponse.status}, code ${String(tokenBody.errcode ?? 'unknown')})`);
+            }
+
+            const sourceId = `pr13-readonly-smoke-${Date.now()}`;
+            const lookupUrl = `https://api.dingtalk.com/v1.0/todo/users/${encodeURIComponent(unionId)}/tasks/sources/${encodeURIComponent(sourceId)}`;
+            const lookup = await fetch(lookupUrl, {
+              headers: { 'x-acs-dingtalk-access-token': tokenBody.access_token },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (![200, 404].includes(lookup.status)) {
+              throw new Error(`DingTalk Todo lookup permission preflight failed (HTTP ${lookup.status})`);
+            }
+
+            console.log(JSON.stringify({
+              tokenAcquired: true,
+              activePrimaryIdentityResolved: true,
+              todoLookupStatus: lookup.status,
+              mutatingCallsMade: false,
+            }));
+          } finally {
+            await database.end();
+          }
+          NODE
+          REMOTE
