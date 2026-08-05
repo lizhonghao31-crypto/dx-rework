@@ -17,9 +17,11 @@ describe("public tools repository guards", () => {
     const client = { query: vi.fn(async () => ({ rowCount: 0, rows: [] })) };
     const repository = new MessageOutboxRepository();
     await expect(repository.claim(client as never, 1, 29)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
-    await repository.claim(client as never, 1, 300);
+    await repository.claim(client as never, 1, 300, "todo.delivery");
     expect(client.query.mock.calls[0]![0]).toContain("status='processing' AND claimed_at <=");
     expect(client.query.mock.calls[0]![0]).toContain("SKIP LOCKED");
+    expect(client.query.mock.calls[0]![0]).toContain("topic=$4");
+    expect(client.query.mock.calls[0]![1]).toEqual([1, 300, expect.any(String), "todo.delivery"]);
     await expect(repository.enqueue(client as never, { topic: "t", aggregateType: "a", aggregateId: "1", payload: {}, recipientKey: "r", idempotencyKey: "k" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
     expect(client.query.mock.calls[1]![0]).toContain("message_outbox.payload=EXCLUDED.payload");
   });

@@ -19,6 +19,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
 type FactoryState = Readonly<{
@@ -111,6 +112,7 @@ export class ReworkInitiationService {
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async createDraft(
@@ -302,6 +304,18 @@ export class ReworkInitiationService {
         payload: { reworkOrderId, reworkNo, styleNo: current.style_no },
         recipientKey: "role:tail_supervisor",
         idempotencyKey: `${reworkOrderId}:submitted:${nextVersion}`,
+      });
+      await this.todos?.actionableForUniqueDirectRole(client, actor, {
+        category: "process_configuration",
+        sourceEventId: eventId,
+        sourceAction: "rework.submit",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        requiredRole: "tail_supervisor",
+        requiredCapability: "process:configure",
+        route: { routeName: "process_configuration", entityId: reworkOrderId },
+        policyKey: "general",
+        dedupeKey: `process-config:${reworkOrderId}:${nextVersion}`,
       });
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
     });

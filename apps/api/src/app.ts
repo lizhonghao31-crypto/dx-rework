@@ -28,6 +28,7 @@ import { registerResponsibilityDeterminationRoutes, type ResponsibilityDetermina
 import { registerOwnFactoryApprovalRoutes, type OwnFactoryApprovalHttpDependencies } from "./rework/own-factory-approval-routes.js";
 import { registerExternalResponsibilityRoutes, type ExternalResponsibilityHttpDependencies } from "./rework/external-responsibility-routes.js";
 import { registerWageRoutes, type WageHttpDependencies } from "./wages/wage-routes.js";
+import { registerTodoRoutes, type TodoHttpDependencies } from "./todos/routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -44,6 +45,7 @@ export type AppDependencies = Readonly<{
   ownFactoryApproval?: OwnFactoryApprovalHttpDependencies;
   externalResponsibility?: ExternalResponsibilityHttpDependencies;
   wages?: WageHttpDependencies;
+  todos?: TodoHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -110,6 +112,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.ownFactoryApproval) registerOwnFactoryApprovalRoutes(app, dependencies.ownFactoryApproval);
   if (dependencies.externalResponsibility) registerExternalResponsibilityRoutes(app, dependencies.externalResponsibility);
   if (dependencies.wages) registerWageRoutes(app, dependencies.wages);
+  if (dependencies.todos) registerTodoRoutes(app, dependencies.todos);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {

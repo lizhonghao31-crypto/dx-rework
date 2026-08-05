@@ -6,6 +6,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { ExternalResponsibilityService } from "./external-responsibility-service.js";
 
 type Queryable = Pool | PoolClient;
@@ -34,8 +35,11 @@ const fail = (
  */
 export class FixedExternalResponsibilityService
   extends ExternalResponsibilityService {
-  constructor(private readonly reviewedDatabase: Pool) {
-    super(reviewedDatabase);
+  constructor(
+    private readonly reviewedDatabase: Pool,
+    todos?: TodoProjectionService,
+  ) {
+    super(reviewedDatabase, todos);
   }
 
   override async get(

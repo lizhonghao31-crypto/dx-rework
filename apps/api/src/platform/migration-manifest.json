@@ -99,6 +99,18 @@
     {
       "version": "0025_wage_completion_month_backfill_access",
       "checksum": "0a52386e46a6ffa650398f490c8ba84d092084bb5c6bf2c6c1c62caf6de4e261"
+    },
+    {
+      "version": "0026_todo_notification_foundation",
+      "checksum": "9b69f0246e4644349f41636940bb268bf2057f70ded563227b0c2d14e47a3297"
+    },
+    {
+      "version": "0027_todo_routing_lifecycle_closure",
+      "checksum": "c0ba02504429e9fe1db70887785c7b330f5ac245c7a6dd0c5fad2f7c33422b29"
+    },
+    {
+      "version": "0028_dingtalk_todo_external_bindings",
+      "checksum": "3daf7ab0bf74bdff1540ef819ad270f721d77ff83e867f9757791f66c45587a9"
     }
   ]
 }

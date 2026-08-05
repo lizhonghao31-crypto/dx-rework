@@ -12,6 +12,8 @@ const PostgreSqlUrlSchema = z.string().min(1).refine(
   { message: "must be a valid PostgreSQL URL" },
 );
 
+const BooleanTextSchema = z.enum(["true", "false"]).default("false");
+
 const EnvironmentSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -31,6 +33,10 @@ const EnvironmentSchema = z
     APP_BASE_PATH: z.string().regex(/^\/(?!\/)[^?#\\]*$/).refine((value) => !value.includes("//"), "must not contain empty path segments").default("/"),
     SESSION_SECRET: z.string().min(32),
     SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
+    TODO_RUNTIME_ENABLED: BooleanTextSchema,
+    TODO_RUNTIME_ACTOR_ID: z.string().uuid().optional(),
+    TODO_DELIVERY_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(30_000),
+    TODO_TIMING_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
     OSS_REGION: z.string().min(1).optional(),
     OSS_ENDPOINT: z.string().url().optional(),
     OSS_BUCKET: z.string().min(1).optional(),
@@ -38,7 +44,7 @@ const EnvironmentSchema = z
     OSS_ACCESS_KEY_SECRET: z.string().min(1).optional(),
     OSS_PRIVATE_PREFIX: z.string()
       .regex(/^[A-Za-z0-9/_-]+$/)
-      .refine((value) => !value.startsWith("/") && !value.endsWith("/") && !value.includes("//"), "must be a non-root normalized prefix")
+      .refine((value) => !value.startsWith("/") && !value.endsWith("/") && !value.includes("//"), "must not be a root or contain empty path segments")
       .default("dx-rework/private"),
     OSS_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     OSS_MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(104857600).default(20971520),
@@ -46,6 +52,12 @@ const EnvironmentSchema = z
   .superRefine((environment, context) => {
     const ossValues = [environment.OSS_REGION, environment.OSS_ENDPOINT, environment.OSS_BUCKET, environment.OSS_ACCESS_KEY_ID, environment.OSS_ACCESS_KEY_SECRET];
     if (ossValues.some(Boolean) && !ossValues.every(Boolean)) context.addIssue({ code: "custom", path: ["OSS_BUCKET"], message: "OSS configuration must be complete or entirely disabled" });
+    if (environment.TODO_RUNTIME_ENABLED === "true" && !environment.TODO_RUNTIME_ACTOR_ID) {
+      context.addIssue({ code: "custom", path: ["TODO_RUNTIME_ACTOR_ID"], message: "todo runtime requires an authorized actor ID" });
+    }
+    if (environment.NODE_ENV === "test" && environment.TODO_RUNTIME_ENABLED === "true") {
+      context.addIssue({ code: "custom", path: ["TODO_RUNTIME_ENABLED"], message: "test environment cannot enable the real todo runtime" });
+    }
     if (environment.NODE_ENV !== "production") return;
     if (environment.OSS_ENDPOINT && new URL(environment.OSS_ENDPOINT).protocol !== "https:") {
       context.addIssue({ code: "custom", path: ["OSS_ENDPOINT"], message: "production requires an HTTPS OSS endpoint" });
@@ -89,6 +101,12 @@ export type AppConfig = Readonly<{
   appBasePath: string;
   sessionSecret: string;
   sessionTtlSeconds: number;
+  todoRuntime: Readonly<{
+    enabled: boolean;
+    actorId: string | undefined;
+    deliveryIntervalMs: number;
+    timingIntervalMs: number;
+  }>;
   objectStorage: Readonly<{ enabled: boolean; region: string | undefined; endpoint: string | undefined; bucket: string | undefined; accessKeyId: string | undefined; accessKeySecret: string | undefined; privatePrefix: string; signedUrlTtlSeconds: number; maxUploadBytes: number }>;
 }>;
 
@@ -112,6 +130,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     appBasePath: result.data.APP_BASE_PATH.endsWith("/") ? result.data.APP_BASE_PATH : `${result.data.APP_BASE_PATH}/`,
     sessionSecret: result.data.SESSION_SECRET,
     sessionTtlSeconds: result.data.SESSION_TTL_SECONDS,
+    todoRuntime: {
+      enabled: result.data.TODO_RUNTIME_ENABLED === "true",
+      actorId: result.data.TODO_RUNTIME_ACTOR_ID,
+      deliveryIntervalMs: result.data.TODO_DELIVERY_INTERVAL_MS,
+      timingIntervalMs: result.data.TODO_TIMING_INTERVAL_MS,
+    },
     objectStorage: { enabled: Boolean(result.data.OSS_BUCKET), region: result.data.OSS_REGION, endpoint: result.data.OSS_ENDPOINT, bucket: result.data.OSS_BUCKET, accessKeyId: result.data.OSS_ACCESS_KEY_ID, accessKeySecret: result.data.OSS_ACCESS_KEY_SECRET, privatePrefix: result.data.OSS_PRIVATE_PREFIX.replace(/\/$/, ""), signedUrlTtlSeconds: result.data.OSS_SIGNED_URL_TTL_SECONDS, maxUploadBytes: result.data.OSS_MAX_UPLOAD_BYTES },
   });
 }

@@ -15,6 +15,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Queryable = Pool | PoolClient;
 type Result<T> = { value: T; reused: boolean };
@@ -99,7 +100,10 @@ export class OwnFactoryApprovalService {
   private readonly events = new OperationEventRepository();
   private readonly outbox = new MessageOutboxRepository();
 
-  constructor(private readonly database: Pool) {}
+  constructor(
+    private readonly database: Pool,
+    private readonly todos?: TodoProjectionService,
+  ) {}
 
   async ensureForFinalized(
     client: PoolClient,
@@ -164,6 +168,19 @@ export class OwnFactoryApprovalService {
       ],
     );
     await this.enqueuePendingNotices(client, approvalId, order, actor.requestId);
+    await this.todos?.actionableForParallelDirectRole(client, actor, {
+      category: "own_factory_approval",
+      sourceEventId: eventId,
+      sourceAction: "rework.own_factory_approval.create",
+      entityType: "rework_order",
+      entityId: order.rework_order_id,
+      requiredRole: "owner_group",
+      requiredCapability: "own_factory:approve",
+      route: { routeName: "own_factory_approval", entityId: order.rework_order_id },
+      policyKey: "general",
+      dedupeKey: `own-factory-approval:${approvalId}`,
+      expectedRecipientCount: 2,
+    });
     return approvalId;
   }
 
@@ -408,6 +425,28 @@ export class OwnFactoryApprovalService {
     }
     if (decision === "approved") {
       await maybeCompleteResponsibilityAction(client, actor, order);
+    }
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `own-factory-approval:${approvalId}:`,
+      "A direct owner completed the parallel own-factory approval",
+    );
+    for (const ownerId of await this.activeOwners(client)) {
+      if (ownerId === actor.actorId) continue;
+      await this.todos?.information(client, actor, {
+        category: "own_factory_approval_result",
+        sourceEventId: eventId,
+        sourceAction: action,
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        recipientUserId: ownerId,
+        route: {
+          routeName: "own_factory_approval",
+          entityId: order.rework_order_id,
+        },
+        dedupeKey: `own-factory-result:${approvalId}:${ownerId}`,
+      });
     }
     await this.enqueueResultNotices(
       client,

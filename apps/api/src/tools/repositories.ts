@@ -118,7 +118,7 @@ export class MessageOutboxRepository {
     return row.event_id;
   }
 
-  async claim(client: SqlClient, limit = 1, leaseSeconds = 300): Promise<Array<{
+  async claim(client: SqlClient, limit = 1, leaseSeconds = 300, topic?: string): Promise<Array<{
     eventId: string;
     topic: string;
     aggregateType: string;
@@ -142,10 +142,13 @@ export class MessageOutboxRepository {
       claim_token: string;
       attempts: number;
     }>(
-      `WITH candidates AS (
+       `WITH candidates AS (
          SELECT event_id FROM message_outbox
-         WHERE (status IN ('pending','failed') AND available_at <= CURRENT_TIMESTAMP)
-            OR (status='processing' AND claimed_at <= CURRENT_TIMESTAMP - ($2 * interval '1 second'))
+         WHERE (
+              (status IN ('pending','failed') AND available_at <= CURRENT_TIMESTAMP)
+              OR (status='processing' AND claimed_at <= CURRENT_TIMESTAMP - ($2 * interval '1 second'))
+            )
+           AND ($4::text IS NULL OR topic=$4)
          ORDER BY COALESCE(claimed_at,available_at),created_at
          FOR UPDATE SKIP LOCKED LIMIT $1
        )
@@ -153,7 +156,7 @@ export class MessageOutboxRepository {
        SET status='processing',claimed_at=CURRENT_TIMESTAMP,claim_token=$3,attempts=o.attempts+1,updated_at=CURRENT_TIMESTAMP
        FROM candidates c WHERE o.event_id=c.event_id
        RETURNING o.event_id,o.topic,o.aggregate_type,o.aggregate_id,o.payload,o.recipient_key,o.idempotency_key,o.claim_token,o.attempts`,
-      [limit, leaseSeconds, claimToken],
+      [limit, leaseSeconds, claimToken, topic ?? null],
     );
     return result.rows.map((row) => ({
       eventId: row.event_id,

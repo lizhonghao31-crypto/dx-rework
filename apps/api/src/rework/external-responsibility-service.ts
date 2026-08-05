@@ -22,6 +22,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Queryable = Pool | PoolClient;
 type Result<T> = { value: T; reused: boolean };
@@ -145,7 +146,10 @@ export class ExternalResponsibilityService {
   private readonly idempotency = new IdempotencyService();
   private readonly events = new OperationEventRepository();
   private readonly outbox = new MessageOutboxRepository();
-  constructor(private readonly database: Pool) {}
+  constructor(
+    private readonly database: Pool,
+    protected readonly todos?: TodoProjectionService,
+  ) {}
 
   /** Called inside PR-09 finalization; no browser request can create a batch. */
   async ensureForFinalized(
@@ -347,6 +351,23 @@ export class ExternalResponsibilityService {
       await client.query(`INSERT INTO rework_external_business_signoffs(signoff_id,case_id,action,submitted_by,actor_role_snapshot,remark,attachment_ids,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),caseId,current.status==="returned"?"resubmitted":"submitted",actor.actorId,this.roles(actor),input.remark??null,input.attachmentIds,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='pending_payables_confirmation',case_version=case_version+1,submitted_at=CURRENT_TIMESTAMP WHERE case_id=$1",[caseId]);
       await this.outbox.enqueue(client,{topic:"rework.external_responsibility.pending_payables",aggregateType:"external_responsibility_case",aggregateId:caseId,recipientKey:payablesRole(current.responsibility_type),idempotencyKey:`external-case:pending-payables:${caseId}:${current.case_version+1}`,payload:{caseId,reworkOrderId:order.rework_order_id,delivery:"intent_only"}});
+      await this.todos?.completeOpenByDedupeKey(client,actor,`external-signoff:${caseId}:${current.case_version}`,"External business signoff was submitted");
+      if(current.status==="returned") {
+        await this.todos?.completeOpenByDedupePrefix(client,actor,`external-return:${caseId}:`,"Returned external responsibility was resubmitted");
+      }
+      await this.todos?.actionableForUniqueRoleOrOrderDelegate(client,actor,{
+        category:"external_payables_confirmation",sourceEventId:eventId,sourceAction:"rework.external_responsibility.submit",
+        entityType:"rework_order",entityId:order.rework_order_id,requiredRole:current.payables_handler_role_snapshot,
+        requiredCapability:"external_responsibility:payables_confirm",delegationScopeId:order.rework_order_id,
+        route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},policyKey:"general",
+        dedupeKey:`external-payables:${caseId}:${current.case_version+1}`,
+      });
+      await this.todos?.information(client,actor,{
+        category:"external_business_signoff_submitted",sourceEventId:eventId,sourceAction:"rework.external_responsibility.submit",
+        entityType:"rework_order",entityId:order.rework_order_id,recipientUserId:actor.actorId,
+        route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},
+        dedupeKey:`external-signoff-submitted:${caseId}:${current.case_version+1}:${actor.actorId}`,
+      });
       return this.getCase(actor,caseId,client);
     });
   }
@@ -364,6 +385,7 @@ export class ExternalResponsibilityService {
       const permitted=await this.canSign(client,actor.actorId,order.rework_order_id,current.responsibility_type)||await this.canPayables(client,actor.actorId,order.rework_order_id,current.responsibility_type);
       if(!permitted) fail("当前用户无权跟进扣款",403,"FORBIDDEN"); await this.readyAttachments(client,input.attachmentIds); const eventId=await this.event(client,actor,"rework.external_deduction.follow_up","external_deduction:follow_up",order); await this.bindAttachments(client,actor,caseId,input.attachmentIds);
       await client.query(`INSERT INTO rework_external_deduction_follow_ups(follow_up_id,case_id,content,supplier_feedback,next_follow_up_at,attachment_ids,created_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),caseId,input.content,input.supplierFeedback??null,input.nextFollowUpAt??null,input.attachmentIds,actor.actorId,eventId,actor.requestId]);
+      await this.todos?.cancelOpenByDedupePrefix(client,actor,`deduction-overdue:${caseId}:`,"A newer formal deduction follow-up deadline superseded the prior overdue notice");
       return this.getCase(actor,caseId,client);
     });
   }
@@ -400,6 +422,7 @@ export class ExternalResponsibilityService {
       const eventId=await this.event(client,actor,"rework.external_deduction.close","external_deduction:close",order); await this.bindAttachments(client,actor,caseId,input.evidenceAttachmentIds);
       await client.query(`INSERT INTO rework_external_deduction_closures(closure_id,case_id,result,proposed_amount,actual_deducted_amount,remaining_amount,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$4-$5,$6,$7,$8,$9,$10,$11)`,[randomUUID(),caseId,input.result,proposed,actual,input.reason??null,input.evidenceAttachmentIds,input.remainingDifferenceDisposition??null,actor.actorId,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='closed',case_version=case_version+1 WHERE case_id=$1",[caseId]);
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-overdue:${caseId}:`,"The deduction case was closed");
       return this.getCase(actor,caseId,client);
     });
   }
@@ -436,7 +459,40 @@ export class ExternalResponsibilityService {
       const eventAction=decision==="accepted"?"rework.external_responsibility.payables_accept":"rework.external_responsibility.payables_return"; const eventId=await this.event(client,actor,eventAction,"external_responsibility:payables_confirm",order); await this.bindAttachments(client,actor,caseId,attachmentIds);
       await client.query(`INSERT INTO rework_external_payables_actions(payables_action_id,case_id,action,acted_by,actor_role_snapshot,reason,attachment_ids,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),caseId,decision,actor.actorId,this.roles(actor),reason,attachmentIds,eventId,actor.requestId]);
       const next=decision==="accepted"?"deduction_follow_up":"returned"; await client.query("UPDATE rework_external_responsibility_cases SET status=$2,case_version=case_version+1,payables_confirmed_at=CASE WHEN $2='deduction_follow_up' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE case_id=$1",[caseId,next]);
-      if(decision==="accepted") { await maybeCompleteResponsibilityAction(client,actor,order); await this.outbox.enqueue(client,{topic:"rework.external_responsibility.deduction_follow_up",aggregateType:"external_responsibility_case",aggregateId:caseId,recipientKey:actor.actorId,idempotencyKey:`external-case:follow-up:${caseId}`,payload:{caseId,reworkOrderId:order.rework_order_id,delivery:"intent_only"}}); }
+      await this.todos?.completeOpenByDedupeKey(client,actor,`external-payables:${caseId}:${current.case_version}`,decision==="accepted"?"External payables confirmation accepted":"External payables confirmation returned");
+      if(decision==="accepted") {
+        await maybeCompleteResponsibilityAction(client,actor,order);
+        await this.outbox.enqueue(client,{topic:"rework.external_responsibility.deduction_follow_up",aggregateType:"external_responsibility_case",aggregateId:caseId,recipientKey:actor.actorId,idempotencyKey:`external-case:follow-up:${caseId}`,payload:{caseId,reworkOrderId:order.rework_order_id,delivery:"intent_only"}});
+        await this.todos?.actionableForUniqueRoleOrOrderDelegate(client,actor,{
+          category:"external_deduction_follow_up",sourceEventId:eventId,sourceAction:"rework.external_responsibility.payables_accept",
+          entityType:"rework_order",entityId:order.rework_order_id,requiredRole:current.payables_handler_role_snapshot,
+          requiredCapability:"external_deduction:follow_up",delegationScopeId:order.rework_order_id,
+          route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},policyKey:"general",
+          dedupeKey:`deduction-follow-up:${caseId}:${current.case_version+1}`,
+        });
+        await this.todos?.information(client,actor,{
+          category:"external_payables_accepted",sourceEventId:eventId,sourceAction:"rework.external_responsibility.payables_accept",
+          entityType:"rework_order",entityId:order.rework_order_id,recipientUserId:current.business_handler_user_id,
+          route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},
+          dedupeKey:`external-payables-accepted:${caseId}:${current.case_version+1}:${current.business_handler_user_id}`,
+        });
+      } else {
+        const sourceSignoff=await client.query<{operation_event_id:string}>("SELECT operation_event_id FROM rework_external_business_signoffs WHERE case_id=$1 ORDER BY created_at DESC,signoff_id DESC LIMIT 1 FOR KEY SHARE",[caseId]);
+        const sourceSignoffEventId=sourceSignoff.rows[0]?.operation_event_id??fail("外部业务签收原始事件不存在，不能创建可追溯的退回待办",409,"CONFLICT");
+        await this.todos?.actionableForNamedSourceActor(client,actor,{
+          category:"external_payables_return",sourceEventId:eventId,sourceAction:"rework.external_responsibility.payables_return",
+          entityType:"rework_order",entityId:order.rework_order_id,recipientUserId:current.business_handler_user_id,
+          sourceActorEventId:sourceSignoffEventId,permittedCapabilities:["external_responsibility:sign"],
+          route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},policyKey:"finance_return_or_wage_review",
+          dedupeKey:`external-return:${caseId}:${current.case_version+1}`,
+        });
+        await this.todos?.information(client,actor,{
+          category:"external_payables_returned",sourceEventId:eventId,sourceAction:"rework.external_responsibility.payables_return",
+          entityType:"rework_order",entityId:order.rework_order_id,recipientUserId:actor.actorId,
+          route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},
+          dedupeKey:`external-returned:${caseId}:${current.case_version+1}:${actor.actorId}`,
+        });
+      }
       return this.getCase(actor,caseId,client);
     });
   }
