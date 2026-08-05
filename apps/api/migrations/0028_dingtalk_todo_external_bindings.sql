@@ -153,11 +153,11 @@ BEGIN
   )
   ON CONFLICT(topic,recipient_key,idempotency_key) DO NOTHING;
 
-  SELECT event_id INTO outbox_event_id
-  FROM message_outbox
-  WHERE topic='todo.delivery'
-    AND recipient_key='todo:'||todo_record.todo_id::text||':external'
-    AND idempotency_key=stable_idempotency_key;
+  SELECT message.event_id INTO outbox_event_id
+  FROM message_outbox message
+  WHERE message.topic='todo.delivery'
+    AND message.recipient_key='todo:'||todo_record.todo_id::text||':external'
+    AND message.idempotency_key=stable_idempotency_key;
 
   INSERT INTO todo_delivery_attempts(
     delivery_attempt_id,todo_id,message_outbox_event_id,attempt_no,delivery_kind,
@@ -169,19 +169,39 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION normalize_todo_terminal_blocked_fields()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.status='blocked_recipient' AND NEW.status IN ('completed','cancelled') THEN
+    NEW.blocked_at := NULL;
+    NEW.blocked_reason := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER rework_todos_clear_blocked_before_terminal
+  BEFORE UPDATE ON rework_todos FOR EACH ROW
+  EXECUTE FUNCTION normalize_todo_terminal_blocked_fields();
+
 CREATE OR REPLACE FUNCTION project_todo_external_lifecycle()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-  event_id uuid;
-  request_id text;
+  audit_event_id uuid;
+  audit_request_id text;
 BEGIN
   IF OLD.recipient_user_id IS DISTINCT FROM NEW.recipient_user_id
-     AND OLD.status='blocked_recipient' AND NEW.status='pending' THEN
-    event_id := nullif(current_setting('dx_rework.todo_event_id',true),'')::uuid;
-    request_id := nullif(current_setting('dx_rework.todo_request_id',true),'');
-    IF event_id IS NULL OR request_id IS NULL OR NOT EXISTS(
+     AND OLD.status='blocked_recipient' AND NEW.status='pending'
+     AND EXISTS(
+       SELECT 1 FROM dingtalk_todo_external_bindings binding
+       WHERE binding.todo_id=OLD.todo_id
+         AND binding.recipient_user_id=OLD.recipient_user_id
+         AND binding.provider_state IN ('creating','active','unknown_response')
+     ) THEN
+    audit_event_id := nullif(current_setting('dx_rework.todo_event_id',true),'')::uuid;
+    audit_request_id := nullif(current_setting('dx_rework.todo_request_id',true),'');
+    IF audit_event_id IS NULL OR audit_request_id IS NULL OR NOT EXISTS(
       SELECT 1 FROM operation_events event
-      WHERE event.event_id=event_id AND event.request_id=request_id
+      WHERE event.event_id=audit_event_id AND event.request_id=audit_request_id
         AND event.action='todo.transfer'
         AND event.entity_type='rework_todo'
         AND event.entity_id=NEW.todo_id::text
@@ -190,40 +210,52 @@ BEGIN
         USING ERRCODE='55000';
     END IF;
     PERFORM enqueue_todo_external_delivery(
-      OLD,'complete',OLD.recipient_user_id,event_id,request_id,
-      'transfer-close:'||event_id::text
+      OLD,'complete',OLD.recipient_user_id,audit_event_id,audit_request_id,
+      'transfer-close:'||audit_event_id::text
     );
   END IF;
 
   IF OLD.status IN ('pending','blocked_recipient')
-     AND NEW.status IN ('completed','cancelled') THEN
-    event_id := CASE NEW.status
+     AND NEW.status IN ('completed','cancelled')
+     AND EXISTS(
+       SELECT 1 FROM dingtalk_todo_external_bindings binding
+       WHERE binding.todo_id=OLD.todo_id
+         AND binding.recipient_user_id=OLD.recipient_user_id
+         AND binding.provider_state IN ('creating','active','unknown_response')
+     ) THEN
+    audit_event_id := CASE NEW.status
       WHEN 'completed' THEN NEW.completed_operation_event_id
       ELSE NEW.cancelled_operation_event_id
     END;
-    SELECT event.request_id INTO request_id
+    SELECT event.request_id INTO audit_request_id
     FROM operation_events event
-    WHERE event.event_id=event_id
+    WHERE event.event_id=audit_event_id
       AND event.action=CASE NEW.status WHEN 'completed' THEN 'todo.complete' ELSE 'todo.cancel' END
       AND event.entity_type='rework_todo'
       AND event.entity_id=NEW.todo_id::text;
-    IF request_id IS NULL THEN
+    IF audit_request_id IS NULL THEN
       RAISE EXCEPTION 'todo external terminal projection requires matching audit event'
         USING ERRCODE='55000';
     END IF;
     PERFORM enqueue_todo_external_delivery(
-      NEW,'complete',OLD.recipient_user_id,event_id,request_id,
-      'terminal:'||NEW.status||':'||event_id::text
+      NEW,'complete',OLD.recipient_user_id,audit_event_id,audit_request_id,
+      'terminal:'||NEW.status||':'||audit_event_id::text
     );
   END IF;
 
   IF OLD.escalated_at IS NULL AND NEW.escalated_at IS NOT NULL
-     AND NEW.status='pending' THEN
-    event_id := nullif(current_setting('dx_rework.todo_event_id',true),'')::uuid;
-    request_id := nullif(current_setting('dx_rework.todo_request_id',true),'');
-    IF event_id IS NULL OR request_id IS NULL OR NOT EXISTS(
+     AND NEW.status='pending'
+     AND EXISTS(
+       SELECT 1 FROM dingtalk_todo_external_bindings binding
+       WHERE binding.todo_id=NEW.todo_id
+         AND binding.recipient_user_id=NEW.recipient_user_id
+         AND binding.provider_state IN ('creating','active','unknown_response')
+     ) THEN
+    audit_event_id := nullif(current_setting('dx_rework.todo_event_id',true),'')::uuid;
+    audit_request_id := nullif(current_setting('dx_rework.todo_request_id',true),'');
+    IF audit_event_id IS NULL OR audit_request_id IS NULL OR NOT EXISTS(
       SELECT 1 FROM operation_events event
-      WHERE event.event_id=event_id AND event.request_id=request_id
+      WHERE event.event_id=audit_event_id AND event.request_id=audit_request_id
         AND event.action='todo.escalate'
         AND event.entity_type='rework_todo'
         AND event.entity_id=NEW.todo_id::text
@@ -232,8 +264,8 @@ BEGIN
         USING ERRCODE='55000';
     END IF;
     PERFORM enqueue_todo_external_delivery(
-      NEW,'escalation',NEW.recipient_user_id,event_id,request_id,
-      'escalation:'||event_id::text
+      NEW,'escalation',NEW.recipient_user_id,audit_event_id,audit_request_id,
+      'escalation:'||audit_event_id::text
     );
   END IF;
   RETURN NEW;
