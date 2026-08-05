@@ -111,6 +111,10 @@
     {
       "version": "0028_dingtalk_todo_external_bindings",
       "checksum": "3daf7ab0bf74bdff1540ef819ad270f721d77ff83e867f9757791f66c45587a9"
+    },
+    {
+      "version": "0029_management_dashboard_reporting",
+      "checksum": "e8f882baa2431717cd4c6d7a56cbd313cef03045f1c2135c9719750c0a6f5ddf"
     }
   ]
 }
