@@ -23,6 +23,10 @@
     "./reporting": {
       "types": "./src/reporting.ts",
       "import": "./dist/reporting.js"
+    },
+    "./admin-console": {
+      "types": "./src/admin-console.ts",
+      "import": "./dist/admin-console.js"
     }
   },
   "scripts": {

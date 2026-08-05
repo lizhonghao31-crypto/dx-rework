@@ -31,6 +31,7 @@ import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
 import { AdminAuditService } from "./admin-audit-service.js";
+import { AdminConsoleService } from "./admin-console-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -151,6 +152,7 @@ const app = buildApp({
     exportService: new ReportExportService(reportingService, database, config.gitSha),
   },
   adminAudit: { authenticate: (token) => auth.authenticate(token), service: new AdminAuditService(database) },
+  adminConsole: { authenticate: (token) => auth.authenticate(token), service: new AdminConsoleService(database) },
 });
 registerDatabasePoolErrorHandler(database, app.log);
 

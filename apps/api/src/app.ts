@@ -31,6 +31,7 @@ import { registerWageRoutes, type WageHttpDependencies } from "./wages/wage-rout
 import { registerTodoRoutes, type TodoHttpDependencies } from "./todos/routes.js";
 import { registerManagementReportingRoutes, type ManagementReportingHttpDependencies } from "./reporting/management-reporting-routes.js";
 import { registerAdminAuditRoutes, type AdminAuditHttpDependencies } from "./admin-audit-routes.js";
+import { registerAdminConsoleRoutes, type AdminConsoleHttpDependencies } from "./admin-console-routes.js";
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
@@ -50,6 +51,7 @@ export type AppDependencies = Readonly<{
   todos?: TodoHttpDependencies;
   reporting?: ManagementReportingHttpDependencies;
   adminAudit?: AdminAuditHttpDependencies;
+  adminConsole?: AdminConsoleHttpDependencies;
 }>;
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -119,6 +121,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.todos) registerTodoRoutes(app, dependencies.todos);
   if (dependencies.reporting) registerManagementReportingRoutes(app, dependencies.reporting);
   if (dependencies.adminAudit) registerAdminAuditRoutes(app, dependencies.adminAudit);
+  if (dependencies.adminConsole) registerAdminConsoleRoutes(app, dependencies.adminConsole);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
     try {

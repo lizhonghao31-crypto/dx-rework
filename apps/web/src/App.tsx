@@ -10,6 +10,7 @@ import { WagePage } from "./wages/wage-page.js";
 import { ManagementDashboardPage } from "./reporting/management-dashboard-page.js";
 import { ReworkQueryPage } from "./reporting/rework-query-page.js";
 import { ReportCenterPage } from "./reporting/report-center-page.js";
+import { AdminConsolePage } from "./admin-console-page.js";
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -20,7 +21,8 @@ export function App() {
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
   let page;
-  if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
+  if (path === "/ui/admin") page = <AdminConsolePage />;
+  else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
@@ -57,6 +59,9 @@ export function App() {
   }
   if (path === "/ui/wages" || path.startsWith("/ui/wages/")) {
     return <AuthGate requiredCapability="wage:view">{page}</AuthGate>;
+  }
+  if (path === "/ui/admin") {
+    return <AuthGate requiredCapability="admin:read">{page}</AuthGate>;
   }
   if (path === "/ui/management") {
     return <AuthGate requiredCapability="dashboard:management:read">{page}</AuthGate>;
