@@ -1,0 +1,64 @@
+name: PR-14 dependency snapshot
+
+on:
+  push:
+    branches:
+      - codex/pr-13-todo-notification-v2-validation
+    paths:
+      - .github/workflows/pr14-dependencies-snapshot.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR-14 base
+        uses: actions/checkout@v4
+        with:
+          ref: dcfcf13f9247406b750829e7b93e78a1debe4e81
+          fetch-depth: 1
+      - name: Use repository Node version
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Use repository npm version
+        run: npm install --global npm@10.9.9
+      - name: Install exact lockfile dependencies
+        run: |
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          test "$(npm --version)" = "10.9.9"
+          npm ci
+          printf '%s\n' "node=$(node --version) npm=$(npm --version)" > .dependency-toolchain
+      - id: upload
+        name: Upload dependency tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-rework-pr14-dependencies
+          path: |
+            node_modules
+            packages/*/node_modules
+            apps/*/node_modules
+            .dependency-toolchain
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 6
+      - name: Publish artifact ID
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+        with:
+          script: |
+            const marker = '<!-- pr14-dependency-snapshot -->';
+            const body = `${marker}\nPR-14 dependency snapshot ready.\n\n- Base: \`dcfcf13f9247406b750829e7b93e78a1debe4e81\`\n- Artifact ID: \`${process.env.ARTIFACT_ID}\`\n- Run ID: \`${context.runId}\``;
+            const {owner, repo} = context.repo;
+            const issue_number = 22;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(comment => comment.user?.type === 'Bot' && comment.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
