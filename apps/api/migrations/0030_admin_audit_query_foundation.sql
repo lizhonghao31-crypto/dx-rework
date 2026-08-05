@@ -7,9 +7,7 @@ DROP TRIGGER role_capabilities_no_insert ON role_capabilities;
 
 INSERT INTO capability_catalog(capability,display_name,description) VALUES
   ('audit:read','审计查看','系统管理员只读查询操作审计事件和导出审计日志')
-ON CONFLICT (capability) DO UPDATE SET
-  display_name=EXCLUDED.display_name,
-  description=EXCLUDED.description;
+ON CONFLICT DO NOTHING;
 
 INSERT INTO role_capabilities(role_code,capability) VALUES
   ('system_admin','audit:read')
