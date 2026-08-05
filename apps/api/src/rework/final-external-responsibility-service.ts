@@ -13,6 +13,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { FixedExternalResponsibilityService } from "./fixed-external-responsibility-service.js";
 
 type Result<T> = { value: T; reused: boolean };
@@ -101,8 +102,11 @@ export class FinalExternalResponsibilityService
   private readonly reviewIdempotency = new IdempotencyService();
   private readonly reviewEvents = new OperationEventRepository();
 
-  constructor(private readonly finalDatabase: Pool) {
-    super(finalDatabase);
+  constructor(
+    private readonly finalDatabase: Pool,
+    private readonly finalTodos?: TodoProjectionService,
+  ) {
+    super(finalDatabase, finalTodos);
   }
 
   override async get(
@@ -461,6 +465,22 @@ export class FinalExternalResponsibilityService
     if (updated.rowCount !== 1) {
       fail("责任变更草稿创建时订单版本发生冲突");
     }
+    await this.finalTodos?.actionableForResponsibilityHandler(client, actor, {
+      category: "responsibility_determination",
+      sourceEventId: draftEventId,
+      sourceAction: "rework.responsibility.draft",
+      entityType: "rework_order",
+      entityId: reopenedOrder.rework_order_id,
+      recipientUserId: actor.actorId,
+      route: {
+        routeName: "responsibility_detail",
+        entityId: reopenedOrder.rework_order_id,
+      },
+      // A revision can reopen the order without implying a new determination
+      // version. The draft event is the immutable fact that identifies this
+      // projection, so it is the only safe discriminator for its todo.
+      dedupeKey: `responsibility:${reopenedOrder.rework_order_id}:revision:${draftId}`,
+    });
     return draftId;
   }
 
