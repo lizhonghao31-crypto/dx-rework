@@ -871,12 +871,18 @@ export class TodoBackfillService {
   }
 
   private async captureWatermark(): Promise<Watermark> {
-    const result = await this.database.query<{ created_at: Date; event_id: string }>(
-      "SELECT created_at,event_id FROM operation_events ORDER BY created_at DESC,event_id DESC LIMIT 1",
+    const result = await this.database.query<{ created_at: string; event_id: string }>(
+      `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') || '+00:00' AS created_at,
+              event_id
+       FROM operation_events
+       ORDER BY created_at DESC,event_id DESC LIMIT 1`,
     );
     const row = result.rows[0];
     if (!row) throw new ApplicationError("CONFLICT", "Backfill requires an existing operation-event history", 409);
-    return { createdAt: row.created_at.toISOString(), eventId: row.event_id };
+    // Do not round through JavaScript Date: PostgreSQL timestamps retain
+    // microseconds, and truncating the high watermark could omit the newest
+    // source event from the finite historical scan.
+    return { createdAt: row.created_at, eventId: row.event_id };
   }
 
   private async resolveActor(actorUserId: string): Promise<TrustedActorContext> {
