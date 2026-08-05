@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: pr13-dingtalk-readonly-smoke
@@ -20,17 +21,25 @@ jobs:
     timeout-minutes: 10
     environment: pr-preview
     steps:
-      - name: Checkout validation branch
+      - id: checkout
+        name: Checkout validation branch
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Verify validation branch contains the reviewed PR Head
+      - id: base
+        name: Verify validation branch contains the reviewed PR Head
+        if: steps.checkout.outcome == 'success'
+        continue-on-error: true
         env:
           REVIEWED_HEAD: 82a2990ef53fec9d4722db55e9ed4dce22d4129a
         run: git merge-base --is-ancestor "$REVIEWED_HEAD" HEAD
 
-      - name: Configure pinned ECS SSH identity
+      - id: ssh
+        name: Configure pinned ECS SSH identity
+        if: steps.checkout.outcome == 'success' && steps.base.outcome == 'success'
+        continue-on-error: true
         env:
           PREVIEW_HOST: ${{ vars.PR_PREVIEW_HOST }}
           PREVIEW_SSH_USER: ${{ secrets.PR_PREVIEW_SSH_USER }}
@@ -48,7 +57,10 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           printf 'PREVIEW_HOST=%s\nPREVIEW_SSH_USER=%s\n' "$PREVIEW_HOST" "$PREVIEW_SSH_USER" >> "$GITHUB_ENV"
 
-      - name: Run non-mutating token, identity and Todo lookup preflight
+      - id: smoke
+        name: Run non-mutating token, identity and Todo lookup preflight
+        if: steps.checkout.outcome == 'success' && steps.base.outcome == 'success' && steps.ssh.outcome == 'success'
+        continue-on-error: true
         run: |
           set -euo pipefail
           ssh "$PREVIEW_SSH_USER@$PREVIEW_HOST" 'bash -s' <<'REMOTE'
@@ -143,3 +155,30 @@ jobs:
           }
           NODE
           REMOTE
+
+      - name: Upsert sanitized smoke status on PR 22
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          BASE_OUTCOME: ${{ steps.base.outcome }}
+          SSH_OUTCOME: ${{ steps.ssh.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        with:
+          script: |
+            const marker = '<!-- pr13-dingtalk-readonly-smoke -->';
+            const success = process.env.CHECKOUT_OUTCOME === 'success'
+              && process.env.BASE_OUTCOME === 'success'
+              && process.env.SSH_OUTCOME === 'success'
+              && process.env.SMOKE_OUTCOME === 'success';
+            const body = `${marker}\n## PR-13 DingTalk 只读生产预检\n\n- Validation commit: \`${context.sha}\`\n- Reviewed PR Head: \`82a2990ef53fec9d4722db55e9ed4dce22d4129a\`\n- 结果: **${success ? '通过' : '失败'}**\n- 范围: 真实 token、primary-corp identity、Todo lookup；**未创建、更新或完成待办**。\n- 阶段结果: checkout=${process.env.CHECKOUT_OUTCOME}, base=${process.env.BASE_OUTCOME}, ssh=${process.env.SSH_OUTCOME}, smoke=${process.env.SMOKE_OUTCOME}\n`;
+            const {owner, repo} = context.repo;
+            const issue_number = 22;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(comment => comment.user?.type === 'Bot' && comment.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
+
+      - name: Keep preflight failures blocking
+        if: always() && (steps.checkout.outcome != 'success' || steps.base.outcome != 'success' || steps.ssh.outcome != 'success' || steps.smoke.outcome != 'success')
+        run: exit 1
