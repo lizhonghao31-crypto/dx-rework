@@ -15,8 +15,6 @@ INSERT INTO role_capabilities(role_code,capability) VALUES
   ('owner_group','report:export'),
   ('production_management','report:view'),
   ('production_management','report:export'),
-  ('tail_supervisor','report:view'),
-  ('tail_supervisor','report:export'),
   ('finance_read','report:view'),
   ('finance_read','report:export')
 ON CONFLICT DO NOTHING;
