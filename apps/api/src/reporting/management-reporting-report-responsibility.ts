@@ -32,7 +32,8 @@ export async function ownFactoryReport(source: Queryable, query: ReportQuery, ra
        approval.finalized_determination_version,approval.status,approval.own_factory_total_amount::text,
        decision.decision,decision.acted_by,decision.decided_at
      FROM leaf JOIN rework_own_factory_approvals approval ON approval.finalized_determination_id=leaf.determination_id
-     JOIN rework_orders order_record USING(rework_order_id) LEFT JOIN rework_own_factory_approval_decisions decision USING(approval_id)
+     JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
+     LEFT JOIN rework_own_factory_approval_decisions decision USING(approval_id)
      WHERE (approval.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4)
        AND ($5::text IS NULL OR approval.status=$5)
@@ -51,7 +52,8 @@ export async function externalReport(source: Queryable, query: ReportQuery, rang
        COALESCE(closure.remaining_amount,case_record.proposed_deduction_amount-COALESCE(entries.actual,0))::text remaining_amount,
        closure.result,closure.closed_at
      FROM leaf JOIN rework_external_responsibility_batches batch ON batch.finalized_determination_id=leaf.determination_id AND batch.status='active'
-     JOIN rework_external_responsibility_cases case_record USING(batch_id) JOIN rework_orders order_record USING(rework_order_id)
+     JOIN rework_external_responsibility_cases case_record USING(batch_id)
+     JOIN rework_orders order_record ON order_record.rework_order_id=case_record.rework_order_id
      LEFT JOIN entries USING(case_id) LEFT JOIN rework_external_deduction_closures closure USING(case_id)
      WHERE case_record.status<>'superseded' AND (case_record.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4 OR case_record.supplier_name_snapshot ILIKE $4)
