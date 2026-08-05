@@ -59,7 +59,15 @@ runWithPostgres("PR-15 admin audit query PostgreSQL integration", () => {
        ($3,'req-three',$9,ARRAY['tail_supervisor'],'submission:audit','work.reported','work_report','wr-1',$10,$11,'business reason','2026-08-05T12:00:01Z')`,
       [eventIds[0], eventIds[1], eventIds[2], requestId, ids.owner, { old: true }, { reportType: "rework_overview", filters: { q: "a" } }, { exportType: "custom_export" }, ids.tail, { qty: 1 }, { qty: 2 }],
     );
-    await database.query("UPDATE user_role_assignments SET role_code='tail_supervisor' WHERE user_id=$1", [ids.owner]);
+    await database.query(
+      "INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'tail_supervisor',$2,'fixture role change')",
+      [randomUUID(), ids.owner],
+    );
+    const currentRoles = await database.query<{ role_code: string }>(
+      "SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL ORDER BY role_code",
+      [ids.owner],
+    );
+    expect(currentRoles.rows).toEqual([{ role_code: "owner_group" }, { role_code: "tail_supervisor" }]);
 
     const page1 = await service.events({ limit: 2 });
     const page2 = await service.events({ limit: 2, cursor: page1.nextCursor ?? undefined });
