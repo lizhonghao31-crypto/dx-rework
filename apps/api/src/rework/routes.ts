@@ -10,6 +10,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { AuthUser } from "../auth/service.js";
+import { registerErpIntegrationRoutes, type ErpIntegrationHttpDependencies } from "../erp/erp-integration-routes.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ReworkInitiationService } from "./service.js";
@@ -38,6 +39,7 @@ const idempotencyKey = (request: FastifyRequest): string =>
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
 }>;
 
 export function registerReworkRoutes(
@@ -151,4 +153,11 @@ export function registerReworkRoutes(
       query.status,
     );
   });
+
+  if (dependencies.erp) {
+    registerErpIntegrationRoutes(app, {
+      authenticateSession: dependencies.authenticate,
+      ...dependencies.erp,
+    });
+  }
 }
