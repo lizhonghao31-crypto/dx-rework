@@ -19,6 +19,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type OrderRow = Readonly<{
@@ -66,6 +67,7 @@ export class WholeOrderReviewService {
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async get(actor: TrustedActorContext, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse> {
@@ -124,6 +126,51 @@ export class WholeOrderReviewService {
         "UPDATE rework_orders SET status='pending_responsibility_determination',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
         [reworkOrderId, actor.actorId],
       );
+      const todoFoundationAvailable = this.todos
+        && await this.todoFoundationAvailable(client);
+      if (todoFoundationAvailable) {
+        await this.todos!.completeOpenByDedupeKey(
+          client,
+          actor,
+          `whole-order-review:${reworkOrderId}:${order.version}`,
+          "Whole-order review was approved",
+        );
+        const wagePeriods = await client.query<{
+          period_id: string;
+          period_version: number;
+        }>(
+          `SELECT DISTINCT period.period_id,period.period_version
+           FROM rework_wage_periods period
+           JOIN rework_wage_items item ON item.period_id=period.period_id
+           WHERE item.order_review_id=$1
+             AND period.status='pending_tail_review'
+           ORDER BY period.period_id`,
+          [reviewId],
+        );
+        for (const wagePeriod of wagePeriods.rows) {
+          await this.todos.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            `wage-tail-review:${wagePeriod.period_id}:`,
+            "Newly materialized wage facts require a fresh tail review",
+          );
+          await this.todos.actionableForUniqueDirectRole(client, actor, {
+            category: "wage_tail_review",
+            sourceEventId: eventId,
+            sourceAction: "rework.whole_order.approve",
+            entityType: "rework_order",
+            entityId: reworkOrderId,
+            requiredRole: "tail_supervisor",
+            requiredCapability: "wage:tail_review",
+            route: {
+              routeName: "wage_period_detail",
+              entityId: wagePeriod.period_id,
+            },
+            policyKey: "finance_return_or_wage_review",
+            dedupeKey: `wage-tail-review:${wagePeriod.period_id}:${wagePeriod.period_version}`,
+          });
+        }
+      }
       await this.outbox.enqueue(client, {
         topic: "rework.pending_responsibility_determination", aggregateType: "rework_order", aggregateId: reworkOrderId,
         payload: { reworkOrderId, reworkNo: order.rework_no, orderReviewId: reviewId }, recipientKey: "role:production_management",
@@ -131,6 +178,19 @@ export class WholeOrderReviewService {
       });
       return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
     });
+  }
+
+  /**
+   * Historical migration replay exercises the pre-PR-13 services against
+   * earlier schemas. The injected projection must therefore remain inert
+   * until the PR-13 table is actually present, rather than querying a PR-12
+   * wage table during that replay.
+   */
+  private async todoFoundationAvailable(client: PoolClient): Promise<boolean> {
+    const result = await client.query<{ available: boolean }>(
+      "SELECT to_regclass('rework_todos') IS NOT NULL AS available",
+    );
+    return result.rows[0]?.available === true;
   }
 
   async rejectReport(actor: TrustedActorContext, workReportId: string, input: RejectWorkReport, key: string): Promise<Result<WholeOrderReviewResponse>> {
@@ -178,6 +238,41 @@ export class WholeOrderReviewService {
         "UPDATE rework_orders SET status='in_progress',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
         [order.rework_order_id, actor.actorId],
       );
+      await this.todos?.cancelOpenByDedupeKey(
+        client,
+        actor,
+        `whole-order-review:${order.rework_order_id}:${order.version}`,
+        "A work report was returned for correction",
+      );
+      const originalSubmission = await client.query<{ event_id: string }>(
+        `SELECT event_id
+         FROM operation_events
+         WHERE action='rework.work_report.submit'
+           AND after_state->>'workReportId'=$1
+         ORDER BY created_at DESC,event_id DESC
+         LIMIT 1
+         FOR KEY SHARE`,
+        [workReportId],
+      );
+      const originalSubmissionEventId = originalSubmission.rows[0]?.event_id
+        ?? error("上数原始操作事件不存在，不能创建可追溯的驳回待办", 409, "CONFLICT");
+      await this.todos?.actionableForNamedSourceActor(client, actor, {
+        category: "work_report_return",
+        sourceEventId: eventId,
+        sourceAction: "rework.work_report.reject",
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        recipientUserId: row.submitted_by,
+        sourceActorEventId: originalSubmissionEventId,
+        permittedCapabilities: ["work:report", "work:report_for_worker"],
+        route: {
+          routeName: "rework_detail",
+          entityId: order.rework_order_id,
+          tab: "whole_order_review",
+        },
+        policyKey: "general",
+        dedupeKey: `work-report-return:${workReportId}`,
+      });
       return this.dto(client, await this.order(client, order.rework_order_id, false), await this.permissions(client, actor, order));
     });
   }
