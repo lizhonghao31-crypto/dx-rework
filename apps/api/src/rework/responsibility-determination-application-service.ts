@@ -9,6 +9,7 @@ import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
 import { ResponsibilityDeterminationQueueService } from "./responsibility-determination-queue-service.js";
 import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
@@ -25,9 +26,17 @@ export class ResponsibilityDeterminationApplicationService {
   private readonly authorized: AuthorizedResponsibilityDeterminationService;
   private readonly queue: ResponsibilityDeterminationQueueService;
 
-  constructor(database: Pool) {
-    this.draftEngine = new ResponsibilityDeterminationService(database);
-    this.authorized = new AuthorizedResponsibilityDeterminationService(database);
+  constructor(database: Pool, todos?: TodoProjectionService) {
+    this.draftEngine = new ResponsibilityDeterminationService(
+      database,
+      undefined,
+      undefined,
+      todos,
+    );
+    this.authorized = new AuthorizedResponsibilityDeterminationService(
+      database,
+      todos,
+    );
     this.queue = new ResponsibilityDeterminationQueueService(database);
   }
 
