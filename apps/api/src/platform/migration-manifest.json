@@ -123,6 +123,10 @@
     {
       "version": "0031_administrator_console_foundation",
       "checksum": "a5ce466bc4d2c61761580c1b480911622735d17974c6db912dd4bf1403813d6d"
+    },
+    {
+      "version": "0032_erp_integration_contract",
+      "checksum": "3535f8dac5e887d72ebb41dc514b17fe365fa367fa0fa2abe3ba186f65145f0a"
     }
   ]
 }

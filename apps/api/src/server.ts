@@ -1,37 +1,39 @@
 import { loadConfig } from "@dx-rework/config";
+import { DisabledErpAdapter } from "@dx-rework/domain";
 import pg from "pg";
 
+import { AccessMasterDataService } from "./access/service.js";
+import { AdminAuditService } from "./admin-audit-service.js";
+import { AdminConsoleService } from "./admin-console-service.js";
 import { buildApp } from "./app.js";
 import { OfficialDingTalkProvider } from "./auth/provider.js";
 import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { AuthService } from "./auth/service.js";
+import { ErpIntegrationService } from "./erp/erp-integration-service.js";
 import {
   checkDatabase,
   getAppliedSchemaHistory,
   registerDatabasePoolErrorHandler,
 } from "./platform/database.js";
+import { ManagementReportingService } from "./reporting/management-reporting-service.js";
+import { ReportExportService } from "./reporting/report-export-service.js";
+import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
+import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
+import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
+import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
+import { ReworkInitiationService } from "./rework/service.js";
+import { WholeOrderReviewService } from "./rework/whole-order-review-service.js";
+import { WorkReportingService } from "./rework/work-reporting-service.js";
+import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
+import { TodoProjectionService } from "./todos/projection-service.js";
+import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
+import { TodoService } from "./todos/service.js";
 import { AttachmentService } from "./tools/attachments.js";
 import { ExportJobService } from "./tools/exports.js";
 import { DisabledObjectStorage } from "./tools/storage.js";
-import { AccessMasterDataService } from "./access/service.js";
-import { ReworkInitiationService } from "./rework/service.js";
-import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
-import { WorkReportingService } from "./rework/work-reporting-service.js";
-import { WholeOrderReviewService } from "./rework/whole-order-review-service.js";
-import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
-import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
-import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
 import { canDownloadWageAttachment } from "./wages/wage-attachment-access.js";
-import { WageService } from "./wages/wage-service.js";
 import { WageExportService } from "./wages/wage-export-service.js";
-import { TodoService } from "./todos/service.js";
-import { TodoProjectionService } from "./todos/projection-service.js";
-import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
-import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
-import { ManagementReportingService } from "./reporting/management-reporting-service.js";
-import { ReportExportService } from "./reporting/report-export-service.js";
-import { AdminAuditService } from "./admin-audit-service.js";
-import { AdminConsoleService } from "./admin-console-service.js";
+import { WageService } from "./wages/wage-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -57,6 +59,14 @@ const attachments = new AttachmentService(database, storage, {
 const todoService = new TodoService(database);
 const todoProjection = new TodoProjectionService(todoService);
 const reworkService = new ReworkInitiationService(
+  database,
+  config.dingtalk.corpId,
+  undefined,
+  undefined,
+  undefined,
+  todoProjection,
+);
+const erpIntegrationService = new ErpIntegrationService(
   database,
   config.dingtalk.corpId,
   undefined,
@@ -119,6 +129,10 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    erp: {
+      adapter: new DisabledErpAdapter(),
+      service: erpIntegrationService,
+    },
   },
   processConfiguration: {
     authenticate: (token) => auth.authenticate(token),
