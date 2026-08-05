@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import type { ReportQuery, ReportType } from "@dx-rework/contracts/reporting";
 
-import type { TrustedActorContext } from "../tools/repositories.js";
+import { OperationEventRepository, type SqlClient, type TrustedActorContext } from "../tools/repositories.js";
 import type { ManagementReportingService } from "./management-reporting-service.js";
 import { buildWorkbook, type WorkbookCell } from "./xlsx-workbook.js";
 
@@ -24,7 +26,9 @@ const sheetRows = (
 export class ReportExportService {
   constructor(
     private readonly reporting: ManagementReportingService,
+    private readonly auditClient: SqlClient,
     private readonly gitSha: string,
+    private readonly events = new OperationEventRepository(),
   ) {}
 
   async export(actor: TrustedActorContext, reportType: ReportType, query: ReportQuery): Promise<{
@@ -32,6 +36,7 @@ export class ReportExportService {
     content: Buffer;
   }> {
     const { range, data } = await this.reporting.exportData(actor, reportType, query);
+    const filename = `${reportNames[reportType]}-${range.from}-${range.to}.xlsx`;
     const filterRows: WorkbookCell[][] = [
       ["报表类型", reportNames[reportType]],
       ["数据快照时间", range.asOf.toISOString()],
@@ -54,9 +59,21 @@ export class ReportExportService {
       { name: "明细", rows: sheetRows(data.columns, data.rows) },
       { name: "汇总", rows: summaryRows },
     ]);
-    return {
-      filename: `${reportNames[reportType]}-${range.from}-${range.to}.xlsx`,
-      content,
-    };
+
+    await this.events.append(this.auditClient, actor, {
+      action: "report.exported",
+      entityType: "report_export",
+      entityId: randomUUID(),
+      after: {
+        reportType,
+        filters: query,
+        range: { from: range.from, to: range.to },
+        snapshotAt: range.asOf.toISOString(),
+        rowCount: data.rows.length,
+        filename,
+      },
+    });
+
+    return { filename, content };
   }
 }
