@@ -4,7 +4,9 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
+import type { DingTalkTodoProvider } from "../../apps/api/src/todos/provider.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
@@ -38,6 +40,7 @@ const migrations = [
   "0025_wage_completion_month_backfill_access.sql",
   "0026_todo_notification_foundation.sql",
   "0027_todo_routing_lifecycle_closure.sql",
+  "0028_dingtalk_todo_external_bindings.sql",
 ] as const;
 
 runWithPostgres("PR-13 todo notification foundation migration", () => {
@@ -46,6 +49,15 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
   const database = new pg.Pool({
     connectionString: databaseUrl!,
     options: `-c search_path=${schema}`,
+  });
+  const adminId = randomUUID();
+  let access: AccessMasterDataService;
+  const adminActor = (): TrustedActorContext => ({
+    actorId: adminId,
+    actorRoles: ["system_admin"],
+    authorizationCapability: "access:admin",
+    authorizationCapabilities: ["access:admin"],
+    requestId: `todo-admin-${randomUUID()}`,
   });
 
   beforeAll(async () => {
@@ -56,6 +68,24 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
         "utf8",
       ));
     }
+    await database.query(
+      "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'Todo test administrator',true)",
+      [adminId],
+    );
+    await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','todo-corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(), adminId, `todo-admin-user-${adminId}`, `todo-admin-union-${adminId}`],
+    );
+    await database.query(
+      `INSERT INTO user_role_assignments(
+         assignment_id,user_id,role_code,granted_by,grant_reason
+       ) VALUES($1,$2,'system_admin',$2,'initial controlled administrator')`,
+      [randomUUID(), adminId],
+    );
+    access = new AccessMasterDataService(database, "todo-corp");
+    await access.ensureOrganizationPolicy();
   });
 
   afterAll(async () => {
@@ -258,7 +288,23 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       [first.todoId],
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
 
-    const provider = { deliver: async () => ({ providerMessageId: "message-1" }) };
+    const provider: DingTalkTodoProvider = {
+      createTodo: async (input) => ({
+        providerMessageId: "message-1",
+        providerTodoId: `provider-${input.todoId}`,
+        state: "created",
+      }),
+      completeTodo: async (input) => ({
+        providerMessageId: "message-complete",
+        providerTodoId: input.providerTodoId ?? `provider-${input.todoId}`,
+        state: "completed",
+      }),
+      updateTodo: async (input) => ({
+        providerMessageId: "message-update",
+        providerTodoId: input.providerTodoId ?? `provider-${input.todoId}`,
+        state: "updated",
+      }),
+    };
     expect(await new TodoDeliveryWorker(database, provider, "/").runOnce()).toEqual({
       claimed: 1,
       sent: 1,
@@ -267,7 +313,9 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     });
     await expect(database.query(
       `SELECT attempt_no,outcome,provider_message_id
-       FROM todo_delivery_attempts WHERE todo_id=$1 ORDER BY attempt_no`,
+       FROM todo_delivery_attempts
+       WHERE todo_id=$1 AND delivery_kind='information'
+       ORDER BY attempt_no`,
       [first.todoId],
     )).resolves.toMatchObject({ rows: [
       { attempt_no: 0, outcome: "queued", provider_message_id: null },
@@ -277,6 +325,13 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       "SELECT status FROM rework_todos WHERE todo_id=$1",
       [first.todoId],
     )).resolves.toMatchObject({ rows: [{ status: "completed" }] });
+    await database.query(
+      `UPDATE message_outbox
+       SET status='sent',sent_at=COALESCE(sent_at,CURRENT_TIMESTAMP),
+           claimed_at=NULL,claim_token=NULL,last_error=NULL,updated_at=CURRENT_TIMESTAMP
+       WHERE aggregate_id=$1 AND status<>'sent'`,
+      [first.todoId],
+    );
 
     const secondSourceEventId = randomUUID();
     await database.query(
@@ -314,9 +369,12 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     } finally {
       completionClient.release();
     }
-    expect(await new TodoDeliveryWorker(database, {
-      deliver: async () => { throw new Error("a completed todo must never call the provider"); },
-    }, "/").runOnce()).toEqual({
+    const noCallProvider: DingTalkTodoProvider = {
+      createTodo: async () => { throw new Error("a completed todo must never call the provider"); },
+      completeTodo: async () => { throw new Error("a completed todo without a binding must never call the provider"); },
+      updateTodo: async () => { throw new Error("a completed todo must never call the provider"); },
+    };
+    expect(await new TodoDeliveryWorker(database, noCallProvider, "/").runOnce(1)).toEqual({
       claimed: 1,
       sent: 0,
       failed: 0,
@@ -350,15 +408,14 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       [managerId, "production_management"],
       [replacementRecipientId, "tail_supervisor"],
     ] as const) {
-      await database.query(
-        `INSERT INTO user_role_assignments(
-           assignment_id,user_id,role_code,granted_by,grant_reason
-         ) VALUES($1,$2,$3,$4,'migration fixture')`,
-        [randomUUID(), userId, roleCode, actorId],
-      );
+      await access.assignRole(adminActor(), {
+        userId,
+        roleCode,
+        reason: "controlled migration fixture",
+      });
     }
     await database.query(
-      "INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','todo-corp')",
+      "INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','todo-corp') ON CONFLICT DO NOTHING",
     );
     await database.query(
       `INSERT INTO operation_events(
@@ -474,14 +531,12 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       [actorId, "tail_supervisor"],
       [recipientId, "tail_supervisor"],
       [firstManagerId, "production_management"],
-      [replacementManagerId, "production_management"],
     ] as const) {
-      await database.query(
-        `INSERT INTO user_role_assignments(
-           assignment_id,user_id,role_code,granted_by,grant_reason
-         ) VALUES($1,$2,$3,$4,'routing lifecycle fixture')`,
-        [randomUUID(), userId, roleCode, actorId],
-      );
+      await access.assignRole(adminActor(), {
+        userId,
+        roleCode,
+        reason: "controlled routing lifecycle fixture",
+      });
     }
     await database.query(
       "INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','todo-corp') ON CONFLICT DO NOTHING",
@@ -553,6 +608,11 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     const firstRoutingTodoId = first.rows[0]!.routing_todo_id;
 
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [firstManagerId]);
+    await access.assignRole(adminActor(), {
+      userId: replacementManagerId,
+      roleCode: "production_management",
+      reason: "controlled replacement routing manager",
+    });
     const secondRevalidation = await database.connect();
     try {
       await secondRevalidation.query("BEGIN");

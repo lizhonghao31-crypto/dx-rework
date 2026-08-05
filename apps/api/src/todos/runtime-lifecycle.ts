@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import type { Pool } from "pg";
 
-import { TodoDeliveryWorker } from "./delivery-worker.js";
-import { DisabledDingTalkTodoProvider, type DingTalkTodoProvider } from "./provider.js";
-import { TodoTimingService } from "./timing-service.js";
+import { TodoDeliveryWorker, type TodoDeliveryRunResult } from "./delivery-worker.js";
+import type { DingTalkTodoProvider } from "./provider.js";
+import { TodoTimingService, type TodoTimingRunResult } from "./timing-service.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 
 type Logger = Readonly<{
@@ -10,76 +12,157 @@ type Logger = Readonly<{
   warn(value: unknown, message?: string): void;
 }>;
 
+type DeliveryRunner = Readonly<{
+  runOnce(limit?: number): Promise<TodoDeliveryRunResult>;
+}>;
+
+type TimingRunner = Readonly<{
+  runOnce(actor: TrustedActorContext, limit?: number): Promise<TodoTimingRunResult>;
+}>;
+
 export type TodoRuntimeLifecycleOptions = Readonly<{
   enabled: boolean;
   appBasePath: string;
+  runtimeActorId?: string;
   deliveryIntervalMs?: number;
   timingIntervalMs?: number;
   provider?: DingTalkTodoProvider;
-  timingActor: TrustedActorContext;
+  deliveryRunner?: DeliveryRunner;
+  timingRunner?: TimingRunner;
   logger: Logger;
 }>;
 
 export class TodoRuntimeLifecycle {
   private deliveryTimer: NodeJS.Timeout | null = null;
   private timingTimer: NodeJS.Timeout | null = null;
-  private runningDelivery = false;
-  private runningTiming = false;
+  private deliveryRun: Promise<void> | null = null;
+  private timingRun: Promise<void> | null = null;
   private stopped = true;
-  private readonly deliveryWorker: TodoDeliveryWorker;
-  private readonly timingService: TodoTimingService;
+  private readonly deliveryWorker: DeliveryRunner;
+  private readonly timingService: TimingRunner;
   private readonly deliveryIntervalMs: number;
   private readonly timingIntervalMs: number;
 
-  constructor(database: Pool, private readonly options: TodoRuntimeLifecycleOptions) {
-    this.deliveryWorker = new TodoDeliveryWorker(database, options.provider ?? new DisabledDingTalkTodoProvider(), options.appBasePath);
-    this.timingService = new TodoTimingService(database);
-    this.deliveryIntervalMs = options.deliveryIntervalMs ?? 30_000;
-    this.timingIntervalMs = options.timingIntervalMs ?? 60_000;
+  constructor(
+    private readonly database: Pool,
+    private readonly options: TodoRuntimeLifecycleOptions,
+  ) {
+    if (options.enabled && !options.deliveryRunner && !options.provider) {
+      throw new Error("Todo runtime requires an explicit DingTalk todo provider");
+    }
+    if (options.enabled && !options.runtimeActorId) {
+      throw new Error("Todo runtime requires TODO_RUNTIME_ACTOR_ID");
+    }
+    this.deliveryWorker = options.deliveryRunner
+      ?? new TodoDeliveryWorker(database, options.provider!, options.appBasePath);
+    this.timingService = options.timingRunner ?? new TodoTimingService(database);
+    this.deliveryIntervalMs = this.interval(options.deliveryIntervalMs ?? 30_000, "delivery");
+    this.timingIntervalMs = this.interval(options.timingIntervalMs ?? 60_000, "timing");
   }
 
   start(): void {
     if (!this.options.enabled || !this.stopped) return;
     this.stopped = false;
-    this.deliveryTimer = setInterval(() => void this.runDelivery(), this.deliveryIntervalMs);
-    this.timingTimer = setInterval(() => void this.runTiming(), this.timingIntervalMs);
-    void this.runDelivery();
-    void this.runTiming();
-    this.options.logger.info({ deliveryIntervalMs: this.deliveryIntervalMs, timingIntervalMs: this.timingIntervalMs }, "todo runtime lifecycle started");
+    this.deliveryTimer = setInterval(() => this.kickDelivery(), this.deliveryIntervalMs);
+    this.timingTimer = setInterval(() => this.kickTiming(), this.timingIntervalMs);
+    this.kickDelivery();
+    this.kickTiming();
+    this.options.logger.info({
+      deliveryIntervalMs: this.deliveryIntervalMs,
+      timingIntervalMs: this.timingIntervalMs,
+    }, "todo runtime lifecycle started");
   }
 
   async stop(): Promise<void> {
+    if (this.stopped && !this.deliveryRun && !this.timingRun) return;
     this.stopped = true;
     if (this.deliveryTimer) clearInterval(this.deliveryTimer);
     if (this.timingTimer) clearInterval(this.timingTimer);
     this.deliveryTimer = null;
     this.timingTimer = null;
+    await Promise.allSettled([
+      this.deliveryRun ?? Promise.resolve(),
+      this.timingRun ?? Promise.resolve(),
+    ]);
     this.options.logger.info({}, "todo runtime lifecycle stopped");
   }
 
+  private kickDelivery(): void {
+    if (this.stopped || this.deliveryRun) return;
+    this.deliveryRun = this.runDelivery().finally(() => { this.deliveryRun = null; });
+  }
+
+  private kickTiming(): void {
+    if (this.stopped || this.timingRun) return;
+    this.timingRun = this.runTiming().finally(() => { this.timingRun = null; });
+  }
+
   private async runDelivery(): Promise<void> {
-    if (this.runningDelivery || this.stopped) return;
-    this.runningDelivery = true;
     try {
       const result = await this.deliveryWorker.runOnce();
       this.options.logger.info(result, "todo delivery worker tick completed");
-    } catch (error) {
-      this.options.logger.warn({ err: error instanceof Error ? { name: error.name, message: error.message } : error }, "todo delivery worker tick failed");
-    } finally {
-      this.runningDelivery = false;
+    } catch (error: unknown) {
+      this.options.logger.warn({ err: this.safeError(error) }, "todo delivery worker tick failed");
     }
   }
 
   private async runTiming(): Promise<void> {
-    if (this.runningTiming || this.stopped) return;
-    this.runningTiming = true;
     try {
-      const result = await this.timingService.runOnce(this.options.timingActor);
+      const actor = await this.resolveRuntimeActor();
+      const result = await this.timingService.runOnce(actor);
       this.options.logger.info(result, "todo timing tick completed");
-    } catch (error) {
-      this.options.logger.warn({ err: error instanceof Error ? { name: error.name, message: error.message } : error }, "todo timing tick failed");
-    } finally {
-      this.runningTiming = false;
+    } catch (error: unknown) {
+      this.options.logger.warn({ err: this.safeError(error) }, "todo timing tick failed");
     }
+  }
+
+  private async resolveRuntimeActor(): Promise<TrustedActorContext> {
+    const result = await this.database.query<{
+      actor_id: string;
+      actor_roles: string[];
+    }>(
+      `SELECT user_record.id actor_id,
+              array_agg(DISTINCT assignment.role_code ORDER BY assignment.role_code) actor_roles
+       FROM app_users user_record
+       JOIN identity_mappings identity
+         ON identity.user_id=user_record.id AND identity.provider='dingtalk'
+        AND identity.active=true AND identity.employed=true
+       JOIN access_security_policy policy
+         ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+       JOIN user_role_assignments assignment
+         ON assignment.user_id=user_record.id AND assignment.revoked_at IS NULL
+       JOIN business_roles role
+         ON role.role_code=assignment.role_code AND role.enabled=true
+       JOIN role_capabilities capability
+         ON capability.role_code=assignment.role_code AND capability.capability='todo:runtime'
+       WHERE user_record.id=$1 AND user_record.enabled=true
+       GROUP BY user_record.id`,
+      [this.options.runtimeActorId],
+    );
+    const actor = result.rows[0];
+    if (!actor) {
+      throw new Error("Configured todo runtime actor is not an active authorized employee");
+    }
+    return {
+      actorId: actor.actor_id,
+      actorRoles: actor.actor_roles,
+      authorizationCapability: "todo:runtime",
+      authorizationCapabilities: ["todo:runtime"],
+      requestId: `todo-runtime:${randomUUID()}`,
+    };
+  }
+
+  private interval(value: number, name: string): number {
+    if (!Number.isInteger(value) || value < 1_000 || value > 3_600_000) {
+      throw new Error(`Todo ${name} interval must be between 1000 and 3600000 milliseconds`);
+    }
+    return value;
+  }
+
+  private safeError(error: unknown): Readonly<{ name: string; message: string }> {
+    if (error instanceof Error) {
+      return { name: error.name.slice(0, 100), message: error.message.slice(0, 500) };
+    }
+    return { name: "UnknownError", message: "Unknown todo runtime failure" };
   }
 }

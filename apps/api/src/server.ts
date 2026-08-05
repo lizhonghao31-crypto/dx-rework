@@ -26,6 +26,7 @@ import { WageService } from "./wages/wage-service.js";
 import { WageExportService } from "./wages/wage-export-service.js";
 import { TodoService } from "./todos/service.js";
 import { TodoProjectionService } from "./todos/projection-service.js";
+import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 
 const { Pool } = pg;
@@ -142,16 +143,22 @@ const app = buildApp({
   todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
 });
 registerDatabasePoolErrorHandler(database, app.log);
+
+const todoProvider = config.todoRuntime.enabled
+  ? new OfficialDingTalkTodoProvider({
+      appKey: config.dingtalk.h5AppKey,
+      appSecret: config.dingtalk.h5AppSecret,
+      nodeEnv: config.nodeEnv,
+    })
+  : undefined;
 const todoRuntime = new TodoRuntimeLifecycle(database, {
-  enabled: config.nodeEnv !== "test",
+  enabled: config.todoRuntime.enabled,
   appBasePath: config.appBasePath,
+  ...(config.todoRuntime.actorId ? { runtimeActorId: config.todoRuntime.actorId } : {}),
+  deliveryIntervalMs: config.todoRuntime.deliveryIntervalMs,
+  timingIntervalMs: config.todoRuntime.timingIntervalMs,
+  ...(todoProvider ? { provider: todoProvider } : {}),
   logger: app.log,
-  timingActor: {
-    actorId: "00000000-0000-4000-8000-000000000000",
-    actorRoles: ["system"],
-    authorizationCapability: "todo:runtime",
-    requestId: "todo-runtime",
-  },
 });
 
 let shuttingDown = false;
@@ -168,10 +175,11 @@ process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
 try {
-  todoRuntime.start();
   await app.listen({ host: config.host, port: config.port });
+  todoRuntime.start();
 } catch (error: unknown) {
   app.log.fatal({ err: error }, "API startup failed");
+  await todoRuntime.stop();
   await database.end();
   process.exitCode = 1;
 }

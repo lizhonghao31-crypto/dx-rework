@@ -5,7 +5,11 @@ import { sanitizeOperationalError } from "@dx-rework/domain";
 import type { Pool, PoolClient } from "pg";
 
 import { buildTodoDeepLink } from "./deep-link.js";
-import type { DingTalkTodoProvider } from "./provider.js";
+import {
+  DingTalkTodoDeliveryError,
+  type DingTalkTodoDeliveryKind,
+  type DingTalkTodoProvider,
+} from "./provider.js";
 import { ApplicationError } from "../platform/errors.js";
 import { MessageOutboxRepository, type SqlClient } from "../tools/repositories.js";
 import { TODO_DELIVERY_TOPIC, TodoService } from "./service.js";
@@ -14,6 +18,7 @@ type ClaimedDelivery = Readonly<{
   eventId: string;
   aggregateId: string;
   payload: unknown;
+  idempotencyKey: string;
   claimToken: string;
   attempts: number;
 }>;
@@ -25,14 +30,28 @@ type TodoDeliveryRow = Readonly<{
   recipient_user_id: string;
   route_descriptor: TodoRouteDescriptor;
   status: "pending" | "blocked_recipient" | "completed" | "cancelled";
-  created_operation_event_id: string;
+  completed_operation_event_id: string | null;
+  cancelled_operation_event_id: string | null;
+}>;
+
+type BindingRow = Readonly<{
+  binding_id: string;
+  todo_id: string;
+  external_generation: number;
+  recipient_user_id: string;
+  recipient_union_id: string;
+  provider_todo_id: string | null;
+  source_key: string;
+  provider_state: "creating" | "active" | "unknown_response" | "completed" | "cancelled" | "permanent_failed";
+  create_outbox_event_id: string;
+  create_operation_event_id: string;
 }>;
 
 type DeliveryPayload = Readonly<{
   todoId: string;
   recipientUserId: string;
   category: string;
-  deliveryKind: "create" | "reminder" | "escalation" | "information";
+  deliveryKind: DingTalkTodoDeliveryKind;
   route: TodoRouteDescriptor;
   operationEventId: string;
   operationRequestId: string;
@@ -50,7 +69,16 @@ const errorCode = (error: unknown): string =>
     ? error.code.slice(0, 100)
     : "DINGTALK_DELIVERY_FAILED";
 
-const payload = (value: unknown): DeliveryPayload => {
+const deliveryKinds = new Set<DingTalkTodoDeliveryKind>([
+  "create",
+  "complete",
+  "update",
+  "reminder",
+  "escalation",
+  "information",
+]);
+
+const parsePayload = (value: unknown): DeliveryPayload => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ApplicationError("VALIDATION_ERROR", "Todo delivery payload is invalid", 500);
   }
@@ -59,9 +87,8 @@ const payload = (value: unknown): DeliveryPayload => {
     typeof record.todoId !== "string"
     || typeof record.recipientUserId !== "string"
     || typeof record.category !== "string"
-    || !["create", "reminder", "escalation", "information"].includes(
-      String(record.deliveryKind),
-    )
+    || typeof record.deliveryKind !== "string"
+    || !deliveryKinds.has(record.deliveryKind as DingTalkTodoDeliveryKind)
     || typeof record.operationEventId !== "string"
     || typeof record.operationRequestId !== "string"
   ) {
@@ -71,18 +98,13 @@ const payload = (value: unknown): DeliveryPayload => {
     todoId: record.todoId,
     recipientUserId: record.recipientUserId,
     category: record.category,
-    deliveryKind: record.deliveryKind as DeliveryPayload["deliveryKind"],
+    deliveryKind: record.deliveryKind as DingTalkTodoDeliveryKind,
     route: TodoRouteDescriptorSchema.parse(record.route),
     operationEventId: record.operationEventId,
     operationRequestId: record.operationRequestId,
   };
 };
 
-/**
- * Claims only todo-delivery outbox rows. It deliberately leaves all existing
- * business outbox topics to their current owners and never delivers a todo
- * once it has been blocked, completed or cancelled.
- */
 export class TodoDeliveryWorker {
   constructor(
     private readonly database: Pool,
@@ -117,6 +139,7 @@ export class TodoDeliveryWorker {
         eventId: row.eventId,
         aggregateId: row.aggregateId,
         payload: row.payload,
+        idempotencyKey: row.idempotencyKey,
         claimToken: row.claimToken,
         attempts: row.attempts,
       }));
@@ -128,107 +151,358 @@ export class TodoDeliveryWorker {
     }
   }
 
-  private async deliver(claimed: ClaimedDelivery): Promise<"sent" | "failed" | "suppressed"> {
-    const todo = await this.todo(claimed.aggregateId);
+  private async deliver(
+    claimed: ClaimedDelivery,
+  ): Promise<"sent" | "failed" | "suppressed"> {
+    let input: DeliveryPayload;
+    try {
+      input = parsePayload(claimed.payload);
+      if (input.todoId !== claimed.aggregateId) {
+        throw new ApplicationError("CONFLICT", "Todo delivery aggregate is invalid", 409);
+      }
+      await this.assertDeliveryEvent(input);
+    } catch (error: unknown) {
+      await this.failWithoutBinding(claimed, error);
+      return "failed";
+    }
+
+    if (input.deliveryKind === "complete") {
+      return this.completeExternal(claimed, input);
+    }
+    if (["update", "reminder", "escalation"].includes(input.deliveryKind)) {
+      return this.updateExternal(claimed, input);
+    }
+    return this.createExternal(claimed, input);
+  }
+
+  private async createExternal(
+    claimed: ClaimedDelivery,
+    input: DeliveryPayload,
+  ): Promise<"sent" | "failed" | "suppressed"> {
+    const todo = await this.todo(input.todoId);
     if (!todo || todo.status !== "pending") {
       await this.markSuppressed(claimed);
       return "suppressed";
     }
-    let input: DeliveryPayload;
-    try {
-      input = payload(claimed.payload);
-      this.assertPayloadMatchesTodo(claimed, input, todo);
-      await this.assertDeliveryEvent(todo, input);
-      if (!(await this.revalidateRecipient(todo, input))) {
-        await this.markSuppressed(claimed);
-        return "suppressed";
-      }
-    } catch (error: unknown) {
-      await this.markFailedWithoutAttempt(claimed, error);
+    if (!this.payloadMatchesTodo(input, todo)) {
+      await this.failWithoutBinding(
+        claimed,
+        new ApplicationError("CONFLICT", "Todo delivery payload no longer matches its todo", 409),
+      );
       return "failed";
     }
-
+    const eligible = await this.revalidateRecipient(todo, input);
+    if (!eligible) {
+      await this.markSuppressed(claimed);
+      return "suppressed";
+    }
+    const recipientUnionId = await this.recipientUnionId(input.recipientUserId);
+    if (!recipientUnionId) {
+      await this.failWithoutBinding(
+        claimed,
+        new DingTalkTodoDeliveryError(
+          "DINGTALK_RECIPIENT_NOT_FOUND",
+          "Todo recipient has no active primary-corporation DingTalk identity",
+          true,
+        ),
+      );
+      return "failed";
+    }
+    const sourceKey = claimed.idempotencyKey;
+    const binding = await this.ensureBinding(claimed, input, recipientUnionId, sourceKey);
     try {
+      const createKind: "create" | "information" = input.deliveryKind === "information"
+        ? "information"
+        : "create";
       const receipt = await this.provider.createTodo({
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
+        recipientUnionId,
         category: todo.category,
-        deliveryKind: input.deliveryKind,
-        sourceKey: `todo:${todo.todo_id}:${input.deliveryKind}:${input.operationEventId}`,
+        deliveryKind: createKind,
+        sourceKey,
         route: input.route,
         deepLink: buildTodoDeepLink(this.appBasePath, input.route),
       });
-      await this.recordAttempt(claimed, input, "sent", receipt.providerMessageId, undefined);
+      await this.recordSuccess(claimed, input, binding, receipt.providerTodoId, receipt.providerMessageId, "active");
       return "sent";
     } catch (error: unknown) {
-      await this.recordAttempt(claimed, input, "failed", undefined, error);
+      await this.recordFailure(claimed, input, binding, error);
       return "failed";
     }
   }
 
-  private async todo(todoId: string): Promise<TodoDeliveryRow | null> {
-    const result = await this.database.query<TodoDeliveryRow>(
-      `SELECT todo_id,todo_type,category,recipient_user_id,route_descriptor,status,
-              created_operation_event_id
-       FROM rework_todos WHERE todo_id=$1`,
-      [todoId],
+  private async completeExternal(
+    claimed: ClaimedDelivery,
+    input: DeliveryPayload,
+  ): Promise<"sent" | "failed" | "suppressed"> {
+    const todo = await this.todo(input.todoId);
+    if (!todo) {
+      await this.markSuppressed(claimed);
+      return "suppressed";
+    }
+    const binding = await this.openBinding(input.todoId, input.recipientUserId);
+    if (!binding) {
+      await this.failWithoutBinding(
+        claimed,
+        new DingTalkTodoDeliveryError(
+          "DINGTALK_TODO_BINDING_PENDING",
+          "DingTalk todo binding is not available yet",
+          true,
+        ),
+      );
+      return "failed";
+    }
+    try {
+      const receipt = await this.provider.completeTodo({
+        todoId: todo.todo_id,
+        recipientUnionId: binding.recipient_union_id,
+        ...(binding.provider_todo_id ? { providerTodoId: binding.provider_todo_id } : {}),
+        sourceKey: binding.source_key,
+        reason: todo.status === "cancelled" ? "Internal todo was cancelled" : "Internal todo was completed or transferred",
+      });
+      const finalState = todo.status === "cancelled" ? "cancelled" : "completed";
+      await this.recordSuccess(
+        claimed,
+        input,
+        binding,
+        receipt.providerTodoId,
+        receipt.providerMessageId,
+        finalState,
+      );
+      return "sent";
+    } catch (error: unknown) {
+      await this.recordFailure(claimed, input, binding, error);
+      return "failed";
+    }
+  }
+
+  private async updateExternal(
+    claimed: ClaimedDelivery,
+    input: DeliveryPayload,
+  ): Promise<"sent" | "failed" | "suppressed"> {
+    const todo = await this.todo(input.todoId);
+    if (!todo || todo.status !== "pending") {
+      await this.markSuppressed(claimed);
+      return "suppressed";
+    }
+    if (!this.payloadMatchesTodo(input, todo)) {
+      await this.failWithoutBinding(
+        claimed,
+        new ApplicationError("CONFLICT", "Todo delivery payload no longer matches its todo", 409),
+      );
+      return "failed";
+    }
+    if (!(await this.revalidateRecipient(todo, input))) {
+      await this.markSuppressed(claimed);
+      return "suppressed";
+    }
+    const binding = await this.openBinding(input.todoId, input.recipientUserId);
+    if (!binding) {
+      await this.failWithoutBinding(
+        claimed,
+        new DingTalkTodoDeliveryError(
+          "DINGTALK_TODO_BINDING_PENDING",
+          "DingTalk todo binding is not available yet",
+          true,
+        ),
+      );
+      return "failed";
+    }
+    try {
+      const updateKind: "update" | "reminder" | "escalation" = input.deliveryKind === "reminder"
+        ? "reminder"
+        : input.deliveryKind === "escalation"
+          ? "escalation"
+          : "update";
+      const receipt = await this.provider.updateTodo({
+        todoId: todo.todo_id,
+        recipientUserId: todo.recipient_user_id,
+        recipientUnionId: binding.recipient_union_id,
+        ...(binding.provider_todo_id ? { providerTodoId: binding.provider_todo_id } : {}),
+        category: todo.category,
+        deliveryKind: updateKind,
+        sourceKey: binding.source_key,
+        route: input.route,
+        deepLink: buildTodoDeepLink(this.appBasePath, input.route),
+      });
+      await this.recordSuccess(
+        claimed,
+        input,
+        binding,
+        receipt.providerTodoId,
+        receipt.providerMessageId,
+        "active",
+      );
+      return "sent";
+    } catch (error: unknown) {
+      await this.recordFailure(claimed, input, binding, error);
+      return "failed";
+    }
+  }
+
+  private async ensureBinding(
+    claimed: ClaimedDelivery,
+    input: DeliveryPayload,
+    recipientUnionId: string,
+    sourceKey: string,
+  ): Promise<BindingRow> {
+    return this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [sourceKey]);
+      const existing = await client.query<BindingRow>(
+        `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+                provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id
+         FROM dingtalk_todo_external_bindings
+         WHERE provider='dingtalk' AND source_key=$1
+         FOR UPDATE`,
+        [sourceKey],
+      );
+      if (existing.rows[0]) return existing.rows[0];
+      const generation = await client.query<{ generation: number }>(
+        `SELECT COALESCE(max(external_generation),0)::int+1 generation
+         FROM dingtalk_todo_external_bindings WHERE todo_id=$1`,
+        [input.todoId],
+      );
+      const bindingId = randomUUID();
+      const inserted = await client.query<BindingRow>(
+        `INSERT INTO dingtalk_todo_external_bindings(
+           binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+           source_key,provider_state,create_outbox_event_id,create_operation_event_id
+         ) VALUES($1,$2,$3,$4,$5,$6,'creating',$7,$8)
+         RETURNING binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+                   provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id`,
+        [
+          bindingId,
+          input.todoId,
+          generation.rows[0]?.generation ?? 1,
+          input.recipientUserId,
+          recipientUnionId,
+          sourceKey,
+          claimed.eventId,
+          input.operationEventId,
+        ],
+      );
+      const binding = inserted.rows[0];
+      if (!binding) throw new ApplicationError("INTERNAL_ERROR", "DingTalk todo binding was not created", 500);
+      await this.insertBindingEvent(client, claimed, input, binding, "creating", null, null);
+      return binding;
+    });
+  }
+
+  private async openBinding(todoId: string, recipientUserId: string): Promise<BindingRow | null> {
+    const result = await this.database.query<BindingRow>(
+      `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+              provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id
+       FROM dingtalk_todo_external_bindings
+       WHERE todo_id=$1 AND recipient_user_id=$2
+         AND provider_state IN ('creating','active','unknown_response')
+       ORDER BY external_generation DESC
+       LIMIT 1`,
+      [todoId, recipientUserId],
     );
     return result.rows[0] ?? null;
   }
 
-  private assertPayloadMatchesTodo(
+  private async recordSuccess(
     claimed: ClaimedDelivery,
     input: DeliveryPayload,
-    todo: TodoDeliveryRow,
-  ): void {
-    const route = TodoRouteDescriptorSchema.parse(todo.route_descriptor);
-    if (
-      input.todoId !== todo.todo_id
-      || input.todoId !== claimed.aggregateId
-      || input.recipientUserId !== todo.recipient_user_id
-      || input.category !== todo.category
-      || input.route.routeName !== route.routeName
-      || input.route.entityId !== route.entityId
-      || input.route.reworkOrderId !== route.reworkOrderId
-      || input.route.todoId !== route.todoId
-      || input.route.tab !== route.tab
-    ) {
-      throw new ApplicationError("CONFLICT", "Todo delivery payload no longer matches its immutable todo", 409);
-    }
-  }
-
-  private async assertDeliveryEvent(todo: TodoDeliveryRow, input: DeliveryPayload): Promise<void> {
-    const event = await this.database.query<{
-      action: string;
-      entity_type: string;
-      entity_id: string;
-    }>(
-      `SELECT event.action,event.entity_type,event.entity_id
-       FROM operation_events event
-       WHERE event.event_id=$1 AND event.request_id=$2`,
-      [input.operationEventId, input.operationRequestId],
-    );
-    const row = event.rows[0];
-    if (!row || row.entity_type !== "rework_todo" || row.entity_id !== todo.todo_id) {
-      throw new ApplicationError("CONFLICT", "Todo delivery audit event is invalid", 409);
-    }
-    const expectedActions = input.deliveryKind === "reminder"
-      ? ["todo.remind"]
-      : input.deliveryKind === "escalation"
-        ? ["todo.escalate"]
-        : ["todo.create", "todo.transfer"];
-    if (!expectedActions.includes(row.action)) {
-      throw new ApplicationError("CONFLICT", "Todo delivery audit event is invalid", 409);
-    }
-  }
-
-  private async markSuppressed(claimed: ClaimedDelivery): Promise<void> {
+    binding: BindingRow,
+    providerTodoId: string,
+    providerMessageId: string,
+    state: "active" | "completed" | "cancelled",
+  ): Promise<void> {
     await this.transaction(async (client) => {
+      await this.setTodoContext(client, input.operationEventId, input.operationRequestId);
+      await this.insertAttempt(client, claimed, input, "sent", providerMessageId, undefined);
+      await client.query(
+        `UPDATE dingtalk_todo_external_bindings
+         SET provider_todo_id=$2,provider_state=$3,
+             terminal_outbox_event_id=CASE WHEN $3 IN ('completed','cancelled') THEN $4 ELSE terminal_outbox_event_id END,
+             terminal_operation_event_id=CASE WHEN $3 IN ('completed','cancelled') THEN $5 ELSE terminal_operation_event_id END,
+             version=version+1,updated_at=CURRENT_TIMESTAMP
+         WHERE binding_id=$1`,
+        [binding.binding_id, providerTodoId, state, claimed.eventId, input.operationEventId],
+      );
+      await this.insertBindingEvent(
+        client,
+        claimed,
+        input,
+        { ...binding, provider_todo_id: providerTodoId },
+        state,
+        providerMessageId,
+        providerTodoId,
+      );
+      if (input.deliveryKind === "information") {
+        await this.todos.completeInformationAfterSuccessfulDeliveryInTransaction(
+          client,
+          input.todoId,
+          input.operationEventId,
+          input.operationRequestId,
+        );
+      }
       await this.outbox.markSent(client, claimed.eventId, claimed.claimToken);
     });
   }
 
-  private async markFailedWithoutAttempt(claimed: ClaimedDelivery, error: unknown): Promise<void> {
+  private async recordFailure(
+    claimed: ClaimedDelivery,
+    input: DeliveryPayload,
+    binding: BindingRow,
+    error: unknown,
+  ): Promise<void> {
+    const deliveryError = error instanceof DingTalkTodoDeliveryError ? error : null;
+    const retryable = deliveryError?.retryable ?? true;
+    const bindingState = deliveryError?.unknownResponse
+      ? "unknown_response"
+      : retryable
+        ? "retryable_failed"
+        : "permanent_failed";
+    await this.transaction(async (client) => {
+      await this.setTodoContext(client, input.operationEventId, input.operationRequestId);
+      await this.insertAttempt(
+        client,
+        claimed,
+        input,
+        deliveryError?.unknownResponse ? "unknown_response" : "failed",
+        undefined,
+        error,
+      );
+      await client.query(
+        `UPDATE dingtalk_todo_external_bindings
+         SET provider_state=CASE
+               WHEN $2='unknown_response' THEN 'unknown_response'
+               WHEN $2='permanent_failed' THEN 'permanent_failed'
+               ELSE provider_state
+             END,
+             version=version+1,updated_at=CURRENT_TIMESTAMP
+         WHERE binding_id=$1`,
+        [binding.binding_id, bindingState],
+      );
+      await this.insertBindingEvent(
+        client,
+        claimed,
+        input,
+        binding,
+        bindingState,
+        undefined,
+        binding.provider_todo_id,
+        error,
+      );
+      if (retryable) {
+        await this.outbox.markFailed(
+          client,
+          claimed.eventId,
+          claimed.claimToken,
+          error,
+          this.retryDelaySeconds,
+        );
+      } else {
+        await this.outbox.markSent(client, claimed.eventId, claimed.claimToken);
+      }
+    });
+  }
+
+  private async failWithoutBinding(claimed: ClaimedDelivery, error: unknown): Promise<void> {
     await this.transaction(async (client) => {
       await this.outbox.markFailed(
         client,
@@ -240,49 +514,129 @@ export class TodoDeliveryWorker {
     });
   }
 
-  private async recordAttempt(
+  private async insertAttempt(
+    client: PoolClient,
     claimed: ClaimedDelivery,
     input: DeliveryPayload,
-    outcome: "sent" | "failed",
+    outcome: "sent" | "failed" | "unknown_response",
     providerMessageId: string | undefined,
     error: unknown,
   ): Promise<void> {
-    await this.transaction(async (client) => {
-      await this.setTodoContext(client, input.operationEventId, input.operationRequestId);
-      await client.query(
-        `INSERT INTO todo_delivery_attempts(
-           delivery_attempt_id,todo_id,message_outbox_event_id,attempt_no,delivery_kind,
-           provider,outcome,provider_message_id,error_code,error_message,
-           operation_event_id,operation_request_id
-         ) VALUES($1,$2,$3,$4,$5,'dingtalk',$6,$7,$8,$9,$10,$11)`,
-        [
-          randomUUID(), input.todoId, claimed.eventId, claimed.attempts,
-          input.deliveryKind, outcome, providerMessageId ?? null,
-          outcome === "failed" ? errorCode(error) : null,
-          outcome === "failed" ? sanitizeOperationalError(error) : null,
-          input.operationEventId, input.operationRequestId,
-        ],
-      );
-      if (outcome === "sent") {
-        if (input.deliveryKind === "information") {
-          await this.todos.completeInformationAfterSuccessfulDeliveryInTransaction(
-            client,
-            input.todoId,
-            input.operationEventId,
-            input.operationRequestId,
-          );
-        }
-        await this.outbox.markSent(client, claimed.eventId, claimed.claimToken);
-      } else {
-        await this.outbox.markFailed(
-          client,
-          claimed.eventId,
-          claimed.claimToken,
-          error,
-          this.retryDelaySeconds,
-        );
-      }
-    });
+    await client.query(
+      `INSERT INTO todo_delivery_attempts(
+         delivery_attempt_id,todo_id,message_outbox_event_id,attempt_no,delivery_kind,
+         provider,outcome,provider_message_id,error_code,error_message,
+         operation_event_id,operation_request_id
+       ) VALUES($1,$2,$3,$4,$5,'dingtalk',$6,$7,$8,$9,$10,$11)
+       ON CONFLICT(todo_id,message_outbox_event_id,attempt_no) DO NOTHING`,
+      [
+        randomUUID(),
+        input.todoId,
+        claimed.eventId,
+        claimed.attempts,
+        input.deliveryKind,
+        outcome,
+        providerMessageId ?? null,
+        outcome === "sent" ? null : errorCode(error),
+        outcome === "sent" ? null : sanitizeOperationalError(error),
+        input.operationEventId,
+        input.operationRequestId,
+      ],
+    );
+  }
+
+  private async insertBindingEvent(
+    client: PoolClient,
+    claimed: ClaimedDelivery,
+    input: DeliveryPayload,
+    binding: BindingRow,
+    state: "creating" | "active" | "unknown_response" | "completed" | "cancelled" | "retryable_failed" | "permanent_failed",
+    providerRequestId: string | null | undefined,
+    providerTodoId: string | null | undefined,
+    error?: unknown,
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO dingtalk_todo_external_binding_events(
+         binding_event_id,binding_id,message_outbox_event_id,operation_event_id,request_id,
+         action,provider_state,provider_request_id,provider_todo_id,detail
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT(binding_id,message_outbox_event_id,action,provider_state) DO NOTHING`,
+      [
+        randomUUID(),
+        binding.binding_id,
+        claimed.eventId,
+        input.operationEventId,
+        input.operationRequestId,
+        input.deliveryKind,
+        state,
+        providerRequestId ?? null,
+        providerTodoId ?? null,
+        error ? { errorCode: errorCode(error), error: sanitizeOperationalError(error) } : {},
+      ],
+    );
+  }
+
+  private async todo(todoId: string): Promise<TodoDeliveryRow | null> {
+    const result = await this.database.query<TodoDeliveryRow>(
+      `SELECT todo_id,todo_type,category,recipient_user_id,route_descriptor,status,
+              completed_operation_event_id,cancelled_operation_event_id
+       FROM rework_todos WHERE todo_id=$1`,
+      [todoId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  private payloadMatchesTodo(input: DeliveryPayload, todo: TodoDeliveryRow): boolean {
+    const route = TodoRouteDescriptorSchema.parse(todo.route_descriptor);
+    return input.todoId === todo.todo_id
+      && input.recipientUserId === todo.recipient_user_id
+      && input.category === todo.category
+      && input.route.routeName === route.routeName
+      && input.route.entityId === route.entityId
+      && input.route.reworkOrderId === route.reworkOrderId
+      && input.route.todoId === route.todoId
+      && input.route.tab === route.tab;
+  }
+
+  private async assertDeliveryEvent(input: DeliveryPayload): Promise<void> {
+    const event = await this.database.query<{
+      action: string;
+      entity_type: string;
+      entity_id: string;
+    }>(
+      `SELECT action,entity_type,entity_id
+       FROM operation_events WHERE event_id=$1 AND request_id=$2`,
+      [input.operationEventId, input.operationRequestId],
+    );
+    const row = event.rows[0];
+    if (!row || row.entity_type !== "rework_todo" || row.entity_id !== input.todoId) {
+      throw new ApplicationError("CONFLICT", "Todo delivery audit event is invalid", 409);
+    }
+    const expected = input.deliveryKind === "reminder"
+      ? ["todo.remind"]
+      : input.deliveryKind === "escalation" || input.deliveryKind === "update"
+        ? ["todo.escalate", "todo.remind"]
+        : input.deliveryKind === "complete"
+          ? ["todo.complete", "todo.cancel", "todo.transfer"]
+          : ["todo.create", "todo.transfer"];
+    if (!expected.includes(row.action)) {
+      throw new ApplicationError("CONFLICT", "Todo delivery audit event is invalid", 409);
+    }
+  }
+
+  private async recipientUnionId(userId: string): Promise<string | null> {
+    const result = await this.database.query<{ union_id: string }>(
+      `SELECT identity.union_id
+       FROM app_users user_record
+       JOIN identity_mappings identity
+         ON identity.user_id=user_record.id AND identity.provider='dingtalk'
+        AND identity.active=true AND identity.employed=true
+       JOIN access_security_policy policy
+         ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+       WHERE user_record.id=$1 AND user_record.enabled=true`,
+      [userId],
+    );
+    return result.rows[0]?.union_id ?? null;
   }
 
   private async revalidateRecipient(
@@ -296,8 +650,7 @@ export class TodoDeliveryWorker {
         authorization_capability: string;
       }>(
         `SELECT actor_id,actor_roles,authorization_capability
-         FROM operation_events
-         WHERE event_id=$1 AND request_id=$2`,
+         FROM operation_events WHERE event_id=$1 AND request_id=$2`,
         [input.operationEventId, input.operationRequestId],
       );
       const actor = source.rows[0];
@@ -310,6 +663,12 @@ export class TodoDeliveryWorker {
         authorizationCapability: actor.authorization_capability,
         requestId: input.operationRequestId,
       }, todo.todo_id);
+    });
+  }
+
+  private async markSuppressed(claimed: ClaimedDelivery): Promise<void> {
+    await this.transaction(async (client) => {
+      await this.outbox.markSent(client, claimed.eventId, claimed.claimToken);
     });
   }
 
