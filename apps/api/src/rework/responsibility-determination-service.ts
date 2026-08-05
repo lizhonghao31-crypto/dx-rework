@@ -12,6 +12,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 const fail = (message: string, status = 409, code = "CONFLICT"): never => {
   throw new ApplicationError(code, message, status);
@@ -172,6 +173,7 @@ export class ResponsibilityDeterminationService {
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async get(
@@ -711,6 +713,76 @@ export class ResponsibilityDeterminationService {
        WHERE rework_order_id=$1`,
       [orderId, actor.actorId],
     );
+    if (previous) {
+      await this.todos?.cancelOpenByDedupeKey(
+        client,
+        actor,
+        `responsibility:${orderId}:${previous.determination_version}`,
+        "A newer responsibility draft superseded this version",
+      );
+      await this.todos?.cancelOpenByDedupePrefix(
+        client,
+        actor,
+        `high-multiplier:${previous.determination_id}:${previous.determination_version}:`,
+        "A newer responsibility draft superseded this version",
+      );
+    }
+    await this.todos?.actionableForResponsibilityHandler(client, actor, {
+      category: "responsibility_determination",
+      sourceEventId: eventId,
+      sourceAction: "rework.responsibility.draft",
+      entityType: "rework_order",
+      entityId: orderId,
+      recipientUserId: input.handlerUserId,
+      route: { routeName: "responsibility_detail", entityId: orderId },
+      dedupeKey: `responsibility:${orderId}:${version}`,
+    });
+    if (input.processes.some((process) => Number(process.multiplier) > 2)) {
+      const sourceAuthorIsDirectOwner = await client.query<{ eligible: boolean }>(
+        `SELECT todo_user_has_direct_role(
+           $1::uuid,'owner_group'::text,'responsibility:confirm_high_multiplier'::text
+         ) AS eligible`,
+        [actor.actorId],
+      );
+      const highMultiplierProjection = {
+        category: "high_multiplier_confirmation",
+        sourceEventId: eventId,
+        sourceAction: "rework.responsibility.draft",
+        entityType: "rework_order",
+        entityId: orderId,
+        requiredRole: "owner_group",
+        requiredCapability: "responsibility:confirm_high_multiplier",
+        route: { routeName: "responsibility_detail", entityId: orderId },
+        policyKey: "general",
+        dedupeKey: `high-multiplier:${determinationId}:${version}`,
+      } as const;
+      if (sourceAuthorIsDirectOwner.rows[0]?.eligible) {
+        await this.todos?.actionableForIndependentOwner(client, actor, {
+          ...highMultiplierProjection,
+          dedupeKey: `${highMultiplierProjection.dedupeKey}:${actor.actorId}`,
+          excludeUserId: actor.actorId,
+        });
+      } else {
+        // The Golden Source allows a production-management handler to create
+        // a draft. In that case both direct owners are independently already
+        // authorized to provide the one required confirmation, so both see
+        // the same fact and the first confirmation closes both todos.
+        await this.todos?.actionableForParallelDirectRole(client, actor, {
+          ...highMultiplierProjection,
+          expectedRecipientCount: 2,
+        });
+      }
+      await this.todos?.information(client, actor, {
+        category: "high_multiplier_confirmation_requested",
+        sourceEventId: eventId,
+        sourceAction: "rework.responsibility.draft",
+        entityType: "rework_order",
+        entityId: orderId,
+        recipientUserId: actor.actorId,
+        route: { routeName: "responsibility_detail", entityId: orderId },
+        dedupeKey: `high-multiplier-requested:${determinationId}:${version}:${actor.actorId}`,
+      });
+    }
     return this.get(actor, orderId, client);
   }
 
