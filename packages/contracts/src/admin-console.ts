@@ -7,6 +7,10 @@ const DateTimeSchema = z.string().datetime({ offset: true });
 const OptionalEntityIdSchema = z.string().min(1).max(200).optional();
 const TextFilterSchema = z.string().min(1).max(128);
 const JsonValueSchema: z.ZodType<unknown> = z.unknown();
+const BooleanQuerySchema = z.union([
+  z.boolean(),
+  z.enum(["true", "false"]).transform((value) => value === "true"),
+]);
 
 export const AdminAttachmentsQuerySchema = z.object({
   attachmentId: IdSchema.optional(),
@@ -46,7 +50,7 @@ export const AdminDelegationsQuerySchema = z.object({
   scopeType: TextFilterSchema.optional(),
   scopeId: OptionalEntityIdSchema,
   activeAt: DateTimeSchema.optional(),
-  includeRevoked: z.coerce.boolean().default(false),
+  includeRevoked: BooleanQuerySchema.default(false),
   cursor: CursorSchema.optional(),
   limit: LimitSchema,
 }).strict();
@@ -74,7 +78,7 @@ export const AdminDelegationsPageSchema = z.object({ items: z.array(AdminDelegat
 export const AdminExceptionsQuerySchema = z.object({
   exceptionType: TextFilterSchema.optional(),
   sourceEntityType: TextFilterSchema.optional(),
-  retryable: z.coerce.boolean().optional(),
+  retryable: BooleanQuerySchema.optional(),
   cursor: CursorSchema.optional(),
   limit: LimitSchema,
 }).strict();

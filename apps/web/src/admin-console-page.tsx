@@ -26,6 +26,7 @@ export function AdminConsolePage() {
 
 function AuditTab() {
   const [cursor, setCursor] = useState<string | undefined>();
+  const [searchVersion, setSearchVersion] = useState(0);
   const [state, setState] = useState<LoadState<{ events: AdminAuditEventsPage; exports: AdminAuditExportsPage }>>({ kind: "loading" });
   const [filters, setFilters] = useState({ from: "", to: "", actorId: "", action: "", entityType: "", entityId: "", authorizationCapability: "", requestId: "" });
   const query = () => new URLSearchParams(Object.entries({ ...filters, cursor: cursor ?? "", limit: "20" }).filter((entry): entry is [string, string] => entry[1] !== "")).toString();
@@ -34,10 +35,14 @@ function AuditTab() {
     void Promise.all([getJson<AdminAuditEventsPage>(`admin/audit/events?${query()}`), getJson<AdminAuditExportsPage>(`admin/audit/exports?limit=10`)])
       .then(([events, exports]) => setState({ kind: "ready", data: { events, exports } }))
       .catch((error: unknown) => setState({ kind: "error", message: error instanceof Error ? error.message : "加载失败" }));
-  }, [cursor]);
+  }, [cursor, searchVersion]);
+  const submitSearch = () => {
+    setCursor(undefined);
+    setSearchVersion((value) => value + 1);
+  };
   return (
     <section className="admin-panel">
-      <FilterGrid filters={filters} setFilters={setFilters} onSearch={() => setCursor(undefined)} />
+      <FilterGrid filters={filters} setFilters={setFilters} onSearch={submitSearch} />
       <State state={state} render={({ events, exports }) => (
         <>
           <div className="admin-list">

@@ -24,12 +24,23 @@ function appFor(capabilities: string[], businessRoles: string[]) {
 }
 
 describe("admin console routes", () => {
-  it("allows only system_admin with admin:read to query administrator metadata and rejects unknown fields", async () => {
+  it("allows only system_admin with admin:read to query administrator metadata and parses boolean query strings exactly", async () => {
     const { app, service } = appFor(["admin:read", "admin:exception:manage"], ["system_admin"]);
     expect((await app.inject({ method: "GET", url: `/admin/attachments?attachmentId=${attachmentId}&limit=100` })).statusCode).toBe(200);
     expect(service.attachments).toHaveBeenCalledWith(expect.objectContaining({ attachmentId, limit: 100 }));
+
     expect((await app.inject({ method: "GET", url: `/admin/delegations?includeRevoked=true&activeAt=2026-08-05T00:00:00.000Z` })).statusCode).toBe(200);
+    expect(service.delegations).toHaveBeenLastCalledWith(expect.objectContaining({ includeRevoked: true }));
+    expect((await app.inject({ method: "GET", url: "/admin/delegations?includeRevoked=false" })).statusCode).toBe(200);
+    expect(service.delegations).toHaveBeenLastCalledWith(expect.objectContaining({ includeRevoked: false }));
+
     expect((await app.inject({ method: "GET", url: "/admin/exceptions?retryable=true" })).statusCode).toBe(200);
+    expect(service.exceptions).toHaveBeenLastCalledWith(expect.objectContaining({ retryable: true }));
+    expect((await app.inject({ method: "GET", url: "/admin/exceptions?retryable=false" })).statusCode).toBe(200);
+    expect(service.exceptions).toHaveBeenLastCalledWith(expect.objectContaining({ retryable: false }));
+
+    expect((await app.inject({ method: "GET", url: "/admin/delegations?includeRevoked=1" })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/admin/exceptions?retryable=0" })).statusCode).toBe(400);
     expect((await app.inject({ method: "GET", url: "/admin/attachments?unexpected=true" })).statusCode).toBe(400);
   });
 

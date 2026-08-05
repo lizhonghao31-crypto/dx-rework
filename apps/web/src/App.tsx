@@ -61,7 +61,7 @@ export function App() {
     return <AuthGate requiredCapability="wage:view">{page}</AuthGate>;
   }
   if (path === "/ui/admin") {
-    return <AuthGate requiredCapability="admin:read">{page}</AuthGate>;
+    return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
   }
   if (path === "/ui/management") {
     return <AuthGate requiredCapability="dashboard:management:read">{page}</AuthGate>;
