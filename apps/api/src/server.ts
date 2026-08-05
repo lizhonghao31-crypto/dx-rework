@@ -147,7 +147,7 @@ const app = buildApp({
   reporting: {
     authenticate: (token) => auth.authenticate(token),
     service: reportingService,
-    exportService: new ReportExportService(reportingService, config.gitSha),
+    exportService: new ReportExportService(reportingService, database, config.gitSha),
   },
 });
 registerDatabasePoolErrorHandler(database, app.log);
