@@ -77,18 +77,17 @@ export function registerErpIntegrationRoutes(
 
   app.post("/integrations/erp/v1/rework-orders", async (request, reply) => {
     const input = parse(ErpReworkIntakeV1Schema, request.body);
+    const key = idempotencyKey(request);
     const actor = await integrationActor(request);
-    try {
-      await dependencies.adapter.acceptSourceRecord(input);
-    } catch (error: unknown) {
-      if (error instanceof IntegrationDisabledError) throw integrationDisabled();
-      throw error;
+    const result = await dependencies.service.intakeFromErp(actor, input, key);
+    if (!result.reused) {
+      try {
+        await dependencies.adapter.acceptSourceRecord(input);
+      } catch (error: unknown) {
+        if (error instanceof IntegrationDisabledError) throw integrationDisabled();
+        throw error;
+      }
     }
-    const result = await dependencies.service.intakeFromErp(
-      actor,
-      input,
-      idempotencyKey(request),
-    );
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
