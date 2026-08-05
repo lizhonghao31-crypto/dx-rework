@@ -18,6 +18,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
 type MutationResult<T> = Readonly<{ value: T; reused: boolean }>;
@@ -150,6 +151,7 @@ export class ProcessConfigurationService {
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ProcessConfigurationResponse> {
@@ -312,6 +314,18 @@ export class ProcessConfigurationService {
         recipientKey: "role:ie_reviewer",
         idempotencyKey: reworkOrderId + ":process-configuration:" + configuration.configuration_version + ":submit",
       });
+      await this.todos?.actionableForUniqueDirectRole(client, actor, {
+        category: "ie_review",
+        sourceEventId: eventId,
+        sourceAction: "rework.process_configuration.submit",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        requiredRole: "ie_reviewer",
+        requiredCapability: "process:review",
+        route: { routeName: "process_configuration", entityId: reworkOrderId },
+        policyKey: "general",
+        dedupeKey: `ie-review:${reworkOrderId}:${configuration.configuration_version}`,
+      });
       return this.dto(client, await this.order(client, reworkOrderId));
     });
   }
@@ -392,6 +406,31 @@ export class ProcessConfigurationService {
         recipientKey: "role:tail_supervisor",
         idempotencyKey: reworkOrderId + ":process-configuration:" + configuration.configuration_version + ":" + input.decision,
       });
+      if (!approved) {
+        await this.todos?.actionableForNamedRecipient(client, actor, {
+          category: "process_configuration_return",
+          sourceEventId: eventId,
+          sourceAction: "rework.process_configuration.review",
+          entityType: "rework_order",
+          entityId: reworkOrderId,
+          recipientUserId: configuration.created_by,
+          requiredRole: "tail_supervisor",
+          requiredCapability: "process:configure",
+          route: { routeName: "process_configuration", entityId: reworkOrderId },
+          policyKey: "general",
+          dedupeKey: `process-config-return:${configuration.configuration_id}:${configuration.configuration_version}`,
+        });
+        await this.todos?.information(client, actor, {
+          category: "process_configuration_rejection_notice",
+          sourceEventId: eventId,
+          sourceAction: "rework.process_configuration.review",
+          entityType: "rework_order",
+          entityId: reworkOrderId,
+          recipientUserId: configuration.created_by,
+          route: { routeName: "process_configuration", entityId: reworkOrderId },
+          dedupeKey: `process-config-return-notice:${configuration.configuration_id}:${configuration.configuration_version}:${configuration.created_by}`,
+        });
+      }
       return this.dto(client, await this.order(client, reworkOrderId));
     });
   }
