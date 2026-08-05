@@ -115,6 +115,10 @@
     {
       "version": "0029_management_dashboard_reporting",
       "checksum": "63cab12ef8256ee7715ef3e7228e1f2ad81dc0209ce5784327183257ce3afc27"
+    },
+    {
+      "version": "0030_admin_audit_query_foundation",
+      "checksum": "eab6e1a76d2ea5d382c169dcf676c52e5884c4a2a36aea237bca8a38977a8475"
     }
   ]
 }

@@ -39,7 +39,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
     const directory = new URL("../../apps/api/migrations/", import.meta.url);
     const migrations = (await readdir(directory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-    expect(migrations.at(-1)).toBe("0029_management_dashboard_reporting.sql");
+    expect(migrations.at(-1)).toBe("0030_admin_audit_query_foundation.sql");
     for (const migration of migrations) await database.query(await readFile(new URL(migration, directory), "utf8"));
 
     for (const [id, name, role] of [

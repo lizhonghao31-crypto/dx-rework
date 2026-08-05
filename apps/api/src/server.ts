@@ -30,6 +30,7 @@ import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
+import { AdminAuditService } from "./admin-audit-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -149,6 +150,7 @@ const app = buildApp({
     service: reportingService,
     exportService: new ReportExportService(reportingService, database, config.gitSha),
   },
+  adminAudit: { authenticate: (token) => auth.authenticate(token), service: new AdminAuditService(database) },
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
