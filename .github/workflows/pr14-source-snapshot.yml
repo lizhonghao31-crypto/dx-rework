@@ -1,0 +1,54 @@
+name: PR-14 source snapshot
+
+on:
+  push:
+    branches:
+      - codex/pr-13-todo-notification-v2-validation
+    paths:
+      - .github/workflows/pr14-source-snapshot.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR-14 base
+        uses: actions/checkout@v4
+        with:
+          ref: dcfcf13f9247406b750829e7b93e78a1debe4e81
+          fetch-depth: 1
+      - name: Verify exact base and prepare source tree
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "dcfcf13f9247406b750829e7b93e78a1debe4e81"
+          rm -rf .git
+          find . -type l -print -quit | grep -q . && { echo 'symlinks forbidden' >&2; exit 1; } || true
+          printf '%s\n' 'dcfcf13f9247406b750829e7b93e78a1debe4e81' > .source-base-sha
+      - id: upload
+        name: Upload complete source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-rework-pr14-source-dcfcf13f9247406b750829e7b93e78a1debe4e81
+          path: .
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 3
+          compression-level: 6
+      - name: Publish artifact ID for controlled retrieval
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+        with:
+          script: |
+            const marker = '<!-- pr14-source-snapshot -->';
+            const body = `${marker}\nPR-14 source snapshot ready.\n\n- Base: \`dcfcf13f9247406b750829e7b93e78a1debe4e81\`\n- Artifact ID: \`${process.env.ARTIFACT_ID}\`\n- Run ID: \`${context.runId}\``;
+            const {owner, repo} = context.repo;
+            const issue_number = 22;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const prior = comments.find(comment => comment.user?.type === 'Bot' && comment.body?.includes(marker));
+            if (prior) await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
