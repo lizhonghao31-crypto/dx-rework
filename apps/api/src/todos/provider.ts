@@ -214,7 +214,7 @@ const OAPI = "https://oapi.dingtalk.com";
 
 export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   private cachedToken?: { token: string; refreshAt: number };
-  private tokenRequest?: Promise<string>;
+  private tokenRequest: Promise<string> | undefined;
 
   constructor(
     private readonly config: OfficialDingTalkTodoProviderConfig,
