@@ -503,6 +503,7 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       routing_status: "completed",
       delegation_scope_id: entityId,
     }] });
+    await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [managerId]);
   });
 
   it("re-routes a stale routing manager while retaining an auditable exception history", async () => {
