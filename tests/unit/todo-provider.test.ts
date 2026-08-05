@@ -4,7 +4,7 @@ import { DisabledDingTalkTodoProvider } from "../../apps/api/src/todos/provider.
 
 describe("DingTalk todo provider boundary", () => {
   it("fails closed until a separately approved provider adapter is configured", async () => {
-    await expect(new DisabledDingTalkTodoProvider().deliver({
+    await expect(new DisabledDingTalkTodoProvider().createTodo({
       todoId: "00000000-0000-4000-8000-000000000013",
       recipientUserId: "00000000-0000-4000-8000-000000000014",
       category: "process_configuration",
@@ -14,6 +14,7 @@ describe("DingTalk todo provider boundary", () => {
         entityId: "00000000-0000-4000-8000-000000000015",
         todoId: "00000000-0000-4000-8000-000000000013",
       },
+      sourceKey: "todo:00000000-0000-4000-8000-000000000013:create:test",
       deepLink: "/ui/tasks/00000000-0000-4000-8000-000000000015",
     })).rejects.toMatchObject({ code: "DINGTALK_TODO_NOT_CONFIGURED" });
   });

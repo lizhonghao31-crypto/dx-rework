@@ -107,6 +107,10 @@
     {
       "version": "0027_todo_routing_lifecycle_closure",
       "checksum": "c0ba02504429e9fe1db70887785c7b330f5ac245c7a6dd0c5fad2f7c33422b29"
+    },
+    {
+      "version": "0028_dingtalk_todo_external_bindings",
+      "checksum": "29568ed24a480ebe8a20e016836fe78798684c8fc34f8cae5c39881ef3c837c3"
     }
   ]
 }

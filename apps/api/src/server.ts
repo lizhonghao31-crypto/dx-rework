@@ -26,6 +26,7 @@ import { WageService } from "./wages/wage-service.js";
 import { WageExportService } from "./wages/wage-export-service.js";
 import { TodoService } from "./todos/service.js";
 import { TodoProjectionService } from "./todos/projection-service.js";
+import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -141,12 +142,24 @@ const app = buildApp({
   todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
 });
 registerDatabasePoolErrorHandler(database, app.log);
+const todoRuntime = new TodoRuntimeLifecycle(database, {
+  enabled: config.nodeEnv !== "test",
+  appBasePath: config.appBasePath,
+  logger: app.log,
+  timingActor: {
+    actorId: "00000000-0000-4000-8000-000000000000",
+    actorRoles: ["system"],
+    authorizationCapability: "todo:runtime",
+    requestId: "todo-runtime",
+  },
+});
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   app.log.info({ signal }, "graceful shutdown started");
+  await todoRuntime.stop();
   await app.close();
   await database.end();
 }
@@ -155,6 +168,7 @@ process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
 try {
+  todoRuntime.start();
   await app.listen({ host: config.host, port: config.port });
 } catch (error: unknown) {
   app.log.fatal({ err: error }, "API startup failed");

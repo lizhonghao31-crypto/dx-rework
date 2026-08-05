@@ -149,11 +149,12 @@ export class TodoDeliveryWorker {
     }
 
     try {
-      const receipt = await this.provider.deliver({
+      const receipt = await this.provider.createTodo({
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
         category: todo.category,
         deliveryKind: input.deliveryKind,
+        sourceKey: `todo:${todo.todo_id}:${input.deliveryKind}:${input.operationEventId}`,
         route: input.route,
         deepLink: buildTodoDeepLink(this.appBasePath, input.route),
       });

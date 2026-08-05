@@ -815,6 +815,9 @@ export class TodoService {
          WHERE todo_id=$1`,
         [todo.todo_id, actor.actorId, eventId],
       );
+      if (todo.status === "blocked_recipient") {
+        await this.cancelPendingRoutingExceptionForTodo(client, actor, todo.todo_id, reason);
+      }
     } else {
       await client.query(
         `UPDATE rework_todos
