@@ -28,6 +28,8 @@ import { TodoService } from "./todos/service.js";
 import { TodoProjectionService } from "./todos/projection-service.js";
 import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
+import { ManagementReportingService } from "./reporting/management-reporting-service.js";
+import { ReportExportService } from "./reporting/report-export-service.js";
 
 const { Pool } = pg;
 const config = loadConfig();
@@ -93,6 +95,7 @@ const externalResponsibilityService = new ExternalResponsibilityApplicationServi
   todoProjection,
 );
 const wageService = new WageService(database, undefined, undefined, todoProjection);
+const reportingService = new ManagementReportingService(database);
 const app = buildApp({
   config,
   checkDatabase: () => checkDatabase(database),
@@ -141,6 +144,11 @@ const app = buildApp({
   },
   wages: { authenticate: (token) => auth.authenticate(token), service: wageService, exportService: new WageExportService(database) },
   todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
+  reporting: {
+    authenticate: (token) => auth.authenticate(token),
+    service: reportingService,
+    exportService: new ReportExportService(reportingService, database, config.gitSha),
+  },
 });
 registerDatabasePoolErrorHandler(database, app.log);
 

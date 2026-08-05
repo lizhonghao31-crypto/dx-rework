@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
+import { buildWorkbook } from "../reporting/xlsx-workbook.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 
 type Cell = string | number | null;
@@ -30,87 +31,10 @@ const first = <T>(rows: T[], message: string): T => {
   }
   return value;
 };
-const escapeXml = (value: string): string => value
-  .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
-  .replaceAll(">", "&gt;").replaceAll('"', "&quot;")
-  .replaceAll("'", "&apos;");
-const column = (index: number): string => {
-  let value = index + 1;
-  let output = "";
-  while (value > 0) {
-    value -= 1;
-    output = String.fromCharCode(65 + value % 26) + output;
-    value = Math.floor(value / 26);
-  }
-  return output;
-};
-const worksheet = (rows: Cell[][]): string => {
-  const data = rows.map((row, rowIndex) => {
-    const cells = row.map((value, columnIndex) => {
-      const ref = `${column(columnIndex)}${rowIndex + 1}`;
-      if (typeof value === "number") return `<c r="${ref}" t="n"><v>${value}</v></c>`;
-      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value === null ? "" : value)}</t></is></c>`;
-    }).join("");
-    return `<row r="${rowIndex + 1}">${cells}</row>`;
-  }).join("");
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>${data}</sheetData></worksheet>`;
-};
-const crcTable = Array.from({ length: 256 }, (_, input) => {
-  let value = input;
-  for (let bit = 0; bit < 8; bit += 1) {
-    value = (value & 1) !== 0 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-  }
-  return value >>> 0;
-});
-const crc32 = (buffer: Buffer): number => {
-  let value = 0xffffffff;
-  for (const byte of buffer) value = crcTable[(value ^ byte) & 0xff]! ^ (value >>> 8);
-  return (value ^ 0xffffffff) >>> 0;
-};
-const u16 = (value: number): Buffer => {
-  const buffer = Buffer.alloc(2); buffer.writeUInt16LE(value); return buffer;
-};
-const u32 = (value: number): Buffer => {
-  const buffer = Buffer.alloc(4); buffer.writeUInt32LE(value >>> 0); return buffer;
-};
-const zip = (files: ReadonlyArray<{ name: string; content: string }>): Buffer => {
-  const locals: Buffer[] = [];
-  const centrals: Buffer[] = [];
-  let offset = 0;
-  for (const file of files) {
-    const name = Buffer.from(file.name, "utf8");
-    const content = Buffer.from(file.content, "utf8");
-    const checksum = crc32(content);
-    const local = Buffer.concat([
-      u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0),
-      u32(checksum),u32(content.length),u32(content.length),u16(name.length),u16(0),
-      name,content,
-    ]);
-    locals.push(local);
-    centrals.push(Buffer.concat([
-      u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0),
-      u32(checksum),u32(content.length),u32(content.length),u16(name.length),
-      u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),name,
-    ]));
-    offset += local.length;
-  }
-  const central = Buffer.concat(centrals);
-  return Buffer.concat([
-    ...locals,central,
-    u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),
-    u32(central.length),u32(offset),u16(0),
-  ]);
-};
-
 export function buildWageWorkbook(detailRows: Cell[][], summaryRows: Cell[][]): Buffer {
-  return zip([
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>` },
-    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
-    { name: "xl/workbook.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="工资明细" sheetId="1" r:id="rId1"/><sheet name="人员汇总" sheetId="2" r:id="rId2"/></sheets></workbook>` },
-    { name: "xl/_rels/workbook.xml.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "xl/styles.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Noto Sans SC"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="1"><xf xfId="0"/></cellXfs></styleSheet>` },
-    { name: "xl/worksheets/sheet1.xml", content: worksheet(detailRows) },
-    { name: "xl/worksheets/sheet2.xml", content: worksheet(summaryRows) },
+  return buildWorkbook([
+    { name: "工资明细", rows: detailRows },
+    { name: "人员汇总", rows: summaryRows },
   ]);
 }
 

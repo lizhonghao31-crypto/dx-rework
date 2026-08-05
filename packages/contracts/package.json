@@ -19,6 +19,10 @@
     "./wages": {
       "types": "./src/wages.ts",
       "import": "./dist/wages.js"
+    },
+    "./reporting": {
+      "types": "./src/reporting.ts",
+      "import": "./dist/reporting.js"
     }
   },
   "scripts": {

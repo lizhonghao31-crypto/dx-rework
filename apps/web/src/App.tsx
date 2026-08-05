@@ -1,4 +1,4 @@
-import { Dashboard, Detail, Foundation, MobileForm, Tasks } from "./pages.js";
+import { Detail, Foundation, MobileForm } from "./pages.js";
 import { AuthGate, DeniedPage, LoginPage, QrLoginPage } from "./auth.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
@@ -7,6 +7,9 @@ import { OwnFactoryApprovalQueuePage } from "./own-factory-approval-queue-page.j
 import { ExternalResponsibilityQueuePage } from "./external-responsibility-queue-page.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import { WagePage } from "./wages/wage-page.js";
+import { ManagementDashboardPage } from "./reporting/management-dashboard-page.js";
+import { ReworkQueryPage } from "./reporting/rework-query-page.js";
+import { ReportCenterPage } from "./reporting/report-center-page.js";
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -17,13 +20,14 @@ export function App() {
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
   let page;
-  if (path === "/ui/management") page = <Dashboard />;
-  else if (path === "/ui/supervisor") page = <Dashboard supervisor />;
+  if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
+  else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
   else if (path === "/ui/external-responsibilities") page = <ExternalResponsibilityQueuePage />;
   else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <WagePage path={path} />;
-  else if (path === "/ui/tasks") page = <Tasks />;
+  else if (path === "/ui/tasks") page = <ReworkQueryPage />;
+  else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <Detail />;
   else if (path === "/ui/qc/new") page = <ReworkInitiationForm />;
   else if (path === "/ui/process-configuration") page = <ProcessConfigurationForm />;
@@ -53,6 +57,22 @@ export function App() {
   }
   if (path === "/ui/wages" || path.startsWith("/ui/wages/")) {
     return <AuthGate requiredCapability="wage:view">{page}</AuthGate>;
+  }
+  if (path === "/ui/management") {
+    return <AuthGate requiredCapability="dashboard:management:read">{page}</AuthGate>;
+  }
+  if (path === "/ui/supervisor") {
+    return <AuthGate requiredCapability="dashboard:site:read">{page}</AuthGate>;
+  }
+  if (path === "/ui/tasks") {
+    return <AuthGate requiredAnyOf={[
+      { requiredCapability: "dashboard:management:read" },
+      { requiredCapability: "dashboard:site:read" },
+      { requiredCapability: "report:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/reports") {
+    return <AuthGate requiredCapability="report:view">{page}</AuthGate>;
   }
   return <AuthGate>{page}</AuthGate>;
 }
