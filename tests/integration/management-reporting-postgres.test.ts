@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { ManagementReportingService } from "../../apps/api/src/reporting/management-reporting-service.js";
+import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -25,11 +26,13 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
     authorizationCapabilities: capabilities,
     requestId: `report-${randomUUID()}`,
   });
-  const owner = () => actor(ids.owner, ["owner_group"], "dashboard:management:read", [
+  const ownerCapabilities = [
     "dashboard:management:read", "report:view", "report:export", "responsibility:determine", "own_factory:approve", "external_responsibility:view", "wage:view",
-  ]);
+  ];
+  const owner = () => actor(ids.owner, ["owner_group"], "dashboard:management:read", ownerCapabilities);
+  const ownerExporter = () => actor(ids.owner, ["owner_group"], "report:export", ownerCapabilities);
   const tail = () => actor(ids.tail, ["tail_supervisor"], "dashboard:site:read", [
-    "dashboard:site:read", "report:view", "report:export", "process:configure", "work:assign", "submission:audit", "wage:tail_review",
+    "dashboard:site:read", "process:configure", "work:assign", "submission:audit", "wage:tail_review",
   ]);
 
   beforeAll(async () => {
@@ -66,7 +69,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
     await admin.end();
   });
 
-  it("adds only reporting capabilities and preserves existing dashboard capabilities", async () => {
+  it("grants management reports only to management and finance roles", async () => {
     const capabilities = await database.query<{ role_code: string; capability: string }>(
       `SELECT role_code,capability FROM role_capabilities
        WHERE capability IN ('report:view','report:export') ORDER BY role_code,capability`,
@@ -78,9 +81,8 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
       { role_code: "owner_group", capability: "report:view" },
       { role_code: "production_management", capability: "report:export" },
       { role_code: "production_management", capability: "report:view" },
-      { role_code: "tail_supervisor", capability: "report:export" },
-      { role_code: "tail_supervisor", capability: "report:view" },
     ]);
+    expect((await database.query("SELECT 1 FROM role_capabilities WHERE role_code='tail_supervisor' AND capability LIKE 'report:%'")).rowCount).toBe(0);
     expect((await database.query("SELECT 1 FROM role_capabilities WHERE role_code='system_admin' AND capability LIKE 'report:%'")).rowCount).toBe(0);
     expect((await database.query("SELECT 1 FROM role_capabilities WHERE role_code='owner_group' AND capability='dashboard:management:read'")).rowCount).toBe(1);
     expect((await database.query("SELECT 1 FROM role_capabilities WHERE role_code='tail_supervisor' AND capability='dashboard:site:read'")).rowCount).toBe(1);
@@ -102,6 +104,41 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
       const exported = await service.exportData(owner(), reportType, { limit: 100 });
       expect(exported.data.rows).toEqual([]);
     }
+  });
+
+  it("keeps site users out of management reports and records every successful export", async () => {
+    await expect(service.report(tail(), "wages", { limit: 100 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const result = await new ReportExportService(service, database, "test-git-sha").export(
+      ownerExporter(),
+      "rework_overview",
+      { from: "2026-08-01", to: "2026-08-31", q: "测试", limit: 100 },
+    );
+    expect(result.filename).toBe("返工总览-2026-08-01-2026-08-31.xlsx");
+    expect(result.content.subarray(0, 2).toString()).toBe("PK");
+
+    const audit = await database.query<{
+      action: string;
+      actor_id: string;
+      authorization_capability: string;
+      after_state: Record<string, unknown>;
+    }>(
+      `SELECT action,actor_id,authorization_capability,after_state
+       FROM operation_events WHERE action='report.exported' ORDER BY created_at DESC,event_id DESC LIMIT 1`,
+    );
+    expect(audit.rows[0]).toMatchObject({
+      action: "report.exported",
+      actor_id: ids.owner,
+      authorization_capability: "report:export",
+      after_state: {
+        reportType: "rework_overview",
+        filters: { from: "2026-08-01", to: "2026-08-31", q: "测试", limit: 100 },
+        range: { from: "2026-08-01", to: "2026-08-31" },
+        rowCount: 0,
+        filename: "返工总览-2026-08-01-2026-08-31.xlsx",
+      },
+    });
+    expect(audit.rows[0]?.after_state.snapshotAt).toEqual(expect.any(String));
   });
 
   it("rejects report access when the claimed capability is absent even for system_admin", async () => {
