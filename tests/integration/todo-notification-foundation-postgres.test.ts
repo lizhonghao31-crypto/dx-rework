@@ -208,6 +208,15 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       [actorId],
     );
     await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','todo-corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(), actorId, `todo-user-${actorId}`, `todo-union-${actorId}`],
+    );
+    await database.query(
+      "INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','todo-corp') ON CONFLICT DO NOTHING",
+    );
+    await database.query(
       `INSERT INTO operation_events(
          event_id,request_id,actor_id,actor_roles,authorization_capability,
          action,entity_type,entity_id
@@ -465,6 +474,7 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
       [actorId, "tail_supervisor"],
       [recipientId, "tail_supervisor"],
       [firstManagerId, "production_management"],
+      [replacementManagerId, "production_management"],
     ] as const) {
       await database.query(
         `INSERT INTO user_role_assignments(
@@ -543,12 +553,6 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     const firstRoutingTodoId = first.rows[0]!.routing_todo_id;
 
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [firstManagerId]);
-    await database.query(
-      `INSERT INTO user_role_assignments(
-         assignment_id,user_id,role_code,granted_by,grant_reason
-       ) VALUES($1,$2,'production_management',$3,'replacement routing manager')`,
-      [randomUUID(), replacementManagerId, actorId],
-    );
     const secondRevalidation = await database.connect();
     try {
       await secondRevalidation.query("BEGIN");
