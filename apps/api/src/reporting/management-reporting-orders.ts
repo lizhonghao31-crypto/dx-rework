@@ -149,13 +149,15 @@ export async function fetchFacts(source: Queryable, options: {
        order_record.updated_at
      FROM rework_orders order_record
      LEFT JOIN current_determinations current_determination ON current_determination.rework_order_id=order_record.rework_order_id
-     LEFT JOIN responsibility USING(rework_order_id) LEFT JOIN external USING(rework_order_id)
-     LEFT JOIN wages USING(rework_order_id) LEFT JOIN reports USING(rework_order_id)
-     LEFT JOIN todo_stats USING(rework_order_id) LEFT JOIN followup_stats USING(rework_order_id)
-     LEFT JOIN latest_event USING(rework_order_id)
+     LEFT JOIN responsibility ON responsibility.rework_order_id=order_record.rework_order_id
+     LEFT JOIN external ON external.rework_order_id=order_record.rework_order_id
+     LEFT JOIN wages ON wages.rework_order_id=order_record.rework_order_id
+     LEFT JOIN reports ON reports.rework_order_id=order_record.rework_order_id
+     LEFT JOIN todo_stats ON todo_stats.rework_order_id=order_record.rework_order_id
+     LEFT JOIN followup_stats ON followup_stats.rework_order_id=order_record.rework_order_id
+     LEFT JOIN latest_event ON latest_event.rework_order_id=order_record.rework_order_id
      WHERE ${where.join(" AND ")}
      ORDER BY order_record.updated_at DESC,order_record.rework_order_id DESC LIMIT ${limit}`,
     values,
   );
 }
-
