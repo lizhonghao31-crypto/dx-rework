@@ -119,9 +119,19 @@ describe("ERP integration routes", () => {
     expect(service.intakeFromErp).not.toHaveBeenCalled();
   });
 
-  it("uses the mock adapter and dedicated service actor in contract tests", async () => {
+  it("validates and accepts once before exposing the mock adapter effect", async () => {
     const adapter = new MockErpAdapter();
     const { app, service } = appFor({ adapter, integrationAuth: true });
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/integrations/erp/v1/rework-orders",
+      payload,
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(service.intakeFromErp).not.toHaveBeenCalled();
+    expect(adapter.acceptedSourceRecords).toEqual([]);
+
     const response = await app.inject({
       method: "POST",
       url: "/integrations/erp/v1/rework-orders",
@@ -135,6 +145,17 @@ describe("ERP integration routes", () => {
       payload,
       "erp-rw-1",
     );
+
+    service.intakeFromErp.mockResolvedValueOnce({ value: intakeResponse, reused: true });
+    const replay = await app.inject({
+      method: "POST",
+      url: "/integrations/erp/v1/rework-orders",
+      headers: { "idempotency-key": "erp-rw-1" },
+      payload,
+    });
+    expect(replay.statusCode).toBe(201);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect(adapter.acceptedSourceRecords).toEqual([payload]);
   });
 
   it("requires system_admin, capability, reason and Idempotency-Key for emergency intake", async () => {
