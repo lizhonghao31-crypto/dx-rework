@@ -37,7 +37,8 @@
     "db:migrate:check": "node scripts/migration-integration-check.mjs",
     "secret:scan": "node scripts/secret-scan.mjs",
     "check": "npm run lint && npm run typecheck && npm run build && npm run test && npm run db:migrate:lint && npm run secret:scan",
-    "preview:dry-run": "bash scripts/preview/dry-run.sh"
+    "preview:dry-run": "bash scripts/preview/dry-run.sh",
+    "pr17:acceptance": "node scripts/acceptance/validate.mjs docs/operations/pr-17-acceptance-matrix.json"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

@@ -1,0 +1,534 @@
+{
+  "routeId": "PR-17",
+  "requirementsBaseline": "startup-requirements-v1.2 section 13",
+  "items": [
+    {
+      "id": "UAT-01",
+      "requirement": "单工序、单工人、加工厂全额承担并成功扣款",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-02",
+      "requirement": "多工序、多工人、分批上数、整单审核",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-03",
+      "requirement": "一个工序由多个责任方按比例承担",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-04",
+      "requirement": "多人同时上数时防止累计超量",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-05",
+      "requirement": "7人集体计件任务按成员快照均分，生成7条个人工资明细，个人明细合计严格等于组总额",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-06",
+      "requirement": "集体计件成员后续变化不影响已审核或已锁定的历史分摊",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-07",
+      "requirement": "工人上数被驳回、修改、重新提交",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-08",
+      "requirement": "主管审核后通过调整记录更正数量",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-09",
+      "requirement": "本厂承担由李总审批后，伍总收到结果知会且不重复审批",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-10",
+      "requirement": "本厂承担由伍总审批后，李总收到结果知会且不重复审批",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-11",
+      "requirement": "张文豪可以完整查看、判责和提交，但不能完成本厂承担最终审批",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-12",
+      "requirement": "三人使用相同Dashboard时看到相同指标、明细和异常，操作按钮按权限正确显示",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-13",
+      "requirement": "跟单修改责任/倍率并触发生产管理重新确认",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-14",
+      "requirement": "供应商部分扣款",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-15",
+      "requirement": "供应商扣款失败并将差额改为本厂承担",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-16",
+      "requirement": "临时工由李同生或授权人员代录",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-17",
+      "requirement": "月份人工锁定后只能生成下期调整",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-18",
+      "requirement": "非公司钉钉组织账号扫码后仍被拒绝",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-19",
+      "requirement": "员工离职/禁用后不能登录，但历史记录可查询",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-20",
+      "requirement": "移动端免密登录和电脑端扫码登录",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-21",
+      "requirement": "消息点击直达单据，重试不产生重复待办",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    },
+    {
+      "id": "UAT-22",
+      "requirement": "Excel明细金额与系统逐行舍入口径一致",
+      "environment": "TBD-isolated",
+      "gitSha": "TBD-40-char-sha",
+      "schemaVersion": "TBD",
+      "testDataIds": [
+        "TBD"
+      ],
+      "roles": [
+        "TBD"
+      ],
+      "steps": [
+        "TBD"
+      ],
+      "expected": "TBD",
+      "actual": "TBD",
+      "evidenceRefs": [],
+      "executor": "TBD",
+      "reviewer": "TBD",
+      "executedAt": "TBD-ISO-8601",
+      "result": "not_run",
+      "defectLinks": []
+    }
+  ]
+}

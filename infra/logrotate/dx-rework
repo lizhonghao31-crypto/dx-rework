@@ -1,4 +1,4 @@
-/opt/dx-rework/logs/*.log {
+/opt/dx-rework/logs/*.log /opt/dx-rework/logs/deploy/*.log /opt/dx-rework/logs/backup/*.log /opt/dx-rework/logs/restore/*.log {
     daily
     rotate 30
     missingok

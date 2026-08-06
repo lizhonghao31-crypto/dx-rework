@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail; source "$(dirname "$0")/lib.sh"; [[ $# == 2 ]] || die 'usage: smoke.sh SHA SCHEMA'; sha="$1" schema="$2"; require_sha "$sha"; base="${DX_REWORK_SMOKE_URL:?explicit smoke URL required}"; [[ "$base" == https://* ]] || die 'HTTPS smoke URL required'; nginx -t
+pm2 jlist | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s).find(x=>x.name==="dx-rework-api");if(!a||a.pm2_env.pm_cwd!=="/opt/dx-rework/current")process.exit(1)})'
+json="$(curl -fsS "$base/version")"; node -e 'const v=JSON.parse(process.argv[1]);if(v.gitSha!==process.argv[2]||String(v.schemaVersion)!==process.argv[3])process.exit(1)' "$json" "$sha" "$schema"
+curl -fsS "$base/health/live" >/dev/null; curl -fsS "$base/health/ready" >/dev/null; curl -fsS "$base/" | grep -qi '<html'; curl -fsS "$base/login" | grep -qi '<html'; curl -fsS "$base/api/health/live" >/dev/null
+asset="$(curl -fsS "$base/"|sed -nE 's#.*(assets/[^" ]+).*#\1#p'|head -1)"; [[ -n "$asset" ]]; content="$(curl -fsS "$base/$asset")"; ! grep -qi '<html' <<<"$content" || die 'static 404 returned HTML'; curl -fsSI --compressed "$base/$asset" | grep -Eqi 'content-(encoding|type)|vary'; safe_log blocked 'real OSS/DingTalk/Todo smoke requires isolated authorization'; safe_log pass "read-only smoke passed $sha"

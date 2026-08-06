@@ -1,0 +1,69 @@
+name: PR-17 manual release
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact 40-character lowercase commit SHA
+        required: true
+      target_environment:
+        type: environment
+        required: true
+      dry_run:
+        type: boolean
+        default: true
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: pr-17-${{ inputs.target_environment }}
+  cancel-in-progress: false
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment }}
+    steps:
+      - name: Validate SHA
+        env: { TARGET_SHA: "${{ inputs.git_sha }}" }
+        run: '[[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.git_sha }}", fetch-depth: 0 }
+      - name: Verify exact allowed commit
+        env: { TARGET_SHA: "${{ inputs.git_sha }}" }
+        run: |
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          git merge-base --is-ancestor "$TARGET_SHA" origin/main || test "$TARGET_SHA" = "$(git rev-parse HEAD)"
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - name: Build immutable release
+        env:
+          TARGET_SHA: "${{ inputs.git_sha }}"
+          DX_REWORK_BUILD_ROOT: "${{ runner.temp }}/pr17-build"
+        run: scripts/deploy/build-release.sh "$TARGET_SHA" "$(date -u +%FT%TZ)" "$RUNNER_TEMP/pr17-build/$TARGET_SHA"
+      - run: npm run lint && npm run typecheck && npm test
+      - run: npm run db:migrate:lint && npm run secret:scan && npm run preview:dry-run
+      - name: Publish redacted build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr17-redacted-${{ inputs.git_sha }}
+          path: |
+            ${{ runner.temp }}/pr17-build/${{ inputs.git_sha }}/release-manifest.json
+            ${{ runner.temp }}/pr17-build/${{ inputs.git_sha }}/SHA256SUMS
+  deploy:
+    needs: gate
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.git_sha }}" }
+      - name: Strict SSH setup and remote dry-safe orchestration
+        env:
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+          SSH_KEY: ${{ secrets.DX_REWORK_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.DX_REWORK_SSH_HOST_KEY }}
+        run: |
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 0600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts && chmod 0600 ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- /opt/dx-rework/tools/pr17-approved-release "${{ inputs.git_sha }}"

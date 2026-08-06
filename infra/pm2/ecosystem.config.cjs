@@ -15,6 +15,7 @@ module.exports = {
       out_file: "/opt/dx-rework/logs/api-out.log",
       error_file: "/opt/dx-rework/logs/api-error.log",
       merge_logs: true,
+      env_file: "/opt/dx-rework/shared/.env",
       env: {
         NODE_ENV: "production",
         HOST: "127.0.0.1",

@@ -5,7 +5,9 @@ log_format dx_rework_query_free '$remote_addr [$time_local] "$request_method $ur
 # 独立 vhost 示例。PR-01 不安装、不 reload Nginx，也不修改 ERP 配置。
 server {
     listen 80;
-    server_name rework.example.invalid;
+    # Render DX_REWORK_SERVER_NAME and DX_REWORK_TLS_* during installation.
+    # Any remaining double-underscore token is rejected by preflight.
+    server_name __DX_REWORK_SERVER_NAME__;
 
     root /opt/dx-rework/frontend/current;
     index index.html;
