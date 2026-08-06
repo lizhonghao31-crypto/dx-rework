@@ -77,9 +77,23 @@ function makeActivationFixture(withPrevious: boolean): {
   );
 
   const pm2Log = join(root, "pm2.log");
+  const pm2Count = join(root, "pm2-count");
+  writeFileSync(pm2Log, "");
+  writeFileSync(pm2Count, "0\n");
   writeExecutable(
     join(fakeBin, "pm2"),
-    `#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' "$*" >> "${pm2Log}"\nif [[ "$1" == startOrReload && "$2" == *"/${newSha}/"* ]]; then exit 42; fi\nexit 0\n`,
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "${pm2Log}"
+if [[ "$1" == startOrReload ]]; then
+  count="$(cat "${pm2Count}")"
+  if [[ "$count" == 0 ]]; then
+    printf '1\n' > "${pm2Count}"
+    exit 42
+  fi
+fi
+exit 0
+`,
   );
   writeExecutable(join(fakeBin, "sudo"), "#!/usr/bin/env bash\nexit 0\n");
 
@@ -177,6 +191,7 @@ describe("PR-17 deployment failure recovery", () => {
     const fixture = makeActivationFixture(true);
     const result = runActivation(fixture, true);
     expect(result.status).not.toBe(0);
+    expect(readFileSync(fixture.pm2Log, "utf8")).toMatch(/startOrReload[\s\S]*startOrReload/);
     expect(readlinkSync(join(fixture.root, "current"))).toBe(join(fixture.root, "releases", oldSha));
     expect(readlinkSync(join(fixture.root, "frontend", "current"))).toBe(
       join(fixture.root, "frontend", "releases", oldSha),
@@ -187,15 +202,18 @@ describe("PR-17 deployment failure recovery", () => {
     const fixture = makeActivationFixture(false);
     const result = runActivation(fixture, true);
     expect(result.status).not.toBe(0);
+    const log = readFileSync(fixture.pm2Log, "utf8");
+    expect(log).toContain("startOrReload");
+    expect(log).toContain("stop dx-rework-api");
     expect(existsSync(join(fixture.root, "current"))).toBe(false);
     expect(existsSync(join(fixture.root, "frontend", "current"))).toBe(false);
-    expect(readFileSync(fixture.pm2Log, "utf8")).toContain("stop dx-rework-api");
   });
 
   it("retains the target release when migration compatibility forbids old-code restore", () => {
     const fixture = makeActivationFixture(true);
     const result = runActivation(fixture, false);
     expect(result.status).not.toBe(0);
+    expect(readFileSync(fixture.pm2Log, "utf8")).toMatch(/startOrReload[\s\S]*startOrReload/);
     expect(readlinkSync(join(fixture.root, "current"))).toBe(join(fixture.root, "releases", newSha));
     expect(readlinkSync(join(fixture.root, "frontend", "current"))).toBe(
       join(fixture.root, "frontend", "releases", newSha),
