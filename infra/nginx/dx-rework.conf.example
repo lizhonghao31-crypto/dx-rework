@@ -53,8 +53,22 @@ server {
         proxy_pass http://127.0.0.1:3201/version;
     }
 
-    # OAuth callback request lines contain credentials. Suppress Nginx error
-    # diagnostics for only these exact locations; Fastify retains sanitized logs.
+    # DingTalk redirects its iframe to this same-origin SPA relay with authCode
+    # in the query string. Never write that request line to access/error logs.
+    location = /auth/qr/relay {
+        access_log off;
+        error_log /dev/null emerg;
+        try_files /index.html =404;
+    }
+
+    location = /rework/auth/qr/relay {
+        access_log off;
+        error_log /dev/null emerg;
+        try_files /index.html =404;
+    }
+
+    # Legacy OAuth callback request lines contain credentials. Suppress Nginx
+    # error diagnostics for only these exact locations; Fastify sanitizes logs.
     location = /api/auth/qr/callback {
         error_log /dev/null emerg;
         proxy_http_version 1.1;
