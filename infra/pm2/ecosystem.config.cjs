@@ -3,8 +3,8 @@ module.exports = {
     {
       name: "dx-rework-api",
       cwd: "/opt/dx-rework/current",
-      script: "apps/api/dist/server.js",
-      interpreter: "/usr/bin/node",
+      script: "/opt/dx-rework/current/scripts/deploy/start-api.sh",
+      interpreter: "/usr/bin/bash",
       exec_mode: "fork",
       instances: 1,
       autorestart: true,
@@ -15,12 +15,6 @@ module.exports = {
       out_file: "/opt/dx-rework/logs/api-out.log",
       error_file: "/opt/dx-rework/logs/api-error.log",
       merge_logs: true,
-      env: {
-        NODE_ENV: "production",
-        HOST: "127.0.0.1",
-        PORT: "3201",
-        SERVICE_NAME: "dx-rework-api",
-      },
     },
   ],
 };
