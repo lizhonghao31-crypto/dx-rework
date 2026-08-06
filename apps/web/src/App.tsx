@@ -1,5 +1,5 @@
 import { Detail, Foundation, MobileForm } from "./pages.js";
-import { AuthGate, DeniedPage, LoginPage, QrLoginPage } from "./auth.js";
+import { AuthGate, DeniedPage, LoginPage, QrLoginPage, QrRelayPage } from "./auth.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
@@ -20,6 +20,7 @@ export function App() {
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
+  if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
   if (path === "/ui/admin") page = <AdminConsolePage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
