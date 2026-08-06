@@ -34,7 +34,10 @@ jobs:
         with: { node-version: '22', cache: npm }
       - run: npm ci
       - name: Exact-head gates
-        env: { TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test }
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test
+          TARGET_SHA: "${{ inputs.git_sha }}"
+          GIT_SHA: "${{ inputs.git_sha }}"
         run: npm run lint && npm run typecheck && npm run build && npm test && npm run db:migrate:lint && npm run db:migrate:check && npm run secret:scan && npm run preview:dry-run && npm run pr17:acceptance
       - name: Package and runtime verify
         env: { TARGET_SHA: "${{ inputs.git_sha }}", DX_REWORK_BUILD_ROOT: "${{ runner.temp }}/build" }
