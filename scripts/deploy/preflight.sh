@@ -34,10 +34,12 @@ check profile bash -c '[[ "$1" == pilot || "$1" == production ]]' _ "${DX_REWORK
 check memory bash -c '[[ $(awk "/MemAvailable/{print \$2}" /proc/meminfo) -ge ${DX_REWORK_MIN_MEMORY_KB:-262144} ]]'
 check disk bash -c '[[ $(df -Pk "$1" | awk "NR==2{print \$4}") -ge ${DX_REWORK_MIN_DISK_KB:-1048576} ]]' _ "$DX_ROOT"
 check root-boundary assert_safe_path "$DX_ROOT"
+check maintenance-clear test ! -e "$(release_switch_flag)"
 
 for directory in \
   "$DX_ROOT" \
   "$DX_ROOT/releases" \
+  "$DX_ROOT/generations" \
   "$DX_ROOT/frontend" \
   "$DX_ROOT/frontend/releases" \
   "$DX_ROOT/shared" \
@@ -57,6 +59,8 @@ done
 nginx_conf="${DX_REWORK_NGINX_CONFIG:-$DX_ROOT/shared/nginx.conf}"
 check nginx-regular bash -c '[[ -f "$1" && ! -L "$1" ]]' _ "$nginx_conf"
 check nginx-rendered bash -c '! grep -Eq "__[A-Z0-9_]+__|staging-api\.dxerp\.org\.cn" "$1"' _ "$nginx_conf"
+check nginx-maintenance-gate grep -Fq '/opt/dx-rework/shared/release-switch.lock' "$nginx_conf"
+check nginx-query-free-redirect bash -c '[[ $(grep -Fc "access_log /opt/dx-rework/logs/nginx-access.log dx_rework_query_free;" "$1") -ge 2 ]]' _ "$nginx_conf"
 check domain bash -c '[[ "$1" =~ ^[A-Za-z0-9.-]+$ && "$1" != staging-api.dxerp.org.cn ]]' _ "$DX_REWORK_SERVER_NAME"
 check smoke-origin bash -c '[[ "$1" == "https://$2" ]]' _ "$DX_REWORK_SMOKE_URL" "$DX_REWORK_SERVER_NAME"
 
@@ -76,13 +80,23 @@ bundle="$(realpath "$bundle")"
 check release-api assert_release "$bundle/api" "$sha" "$bundle"
 check release-frontend assert_release "$bundle/frontend" "$sha" "$bundle"
 
+validate_active_runtime() {
+  local active_sha
+  active_sha="$(current_generation_sha)" || return 1
+  assert_active_release "$active_sha"
+  pm2 jlist | "$node_bin" -e '
+let s="";
+process.stdin.on("data",d=>s+=d).on("end",()=>{
+  const expected=process.argv[1];
+  const apps=JSON.parse(s).filter(x=>x.name==="dx-rework-api"&&x.pm2_env?.status==="online");
+  if(apps.length!==1||apps[0].pm2_env.pm_cwd!==expected)process.exit(1);
+});
+' "$DX_ROOT/current"
+  curl -fsS http://127.0.0.1:3201/health/live >/dev/null
+}
+
 if (ss -ltn 2>/dev/null || true) | grep -qE ':3201[[:space:]]'; then
-  check port-owner bash -c '
-    node_bin="$1"; root="$2"
-    pm2 jlist | "$node_bin" -e '\''let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s).filter(x=>x.name==="dx-rework-api"&&x.pm2_env?.status==="online");if(a.length!==1||a[0].pm2_env.pm_cwd!==process.argv[1])process.exit(1)})'\'' "$root/current"
-    [[ -L "$root/current" ]]
-    curl -fsS http://127.0.0.1:3201/health/live >/dev/null
-  ' _ "$node_bin" "$DX_ROOT"
+  check port-owner validate_active_runtime
 else
   safe_log pass port3201-free
 fi
