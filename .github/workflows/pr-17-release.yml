@@ -187,6 +187,8 @@ jobs:
             "transfer/pr17-$TARGET_SHA.tar.gz" \
             "$SSH_USER@$SSH_HOST:$incoming/transfer.tar.gz"
 
+          # remote-release.sh validates the bundle and only then exports
+          # DX_REWORK_APPLY=true together with the explicit migration switch.
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" \
             'bash -s --' apply "$incoming" "$TARGET_SHA" "$APPLY_MIGRATIONS" "$GITHUB_RUN_ID" \
