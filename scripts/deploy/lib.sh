@@ -123,14 +123,123 @@ assert_release() {
   verify_sums "$dir"
 }
 
+ensure_static_alias() {
+  local alias_path="$1" expected_target="$2"
+  if [[ -L "$alias_path" ]]; then
+    [[ "$(readlink "$alias_path")" == "$expected_target" ]] || die "release alias target mismatch: $alias_path"
+  elif [[ -e "$alias_path" ]]; then
+    die "release alias must be a symlink: $alias_path"
+  else
+    ln -s "$expected_target" "$alias_path"
+  fi
+}
+
+ensure_generation() {
+  local sha="$1" generations generation tmp api web
+  require_sha "$sha"
+  generations="$DX_ROOT/generations"
+  generation="$generations/$sha"
+  api="$DX_ROOT/releases/$sha"
+  web="$DX_ROOT/frontend/releases/$sha"
+  assert_release "$api" "$sha"
+  assert_release "$web" "$sha"
+  mkdir -p "$generations"
+  [[ -d "$generations" && ! -L "$generations" ]] || die 'generations root must be a real directory'
+
+  if [[ ! -e "$generation" ]]; then
+    tmp="${generation}.tmp.$$"
+    mkdir -m 0755 "$tmp"
+    ln -s "$api" "$tmp/api"
+    ln -s "$web" "$tmp/frontend"
+    mv "$tmp" "$generation"
+  fi
+
+  [[ -d "$generation" && ! -L "$generation" ]] || die 'generation must be a real directory'
+  [[ -L "$generation/api" && "$(readlink -f "$generation/api")" == "$api" ]] || die 'generation API target mismatch'
+  [[ -L "$generation/frontend" && "$(readlink -f "$generation/frontend")" == "$web" ]] || die 'generation frontend target mismatch'
+  printf '%s\n' "$generation"
+}
+
+ensure_active_aliases() {
+  mkdir -p "$DX_ROOT/frontend"
+  ensure_static_alias "$DX_ROOT/current" "$DX_ROOT/active/api"
+  ensure_static_alias "$DX_ROOT/frontend/current" "$DX_ROOT/active/frontend"
+}
+
+current_generation_sha() {
+  local active="$DX_ROOT/active" generation sha
+  if [[ -L "$active" ]]; then
+    generation="$(readlink -f "$active" 2>/dev/null || true)"
+    [[ -d "$generation" && ! -L "$generation" ]] || die 'active generation link is broken'
+    sha="$(basename "$generation")"
+    require_sha "$sha"
+    [[ "$generation" == "$DX_ROOT/generations/$sha" ]] || die 'active generation is outside the generations root'
+    ensure_generation "$sha" >/dev/null
+    printf '%s\n' "$sha"
+    return 0
+  fi
+  [[ ! -e "$active" ]] || die 'active generation must be a symlink'
+  return 1
+}
+
+assert_active_release() {
+  local expected_sha="$1" active_sha
+  require_sha "$expected_sha"
+  [[ -L "$DX_ROOT/current" && "$(readlink "$DX_ROOT/current")" == "$DX_ROOT/active/api" ]] ||
+    die 'API current alias is not bound to the active generation'
+  [[ -L "$DX_ROOT/frontend/current" && "$(readlink "$DX_ROOT/frontend/current")" == "$DX_ROOT/active/frontend" ]] ||
+    die 'frontend current alias is not bound to the active generation'
+  active_sha="$(current_generation_sha)" || die 'no active generation'
+  [[ "$active_sha" == "$expected_sha" ]] || die 'active generation SHA mismatch'
+  [[ "$(readlink -f "$DX_ROOT/current")" == "$DX_ROOT/releases/$expected_sha" ]] || die 'active API release mismatch'
+  [[ "$(readlink -f "$DX_ROOT/frontend/current")" == "$DX_ROOT/frontend/releases/$expected_sha" ]] ||
+    die 'active frontend release mismatch'
+}
+
+release_switch_flag() {
+  printf '%s\n' "$DX_ROOT/shared/release-switch.lock"
+}
+
+enter_release_maintenance() {
+  local flag
+  flag="$(release_switch_flag)"
+  [[ -d "$DX_ROOT/shared" && ! -L "$DX_ROOT/shared" ]] || die 'shared directory unavailable for release maintenance'
+  [[ ! -L "$flag" ]] || die 'release maintenance flag must not be a symlink'
+  if [[ ! -e "$flag" ]]; then
+    (set -o noclobber; : > "$flag") 2>/dev/null || die 'unable to create release maintenance flag'
+    chmod 0600 "$flag"
+  fi
+}
+
+leave_release_maintenance() {
+  local flag
+  flag="$(release_switch_flag)"
+  [[ ! -L "$flag" ]] || die 'release maintenance flag must not be a symlink'
+  rm -f "$flag"
+}
+
+database_states_equal() {
+  node_exec -e '
+const pick=x=>{const v=JSON.parse(x);return {count:v.count,version:v.version??null,checksum:v.checksum??null}};
+process.exit(JSON.stringify(pick(process.argv[1]))===JSON.stringify(pick(process.argv[2]))?0:1);
+' "$1" "$2"
+}
+
 # Parse a 0600 KEY=value file without executing it. Every key must belong to
 # the full allowlist. Only keys in the optional selected list are exported.
 load_env_file() {
-  local file="$1" expected_owner="$2" allowed=" $3 " selected=" ${4:-$3} " line key value owner
+  local file="$1" expected_owner="$2" allowed=" $3 " selected=" ${4:-$3} " line key value owner selected_key
   [[ -f "$file" && ! -L "$file" ]] || die "environment file must be a regular non-symlink: $file"
   require_mode "$file" 600
   owner="$(stat -c %U "$file")"
   [[ "$owner" == "$expected_owner" ]] || die "environment file has wrong owner: $file"
+
+  # Configuration files are authoritative. Clear every selected key first so
+  # an omitted key cannot silently inherit stale credentials or approvals.
+  for selected_key in $selected; do
+    unset "$selected_key"
+  done
+
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" == \#* ]] && continue
     [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || die 'invalid environment line'
