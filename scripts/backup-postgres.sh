@@ -3,11 +3,10 @@ set -euo pipefail
 source "$(dirname "$0")/deploy/lib.sh"
 umask 077
 
-if [[ "${DX_REWORK_CONFIG_LOADED:-false}" != true ]]; then
-  load_app_config
-  load_node_config
-  export DX_REWORK_CONFIG_LOADED=true
-fi
+# Always validate the real target files; do not trust a caller-supplied boolean
+# claiming configuration has already been loaded.
+load_app_config
+load_node_config
 
 : "${DATABASE_URL:?DATABASE_URL is required}"
 : "${GIT_SHA:?GIT_SHA is required}"
