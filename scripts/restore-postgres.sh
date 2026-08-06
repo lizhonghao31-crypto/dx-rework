@@ -43,8 +43,15 @@ metadata_fp="$(node_exec -e 'process.stdout.write(JSON.parse(process.argv[1]).so
    "$target_fp" == "$DX_REWORK_APPROVED_TARGET_FINGERPRINT" ]] ||
   die 'target is not the explicitly approved drill database'
 
-[[ "$(psql "$DX_REWORK_RESTORE_DATABASE_URL" -XAtqc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname not in ('pg_catalog','information_schema') and c.relkind in ('r','p','v','m','S','f')")" == 0 ]] ||
-  die 'target contains user objects'
+user_object_count="$(psql "$DX_REWORK_RESTORE_DATABASE_URL" -XAtqc "
+  select count(*)
+  from pg_class c
+  join pg_namespace n on n.oid=c.relnamespace
+  where n.nspname <> 'information_schema'
+    and n.nspname not like 'pg_%'
+    and c.relkind in ('r','p','v','m','S','f')
+")"
+[[ "$user_object_count" == 0 ]] || die 'target contains user objects'
 
 pg_restore --list "$setdir/database.dump" >/dev/null
 start="$(date +%s)"
