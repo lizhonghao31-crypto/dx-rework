@@ -32,18 +32,20 @@ function writeRelease(root: string, sha: string): void {
       join(directory, "release-manifest.json"),
       `${JSON.stringify({ gitSha: sha, schemaVersion: "0032_fixture" })}\n`,
     );
-    const checksum = spawnSync(
-      "sha256sum",
-      ["release-manifest.json"],
-      { cwd: directory, encoding: "utf8" },
-    );
+    const checksum = spawnSync("sha256sum", ["release-manifest.json"], {
+      cwd: directory,
+      encoding: "utf8",
+    });
     expect(checksum.status).toBe(0);
     writeFileSync(join(directory, "SHA256SUMS"), checksum.stdout);
   }
   mkdirSync(join(api, "scripts", "deploy"), { recursive: true });
   mkdirSync(join(api, "apps", "api", "src", "platform"), { recursive: true });
   mkdirSync(join(api, "infra", "pm2"), { recursive: true });
-  writeFileSync(join(api, "apps", "api", "src", "platform", "migration-manifest.json"), '{"migrations":[]}\n');
+  writeFileSync(
+    join(api, "apps", "api", "src", "platform", "migration-manifest.json"),
+    '{"migrations":[]}\n',
+  );
   writeFileSync(join(api, "infra", "pm2", "ecosystem.config.cjs"), "module.exports={}\n");
 }
 
@@ -71,7 +73,7 @@ function makeActivationFixture(withPrevious: boolean): {
   const nodeBin = join(fakeBin, "node22");
   writeExecutable(
     nodeBin,
-    `#!/usr/bin/env bash\nset -euo pipefail\nif [[ "${1:-}" == */database-state.mjs ]]; then exit 0; fi\nexec "${realNode}" "$@"\n`,
+    `#!/usr/bin/env bash\nset -euo pipefail\nif [[ "\${1:-}" == */database-state.mjs ]]; then exit 0; fi\nexec "${realNode}" "$@"\n`,
   );
 
   const pm2Log = join(root, "pm2.log");
@@ -120,19 +122,15 @@ function makeActivationFixture(withPrevious: boolean): {
 function runActivation(
   fixture: ReturnType<typeof makeActivationFixture>,
   allowPreviousRestore: boolean,
-): ReturnType<typeof spawnSync> {
-  return spawnSync(
-    "bash",
-    ["scripts/deploy/activate-release.sh", newSha],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      env: {
-        ...fixture.env,
-        DX_REWORK_ALLOW_PREVIOUS_RESTORE: String(allowPreviousRestore),
-      },
+) {
+  return spawnSync("bash", ["scripts/deploy/activate-release.sh", newSha], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: {
+      ...fixture.env,
+      DX_REWORK_ALLOW_PREVIOUS_RESTORE: String(allowPreviousRestore),
     },
-  );
+  });
 }
 
 describe("PR-17 deployment failure recovery", () => {
