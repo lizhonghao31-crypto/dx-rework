@@ -11,61 +11,61 @@ api="$DX_ROOT/releases/$sha"
 web="$DX_ROOT/frontend/releases/$sha"
 assert_release "$api" "$sha"
 assert_release "$web" "$sha"
+generation="$(ensure_generation "$sha")"
+ensure_active_aliases
 acquire_lock "$DX_ROOT/locks/release.lock"
 
 DATABASE_URL="${DATABASE_URL:?DATABASE_URL required}" node_exec \
   "$api/scripts/deploy/database-state.mjs" verify-current \
   "$api/apps/api/src/platform/migration-manifest.json"
 
-old_api=""
-old_web=""
-if [[ -L "$DX_ROOT/current" || -L "$DX_ROOT/frontend/current" ]]; then
-  [[ -L "$DX_ROOT/current" && -L "$DX_ROOT/frontend/current" ]] ||
-    die 'current API/frontend mismatch'
-  old_api="$(readlink -f "$DX_ROOT/current" 2>/dev/null || true)"
-  old_web="$(readlink -f "$DX_ROOT/frontend/current" 2>/dev/null || true)"
-  [[ -d "$old_api" && -d "$old_web" ]] || die 'current API/frontend link is broken'
-  old_sha="$(basename "$old_api")"
-  [[ "$old_sha" =~ ^[0-9a-f]{40}$ && "$old_sha" == "$(basename "$old_web")" ]] ||
-    die 'current API/frontend release identity mismatch'
-elif [[ -e "$DX_ROOT/current" || -e "$DX_ROOT/frontend/current" ]]; then
-  die 'current API/frontend must be symlinks'
-fi
-
+old_sha="$(current_generation_sha || true)"
 restore_previous="${DX_REWORK_ALLOW_PREVIOUS_RESTORE:-true}"
+
 restore() {
-  local rc=$?
-  trap - ERR EXIT
+  local rc=$? old_api old_schema
+  trap - ERR EXIT INT TERM
+
   if [[ "$restore_previous" == true ]]; then
-    if [[ -n "$old_api" ]]; then
-      atomic_link "$old_api" "$DX_ROOT/current"
-      atomic_link "$old_web" "$DX_ROOT/frontend/current"
-      pm2 startOrReload "$old_api/infra/pm2/ecosystem.config.cjs" --only dx-rework-api || true
+    if [[ -n "$old_sha" ]]; then
+      old_api="$DX_ROOT/releases/$old_sha"
+      old_schema="$(manifest_field "$old_api/release-manifest.json" schemaVersion)"
+      atomic_link "$DX_ROOT/generations/$old_sha" "$DX_ROOT/active"
+      if pm2 startOrReload "$old_api/infra/pm2/ecosystem.config.cjs" --only dx-rework-api && \
+        DX_REWORK_SMOKE_LOCAL=true "$(dirname "$0")/smoke.sh" "$old_sha" "$old_schema"; then
+        leave_release_maintenance
+        safe_log fail 'activation restored the previous compatible generation'
+      else
+        safe_log fail 'previous generation restored but readiness failed; maintenance remains enabled'
+      fi
     else
-      rm -f "$DX_ROOT/current" "$DX_ROOT/frontend/current"
+      rm -f "$DX_ROOT/active"
       pm2 stop dx-rework-api || true
+      leave_release_maintenance
+      safe_log fail 'first activation failed; target generation was deactivated'
     fi
-    safe_log fail 'activation restored the previous compatible release'
   else
     # Once migrations have advanced, old code may no longer be compatible.
-    # Keep both links on the target release and preserve the failure evidence.
-    atomic_link "$api" "$DX_ROOT/current" || true
-    atomic_link "$web" "$DX_ROOT/frontend/current" || true
+    # Keep the target generation selected and leave the maintenance gate in
+    # place until a forward-fix or approved database recovery is complete.
+    atomic_link "$generation" "$DX_ROOT/active" || true
     pm2 startOrReload "$api/infra/pm2/ecosystem.config.cjs" --only dx-rework-api || true
-    safe_log fail 'activation failed after schema change; target release retained and manual recovery is required'
+    safe_log fail 'activation failed after schema change; target generation retained under maintenance'
   fi
   exit "$rc"
 }
-trap restore ERR EXIT
+trap restore ERR EXIT INT TERM
 
-# Static release switching does not require an Nginx reload. Validate the
-# already-installed independent vhost read-only before changing current links.
+# Nginx reads both stable aliases through the same active generation. A file-
+# based maintenance gate blocks external traffic while the pointer and the
+# in-memory API process are advanced, without reloading any other vhost.
 sudo -n nginx -t
-atomic_link "$api" "$DX_ROOT/current"
-atomic_link "$web" "$DX_ROOT/frontend/current"
+enter_release_maintenance
+atomic_link "$generation" "$DX_ROOT/active"
 pm2 startOrReload "$api/infra/pm2/ecosystem.config.cjs" --only dx-rework-api
 DX_REWORK_SMOKE_LOCAL=true "$(dirname "$0")/smoke.sh" \
   "$sha" "$(manifest_field "$api/release-manifest.json" schemaVersion)"
+leave_release_maintenance
 
-trap - ERR EXIT
-safe_log pass "activated $sha"
+trap - ERR EXIT INT TERM
+safe_log pass "activated generation $sha"
