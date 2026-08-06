@@ -6,15 +6,13 @@ source "$(dirname "$0")/lib.sh"
 sha="$1"
 schema="$2"
 require_sha "$sha"
-
-[[ "$(basename "$(readlink -f "$DX_ROOT/current")")" == "$sha" && \
-   "$(basename "$(readlink -f "$DX_ROOT/frontend/current")")" == "$sha" ]] ||
-  die 'current API/frontend SHA mismatch'
+assert_active_release "$sha"
 
 local_mode="${DX_REWORK_SMOKE_LOCAL:-false}"
 if [[ "$local_mode" == true ]]; then
   base=http://127.0.0.1:3201
 else
+  [[ ! -e "$(release_switch_flag)" ]] || die 'external smoke cannot run while release maintenance is enabled'
   if [[ -z "${DX_REWORK_SMOKE_URL:-}" ]]; then
     load_deploy_config
     [[ "${DX_REWORK_SERVER_NAME:-}" =~ ^[A-Za-z0-9.-]+$ ]] || die 'invalid smoke server name'
