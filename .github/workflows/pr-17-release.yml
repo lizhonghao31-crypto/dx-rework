@@ -1,105 +1,195 @@
 name: PR-17 manual release
+
 on:
   workflow_dispatch:
     inputs:
-      git_sha: { description: Exact current main SHA, required: true }
-      target_environment: { type: choice, required: true, options: [dx-rework-pilot, dx-rework-production] }
-      dry_run: { type: boolean, default: true, required: true }
-      apply_migrations: { type: boolean, default: false, required: true }
+      git_sha:
+        description: Exact current main SHA
+        required: true
+        type: string
+      target_environment:
+        description: Protected target environment
+        required: true
+        type: choice
+        options:
+          - dx-rework-pilot
+          - dx-rework-production
+      dry_run:
+        description: Build and verify without connecting to ECS
+        required: true
+        type: boolean
+        default: true
+      apply_migrations:
+        description: Apply pending PostgreSQL migrations during deployment
+        required: true
+        type: boolean
+        default: false
+
 permissions:
   contents: read
-concurrency: { group: "pr-17-${{ inputs.target_environment }}", cancel-in-progress: false }
+
+concurrency:
+  group: pr-17-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+env:
+  APP_BASE_PATH: /rework/
+  VITE_BASE_PATH: /rework/
+
 jobs:
   gate:
+    name: Build exact main release bundle
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target_environment }}
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
-        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: dx_rework_test }
-        ports: ["5432:5432"]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dx_rework_test
+        ports:
+          - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U postgres -d dx_rework_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-        with: { ref: "${{ inputs.git_sha }}", fetch-depth: 0 }
-      - name: Authorize exact main head
-        env: { TARGET_SHA: "${{ inputs.git_sha }}" }
+      - name: Checkout exact requested SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 0
+
+      - name: Authorize exact current main head
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
         run: |
+          set -euo pipefail
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
           test "$(git rev-parse origin/main)" = "$TARGET_SHA"
-      - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: npm }
-      - run: npm ci
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        run: npm install --global npm@10.9.9
+
+      - name: Install locked dependencies
+        run: npm ci
+
       - name: Exact-head gates
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test
-          TARGET_SHA: "${{ inputs.git_sha }}"
-          GIT_SHA: "${{ inputs.git_sha }}"
-        run: npm run lint && npm run typecheck && npm run build && npm test && npm run db:migrate:lint && npm run db:migrate:check && npm run secret:scan && npm run preview:dry-run && npm run pr17:acceptance
-      - name: Package and runtime verify
-        env: { TARGET_SHA: "${{ inputs.git_sha }}", DX_REWORK_BUILD_ROOT: "${{ runner.temp }}/build" }
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test
+          TARGET_SHA: ${{ inputs.git_sha }}
+          GIT_SHA: ${{ inputs.git_sha }}
+        run: >-
+          npm run lint &&
+          npm run typecheck &&
+          npm run build &&
+          npm test &&
+          npm run db:migrate:lint &&
+          npm run db:migrate:check &&
+          npm run secret:scan &&
+          npm run preview:dry-run &&
+          npm run pr17:acceptance
+
+      - name: Package and verify runtime
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+          DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/build
         run: |
+          set -euo pipefail
           mkdir -p "$DX_REWORK_BUILD_ROOT"
-          scripts/deploy/package-release.sh "$TARGET_SHA" "$(date -u +%FT%TZ)" "$DX_REWORK_BUILD_ROOT/$TARGET_SHA"
+          scripts/deploy/package-release.sh \
+            "$TARGET_SHA" \
+            "$(date -u +%FT%TZ)" \
+            "$DX_REWORK_BUILD_ROOT/$TARGET_SHA"
           scripts/deploy/verify-runtime.sh "$DX_REWORK_BUILD_ROOT/$TARGET_SHA/api"
-          scripts/deploy/create-transfer-bundle.sh "$DX_REWORK_BUILD_ROOT/$TARGET_SHA" "$RUNNER_TEMP/pr17-$TARGET_SHA.tar.gz"
-      - uses: actions/upload-artifact@v4
-        with: { name: "pr17-transfer-${{ inputs.git_sha }}", path: "${{ runner.temp }}/pr17-${{ inputs.git_sha }}.tar.gz*", if-no-files-found: error }
+          scripts/deploy/create-transfer-bundle.sh \
+            "$DX_REWORK_BUILD_ROOT/$TARGET_SHA" \
+            "$RUNNER_TEMP/pr17-$TARGET_SHA.tar.gz"
+
+      - name: Upload checksum-bound transfer bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr17-transfer-${{ inputs.git_sha }}
+          path: |
+            ${{ runner.temp }}/pr17-${{ inputs.git_sha }}.tar.gz
+            ${{ runner.temp }}/pr17-${{ inputs.git_sha }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   deploy:
+    name: Deploy isolated ECS release
     needs: gate
-    if: ${{ !inputs.dry_run }}
+    if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: ${{ inputs.target_environment }}
     steps:
-      - uses: actions/download-artifact@v4
-        with: { name: "pr17-transfer-${{ inputs.git_sha }}", path: transfer }
-      - name: Verify gate bundle and transfer
+      - name: Checkout deployment transport script
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 1
+
+      - name: Download verified transfer bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: pr17-transfer-${{ inputs.git_sha }}
+          path: transfer
+
+      - name: Verify and transfer release
+        shell: bash
         env:
-          SSH_HOST: "${{ secrets.DX_REWORK_SSH_HOST }}"
-          SSH_USER: "${{ secrets.DX_REWORK_SSH_USER }}"
-          SSH_KEY: "${{ secrets.DX_REWORK_SSH_KEY }}"
-          SSH_HOST_KEY: "${{ secrets.DX_REWORK_SSH_HOST_KEY }}"
-          TARGET_SHA: "${{ inputs.git_sha }}"
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+          SSH_KEY: ${{ secrets.DX_REWORK_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.DX_REWORK_SSH_HOST_KEY }}
+          TARGET_SHA: ${{ inputs.git_sha }}
           APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
         run: |
-          cd transfer && sha256sum -c --strict "pr17-$TARGET_SHA.tar.gz.sha256" && cd ..
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_KEY"
+          test -n "$SSH_HOST_KEY"
+          [[ "$SSH_USER" =~ ^[A-Za-z_][A-Za-z0-9._-]*$ ]]
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          cd transfer
+          sha256sum -c --strict "pr17-$TARGET_SHA.tar.gz.sha256"
+          cd ..
+
           install -m 0700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 0600 ~/.ssh/id_ed25519
           printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
           chmod 0600 ~/.ssh/known_hosts
+
           incoming="/opt/dx-rework/incoming/${GITHUB_RUN_ID}-$TARGET_SHA"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" <<'REMOTE'
-          set -euo pipefail; umask 077; d="$1"; me="$(id -un)"
-          for p in /opt/dx-rework /opt/dx-rework/incoming; do
-            [[ -d "$p" && ! -L "$p" && "$(stat -c %U "$p")" == "$me" ]]
-            mode="$(stat -c %a "$p")"; (( (8#$mode & 0022) == 0 ))
-          done
-          [[ "$d" == /opt/dx-rework/incoming/* && ! -e "$d" && ! -L "$d" ]]
-          mkdir -m 0700 "$d"
-          REMOTE
-          scp -o BatchMode=yes -o StrictHostKeyChecking=yes "transfer/pr17-$TARGET_SHA.tar.gz" "$SSH_USER@$SSH_HOST:$incoming/transfer.tar.gz"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" "$TARGET_SHA" "$APPLY_MIGRATIONS" "$GITHUB_RUN_ID" <<'REMOTE'
-          set -euo pipefail; umask 077; d="$1"; sha="$2"; apply_migrations="$3"; run_id="$4"
-          python3 - "$d/transfer.tar.gz" "$d" <<'PY'
-          import sys,tarfile
-          archive,dest=sys.argv[1:]
-          with tarfile.open(archive,"r:gz") as t:
-            for m in t.getmembers():
-              parts=m.name.split("/")
-              if m.name.startswith("/") or any(x in ("", ".", "..") for x in parts) or not (m.isfile() or m.isdir()):
-                raise SystemExit("unsafe tar entry")
-            t.extractall(dest,filter="data")
-          PY
-          bundle="$d/$sha"
-          [[ -d "$bundle/api" && -d "$bundle/frontend" && -f "$bundle/SHA256SUMS" ]]
-          actual_sha="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["gitSha"])' "$bundle/release-manifest.json")"
-          [[ "$actual_sha" == "$sha" ]]
-          (cd "$bundle" && sha256sum -c --strict SHA256SUMS)
-          (cd "$bundle/api" && sha256sum -c --strict SHA256SUMS)
-          (cd "$bundle/frontend" && sha256sum -c --strict SHA256SUMS)
-          DX_REWORK_APPLY=true DX_REWORK_ENVIRONMENT_APPROVED=true DX_REWORK_CONFIRM_RELEASE="$sha" DX_REWORK_APPLY_MIGRATIONS="$apply_migrations" GITHUB_RUN_ID="$run_id" "$bundle/api/scripts/deploy/release.sh" "$sha" "$bundle"
-          REMOTE
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            'bash -s --' prepare "$incoming" \
+            < scripts/deploy/remote-release.sh
+
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "transfer/pr17-$TARGET_SHA.tar.gz" \
+            "$SSH_USER@$SSH_HOST:$incoming/transfer.tar.gz"
+
+          # remote-release.sh validates the bundle and only then exports
+          # DX_REWORK_APPLY=true together with the explicit migration switch.
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            'bash -s --' apply "$incoming" "$TARGET_SHA" "$APPLY_MIGRATIONS" "$GITHUB_RUN_ID" \
+            < scripts/deploy/remote-release.sh
