@@ -34,10 +34,13 @@ target_checksum="$(manifest_field "$bundle/api/release-manifest.json" schemaChec
 DATABASE_URL="${DATABASE_URL:?DATABASE_URL required}" node_exec \
   "$bundle/api/scripts/deploy/database-state.mjs" verify-prefix "$manifest"
 current_before="$(DATABASE_URL="$DATABASE_URL" node_exec "$bundle/api/scripts/deploy/database-state.mjs" print-current)"
+previous="$(current_generation_sha || true)"
 
 # Install the checksum-bound release before any database change. Installation is
 # inactive and idempotent, but guarantees recovery code is present locally.
 "$(dirname "$0")/install-release.sh" "$sha" "$bundle"
+installed_api="$DX_ROOT/releases/$sha"
+installed_manifest="$installed_api/apps/api/src/platform/migration-manifest.json"
 
 GIT_SHA="$sha" \
 TARGET_SCHEMA_VERSION="$target_version" \
@@ -53,44 +56,53 @@ migration_applied=false
 if [[ "$pending" == true ]]; then
   [[ "${DX_REWORK_APPLY_MIGRATIONS:-false}" == true ]] ||
     die 'pending migrations require DX_REWORK_APPLY_MIGRATIONS=true'
-  (cd "$bundle/api" && DATABASE_URL="$DATABASE_URL" node_exec scripts/migrate.mjs)
+  DATABASE_URL="$DATABASE_URL" "$(dirname "$0")/apply-migrations-safely.sh" \
+    "$installed_api" "$current_before"
   migration_applied=true
 fi
 
-DATABASE_URL="$DATABASE_URL" node_exec \
-  "$bundle/api/scripts/deploy/database-state.mjs" verify-current "$manifest"
-DATABASE_URL="$DATABASE_URL" node_exec \
-  "$bundle/api/scripts/deploy/verify-database-readiness.mjs" "$manifest"
+if ! DATABASE_URL="$DATABASE_URL" node_exec \
+  "$installed_api/scripts/deploy/database-state.mjs" verify-current "$installed_manifest" || \
+  ! DATABASE_URL="$DATABASE_URL" node_exec \
+  "$installed_api/scripts/deploy/verify-database-readiness.mjs" "$installed_manifest"; then
+  if [[ "$migration_applied" == true ]]; then
+    enter_release_maintenance
+    die 'database advanced but target readiness verification failed; maintenance enabled and manual recovery is required'
+  fi
+  die 'target database readiness verification failed before activation'
+fi
 
-previous="$(basename "$(readlink -f "$DX_ROOT/current" 2>/dev/null || true)")"
 allow_previous_restore=true
 [[ "$migration_applied" == true ]] && allow_previous_restore=false
 
 if ! DX_REWORK_ALLOW_PREVIOUS_RESTORE="$allow_previous_restore" \
   "$(dirname "$0")/activate-release.sh" "$sha"; then
   if [[ "$migration_applied" == true ]]; then
-    die 'activation failed after migration; target release retained and manual recovery is required'
+    die 'activation failed after migration; target generation retained under maintenance'
   fi
-  die 'activation failed; previous compatible release was restored'
+  die 'activation failed; previous compatible generation was restored'
 fi
 
 if ! DX_REWORK_SMOKE_LOCAL=false "$(dirname "$0")/smoke.sh" "$sha" "$target_version"; then
   if [[ "$migration_applied" == true ]]; then
-    die 'external smoke failed after migration; target release retained and manual recovery is required'
+    enter_release_maintenance
+    die 'external smoke failed after migration; target generation retained under maintenance for manual recovery'
   fi
 
   if [[ "$previous" =~ ^[0-9a-f]{40}$ ]]; then
     if "$(dirname "$0")/rollback.sh" "$previous"; then
-      safe_log fail "external smoke failed; compatible previous release $previous restored"
+      safe_log fail "external smoke failed; compatible previous generation $previous restored"
       exit 1
     fi
-    die 'external smoke failed and rollback failed; current state preserved for manual recovery'
+    enter_release_maintenance
+    die 'external smoke failed and rollback failed; current state preserved under maintenance'
   fi
 
   # First deployment with no schema change has no compatible previous release.
-  rm -f "$DX_ROOT/current" "$DX_ROOT/frontend/current"
+  enter_release_maintenance
+  rm -f "$DX_ROOT/active"
   pm2 stop dx-rework-api || true
-  die 'first-deployment smoke failed; target deactivated without changing database schema'
+  die 'first-deployment smoke failed; target deactivated and maintenance remains enabled'
 fi
 
 safe_log pass "release complete evidence=$evidence"
