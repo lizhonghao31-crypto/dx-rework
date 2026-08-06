@@ -93,7 +93,6 @@ server {
     # alias strips the public prefix; missing assets return 404 and never the SPA HTML.
     location ^~ /rework/assets/ {
         alias /opt/dx-rework/frontend/current/assets/;
-        try_files $uri =404;
     }
 
     location ^~ /assets/ { try_files $uri =404; }

@@ -102,6 +102,24 @@ jobs:
       - name: Scan repository for committed secret signatures
         run: npm run secret:scan
 
+      - name: PR-17 exact-head acceptance and lifecycle
+        shell: bash
+        run: |
+          npm run pr17:acceptance
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          npx vitest run tests/unit/pr-17-deployment.test.ts tests/unit/pr-17-operations.test.ts tests/integration/pr-17-release-lifecycle.test.ts
+
+      - name: PR-17 package, runtime and relocation-safe transfer
+        shell: bash
+        env:
+          DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/pr17-build
+        run: |
+          sha="$(git rev-parse HEAD)"; out="$DX_REWORK_BUILD_ROOT/$sha"; mkdir -p "$DX_REWORK_BUILD_ROOT"
+          scripts/deploy/package-release.sh "$sha" "$BUILD_TIME" "$out"
+          scripts/deploy/verify-runtime.sh "$out/api"
+          scripts/deploy/create-transfer-bundle.sh "$out" "$RUNNER_TEMP/pr17-$sha.tar.gz"
+          (cd "$RUNNER_TEMP" && sha256sum -c --strict "pr17-$sha.tar.gz.sha256")
+
       - name: Write validation summary
         shell: bash
         run: |

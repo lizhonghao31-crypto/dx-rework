@@ -16,3 +16,29 @@ acquire_lock(){ [[ "${DX_REWORK_LOCK_HELD:-false}" == true ]] && return; local f
 atomic_link(){ local target="$1" link="$2" tmp="${link}.tmp.$$"; assert_safe_path "$target" >/dev/null; assert_safe_path "$link" >/dev/null; ln -s "$target" "$tmp"; mv -Tf "$tmp" "$link"; }
 manifest_field(){ node -e 'const m=require(process.argv[1]); const v=process.argv[2].split(".").reduce((o,k)=>o?.[k],m); if(v===undefined||v===null)process.exit(2); process.stdout.write(String(v))' "$1" "$2"; }
 assert_release(){ local dir sha root="${3:-$DX_ROOT}"; dir="$(assert_safe_path "$1" "$root")"; sha="$2"; require_sha "$sha"; [[ -d "$dir" && ! -L "$dir" && -f "$dir/release-manifest.json" && -f "$dir/SHA256SUMS" ]] || die 'release is not registered'; [[ "$(manifest_field "$dir/release-manifest.json" gitSha)" == "$sha" ]] || die 'manifest SHA mismatch'; verify_sums "$dir"; }
+
+# Parse a root-owned/deploy-user-owned 0600 KEY=value file without executing it.
+# The third argument is a space-delimited, explicit allowlist. Values are kept
+# byte-for-byte after the first '='; shell syntax is data, never code.
+load_env_file(){
+  local file="$1" expected_owner="$2" allowed=" $3 " line key value owner
+  [[ -f "$file" && ! -L "$file" ]] || die "environment file must be a regular non-symlink: $file"
+  require_mode "$file" 600
+  owner="$(stat -c %U "$file")"; [[ "$owner" == "$expected_owner" ]] || die "environment file has wrong owner: $file"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || die 'invalid environment line'
+    key="${line%%=*}"; value="${line#*=}"
+    [[ "$allowed" == *" $key "* ]] || die "environment key is not allowed: $key"
+    case "$key" in NODE_OPTIONS|BASH_ENV|ENV|LD_PRELOAD|LD_LIBRARY_PATH|DX_REWORK_TEST_*) die "interpreter/test control variable forbidden: $key";; esac
+    printf -v "$key" %s "$value"; export "$key"
+  done < "$file"
+}
+
+DX_REWORK_APP_ENV_KEYS='DATABASE_URL LOG_LEVEL DINGTALK_CORP_ID DINGTALK_H5_APP_KEY DINGTALK_H5_APP_SECRET DINGTALK_WEB_CLIENT_ID DINGTALK_WEB_CLIENT_SECRET DINGTALK_QR_REDIRECT_URI APP_BASE_PATH SESSION_SECRET SESSION_TTL_SECONDS TODO_RUNTIME_ENABLED TODO_RUNTIME_ACTOR_ID TODO_DELIVERY_INTERVAL_MS TODO_TIMING_INTERVAL_MS OSS_REGION OSS_ENDPOINT OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_PRIVATE_PREFIX OSS_SIGNED_URL_TTL_SECONDS OSS_MAX_UPLOAD_BYTES'
+DX_REWORK_DEPLOY_ENV_KEYS='DX_REWORK_NODE_BIN DX_REWORK_SERVER_NAME DX_REWORK_TLS_CERT DX_REWORK_TLS_KEY DX_REWORK_NGINX_CONFIG DX_REWORK_PROFILE DX_REWORK_DEPLOY_USER DX_REWORK_RESTORE_DATABASE_URL DX_REWORK_APPROVED_TARGET_FINGERPRINT DX_REWORK_APPROVED_TARGET_DATABASE'
+load_shared_config(){
+  local owner="${DX_REWORK_DEPLOY_USER:-$(id -un)}"
+  load_env_file "${DX_REWORK_APP_ENV_FILE:-$DX_ROOT/shared/.env}" "$owner" "$DX_REWORK_APP_ENV_KEYS"
+  load_env_file "${DX_REWORK_DEPLOY_ENV_FILE:-$DX_ROOT/shared/deploy.env}" "$owner" "$DX_REWORK_DEPLOY_ENV_KEYS"
+}

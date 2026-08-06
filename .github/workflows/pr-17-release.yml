@@ -5,6 +5,7 @@ on:
       git_sha: { description: Exact current main SHA, required: true }
       target_environment: { type: choice, required: true, options: [dx-rework-pilot, dx-rework-production] }
       dry_run: { type: boolean, default: true, required: true }
+      apply_migrations: { type: boolean, default: false, required: true }
 permissions:
   contents: read
 concurrency: { group: "pr-17-${{ inputs.target_environment }}", cancel-in-progress: false }
@@ -26,7 +27,7 @@ jobs:
         env: { TARGET_SHA: "${{ inputs.git_sha }}" }
         run: |
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
-          git fetch origin main --force
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
           test "$(git rev-parse origin/main)" = "$TARGET_SHA"
       - uses: actions/setup-node@v4
@@ -57,15 +58,35 @@ jobs:
       # credentials remain job-scoped protected-environment inputs and are
       # never copied into, appended to, or uploaded with the transfer bundle.
       - name: Verify gate bundle and transfer
-        env: { SSH_HOST: "${{ secrets.DX_REWORK_SSH_HOST }}", SSH_USER: "${{ secrets.DX_REWORK_SSH_USER }}", SSH_KEY: "${{ secrets.DX_REWORK_SSH_KEY }}", SSH_HOST_KEY: "${{ secrets.DX_REWORK_SSH_HOST_KEY }}", TARGET_SHA: "${{ inputs.git_sha }}" }
+        env:
+          SSH_HOST: "${{ secrets.DX_REWORK_SSH_HOST }}"
+          SSH_USER: "${{ secrets.DX_REWORK_SSH_USER }}"
+          SSH_KEY: "${{ secrets.DX_REWORK_SSH_KEY }}"
+          SSH_HOST_KEY: "${{ secrets.DX_REWORK_SSH_HOST_KEY }}"
+          TARGET_SHA: "${{ inputs.git_sha }}"
+          APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
         run: |
           cd transfer && sha256sum -c --strict "pr17-$TARGET_SHA.tar.gz.sha256" && cd ..
           install -m 0700 -d ~/.ssh; printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519; chmod 0600 ~/.ssh/id_ed25519; printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts; chmod 0600 ~/.ssh/known_hosts
           incoming="/opt/dx-rework/incoming/${GITHUB_RUN_ID}-$TARGET_SHA"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" <<'REMOTE'
-          set -euo pipefail; d="$1"; [[ "$d" == /opt/dx-rework/incoming/* && ! -e "$d" && ! -L "$d" ]]; mkdir -m 0700 "$d"
-REMOTE
+          set -euo pipefail; umask 077; d="$1"; me="$(id -un)"
+          for p in /opt/dx-rework /opt/dx-rework/incoming; do [[ -d "$p" && ! -L "$p" && "$(stat -c %U "$p")" == "$me" ]]; mode="$(stat -c %a "$p")"; (( (8#$mode & 0022) == 0 )); done
+          [[ "$d" == /opt/dx-rework/incoming/* && ! -e "$d" && ! -L "$d" ]]; mkdir -m 0700 "$d"
+          REMOTE
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes "transfer/pr17-$TARGET_SHA.tar.gz" "$SSH_USER@$SSH_HOST:$incoming/transfer.tar.gz"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" "$TARGET_SHA" <<'REMOTE'
-          set -euo pipefail; d="$1"; sha="$2"; tar -tzf "$d/transfer.tar.gz" | awk '$0 ~ /^\// || $0 ~ /(^|\/)\.\.($|\/)/ {exit 1}'; tar -xzf "$d/transfer.tar.gz" -C "$d"; bundle="$d/$sha"; "$bundle/api/scripts/deploy/release.sh" "$sha" "$bundle"
-REMOTE
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" "$TARGET_SHA" "$APPLY_MIGRATIONS" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail; umask 077; d="$1"; sha="$2"; apply_migrations="$3"; run_id="$4"
+          python3 - "$d/transfer.tar.gz" "$d" <<'PY'
+          import os,sys,tarfile
+          archive,dest=sys.argv[1:]
+          with tarfile.open(archive,"r:gz") as t:
+            for m in t.getmembers():
+              n=m.name
+              if n.startswith("/") or any(x in ("", ".", "..") for x in n.split("/")) or not (m.isfile() or m.isdir()): raise SystemExit("unsafe tar entry")
+            t.extractall(dest,filter="data")
+          PY
+          bundle="$d/$sha"; [[ -d "$bundle/api" && -d "$bundle/frontend" && -f "$bundle/SHA256SUMS" && "$(node -p "require('$bundle/release-manifest.json').gitSha")" == "$sha" ]]
+          (cd "$bundle" && sha256sum -c --strict SHA256SUMS); (cd "$bundle/api" && sha256sum -c --strict SHA256SUMS); (cd "$bundle/frontend" && sha256sum -c --strict SHA256SUMS)
+          DX_REWORK_APPLY=true DX_REWORK_ENVIRONMENT_APPROVED=true DX_REWORK_CONFIRM_RELEASE="$sha" DX_REWORK_APPLY_MIGRATIONS="$apply_migrations" GITHUB_RUN_ID="$run_id" "$bundle/api/scripts/deploy/release.sh" "$sha" "$bundle"
+          REMOTE
