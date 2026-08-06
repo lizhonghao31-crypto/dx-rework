@@ -32,7 +32,7 @@ describe("PR-17 operations evidence", () => {
     expect(spawnSync("node", ["scripts/acceptance/validate.mjs", path]).status).not.toBe(0);
   });
 
-  it("manual workflow is dry by default and tightly scoped", () => {
+  it("manual workflow is dry by default, validly transported and scoped to /rework/", () => {
     const workflow = read(".github/workflows/pr-17-release.yml");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toMatch(/^\s+(push|pull_request):/m);
@@ -40,6 +40,11 @@ describe("PR-17 operations evidence", () => {
     expect(workflow).toContain("permissions:\n  contents: read");
     expect(workflow).toContain("concurrency:");
     expect(workflow).toContain("environment:");
+    expect(workflow).toContain("APP_BASE_PATH: /rework/");
+    expect(workflow).toContain("VITE_BASE_PATH: /rework/");
+    expect(workflow).toContain("< scripts/deploy/remote-release.sh");
+    expect(workflow).not.toContain("<<'REMOTE'");
+    expect(workflow).not.toContain("<<'PY'");
     expect(workflow).toContain("StrictHostKeyChecking=yes");
     expect(workflow).not.toContain("StrictHostKeyChecking=no");
     expect(workflow).not.toMatch(/artifact[\s\S]{0,200}(\.env|DATABASE_URL|SSH_KEY)/);
