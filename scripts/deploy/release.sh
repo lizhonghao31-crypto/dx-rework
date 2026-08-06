@@ -9,7 +9,6 @@ require_sha "$sha"
 
 script_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 load_release_config
-export DX_REWORK_CONFIG_LOADED=true
 acquire_lock "$DX_ROOT/locks/release.lock"
 
 evidence="$(assert_safe_path "${DX_REWORK_EVIDENCE_DIR:-$DX_ROOT/evidence/${GITHUB_RUN_ID:-local}-$sha}")"
