@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -47,6 +48,11 @@ function writeRelease(root: string, sha: string): void {
     '{"migrations":[]}\n',
   );
   writeFileSync(join(api, "infra", "pm2", "ecosystem.config.cjs"), "module.exports={}\n");
+
+  const generation = join(root, "generations", sha);
+  mkdirSync(generation, { recursive: true });
+  symlinkSync(api, join(generation, "api"));
+  symlinkSync(frontend, join(generation, "frontend"));
 }
 
 function makeActivationFixture(withPrevious: boolean): {
@@ -61,12 +67,14 @@ function makeActivationFixture(withPrevious: boolean): {
   mkdirSync(shared, { recursive: true });
   mkdirSync(join(root, "locks"), { recursive: true });
   mkdirSync(join(root, "frontend"), { recursive: true });
+  mkdirSync(join(root, "generations"), { recursive: true });
   writeRelease(root, oldSha);
   writeRelease(root, newSha);
 
+  symlinkSync(join(root, "active", "api"), join(root, "current"));
+  symlinkSync(join(root, "active", "frontend"), join(root, "frontend", "current"));
   if (withPrevious) {
-    symlinkSync(join(root, "releases", oldSha), join(root, "current"));
-    symlinkSync(join(root, "frontend", "releases", oldSha), join(root, "frontend", "current"));
+    symlinkSync(join(root, "generations", oldSha), join(root, "active"));
   }
 
   const realNode = process.execPath;
@@ -85,7 +93,11 @@ function makeActivationFixture(withPrevious: boolean): {
     `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${pm2Log}"
-if [[ "$1" == startOrReload ]]; then
+if [[ "\${1:-}" == jlist ]]; then
+  printf '[{"name":"dx-rework-api","pm2_env":{"status":"online","pm_cwd":"${root}/current","pm_exec_path":"${root}/current/scripts/deploy/start-api.sh"}}]\n'
+  exit 0
+fi
+if [[ "\${1:-}" == startOrReload ]]; then
   count="$(cat "${pm2Count}")"
   if [[ "$count" == 0 ]]; then
     printf '1\n' > "${pm2Count}"
@@ -96,6 +108,18 @@ exit 0
 `,
   );
   writeExecutable(join(fakeBin, "sudo"), "#!/usr/bin/env bash\nexit 0\n");
+  writeExecutable(
+    join(fakeBin, "curl"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+url="\${*: -1}"
+if [[ "$url" == */version ]]; then
+  sha="$(basename "$(readlink -f "${root}/active")")"
+  printf '{"gitSha":"%s","expectedSchemaVersion":"0032_fixture","schemaVersion":"0032_fixture"}\n' "$sha"
+fi
+exit 0
+`,
+  );
 
   const nginxConfig = join(shared, "nginx.conf");
   const cert = join(shared, "cert.pem");
@@ -187,36 +211,37 @@ describe("PR-17 deployment failure recovery", () => {
     }
   });
 
-  it("restores both previous links when target PM2 activation fails", () => {
+  it("restores the previous generation when target PM2 activation fails", () => {
     const fixture = makeActivationFixture(true);
     const result = runActivation(fixture, true);
     expect(result.status).not.toBe(0);
     expect(readFileSync(fixture.pm2Log, "utf8")).toMatch(/startOrReload[\s\S]*startOrReload/);
-    expect(readlinkSync(join(fixture.root, "current"))).toBe(join(fixture.root, "releases", oldSha));
+    expect(readlinkSync(join(fixture.root, "active"))).toBe(join(fixture.root, "generations", oldSha));
+    expect(readlinkSync(join(fixture.root, "current"))).toBe(join(fixture.root, "active", "api"));
     expect(readlinkSync(join(fixture.root, "frontend", "current"))).toBe(
-      join(fixture.root, "frontend", "releases", oldSha),
+      join(fixture.root, "active", "frontend"),
     );
+    expect(existsSync(join(fixture.root, "shared", "release-switch.lock"))).toBe(false);
   });
 
-  it("removes first-deployment links and stops the bad process on activation failure", () => {
+  it("deactivates a failed first generation and stops the bad process", () => {
     const fixture = makeActivationFixture(false);
     const result = runActivation(fixture, true);
     expect(result.status).not.toBe(0);
     const log = readFileSync(fixture.pm2Log, "utf8");
     expect(log).toContain("startOrReload");
     expect(log).toContain("stop dx-rework-api");
-    expect(existsSync(join(fixture.root, "current"))).toBe(false);
-    expect(existsSync(join(fixture.root, "frontend", "current"))).toBe(false);
+    expect(existsSync(join(fixture.root, "active"))).toBe(false);
+    expect(lstatSync(join(fixture.root, "current")).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(fixture.root, "shared", "release-switch.lock"))).toBe(false);
   });
 
-  it("retains the target release when migration compatibility forbids old-code restore", () => {
+  it("retains the target generation under maintenance after schema change", () => {
     const fixture = makeActivationFixture(true);
     const result = runActivation(fixture, false);
     expect(result.status).not.toBe(0);
     expect(readFileSync(fixture.pm2Log, "utf8")).toMatch(/startOrReload[\s\S]*startOrReload/);
-    expect(readlinkSync(join(fixture.root, "current"))).toBe(join(fixture.root, "releases", newSha));
-    expect(readlinkSync(join(fixture.root, "frontend", "current"))).toBe(
-      join(fixture.root, "frontend", "releases", newSha),
-    );
+    expect(readlinkSync(join(fixture.root, "active"))).toBe(join(fixture.root, "generations", newSha));
+    expect(existsSync(join(fixture.root, "shared", "release-switch.lock"))).toBe(true);
   });
 });
