@@ -100,7 +100,8 @@ acquire_lock() {
 }
 
 atomic_link() {
-  local target="$1" link="$2" tmp="${link}.tmp.$$"
+  local target="$1" link="$2" tmp
+  tmp="${link}.tmp.$$"
   assert_safe_path "$target" >/dev/null
   assert_safe_path "$link" >/dev/null
   ln -s "$target" "$tmp"
