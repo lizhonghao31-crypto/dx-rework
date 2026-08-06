@@ -156,13 +156,14 @@ jobs:
       - name: PR-17 exact-head acceptance and lifecycle
         shell: bash
         run: |
-          npm run pr17:acceptance
+          TARGET_SHA="$(git rev-parse HEAD)" npm run pr17:acceptance
           find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           npx vitest run \
             tests/unit/pr-17-deployment.test.ts \
             tests/unit/pr-17-operations.test.ts \
             tests/integration/pr-17-release-lifecycle.test.ts \
-            tests/integration/pr-17-deploy-failure.test.ts
+            tests/integration/pr-17-deploy-failure.test.ts \
+            tests/integration/pr-17-review-fixes.test.ts
 
       - name: PR-17 package, runtime and relocation-safe transfer
         shell: bash
@@ -188,6 +189,7 @@ jobs:
             echo "- Lint/typecheck/build/tests: passed"
             echo "- PostgreSQL migration replay: passed"
             echo "- PostgreSQL backup/isolated restore/readiness: passed"
+            echo "- Partial migration/generation/config/UAT review regressions: passed"
             echo "- Release package/runtime/transfer: passed"
             echo "- Secret signature scan: passed"
           } >> "${GITHUB_STEP_SUMMARY}"
