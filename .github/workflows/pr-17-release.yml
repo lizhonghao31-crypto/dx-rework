@@ -2,68 +2,70 @@ name: PR-17 manual release
 on:
   workflow_dispatch:
     inputs:
-      git_sha:
-        description: Exact 40-character lowercase commit SHA
-        required: true
-      target_environment:
-        type: environment
-        required: true
-      dry_run:
-        type: boolean
-        default: true
-        required: true
+      git_sha: { description: Exact current main SHA, required: true }
+      target_environment: { type: choice, required: true, options: [dx-rework-pilot, dx-rework-production] }
+      dry_run: { type: boolean, default: true, required: true }
 permissions:
   contents: read
-concurrency:
-  group: pr-17-${{ inputs.target_environment }}
-  cancel-in-progress: false
+concurrency: { group: "pr-17-${{ inputs.target_environment }}", cancel-in-progress: false }
 jobs:
   gate:
     runs-on: ubuntu-latest
     environment: ${{ inputs.target_environment }}
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: dx_rework_test }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - name: Validate SHA
-        env: { TARGET_SHA: "${{ inputs.git_sha }}" }
-        run: '[[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]'
       - uses: actions/checkout@v4
         with: { ref: "${{ inputs.git_sha }}", fetch-depth: 0 }
-      - name: Verify exact allowed commit
+      - name: Authorize exact main head
         env: { TARGET_SHA: "${{ inputs.git_sha }}" }
         run: |
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git fetch origin main --force
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          git merge-base --is-ancestor "$TARGET_SHA" origin/main || test "$TARGET_SHA" = "$(git rev-parse HEAD)"
+          test "$(git rev-parse origin/main)" = "$TARGET_SHA"
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: npm }
-      - name: Build immutable release
-        env:
-          TARGET_SHA: "${{ inputs.git_sha }}"
-          DX_REWORK_BUILD_ROOT: "${{ runner.temp }}/pr17-build"
-        run: scripts/deploy/build-release.sh "$TARGET_SHA" "$(date -u +%FT%TZ)" "$RUNNER_TEMP/pr17-build/$TARGET_SHA"
-      - run: npm run lint && npm run typecheck && npm test
-      - run: npm run db:migrate:lint && npm run secret:scan && npm run preview:dry-run
-      - name: Publish redacted build evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr17-redacted-${{ inputs.git_sha }}
-          path: |
-            ${{ runner.temp }}/pr17-build/${{ inputs.git_sha }}/release-manifest.json
-            ${{ runner.temp }}/pr17-build/${{ inputs.git_sha }}/SHA256SUMS
+      - run: npm ci
+      - name: Exact-head gates
+        env: { TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test }
+        run: npm run lint && npm run typecheck && npm run build && npm test && npm run db:migrate:lint && npm run db:migrate:check && npm run secret:scan && npm run preview:dry-run && npm run pr17:acceptance
+      - name: Package and runtime verify
+        env: { TARGET_SHA: "${{ inputs.git_sha }}", DX_REWORK_BUILD_ROOT: "${{ runner.temp }}/build" }
+        run: |
+          mkdir -p "$DX_REWORK_BUILD_ROOT"
+          scripts/deploy/package-release.sh "$TARGET_SHA" "$(date -u +%FT%TZ)" "$DX_REWORK_BUILD_ROOT/$TARGET_SHA"
+          scripts/deploy/verify-runtime.sh "$DX_REWORK_BUILD_ROOT/$TARGET_SHA/api"
+          scripts/deploy/create-transfer-bundle.sh "$DX_REWORK_BUILD_ROOT/$TARGET_SHA" "$RUNNER_TEMP/pr17-$TARGET_SHA.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with: { name: "pr17-transfer-${{ inputs.git_sha }}", path: "${{ runner.temp }}/pr17-${{ inputs.git_sha }}.tar.gz*", if-no-files-found: error }
   deploy:
     needs: gate
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.target_environment }}
     steps:
-      - uses: actions/checkout@v4
-        with: { ref: "${{ inputs.git_sha }}" }
-      - name: Strict SSH setup and remote dry-safe orchestration
-        env:
-          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
-          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
-          SSH_KEY: ${{ secrets.DX_REWORK_SSH_KEY }}
-          SSH_HOST_KEY: ${{ secrets.DX_REWORK_SSH_HOST_KEY }}
+      - uses: actions/download-artifact@v4
+        with: { name: "pr17-transfer-${{ inputs.git_sha }}", path: transfer }
+      # The downloaded object is the complete checksum-bound release bundle. It
+      # contains application binaries and versioned deployment scripts only;
+      # credentials remain job-scoped protected-environment inputs and are
+      # never copied into, appended to, or uploaded with the transfer bundle.
+      - name: Verify gate bundle and transfer
+        env: { SSH_HOST: "${{ secrets.DX_REWORK_SSH_HOST }}", SSH_USER: "${{ secrets.DX_REWORK_SSH_USER }}", SSH_KEY: "${{ secrets.DX_REWORK_SSH_KEY }}", SSH_HOST_KEY: "${{ secrets.DX_REWORK_SSH_HOST_KEY }}", TARGET_SHA: "${{ inputs.git_sha }}" }
         run: |
-          install -m 0700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 0600 ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts && chmod 0600 ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- /opt/dx-rework/tools/pr17-approved-release "${{ inputs.git_sha }}"
+          cd transfer && sha256sum -c --strict "pr17-$TARGET_SHA.tar.gz.sha256" && cd ..
+          install -m 0700 -d ~/.ssh; printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519; chmod 0600 ~/.ssh/id_ed25519; printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts; chmod 0600 ~/.ssh/known_hosts
+          incoming="/opt/dx-rework/incoming/${GITHUB_RUN_ID}-$TARGET_SHA"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" <<'REMOTE'
+          set -euo pipefail; d="$1"; [[ "$d" == /opt/dx-rework/incoming/* && ! -e "$d" && ! -L "$d" ]]; mkdir -m 0700 "$d"
+REMOTE
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes "transfer/pr17-$TARGET_SHA.tar.gz" "$SSH_USER@$SSH_HOST:$incoming/transfer.tar.gz"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" -- bash -s -- "$incoming" "$TARGET_SHA" <<'REMOTE'
+          set -euo pipefail; d="$1"; sha="$2"; tar -tzf "$d/transfer.tar.gz" | awk '$0 ~ /^\// || $0 ~ /(^|\/)\.\.($|\/)/ {exit 1}'; tar -xzf "$d/transfer.tar.gz" -C "$d"; bundle="$d/$sha"; "$bundle/api/scripts/deploy/release.sh" "$sha" "$bundle"
+REMOTE

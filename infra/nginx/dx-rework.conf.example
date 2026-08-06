@@ -5,9 +5,18 @@ log_format dx_rework_query_free '$remote_addr [$time_local] "$request_method $ur
 # 独立 vhost 示例。PR-01 不安装、不 reload Nginx，也不修改 ERP 配置。
 server {
     listen 80;
-    # Render DX_REWORK_SERVER_NAME and DX_REWORK_TLS_* during installation.
-    # Any remaining double-underscore token is rejected by preflight.
     server_name __DX_REWORK_SERVER_NAME__;
+    return 308 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name __DX_REWORK_SERVER_NAME__;
+    ssl_certificate __DX_REWORK_TLS_CERT__;
+    ssl_certificate_key __DX_REWORK_TLS_KEY__;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options SAMEORIGIN always;
 
     root /opt/dx-rework/frontend/current;
     index index.html;
@@ -84,7 +93,10 @@ server {
     # alias strips the public prefix; missing assets return 404 and never the SPA HTML.
     location ^~ /rework/assets/ {
         alias /opt/dx-rework/frontend/current/assets/;
+        try_files $uri =404;
     }
+
+    location ^~ /assets/ { try_files $uri =404; }
 
     location / {
         try_files $uri $uri/ /index.html;

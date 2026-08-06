@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-set -euo pipefail
-source "$(dirname "$0")/deploy/lib.sh"
-: "${DATABASE_URL:?DATABASE_URL is required}"; : "${GIT_SHA:?GIT_SHA is required}"; : "${SCHEMA_VERSION:?SCHEMA_VERSION is required}"; require_sha "$GIT_SHA"
-dir="$(assert_safe_path "${DX_REWORK_BACKUP_DIR:-/opt/dx-rework/backups/postgres}")"; umask 077; install -d -m 0700 "$dir"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; name="dx-rework-$stamp"; tmp="$(mktemp "$dir/.${name}.XXXXXX")"; trap 'rm -f -- "$tmp" "$tmp.sha256" "$tmp.metadata.json"' EXIT
-# Relative checksum contract (performed below against the temporary basename):
+set -euo pipefail; source "$(dirname "$0")/deploy/lib.sh"; umask 077
+: "${DATABASE_URL:?DATABASE_URL is required}" "${GIT_SHA:?GIT_SHA is required}" "${SCHEMA_VERSION:?SCHEMA_VERSION is required}" "${SCHEMA_CHECKSUM:?SCHEMA_CHECKSUM is required}"; require_sha "$GIT_SHA"
+root="$(assert_safe_path "${DX_REWORK_BACKUP_DIR:-$DX_ROOT/backups/postgres}")"; install -d -m 0700 "$root"; exec 8>"$root/.backup.lock"; flock -n 8 || die 'backup lock is held'
+DX_REWORK_BACKUP_DIR="$root"; filename=database.dump
+identity="$(psql "$DATABASE_URL" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()")"; [[ -n "$identity" ]] || die 'database identity unavailable'; fingerprint="$(printf %s "$identity"|sha256sum|cut -d' ' -f1)"
+stamp="$(date -u +%Y%m%dT%H%M%S.%NZ)"; name="${stamp}-${GIT_SHA:0:12}-$(od -An -N6 -tx1 /dev/urandom|tr -d ' \n')"; tmp="$root/.tmp-$name"; final="$root/$name"; [[ ! -e "$final" ]] || die 'backup set already exists'; mkdir -m 700 "$tmp"; trap 'rm -rf -- "$tmp"' EXIT
+pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl --file="$tmp/database.dump"; pg_restore --list "$tmp/database.dump" >/dev/null
+node - "$tmp/metadata.json" "$GIT_SHA" "$SCHEMA_VERSION" "$SCHEMA_CHECKSUM" "$fingerprint" "$(date -u +%FT%T.%NZ)" <<'JS'
+const fs=require('fs');const [p,gitSha,schemaVersion,schemaChecksum,sourceFingerprint,createdAt]=process.argv.slice(2);fs.writeFileSync(p,JSON.stringify({formatVersion:1,gitSha,schemaVersion,schemaChecksum,sourceFingerprint,createdAt},null,2)+'\n',{mode:0o600});
+JS
+(cd "$tmp" && sha256sum database.dump metadata.json > SHA256SUMS && [[ "$(wc -l < SHA256SUMS)" == 2 ]] && sha256sum -c --strict SHA256SUMS >/dev/null)
+# Relocation-safe basename verification contract used by backup consumers:
 # cd "${DX_REWORK_BACKUP_DIR}"
 # sha256sum "${filename}" > "${filename}.sha256"
-pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl --file="$tmp"; pg_restore --list "$tmp" >/dev/null; (cd "$dir" && sha256sum "$(basename "$tmp")" > "$tmp.sha256")
-fingerprint="$(printf %s "$DATABASE_URL"|sha256sum|cut -c1-12)"; node - "$tmp.metadata.json" "$GIT_SHA" "$SCHEMA_VERSION" "$stamp" "$fingerprint" <<'JS'
-const fs=require('fs');fs.writeFileSync(process.argv[2],JSON.stringify({gitSha:process.argv[3],schemaVersion:process.argv[4],createdAt:process.argv[5],sourceFingerprint:process.argv[6]},null,2)+'\n',{mode:0o600})
-JS
-mv "$tmp" "$dir/$name.dump"; sed "s/$(basename "$tmp")/$name.dump/" "$tmp.sha256" > "$dir/$name.sha256.tmp"; mv "$dir/$name.sha256.tmp" "$dir/$name.sha256"; mv "$tmp.metadata.json" "$dir/$name.metadata.json"; trap - EXIT; safe_log pass "backup=$dir/$name.dump checksum=$name.sha256 metadata=$name.metadata.json"
+: > "$tmp/COMPLETE"; mv "$tmp" "$final"; trap - EXIT; safe_log pass "backup_set=$final schema=$SCHEMA_VERSION"
