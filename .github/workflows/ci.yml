@@ -17,7 +17,7 @@ jobs:
   validate:
     name: Lint, test, migrate and build exact Head
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci
@@ -99,6 +99,57 @@ jobs:
       - name: Apply and validate exact Head migration history against PostgreSQL
         run: npm run db:migrate:check
 
+      - name: PR-17 real PostgreSQL backup and isolated restore drill
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/pr17-db-drill"
+          node_bin="$(readlink -f "$(command -v node)")"
+          mkdir -p "$root/shared" "$root/backups/postgres"
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > "$root/shared/.env"
+          printf 'DX_REWORK_NODE_BIN=%s\n' "$node_bin" > "$root/shared/deploy.env"
+          chmod 0600 "$root/shared/.env" "$root/shared/deploy.env"
+
+          state="$(node scripts/deploy/database-state.mjs print-current)"
+          target_version="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).version")"
+          target_checksum="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).checksum")"
+          DX_REWORK_ROOT="$root" \
+          DX_REWORK_APP_ENV_FILE="$root/shared/.env" \
+          DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
+          GIT_SHA="$(git rev-parse HEAD)" \
+          CURRENT_DATABASE_STATE="$state" \
+          TARGET_SCHEMA_VERSION="$target_version" \
+          TARGET_SCHEMA_CHECKSUM="$target_checksum" \
+            scripts/backup-postgres.sh
+
+          admin_url='postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/postgres'
+          target_name='dx_rework_drill_ci'
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $target_name"
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $target_name"
+          target_url="postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/$target_name"
+          target_identity="$(psql "$target_url" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()")"
+          target_fp="$(printf %s "$target_identity" | sha256sum | cut -d' ' -f1)"
+          {
+            printf 'DX_REWORK_RESTORE_DATABASE_URL=%s\n' "$target_url"
+            printf 'DX_REWORK_APPROVED_TARGET_FINGERPRINT=%s\n' "$target_fp"
+            printf 'DX_REWORK_APPROVED_TARGET_DATABASE=%s\n' "$target_name"
+          } > "$root/shared/restore.env"
+          chmod 0600 "$root/shared/restore.env"
+
+          backup_set="$(find "$root/backups/postgres" -mindepth 1 -maxdepth 1 -type d ! -name '.tmp-*' -print -quit)"
+          test -n "$backup_set"
+          DX_REWORK_ROOT="$root" \
+          DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
+          DX_REWORK_RESTORE_ENV_FILE="$root/shared/restore.env" \
+          DX_REWORK_RESTORE_DRILL=true \
+          DX_REWORK_RESTORE_CONFIRM=RESTORE_TO_ISOLATED_DRILL \
+          DX_REWORK_RESTORE_MANIFEST="$PWD/apps/api/src/platform/migration-manifest.json" \
+            scripts/restore-postgres.sh "$backup_set"
+
+          DATABASE_URL="$target_url" node scripts/deploy/verify-database-readiness.mjs \
+            apps/api/src/platform/migration-manifest.json
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE $target_name"
+
       - name: Scan repository for committed secret signatures
         run: npm run secret:scan
 
@@ -107,7 +158,11 @@ jobs:
         run: |
           npm run pr17:acceptance
           find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
-          npx vitest run tests/unit/pr-17-deployment.test.ts tests/unit/pr-17-operations.test.ts tests/integration/pr-17-release-lifecycle.test.ts
+          npx vitest run \
+            tests/unit/pr-17-deployment.test.ts \
+            tests/unit/pr-17-operations.test.ts \
+            tests/integration/pr-17-release-lifecycle.test.ts \
+            tests/integration/pr-17-deploy-failure.test.ts
 
       - name: PR-17 package, runtime and relocation-safe transfer
         shell: bash
@@ -125,12 +180,14 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## PR-01 technical foundation"
+            echo "## PR-17 exact-head validation"
             echo
             echo "- Head SHA: $(git rev-parse HEAD)"
             echo "- Node: $(node --version)"
             echo "- npm: $(npm --version)"
             echo "- Lint/typecheck/build/tests: passed"
-            echo "- PostgreSQL exact migration history replay: passed"
+            echo "- PostgreSQL migration replay: passed"
+            echo "- PostgreSQL backup/isolated restore/readiness: passed"
+            echo "- Release package/runtime/transfer: passed"
             echo "- Secret signature scan: passed"
           } >> "${GITHUB_STEP_SUMMARY}"
