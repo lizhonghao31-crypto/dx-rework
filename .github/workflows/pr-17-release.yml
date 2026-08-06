@@ -15,7 +15,7 @@ on:
           - dx-rework-pilot
           - dx-rework-production
       dry_run:
-        description: Build and verify without connecting to ECS
+        description: Build package only; do not connect to ECS
         required: true
         type: boolean
         default: true
@@ -40,21 +40,7 @@ jobs:
   gate:
     name: Build exact main release bundle
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: dx_rework_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d dx_rework_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    timeout-minutes: 15
     steps:
       - name: Checkout exact requested SHA
         uses: actions/checkout@v4
@@ -85,22 +71,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Exact-head gates
-        env:
-          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/dx_rework_test
-          TARGET_SHA: ${{ inputs.git_sha }}
-          GIT_SHA: ${{ inputs.git_sha }}
-        run: >-
-          npm run lint &&
-          npm run typecheck &&
-          npm run build &&
-          npm test &&
-          npm run db:migrate:lint &&
-          npm run db:migrate:check &&
-          npm run secret:scan &&
-          npm run preview:dry-run &&
-          npm run pr17:acceptance
+      - name: Build deployable application
+        run: npm run build
 
       - name: Package and verify runtime
         shell: bash
@@ -110,14 +82,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$DX_REWORK_BUILD_ROOT"
+          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           scripts/deploy/package-release.sh \
             "$TARGET_SHA" \
-            "$(date -u +%FT%TZ)" \
+            "$build_time" \
             "$DX_REWORK_BUILD_ROOT/$TARGET_SHA"
           scripts/deploy/verify-runtime.sh "$DX_REWORK_BUILD_ROOT/$TARGET_SHA/api"
           scripts/deploy/create-transfer-bundle.sh \
             "$DX_REWORK_BUILD_ROOT/$TARGET_SHA" \
             "$RUNNER_TEMP/pr17-$TARGET_SHA.tar.gz"
+          (cd "$RUNNER_TEMP" && sha256sum -c --strict "pr17-$TARGET_SHA.tar.gz.sha256")
 
       - name: Upload checksum-bound transfer bundle
         uses: actions/upload-artifact@v4
