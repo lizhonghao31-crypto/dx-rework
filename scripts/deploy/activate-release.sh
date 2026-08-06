@@ -17,11 +17,19 @@ DATABASE_URL="${DATABASE_URL:?DATABASE_URL required}" node_exec \
   "$api/scripts/deploy/database-state.mjs" verify-current \
   "$api/apps/api/src/platform/migration-manifest.json"
 
-old_api="$(readlink -f "$DX_ROOT/current" 2>/dev/null || true)"
-old_web="$(readlink -f "$DX_ROOT/frontend/current" 2>/dev/null || true)"
-if [[ -n "$old_api" || -n "$old_web" ]]; then
-  [[ -n "$old_api" && -n "$old_web" && "$(basename "$old_api")" == "$(basename "$old_web")" ]] ||
+old_api=""
+old_web=""
+if [[ -L "$DX_ROOT/current" || -L "$DX_ROOT/frontend/current" ]]; then
+  [[ -L "$DX_ROOT/current" && -L "$DX_ROOT/frontend/current" ]] ||
     die 'current API/frontend mismatch'
+  old_api="$(readlink -f "$DX_ROOT/current" 2>/dev/null || true)"
+  old_web="$(readlink -f "$DX_ROOT/frontend/current" 2>/dev/null || true)"
+  [[ -d "$old_api" && -d "$old_web" ]] || die 'current API/frontend link is broken'
+  old_sha="$(basename "$old_api")"
+  [[ "$old_sha" =~ ^[0-9a-f]{40}$ && "$old_sha" == "$(basename "$old_web")" ]] ||
+    die 'current API/frontend release identity mismatch'
+elif [[ -e "$DX_ROOT/current" || -e "$DX_ROOT/frontend/current" ]]; then
+  die 'current API/frontend must be symlinks'
 fi
 
 restore_previous="${DX_REWORK_ALLOW_PREVIOUS_RESTORE:-true}"
