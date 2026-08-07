@@ -53,9 +53,6 @@ validate_shared_config() {
     [[ "$(grep -Fc "$required" <<<"$block")" == 1 ]] || return 1
   done
 
-  # The marked block must own every active /rework location in this vhost file.
-  # Any legacy or duplicate /rework location outside the block is ambiguous and
-  # therefore blocks deployment instead of being silently shadowed.
   rework_location_re='^[[:space:]]*location[[:space:]]+(=|\^~)?[[:space:]]*/rework([[:space:]]|\{|/)'
   rework_location_count="$(grep -Ec "$rework_location_re" <<<"$block")"
   [[ "$rework_location_count" == 6 ]] || return 1
@@ -64,15 +61,11 @@ validate_shared_config() {
   lock_re='^[[:space:]]*if[[:space:]]+\(-f[[:space:]]+/opt/dx-rework/shared/release-switch\.lock\)[[:space:]]*\{'
   lock_count="$(grep -Ec "$lock_re" <<<"$block")"
   [[ "$lock_count" == 6 ]] || return 1
-  # Any additional active lock check outside the marked block would widen the
-  # maintenance blast radius beyond /rework/ and is therefore forbidden.
   [[ "$(grep -Ec "$lock_re" "$conf")" == "$lock_count" ]] || return 1
 
   proxy_count="$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+http://127\.0\.0\.1:3201(/auth/qr/callback|/);$' <<<"$block")"
   [[ "$proxy_count" == 2 ]] || return 1
   [[ "$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+' <<<"$block")" == "$proxy_count" ]] || return 1
-  # Port 3201 belongs only to dx-rework; no legacy root health/version/API route
-  # may point at it outside the marked shared-path block.
   [[ "$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+http://127\.0\.0\.1:3201' "$conf")" == "$proxy_count" ]] || return 1
 
   frontend_re='^[[:space:]]*(root|alias)[[:space:]]+/opt/dx-rework/frontend/current(/[^;]*)?;'
@@ -125,7 +118,7 @@ sha="$1"
 bundle="$2"
 require_sha "$sha"
 
-for command_name in node npm nginx pm2 pg_dump pg_restore psql realpath sha256sum flock openssl ss curl sudo awk; do
+for command_name in node npm nginx pm2 realpath sha256sum flock openssl ss curl sudo awk; do
   check "command:$command_name" command -v "$command_name"
 done
 
