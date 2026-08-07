@@ -31,7 +31,7 @@ extract_shared_block() {
 }
 
 validate_shared_config() {
-  local conf="$1" block lock_re lock_count proxy_count root_count
+  local conf="$1" block lock_re lock_count proxy_count root_count rework_location_re rework_location_count frontend_re
   [[ "${APP_BASE_PATH:-}" == /rework/ ]] || return 1
   [[ "${DX_REWORK_SERVER_NAME:-}" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
   ! grep -Eq '__[A-Z0-9_]+__' "$conf" || return 1
@@ -53,6 +53,14 @@ validate_shared_config() {
     [[ "$(grep -Fc "$required" <<<"$block")" == 1 ]] || return 1
   done
 
+  # The marked block must own every active /rework location in this vhost file.
+  # Any legacy or duplicate /rework location outside the block is ambiguous and
+  # therefore blocks deployment instead of being silently shadowed.
+  rework_location_re='^[[:space:]]*location[[:space:]]+(=|\^~)?[[:space:]]*/rework([[:space:]]|\{|/)'
+  rework_location_count="$(grep -Ec "$rework_location_re" <<<"$block")"
+  [[ "$rework_location_count" == 6 ]] || return 1
+  [[ "$(grep -Ec "$rework_location_re" "$conf")" == "$rework_location_count" ]] || return 1
+
   lock_re='^[[:space:]]*if[[:space:]]+\(-f[[:space:]]+/opt/dx-rework/shared/release-switch\.lock\)[[:space:]]*\{'
   lock_count="$(grep -Ec "$lock_re" <<<"$block")"
   [[ "$lock_count" == 6 ]] || return 1
@@ -63,10 +71,15 @@ validate_shared_config() {
   proxy_count="$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+http://127\.0\.0\.1:3201(/auth/qr/callback|/);$' <<<"$block")"
   [[ "$proxy_count" == 2 ]] || return 1
   [[ "$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+' <<<"$block")" == "$proxy_count" ]] || return 1
+  # Port 3201 belongs only to dx-rework; no legacy root health/version/API route
+  # may point at it outside the marked shared-path block.
+  [[ "$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+http://127\.0\.0\.1:3201' "$conf")" == "$proxy_count" ]] || return 1
 
-  root_count="$(grep -Fc 'root /opt/dx-rework/frontend/current;' <<<"$block")"
-  [[ "$root_count" == 2 ]] || return 1
-  [[ "$(grep -Ec '^[[:space:]]*(root|alias)[[:space:]]+/opt/' <<<"$block")" == 3 ]] || return 1
+  frontend_re='^[[:space:]]*(root|alias)[[:space:]]+/opt/dx-rework/frontend/current(/[^;]*)?;'
+  root_count="$(grep -Ec "$frontend_re" <<<"$block")"
+  [[ "$root_count" == 3 ]] || return 1
+  [[ "$(grep -Ec "$frontend_re" "$conf")" == "$root_count" ]] || return 1
+  [[ "$(grep -Fc 'root /opt/dx-rework/frontend/current;' <<<"$block")" == 2 ]] || return 1
   grep -Fq 'alias /opt/dx-rework/frontend/current/index.html;' <<<"$block" || return 1
   grep -Fq 'try_files $uri =404;' <<<"$block" || return 1
   grep -Fq 'try_files $uri $uri/ /rework/index.html;' <<<"$block" || return 1
