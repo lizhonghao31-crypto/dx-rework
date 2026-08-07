@@ -1,0 +1,45 @@
+import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+
+describe("ECS one-command deployment entry", () => {
+  it("builds a package and delegates activation, migration and rollback to release.sh", async () => {
+    execFileSync("bash", ["-n", "scripts/deploy-ecs.sh"]);
+    const script = await readFile("scripts/deploy-ecs.sh", "utf8");
+    expect(script).toContain("EXPECTED_ORIGIN='git@github.com:lizhonghao31-crypto/dx-rework.git'");
+    expect(script).toContain('origin_url="$(git remote get-url origin)"');
+    expect(script).toContain('[[ "$origin_url" == "$EXPECTED_ORIGIN" ]]');
+    expect(script).toContain('[[ "$branch" == "main" ]]');
+    expect(script).toContain("git fetch origin main");
+    expect(script).toContain('remote_sha="$(git rev-parse origin/main)"');
+    expect(script).toContain('[[ "$sha" == "$remote_sha" ]]');
+    expect(script).toContain('for key in $DX_REWORK_APP_ENV_KEYS; do unset "$key"; done');
+    expect(script).toContain("load_env_file");
+    expect(script).toContain("'APP_BASE_PATH'");
+    expect(script).not.toContain("load_app_config");
+    expect(script).toContain('acquire_lock "$DX_ROOT/locks/release.lock"');
+    expect(script).toContain("npm ci");
+    expect(script).toContain("package-release.sh");
+    expect(script).toContain('scripts/deploy/release.sh" "$sha" "$bundle"');
+    expect(script).toContain("DX_REWORK_APPLY_MIGRATIONS=true");
+    expect(script).not.toContain("pm2 startOrReload");
+    expect(script).not.toContain("scripts/migrate.mjs");
+    expect(script).not.toContain("ln -sfn");
+  });
+
+  it("keeps database backup and PostgreSQL client requirements on the migration path", async () => {
+    const release = await readFile("scripts/deploy/release.sh", "utf8");
+    const preflight = await readFile("scripts/deploy/preflight.sh", "utf8");
+    const pendingBlock = release.indexOf('if [[ "$pending" == true ]]; then');
+    const backup = release.indexOf('"$script_root/scripts/backup-postgres.sh"');
+    expect(pendingBlock).toBeGreaterThan(-1);
+    expect(backup).toBeGreaterThan(pendingBlock);
+    expect(release).toContain("require_command psql");
+    expect(release).toContain("require_command pg_dump");
+    expect(release).toContain("require_command pg_restore");
+    expect(preflight).not.toContain("pm2 pg_dump pg_restore psql realpath");
+    expect(release).toContain("apply-migrations-safely.sh");
+    expect(release).toContain("activate-release.sh");
+    expect(release).toContain("rollback.sh");
+  });
+});

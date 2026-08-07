@@ -125,7 +125,7 @@ sha="$1"
 bundle="$2"
 require_sha "$sha"
 
-for command_name in node npm nginx pm2 pg_dump pg_restore psql realpath sha256sum flock openssl ss curl sudo awk; do
+for command_name in node npm nginx pm2 realpath sha256sum flock openssl ss curl sudo awk; do
   check "command:$command_name" command -v "$command_name"
 done
 

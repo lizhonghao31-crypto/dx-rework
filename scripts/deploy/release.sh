@@ -42,12 +42,6 @@ previous="$(current_generation_sha || true)"
 installed_api="$DX_ROOT/releases/$sha"
 installed_manifest="$installed_api/apps/api/src/platform/migration-manifest.json"
 
-GIT_SHA="$sha" \
-TARGET_SCHEMA_VERSION="$target_version" \
-TARGET_SCHEMA_CHECKSUM="$target_checksum" \
-CURRENT_DATABASE_STATE="$current_before" \
-  "$script_root/scripts/backup-postgres.sh"
-
 pending="$(node_exec -e '
 const current=JSON.parse(process.argv[1]);
 process.stdout.write(String(current.version!==process.argv[2]||current.checksum!==process.argv[3]));
@@ -56,6 +50,14 @@ migration_applied=false
 if [[ "$pending" == true ]]; then
   [[ "${DX_REWORK_APPLY_MIGRATIONS:-false}" == true ]] ||
     die 'pending migrations require DX_REWORK_APPLY_MIGRATIONS=true'
+  require_command psql
+  require_command pg_dump
+  require_command pg_restore
+  GIT_SHA="$sha" \
+  TARGET_SCHEMA_VERSION="$target_version" \
+  TARGET_SCHEMA_CHECKSUM="$target_checksum" \
+  CURRENT_DATABASE_STATE="$current_before" \
+    "$script_root/scripts/backup-postgres.sh"
   DATABASE_URL="$DATABASE_URL" "$(dirname "$0")/apply-migrations-safely.sh" \
     "$installed_api" "$current_before"
   migration_applied=true
