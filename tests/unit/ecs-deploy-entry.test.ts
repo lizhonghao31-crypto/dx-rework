@@ -18,7 +18,10 @@ describe("ECS one-command deployment entry", () => {
     expect(script).toContain("'APP_BASE_PATH'");
     expect(script).not.toContain("load_app_config");
     expect(script).toContain('acquire_lock "$DX_ROOT/locks/release.lock"');
-    expect(script).toContain("npm ci");
+    expect(script).toContain('DEPS_MARKER="$DX_ROOT/shared/build-package-lock.sha256"');
+    expect(script).toContain("reuse persistent source node_modules");
+    expect(script).toContain("npm ci --prefer-offline --no-audit --no-fund --progress=false");
+    expect(script).not.toContain('ln -s "$DX_ROOT/current/node_modules" node_modules');
     expect(script).toContain("package-release.sh");
     expect(script).toContain('scripts/deploy/release.sh" "$sha" "$bundle"');
     expect(script).toContain("DX_REWORK_APPLY_MIGRATIONS=true");
