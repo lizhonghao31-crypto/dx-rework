@@ -58,8 +58,8 @@ location ^~ /rework/assets/ {
     try_files $uri =404;
 }
 
-# SPA shell and deep links. This block intentionally owns only /rework/* and
-# cannot intercept unrelated staging/ERP paths.
+# SPA shell and deep links. The fallback deliberately stays under /rework/ so
+# the internal redirect cannot escape into an unrelated shared-origin root.
 location ^~ /rework/ {
     if (-f /opt/dx-rework/shared/release-switch.lock) { return 503; }
     access_log /opt/dx-rework/logs/nginx-access.log dx_rework_query_free;
@@ -68,6 +68,6 @@ location ^~ /rework/ {
     add_header X-Frame-Options SAMEORIGIN always;
     rewrite ^/rework/(.*)$ /$1 break;
     root /opt/dx-rework/frontend/current;
-    try_files $uri $uri/ /index.html;
+    try_files $uri $uri/ /rework/index.html;
 }
 # DX_REWORK_SHARED_PATHS_END
