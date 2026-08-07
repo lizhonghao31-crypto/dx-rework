@@ -69,7 +69,6 @@ type ErrorBody = { error?: { code?: string; message?: string } };
 const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
-const QR_AUTO_REFRESH_MS = 35_000;
 
 function StatePage({ tone, title, detail, children }: { tone: "info" | "warning" | "danger"; title: string; detail: string; children?: ReactNode }) {
   return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone={tone}>达兴组织准入</StatusBadge><h1>{title}</h1><p>{detail}</p>{children}</Surface></main>;
@@ -201,7 +200,6 @@ export function QrLoginPage() {
   useEffect(() => {
     let cancelled = false;
     let expectedState = "";
-    let refreshTimer: number | undefined;
     completing.current = false;
 
     const consumeCode = async (code: string, returnedState?: string) => {
@@ -249,7 +247,7 @@ export function QrLoginPage() {
         const container = document.getElementById(QR_CONTAINER_ID);
         if (!container) throw new Error();
         container.innerHTML = "";
-        setMessage("请使用手机钉钉扫描二维码，并在钉钉中确认登录。");
+        setMessage("请使用手机钉钉扫描二维码，并在钉钉中确认登录。二维码过期时再点击下方按钮重新生成。");
         frameLogin(
           { id: QR_CONTAINER_ID, width: 300, height: 300 },
           {
@@ -261,13 +259,8 @@ export function QrLoginPage() {
             prompt: body.frame.prompt,
           },
           (result) => { void consumeCode(result.authCode ?? result.code ?? "", result.state); },
-          () => setMessage("二维码暂时不可用，请点击重新生成二维码。"),
+          () => setMessage("二维码已失效或暂时不可用，请点击重新生成二维码。"),
         );
-        refreshTimer = window.setTimeout(() => {
-          if (cancelled || completing.current) return;
-          setMessage("二维码已自动刷新，请使用最新二维码扫码。");
-          setAttempt((value) => value + 1);
-        }, QR_AUTO_REFRESH_MS);
       } catch {
         if (!cancelled) setMessage("二维码生成失败，请点击重新生成；仍失败请联系管理员确认钉钉应用配置。");
       } finally {
@@ -282,7 +275,6 @@ export function QrLoginPage() {
 
     return () => {
       cancelled = true;
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       window.removeEventListener("message", relay);
       const container = document.getElementById(QR_CONTAINER_ID);
       if (container) container.innerHTML = "";
