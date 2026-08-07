@@ -141,13 +141,22 @@ let dingTalkQrScript: Promise<void> | undefined;
 async function loadDingTalkQrSdk(): Promise<void> {
   if ((window as DingTalkWindow).DTFrameLogin) return;
   dingTalkQrScript ??= new Promise<void>((resolve, reject) => {
+    const existing = document.getElementById("dx-rework-dingtalk-qr-sdk");
+    if (existing) {
+      const waitForSdk = () => {
+        if ((window as DingTalkWindow).DTFrameLogin) resolve();
+        else window.setTimeout(waitForSdk, 100);
+      };
+      waitForSdk();
+      return;
+    }
     const script = document.createElement("script");
     script.id = "dx-rework-dingtalk-qr-sdk";
     script.src = "https://g.alicdn.com/dingding/h5-dingtalk-login/0.21.0/ddlogin.js";
     script.async = true;
     script.onload = () => (window as DingTalkWindow).DTFrameLogin ? resolve() : reject(new Error("DingTalk QR SDK unavailable"));
     script.onerror = () => { dingTalkQrScript = undefined; reject(new Error("DingTalk QR SDK failed")); };
-    document.head.append(script);
+    document.body.appendChild(script);
   });
   await dingTalkQrScript;
 }
@@ -200,6 +209,7 @@ export function QrLoginPage() {
   useEffect(() => {
     let cancelled = false;
     let expectedState = "";
+    let retryTimer: number | undefined;
     completing.current = false;
 
     const consumeCode = async (code: string, returnedState?: string) => {
@@ -220,6 +230,34 @@ export function QrLoginPage() {
       void consumeCode(data.authCode, data.state);
     };
     window.addEventListener("message", relay);
+
+    const renderDingQr = (body: QrStartResponse) => {
+      if (cancelled) return;
+      const container = document.getElementById(QR_CONTAINER_ID);
+      if (!container) {
+        window.requestAnimationFrame(() => renderDingQr(body));
+        return;
+      }
+      const frameLogin = (window as DingTalkWindow).DTFrameLogin;
+      if (!frameLogin) {
+        retryTimer = window.setTimeout(() => renderDingQr(body), 100);
+        return;
+      }
+      container.innerHTML = "";
+      frameLogin(
+        { id: QR_CONTAINER_ID, width: 300, height: 300 },
+        {
+          redirect_uri: encodeURIComponent(body.frame.redirectUri),
+          client_id: body.frame.clientId,
+          scope: body.frame.scope,
+          response_type: body.frame.responseType,
+          state: body.frame.state,
+          prompt: body.frame.prompt,
+        },
+        (result) => { void consumeCode(result.authCode ?? result.code ?? "", result.state); },
+        () => setMessage("二维码已失效或暂时不可用，请点击重新生成二维码。"),
+      );
+    };
 
     const start = async () => {
       setStarting(true);
@@ -242,25 +280,8 @@ export function QrLoginPage() {
         expectedState = body.frame.state;
         await loadDingTalkQrSdk();
         if (cancelled) return;
-        const frameLogin = (window as DingTalkWindow).DTFrameLogin;
-        if (!frameLogin) throw new Error();
-        const container = document.getElementById(QR_CONTAINER_ID);
-        if (!container) throw new Error();
-        container.innerHTML = "";
         setMessage("请使用手机钉钉扫描二维码，并在钉钉中确认登录。二维码过期时再点击下方按钮重新生成。");
-        frameLogin(
-          { id: QR_CONTAINER_ID, width: 300, height: 300 },
-          {
-            redirect_uri: encodeURIComponent(body.frame.redirectUri),
-            client_id: body.frame.clientId,
-            scope: body.frame.scope,
-            response_type: body.frame.responseType,
-            state: body.frame.state,
-            prompt: body.frame.prompt,
-          },
-          (result) => { void consumeCode(result.authCode ?? result.code ?? "", result.state); },
-          () => setMessage("二维码已失效或暂时不可用，请点击重新生成二维码。"),
-        );
+        window.requestAnimationFrame(() => renderDingQr(body));
       } catch {
         if (!cancelled) setMessage("二维码生成失败，请点击重新生成；仍失败请联系管理员确认钉钉应用配置。");
       } finally {
@@ -275,6 +296,7 @@ export function QrLoginPage() {
 
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       window.removeEventListener("message", relay);
       const container = document.getElementById(QR_CONTAINER_ID);
       if (container) container.innerHTML = "";
