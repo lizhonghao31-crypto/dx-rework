@@ -31,7 +31,7 @@ extract_shared_block() {
 }
 
 validate_shared_config() {
-  local conf="$1" block lock_line lock_count proxy_count root_count
+  local conf="$1" block lock_re lock_count proxy_count root_count
   [[ "${APP_BASE_PATH:-}" == /rework/ ]] || return 1
   [[ "${DX_REWORK_SERVER_NAME:-}" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
   ! grep -Eq '__[A-Z0-9_]+__' "$conf" || return 1
@@ -41,7 +41,7 @@ validate_shared_config() {
   ! grep -Eq '^[[:space:]]*(server[[:space:]]*\{|listen[[:space:]]|server_name[[:space:]]|ssl_certificate(_key)?[[:space:]])' <<<"$block" || return 1
   ! grep -Eq 'location[[:space:]]+(=|\^~)?[[:space:]]+/(health|version|api/|assets/|login([[:space:]]|\{)|[[:space:]]*\{)' <<<"$block" || return 1
   ! grep -Fq 'location / {' <<<"$block" || return 1
-  ! grep -Eq '/opt/daxing-(erp|sample)|proxy_pass[[:space:]]+http://(?!127\.0\.0\.1:3201)' <<<"$block" || return 1
+  ! grep -Eq '/opt/daxing-(erp|sample)' <<<"$block" || return 1
 
   for required in \
     'location = /rework {' \
@@ -50,13 +50,15 @@ validate_shared_config() {
     'location ^~ /rework/api/ {' \
     'location ^~ /rework/assets/ {' \
     'location ^~ /rework/ {'; do
-    [[ "$(grep -Fxc "$required" <<<"$block")" == 1 ]] || return 1
+    [[ "$(grep -Fc "$required" <<<"$block")" == 1 ]] || return 1
   done
 
-  lock_line='if (-f /opt/dx-rework/shared/release-switch.lock) { return 503; }'
-  lock_count="$(grep -Fc "$lock_line" <<<"$block")"
+  lock_re='^[[:space:]]*if[[:space:]]+\(-f[[:space:]]+/opt/dx-rework/shared/release-switch\.lock\)[[:space:]]*\{'
+  lock_count="$(grep -Ec "$lock_re" <<<"$block")"
   [[ "$lock_count" == 6 ]] || return 1
-  [[ "$(grep -Fc "$lock_line" "$conf")" == "$lock_count" ]] || return 1
+  # Any additional active lock check outside the marked block would widen the
+  # maintenance blast radius beyond /rework/ and is therefore forbidden.
+  [[ "$(grep -Ec "$lock_re" "$conf")" == "$lock_count" ]] || return 1
 
   proxy_count="$(grep -Ec '^[[:space:]]*proxy_pass[[:space:]]+http://127\.0\.0\.1:3201(/auth/qr/callback|/);$' <<<"$block")"
   [[ "$proxy_count" == 2 ]] || return 1
@@ -67,7 +69,8 @@ validate_shared_config() {
   [[ "$(grep -Ec '^[[:space:]]*(root|alias)[[:space:]]+/opt/' <<<"$block")" == 3 ]] || return 1
   grep -Fq 'alias /opt/dx-rework/frontend/current/index.html;' <<<"$block" || return 1
   grep -Fq 'try_files $uri =404;' <<<"$block" || return 1
-  grep -Fq 'try_files $uri $uri/ /index.html;' <<<"$block" || return 1
+  grep -Fq 'try_files $uri $uri/ /rework/index.html;' <<<"$block" || return 1
+  ! grep -Fq 'try_files $uri $uri/ /index.html;' <<<"$block" || return 1
 
   grep -A5 -F 'location = /rework/auth/qr/relay {' <<<"$block" | grep -Fq 'access_log off;' || return 1
   grep -A5 -F 'location = /rework/auth/qr/relay {' <<<"$block" | grep -Fq 'error_log /dev/null emerg;' || return 1
@@ -76,10 +79,10 @@ validate_shared_config() {
   [[ "$(grep -Fc 'access_log /opt/dx-rework/logs/nginx-access.log dx_rework_query_free;' <<<"$block")" -ge 4 ]] || return 1
 }
 
-validate_shared_loaded() {
+validate_shared_loaded() (
   local conf="$1" dump_file file_block dump_block
   dump_file="$(mktemp)"
-  trap 'rm -f "$dump_file"' RETURN
+  trap 'rm -f "$dump_file"' EXIT
   sudo -n nginx -T >"$dump_file" 2>&1 || return 1
   grep -Eq "^[[:space:]]*server_name[[:space:]]+${DX_REWORK_SERVER_NAME//./\\.}([[:space:]]|;)" "$dump_file" || return 1
   [[ "$(grep -Fc '# DX_REWORK_SHARED_PATHS_BEGIN' "$dump_file")" == 1 ]] || return 1
@@ -87,8 +90,8 @@ validate_shared_loaded() {
   file_block="$(extract_shared_block "$conf")" || return 1
   dump_block="$(extract_shared_block "$dump_file")" || return 1
   [[ "$file_block" == "$dump_block" ]] || return 1
-  grep -Eq '^log_format[[:space:]]+dx_rework_query_free[[:space:]]' "$dump_file" || return 1
-}
+  grep -Eq '^[[:space:]]*log_format[[:space:]]+dx_rework_query_free[[:space:]]' "$dump_file" || return 1
+)
 
 validate_dedicated_config() {
   local conf="$1"
