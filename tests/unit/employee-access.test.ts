@@ -49,10 +49,14 @@ describe("PR-31 employee access contracts", () => {
     }).success).toBe(true);
   });
 
-  it("gates the employee access page to owner_group plus access:admin", async () => {
-    const app = await readFile("apps/web/src/App.tsx", "utf8");
+  it("gates the employee access page to owner_group plus access:admin and exposes it in the existing navigation", async () => {
+    const [app, components] = await Promise.all([
+      readFile("apps/web/src/App.tsx", "utf8"),
+      readFile("apps/web/src/components.tsx", "utf8"),
+    ]);
     expect(app).toContain('path === "/ui/employee-access"');
     expect(app).toContain('requiredRole="owner_group" requiredCapability="access:admin"');
+    expect(components).toContain('["权", "权限管理", "/ui/employee-access"]');
   });
 
   it("keeps owner bootstrap one-time at the database boundary", async () => {
