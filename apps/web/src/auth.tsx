@@ -69,7 +69,7 @@ type ErrorBody = { error?: { code?: string; message?: string } };
 const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
-const QR_AUTO_REFRESH_MS = 90_000;
+const QR_AUTO_REFRESH_MS = 35_000;
 
 function StatePage({ tone, title, detail, children }: { tone: "info" | "warning" | "danger"; title: string; detail: string; children?: ReactNode }) {
   return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone={tone}>达兴组织准入</StatusBadge><h1>{title}</h1><p>{detail}</p>{children}</Surface></main>;
