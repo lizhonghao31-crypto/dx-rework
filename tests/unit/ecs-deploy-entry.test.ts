@@ -10,6 +10,7 @@ describe("ECS one-command deployment entry", () => {
     expect(script).toContain("git fetch origin main");
     expect(script).toContain('remote_sha="$(git rev-parse origin/main)"');
     expect(script).toContain('[[ "$sha" == "$remote_sha" ]]');
+    expect(script).toContain('for key in $DX_REWORK_APP_ENV_KEYS; do unset "$key"; done');
     expect(script).toContain("load_env_file");
     expect(script).toContain("'APP_BASE_PATH'");
     expect(script).not.toContain("load_app_config");
