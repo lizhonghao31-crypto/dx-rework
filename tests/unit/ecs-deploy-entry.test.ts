@@ -7,6 +7,11 @@ describe("ECS one-command deployment entry", () => {
     execFileSync("bash", ["-n", "scripts/deploy-ecs.sh"]);
     const script = await readFile("scripts/deploy-ecs.sh", "utf8");
     expect(script).toContain('[[ "$branch" == "main" ]]');
+    expect(script).toContain('remote_sha="$(git rev-parse origin/main)"');
+    expect(script).toContain('[[ "$sha" == "$remote_sha" ]]');
+    expect(script).toContain("$DX_REWORK_APP_ENV_KEYS\" 'APP_BASE_PATH'");
+    expect(script).not.toContain("load_app_config");
+    expect(script).toContain('acquire_lock "$DX_ROOT/locks/release.lock"');
     expect(script).toContain("npm ci");
     expect(script).toContain("package-release.sh");
     expect(script).toContain('scripts/deploy/release.sh" "$sha" "$bundle"');
