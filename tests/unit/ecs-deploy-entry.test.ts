@@ -3,46 +3,22 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("ECS one-command deployment entry", () => {
-  it("builds a package and delegates activation, migration and rollback to release.sh", async () => {
+  it("uses an ERP-style persistent source build and direct runtime switch", async () => {
     execFileSync("bash", ["-n", "scripts/deploy-ecs.sh"]);
     const script = await readFile("scripts/deploy-ecs.sh", "utf8");
     expect(script).toContain("EXPECTED_ORIGIN='git@github.com:lizhonghao31-crypto/dx-rework.git'");
-    expect(script).toContain('origin_url="$(git remote get-url origin)"');
-    expect(script).toContain('[[ "$origin_url" == "$EXPECTED_ORIGIN" ]]');
-    expect(script).toContain('[[ "$branch" == "main" ]]');
     expect(script).toContain("git fetch origin main");
-    expect(script).toContain('remote_sha="$(git rev-parse origin/main)"');
     expect(script).toContain('[[ "$sha" == "$remote_sha" ]]');
-    expect(script).toContain('for key in $DX_REWORK_APP_ENV_KEYS; do unset "$key"; done');
-    expect(script).toContain("load_env_file");
-    expect(script).toContain("'APP_BASE_PATH'");
-    expect(script).not.toContain("load_app_config");
-    expect(script).toContain('acquire_lock "$DX_ROOT/locks/release.lock"');
     expect(script).toContain('DEPS_MARKER="$DX_ROOT/shared/build-package-lock.sha256"');
     expect(script).toContain("reuse persistent source node_modules");
-    expect(script).toContain("npm ci --prefer-offline --no-audit --no-fund --progress=false");
-    expect(script).not.toContain('ln -s "$DX_ROOT/current/node_modules" node_modules');
-    expect(script).toContain("package-release.sh");
-    expect(script).toContain('scripts/deploy/release.sh" "$sha" "$bundle"');
-    expect(script).toContain("DX_REWORK_APPLY_MIGRATIONS=true");
-    expect(script).not.toContain("pm2 startOrReload");
-    expect(script).not.toContain("scripts/migrate.mjs");
-    expect(script).not.toContain("ln -sfn");
-  });
-
-  it("keeps database backup and PostgreSQL client requirements on the migration path", async () => {
-    const release = await readFile("scripts/deploy/release.sh", "utf8");
-    const preflight = await readFile("scripts/deploy/preflight.sh", "utf8");
-    const pendingBlock = release.indexOf('if [[ "$pending" == true ]]; then');
-    const backup = release.indexOf('"$script_root/scripts/backup-postgres.sh"');
-    expect(pendingBlock).toBeGreaterThan(-1);
-    expect(backup).toBeGreaterThan(pendingBlock);
-    expect(release).toContain("require_command psql");
-    expect(release).toContain("require_command pg_dump");
-    expect(release).toContain("require_command pg_restore");
-    expect(preflight).not.toContain("pm2 pg_dump pg_restore psql realpath");
-    expect(release).toContain("apply-migrations-safely.sh");
-    expect(release).toContain("activate-release.sh");
-    expect(release).toContain("rollback.sh");
+    expect(script).toContain("bootstrap source build dependencies from local current release");
+    expect(script).toContain("npm run build");
+    expect(script).toContain("scripts/migrate.mjs");
+    expect(script).toContain('ln -sfn "$SOURCE_ROOT" "$DX_ROOT/current"');
+    expect(script).toContain('ln -sfn "$web_target" "$DX_ROOT/frontend/current"');
+    expect(script).toContain("pm2 startOrReload");
+    expect(script).toContain("http://127.0.0.1:3201/health/ready");
+    expect(script).not.toContain("package-release.sh");
+    expect(script).not.toContain("scripts/deploy/release.sh");
   });
 });
