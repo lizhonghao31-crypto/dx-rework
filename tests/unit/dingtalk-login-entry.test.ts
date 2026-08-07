@@ -12,6 +12,17 @@ describe("达兴统一钉钉登录入口", () => {
     expect(auth).not.toContain("window.location.assign(body.authorizationUrl)");
   });
 
+  it("serializes QR challenge creation and disables regeneration while pending", async () => {
+    const auth = await readFile("apps/web/src/auth.tsx", "utf8");
+    expect(auth).toContain("const challengeBusy = useRef(true);");
+    expect(auth).toContain("const challengeQueue = useRef<Promise<void>>(Promise.resolve());");
+    expect(auth).toContain("const previousStart = challengeQueue.current;");
+    expect(auth).toContain("await previousStart;");
+    expect(auth).toContain("if (challengeBusy.current) return;");
+    expect(auth).toContain("<Button disabled={starting} onClick={regenerate}>重新生成二维码</Button>");
+    expect(auth).not.toContain("<Button onClick={() => setAttempt((value) => value + 1)}>重新生成二维码</Button>");
+  });
+
   it("routes the same-origin relay before protected business pages", async () => {
     const app = await readFile("apps/web/src/App.tsx", "utf8");
     const relay = app.indexOf('path === "/auth/qr/relay"');
