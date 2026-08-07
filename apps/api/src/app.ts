@@ -17,6 +17,10 @@ import { AuthDeniedError } from "./auth/service.js";
 import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/schema-version.js";
 import { registerToolsRoutes, type ToolsHttpDependencies } from "./tools/routes.js";
 import { registerAccessRoutes, type AccessHttpDependencies } from "./access/routes.js";
+import {
+  registerEmployeeAccessRoutes,
+  type EmployeeAccessHttpDependencies,
+} from "./access/employee-access-routes.js";
 import { registerReworkRoutes, type ReworkHttpDependencies } from "./rework/routes.js";
 import {
   registerProcessConfigurationRoutes,
@@ -40,6 +44,7 @@ export type AppDependencies = Readonly<{
   auth?: AuthService;
   tools?: ToolsHttpDependencies;
   access?: AccessHttpDependencies;
+  employeeAccess?: EmployeeAccessHttpDependencies;
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
   workReporting?: WorkReportingHttpDependencies;
@@ -118,6 +123,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   }
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
   if (dependencies.access) registerAccessRoutes(app, dependencies.access);
+  if (dependencies.employeeAccess) registerEmployeeAccessRoutes(app, dependencies.employeeAccess);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);
   if (dependencies.processConfiguration) {
     registerProcessConfigurationRoutes(app, dependencies.processConfiguration);
