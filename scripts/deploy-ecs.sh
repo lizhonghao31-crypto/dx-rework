@@ -10,15 +10,19 @@ fi
 
 cd "$SOURCE_ROOT"
 source "$SOURCE_ROOT/scripts/deploy/lib.sh"
-load_app_config
+load_env_file "${DX_REWORK_APP_ENV_FILE:-$DX_ROOT/shared/.env}" "$(config_owner)" "$DX_REWORK_APP_ENV_KEYS" 'APP_BASE_PATH'
 load_node_config
 
 export PATH="$(dirname "$DX_REWORK_NODE_BIN"):$PATH"
 
 sha="$(git rev-parse HEAD)"
 branch="$(git branch --show-current)"
+remote_sha="$(git rev-parse origin/main)"
 [[ "$branch" == "main" ]] || die "ECS deploy requires main branch, got: ${branch:-detached}"
+[[ "$sha" == "$remote_sha" ]] || die 'ECS deploy requires HEAD to match origin/main'
 [[ -z "$(git status --porcelain)" ]] || die 'ECS deploy requires a clean working tree'
+
+acquire_lock "$DX_ROOT/locks/release.lock"
 
 build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 build_root="$DX_ROOT/incoming/ecs-build-$sha-$$"
