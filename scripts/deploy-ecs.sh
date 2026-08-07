@@ -35,8 +35,17 @@ bundle="$build_root/$sha"
 trap 'rm -rf -- "$build_root"' EXIT
 
 printf '=== dx-rework deploy %s ===\n' "$sha"
-printf '1/3 install and build\n'
-npm ci
+printf '1/3 dependencies and build\n'
+if [[ -f "$DX_ROOT/current/package-lock.json" && -d "$DX_ROOT/current/node_modules" ]] && \
+   cmp -s package-lock.json "$DX_ROOT/current/package-lock.json"; then
+  printf 'dependencies unchanged; reuse current release node_modules\n'
+  rm -rf node_modules
+  ln -s "$DX_ROOT/current/node_modules" node_modules
+else
+  printf 'dependencies changed; install once\n'
+  rm -rf node_modules
+  npm ci --prefer-offline --no-audit --no-fund
+fi
 APP_BASE_PATH="$APP_BASE_PATH" VITE_BASE_PATH="$APP_BASE_PATH" npm run build
 
 printf '2/3 package release\n'
