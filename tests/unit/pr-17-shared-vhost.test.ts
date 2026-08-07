@@ -114,7 +114,8 @@ describe("PR-17 shared staging /rework contract", () => {
     expect(nginx.match(/root \/opt\/dx-rework\/frontend\/current;/g)).toHaveLength(2);
     expect(nginx).toContain("alias /opt/dx-rework/frontend/current/index.html;");
     expect(nginx).toContain("try_files $uri =404;");
-    expect(nginx).toContain("try_files $uri $uri/ /index.html;");
+    expect(nginx).toContain("try_files $uri $uri/ /rework/index.html;");
+    expect(nginx).not.toContain("try_files $uri $uri/ /index.html;");
     expect(nginx).not.toMatch(/\/opt\/daxing-(?:erp|sample)/);
   });
 
