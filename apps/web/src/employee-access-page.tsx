@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
-import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts";
+import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts/employee-access";
 import { createWebUrls } from "../url-contract.js";
 import "./employee-access.css";
 
