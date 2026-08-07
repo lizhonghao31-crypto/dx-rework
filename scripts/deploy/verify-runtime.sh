@@ -2,6 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"; [[ $# == 1 ]] || die 'usage: verify-runtime.sh API_RELEASE'
 api="$(realpath "$1")"; manifest="$api/release-manifest.json"; port="${DX_REWORK_TEST_PORT:-$((20000 + RANDOM % 20000))}"; probe="$api/.runtime-probe.mjs"; log="$(mktemp)"
+[[ -f "$api/apps/api/src/platform/migration-manifest.json" ]] || die 'artifact migration manifest missing at runtime path'
 trap '[[ -n "${pid:-}" ]] && kill "$pid" 2>/dev/null || true; rm -f "$probe" "$log"' EXIT
 cat >"$probe" <<'JS'
 import {buildApp} from './apps/api/dist/app.js';import {loadConfig} from './packages/config/dist/index.js';import manifest from './release-manifest.json' with {type:'json'};
