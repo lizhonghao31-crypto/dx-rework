@@ -42,6 +42,8 @@ deps_ready=false
 if [[ -d node_modules && ! -L node_modules \
       && -f node_modules/typescript/lib/tsc.js \
       && -f node_modules/vite/bin/vite.js \
+      && -x node_modules/.bin/tsc \
+      && -x node_modules/.bin/vite \
       && -f "$DEPS_MARKER" \
       && "$(cat "$DEPS_MARKER")" == "$lock_hash" ]]; then
   deps_ready=true
@@ -53,7 +55,10 @@ else
   printf 'dependencies missing/changed; repair once\n'
   rm -rf node_modules
   npm ci --prefer-offline --no-audit --no-fund --progress=false
-  [[ -f node_modules/typescript/lib/tsc.js && -f node_modules/vite/bin/vite.js ]] || die 'dependency install incomplete'
+  [[ -f node_modules/typescript/lib/tsc.js \
+     && -f node_modules/vite/bin/vite.js \
+     && -x node_modules/.bin/tsc \
+     && -x node_modules/.bin/vite ]] || die 'dependency install incomplete'
   printf '%s\n' "$lock_hash" > "${DEPS_MARKER}.tmp.$$"
   mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
 fi
