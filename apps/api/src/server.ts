@@ -2,6 +2,7 @@ import { loadConfig } from "@dx-rework/config";
 import { DisabledErpAdapter } from "@dx-rework/domain";
 import pg from "pg";
 
+import { EmployeeAccessService } from "./access/employee-access-service.js";
 import { AccessMasterDataService } from "./access/service.js";
 import { AdminAuditService } from "./admin-audit-service.js";
 import { AdminConsoleService } from "./admin-console-service.js";
@@ -48,7 +49,22 @@ const database = new Pool({
 const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
 const accessService = new AccessMasterDataService(database, config.dingtalk.corpId);
 await accessService.ensureOrganizationPolicy();
-const auth = new AuthService(new OfficialDingTalkProvider(config.dingtalk), authStore, config.dingtalk.corpId, config.sessionTtlSeconds * 1000, config.sessionSecret);
+const dingtalkProvider = new OfficialDingTalkProvider(config.dingtalk);
+const auth = new AuthService(
+  dingtalkProvider,
+  authStore,
+  config.dingtalk.corpId,
+  config.sessionTtlSeconds * 1000,
+  config.sessionSecret,
+);
+const employeeAccessService = new EmployeeAccessService(
+  database,
+  config.dingtalk.corpId,
+  accessService,
+  authStore,
+  dingtalkProvider,
+  config.ownerBootstrap,
+);
 const storage = new DisabledObjectStorage();
 if (config.objectStorage.enabled) throw new Error("OSS is configured but the official Aliyun OSS SDK client has not been injected");
 const attachments = new AttachmentService(database, storage, {
@@ -85,6 +101,7 @@ const workReportingService = new WorkReportingService(
   database,
   undefined,
   undefined,
+  undefined,
   todoProjection,
 );
 const wholeOrderReviewService = new WholeOrderReviewService(
@@ -116,6 +133,10 @@ const app = buildApp({
   access: {
     authenticate: (token) => auth.authenticate(token),
     service: accessService,
+  },
+  employeeAccess: {
+    authenticate: (token) => auth.authenticate(token),
+    service: employeeAccessService,
   },
   tools: {
     authenticate: (token) => auth.authenticate(token),
