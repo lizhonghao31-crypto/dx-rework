@@ -6,6 +6,9 @@ describe("ECS one-command deployment entry", () => {
   it("builds a package and delegates activation, migration and rollback to release.sh", async () => {
     execFileSync("bash", ["-n", "scripts/deploy-ecs.sh"]);
     const script = await readFile("scripts/deploy-ecs.sh", "utf8");
+    expect(script).toContain("EXPECTED_ORIGIN='git@github.com:lizhonghao31-crypto/dx-rework.git'");
+    expect(script).toContain('origin_url="$(git remote get-url origin)"');
+    expect(script).toContain('[[ "$origin_url" == "$EXPECTED_ORIGIN" ]]');
     expect(script).toContain('[[ "$branch" == "main" ]]');
     expect(script).toContain("git fetch origin main");
     expect(script).toContain('remote_sha="$(git rev-parse origin/main)"');
@@ -24,13 +27,17 @@ describe("ECS one-command deployment entry", () => {
     expect(script).not.toContain("ln -sfn");
   });
 
-  it("keeps database backup on the migration path instead of every code-only release", async () => {
+  it("keeps database backup and PostgreSQL client requirements on the migration path", async () => {
     const release = await readFile("scripts/deploy/release.sh", "utf8");
+    const preflight = await readFile("scripts/deploy/preflight.sh", "utf8");
     const pendingBlock = release.indexOf('if [[ "$pending" == true ]]; then');
     const backup = release.indexOf('"$script_root/scripts/backup-postgres.sh"');
     expect(pendingBlock).toBeGreaterThan(-1);
     expect(backup).toBeGreaterThan(pendingBlock);
+    expect(release).toContain("require_command psql");
     expect(release).toContain("require_command pg_dump");
+    expect(release).toContain("require_command pg_restore");
+    expect(preflight).not.toContain("pm2 pg_dump pg_restore psql realpath");
     expect(release).toContain("apply-migrations-safely.sh");
     expect(release).toContain("activate-release.sh");
     expect(release).toContain("rollback.sh");
