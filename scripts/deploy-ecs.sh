@@ -5,6 +5,7 @@ DX_ROOT=/opt/dx-rework
 SOURCE_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 EXPECTED_ORIGIN='git@github.com:lizhonghao31-crypto/dx-rework.git'
 DEPS_MARKER="$DX_ROOT/shared/build-package-lock.sha256"
+WEB_RELEASE_ROOT="$DX_ROOT/frontend/source-releases"
 
 if [[ "$(id -un)" != "dxrework" ]]; then
   exec sudo -iu dxrework bash "$SOURCE_ROOT/scripts/deploy-ecs.sh"
@@ -15,7 +16,6 @@ source "$SOURCE_ROOT/scripts/deploy/lib.sh"
 for key in $DX_REWORK_APP_ENV_KEYS; do unset "$key"; done
 load_env_file "${DX_REWORK_APP_ENV_FILE:-$DX_ROOT/shared/.env}" "$(config_owner)" "$DX_REWORK_APP_ENV_KEYS" 'APP_BASE_PATH'
 load_node_config
-
 export PATH="$(dirname "$DX_REWORK_NODE_BIN"):$PATH"
 
 branch="$(git branch --show-current)"
@@ -29,11 +29,7 @@ remote_sha="$(git rev-parse origin/main)"
 [[ "$sha" == "$remote_sha" ]] || die 'ECS deploy requires HEAD to match origin/main'
 
 acquire_lock "$DX_ROOT/locks/release.lock"
-
 build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-build_root="$DX_ROOT/incoming/ecs-build-$sha-$$"
-bundle="$build_root/$sha"
-trap 'rm -rf -- "$build_root"' EXIT
 
 repair_links() {
   "$DX_REWORK_NODE_BIN" <<'NODE'
@@ -42,7 +38,6 @@ const path = require('path');
 const source = process.cwd();
 const root = path.join(source, 'node_modules');
 const binDir = path.join(root, '.bin');
-
 const packages = [];
 for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
   if (entry.name === '.bin') continue;
@@ -51,11 +46,8 @@ for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     for (const child of fs.readdirSync(full, { withFileTypes: true })) {
       if (child.isDirectory()) packages.push(path.join(full, child.name));
     }
-  } else if (entry.isDirectory()) {
-    packages.push(full);
-  }
+  } else if (entry.isDirectory()) packages.push(full);
 }
-
 fs.rmSync(binDir, { recursive: true, force: true });
 fs.mkdirSync(binDir, { recursive: true });
 for (const pkgDir of packages) {
@@ -76,7 +68,6 @@ for (const pkgDir of packages) {
     fs.symlinkSync(path.relative(path.dirname(link), target), link);
   }
 }
-
 const workspaces = {
   '@dx-rework/contracts': 'packages/contracts',
   '@dx-rework/config': 'packages/config',
@@ -96,8 +87,8 @@ for (const [name, rel] of Object.entries(workspaces)) {
 NODE
 }
 
-printf '=== dx-rework deploy %s ===\n' "$sha"
-printf '1/3 dependencies and build\n'
+printf '=== dx-rework fast deploy %s ===\n' "$sha"
+printf '1/4 dependencies\n'
 lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
 deps_ready=false
 if [[ -d node_modules && ! -L node_modules \
@@ -110,11 +101,12 @@ fi
 
 if [[ "$deps_ready" == true ]]; then
   printf 'dependencies unchanged; reuse persistent source node_modules\n'
-elif [[ -f "$DX_ROOT/current/package-lock.json" \
+elif [[ "$(readlink -f "$DX_ROOT/current" 2>/dev/null || true)" != "$SOURCE_ROOT" \
+        && -f "$DX_ROOT/current/package-lock.json" \
         && -d "$DX_ROOT/current/node_modules" \
         && ! -L "$DX_ROOT/current/node_modules" ]] \
      && cmp -s package-lock.json "$DX_ROOT/current/package-lock.json"; then
-  printf 'bootstrap build dependencies from current local release (no npm network install)\n'
+  printf 'bootstrap source build dependencies from local current release\n'
   rm -rf node_modules
   cp -a "$DX_ROOT/current/node_modules" node_modules
   repair_links
@@ -123,7 +115,7 @@ elif [[ -f "$DX_ROOT/current/package-lock.json" \
   printf '%s\n' "$lock_hash" > "${DEPS_MARKER}.tmp.$$"
   mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
 else
-  printf 'package-lock changed; install dependencies once\n'
+  printf 'package-lock changed or build dependencies unavailable; install once\n'
   [[ -L node_modules ]] && rm -f node_modules
   npm install --prefer-offline --no-audit --no-fund --progress=false
   repair_links
@@ -134,20 +126,39 @@ else
   mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
 fi
 
+printf '2/4 build\n'
 APP_BASE_PATH="$APP_BASE_PATH" VITE_BASE_PATH="$APP_BASE_PATH" npm run build
 
-printf '2/3 package release\n'
-APP_BASE_PATH="$APP_BASE_PATH" \
-VITE_BASE_PATH="$APP_BASE_PATH" \
-DX_REWORK_BUILD_ROOT="$DX_ROOT/incoming" \
-  "$SOURCE_ROOT/scripts/deploy/package-release.sh" "$sha" "$build_time" "$bundle"
+printf '3/4 migrate and switch\n'
+load_app_config
+DATABASE_URL="$DATABASE_URL" "$DX_REWORK_NODE_BIN" scripts/migrate.mjs
+schema_version="$($DX_REWORK_NODE_BIN -e 'const m=require("./apps/api/src/platform/migration-manifest.json");process.stdout.write(m.migrations.at(-1).version)')"
+cat > release-manifest.json <<JSON
+{"gitSha":"$sha","buildTime":"$build_time","schemaVersion":"$schema_version"}
+JSON
 
-printf '3/3 release\n'
-DX_REWORK_APPLY=true \
-DX_REWORK_ENVIRONMENT_APPROVED=true \
-DX_REWORK_CONFIRM_RELEASE="$sha" \
-DX_REWORK_APPLY_MIGRATIONS=true \
-DX_REWORK_EVIDENCE_DIR="$DX_ROOT/evidence/ecs-$sha" \
-  "$SOURCE_ROOT/scripts/deploy/release.sh" "$sha" "$bundle"
+web_target="$WEB_RELEASE_ROOT/$sha"
+rm -rf "$web_target"
+mkdir -p "$web_target"
+cp -a apps/web/dist/. "$web_target/"
+ln -sfn "$SOURCE_ROOT" "$DX_ROOT/current"
+ln -sfn "$web_target" "$DX_ROOT/frontend/current"
 
+pm2 startOrReload "$SOURCE_ROOT/infra/pm2/ecosystem.config.cjs" --only dx-rework-api
+pm2 save >/dev/null
+
+printf '4/4 verify\n'
+ready=false
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS http://127.0.0.1:3201/health/ready >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+[[ "$ready" == true ]] || die 'API did not become ready'
+version="$(curl -fsS http://127.0.0.1:3201/version)"
+"$DX_REWORK_NODE_BIN" -e 'const v=JSON.parse(process.argv[1]);if(v.gitSha!==process.argv[2])process.exit(1)' "$version" "$sha"
+curl -fsS -o /dev/null "https://staging-api.dxerp.org.cn/rework/"
+printf '%s\n' "$version"
 printf 'DEPLOY SUCCESS: %s\n' "$sha"
