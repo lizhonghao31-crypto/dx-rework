@@ -49,7 +49,7 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
     const result = await auth.loginMobile(request.body?.code ?? "");
     return reply.header("set-cookie", setSession(result.token)).send({ user: result.user, status: result.user.capabilities.length ? "authorized" : "no_role" });
   });
-  app.post("/auth/qr/start", { preHandler: limitPublicLogin }, async (_request, reply) => {
+  app.post("/auth/qr/start", async (_request, reply) => {
     const result = await auth.beginQr();
     return reply.header("set-cookie", setQrBinding(result.bindingToken)).send({
       authorizationUrl: result.authorizationUrl,
