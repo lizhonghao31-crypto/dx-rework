@@ -11,6 +11,7 @@ import { ManagementDashboardPage } from "./reporting/management-dashboard-page.j
 import { ReworkQueryPage } from "./reporting/rework-query-page.js";
 import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
+import { EmployeeAccessPage } from "./employee-access-page.js";
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -23,6 +24,7 @@ export function App() {
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
   if (path === "/ui/admin") page = <AdminConsolePage />;
+  else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
@@ -63,6 +65,9 @@ export function App() {
   }
   if (path === "/ui/admin") {
     return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
+  }
+  if (path === "/ui/employee-access") {
+    return <AuthGate requiredRole="owner_group" requiredCapability="access:admin">{page}</AuthGate>;
   }
   if (path === "/ui/management") {
     return <AuthGate requiredCapability="dashboard:management:read">{page}</AuthGate>;

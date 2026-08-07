@@ -31,6 +31,10 @@
     "./erp-integration": {
       "types": "./src/erp-integration.ts",
       "import": "./dist/erp-integration.js"
+    },
+    "./employee-access": {
+      "types": "./src/employee-access.ts",
+      "import": "./dist/employee-access.js"
     }
   },
   "scripts": {

@@ -7,6 +7,9 @@ export type OrganizationMember = Readonly<{
   employed: boolean;
   displayName: string;
 }>;
+export type DirectoryOrganizationMember = OrganizationMember & Readonly<{
+  departmentNames: readonly string[];
+}>;
 
 export interface DingTalkProvider {
   exchangeMobileCode(code: string): Promise<DingTalkIdentity>;
@@ -75,13 +78,90 @@ export class OfficialDingTalkProvider implements DingTalkProvider {
       if (!userId) return null;
     }
     const detail = await this.postOapi("/topapi/v2/user/get", appToken, { userid: userId }, true);
-    if (!detail) return { corpId, userId, unionId: identity.unionId, active: false, employed: false, displayName: "钉钉用户" };
+    if (!detail) return null;
     const result = record(detail.result, "user detail result");
     if (text(result.userid, "detail userid") !== userId) throw new DingTalkProtocolError("DingTalk user detail identity mismatch");
     const detailUnionId = optionalText(result.unionid);
     if (detailUnionId && detailUnionId !== identity.unionId) throw new DingTalkProtocolError("DingTalk union identity mismatch");
     const active = boolean(result.active, "active");
     return { corpId, userId, unionId: detailUnionId ?? identity.unionId, active, employed: true, displayName: optionalText(result.name) ?? "钉钉用户" };
+  }
+
+  async listOrganizationMembers(corpId: string): Promise<DirectoryOrganizationMember[]> {
+    if (corpId !== this.config.corpId) {
+      throw new DingTalkProtocolError("Directory request belongs to a different corporation");
+    }
+    const appToken = await this.getAppToken();
+    const departments: Array<{ id: number; name: string }> = [{ id: 1, name: "全公司" }];
+    const seenDepartments = new Set<number>([1]);
+
+    for (let index = 0; index < departments.length; index += 1) {
+      if (departments.length > 10_000) throw new DingTalkProtocolError("DingTalk department graph is unexpectedly large");
+      const department = departments[index];
+      if (!department) throw new DingTalkProtocolError("DingTalk department traversal failed");
+      const body = await this.postOapi(
+        "/topapi/v2/department/listsub",
+        appToken,
+        { dept_id: department.id, language: "zh_CN" },
+      );
+      if (!body) throw new DingTalkProtocolError("DingTalk department list was not found");
+      const children = records(body.result, "department list");
+      for (const child of children) {
+        const id = integer(child.dept_id, "department dept_id");
+        const name = text(child.name, "department name");
+        if (seenDepartments.has(id)) {
+          throw new DingTalkProtocolError("DingTalk department graph contains a duplicate or cycle");
+        }
+        seenDepartments.add(id);
+        departments.push({ id, name });
+      }
+    }
+
+    const rawMembers = new Map<string, { unionId: string; departmentNames: Set<string> }>();
+    for (const department of departments) {
+      let cursor = 0;
+      const seenCursors = new Set<number>();
+      for (let page = 0; page < 10_000; page += 1) {
+        if (seenCursors.has(cursor)) throw new DingTalkProtocolError("DingTalk directory pagination repeated a cursor");
+        seenCursors.add(cursor);
+        const body = await this.postOapi(
+          "/topapi/v2/user/list",
+          appToken,
+          { dept_id: department.id, cursor, size: 100, order_field: "custom", contain_access_limit: false, language: "zh_CN" },
+        );
+        if (!body) throw new DingTalkProtocolError("DingTalk member page was not found");
+        const result = record(body.result, "member page result");
+        const list = records(result.list, "member list");
+        for (const value of list) {
+          const userId = text(value.userid, "member userid");
+          const unionId = text(value.unionid, "member unionid");
+          const existing = rawMembers.get(userId);
+          if (existing && existing.unionId !== unionId) {
+            throw new DingTalkProtocolError("DingTalk directory returned conflicting stable identities");
+          }
+          const member = existing ?? { unionId, departmentNames: new Set<string>() };
+          member.departmentNames.add(department.name);
+          rawMembers.set(userId, member);
+        }
+        const hasMore = boolean(result.has_more, "member has_more");
+        if (!hasMore) break;
+        const nextCursor = integer(result.next_cursor, "member next_cursor");
+        if (nextCursor <= cursor) throw new DingTalkProtocolError("DingTalk directory pagination did not advance");
+        cursor = nextCursor;
+        if (page === 9_999) throw new DingTalkProtocolError("DingTalk directory pagination exceeded the safe limit");
+      }
+    }
+
+    const members: DirectoryOrganizationMember[] = [];
+    for (const [userId, raw] of rawMembers) {
+      const member = await this.getOrganizationMember({ userId, unionId: raw.unionId, corpId }, corpId);
+      if (!member) throw new DingTalkProtocolError("DingTalk directory member could not be verified in the configured corporation");
+      members.push({
+        ...member,
+        departmentNames: [...raw.departmentNames].sort((left, right) => left.localeCompare(right, "zh-CN")),
+      });
+    }
+    return members.sort((left, right) => left.userId.localeCompare(right.userId));
   }
 
   private async getAppToken(): Promise<string> {
@@ -123,6 +203,7 @@ export class OfficialDingTalkProvider implements DingTalkProvider {
 
 function jsonHeaders(): Record<string, string> { return { "content-type": "application/json" }; }
 function record(value: unknown, field: string): Record<string, unknown> { if (typeof value !== "object" || value === null || Array.isArray(value)) throw new DingTalkProtocolError(`Invalid DingTalk ${field}`); return value as Record<string, unknown>; }
+function records(value: unknown, field: string): Record<string, unknown>[] { if (!Array.isArray(value)) throw new DingTalkProtocolError(`Invalid DingTalk ${field}`); return value.map((item, index) => record(item, `${field}[${index}]`)); }
 function text(value: unknown, field: string): string { if (typeof value !== "string" || !value) throw new DingTalkProtocolError(`Invalid DingTalk ${field}`); return value; }
 function optionalText(value: unknown): string | undefined { return typeof value === "string" && value ? value : undefined; }
 function boolean(value: unknown, field: string): boolean { if (typeof value !== "boolean") throw new DingTalkProtocolError(`Invalid DingTalk ${field}`); return value; }
