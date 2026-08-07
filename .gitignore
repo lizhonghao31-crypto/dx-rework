@@ -9,3 +9,4 @@ coverage/
 .vite/
 tmp/
 backups/
+/release-manifest.json
