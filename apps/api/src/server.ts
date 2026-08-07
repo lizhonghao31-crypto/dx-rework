@@ -101,7 +101,6 @@ const workReportingService = new WorkReportingService(
   database,
   undefined,
   undefined,
-  undefined,
   todoProjection,
 );
 const wholeOrderReviewService = new WholeOrderReviewService(
