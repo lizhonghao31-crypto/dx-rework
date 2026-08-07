@@ -7,6 +7,7 @@ describe("ECS one-command deployment entry", () => {
     execFileSync("bash", ["-n", "scripts/deploy-ecs.sh"]);
     const script = await readFile("scripts/deploy-ecs.sh", "utf8");
     expect(script).toContain('[[ "$branch" == "main" ]]');
+    expect(script).toContain("git fetch origin main");
     expect(script).toContain('remote_sha="$(git rev-parse origin/main)"');
     expect(script).toContain('[[ "$sha" == "$remote_sha" ]]');
     expect(script).toContain("load_env_file");
