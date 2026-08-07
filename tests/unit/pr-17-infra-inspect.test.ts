@@ -64,7 +64,9 @@ describe("PR-17 read-only infrastructure inspection", () => {
     expect(script).not.toContain("printenv");
     expect(script).not.toMatch(/echo\s+\$DATABASE_URL/);
     expect(script).not.toMatch(/emit\s+.*(?:SESSION_SECRET|OWNER_BOOTSTRAP_SECRET|DINGTALK_H5_APP_SECRET|DINGTALK_WEB_CLIENT_SECRET|OSS_ACCESS_KEY_SECRET)["']?\s+\$?\{/);
-    expect(script).toContain("app.key_present.OWNER_BOOTSTRAP_SECRET");
+    expect(script).toContain("OWNER_BOOTSTRAP_SECRET");
+    expect(script).toContain('emit "app.key_present.$key" true');
+    expect(script).toContain('emit "app.key_present.$key" false');
     expect(script).toContain("nginx.target_files");
     expect(script).toContain("nginx.ssl_certificate_paths");
     expect(script).toContain("nginx.rework_locations");
