@@ -20,6 +20,8 @@ Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准�
 - `/opt/dx-rework/shared/deploy.env`：Node 22 路径、显式 Nginx 模式、HTTPS server name、TLS、真实 Nginx 配置路径和环境 profile；参考 `pr-17-deploy.env.example`；
 - `/opt/dx-rework/shared/restore.env`：仅恢复演练目标库及批准指纹；参考 `pr-17-restore.env.example`。API 进程不会读取该文件。
 
+首位老板 bootstrap 窗口是独立的安全操作窗口，不与 release/rollback 并发：只有当前 `0033_employee_access_management` 兼容 release 已稳定运行后，才允许临时把 `OWNER_BOOTSTRAP_DINGTALK_USER_ID` 与 `OWNER_BOOTSTRAP_SECRET` 成对写入 `.env` 并仅 reload `dx-rework-api`。完成一次性 bootstrap 后必须立即从 `.env` 删除两项、再次 reload 并确认 bootstrap 回到默认关闭状态。窗口期间禁止发起发布或代码回滚；尤其不得尝试回滚到不认识这两个环境键的更早 start wrapper。数据库的一次性 consumption 记录不因删除环境变量而撤销。
+
 配置文件是唯一事实源。加载前脚本会清空对应 allowlist 变量，文件缺失的值不得从调用 shell、PM2 或历史会话继承。`DX_REWORK_NODE_BIN` 必须指向普通、非软链接、可执行的 Node 22 文件；发布、migration、manifest 和 API 启动统一使用该路径。
 
 `DX_REWORK_SERVER_NAME` 只定义 HTTPS origin。shared-path 模式自动派生：
