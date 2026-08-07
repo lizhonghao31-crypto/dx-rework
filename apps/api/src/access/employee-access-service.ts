@@ -55,6 +55,17 @@ type AccessStateRow = Readonly<{
   usable_owner: boolean;
 }>;
 
+type DirectoryAuditRow = Readonly<{
+  user_id: string;
+  provider_user_id: string;
+  union_id: string;
+  display_name: string;
+  department_names: string[];
+  active: boolean;
+  employed: boolean;
+  enabled: boolean;
+}>;
+
 const translateDatabaseError = (error: unknown): never => {
   const code = (error as { code?: string } | null)?.code;
   if (code === "23505" || code === "23514" || code === "55000") {
@@ -73,6 +84,27 @@ const secureEqual = (left: string, right: string): boolean => {
 
 const sameStrings = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
+
+const directoryAuditState = (row: DirectoryAuditRow) => ({
+  userId: row.user_id,
+  providerUserId: row.provider_user_id,
+  unionId: row.union_id,
+  displayName: row.display_name,
+  departments: row.department_names,
+  active: row.active,
+  employed: row.employed,
+  enabled: row.enabled,
+});
+
+const sameDirectoryState = (left: DirectoryAuditRow, right: DirectoryAuditRow): boolean =>
+  left.user_id === right.user_id
+  && left.provider_user_id === right.provider_user_id
+  && left.union_id === right.union_id
+  && left.display_name === right.display_name
+  && left.active === right.active
+  && left.employed === right.employed
+  && left.enabled === right.enabled
+  && sameStrings(left.department_names, right.department_names);
 
 export class EmployeeAccessService {
   constructor(
@@ -258,14 +290,26 @@ export class EmployeeAccessService {
       for (const member of members) {
         const normalizedDepartments = [...new Set(member.departmentNames)].sort((left, right) =>
           left.localeCompare(right, "zh-CN"));
-        const user = await this.authStore.upsertDirectoryIdentity(client, member);
-        const existing = await client.query<{ department_names: string[] }>(
-          "SELECT department_names FROM employee_directory_profiles WHERE user_id=$1 FOR UPDATE",
-          [user.id],
+        const beforeResult = await client.query<DirectoryAuditRow>(
+          `SELECT
+             u.id user_id,
+             i.provider_user_id,
+             i.union_id,
+             u.display_name,
+             COALESCE(p.department_names,'{}'::text[]) department_names,
+             i.active,
+             i.employed,
+             u.enabled
+           FROM identity_mappings i
+           JOIN app_users u ON u.id=i.user_id
+           LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
+           WHERE i.provider='dingtalk' AND i.corp_id=$1
+             AND (i.provider_user_id=$2 OR i.union_id=$3)
+           FOR UPDATE OF i,u`,
+          [this.corporationId, member.userId, member.unionId],
         );
-        if (!existing.rows[0] || !sameStrings(existing.rows[0].department_names, normalizedDepartments)) {
-          changed += 1;
-        }
+        const before = beforeResult.rows[0];
+        const user = await this.authStore.upsertDirectoryIdentity(client, member);
         await client.query(
           `INSERT INTO employee_directory_profiles(user_id,department_names,last_directory_synced_at)
            VALUES($1,$2,$3)
@@ -275,6 +319,37 @@ export class EmployeeAccessService {
                updated_at=CURRENT_TIMESTAMP`,
           [user.id, normalizedDepartments, syncedAt],
         );
+        const afterResult = await client.query<DirectoryAuditRow>(
+          `SELECT
+             u.id user_id,
+             i.provider_user_id,
+             i.union_id,
+             u.display_name,
+             COALESCE(p.department_names,'{}'::text[]) department_names,
+             i.active,
+             i.employed,
+             u.enabled
+           FROM identity_mappings i
+           JOIN app_users u ON u.id=i.user_id
+           LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
+           WHERE i.provider='dingtalk' AND i.corp_id=$1 AND i.user_id=$2`,
+          [this.corporationId, user.id],
+        );
+        const after = afterResult.rows[0];
+        if (!after) {
+          throw new ApplicationError("INVALID_STATE_TRANSITION", "钉钉目录同步后无法读取员工身份状态", 409);
+        }
+        if (!before || !sameDirectoryState(before, after)) {
+          changed += 1;
+          await this.events.append(client, actor, {
+            action: "access.directory.employee.sync",
+            entityType: "app_user",
+            entityId: user.id,
+            before: before ? directoryAuditState(before) : undefined,
+            after: directoryAuditState(after),
+            reason: "老板手动同步钉钉通讯录",
+          });
+        }
       }
 
       const response = {
