@@ -127,6 +127,10 @@
     {
       "version": "0032_erp_integration_contract",
       "checksum": "3535f8dac5e887d72ebb41dc514b17fe365fa367fa0fa2abe3ba186f65145f0a"
+    },
+    {
+      "version": "0033_employee_access_management",
+      "checksum": "bb87700794a244c80d90afd87faf514375916d7085b1bd999d26416cef5ffe1d"
     }
   ]
 }
