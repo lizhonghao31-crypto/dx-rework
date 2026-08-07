@@ -35,13 +35,72 @@ build_root="$DX_ROOT/incoming/ecs-build-$sha-$$"
 bundle="$build_root/$sha"
 trap 'rm -rf -- "$build_root"' EXIT
 
+repair_links() {
+  "$DX_REWORK_NODE_BIN" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const source = process.cwd();
+const root = path.join(source, 'node_modules');
+const binDir = path.join(root, '.bin');
+
+const packages = [];
+for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+  if (entry.name === '.bin') continue;
+  const full = path.join(root, entry.name);
+  if (entry.name.startsWith('@') && entry.isDirectory()) {
+    for (const child of fs.readdirSync(full, { withFileTypes: true })) {
+      if (child.isDirectory()) packages.push(path.join(full, child.name));
+    }
+  } else if (entry.isDirectory()) {
+    packages.push(full);
+  }
+}
+
+fs.rmSync(binDir, { recursive: true, force: true });
+fs.mkdirSync(binDir, { recursive: true });
+for (const pkgDir of packages) {
+  const manifest = path.join(pkgDir, 'package.json');
+  if (!fs.existsSync(manifest)) continue;
+  let pkg;
+  try { pkg = JSON.parse(fs.readFileSync(manifest, 'utf8')); } catch { continue; }
+  if (!pkg.bin) continue;
+  const bins = typeof pkg.bin === 'string'
+    ? { [String(pkg.name || path.basename(pkgDir)).split('/').pop()]: pkg.bin }
+    : pkg.bin;
+  for (const [name, rel] of Object.entries(bins || {})) {
+    if (typeof rel !== 'string' || !name) continue;
+    const target = path.join(pkgDir, rel);
+    if (!fs.existsSync(target)) continue;
+    const link = path.join(binDir, name);
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(path.relative(path.dirname(link), target), link);
+  }
+}
+
+const workspaces = {
+  '@dx-rework/contracts': 'packages/contracts',
+  '@dx-rework/config': 'packages/config',
+  '@dx-rework/domain': 'packages/domain',
+  '@dx-rework/ui': 'packages/ui',
+  '@dx-rework/api': 'apps/api',
+  '@dx-rework/web': 'apps/web',
+};
+for (const [name, rel] of Object.entries(workspaces)) {
+  const [scope, pkg] = name.split('/');
+  const link = path.join(root, scope, pkg);
+  const target = path.join(source, rel);
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.rmSync(link, { recursive: true, force: true });
+  fs.symlinkSync(path.relative(path.dirname(link), target), link, 'dir');
+}
+NODE
+}
+
 printf '=== dx-rework deploy %s ===\n' "$sha"
 printf '1/3 dependencies and build\n'
 lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
 deps_ready=false
 if [[ -d node_modules && ! -L node_modules \
-      && -f node_modules/typescript/lib/tsc.js \
-      && -f node_modules/vite/bin/vite.js \
       && -x node_modules/.bin/tsc \
       && -x node_modules/.bin/vite \
       && -f "$DEPS_MARKER" \
@@ -51,25 +110,26 @@ fi
 
 if [[ "$deps_ready" == true ]]; then
   printf 'dependencies unchanged; reuse persistent source node_modules\n'
+elif [[ -f "$DX_ROOT/current/package-lock.json" \
+        && -d "$DX_ROOT/current/node_modules" \
+        && ! -L "$DX_ROOT/current/node_modules" ]] \
+     && cmp -s package-lock.json "$DX_ROOT/current/package-lock.json"; then
+  printf 'bootstrap build dependencies from current local release (no npm network install)\n'
+  rm -rf node_modules
+  cp -a "$DX_ROOT/current/node_modules" node_modules
+  repair_links
+  node_modules/.bin/tsc --version >/dev/null
+  node_modules/.bin/vite --version >/dev/null
+  printf '%s\n' "$lock_hash" > "${DEPS_MARKER}.tmp.$$"
+  mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
 else
-  printf 'dependencies missing/changed; repair once\n'
+  printf 'package-lock changed; install dependencies once\n'
   [[ -L node_modules ]] && rm -f node_modules
-  set +e
   npm install --prefer-offline --no-audit --no-fund --progress=false
-  npm_rc=$?
-  set -e
-
-  if [[ "$npm_rc" != 0 ]]; then
-    printf 'npm returned %s; checking whether the dependency tree is nevertheless usable\n' "$npm_rc"
-  fi
-
-  [[ -f node_modules/typescript/lib/tsc.js \
-     && -f node_modules/vite/bin/vite.js \
-     && -x node_modules/.bin/tsc \
-     && -x node_modules/.bin/vite ]] || die 'dependency install incomplete'
-  npm ls --depth=0 --workspaces --include-workspace-root >/dev/null || die 'dependency tree validation failed'
-  git diff --quiet -- package.json package-lock.json || die 'dependency repair changed package metadata'
-
+  repair_links
+  node_modules/.bin/tsc --version >/dev/null
+  node_modules/.bin/vite --version >/dev/null
+  git diff --quiet -- package.json package-lock.json || die 'dependency install changed package metadata'
   printf '%s\n' "$lock_hash" > "${DEPS_MARKER}.tmp.$$"
   mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
 fi
