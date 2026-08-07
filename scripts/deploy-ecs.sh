@@ -15,12 +15,13 @@ load_node_config
 
 export PATH="$(dirname "$DX_REWORK_NODE_BIN"):$PATH"
 
-sha="$(git rev-parse HEAD)"
 branch="$(git branch --show-current)"
-remote_sha="$(git rev-parse origin/main)"
 [[ "$branch" == "main" ]] || die "ECS deploy requires main branch, got: ${branch:-detached}"
-[[ "$sha" == "$remote_sha" ]] || die 'ECS deploy requires HEAD to match origin/main'
 [[ -z "$(git status --porcelain)" ]] || die 'ECS deploy requires a clean working tree'
+git fetch origin main
+sha="$(git rev-parse HEAD)"
+remote_sha="$(git rev-parse origin/main)"
+[[ "$sha" == "$remote_sha" ]] || die 'ECS deploy requires HEAD to match origin/main'
 
 acquire_lock "$DX_ROOT/locks/release.lock"
 
