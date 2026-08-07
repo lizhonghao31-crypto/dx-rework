@@ -68,7 +68,7 @@ describe("PR-17 read-only infrastructure inspection", () => {
     expect(script).toContain("nginx.target_files");
     expect(script).toContain("nginx.ssl_certificate_paths");
     expect(script).toContain("nginx.rework_locations");
-    expect(script).not.toContain("cat \"$nginx_dump\"");
+    expect(script).not.toContain('cat "$nginx_dump"');
   });
 
   it("sanitizes PM2 and version output to an explicit allowlist", async () => {
@@ -78,7 +78,7 @@ describe("PR-17 read-only infrastructure inspection", () => {
     expect(script).toContain('"cwd": env.get("pm_cwd")');
     expect(script).toContain('"script": env.get("pm_exec_path") or env.get("script")');
     expect(script).not.toContain('"env": env');
-    expect(script).toContain('(\"service\",\"gitSha\",\"expectedSchemaVersion\",\"schemaVersion\",\"ready\")');
+    expect(script).toContain('("service","gitSha","expectedSchemaVersion","schemaVersion","ready")');
   });
 
   it("has valid shell syntax", () => {
