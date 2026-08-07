@@ -53,7 +53,7 @@ if [[ "$deps_ready" == true ]]; then
   printf 'dependencies unchanged; reuse persistent source node_modules\n'
 else
   printf 'dependencies missing/changed; repair once\n'
-  rm -rf node_modules
+  [[ -L node_modules ]] && rm -f node_modules
   set +e
   npm install --prefer-offline --no-audit --no-fund --progress=false
   npm_rc=$?
