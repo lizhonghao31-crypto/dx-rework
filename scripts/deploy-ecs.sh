@@ -4,6 +4,7 @@ set -euo pipefail
 DX_ROOT=/opt/dx-rework
 SOURCE_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 EXPECTED_ORIGIN='git@github.com:lizhonghao31-crypto/dx-rework.git'
+DEPS_MARKER="$DX_ROOT/shared/build-package-lock.sha256"
 
 if [[ "$(id -un)" != "dxrework" ]]; then
   exec sudo -iu dxrework bash "$SOURCE_ROOT/scripts/deploy-ecs.sh"
@@ -36,16 +37,27 @@ trap 'rm -rf -- "$build_root"' EXIT
 
 printf '=== dx-rework deploy %s ===\n' "$sha"
 printf '1/3 dependencies and build\n'
-if [[ -f "$DX_ROOT/current/package-lock.json" && -d "$DX_ROOT/current/node_modules" ]] && \
-   cmp -s package-lock.json "$DX_ROOT/current/package-lock.json"; then
-  printf 'dependencies unchanged; reuse current release node_modules\n'
-  rm -rf node_modules
-  ln -s "$DX_ROOT/current/node_modules" node_modules
-else
-  printf 'dependencies changed; install once\n'
-  rm -rf node_modules
-  npm ci --prefer-offline --no-audit --no-fund
+lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
+deps_ready=false
+if [[ -d node_modules && ! -L node_modules \
+      && -f node_modules/typescript/lib/tsc.js \
+      && -f node_modules/vite/bin/vite.js \
+      && -f "$DEPS_MARKER" \
+      && "$(cat "$DEPS_MARKER")" == "$lock_hash" ]]; then
+  deps_ready=true
 fi
+
+if [[ "$deps_ready" == true ]]; then
+  printf 'dependencies unchanged; reuse persistent source node_modules\n'
+else
+  printf 'dependencies missing/changed; repair once\n'
+  rm -rf node_modules
+  npm ci --prefer-offline --no-audit --no-fund --progress=false
+  [[ -f node_modules/typescript/lib/tsc.js && -f node_modules/vite/bin/vite.js ]] || die 'dependency install incomplete'
+  printf '%s\n' "$lock_hash" > "${DEPS_MARKER}.tmp.$$"
+  mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
+fi
+
 APP_BASE_PATH="$APP_BASE_PATH" VITE_BASE_PATH="$APP_BASE_PATH" npm run build
 
 printf '2/3 package release\n'
