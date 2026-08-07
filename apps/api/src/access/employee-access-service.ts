@@ -4,7 +4,7 @@ import type {
   EmployeeAccessBootstrapResponse,
   EmployeeAccessDirectory,
   EmployeeAccessSyncResponse,
-} from "@dx-rework/contracts";
+} from "@dx-rework/contracts/employee-access";
 import type { Pool, PoolClient } from "pg";
 
 import type { OfficialDingTalkProvider } from "../auth/provider.js";
