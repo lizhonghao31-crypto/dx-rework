@@ -133,6 +133,7 @@ exit 0
     join(shared, "deploy.env"),
     [
       `DX_REWORK_NODE_BIN=${nodeBin}`,
+      "DX_REWORK_NGINX_MODE=dedicated_vhost",
       "DX_REWORK_SERVER_NAME=rework.example.test",
       `DX_REWORK_TLS_CERT=${cert}`,
       `DX_REWORK_TLS_KEY=${key}`,
