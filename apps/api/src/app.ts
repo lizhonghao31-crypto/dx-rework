@@ -105,7 +105,17 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     timestamp: new Date().toISOString(),
   }));
 
-  if (dependencies.auth) registerAuthRoutes(app, dependencies.auth, { secureCookie: config.nodeEnv === "production", ttlSeconds: config.sessionTtlSeconds, appBasePath: config.appBasePath, corpId: config.dingtalk.corpId, mobileClientId: config.dingtalk.h5AppKey });
+  if (dependencies.auth) {
+    registerAuthRoutes(app, dependencies.auth, {
+      secureCookie: config.nodeEnv === "production",
+      ttlSeconds: config.sessionTtlSeconds,
+      appBasePath: config.appBasePath,
+      corpId: config.dingtalk.corpId,
+      mobileClientId: config.dingtalk.h5AppKey,
+      webClientId: config.dingtalk.webClientId,
+      qrRedirectUri: config.dingtalk.qrRedirectUri,
+    });
+  }
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
   if (dependencies.access) registerAccessRoutes(app, dependencies.access);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);

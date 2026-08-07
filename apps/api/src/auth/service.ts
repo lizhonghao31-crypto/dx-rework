@@ -35,12 +35,12 @@ export class AuthService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async beginQr(): Promise<{ authorizationUrl: string; bindingToken: string }> {
+  async beginQr(): Promise<{ authorizationUrl: string; state: string; bindingToken: string }> {
     await this.store.cleanupExpiredAuthArtifacts(this.now());
     const state = randomBytes(32).toString("base64url");
     const bindingToken = randomBytes(32).toString("base64url");
     await this.store.createQrState({ stateHash: hash(state), bindingHash: this.hashBinding(bindingToken), expiresAt: new Date(this.now().getTime() + 5 * 60_000), usedAt: null });
-    return { authorizationUrl: this.provider.buildQrAuthorizationUrl(state), bindingToken };
+    return { authorizationUrl: this.provider.buildQrAuthorizationUrl(state), state, bindingToken };
   }
 
   async loginMobile(code: string): Promise<{ token: string; user: AuthUser }> {

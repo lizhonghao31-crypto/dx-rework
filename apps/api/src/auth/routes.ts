@@ -9,10 +9,21 @@ const PUBLIC_LOGIN_WINDOW_MS = 60_000;
 const PUBLIC_LOGIN_TRACKER_CAPACITY = 10_000;
 const cookieToken = (request: FastifyRequest, name = COOKIE): string | undefined => request.headers.cookie?.split(";").map((v) => v.trim()).find((v) => v.startsWith(`${name}=`))?.slice(name.length + 1);
 
-export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, options: { secureCookie: boolean; ttlSeconds: number; appBasePath: string; corpId: string; mobileClientId: string }): void {
+type AuthRouteOptions = Readonly<{
+  secureCookie: boolean;
+  ttlSeconds: number;
+  appBasePath: string;
+  corpId: string;
+  mobileClientId: string;
+  webClientId: string;
+  qrRedirectUri: string;
+}>;
+
+export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, options: AuthRouteOptions): void {
   const { secureCookie, ttlSeconds } = options;
   const cookiePath = options.appBasePath;
   const setSession = (token: string) => `${COOKIE}=${token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=${ttlSeconds}${secureCookie ? "; Secure" : ""}`;
+  const setQrBinding = (bindingToken: string) => `${QR_COOKIE}=${bindingToken}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=300${secureCookie ? "; Secure" : ""}`;
   const clearQrBinding = `${QR_COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie ? "; Secure" : ""}`;
   const loginAttempts = new Map<string, { count: number; resetsAt: number }>();
   const limitPublicLogin = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -40,7 +51,27 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
   });
   app.post("/auth/qr/start", { preHandler: limitPublicLogin }, async (_request, reply) => {
     const result = await auth.beginQr();
-    return reply.header("set-cookie", `${QR_COOKIE}=${result.bindingToken}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=300${secureCookie ? "; Secure" : ""}`).send({ authorizationUrl: result.authorizationUrl });
+    return reply.header("set-cookie", setQrBinding(result.bindingToken)).send({
+      authorizationUrl: result.authorizationUrl,
+      frame: {
+        clientId: options.webClientId,
+        redirectUri: options.qrRedirectUri,
+        state: result.state,
+        scope: "openid corpid",
+        responseType: "code",
+        prompt: "consent",
+      },
+    });
+  });
+  app.post<{ Body: { authCode?: string; code?: string; state?: string } }>("/auth/qr/complete", { preHandler: limitPublicLogin }, async (request, reply) => {
+    const result = await auth.loginQr(
+      request.body?.authCode ?? request.body?.code ?? "",
+      request.body?.state ?? "",
+      cookieToken(request, QR_COOKIE),
+    );
+    return reply
+      .header("set-cookie", [clearQrBinding, setSession(result.token)])
+      .send({ user: result.user, status: result.user.capabilities.length ? "authorized" : "no_role" });
   });
   app.get("/auth/client-config", async () => ({ corpId: options.corpId, mobileClientId: options.mobileClientId }));
   app.get<{ Querystring: { authCode?: string; code?: string; state?: string } }>("/auth/qr/callback", async (request, reply) => {
