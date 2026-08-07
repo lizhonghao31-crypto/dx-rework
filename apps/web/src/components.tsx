@@ -23,6 +23,7 @@ export function Shell({
     ["审", "本厂审批", "/ui/own-factory-approvals"],
     ["扣", "外部扣款", "/ui/external-responsibilities"],
     ["计", "集体计件", "/ui/piecework/collective"],
+    ["权", "权限管理", "/ui/employee-access"],
   ];
   return (
     <div className="app-shell">
