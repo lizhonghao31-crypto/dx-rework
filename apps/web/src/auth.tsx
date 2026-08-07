@@ -191,7 +191,10 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
 export function QrLoginPage() {
   const [message, setMessage] = useState("正在生成一次性扫码请求…");
   const [attempt, setAttempt] = useState(0);
+  const [starting, setStarting] = useState(true);
   const completing = useRef(false);
+  const challengeBusy = useRef(true);
+  const challengeQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     let cancelled = false;
@@ -218,6 +221,18 @@ export function QrLoginPage() {
     window.addEventListener("message", relay);
 
     const start = async () => {
+      setStarting(true);
+      challengeBusy.current = true;
+      const previousStart = challengeQueue.current;
+      let releaseStart: (() => void) | undefined;
+      const thisStart = new Promise<void>((resolve) => { releaseStart = resolve; });
+      challengeQueue.current = previousStart.then(() => thisStart);
+      await previousStart;
+      if (cancelled) {
+        releaseStart?.();
+        return;
+      }
+
       setMessage("正在生成一次性扫码请求…");
       try {
         const response = await fetch(apiUrl("auth/qr/start"), { method: "POST", credentials: "include" });
@@ -247,6 +262,12 @@ export function QrLoginPage() {
         );
       } catch {
         if (!cancelled) setMessage("扫码请求生成失败，请重新生成或联系管理员确认钉钉应用配置。 ");
+      } finally {
+        releaseStart?.();
+        if (!cancelled) {
+          challengeBusy.current = false;
+          setStarting(false);
+        }
       }
     };
     void start();
@@ -259,10 +280,17 @@ export function QrLoginPage() {
     };
   }, [attempt]);
 
+  const regenerate = () => {
+    if (challengeBusy.current) return;
+    challengeBusy.current = true;
+    setStarting(true);
+    setAttempt((value) => value + 1);
+  };
+
   return (
     <StatePage tone="info" title="钉钉扫码登录" detail={message}>
       <div id={QR_CONTAINER_ID} aria-label="钉钉登录二维码" style={{ width: 300, minHeight: 300, margin: "16px auto" }} />
-      <Button onClick={() => setAttempt((value) => value + 1)}>重新生成二维码</Button>
+      <Button disabled={starting} onClick={regenerate}>重新生成二维码</Button>
     </StatePage>
   );
 }
