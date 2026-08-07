@@ -1,8 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("ECS one-command deployment entry", () => {
-  it("builds, migrates, reloads and verifies from the checked-out main source", async () => {
+  it("is valid bash and keeps the real deploy path intact", async () => {
+    execFileSync("bash", ["-n", "scripts/deploy-ecs.sh"]);
     const script = await readFile("scripts/deploy-ecs.sh", "utf8");
     expect(script).toContain('[[ "$branch" == "main" ]]');
     expect(script).toContain("npm ci");
