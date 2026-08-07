@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Button,
   KpiInstrument,
@@ -6,7 +6,11 @@ import {
   StatusBadge,
   Surface,
 } from "@dx-rework/ui";
+import { createWebUrls } from "../url-contract.js";
+import { hasPageAccess, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
+
+const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 export function Shell({
   active,
@@ -16,15 +20,43 @@ export function Shell({
   children: ReactNode;
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const navigation = [
+  const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void fetch(apiUrl("auth/me"), { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const body = await response.json() as {
+          status?: string;
+          user?: AuthorizedUser;
+        };
+        if (
+          mounted
+          && body.status === "authorized"
+          && body.user
+          && hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })
+        ) {
+          setCanManageEmployeeAccess(true);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const navigation: [string, string, string][] = [
     ["总", "总览", "/ui/management"],
     ["工", "返工任务", "/ui/tasks"],
     ["责", "责任处理", "/ui/responsibility"],
     ["审", "本厂审批", "/ui/own-factory-approvals"],
     ["扣", "外部扣款", "/ui/external-responsibilities"],
     ["计", "集体计件", "/ui/piecework/collective"],
-    ["权", "权限管理", "/ui/employee-access"],
   ];
+  if (canManageEmployeeAccess) {
+    navigation.push(["权", "权限管理", "/ui/employee-access"]);
+  }
   return (
     <div className="app-shell">
       <aside>
