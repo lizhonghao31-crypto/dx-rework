@@ -73,51 +73,56 @@ export class PostgresAuthStore implements AuthStore {
   }
 
   async upsertIdentity(member: OrganizationMember): Promise<AuthUser> {
-    if (!stableEqual(member.corpId, this.corporationId)) {
-      throw new Error("DingTalk identity belongs to a different corporation");
-    }
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      if (!member.active || !member.employed) {
-        await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
-      }
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-        `dingtalk:${member.corpId}:${member.unionId}`,
-      ]);
-      const existing = await client.query<{ user_id: string }>(
-        "SELECT user_id FROM identity_mappings WHERE provider='dingtalk' AND corp_id=$1 AND (provider_user_id=$2 OR union_id=$3) FOR UPDATE",
-        [member.corpId, member.userId, member.unionId],
-      );
-      const userId = existing.rows[0]?.user_id ?? randomUUID();
-      if (!existing.rows[0]) {
-        await client.query("INSERT INTO app_users(id, display_name) VALUES($1,$2)", [userId, member.displayName]);
-      } else {
-        await client.query(
-          "UPDATE app_users SET display_name=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$1",
-          [userId, member.displayName],
-        );
-      }
-      if (existing.rows[0]) {
-        await client.query(
-          "UPDATE identity_mappings SET active=$2,employed=$3,last_verified_at=CURRENT_TIMESTAMP WHERE provider='dingtalk' AND corp_id=$1 AND user_id=$4",
-          [member.corpId, member.active, member.employed, userId],
-        );
-      } else {
-        await client.query(
-          "INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk',$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)",
-          [randomUUID(), userId, member.corpId, member.userId, member.unionId, member.active, member.employed],
-        );
-      }
-      const authorization = await this.loadAuthorization(client, userId);
+      const user = await this.upsertDirectoryIdentity(client, member);
       await client.query("COMMIT");
-      return { id: userId, displayName: member.displayName, ...authorization };
+      return user;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  async upsertDirectoryIdentity(client: PoolClient, member: OrganizationMember): Promise<AuthUser> {
+    if (!stableEqual(member.corpId, this.corporationId)) {
+      throw new Error("DingTalk identity belongs to a different corporation");
+    }
+    if (!member.active || !member.employed) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
+    }
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `dingtalk:${member.corpId}:${member.unionId}`,
+    ]);
+    const existing = await client.query<{ user_id: string }>(
+      "SELECT user_id FROM identity_mappings WHERE provider='dingtalk' AND corp_id=$1 AND (provider_user_id=$2 OR union_id=$3) FOR UPDATE",
+      [member.corpId, member.userId, member.unionId],
+    );
+    const userId = existing.rows[0]?.user_id ?? randomUUID();
+    if (!existing.rows[0]) {
+      await client.query("INSERT INTO app_users(id, display_name) VALUES($1,$2)", [userId, member.displayName]);
+    } else {
+      await client.query(
+        "UPDATE app_users SET display_name=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+        [userId, member.displayName],
+      );
+    }
+    if (existing.rows[0]) {
+      await client.query(
+        "UPDATE identity_mappings SET active=$2,employed=$3,last_verified_at=CURRENT_TIMESTAMP WHERE provider='dingtalk' AND corp_id=$1 AND user_id=$4",
+        [member.corpId, member.active, member.employed, userId],
+      );
+    } else {
+      await client.query(
+        "INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk',$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)",
+        [randomUUID(), userId, member.corpId, member.userId, member.unionId, member.active, member.employed],
+      );
+    }
+    const authorization = await this.loadAuthorization(client, userId);
+    return { id: userId, displayName: member.displayName, ...authorization };
   }
 
   async createSession(value: SessionRecord): Promise<void> {
