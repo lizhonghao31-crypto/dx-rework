@@ -10,6 +10,7 @@ fi
 
 cd "$SOURCE_ROOT"
 source "$SOURCE_ROOT/scripts/deploy/lib.sh"
+for key in $DX_REWORK_APP_ENV_KEYS; do unset "$key"; done
 load_env_file "${DX_REWORK_APP_ENV_FILE:-$DX_ROOT/shared/.env}" "$(config_owner)" "$DX_REWORK_APP_ENV_KEYS" 'APP_BASE_PATH'
 load_node_config
 
