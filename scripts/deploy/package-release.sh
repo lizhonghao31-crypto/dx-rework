@@ -6,9 +6,9 @@ sha="$1"; build_time="$2"; out="$(assert_safe_path "$3" "${DX_REWORK_BUILD_ROOT:
 require_sha "$sha"; date -d "$build_time" -u +%FT%TZ >/dev/null || die 'invalid ISO build time'
 [[ ! -e "$out" && ! -L "$out" ]] || die 'output already exists'
 for p in apps/api/dist apps/web/dist packages/config/dist packages/contracts/dist packages/domain/dist node_modules package-lock.json; do [[ -e "$p" ]] || die "built input missing: $p"; done
-stage="${out}.tmp.$$"; trap 'rm -rf -- "$stage"' EXIT; mkdir -p "$stage/api/apps/api" "$stage/api/packages" "$stage/frontend"
+stage="${out}.tmp.$$"; trap 'rm -rf -- "$stage"' EXIT; mkdir -p "$stage/api/apps/api/src" "$stage/api/packages" "$stage/frontend"
 cp package.json package-lock.json "$stage/api/"; cp -aL node_modules "$stage/api/"
-cp apps/api/package.json "$stage/api/apps/api/"; cp -a apps/api/dist apps/api/migrations apps/api/src/platform "$stage/api/apps/api/"
+cp apps/api/package.json "$stage/api/apps/api/"; cp -a apps/api/dist apps/api/migrations "$stage/api/apps/api/"; cp -a apps/api/src/platform "$stage/api/apps/api/src/"
 for p in packages/config packages/contracts packages/domain; do mkdir -p "$stage/api/$p"; cp "$p/package.json" "$stage/api/$p/"; cp -a "$p/dist" "$stage/api/$p/"; done
 mkdir -p "$stage/api/scripts/deploy" "$stage/api/infra/pm2"; cp scripts/deploy/* "$stage/api/scripts/deploy/"; cp scripts/backup-postgres.sh scripts/restore-postgres.sh scripts/migrate.mjs scripts/migration-lib.mjs "$stage/api/scripts/"; cp infra/pm2/ecosystem.config.cjs "$stage/api/infra/pm2/"
 cp -a apps/web/dist/. "$stage/frontend/"

@@ -17,18 +17,19 @@ describe("official DingTalk provider contracts", () => {
     expect(String(http.mock.calls[0]?.[0])).toContain("appkey=h5-key");
   });
 
-  it("uses OAuth, users/me, union mapping, and detail for browser scan", async () => {
-    const http = mockFetch(json({ accessToken: "user-token", expireIn: 7200, corpId: "corp-a" }), json({ unionId: "union-1" }), json({ errcode: 0, access_token: "app-token", expires_in: 7200 }), json({ errcode: 0, result: { userid: "user-1", contact_type: 0 } }), json({ errcode: 0, result: { userid: "user-1", unionid: "union-1", name: "员工", active: true } }));
+  it("uses ERP-style openid OAuth, then verifies the scanned user inside the configured corporation", async () => {
+    const http = mockFetch(json({ accessToken: "user-token", expireIn: 7200 }), json({ unionId: "union-1" }), json({ errcode: 0, access_token: "app-token", expires_in: 7200 }), json({ errcode: 0, result: { userid: "user-1", contact_type: 0 } }), json({ errcode: 0, result: { userid: "user-1", unionid: "union-1", name: "员工", active: true } }));
     const provider = new OfficialDingTalkProvider(config, http);
     const identity = await provider.exchangeQrCode("auth-code");
+    expect(identity).toEqual({ userId: "", unionId: "union-1" });
     expect(await provider.getOrganizationMember(identity, "corp-a")).toMatchObject({ userId: "user-1", unionId: "union-1", active: true });
     expect(http.mock.calls.map(([url]) => String(url))).toEqual([expect.stringContaining("/v1.0/oauth2/userAccessToken"), expect.stringContaining("/v1.0/contact/users/me"), expect.stringContaining("/gettoken"), expect.stringContaining("/topapi/user/getbyunionid"), expect.stringContaining("/topapi/v2/user/get")]);
     expect(JSON.parse(String(http.mock.calls[0]?.[1]?.body))).toMatchObject({ clientId: "web-client", clientSecret: "web-secret", code: "auth-code" });
   });
 
-  it("requires openid/corpid scope and the configured web client", () => {
+  it("matches the ERP desktop QR scope and configured web client", () => {
     const url = new URL(new OfficialDingTalkProvider(config, mockFetch()).buildQrAuthorizationUrl("state-1"));
-    expect(url.searchParams.get("scope")).toBe("openid corpid");
+    expect(url.searchParams.get("scope")).toBe("openid");
     expect(url.searchParams.get("client_id")).toBe("web-client");
     expect(url.searchParams.get("state")).toBe("state-1");
   });

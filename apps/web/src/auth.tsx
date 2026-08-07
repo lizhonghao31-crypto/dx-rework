@@ -66,9 +66,10 @@ type DingTalkWindow = Window & {
 type QrRelayMessage = { type: typeof QR_RELAY_MESSAGE; authCode: string; state: string };
 type ErrorBody = { error?: { code?: string; message?: string } };
 
-const { base, pageUrl, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
+const QR_AUTO_REFRESH_MS = 35_000;
 
 function StatePage({ tone, title, detail, children }: { tone: "info" | "warning" | "danger"; title: string; detail: string; children?: ReactNode }) {
   return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone={tone}>达兴组织准入</StatusBadge><h1>{title}</h1><p>{detail}</p>{children}</Surface></main>;
@@ -103,10 +104,10 @@ export function AuthGate({
 }
 
 export function LoginPage() {
-  const [message, setMessage] = useState("请使用钉钉完成达兴公司身份认证。");
+  const [message, setMessage] = useState("正在准备钉钉身份认证…");
   const isContainer = /DingTalk/i.test(navigator.userAgent);
   const start = async () => {
-    if (!isContainer) { window.location.assign(pageUrl("auth/qr")); return; }
+    if (!isContainer) return;
     setMessage("正在唤起钉钉免密认证…");
     try {
       const response = await fetch(apiUrl("auth/client-config"), { credentials: "include" });
@@ -119,7 +120,8 @@ export function LoginPage() {
     } catch { setMessage("无法加载钉钉认证能力，请检查网络后重试，或联系管理员。") }
   };
   useEffect(() => { if (isContainer) void start(); }, []);
-  return <StatePage tone="info" title="钉钉安全登录" detail={message}><Button onClick={() => void start()}>{isContainer ? "重新尝试免密登录" : "使用钉钉扫码登录"}</Button></StatePage>;
+  if (!isContainer) return <QrLoginPage />;
+  return <StatePage tone="info" title="钉钉安全登录" detail={message}><Button onClick={() => void start()}>重新尝试免密登录</Button></StatePage>;
 }
 
 async function submitMobileCode(code: string, setMessage: (message: string) => void): Promise<void> {
@@ -165,7 +167,7 @@ async function loginErrorMessage(response: Response): Promise<string> {
 
 async function completeQrCode(code: string, state: string, setMessage: (message: string) => void): Promise<boolean> {
   if (!code || !state) {
-    setMessage("钉钉未返回完整授权信息，请重新生成二维码。 ");
+    setMessage("钉钉未返回完整授权信息，请重新生成二维码。");
     return false;
   }
   setMessage("扫码已确认，正在核验达兴组织与在职状态…");
@@ -183,13 +185,13 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
     window.location.assign(base);
     return true;
   } catch {
-    setMessage("扫码结果未送达服务端，请检查网络后重新生成二维码。 ");
+    setMessage("扫码结果未送达服务端，请检查网络后重新生成二维码。");
     return false;
   }
 }
 
 export function QrLoginPage() {
-  const [message, setMessage] = useState("正在生成一次性扫码请求…");
+  const [message, setMessage] = useState("正在生成钉钉二维码…");
   const [attempt, setAttempt] = useState(0);
   const [starting, setStarting] = useState(true);
   const completing = useRef(false);
@@ -199,12 +201,13 @@ export function QrLoginPage() {
   useEffect(() => {
     let cancelled = false;
     let expectedState = "";
+    let refreshTimer: number | undefined;
     completing.current = false;
 
     const consumeCode = async (code: string, returnedState?: string) => {
       if (cancelled || completing.current) return;
       if (returnedState && returnedState !== expectedState) {
-        setMessage("扫码状态校验失败，请重新生成二维码。 ");
+        setMessage("扫码状态校验失败，请重新生成二维码。");
         return;
       }
       completing.current = true;
@@ -233,7 +236,7 @@ export function QrLoginPage() {
         return;
       }
 
-      setMessage("正在生成一次性扫码请求…");
+      setMessage("正在生成钉钉二维码…");
       try {
         const response = await fetch(apiUrl("auth/qr/start"), { method: "POST", credentials: "include" });
         if (!response.ok) throw new Error();
@@ -246,7 +249,7 @@ export function QrLoginPage() {
         const container = document.getElementById(QR_CONTAINER_ID);
         if (!container) throw new Error();
         container.innerHTML = "";
-        setMessage("请使用手机钉钉扫描二维码，并在钉钉中确认登录。 ");
+        setMessage("请使用手机钉钉扫描二维码，并在钉钉中确认登录。");
         frameLogin(
           { id: QR_CONTAINER_ID, width: 300, height: 300 },
           {
@@ -258,10 +261,15 @@ export function QrLoginPage() {
             prompt: body.frame.prompt,
           },
           (result) => { void consumeCode(result.authCode ?? result.code ?? "", result.state); },
-          (errorMessage) => setMessage(errorMessage || "钉钉扫码组件加载异常，请重新生成二维码。"),
+          () => setMessage("二维码暂时不可用，请点击重新生成二维码。"),
         );
+        refreshTimer = window.setTimeout(() => {
+          if (cancelled || completing.current) return;
+          setMessage("二维码已自动刷新，请使用最新二维码扫码。");
+          setAttempt((value) => value + 1);
+        }, QR_AUTO_REFRESH_MS);
       } catch {
-        if (!cancelled) setMessage("扫码请求生成失败，请重新生成或联系管理员确认钉钉应用配置。 ");
+        if (!cancelled) setMessage("二维码生成失败，请点击重新生成；仍失败请联系管理员确认钉钉应用配置。");
       } finally {
         releaseStart?.();
         if (!cancelled) {
@@ -274,6 +282,7 @@ export function QrLoginPage() {
 
     return () => {
       cancelled = true;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       window.removeEventListener("message", relay);
       const container = document.getElementById(QR_CONTAINER_ID);
       if (container) container.innerHTML = "";
@@ -302,13 +311,13 @@ export function QrRelayPage() {
     const authCode = query.get("authCode") || query.get("code") || "";
     const state = query.get("state") || "";
     if (!authCode || !state) {
-      setMessage("钉钉授权信息不完整，请返回登录页重新扫码。 ");
+      setMessage("钉钉授权信息不完整，请返回登录页重新扫码。");
       return;
     }
     if (window.self !== window.top) {
       const message: QrRelayMessage = { type: QR_RELAY_MESSAGE, authCode, state };
       window.parent.postMessage(message, window.location.origin);
-      setMessage("授权已通过，正在安全返回登录窗口…");
+      setMessage("授权已通过，正在返回登录窗口…");
       return;
     }
     void completeQrCode(authCode, state, setMessage);

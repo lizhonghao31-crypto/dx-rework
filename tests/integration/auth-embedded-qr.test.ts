@@ -105,7 +105,7 @@ function createApp(): { app: FastifyInstance; store: MemoryStore } {
 const stateHash = (state: string): string => createHash("sha256").update(state).digest("hex");
 
 describe("ERP-style embedded DingTalk QR login", () => {
-  it("publishes only public frame configuration and completes through the initiating browser", async () => {
+  it("publishes ERP-style openid frame configuration and completes through the initiating browser", async () => {
     const { app, store } = createApp();
     const start = await app.inject({ method: "POST", url: "/auth/qr/start" });
 
@@ -128,7 +128,7 @@ describe("ERP-style embedded DingTalk QR login", () => {
       clientId: "web-client",
       redirectUri: "https://example.test/rework/auth/qr/relay",
       state: body.frame.state,
-      scope: "openid corpid",
+      scope: "openid",
       responseType: "code",
       prompt: "consent",
     });

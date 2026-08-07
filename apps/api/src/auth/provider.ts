@@ -43,7 +43,7 @@ export class OfficialDingTalkProvider implements DingTalkProvider {
 
   buildQrAuthorizationUrl(state: string): string {
     const url = new URL("https://login.dingtalk.com/oauth2/auth");
-    url.search = new URLSearchParams({ redirect_uri: this.config.qrRedirectUri, response_type: "code", client_id: this.config.webClientId, scope: "openid corpid", state, prompt: "consent" }).toString();
+    url.search = new URLSearchParams({ redirect_uri: this.config.qrRedirectUri, response_type: "code", client_id: this.config.webClientId, scope: "openid", state, prompt: "consent" }).toString();
     return url.toString();
   }
 
@@ -58,11 +58,12 @@ export class OfficialDingTalkProvider implements DingTalkProvider {
   async exchangeQrCode(code: string): Promise<DingTalkIdentity> {
     const token = await this.json(`${API}/v1.0/oauth2/userAccessToken`, { method: "POST", headers: jsonHeaders(), body: JSON.stringify({ clientId: this.config.webClientId, clientSecret: this.config.webClientSecret, code, grantType: "authorization_code" }) });
     const accessToken = text(token.accessToken, "OAuth accessToken");
-    const tokenCorpId = text(token.corpId, "OAuth corpId");
+    const tokenCorpId = optionalText(token.corpId);
     positiveNumber(token.expireIn, "OAuth expireIn");
-    if (tokenCorpId !== this.config.corpId) throw new DingTalkProtocolError("OAuth identity belongs to a different corporation");
+    if (tokenCorpId && tokenCorpId !== this.config.corpId) throw new DingTalkProtocolError("OAuth identity belongs to a different corporation");
     const profile = await this.json(`${API}/v1.0/contact/users/me`, { headers: { "x-acs-dingtalk-access-token": accessToken } });
-    return { userId: "", unionId: text(profile.unionId, "profile unionId"), corpId: tokenCorpId };
+    const identity: DingTalkIdentity = { userId: "", unionId: text(profile.unionId, "profile unionId") };
+    return tokenCorpId ? { ...identity, corpId: tokenCorpId } : identity;
   }
 
   async getOrganizationMember(identity: DingTalkIdentity, corpId: string): Promise<OrganizationMember | null> {
