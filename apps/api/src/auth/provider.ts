@@ -78,7 +78,7 @@ export class OfficialDingTalkProvider implements DingTalkProvider {
       if (!userId) return null;
     }
     const detail = await this.postOapi("/topapi/v2/user/get", appToken, { userid: userId }, true);
-    if (!detail) return { corpId, userId, unionId: identity.unionId, active: false, employed: false, displayName: "钉钉用户" };
+    if (!detail) return null;
     const result = record(detail.result, "user detail result");
     if (text(result.userid, "detail userid") !== userId) throw new DingTalkProtocolError("DingTalk user detail identity mismatch");
     const detailUnionId = optionalText(result.unionid);
