@@ -54,11 +54,22 @@ if [[ "$deps_ready" == true ]]; then
 else
   printf 'dependencies missing/changed; repair once\n'
   rm -rf node_modules
-  npm ci --prefer-offline --no-audit --no-fund --progress=false
+  set +e
+  npm install --prefer-offline --no-audit --no-fund --progress=false
+  npm_rc=$?
+  set -e
+
+  if [[ "$npm_rc" != 0 ]]; then
+    printf 'npm returned %s; checking whether the dependency tree is nevertheless usable\n' "$npm_rc"
+  fi
+
   [[ -f node_modules/typescript/lib/tsc.js \
      && -f node_modules/vite/bin/vite.js \
      && -x node_modules/.bin/tsc \
      && -x node_modules/.bin/vite ]] || die 'dependency install incomplete'
+  npm ls --depth=0 --workspaces --include-workspace-root >/dev/null || die 'dependency tree validation failed'
+  git diff --quiet -- package.json package-lock.json || die 'dependency repair changed package metadata'
+
   printf '%s\n' "$lock_hash" > "${DEPS_MARKER}.tmp.$$"
   mv "${DEPS_MARKER}.tmp.$$" "$DEPS_MARKER"
 fi
