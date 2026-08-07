@@ -4,7 +4,7 @@ import {
   EmployeeAccessGrantRoleSchema,
   EmployeeAccessReasonSchema,
   EmployeeAccessUserParamsSchema,
-} from "@dx-rework/contracts";
+} from "@dx-rework/contracts/employee-access";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { AuthUser } from "../auth/service.js";
