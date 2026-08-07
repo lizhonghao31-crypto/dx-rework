@@ -57,7 +57,7 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
         clientId: options.webClientId,
         redirectUri: options.qrRedirectUri,
         state: result.state,
-        scope: "openid corpid",
+        scope: "openid",
         responseType: "code",
         prompt: "consent",
       },
