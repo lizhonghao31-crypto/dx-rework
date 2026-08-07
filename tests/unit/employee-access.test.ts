@@ -49,14 +49,18 @@ describe("PR-31 employee access contracts", () => {
     }).success).toBe(true);
   });
 
-  it("gates the employee access page to owner_group plus access:admin and exposes it in the existing navigation", async () => {
+  it("gates the employee access page and navigation to owner_group plus access:admin", async () => {
     const [app, components] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/employee-access"');
     expect(app).toContain('requiredRole="owner_group" requiredCapability="access:admin"');
-    expect(components).toContain('["权", "权限管理", "/ui/employee-access"]');
+    expect(components).toContain('hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })');
+    const guard = components.indexOf("if (canManageEmployeeAccess)");
+    const link = components.indexOf('["权", "权限管理", "/ui/employee-access"]');
+    expect(guard).toBeGreaterThan(-1);
+    expect(link).toBeGreaterThan(guard);
   });
 
   it("keeps owner bootstrap one-time at the database boundary", async () => {
@@ -76,6 +80,21 @@ describe("PR-31 employee access contracts", () => {
     expect(provider).toContain("pagination repeated a cursor");
     expect(provider).toContain("pagination did not advance");
     expect(provider).toContain("listOrganizationMembers");
+    expect(provider).toContain("if (!detail) return null;");
+    expect(provider).toContain("directory member could not be verified in the configured corporation");
+    expect(provider).not.toContain('active: false, employed: false, displayName: "钉钉用户"');
+  });
+
+  it("records each changed directory employee with before and after access state", async () => {
+    const service = await readFile("apps/api/src/access/employee-access-service.ts", "utf8");
+    expect(service).toContain('action: "access.directory.employee.sync"');
+    expect(service).toContain("entityId: user.id");
+    expect(service).toContain("before: before ? directoryAuditState(before) : undefined");
+    expect(service).toContain("after: directoryAuditState(after)");
+    expect(service).toContain("providerUserId: row.provider_user_id");
+    expect(service).toContain("departments: row.department_names");
+    expect(service).toContain("active: row.active");
+    expect(service).toContain("employed: row.employed");
   });
 
   it("does not expose bootstrap secret in the employee page", async () => {
