@@ -54,12 +54,12 @@ describe("PR-01A UI prototype contract", () => {
     expect(pages).toContain("当前页面仅用于验证独立前端、API 与版本追踪链路");
     expect(pages).toContain("不连接 ERP · 不启用钉钉 · 不写入生产数据");
   });
-  it("loads public DingTalk client config and prefixes auth navigation with Vite BASE_URL", () => {
+  it("loads public DingTalk client config and shows desktop QR without an extra page jump", () => {
     expect(auth).toContain('import.meta.env.BASE_URL');
     expect(auth).toContain('apiUrl("auth/client-config")');
     expect(auth).toContain('apiUrl("auth/mobile")');
     expect(auth).toContain('apiUrl("auth/qr/start")');
-    expect(auth).toContain('pageUrl("auth/qr")');
+    expect(auth).toContain("if (!isContainer) return <QrLoginPage />;");
   });
   it("retains accessible status, meter, audit and touch contracts", () => {
     expect(ui).toContain('aria-hidden="true" className={`dx-meter');
