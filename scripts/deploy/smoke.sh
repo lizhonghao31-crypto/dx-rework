@@ -10,16 +10,24 @@ assert_active_release "$sha"
 
 local_mode="${DX_REWORK_SMOKE_LOCAL:-false}"
 if [[ "$local_mode" == true ]]; then
-  base=http://127.0.0.1:3201
+  api_base=http://127.0.0.1:3201
+  web_base=""
+  origin=""
+  nginx_mode=local
 else
   [[ ! -e "$(release_switch_flag)" ]] || die 'external smoke cannot run while release maintenance is enabled'
-  if [[ -z "${DX_REWORK_SMOKE_URL:-}" ]]; then
-    load_deploy_config
-    [[ "${DX_REWORK_SERVER_NAME:-}" =~ ^[A-Za-z0-9.-]+$ ]] || die 'invalid smoke server name'
-    DX_REWORK_SMOKE_URL="https://${DX_REWORK_SERVER_NAME}"
+  if [[ -z "${DX_REWORK_SMOKE_API_URL:-}" || -z "${DX_REWORK_SMOKE_WEB_URL:-}" || -z "${DX_REWORK_SMOKE_ORIGIN:-}" ]]; then
+    load_release_config
   fi
-  base="$DX_REWORK_SMOKE_URL"
-  [[ "$base" == https://* ]] || die 'HTTPS smoke URL required'
+  api_base="$DX_REWORK_SMOKE_API_URL"
+  web_base="$DX_REWORK_SMOKE_WEB_URL"
+  origin="$DX_REWORK_SMOKE_ORIGIN"
+  nginx_mode="$DX_REWORK_NGINX_MODE"
+  [[ "$origin" == https://* && "$api_base" == https://* && "$web_base" == https://* ]] || die 'HTTPS smoke URLs required'
+  if [[ "$nginx_mode" == shared_path ]]; then
+    [[ "$web_base" == "$origin/rework" && "$api_base" == "$origin/rework/api" ]] ||
+      die 'shared_path smoke must stay inside /rework/'
+  fi
 fi
 
 pm2 jlist | node_exec -e '
@@ -32,14 +40,14 @@ process.stdin.on("data",d=>s+=d).on("end",()=>{
 });
 ' "$DX_ROOT"
 
-json="$(curl -fsS "$base/version")"
+json="$(curl -fsS "$api_base/version")"
 node_exec -e '
 const v=JSON.parse(process.argv[1]);
 if(v.gitSha!==process.argv[2]||v.expectedSchemaVersion!==process.argv[3]||v.schemaVersion!==process.argv[3])process.exit(1);
 ' "$json" "$sha" "$schema"
 
-curl -fsS "$base/health/live" >/dev/null
-[[ "${DX_REWORK_REQUIRE_LOCAL_READY:-true}" != true ]] || curl -fsS "$base/health/ready" >/dev/null
+curl -fsS "$api_base/health/live" >/dev/null
+[[ "${DX_REWORK_REQUIRE_LOCAL_READY:-true}" != true ]] || curl -fsS "$api_base/health/ready" >/dev/null
 
 if [[ "$local_mode" == true ]]; then
   safe_log pass "local API activation smoke passed $sha"
@@ -47,33 +55,47 @@ if [[ "$local_mode" == true ]]; then
 fi
 
 sudo -n nginx -t
-curl -fsS "$base/health/ready" >/dev/null
+curl -fsS "$api_base/health/ready" >/dev/null
 headers="$(mktemp)"
 body="$(mktemp)"
 trap 'rm -f "$headers" "$body"' EXIT
 
-curl -fsS -D "$headers" "$base/" -o "$body"
+curl -fsS -D "$headers" "$web_base/" -o "$body"
 grep -qi '<html' "$body"
 grep -Eqi '^x-content-type-options:[[:space:]]*nosniff' "$headers"
 grep -Eqi '^referrer-policy:' "$headers"
-curl -fsS "$base/login" | grep -qi '<html'
-curl -fsS "$base/rework/deep-link-smoke" | grep -qi '<html'
 
-asset="$(sed -nE 's#.*(assets/[^" ]+).*#\1#p' "$body" | head -1)"
-[[ -n "$asset" ]] || die 'frontend asset reference missing'
-curl -fsS -D "$headers" "$base/$asset" -o "$body"
+if [[ "$nginx_mode" == shared_path ]]; then
+  curl -fsS "$web_base/auth/login" | grep -qi '<html'
+  curl -fsS "$web_base/deep-link-smoke" | grep -qi '<html'
+else
+  # Preserve the dedicated-vhost compatibility checks used by the original PR-17 contract.
+  curl -fsS "$origin/login" | grep -qi '<html'
+  curl -fsS "$origin/rework/deep-link-smoke" | grep -qi '<html'
+fi
+
+asset_path="$(sed -nE 's#.*(\/rework/assets/[^" ]+).*#\1#p' "$body" | head -1)"
+[[ -n "$asset_path" ]] || die 'frontend asset reference missing'
+curl -fsS -D "$headers" "$origin$asset_path" -o "$body"
 ! grep -qi '<html' "$body" || die 'real asset returned HTML'
 grep -Eqi '^content-type:[[:space:]]*(text/css|application/(javascript|octet-stream)|font/|image/)' "$headers"
 
-code="$(curl -sS -o "$body" -w '%{http_code}' "$base/assets/pr17-definitely-missing.js")"
+code="$(curl -sS -o "$body" -w '%{http_code}' "$origin/rework/assets/pr17-definitely-missing.js")"
 [[ "$code" == 404 ]] && ! grep -qi '<html' "$body" || die 'missing asset must be a non-HTML 404'
 
-curl -fsS --compressed -H 'Accept-Encoding: gzip' -D "$headers" "$base/$asset" -o /dev/null
+curl -fsS --compressed -H 'Accept-Encoding: gzip' -D "$headers" "$origin$asset_path" -o /dev/null
 grep -Eqi '^content-encoding:[[:space:]]*gzip' "$headers" || die 'gzip not active'
 
 conf="${DX_REWORK_NGINX_CONFIG:-$DX_ROOT/shared/nginx.conf}"
 grep -q 'dx_rework_query_free' "$conf"
-grep -A3 -E 'location = /(rework/)?api/auth/qr/callback' "$conf" | grep -q 'error_log /dev/null emerg'
+if [[ "$nginx_mode" == shared_path ]]; then
+  grep -A6 -F 'location = /rework/auth/qr/relay {' "$conf" | grep -q 'access_log off;'
+  grep -A6 -F 'location = /rework/auth/qr/relay {' "$conf" | grep -q 'error_log /dev/null emerg;'
+  grep -A7 -F 'location = /rework/api/auth/qr/callback {' "$conf" | grep -q 'access_log off;'
+  grep -A7 -F 'location = /rework/api/auth/qr/callback {' "$conf" | grep -q 'error_log /dev/null emerg;'
+else
+  grep -A3 -E 'location = /(rework/)?api/auth/qr/callback' "$conf" | grep -q 'error_log /dev/null emerg'
+fi
 
 safe_log blocked 'real OSS/DingTalk/Todo smoke requires isolated authorization'
 safe_log pass "read-only HTTPS smoke passed $sha"
