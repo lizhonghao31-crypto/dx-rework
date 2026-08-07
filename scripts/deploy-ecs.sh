@@ -3,6 +3,7 @@ set -euo pipefail
 
 DX_ROOT=/opt/dx-rework
 SOURCE_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+EXPECTED_ORIGIN='git@github.com:lizhonghao31-crypto/dx-rework.git'
 
 if [[ "$(id -un)" != "dxrework" ]]; then
   exec sudo -iu dxrework bash "$SOURCE_ROOT/scripts/deploy-ecs.sh"
@@ -17,7 +18,9 @@ load_node_config
 export PATH="$(dirname "$DX_REWORK_NODE_BIN"):$PATH"
 
 branch="$(git branch --show-current)"
+origin_url="$(git remote get-url origin)"
 [[ "$branch" == "main" ]] || die "ECS deploy requires main branch, got: ${branch:-detached}"
+[[ "$origin_url" == "$EXPECTED_ORIGIN" ]] || die 'ECS deploy origin does not match the approved dx-rework repository'
 [[ -z "$(git status --porcelain)" ]] || die 'ECS deploy requires a clean working tree'
 git fetch origin main
 sha="$(git rev-parse HEAD)"
