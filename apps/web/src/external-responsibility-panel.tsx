@@ -28,6 +28,11 @@ type Supplier = {
 };
 type CaseStatus =
   NonNullable<ExternalResponsibilityBatchResponse>["cases"][number]["status"];
+type ResponsibilityType =
+  NonNullable<ExternalResponsibilityBatchResponse>["items"][number]["responsibilityType"];
+type DeductionEntryType =
+  ExternalResponsibilityCaseResponse["deductions"][number]["entryType"];
+type ClosureResult = NonNullable<ExternalResponsibilityCaseResponse["closure"]>["result"];
 
 const caseLabel: Record<CaseStatus, string> = {
   pending_business_signoff: "待业务签收",
@@ -39,10 +44,37 @@ const caseLabel: Record<CaseStatus, string> = {
   superseded: "已由新责任版本替代",
 };
 
+const responsibilityTypeLabel: Record<ResponsibilityType, string> = {
+  processing_factory: "加工厂",
+  embroidery_factory: "印绣花厂",
+  washing_factory: "洗水厂",
+  fabric_supplier: "面料供应商",
+};
+
+const deductionEntryLabel: Record<DeductionEntryType, string> = {
+  deduction: "实际扣款",
+  adjustment: "扣款调整",
+  reversal: "扣款冲销",
+};
+
+const closureResultLabel: Record<ClosureResult, string> = {
+  full: "已全额扣款",
+  partial: "部分扣款",
+  not_deducted: "未扣成功",
+};
+
+const bpsToPercent = (bps: number): string => {
+  const percent = bps / 100;
+  return `${Number.isInteger(percent) ? percent.toFixed(0) : percent.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}%`;
+};
+
+const processName = (snapshot: Record<string, unknown>): string => {
+  const value = snapshot.processName;
+  return typeof value === "string" && value.trim() ? value.trim() : "工序";
+};
+
 const requiredSupplierType = (
-  type: NonNullable<
-    ExternalResponsibilityBatchResponse
-  >["items"][number]["responsibilityType"],
+  type: ResponsibilityType,
 ): Supplier["supplierType"] =>
   type === "processing_factory"
     ? "factory"
@@ -174,10 +206,7 @@ export function ExternalResponsibilityPanel({
   const allocate = async (): Promise<void> => {
     if (state.kind !== "ready" || !state.value || busy) return;
     const grouped = new Map<string, {
-      responsibilityType:
-        NonNullable<
-          ExternalResponsibilityBatchResponse
-        >["items"][number]["responsibilityType"];
+      responsibilityType: ResponsibilityType;
       supplierId: string;
       externalItemIds: string[];
       processingFactoryOverrideReason?: string;
@@ -460,7 +489,7 @@ export function ExternalResponsibilityPanel({
             );
             return (
               <div className="external-operation-grid" key={item.externalItemId}>
-                <span>{String(item.processSnapshot.processName ?? item.configurationItemId)} · {item.responsibilityType} · 服务端拟扣 ¥{item.proposedAmount}</span>
+                <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 服务端拟扣 ¥{item.proposedAmount}</span>
                 <SearchSelect
                   options={matchingSuppliers.map((supplier) => ({
                     value: supplier.supplierId,
@@ -469,7 +498,7 @@ export function ExternalResponsibilityPanel({
                   value={selection[item.externalItemId] ?? ""}
                   placeholder={matchingSuppliers.length ? "输入供应商名称搜索" : "没有匹配类型的供应商"}
                   emptyText="没有匹配的供应商"
-                  ariaLabel={`供应商 ${String(item.processSnapshot.processName ?? "责任项目")}`}
+                  ariaLabel={`供应商 ${processName(item.processSnapshot)}`}
                   disabled={busy || matchingSuppliers.length === 0}
                   onChange={(supplierId) => setSelection((current) => ({
                     ...current,
@@ -499,20 +528,37 @@ export function ExternalResponsibilityPanel({
         {batch.cases.map((caseItem) => {
           const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
           const evidence = attachments[caseItem.caseId] ?? [];
+          const canEditRemark = caseItem.canSign
+            || caseItem.canPayablesConfirm
+            || caseItem.canFollowUp
+            || caseItem.canClose
+            || caseItem.canRequestRevision
+            || caseItem.canApproveRevision;
+          const canEditDisposition = caseItem.canClose || caseItem.canRequestRevision;
+          const canAttachEvidence = caseItem.canSign
+            || caseItem.canPayablesConfirm
+            || caseItem.canFollowUp
+            || caseItem.canRecordDeduction
+            || caseItem.canClose
+            || caseItem.canRequestRevision;
+          const hasEditableFields = canEditRemark
+            || canEditDisposition
+            || caseItem.canRecordDeduction
+            || canAttachEvidence;
           return (
             <article className="external-case" key={caseItem.caseId}>
               <div>
                 <div className="section-title">
                   <b>{caseLabel[caseItem.status]} · {caseItem.supplier.name}</b>
                   <StatusBadge tone={caseItem.status === "returned" ? "danger" : caseItem.status === "deduction_follow_up" ? "warning" : "info"}>
-                    {caseItem.responsibilityType}
+                    {responsibilityTypeLabel[caseItem.responsibilityType]}
                   </StatusBadge>
                 </div>
-                <small>拟扣 ¥{caseItem.proposedDeductionAmount} · 累计实扣 ¥{caseItem.actualDeductedAmount} · 未扣差额 ¥{caseItem.remainingAmount} · 版本 {caseItem.caseVersion}</small>
+                <small>拟扣 ¥{caseItem.proposedDeductionAmount} · 累计实扣 ¥{caseItem.actualDeductedAmount} · 未扣差额 ¥{caseItem.remainingAmount}</small>
                 <div className="external-ledger-list">
                   {caseItem.items.map((item) => (
                     <div key={item.externalItemId}>
-                      <span>{String(item.processSnapshot.processName ?? item.configurationItemId)} · 倍率 {item.multiplierSnapshot} · {item.shareBpsSnapshot} bps</span>
+                      <span>{processName(item.processSnapshot)} · 倍率 ×{item.multiplierSnapshot} · 责任 {bpsToPercent(item.shareBpsSnapshot)}</span>
                       <b>¥{item.proposedAmount}</b>
                     </div>
                   ))}
@@ -539,46 +585,46 @@ export function ExternalResponsibilityPanel({
                 </>}
               </div>
 
-              <div className="external-operation">
-                <InsetField
+              {hasEditableFields && <div className="external-operation">
+                {canEditRemark && <InsetField
                   label="备注 / 退回、部分扣款、未扣、变更或审核意见"
                   value={remark[caseItem.caseId] ?? ""}
                   onChange={(event) => setRemark((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="退回、部分/未扣、责任变更时必填；审核意见可选"
-                />
-                <InsetField
+                />}
+                {canEditDisposition && <InsetField
                   label="未扣差额最终处理"
                   value={differenceDisposition[caseItem.caseId] ?? caseItem.closure?.remainingDifferenceDisposition ?? ""}
                   onChange={(event) => setDifferenceDisposition((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="部分/未扣关闭时必填，例如：申请转本厂承担并进入责任重判"
-                />
-                <InsetField
-                  label="实际扣款金额（仅应付会计）"
+                />}
+                {caseItem.canRecordDeduction && <InsetField
+                  label="实际扣款金额"
                   value={amount[caseItem.caseId] ?? ""}
                   onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-                  placeholder="仅记录单笔实际扣款；不计算累计"
-                />
-                <ExternalEvidenceUploader
+                  placeholder="仅记录本次实际扣款；系统自动累计"
+                />}
+                {canAttachEvidence && <ExternalEvidenceUploader
                   attachmentIds={evidence}
                   disabled={busy}
                   onChange={(value) => setAttachments((current) => ({ ...current, [caseItem.caseId]: value }))}
                   onMessage={setMessage}
-                />
-              </div>
+                />}
+              </div>}
 
               {caseItem.deductions.length > 0 && <div className="external-ledger-list">
                 {caseItem.deductions.map((entry) => (
                   <div key={entry.deductionEntryId}>
-                    <span>{entry.entryType} · {entry.deductedOn} · {entry.referenceNo ?? "无凭证号"}</span>
+                    <span>{deductionEntryLabel[entry.entryType]} · {entry.deductedOn} · {entry.referenceNo ?? "无凭证号"}</span>
                     <b>¥{entry.amount}</b>
                   </div>
                 ))}
               </div>}
               {caseItem.closure && <StatusBadge tone={caseItem.closure.result === "full" ? "success" : "warning"}>
-                关闭结果：{caseItem.closure.result} · 剩余 ¥{caseItem.closure.remainingAmount}
+                {closureResultLabel[caseItem.closure.result]} · 剩余 ¥{caseItem.closure.remainingAmount}
               </StatusBadge>}
               {caseItem.revisionRequests.filter((item) => item.seededDeterminationId).map((item) => (
-                <StatusBadge key={item.revisionRequestId} tone="success">已生成 N07 草稿 {item.seededDeterminationId}</StatusBadge>
+                <StatusBadge key={item.revisionRequestId} tone="success">责任变更已通过，已生成新的 N07 判责草稿</StatusBadge>
               ))}
             </article>
           );
