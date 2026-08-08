@@ -109,7 +109,21 @@ describe("rework initiation routes", () => {
     }, { styleNo: "PD20529725" }, "qc-create-1");
   });
 
-  it("rejects non-QC roles even when a capability is present", async () => {
+  it("allows owners to enter N01 without assigning themselves the QC role", async () => {
+    const { app, service } = create(["owner_group"], ["dashboard:management:read"]);
+    const options = await app.inject({
+      method: "GET",
+      url: "/rework-orders/initiation-options",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(options.statusCode).toBe(200);
+    expect(service.listInitiationOptions).toHaveBeenCalledWith(expect.objectContaining({
+      actorRoles: ["owner_group", "quality_control"],
+      authorizationCapability: "rework:initiate",
+    }));
+  });
+
+  it("rejects non-QC non-owner roles even when a capability is present", async () => {
     const { app } = create(["system_admin"], ["rework:initiate"]);
     const result = await app.inject({
       method: "POST",
@@ -155,7 +169,7 @@ describe("rework initiation routes", () => {
     );
   });
 
-  it("exposes only the authenticated QC user's detail and filtered list", async () => {
+  it("exposes the authenticated initiator's detail, filtered list and initiation options", async () => {
     const { app, service } = create();
     expect((await app.inject({
       method: "GET",
