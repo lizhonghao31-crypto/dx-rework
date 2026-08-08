@@ -88,6 +88,10 @@ const reworkService = new ReworkInitiationService(
   undefined,
   todoProjection,
 );
+const rootAcceptanceReworkService = new ReworkInitiationService(
+  database,
+  config.dingtalk.corpId,
+);
 const erpIntegrationService = new ErpIntegrationService(
   database,
   config.dingtalk.corpId,
@@ -157,6 +161,7 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    rootAcceptanceService: rootAcceptanceReworkService,
     root: rootAuthority,
     listInitiationOptions: async () => {
       const [directory, suppliers] = await Promise.all([
