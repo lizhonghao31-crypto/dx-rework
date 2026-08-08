@@ -64,6 +64,9 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
     "tail_supervisor",
   ].includes(role));
 
+const actorCapabilities = (actor: TrustedActorContext): readonly string[] =>
+  actor.authorizationCapabilities ?? [actor.authorizationCapability];
+
 export class ReworkBusinessDetailService {
   constructor(private readonly database: Pool) {}
 
@@ -141,6 +144,14 @@ export class ReworkBusinessDetailService {
   private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
     if (broadBusinessReader(actor)) return true;
     if (row.created_by === actor.actorId || row.merchandiser_user_id === actor.actorId) return true;
+
+    if (actorCapabilities(actor).includes("responsibility:determine")) {
+      const responsibility = await this.database.query<{ permitted: boolean }>(
+        "SELECT responsibility_can_determine($1,$2) permitted",
+        [actor.actorId, row.rework_order_id],
+      );
+      if (responsibility.rows[0]?.permitted === true) return true;
+    }
 
     if (actor.actorRoles.includes("ie_reviewer")) {
       const configuration = await this.database.query(
