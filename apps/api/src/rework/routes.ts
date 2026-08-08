@@ -6,6 +6,7 @@ import {
   SubmitReworkOrderSchema,
   TransitionReworkOrderSchema,
   UpdateReworkDraftSchema,
+  type ReworkInitiationOptionsResponse,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -41,6 +42,7 @@ export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
   root?: RootAuthority;
+  listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
 }>;
 
@@ -146,8 +148,11 @@ export function registerReworkRoutes(
     },
   );
 
-  app.get("/rework-orders/initiation-options", async (request) =>
-    dependencies.service.listInitiationOptions(await actor(request)));
+  app.get("/rework-orders/initiation-options", async (request) => {
+    const accessActor = await actor(request);
+    if (dependencies.listInitiationOptions) return dependencies.listInitiationOptions();
+    return dependencies.service.listInitiationOptions(accessActor);
+  });
 
   app.get<{ Params: { reworkOrderId: string } }>(
     "/rework-orders/:reworkOrderId",
