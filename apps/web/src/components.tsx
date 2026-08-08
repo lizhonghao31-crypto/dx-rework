@@ -84,9 +84,11 @@ export function Shell({
     navigation.push(["权", "权限管理", "/ui/employee-access"]);
   }
 
-  const canReadAudit = currentUser?.businessRoles?.includes("system_admin") === true
+  const isOwner = currentUser?.businessRoles?.includes("owner_group") === true;
+  const canReadAudit = isOwner || (
+    currentUser?.businessRoles?.includes("system_admin") === true
     && currentUser.capabilities.includes("audit:read")
-    && currentUser.capabilities.includes("admin:read");
+  );
   const roleText = currentUser?.businessRoles?.length
     ? currentUser.businessRoles.map(roleLabel).join(" · ")
     : "未分配角色";
@@ -104,7 +106,7 @@ export function Shell({
             </a>
           ))}
           {canReadAudit ? (
-            <a href={`${basePath}/ui/admin`}>
+            <a href={`${basePath}/ui/audit`}>
               <NavigationItem icon="审" active={active === "审计日志"}>审计日志</NavigationItem>
             </a>
           ) : (
