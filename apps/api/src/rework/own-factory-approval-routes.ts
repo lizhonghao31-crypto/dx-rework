@@ -23,7 +23,7 @@ const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T 
 export type OwnFactoryApprovalHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: HttpService;
-  root: RootAuthority;
+  root?: RootAuthority;
 }>;
 
 export function registerOwnFactoryApprovalRoutes(app: FastifyInstance, dependencies: OwnFactoryApprovalHttpDependencies): void {
@@ -33,14 +33,6 @@ export function registerOwnFactoryApprovalRoutes(app: FastifyInstance, dependenc
 
   app.get("/own-factory-approvals/queue", async (request) => OwnFactoryApprovalQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "own_factory:view"))));
   app.get("/rework-orders/:reworkOrderId/own-factory-approval", async (request) => OwnFactoryApprovalResponseSchema.parse(await dependencies.service.get(await actor(request, "own_factory:view"), parse(OwnFactoryApprovalOrderParamsSchema, request.params).reworkOrderId)));
-  app.post("/own-factory-approvals/:approvalId/approve", async (request, reply) => {
-    const result = await dependencies.service.approve(await actor(request, "own_factory:approve"), parse(OwnFactoryApprovalParamsSchema, request.params).approvalId, parse(ApproveOwnFactoryApprovalSchema, request.body), key(request));
-    if (result.reused) reply.header("idempotency-replayed", "true");
-    return OwnFactoryApprovalResponseSchema.parse(result.value);
-  });
-  app.post("/own-factory-approvals/:approvalId/reject", async (request, reply) => {
-    const result = await dependencies.service.reject(await actor(request, "own_factory:approve"), parse(OwnFactoryApprovalParamsSchema, request.params).approvalId, parse(RejectOwnFactoryApprovalSchema, request.body), key(request));
-    if (result.reused) reply.header("idempotency-replayed", "true");
-    return OwnFactoryApprovalResponseSchema.parse(result.value);
-  });
+  app.post("/own-factory-approvals/:approvalId/approve", async (request, reply) => { const result = await dependencies.service.approve(await actor(request, "own_factory:approve"), parse(OwnFactoryApprovalParamsSchema, request.params).approvalId, parse(ApproveOwnFactoryApprovalSchema, request.body), key(request)); if (result.reused) reply.header("idempotency-replayed", "true"); return OwnFactoryApprovalResponseSchema.parse(result.value); });
+  app.post("/own-factory-approvals/:approvalId/reject", async (request, reply) => { const result = await dependencies.service.reject(await actor(request, "own_factory:approve"), parse(OwnFactoryApprovalParamsSchema, request.params).approvalId, parse(RejectOwnFactoryApprovalSchema, request.body), key(request)); if (result.reused) reply.header("idempotency-replayed", "true"); return OwnFactoryApprovalResponseSchema.parse(result.value); });
 }
