@@ -24,9 +24,13 @@ const ROLE_LABELS: Record<string, string> = {
   quality_control: "质检",
   tail_supervisor: "尾部主管",
   ie_reviewer: "IE 审核",
-  administrative_clerk: "行政文员",
-  payables_accountant: "应付会计",
-  merchandiser: "跟单",
+  order_merchandiser: "订单跟单",
+  factory_payables: "加工厂应付会计",
+  embroidery_washing_payables: "印绣花洗水应付会计",
+  fabric_payables: "面料供应商应付会计",
+  payroll_review: "工资复核",
+  payroll_close: "工资月结会计",
+  finance_read: "财务全局查看",
   worker: "员工",
 };
 
@@ -72,26 +76,41 @@ export function Shell({
     };
   }, []);
 
-  const navigation: [string, string, string][] = [
-    ["总", "总览", "/ui/management"],
-    ["工", "返工任务", "/ui/tasks"],
-    ["责", "责任处理", "/ui/responsibility"],
-    ["审", "本厂审批", "/ui/own-factory-approvals"],
-    ["扣", "外部扣款", "/ui/external-responsibilities"],
-    ["计", "集体计件", "/ui/piecework/collective"],
-  ];
-  if (canManageEmployeeAccess) {
-    navigation.push(["权", "权限管理", "/ui/employee-access"]);
-  }
-
+  const isRoot = currentUser?.isRoot === true;
   const isOwner = currentUser?.businessRoles?.includes("owner_group") === true;
-  const canReadAudit = currentUser?.isRoot === true || isOwner || (
+  const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
+  const managementAccess = isRoot || isOwner || hasCapability("dashboard:management:read");
+  const initiationAccess = isRoot || isOwner
+    || currentUser?.businessRoles?.includes("quality_control") === true
+    || hasCapability("rework:initiate");
+  const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
+
+  const navigation: [string, string, string][] = [];
+  if (managementAccess) {
+    navigation.push(
+      ["总", "总览", "/ui/management"],
+      ["工", "返工任务", "/ui/tasks"],
+    );
+  }
+  if (initiationAccess) navigation.push(["发", "发起返工", "/ui/qc/new"]);
+  if (managementAccess) {
+    navigation.push(
+      ["责", "责任处理", "/ui/responsibility"],
+      ["审", "本厂审批", "/ui/own-factory-approvals"],
+      ["扣", "外部扣款", "/ui/external-responsibilities"],
+      ["计", "集体计件", "/ui/piecework/collective"],
+    );
+  }
+  if (masterDataAccess) navigation.push(["资", "基础资料", "/ui/master-data"]);
+  if (canManageEmployeeAccess) navigation.push(["权", "权限管理", "/ui/employee-access"]);
+
+  const canReadAudit = isRoot || isOwner || (
     currentUser?.businessRoles?.includes("system_admin") === true
     && currentUser.capabilities.includes("audit:read")
   );
   const roleLabels = currentUser
     ? [
-        ...(currentUser.isRoot === true ? ["超级用户"] : []),
+        ...(isRoot ? ["超级用户"] : []),
         ...(currentUser.businessRoles?.map(roleLabel) ?? []),
       ]
     : [];
@@ -113,11 +132,7 @@ export function Shell({
             <a href={`${basePath}/ui/audit`}>
               <NavigationItem icon="审" active={active === "审计日志"}>审计日志</NavigationItem>
             </a>
-          ) : (
-            <button className="nav-disabled" type="button" disabled aria-disabled="true">
-              <NavigationItem icon="审" active={false}>审计日志</NavigationItem>
-            </button>
-          )}
+          ) : null}
         </nav>
         <div className="org">
           {currentUser ? (
