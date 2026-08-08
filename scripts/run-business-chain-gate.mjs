@@ -55,7 +55,15 @@ if (hasDatabase) {
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const child = spawn(
   npmCommand,
-  ["exec", "--", "vitest", "run", ...tests],
+  [
+    "exec",
+    "--",
+    "vitest",
+    "run",
+    "--config",
+    "vitest.business-chain.config.ts",
+    ...tests,
+  ],
   {
     stdio: "inherit",
     env: process.env,
