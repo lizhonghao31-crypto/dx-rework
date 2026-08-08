@@ -6,6 +6,7 @@ export type AuthorizedUser = {
   displayName: string;
   capabilities: readonly string[];
   businessRoles?: readonly string[];
+  isRoot?: boolean;
 };
 type Me = { status: "authorized" | "no_role"; user: AuthorizedUser };
 export type PageAccessRequirement = {
@@ -17,6 +18,7 @@ export function hasPageAccess(
   user: AuthorizedUser,
   requirement: PageAccessRequirement = {},
 ): boolean {
+  if (user.isRoot === true) return true;
   return (
     (!requirement.requiredRole
       || user.businessRoles?.includes(requirement.requiredRole) === true)
