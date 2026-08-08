@@ -9,6 +9,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { shanghaiBusinessDate } from "./business-date.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { SearchSelect } from "./search-select.js";
 import "./external-responsibility.css";
@@ -106,11 +107,12 @@ export function ExternalResponsibilityPanel({
     const controller = new AbortController();
     void Promise.all([
       load(),
-      fetch(apiUrl("master-data/suppliers"), {
+      fetch(apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`), {
         credentials: "include",
         signal: controller.signal,
         headers: { accept: "application/json" },
       }).then(async (response) => {
+        if (response.status === 403) return [] as Supplier[];
         if (!response.ok) throw new Error(await requestError(response));
         return await response.json() as Supplier[];
       }),
@@ -358,7 +360,7 @@ export function ExternalResponsibilityPanel({
             expectedCaseVersion: caseItem.caseVersion,
             entryType: "deduction",
             amount: amount[caseItem.caseId]!.trim(),
-            deductedOn: new Date().toISOString().slice(0, 10),
+            deductedOn: shanghaiBusinessDate(),
             attachmentIds: files,
           },
         );
