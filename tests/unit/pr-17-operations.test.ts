@@ -27,6 +27,31 @@ const validateAcceptanceMatrix = (matrixPath: string, items: AcceptanceItem[]) =
   ]);
 };
 
+const completeFirstItem = (
+  matrix: { items: AcceptanceItem[] },
+  overrides: Record<string, unknown> = {},
+) => {
+  const releaseSha = "a".repeat(40);
+  Object.assign(matrix.items[0]!, {
+    result: "passed",
+    environment: "isolated-uat",
+    gitSha: releaseSha,
+    schemaVersion: "0038_worker_person_materialization",
+    testDataIds: ["synthetic-uat-01"],
+    roles: ["executor", "reviewer"],
+    steps: ["execute scenario"],
+    expected: "scenario passes",
+    actual: "scenario passed",
+    evidenceRefs: ["evidence://synthetic"],
+    executor: "executor-user",
+    reviewer: "reviewer-user",
+    executedAt: "2026-08-09T00:00:00.000Z",
+    defectLinks: [],
+    ...overrides,
+  });
+  return releaseSha;
+};
+
 describe("PR-17 operations evidence", () => {
   it("has exactly ordered UAT-01 through UAT-22 and accepts only validator-backed evidence", () => {
     const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json")) as { items: AcceptanceItem[] };
@@ -40,26 +65,25 @@ describe("PR-17 operations evidence", () => {
     ).status).toBe(0);
   });
 
-  it("rejects passed evidence without two independent people and evidence", () => {
+  it("rejects passed evidence without two independent people", () => {
     const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json")) as { items: AcceptanceItem[] };
-    const releaseSha = "a".repeat(40);
-    Object.assign(matrix.items[0]!, {
-      result: "passed",
-      environment: "isolated-uat",
-      gitSha: releaseSha,
-      schemaVersion: "0038_worker_person_materialization",
-      testDataIds: ["synthetic-uat-01"],
-      roles: ["executor", "reviewer"],
-      steps: ["execute scenario"],
-      expected: "scenario passes",
-      actual: "scenario passed",
-      evidenceRefs: ["evidence://synthetic"],
+    const releaseSha = completeFirstItem(matrix, {
       executor: "same",
-      reviewer: "same",
-      executedAt: "2026-08-09T00:00:00.000Z",
-      defectLinks: [],
+      reviewer: " same ",
     });
     const path = join(mkdtempSync(join(tmpdir(), "pr17-uat-")), "matrix.json");
+    writeFileSync(path, JSON.stringify(matrix));
+    expect(spawnSync("node", [
+      "scripts/acceptance/validate.mjs",
+      path,
+      releaseSha,
+    ]).status).not.toBe(0);
+  });
+
+  it("rejects placeholder evidence references instead of accepting a cosmetic pass", () => {
+    const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json")) as { items: AcceptanceItem[] };
+    const releaseSha = completeFirstItem(matrix, { evidenceRefs: ["TBD-evidence"] });
+    const path = join(mkdtempSync(join(tmpdir(), "pr17-uat-placeholder-")), "matrix.json");
     writeFileSync(path, JSON.stringify(matrix));
     expect(spawnSync("node", [
       "scripts/acceptance/validate.mjs",
