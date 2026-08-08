@@ -5,7 +5,7 @@ import {
 } from "@dx-rework/contracts";
 import { ResponsibilityTransferOptionsResponseSchema } from "@dx-rework/contracts/responsibility-transfer";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { SearchSelect } from "./search-select.js";
@@ -156,6 +156,7 @@ export function ResponsibilityDeterminationPanel({
   const [confirmationReason, setConfirmationReason] = useState("");
   const [message, setMessage] = useState("正在加载责任判定…");
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const pendingMutationKeys = useRef<Record<string, string>>({});
 
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next);
@@ -257,13 +258,17 @@ export function ResponsibilityDeterminationPanel({
     successMessage: string,
   ): Promise<void> => {
     if (!response || busyAction) return;
+    const signature = `${action}:${path}:${JSON.stringify(payload)}`;
+    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
+    pendingMutationKeys.current[signature] = idempotencyKey;
     setBusyAction(action);
     try {
       const next = await request(path, {
         method: "POST",
-        headers: { "idempotency-key": crypto.randomUUID() },
+        headers: { "idempotency-key": idempotencyKey },
         body: JSON.stringify(payload),
       });
+      delete pendingMutationKeys.current[signature];
       applyResponse(next);
       setMessage(successMessage);
     } catch (error: unknown) {
