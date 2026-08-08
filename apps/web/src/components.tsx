@@ -12,19 +12,40 @@ import type { Task } from "./types.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
+type ShellMe = Readonly<{
+  status?: string;
+  user?: AuthorizedUser;
+}>;
+
+const ROLE_LABELS: Record<string, string> = {
+  owner_group: "老板",
+  system_admin: "系统管理员",
+  production_management: "生产管理",
+  quality_control: "质检",
+  tail_supervisor: "尾部主管",
+  ie_reviewer: "IE 审核",
+  administrative_clerk: "行政文员",
+  payables_accountant: "应付会计",
+  merchandiser: "跟单",
+  worker: "员工",
+};
+
+const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
+
+let shellMeRequest: Promise<ShellMe | null> | undefined;
+function loadShellMe(): Promise<ShellMe | null> {
+  shellMeRequest ??= fetch(apiUrl("auth/me"), { credentials: "include" })
+    .then(async (response) => response.ok ? await response.json() as ShellMe : null)
+    .catch(() => null);
+  return shellMeRequest;
+}
+
 let employeeAccessPermission: Promise<boolean> | undefined;
 function loadEmployeeAccessPermission(): Promise<boolean> {
-  employeeAccessPermission ??= fetch(apiUrl("auth/me"), { credentials: "include" })
-    .then(async (response) => {
-      if (!response.ok) return false;
-      const body = await response.json() as {
-        status?: string;
-        user?: AuthorizedUser;
-      };
-      if (body.status !== "authorized" || !body.user) return false;
-      return hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" });
-    })
-    .catch(() => false);
+  employeeAccessPermission ??= loadShellMe().then((body) => {
+    if (body?.status !== "authorized" || !body.user) return false;
+    return hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" });
+  });
   return employeeAccessPermission;
 }
 
@@ -37,11 +58,14 @@ export function Shell({
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    void loadEmployeeAccessPermission().then((allowed) => {
-      if (mounted) setCanManageEmployeeAccess(allowed);
+    void Promise.all([loadShellMe(), loadEmployeeAccessPermission()]).then(([body, allowed]) => {
+      if (!mounted) return;
+      if (body?.status === "authorized" && body.user) setCurrentUser(body.user);
+      setCanManageEmployeeAccess(allowed);
     });
     return () => {
       mounted = false;
@@ -59,6 +83,14 @@ export function Shell({
   if (canManageEmployeeAccess) {
     navigation.push(["权", "权限管理", "/ui/employee-access"]);
   }
+
+  const canReadAudit = currentUser?.businessRoles?.includes("system_admin") === true
+    && currentUser.capabilities.includes("audit:read")
+    && currentUser.capabilities.includes("admin:read");
+  const roleText = currentUser?.businessRoles?.length
+    ? currentUser.businessRoles.map(roleLabel).join(" · ")
+    : "未分配角色";
+
   return (
     <div className="app-shell">
       <aside>
@@ -71,8 +103,23 @@ export function Shell({
               </NavigationItem>
             </a>
           ))}
+          {canReadAudit ? (
+            <a href={`${basePath}/ui/admin`}>
+              <NavigationItem icon="审" active={active === "审计日志"}>审计日志</NavigationItem>
+            </a>
+          ) : (
+            <button className="nav-disabled" type="button" disabled aria-disabled="true">
+              <NavigationItem icon="审" active={false}>审计日志</NavigationItem>
+            </button>
+          )}
         </nav>
         <div className="org">
+          {currentUser ? (
+            <div className="current-user">
+              <b>{currentUser.displayName}</b>
+              <small>{roleText}</small>
+            </div>
+          ) : null}
           <StatusBadge tone="success">组织内已认证</StatusBadge>
         </div>
       </aside>
