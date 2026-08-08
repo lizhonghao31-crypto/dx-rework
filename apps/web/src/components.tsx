@@ -17,6 +17,13 @@ type ShellMe = Readonly<{
   user?: AuthorizedUser;
 }>;
 
+type NavigationEntry = Readonly<{
+  step: string;
+  name: string;
+  description: string;
+  href: string;
+}>;
+
 const ROLE_LABELS: Record<string, string> = {
   owner_group: "老板",
   system_admin: "系统管理员",
@@ -52,6 +59,34 @@ function loadEmployeeAccessPermission(): Promise<boolean> {
     return hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" });
   });
   return employeeAccessPermission;
+}
+
+function FlowNavigation({
+  navigation,
+  active,
+  basePath,
+}: {
+  navigation: readonly NavigationEntry[];
+  active: string;
+  basePath: string;
+}) {
+  return (
+    <nav className="flow-navigation" aria-label="主导航">
+      {navigation.map((entry, index) => (
+        <div className="flow-navigation__entry" key={entry.name}>
+          <a href={`${basePath}${entry.href}`}>
+            <NavigationItem icon={entry.step} active={active === entry.name}>
+              <span className="flow-navigation__copy">
+                <strong>{entry.name}</strong>
+                <small>{entry.description}</small>
+              </span>
+            </NavigationItem>
+          </a>
+          {index < navigation.length - 1 ? <span className="flow-navigation__arrow" aria-hidden="true">↓</span> : null}
+        </div>
+      ))}
+    </nav>
+  );
 }
 
 export function Shell({
@@ -96,33 +131,109 @@ export function Shell({
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
 
-  const navigation: [string, string, string][] = [];
+  const navigation: NavigationEntry[] = [];
+  if (managementAccess) {
+    navigation.push({
+      step: "0",
+      name: "总览",
+      description: "看全局进度、待办和异常",
+      href: "/ui/management",
+    });
+  }
+  if (initiationAccess) {
+    navigation.push({
+      step: "1",
+      name: "发起返工",
+      description: "登记款号、问题、数量和证据",
+      href: "/ui/qc/new",
+    });
+  }
+  if (managementAccess) {
+    navigation.push({
+      step: "2",
+      name: "返工任务",
+      description: "查返工单状态并进入当前节点",
+      href: "/ui/tasks",
+    });
+  }
+  if (processAccess) {
+    navigation.push({
+      step: "3",
+      name: "工序配置",
+      description: "配工序单价并完成 IE 审核",
+      href: "/ui/process-configuration",
+    });
+  }
+  if (workAccess) {
+    navigation.push({
+      step: "4",
+      name: "分工上数",
+      description: "分配人员、上数并做整单审核",
+      href: "/ui/work-reporting",
+    });
+  }
   if (managementAccess) {
     navigation.push(
-      ["总", "总览", "/ui/management"],
-      ["工", "返工任务", "/ui/tasks"],
+      {
+        step: "5",
+        name: "责任处理",
+        description: "判定责任、倍率和承担比例",
+        href: "/ui/responsibility",
+      },
+      {
+        step: "6",
+        name: "本厂审批",
+        description: "老板确认本厂承担金额",
+        href: "/ui/own-factory-approvals",
+      },
+      {
+        step: "7",
+        name: "外部扣款",
+        description: "外部签收、应付确认和实扣跟进",
+        href: "/ui/external-responsibilities",
+      },
     );
   }
-  if (initiationAccess) navigation.push(["发", "发起返工", "/ui/qc/new"]);
-  if (processAccess) navigation.push(["序", "工序配置", "/ui/process-configuration"]);
-  if (workAccess) navigation.push(["数", "分工上数", "/ui/work-reporting"]);
-  if (managementAccess) {
-    navigation.push(
-      ["责", "责任处理", "/ui/responsibility"],
-      ["审", "本厂审批", "/ui/own-factory-approvals"],
-      ["扣", "外部扣款", "/ui/external-responsibilities"],
-      ["计", "集体计件", "/ui/piecework/collective"],
-    );
+  if (wageAccess) {
+    navigation.push({
+      step: "8",
+      name: "工资核对",
+      description: "返工工资初核、复核和月结",
+      href: "/ui/wages",
+    });
   }
-  if (wageAccess) navigation.push(["薪", "工资核对", "/ui/wages"]);
   if (masterDataAccess) {
     navigation.push(
-      ["资", "基础资料", "/ui/master-data"],
-      ["人", "人员资料", "/ui/people"],
+      {
+        step: "9",
+        name: "基础资料",
+        description: "维护工厂、供应商和工序",
+        href: "/ui/master-data",
+      },
+      {
+        step: "10",
+        name: "人员资料",
+        description: "维护作业人员和临时工",
+        href: "/ui/people",
+      },
     );
   }
-  if (canManageEmployeeAccess) navigation.push(["权", "权限管理", "/ui/employee-access"]);
-  if (auditAccess || technicalAdminAccess) navigation.push(["管", "系统管理", "/ui/admin"]);
+  if (canManageEmployeeAccess) {
+    navigation.push({
+      step: "11",
+      name: "权限管理",
+      description: "给在职员工分配业务角色",
+      href: "/ui/employee-access",
+    });
+  }
+  if (auditAccess || technicalAdminAccess) {
+    navigation.push({
+      step: "12",
+      name: "系统管理",
+      description: "审计、附件、代理和异常",
+      href: "/ui/admin",
+    });
+  }
 
   const roleLabels = currentUser
     ? [
@@ -131,20 +242,13 @@ export function Shell({
       ]
     : [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "未分配角色";
+  const activeEntry = navigation.find((entry) => entry.name === active);
 
   return (
     <div className="app-shell">
       <aside>
         <h2>达兴 · 质检返工</h2>
-        <nav aria-label="主导航">
-          {navigation.map(([icon, name, href]) => (
-            <a href={`${basePath}${href}`} key={name}>
-              <NavigationItem icon={icon!} active={active === name}>
-                {name}
-              </NavigationItem>
-            </a>
-          ))}
-        </nav>
+        <FlowNavigation navigation={navigation} active={active} basePath={basePath} />
         <div className="org">
           {currentUser ? (
             <div className="current-user">
@@ -155,6 +259,15 @@ export function Shell({
           <StatusBadge tone="success">组织内已认证</StatusBadge>
         </div>
       </aside>
+
+      <details className="mobile-flow-navigation">
+        <summary>
+          <span>流程导航</span>
+          <b>{activeEntry ? `${activeEntry.step}. ${activeEntry.name}` : active}</b>
+        </summary>
+        <FlowNavigation navigation={navigation} active={active} basePath={basePath} />
+      </details>
+
       <main>{children}</main>
     </div>
   );
