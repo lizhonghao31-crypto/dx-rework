@@ -28,9 +28,10 @@ describe("PR-31 employee access contracts", () => {
     expect(EmployeeAccessReasonSchema.safeParse({}).success).toBe(false);
   });
 
-  it("keeps bootstrap default-off and requires both bound userid and secret", () => {
+  it("keeps bootstrap default-off and supports a private root identity", () => {
     const disabled = loadConfig({ ...baseEnvironment });
     expect(disabled.ownerBootstrap.enabled).toBe(false);
+    expect(disabled.rootDingtalkUserId).toBeUndefined();
 
     expect(() => loadConfig({
       ...baseEnvironment,
@@ -39,9 +40,11 @@ describe("PR-31 employee access contracts", () => {
 
     const enabled = loadConfig({
       ...baseEnvironment,
+      ROOT_DINGTALK_USER_ID: "root-userid",
       OWNER_BOOTSTRAP_DINGTALK_USER_ID: "manager-userid",
       OWNER_BOOTSTRAP_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
     });
+    expect(enabled.rootDingtalkUserId).toBe("root-userid");
     expect(enabled.ownerBootstrap).toMatchObject({ enabled: true, dingtalkUserId: "manager-userid" });
     expect(EmployeeAccessBootstrapSchema.safeParse({
       secret: "abcdefghijklmnopqrstuvwxyz123456",
@@ -49,18 +52,38 @@ describe("PR-31 employee access contracts", () => {
     }).success).toBe(true);
   });
 
-  it("gates the employee access page and navigation to owner_group plus access:admin", async () => {
+  it("admits owners to employee access and keeps owner navigation available", async () => {
     const [app, components] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/employee-access"');
-    expect(app).toContain('requiredRole="owner_group" requiredCapability="access:admin"');
+    expect(app).toContain('{ requiredRole: "owner_group" }');
     expect(components).toContain('hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })');
     const guard = components.indexOf("if (canManageEmployeeAccess)");
     const link = components.indexOf('["权", "权限管理", "/ui/employee-access"]');
     expect(guard).toBeGreaterThan(-1);
     expect(link).toBeGreaterThan(guard);
+  });
+
+  it("keeps owner and system administrator as root-only protected roles", async () => {
+    const [authority, accessRoutes, employeeRoutes, employeePage, deployLib] = await Promise.all([
+      readFile("apps/api/src/access/root-authority.ts", "utf8"),
+      readFile("apps/api/src/access/routes.ts", "utf8"),
+      readFile("apps/api/src/access/employee-access-routes.ts", "utf8"),
+      readFile("apps/web/src/employee-access-page.tsx", "utf8"),
+      readFile("scripts/deploy/lib.sh", "utf8"),
+    ]);
+    expect(authority).toContain('new Set(["owner_group", "system_admin"])');
+    expect(authority).toContain("ROOT").not;
+    expect(authority).toContain("assertProtectedRoleMutation");
+    expect(authority).toContain("assertTargetAccessMutation");
+    expect(accessRoutes).toContain("filterAssignableRoles");
+    expect(accessRoutes).toContain("assertProtectedRoleMutation");
+    expect(employeeRoutes).toContain("assertAssignmentMutation");
+    expect(employeeRoutes).toContain("assertTargetAccessMutation");
+    expect(employeePage).toContain('new Set(["owner_group", "system_admin"])');
+    expect(deployLib).toContain("ROOT_DINGTALK_USER_ID");
   });
 
   it("keeps owner bootstrap one-time at the database boundary", async () => {
@@ -97,9 +120,10 @@ describe("PR-31 employee access contracts", () => {
     expect(service).toContain("employed: row.employed");
   });
 
-  it("does not expose bootstrap secret in the employee page", async () => {
+  it("does not expose bootstrap or root identity values in the employee page", async () => {
     const page = await readFile("apps/web/src/employee-access-page.tsx", "utf8");
     expect(page).not.toContain("OWNER_BOOTSTRAP_SECRET");
     expect(page).not.toContain("employee-access/bootstrap");
+    expect(page).not.toContain("ROOT_DINGTALK_USER_ID");
   });
 });
