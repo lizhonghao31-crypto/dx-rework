@@ -78,7 +78,7 @@ export function ResponsibilityQueuePage() {
         <div>
           <h2>责任处理入口</h2>
           <p>
-            点击返工单进入真实 UUID 详情；金额、处理人、接管和高倍率权限继续由服务端逐单校验。
+            点击返工单进入责任详情；金额、处理人、接管和高倍率权限继续由服务端逐单校验。
           </p>
         </div>
         <StatusBadge tone="info">N07 · 待判责</StatusBadge>
