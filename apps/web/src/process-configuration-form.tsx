@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { SearchSelect } from "./search-select.js";
 import "./process-configuration-form.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -248,6 +249,15 @@ export function ProcessConfigurationForm() {
     }));
   };
 
+  const selectCatalogProcess = (index: number, processId: string) => {
+    const current = items[index];
+    if (!current) return;
+    const selected = options.processes.find((process) => process.processId === processId);
+    const nextUnit = selected?.pricingUnit ?? current.pricingUnit;
+    setItem(index, { processId });
+    setPricingUnit(index, nextUnit);
+  };
+
   const validateCurrentForm = (): boolean => {
     const itemError = validateItemForms(items);
     if (itemError) {
@@ -409,12 +419,23 @@ export function ProcessConfigurationForm() {
           <label className="process-source"><input type="radio" checked={item.source === "catalog"} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} disabled={busy} /> 公共工序</label>
           <label className="process-source"><input type="radio" checked={item.source === "custom"} onChange={() => setItem(index, { source: "custom", processId: "" })} disabled={busy} /> 自定义工序</label>
           {item.source === "catalog"
-            ? <SelectField label="选择公共工序"><select value={item.processId} onChange={(event) => {
-              const selected = options.processes.find((process) => process.processId === event.target.value);
-              const nextUnit = selected?.pricingUnit ?? item.pricingUnit;
-              setItem(index, { processId: event.target.value });
-              setPricingUnit(index, nextUnit);
-            }} disabled={busy}><option value="">请选择</option>{options.processes.map((process) => <option key={process.processId} value={process.processId}>{process.processName} · {process.pricingUnit === "piece" ? "件" : "小时"}</option>)}</select></SelectField>
+            ? <label className="dx-field">
+              <span>选择公共工序</span>
+              <span className="dx-field__control search-select-control">
+                <SearchSelect
+                  options={options.processes.map((process) => ({
+                    value: process.processId,
+                    label: `${process.processName} · ${process.pricingUnit === "piece" ? "件" : "小时"}`,
+                    keywords: `${process.processName} ${process.pricingUnit === "piece" ? "按件 件" : "按小时 小时"}`,
+                  }))}
+                  value={item.processId}
+                  placeholder={options.processes.length ? "输入工序名称搜索" : "暂无公共工序"}
+                  emptyText="没有匹配的公共工序"
+                  disabled={busy}
+                  onChange={(processId) => selectCatalogProcess(index, processId)}
+                />
+              </span>
+            </label>
             : <InsetField label="自定义工序" value={item.customProcessName} onChange={(event) => setItem(index, { customProcessName: event.target.value })} disabled={busy} placeholder="例如：特殊翻边返修" />}
           <div className="process-line__grid">
             <InsetField label={item.pricingUnit === "piece" ? "计划数量（件）" : "计划工时（小时）"} inputMode="decimal" value={item.plannedQuantity} onChange={(event) => setItem(index, { plannedQuantity: event.target.value })} disabled={busy} />
