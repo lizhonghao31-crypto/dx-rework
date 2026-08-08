@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const reviewRefreshMilliseconds = 15_000;
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), { credentials: "include", ...init, headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers } });
   if (!response.ok) { const body = await response.json().catch(() => null) as { error?: { message?: string } } | null; throw new Error(body?.error?.message ?? "请求未完成，请稍后重试"); }
@@ -48,7 +49,34 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     setData(overview);
     setMessage(overview.reviewId ? "整单已审核，已进入待责任判定。" : "数量与驳回均以服务端当前有效记录为准。");
   };
-  useEffect(() => { void load().catch(() => setData(null)); }, [reworkOrderId]);
+  useEffect(() => {
+    let requestInFlight = false;
+    let hasLoaded = false;
+    const refresh = async (): Promise<void> => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        await load();
+        hasLoaded = true;
+      } catch {
+        if (!hasLoaded) setData(null);
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    const refreshVisible = (): void => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    void refresh();
+    const intervalId = window.setInterval(refreshVisible, reviewRefreshMilliseconds);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [reworkOrderId]);
   const call = async <T,>(path: string, parse: (value: unknown) => T, body: unknown, method = "POST") => {
     const signature = path + JSON.stringify(body);
     const idempotencyKey = attempts.current[signature] ?? crypto.randomUUID();
