@@ -182,7 +182,7 @@ export function App() {
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
   else if (path === "/ui/external-responsibilities") page = <ExternalResponsibilityQueuePage />;
-  else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <WagePage path={path} />;
+  else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <Shell active="工资核对"><WagePage path={path} /></Shell>;
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
