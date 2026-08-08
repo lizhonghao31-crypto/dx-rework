@@ -92,7 +92,9 @@ export function registerProcessConfigurationRoutes(
         dependencies.root,
         user,
         request.id,
-        BUSINESS_READ_ALL_CAPABILITY,
+        "process:configure",
+        "tail_supervisor",
+        true,
       );
     }
     if (isSupervisor) {
