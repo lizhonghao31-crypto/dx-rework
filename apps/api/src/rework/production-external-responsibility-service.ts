@@ -36,6 +36,23 @@ type PermissionRow = {
   can_close: boolean;
 };
 
+type DatabaseError = Readonly<{ code?: unknown; message?: unknown }>;
+
+const databaseError = (error: unknown): DatabaseError | null =>
+  typeof error === "object" && error !== null ? error as DatabaseError : null;
+
+const deductionLedgerValidationMessage = (error: unknown): string | null => {
+  const candidate = databaseError(error);
+  if (candidate?.code !== "23514" || typeof candidate.message !== "string") return null;
+  if (candidate.message.includes("external deduction cumulative actual must stay between zero and proposed amount")) {
+    return "累计实扣金额不能低于 0，也不能超过当前拟扣金额。";
+  }
+  if (candidate.message.includes("external deduction correction must reference an entry from the same case")) {
+    return "扣款调整或冲销只能引用当前这笔扣款台账中的原流水。";
+  }
+  return null;
+};
+
 /**
  * Single production PR-11 service used by HTTP wiring and PostgreSQL workflow
  * tests. Action-specific permissions are re-evaluated from the database so an
@@ -133,7 +150,13 @@ export class ProductionExternalResponsibilityService
       caseId,
       "external_deduction:record",
     );
-    return super.recordDeduction(actor, caseId, input, key);
+    try {
+      return await super.recordDeduction(actor, caseId, input, key);
+    } catch (error: unknown) {
+      const message = deductionLedgerValidationMessage(error);
+      if (message) throw new ApplicationError("VALIDATION_ERROR", message, 400);
+      throw error;
+    }
   }
 
   override async close(
