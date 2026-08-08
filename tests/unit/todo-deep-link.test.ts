@@ -26,6 +26,15 @@ describe("todo deep links", () => {
     })).toBe(`/ui/wages/${entityId}?todo=${todoId}`);
   });
 
+  it("opens whole-order review todos directly in the N06 workspace", () => {
+    expect(buildTodoDeepLink("/", {
+      routeName: "whole_order_review",
+      entityId,
+      reworkOrderId: "00000000-0000-4000-8000-000000000017",
+      todoId,
+    })).toBe(`/ui/work-reporting?todo=${todoId}&rework=00000000-0000-4000-8000-000000000017`);
+  });
+
   it("rejects an unsafe deployment base path instead of accepting an arbitrary URL", () => {
     expect(() => buildTodoDeepLink("https://example.test/", {
       routeName: "rework_detail",
