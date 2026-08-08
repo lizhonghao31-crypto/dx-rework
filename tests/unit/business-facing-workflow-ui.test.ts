@@ -53,4 +53,19 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain('label="比例（bps）"');
     expect(source).not.toContain("返工单：{response?.reworkOrderId");
   });
+
+  it("keeps the external deduction workspace in business language and only shows usable fields", async () => {
+    const source = await read("apps/web/src/external-responsibility-panel.tsx");
+    expect(source).toContain("responsibilityTypeLabel[caseItem.responsibilityType]");
+    expect(source).toContain("bpsToPercent(item.shareBpsSnapshot)");
+    expect(source).toContain("deductionEntryLabel[entry.entryType]");
+    expect(source).toContain("closureResultLabel[caseItem.closure.result]");
+    expect(source).toContain("caseItem.canRecordDeduction && <InsetField");
+    expect(source).toContain("hasEditableFields && <div className=\"external-operation\"");
+    expect(source).not.toContain("item.configurationItemId)} · {item.responsibilityType}");
+    expect(source).not.toContain("{caseItem.responsibilityType}");
+    expect(source).not.toContain("{item.shareBpsSnapshot} bps");
+    expect(source).not.toContain("· 版本 {caseItem.caseVersion}");
+    expect(source).not.toContain("已生成 N07 草稿 {item.seededDeterminationId}");
+  });
 });
