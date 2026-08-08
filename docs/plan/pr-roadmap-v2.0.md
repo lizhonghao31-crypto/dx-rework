@@ -79,8 +79,8 @@ PR-14/15 → PR-16 → PR-17
 
 ## 5. 当前下一步
 
-1. **PR-17 A 阶段仓库施工已合并。** Release 打包、fail-closed 部署、PostgreSQL 备份与隔离恢复、回滚、logrotate、Nginx/PM2 模板、手动发布工作流和 UAT 证据模板均以当前 `main` 为准，不再重复建设 A 阶段。
-2. **当前进入 B 阶段隔离运行时验证。** 只能部署最新 `main` 的 Exact SHA；依次验证 shared staging `/rework/`、current-schema 前向迁移、内外部 smoke、备份→隔离恢复、回滚、logrotate、OSS、钉钉登录与 Todo 深链。未在真实环境执行的项目保持未通过，不能用仓库静态检查代替。
+1. **PR-17 A 阶段大部分仓库施工已合并，但 OSS 生产运行时接线仍是明确的仓库侧阻塞。** Release 打包、fail-closed 部署、PostgreSQL 备份与隔离恢复、回滚、logrotate、Nginx/PM2 模板、手动发布工作流和 UAT 证据模板均以当前 `main` 为准，不再重复建设；当前 `server.ts` 在启用 OSS 时仍会 fail closed，必须在锁文件一致、官方 SDK 可验证的前提下完成生产注入后，才能把 OSS 归入纯环境验收。
+2. **B 阶段隔离运行时验证在 OSS 接线完成后继续。** 只能部署最新 `main` 的 Exact SHA；依次验证 shared staging `/rework/`、current-schema 前向迁移、内外部 smoke、备份→隔离恢复、回滚、logrotate、OSS、钉钉登录与 Todo 深链。未在真实环境执行的项目保持未通过，不能用仓库静态检查代替。
 3. **C/D 阶段仍未完成。** S-04 书面关闭及 B 阶段证据齐全后，才进入达兴广州尾部少量工序、2 名工人的约 2 小时试点；22 项 UAT、试点复盘和上线门槛全部满足后才可正式上线。
 
 ## 6. PR-01A Figma 交付证据（2026-08-01）
