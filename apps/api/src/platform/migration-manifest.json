@@ -147,6 +147,10 @@
     {
       "version": "0037_system_admin_role_description",
       "checksum": "853b2e3b4c562228ee3b08aa01947f684482fb3bd748196f7f725324113c1e7a"
+    },
+    {
+      "version": "0038_worker_person_materialization",
+      "checksum": "50ae12df6d1dfaf7f6b309f74796f56d969aa5d6c322d233e60832960fba2d19"
     }
   ]
 }
