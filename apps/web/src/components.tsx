@@ -91,6 +91,7 @@ export function Shell({
     || (hasRole("tail_supervisor") && hasCapability("work:assign"))
     || (hasRole("worker") && hasCapability("work:report"))
     || hasCapability("work:report_for_worker");
+  const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
@@ -113,6 +114,7 @@ export function Shell({
       ["计", "集体计件", "/ui/piecework/collective"],
     );
   }
+  if (wageAccess) navigation.push(["薪", "工资核对", "/ui/wages"]);
   if (masterDataAccess) navigation.push(["资", "基础资料", "/ui/master-data"]);
   if (canManageEmployeeAccess) navigation.push(["权", "权限管理", "/ui/employee-access"]);
   if (auditAccess || technicalAdminAccess) navigation.push(["管", "系统管理", "/ui/admin"]);
