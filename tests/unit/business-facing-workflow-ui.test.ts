@@ -80,6 +80,14 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain('deductionDate > shanghaiBusinessDate()');
   });
 
+  it("lets one rework reference multiple order numbers without changing the one-style boundary", async () => {
+    const source = await read("apps/web/src/rework-form.tsx");
+    expect(source).toContain("一张返工单一个款号");
+    expect(source).toContain('label="订单号（可填多个，知道时填写）"');
+    expect(source).toContain('maxLength={100}');
+    expect(source).toContain('placeholder="多个订单号用逗号分隔，例如：PO001，PO002"');
+  });
+
   it("keeps worker reporting mobile-friendly without exposing the internal order id", async () => {
     const source = await read("apps/web/src/work-reporting-form.tsx");
     expect(source).toContain("actualQuantity > task.remainingQuantity");
