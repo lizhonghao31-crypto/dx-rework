@@ -53,8 +53,34 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
       if (isRoot) return businessActor(dependencies.root, user, request.id, "work:report_for_worker", "tail_supervisor");
       return businessActor(dependencies.root, user, request.id, worker ? "work:report" : "work:report_for_worker");
     }
-    if (isRoot || ownerReader) {
-      return businessActor(dependencies.root, user, request.id, "work:assign", "tail_supervisor", true);
+    if (isRoot) {
+      const rootActor = await businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        "work:assign",
+        "tail_supervisor",
+      );
+      return {
+        ...rootActor,
+        authorizationCapabilities: [
+          ...new Set([
+            ...(rootActor.authorizationCapabilities ?? []),
+            "work:assign",
+            "work:report_for_worker",
+          ]),
+        ],
+      };
+    }
+    if (ownerReader) {
+      return businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        "work:assign",
+        "tail_supervisor",
+        true,
+      );
     }
     if (supervisor) return businessActor(dependencies.root, user, request.id, "work:assign");
     if (worker) return businessActor(dependencies.root, user, request.id, "work:report");
