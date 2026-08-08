@@ -6,30 +6,66 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
+type AcceptanceItem = {
+  id: string;
+  result: "not_run" | "passed" | "failed" | "blocked";
+  gitSha: string;
+  [key: string]: unknown;
+};
+
+const validateAcceptanceMatrix = (matrixPath: string, items: AcceptanceItem[]) => {
+  const executed = items.filter((item) => item.result !== "not_run");
+  const executedShas = [...new Set(executed.map((item) => item.gitSha))];
+  if (executed.length > 0) {
+    expect(executedShas).toHaveLength(1);
+    expect(executedShas[0]).toMatch(/^[0-9a-f]{40}$/);
+  }
+  return spawnSync("node", [
+    "scripts/acceptance/validate.mjs",
+    matrixPath,
+    ...(executedShas[0] ? [executedShas[0]] : []),
+  ]);
+};
+
 describe("PR-17 operations evidence", () => {
-  it("has exactly ordered UAT-01 through UAT-22 with no fabricated pass", () => {
-    const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json"));
+  it("has exactly ordered UAT-01 through UAT-22 and accepts only validator-backed evidence", () => {
+    const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json")) as { items: AcceptanceItem[] };
     expect(matrix.items).toHaveLength(22);
-    expect(matrix.items.map((item: { id: string }) => item.id)).toEqual(
+    expect(matrix.items.map((item) => item.id)).toEqual(
       Array.from({ length: 22 }, (_, index) => `UAT-${String(index + 1).padStart(2, "0")}`),
     );
-    expect(matrix.items.every((item: { result: string }) => item.result === "not_run")).toBe(true);
-    expect(
-      spawnSync("node", [
-        "scripts/acceptance/validate.mjs",
-        "docs/operations/pr-17-acceptance-matrix.json",
-      ]).status,
-    ).toBe(0);
+    expect(validateAcceptanceMatrix(
+      "docs/operations/pr-17-acceptance-matrix.json",
+      matrix.items,
+    ).status).toBe(0);
   });
 
   it("rejects passed evidence without two independent people and evidence", () => {
-    const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json"));
-    matrix.items[0].result = "passed";
-    matrix.items[0].executor = "same";
-    matrix.items[0].reviewer = "same";
+    const matrix = JSON.parse(read("docs/operations/pr-17-acceptance-matrix.json")) as { items: AcceptanceItem[] };
+    const releaseSha = "a".repeat(40);
+    Object.assign(matrix.items[0]!, {
+      result: "passed",
+      environment: "isolated-uat",
+      gitSha: releaseSha,
+      schemaVersion: "0038_worker_person_materialization",
+      testDataIds: ["synthetic-uat-01"],
+      roles: ["executor", "reviewer"],
+      steps: ["execute scenario"],
+      expected: "scenario passes",
+      actual: "scenario passed",
+      evidenceRefs: ["evidence://synthetic"],
+      executor: "same",
+      reviewer: "same",
+      executedAt: "2026-08-09T00:00:00.000Z",
+      defectLinks: [],
+    });
     const path = join(mkdtempSync(join(tmpdir(), "pr17-uat-")), "matrix.json");
     writeFileSync(path, JSON.stringify(matrix));
-    expect(spawnSync("node", ["scripts/acceptance/validate.mjs", path]).status).not.toBe(0);
+    expect(spawnSync("node", [
+      "scripts/acceptance/validate.mjs",
+      path,
+      releaseSha,
+    ]).status).not.toBe(0);
   });
 
   it("manual workflow packages exact main without repeating the full CI suite", () => {
