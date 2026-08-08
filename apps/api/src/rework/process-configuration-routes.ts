@@ -33,7 +33,11 @@ const parse = <T>(
 ): T => {
   const result = schema.safeParse(value);
   if (!result.success) {
-    throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+    throw new ApplicationError(
+      "VALIDATION_ERROR",
+      "工序配置参数不完整或格式不正确，请检查工序、计划数量、计价单位和单价",
+      400,
+    );
   }
   return result.data;
 };
