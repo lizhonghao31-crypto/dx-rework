@@ -12,15 +12,15 @@ describe("达兴统一钉钉登录入口", () => {
     expect(auth).not.toContain("window.location.assign(body.authorizationUrl)");
   });
 
-  it("serializes QR challenge creation and disables regeneration while pending", async () => {
+  it("reuses one QR challenge per page and only resets it on explicit regeneration", async () => {
     const auth = await readFile("apps/web/src/auth.tsx", "utf8");
-    expect(auth).toContain("const challengeBusy = useRef(true);");
-    expect(auth).toContain("const challengeQueue = useRef<Promise<void>>(Promise.resolve());");
-    expect(auth).toContain("const previousStart = challengeQueue.current;");
-    expect(auth).toContain("await previousStart;");
+    expect(auth).toContain("let qrStartPromise: Promise<QrStartResponse> | undefined;");
+    expect(auth).toContain("async function getQrStart()");
+    expect(auth).toContain("function resetQrStart(): void");
+    expect(auth).toContain("const body = await getQrStart();");
     expect(auth).toContain("if (challengeBusy.current) return;");
     expect(auth).toContain("<Button disabled={starting} onClick={regenerate}>重新生成二维码</Button>");
-    expect(auth).not.toContain("<Button onClick={() => setAttempt((value) => value + 1)}>重新生成二维码</Button>");
+    expect(auth).not.toContain("QR_AUTO_REFRESH_MS");
   });
 
   it("routes the same-origin relay before protected business pages", async () => {
