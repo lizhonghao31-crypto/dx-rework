@@ -139,6 +139,10 @@
     {
       "version": "0035_role_management_policy_closure",
       "checksum": "44d052f64826ab5a039d822ca1dda9de6363f4d12850b7501278d0f9764a9934"
+    },
+    {
+      "version": "0036_permission_authority_closure",
+      "checksum": "769b440b016f996344761cd7ebae01adf612be2ec87a6552000645ca38ea0ddb"
     }
   ]
 }
