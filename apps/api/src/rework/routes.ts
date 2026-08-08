@@ -53,23 +53,18 @@ export function registerReworkRoutes(
   const actor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    const isOwner = user.businessRoles?.includes("owner_group") === true;
+    const isQualityControl = user.businessRoles?.includes("quality_control") === true
+      && user.capabilities.includes("rework:initiate");
     if (!user.businessRoles?.length && !isRoot) {
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
     }
-    if (
-      !isRoot
-      && (
-        !user.businessRoles?.includes("quality_control")
-        || !user.capabilities.includes("rework:initiate")
-      )
-    ) {
-      throw new ApplicationError("FORBIDDEN", "只有品控人员可以发起和维护返工单", 403);
+    if (!isRoot && !isOwner && !isQualityControl) {
+      throw new ApplicationError("FORBIDDEN", "只有品控、老板或超级用户可以发起和维护返工单", 403);
     }
     const actorRoles = [...(user.businessRoles ?? [])];
-    if (isRoot) {
-      actorRoles.push("root_superuser");
-      if (!actorRoles.includes("quality_control")) actorRoles.push("quality_control");
-    }
+    if (isRoot && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
+    if ((isRoot || isOwner) && !actorRoles.includes("quality_control")) actorRoles.push("quality_control");
     return {
       actorId: user.id,
       actorRoles,
