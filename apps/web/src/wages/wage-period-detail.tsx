@@ -122,10 +122,10 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
 
   if (!detail) {
     return (
-      <main className="wage-page">
+      <div className="wage-page">
         <h1>工资详情</h1>
         <Surface><p>{message || "正在加载工资期间…"}</p></Surface>
-      </main>
+      </div>
     );
   }
   const { period, items, adjustments, reviewActions } = detail;
@@ -138,7 +138,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
         : "已锁定";
 
   return (
-    <main className="wage-page">
+    <div className="wage-page">
       <header className="page-heading">
         <div>
           <p className="eyebrow">N10-A · {period.periodMonth.slice(0, 7)}</p>
@@ -269,6 +269,6 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
         ))}
         {period.lockedAt && <p>锁定时间：{period.lockedAt}</p>}
       </Surface>
-    </main>
+    </div>
   );
 }
