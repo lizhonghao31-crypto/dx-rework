@@ -147,6 +147,32 @@
   margin-bottom: 0;
 }
 
+/* `.mobile-actions` is the sticky page footer by default. Some N06 rows reuse
+   the same action group inside a card; those inline controls must stay in the
+   row instead of becoming competing sticky footers. */
+.section-title > .mobile-actions {
+  position: static;
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.section-title > .mobile-actions .dx-field {
+  flex: 1 1 160px;
+  min-width: 160px;
+}
+
+.section-title > .mobile-actions .dx-button {
+  flex: 0 1 auto;
+  width: auto;
+}
+
 @media (max-width: 800px) {
   .app-shell {
     display: block;
@@ -211,6 +237,16 @@
 
   .section-title {
     align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .section-title > .mobile-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .section-title > .mobile-actions .dx-button {
+    flex: 1 1 140px;
   }
 }
 
@@ -226,5 +262,11 @@
   .mobile-flow-navigation {
     padding-right: 12px;
     padding-left: 12px;
+  }
+
+  .section-title > .mobile-actions .dx-field,
+  .section-title > .mobile-actions .dx-button {
+    flex-basis: 100%;
+    width: 100%;
   }
 }
