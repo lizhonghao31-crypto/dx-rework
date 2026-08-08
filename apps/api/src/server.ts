@@ -24,6 +24,7 @@ import { ExternalResponsibilityApplicationService } from "./rework/external-resp
 import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
+import { ReworkBusinessDetailService } from "./rework/rework-business-detail-service.js";
 import { ReworkInitiationService } from "./rework/service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
@@ -89,6 +90,7 @@ const reworkService = new ReworkInitiationService(
   undefined,
   todoProjection,
 );
+const reworkBusinessDetailService = new ReworkBusinessDetailService(database);
 const erpIntegrationService = new ErpIntegrationService(
   database,
   config.dingtalk.corpId,
@@ -155,6 +157,7 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    businessDetailService: reworkBusinessDetailService,
     root: rootAuthority,
     listInitiationOptions: async () => {
       const [directory, suppliers] = await Promise.all([
