@@ -31,17 +31,27 @@ type LandingMe = {
   user: AuthorizedUser;
 };
 
-function resolvePath(basePath: string): string {
-  return window.location.pathname.startsWith(basePath)
-    ? window.location.pathname.slice(basePath.length) || "/"
-    : window.location.pathname;
+type InternalLocation = Readonly<{
+  path: string;
+  search: string;
+  hash: string;
+}>;
+
+function readInternalLocation(basePath: string): InternalLocation {
+  return {
+    path: window.location.pathname.startsWith(basePath)
+      ? window.location.pathname.slice(basePath.length) || "/"
+      : window.location.pathname,
+    search: window.location.search,
+    hash: window.location.hash,
+  };
 }
 
-function useInternalPath(basePath: string): string {
-  const [path, setPath] = useState(() => resolvePath(basePath));
+function useInternalLocation(basePath: string): InternalLocation {
+  const [location, setLocation] = useState(() => readInternalLocation(basePath));
 
   useEffect(() => {
-    const sync = () => setPath(resolvePath(basePath));
+    const sync = () => setLocation(readInternalLocation(basePath));
     const navigate = (event: MouseEvent) => {
       if (
         event.defaultPrevented
@@ -77,7 +87,7 @@ function useInternalPath(basePath: string): string {
     };
   }, [basePath]);
 
-  return path;
+  return location;
 }
 
 function HomeLanding() {
@@ -142,7 +152,7 @@ function HomeLanding() {
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const path = useInternalPath(basePath);
+  const { path } = useInternalLocation(basePath);
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;
