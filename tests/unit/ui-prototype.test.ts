@@ -17,6 +17,12 @@ const processConfigurationForm = read("../../apps/web/src/process-configuration-
 
 describe("PR-01A UI prototype contract", () => {
   it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/process-configuration", "/ui/piecework/collective", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
+  it("routes the authenticated root to a business landing instead of the technical foundation", () => {
+    expect(app).toContain('if (path === "/") return <HomeLanding />;');
+    expect(app).toContain('target = "ui/management"');
+    expect(app).toContain('user.businessRoles?.includes("owner_group")');
+    expect(app).not.toContain("else page = <Foundation />;");
+  });
   it("exports and explicitly imports reusable UI styles", () => {
     expect(existsSync(new URL("../../packages/ui/src/tokens.css", import.meta.url))).toBe(true);
     expect(existsSync(new URL("../../packages/ui/src/components.css", import.meta.url))).toBe(true);
