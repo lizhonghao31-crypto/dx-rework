@@ -147,4 +147,26 @@ describe("business-chain UI handoff contracts", () => {
     expect(source).toContain("部分扣款或未扣成功关闭必须先上传扣款结果证据");
     expect(source).toContain("部分扣款或未扣成功关闭必须填写剩余差额最终处理方式");
   });
+
+  it("keeps N07-N08 queue header actions as real navigation rather than dead buttons", async () => {
+    const [responsibilityQueue, ownFactoryQueue, externalQueue] = await Promise.all([
+      readFile("apps/web/src/responsibility-queue-page.tsx", "utf8"),
+      readFile("apps/web/src/own-factory-approval-queue-page.tsx", "utf8"),
+      readFile("apps/web/src/external-responsibility-queue-page.tsx", "utf8"),
+    ]);
+    expect(responsibilityQueue).toContain('actionHref="/ui/tasks"');
+    expect(ownFactoryQueue).toContain('actionHref="/ui/responsibility"');
+    expect(externalQueue).toContain('actionHref="/ui/responsibility"');
+  });
+
+  it("keeps N08-A approval retry-safe and visually prioritizes the safe forward action", async () => {
+    const source = await readFile(
+      "apps/web/src/own-factory-approval-panel.tsx",
+      "utf8",
+    );
+    expect(source).toContain("pendingDecisionKeys");
+    expect(source).toContain('"idempotency-key": idempotencyKey');
+    expect(source).toContain('variant="primary" disabled={Boolean(busy)} onClick={() => void decide("approved")}');
+    expect(source).toContain('<Button disabled={Boolean(busy)} onClick={() => void decide("rejected")}>驳回并退回 N07</Button>');
+  });
 });
