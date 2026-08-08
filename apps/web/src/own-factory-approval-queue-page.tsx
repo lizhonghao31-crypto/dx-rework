@@ -96,6 +96,7 @@ export function OwnFactoryApprovalQueuePage() {
                 title: item.canDecide ? "本厂承担待终局审批" : "本厂承担待查看",
                 meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", item.problemPart ?? "问题部位未填写", `本厂 ¥${item.ownFactoryTotalAmount}`, item.canDecide ? "可审批" : "仅查看"].join(" · "),
                 tone: item.canDecide ? "warning" : "info",
+                stateLabel: item.canDecide ? "待审批" : "仅查看",
               }} />
               <span>打开锁定审批快照 →</span>
             </a>
