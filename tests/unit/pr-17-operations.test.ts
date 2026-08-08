@@ -115,14 +115,15 @@ describe("PR-17 operations evidence", () => {
     expect(workflow).not.toMatch(/artifact[\s\S]{0,200}(\.env|DATABASE_URL|SSH_KEY)/);
   });
 
-  it("roadmap identifies merged predecessors and PR-17 runtime work", () => {
+  it("roadmap identifies merged predecessors and the remaining PR-17 OSS runtime blocker", () => {
     const roadmap = read("docs/plan/pr-roadmap-v2.0.md");
     for (const id of ["PR-12", "PR-13", "PR-14", "PR-15", "PR-16"]) {
       expect(roadmap).toMatch(new RegExp(`\\| ${id} \\|.*已完成；GitHub #`));
     }
     expect(roadmap).toMatch(/\| PR-17 \|.*施工中；GitHub #27/);
-    expect(roadmap).toContain("PR-17 A 阶段仓库施工已合并");
-    expect(roadmap).toContain("当前进入 B 阶段隔离运行时验证");
+    expect(roadmap).toContain("PR-17 A 阶段大部分仓库施工已合并");
+    expect(roadmap).toContain("OSS 生产运行时接线仍是明确的仓库侧阻塞");
+    expect(roadmap).toContain("B 阶段隔离运行时验证在 OSS 接线完成后继续");
     expect(roadmap).toContain("未在真实环境执行的项目保持未通过");
   });
 
