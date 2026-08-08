@@ -12,6 +12,7 @@ export function SearchSelect({
   value,
   placeholder,
   emptyText = "没有匹配项",
+  ariaLabel,
   disabled,
   onChange,
 }: {
@@ -19,6 +20,7 @@ export function SearchSelect({
   value: string;
   placeholder: string;
   emptyText?: string;
+  ariaLabel?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
@@ -49,6 +51,7 @@ export function SearchSelect({
         type="search"
         value={open ? query : selectedLabel}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         autoComplete="off"
         disabled={disabled}
         onFocus={() => {
@@ -63,7 +66,7 @@ export function SearchSelect({
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
       />
       {open && !disabled ? (
-        <div className="search-select__results" role="listbox">
+        <div className="search-select__results" role="listbox" aria-label={ariaLabel ? `${ariaLabel}搜索结果` : undefined}>
           {matches.length ? matches.map((option) => (
             <button
               type="button"
