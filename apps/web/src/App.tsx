@@ -31,6 +31,55 @@ type LandingMe = {
   user: AuthorizedUser;
 };
 
+function resolvePath(basePath: string): string {
+  return window.location.pathname.startsWith(basePath)
+    ? window.location.pathname.slice(basePath.length) || "/"
+    : window.location.pathname;
+}
+
+function useInternalPath(basePath: string): string {
+  const [path, setPath] = useState(() => resolvePath(basePath));
+
+  useEffect(() => {
+    const sync = () => setPath(resolvePath(basePath));
+    const navigate = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+        || event.shiftKey
+        || event.altKey
+      ) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest("a");
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (anchor.target || anchor.hasAttribute("download")) return;
+
+      const url = new URL(anchor.href, window.location.href);
+      const insideApp = url.origin === window.location.origin
+        && (basePath === "" || url.pathname === basePath || url.pathname.startsWith(`${basePath}/`));
+      if (!insideApp) return;
+
+      event.preventDefault();
+      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      window.scrollTo({ top: 0, left: 0 });
+      sync();
+    };
+
+    window.addEventListener("popstate", sync);
+    document.addEventListener("click", navigate);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      document.removeEventListener("click", navigate);
+    };
+  }, [basePath]);
+
+  return path;
+}
+
 function HomeLanding() {
   const [message, setMessage] = useState("正在进入业务工作台…");
 
@@ -93,9 +142,7 @@ function HomeLanding() {
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const path = window.location.pathname.startsWith(basePath)
-    ? window.location.pathname.slice(basePath.length) || "/"
-    : window.location.pathname;
+  const path = useInternalPath(basePath);
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;
