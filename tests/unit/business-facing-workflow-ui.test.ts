@@ -81,4 +81,19 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("share.toFixed(8)");
     expect(source).not.toContain("result.groupAmount.toFixed(8)");
   });
+
+  it("validates N06 quantity direction before submit and keeps card actions non-sticky", async () => {
+    const [source, css] = await Promise.all([
+      read("apps/web/src/whole-order-review-panel.tsx"),
+      read("apps/web/src/work-reporting-form.css"),
+    ]);
+    expect(source).toContain('kind === "decrease" && target >= process.plannedQuantity');
+    expect(source).toContain('kind === "decrease" && target < process.completedQuantity');
+    expect(source).toContain('kind === "increase" && target <= process.plannedQuantity');
+    expect(source).toContain('process.pricingUnit === "piece" && !Number.isInteger(target)');
+    expect(source).toContain('className="mobile-actions whole-order-actions"');
+    expect(css).toContain(".work-reporting-page .whole-order-actions");
+    expect(css).toContain("position: static;");
+    expect(css).toContain("grid-template-columns: 1fr;");
+  });
 });
