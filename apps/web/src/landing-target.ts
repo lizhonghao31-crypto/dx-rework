@@ -2,33 +2,39 @@ import type { AuthorizedUser } from "./auth.js";
 
 const has = (user: AuthorizedUser, capability: string): boolean =>
   user.capabilities.includes(capability);
+const hasRole = (user: AuthorizedUser, role: string): boolean =>
+  user.businessRoles?.includes(role) === true;
 
 export function landingTarget(user: AuthorizedUser): string | null {
   if (
     user.isRoot === true
-    || user.businessRoles?.includes("owner_group") === true
+    || hasRole(user, "owner_group")
     || has(user, "dashboard:management:read")
   ) return "ui/management";
 
-  if (
-    user.businessRoles?.includes("system_admin") === true
-    && has(user, "admin:read")
-  ) return "ui/admin";
+  if (hasRole(user, "system_admin") && has(user, "admin:read")) {
+    return "ui/admin";
+  }
 
   if (has(user, "dashboard:site:read")) return "ui/supervisor";
-  if (has(user, "rework:initiate")) return "ui/qc/new";
-
-  if (has(user, "process:configure") || has(user, "process:review")) {
-    return "ui/process-configuration";
+  if (hasRole(user, "quality_control") && has(user, "rework:initiate")) {
+    return "ui/qc/new";
   }
 
   if (
-    has(user, "work:assign")
-    || has(user, "submission:audit")
-    || has(user, "quantity:adjust")
-    || has(user, "work:report")
+    (hasRole(user, "tail_supervisor") && has(user, "process:configure"))
+    || (hasRole(user, "ie_reviewer") && has(user, "process:review"))
+  ) return "ui/process-configuration";
+
+  if (
+    (hasRole(user, "tail_supervisor") && (
+      has(user, "work:assign")
+      || has(user, "submission:audit")
+      || has(user, "quantity:adjust")
+    ))
+    || (hasRole(user, "worker") && has(user, "work:report"))
     || has(user, "work:report_for_worker")
-    || has(user, "quantity:confirm")
+    || (hasRole(user, "order_merchandiser") && has(user, "quantity:confirm"))
   ) return "ui/work-reporting";
 
   if (
