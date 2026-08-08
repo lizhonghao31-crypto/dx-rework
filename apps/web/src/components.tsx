@@ -80,12 +80,20 @@ export function Shell({
   const isRoot = currentUser?.isRoot === true;
   const isOwner = currentUser?.businessRoles?.includes("owner_group") === true;
   const isSystemAdmin = currentUser?.businessRoles?.includes("system_admin") === true;
+  const hasRole = (role: string) => currentUser?.businessRoles?.includes(role) === true;
   const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
   const managementAccess = isRoot || isOwner || hasCapability("dashboard:management:read");
-  const initiationAccess = isRoot || isOwner
-    || currentUser?.businessRoles?.includes("quality_control") === true
-    || hasCapability("rework:initiate");
+  const initiationAccess = isRoot || isOwner || hasRole("quality_control") || hasCapability("rework:initiate");
+  const processAccess = isRoot || isOwner
+    || (hasRole("tail_supervisor") && hasCapability("process:configure"))
+    || (hasRole("ie_reviewer") && hasCapability("process:review"));
+  const workAccess = isRoot || isOwner
+    || (hasRole("tail_supervisor") && hasCapability("work:assign"))
+    || (hasRole("worker") && hasCapability("work:report"))
+    || hasCapability("work:report_for_worker");
   const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
+  const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
+  const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
 
   const navigation: [string, string, string][] = [];
   if (managementAccess) {
@@ -95,6 +103,8 @@ export function Shell({
     );
   }
   if (initiationAccess) navigation.push(["发", "发起返工", "/ui/qc/new"]);
+  if (processAccess) navigation.push(["序", "工序配置", "/ui/process-configuration"]);
+  if (workAccess) navigation.push(["数", "分工上数", "/ui/work-reporting"]);
   if (managementAccess) {
     navigation.push(
       ["责", "责任处理", "/ui/responsibility"],
@@ -105,13 +115,8 @@ export function Shell({
   }
   if (masterDataAccess) navigation.push(["资", "基础资料", "/ui/master-data"]);
   if (canManageEmployeeAccess) navigation.push(["权", "权限管理", "/ui/employee-access"]);
-  if (isRoot || (isSystemAdmin && hasCapability("admin:read"))) {
-    navigation.push(["管", "系统管理", "/ui/admin"]);
-  }
+  if (auditAccess || technicalAdminAccess) navigation.push(["管", "系统管理", "/ui/admin"]);
 
-  const canReadAudit = isRoot || isOwner || (
-    isSystemAdmin && currentUser?.capabilities.includes("audit:read") === true
-  );
   const roleLabels = currentUser
     ? [
         ...(isRoot ? ["超级用户"] : []),
@@ -132,11 +137,6 @@ export function Shell({
               </NavigationItem>
             </a>
           ))}
-          {canReadAudit ? (
-            <a href={`${basePath}/ui/audit`}>
-              <NavigationItem icon="审" active={active === "审计日志"}>审计日志</NavigationItem>
-            </a>
-          ) : null}
         </nav>
         <div className="org">
           {currentUser ? (
