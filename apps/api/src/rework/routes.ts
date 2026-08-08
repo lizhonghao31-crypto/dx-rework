@@ -38,9 +38,25 @@ const parse = <T>(
 const idempotencyKey = (request: FastifyRequest): string =>
   parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
+const translateTodoRoutingError = (error: unknown): never => {
+  if (
+    error instanceof ApplicationError
+    && error.code === "CONFLICT"
+    && error.message.includes("Todo recipient is not uniquely routable")
+  ) {
+    throw new ApplicationError(
+      "CONFLICT",
+      "尾部主管接收人尚未唯一配置，请在权限管理确认“尾部主管”角色后重试",
+      409,
+    );
+  }
+  throw error;
+};
+
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  rootAcceptanceService?: ReworkInitiationService;
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
@@ -102,14 +118,23 @@ export function registerReworkRoutes(
     "/rework-orders/:reworkOrderId/submit",
     async (request, reply) => {
       const params = parse(ReworkOrderParamsSchema, request.params);
-      const result = await dependencies.service.submit(
-        await actor(request),
-        params.reworkOrderId,
-        parse(SubmitReworkOrderSchema, request.body),
-        idempotencyKey(request),
-      );
-      if (result.reused) void reply.header("idempotency-replayed", "true");
-      return result.value;
+      const accessActor = await actor(request);
+      const submitService = accessActor.actorRoles.includes("root_superuser")
+        && dependencies.rootAcceptanceService
+        ? dependencies.rootAcceptanceService
+        : dependencies.service;
+      try {
+        const result = await submitService.submit(
+          accessActor,
+          params.reworkOrderId,
+          parse(SubmitReworkOrderSchema, request.body),
+          idempotencyKey(request),
+        );
+        if (result.reused) void reply.header("idempotency-replayed", "true");
+        return result.value;
+      } catch (error: unknown) {
+        return translateTodoRoutingError(error);
+      }
     },
   );
 
