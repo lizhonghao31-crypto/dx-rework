@@ -131,6 +131,10 @@
     {
       "version": "0033_employee_access_management",
       "checksum": "bb87700794a244c80d90afd87faf514375916d7085b1bd999d26416cef5ffe1d"
+    },
+    {
+      "version": "0034_owner_business_master_data",
+      "checksum": "a5e1b644fc2254159a5bbc8944ea947eaceda11ae1d909ef9d0e9f6f0af9739b"
     }
   ]
 }
