@@ -123,6 +123,11 @@ function HomeLanding() {
           || user.capabilities.includes("dashboard:management:read")
         ) {
           target = "ui/management";
+        } else if (
+          user.businessRoles?.includes("system_admin") === true
+          && user.capabilities.includes("admin:read")
+        ) {
+          target = "ui/admin";
         } else if (user.capabilities.includes("dashboard:site:read")) {
           target = "ui/supervisor";
         } else if (user.capabilities.includes("rework:initiate")) {
@@ -168,7 +173,7 @@ export function App() {
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
-  if (path === "/ui/admin") page = <AdminConsolePage />;
+  if (path === "/ui/admin") page = <Shell active="系统管理"><AdminConsolePage /></Shell>;
   else if (path === "/ui/audit") page = <AdminConsolePage auditOnly />;
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/master-data") page = <MasterDataPage />;
@@ -210,7 +215,32 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/work-reporting") {
-    return <AuthGate>{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
+      { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredCapability: "work:report_for_worker" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/responsibility") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "responsibility:determine" },
+      { requiredCapability: "responsibility:takeover" },
+      { requiredCapability: "responsibility:confirm_high_multiplier" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/own-factory-approvals") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "own_factory:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/external-responsibilities") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "external_responsibility:view" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/wages" || path.startsWith("/ui/wages/")) {
     return <AuthGate requiredAnyOf={[
