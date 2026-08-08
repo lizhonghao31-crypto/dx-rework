@@ -86,6 +86,18 @@ describe("PR-31 employee access contracts", () => {
     expect(deployLib).toContain("ROOT_DINGTALK_USER_ID");
   });
 
+  it("enforces the confirmed role-management policy at the database boundary", async () => {
+    const migration = await readFile("apps/api/migrations/0035_role_management_policy_closure.sql", "utf8");
+    expect(migration).toContain("access_is_root_actor");
+    expect(migration).toContain("access_role_manager_roles");
+    expect(migration).toContain("business roles can only be maintained by an active owner or root");
+    expect(migration).toContain("protected roles can only be maintained by root");
+    expect(migration).toContain("root cannot revoke its own protected role");
+    expect(migration).toContain("DELETE FROM role_capabilities");
+    expect(migration).toContain("role_code='system_admin' AND capability='access:admin'");
+    expect(migration).toContain("('owner_group', 'access:admin')");
+  });
+
   it("keeps owner bootstrap one-time at the database boundary", async () => {
     const migration = await readFile("apps/api/migrations/0033_employee_access_management.sql", "utf8");
     expect(migration).toContain("CREATE TABLE owner_bootstrap_consumptions");
