@@ -3,7 +3,7 @@ import {
   type OwnFactoryApprovalResponse,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import "./own-factory-approval.css";
@@ -49,6 +49,7 @@ export function OwnFactoryApprovalPanel({
   const [opinion, setOpinion] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<"approved" | "rejected" | null>(null);
+  const pendingDecisionKeys = useRef<Record<string, string>>({});
 
   const load = async (): Promise<void> => {
     if (!reworkOrderId) return;
@@ -91,6 +92,18 @@ export function OwnFactoryApprovalPanel({
     setMessage("");
     try {
       const approval = state.value.approval;
+      const body = {
+        expectedOrderVersion: state.value.orderVersion,
+        expectedApprovalVersion: approval.approvalVersion,
+        ...(opinion.trim() ? { opinion: opinion.trim() } : {}),
+      };
+      const signature = JSON.stringify({
+        approvalId: approval.approvalId,
+        decision,
+        body,
+      });
+      const idempotencyKey = pendingDecisionKeys.current[signature] ?? crypto.randomUUID();
+      pendingDecisionKeys.current[signature] = idempotencyKey;
       const response = await fetch(
         apiUrl(`own-factory-approvals/${approval.approvalId}/${decision === "approved" ? "approve" : "reject"}`),
         {
@@ -99,20 +112,15 @@ export function OwnFactoryApprovalPanel({
           headers: {
             accept: "application/json",
             "content-type": "application/json",
-            "idempotency-key": crypto.randomUUID(),
+            "idempotency-key": idempotencyKey,
           },
-          body: JSON.stringify({
-            expectedOrderVersion: state.value.orderVersion,
-            expectedApprovalVersion: approval.approvalVersion,
-            ...(opinion.trim() ? { opinion: opinion.trim() } : {}),
-          }),
+          body: JSON.stringify(body),
         },
       );
       if (!response.ok) throw new Error(await requestError(response));
-      setState({
-        kind: "ready",
-        value: OwnFactoryApprovalResponseSchema.parse(await response.json()),
-      });
+      const next = OwnFactoryApprovalResponseSchema.parse(await response.json());
+      delete pendingDecisionKeys.current[signature];
+      setState({ kind: "ready", value: next });
       setOpinion("");
       setMessage(decision === "approved" ? "审批已通过，另一位老板的结果知会已进入发送队列。" : "已驳回并退回 N07；另一位老板的结果知会已进入发送队列。请形成新的责任版本后重新发起审批。");
     } catch (error: unknown) {
@@ -227,8 +235,8 @@ export function OwnFactoryApprovalPanel({
             onChange={(event) => setOpinion(event.target.value)}
           />
           <div>
-            <Button disabled={Boolean(busy)} onClick={() => void decide("approved")}>通过</Button>
-            <Button variant="primary" disabled={Boolean(busy)} onClick={() => void decide("rejected")}>驳回并退回 N07</Button>
+            <Button variant="primary" disabled={Boolean(busy)} onClick={() => void decide("approved")}>通过</Button>
+            <Button disabled={Boolean(busy)} onClick={() => void decide("rejected")}>驳回并退回 N07</Button>
           </div>
         </div>
       )}
