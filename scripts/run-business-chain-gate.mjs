@@ -34,29 +34,28 @@ async function hydrateDatabaseUrl() {
 
 await hydrateDatabaseUrl();
 
-if (!process.env.TEST_DATABASE_URL && !process.env.DATABASE_URL) {
-  process.stdout.write(
-    "BUSINESS_CHAIN_GATE_SKIPPED: no database URL available outside ECS\n",
-  );
-  process.exit(0);
-}
-
-process.stdout.write(
-  "BUSINESS_CHAIN_GATE_START: current-schema N01-N10 isolated regression\n",
+const hasDatabase = Boolean(
+  process.env.TEST_DATABASE_URL || process.env.DATABASE_URL,
 );
+const tests = [
+  "tests/unit/current-migration-manifest-checksum.test.ts",
+  "tests/unit/business-chain-ui-contract.test.ts",
+];
+if (hasDatabase) {
+  tests.push("tests/integration/full-business-chain-postgres.test.ts");
+  process.stdout.write(
+    "BUSINESS_CHAIN_GATE_START: current-schema N01-N10 isolated regression\n",
+  );
+} else {
+  process.stdout.write(
+    "BUSINESS_CHAIN_DB_GATE_SKIPPED: no database URL; running static chain gates only\n",
+  );
+}
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const child = spawn(
   npmCommand,
-  [
-    "exec",
-    "--",
-    "vitest",
-    "run",
-    "tests/unit/current-migration-manifest-checksum.test.ts",
-    "tests/unit/business-chain-ui-contract.test.ts",
-    "tests/integration/full-business-chain-postgres.test.ts",
-  ],
+  ["exec", "--", "vitest", "run", ...tests],
   {
     stdio: "inherit",
     env: process.env,
@@ -78,4 +77,8 @@ if (exitCode !== 0) {
   throw new Error(`BUSINESS_CHAIN_GATE_FAILED: vitest exited ${exitCode}`);
 }
 
-process.stdout.write("BUSINESS_CHAIN_GATE_PASSED\n");
+process.stdout.write(
+  hasDatabase
+    ? "BUSINESS_CHAIN_GATE_PASSED\n"
+    : "BUSINESS_CHAIN_STATIC_GATES_PASSED\n",
+);
