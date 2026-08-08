@@ -1,7 +1,7 @@
--- Keep N04 worker assignment sourced from the same employee-role facts used by access management.
--- Internal workers are materialized automatically as stable business_people records when
--- the worker role is granted. Existing worker-role users are backfilled by the immutable
--- Root identity. Temporary workers remain explicit master-data records.
+-- Align N04 assignment people with the employee-role source of truth.
+-- New worker-role grants are provisioned by WorkerAwareAccessMasterDataService.
+-- This migration only backfills already-existing worker roles and adds a hard
+-- assignment-time eligibility guard. Temporary workers remain explicit records.
 
 CREATE OR REPLACE FUNCTION worker_business_person_id(app_user uuid)
 RETURNS uuid
@@ -13,97 +13,10 @@ AS $$
   SELECT md5('dx-rework:worker-person:' || app_user::text)::uuid
 $$;
 
-CREATE OR REPLACE FUNCTION ensure_worker_person_after_role_assignment()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  target_name text;
-  person_id uuid;
-  event_id uuid;
-  request_id text;
-  actor_roles text[];
-  reason_text text := '授予工人角色自动建立内部作业人员档案';
-BEGIN
-  IF NEW.role_code <> 'worker' OR NEW.revoked_at IS NOT NULL THEN
-    RETURN NEW;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM business_people person
-    WHERE person.app_user_id=NEW.user_id
-  ) THEN
-    RETURN NEW;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM access_security_policy WHERE policy_key='primary'
-  ) THEN
-    RETURN NEW;
-  END IF;
-
-  SELECT u.display_name
-  INTO target_name
-  FROM app_users u
-  JOIN identity_mappings identity
-    ON identity.user_id=u.id
-   AND identity.provider='dingtalk'
-   AND identity.active=true
-   AND identity.employed=true
-  JOIN access_security_policy policy
-    ON policy.policy_key='primary'
-   AND policy.dingtalk_corp_id=identity.corp_id
-  WHERE u.id=NEW.user_id
-    AND u.enabled=true;
-
-  IF target_name IS NULL THEN
-    RAISE EXCEPTION 'worker role target is not an active employee'
-      USING ERRCODE='42501';
-  END IF;
-
-  request_id := nullif(current_setting('dx_rework.role_assign_request_id', true), '');
-  IF request_id IS NULL OR request_id !~ '^[A-Za-z0-9._:-]{1,128}$' THEN
-    RAISE EXCEPTION 'worker person materialization requires role assignment request context'
-      USING ERRCODE='55000';
-  END IF;
-
-  actor_roles := access_authorized_actor_roles(NEW.granted_by, 'master_data:manage');
-  person_id := worker_business_person_id(NEW.user_id);
-  event_id := md5('dx-rework:worker-person-event:' || NEW.assignment_id::text)::uuid;
-
-  INSERT INTO operation_events(
-    event_id,request_id,actor_id,actor_roles,authorization_capability,
-    action,entity_type,entity_id,after_state,reason
-  ) VALUES (
-    event_id,request_id,NEW.granted_by,actor_roles,'master_data:manage',
-    'master_data.person.create','business_person',person_id::text,
-    jsonb_build_object(
-      'personType','internal',
-      'appUserId',NEW.user_id,
-      'displayName',target_name,
-      'active',true,
-      'aliases','[]'::jsonb
-    ),
-    reason_text
-  );
-
-  PERFORM set_config('dx_rework.person_create_event_id',event_id::text,true);
-  PERFORM set_config('dx_rework.person_create_request_id',request_id,true);
-
-  INSERT INTO business_people(
-    person_id,person_type,app_user_id,display_name,created_by
-  ) VALUES (
-    person_id,'internal',NEW.user_id,target_name,NEW.granted_by
-  );
-
-  RETURN NEW;
-END
-$$;
-
-CREATE TRIGGER user_role_assignments_materialize_worker_person
-  AFTER INSERT ON user_role_assignments
-  FOR EACH ROW
-  EXECUTE FUNCTION ensure_worker_person_after_role_assignment();
+-- Backfill is a reviewed migration. Disable only the business-person creation
+-- trigger while inserting rows because the migration writes the matching audit
+-- event explicitly. The normal trigger is restored immediately afterwards.
+DROP TRIGGER business_people_guard_creation ON business_people;
 
 DO $$
 DECLARE
@@ -150,7 +63,9 @@ BEGIN
     ORDER BY u.id
   LOOP
     person_id := worker_business_person_id(row_record.user_id);
-    event_id := md5('dx-rework:worker-person-backfill-event:' || row_record.user_id::text)::uuid;
+    event_id := md5(
+      'dx-rework:worker-person-backfill-event:' || row_record.user_id::text
+    )::uuid;
 
     INSERT INTO operation_events(
       event_id,request_id,actor_id,actor_roles,authorization_capability,
@@ -168,9 +83,6 @@ BEGIN
       reason_text
     );
 
-    PERFORM set_config('dx_rework.person_create_event_id',event_id::text,true);
-    PERFORM set_config('dx_rework.person_create_request_id',request_id,true);
-
     INSERT INTO business_people(
       person_id,person_type,app_user_id,display_name,created_by
     ) VALUES (
@@ -179,6 +91,11 @@ BEGIN
   END LOOP;
 END
 $$;
+
+CREATE TRIGGER business_people_guard_creation
+  BEFORE INSERT ON business_people
+  FOR EACH ROW
+  EXECUTE FUNCTION guard_business_person_creation();
 
 CREATE OR REPLACE FUNCTION guard_work_task_member_employee_eligibility()
 RETURNS trigger
