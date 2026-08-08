@@ -9,6 +9,7 @@ type BootstrapRoot = Readonly<{
   provider_user_id: string;
   corp_id: string;
 }>;
+type DatabaseError = Readonly<{ code?: string }>;
 
 export class RootAuthority {
   constructor(
@@ -40,10 +41,7 @@ export class RootAuthority {
     const bootstrap = await this.bootstrapRoot();
     if (bootstrap) {
       if (bootstrap.user_id !== userId) return false;
-      return this.isEligibleDingTalkIdentity(
-        userId,
-        bootstrap.provider_user_id,
-      );
+      return this.isEligibleDingTalkIdentity(userId, bootstrap.provider_user_id);
     }
 
     if (!this.rootDingtalkUserId) return false;
@@ -53,11 +51,7 @@ export class RootAuthority {
   async assertProtectedRoleMutation(actorUserId: string, roleCode: string): Promise<void> {
     if (!this.isProtectedRole(roleCode)) return;
     if (await this.isRootUser(actorUserId)) return;
-    throw new ApplicationError(
-      "FORBIDDEN",
-      "老板和系统管理员角色仅可由超级用户维护",
-      403,
-    );
+    throw new ApplicationError("FORBIDDEN", "老板和系统管理员角色仅可由超级用户维护", 403);
   }
 
   async assertAssignmentMutation(actorUserId: string, assignmentId: string): Promise<void> {
@@ -71,16 +65,8 @@ export class RootAuthority {
     const assignment = result.rows[0];
     if (!assignment) return;
     const actorIsRoot = await this.isRootUser(actorUserId);
-    if (
-      actorIsRoot
-      && assignment.user_id === actorUserId
-      && this.isProtectedRole(assignment.role_code)
-    ) {
-      throw new ApplicationError(
-        "FORBIDDEN",
-        "超级用户不能撤销自己的受保护角色",
-        403,
-      );
+    if (actorIsRoot && assignment.user_id === actorUserId && this.isProtectedRole(assignment.role_code)) {
+      throw new ApplicationError("FORBIDDEN", "超级用户不能撤销自己的受保护角色", 403);
     }
     await this.assertProtectedRoleMutation(actorUserId, assignment.role_code);
   }
@@ -88,11 +74,7 @@ export class RootAuthority {
   async assertTargetAccessMutation(actorUserId: string, targetUserId: string): Promise<void> {
     const actorIsRoot = await this.isRootUser(actorUserId);
     if (actorIsRoot && actorUserId === targetUserId) {
-      throw new ApplicationError(
-        "FORBIDDEN",
-        "超级用户不能停用自己的系统访问",
-        403,
-      );
+      throw new ApplicationError("FORBIDDEN", "超级用户不能停用自己的系统访问", 403);
     }
 
     const [protectedRole, targetIsRoot] = await Promise.all([
@@ -125,20 +107,22 @@ export class RootAuthority {
   }
 
   private async bootstrapRoot(): Promise<BootstrapRoot | null> {
-    const result = await this.database.query<BootstrapRoot>(
-      `SELECT user_id,provider_user_id,corp_id
-       FROM owner_bootstrap_consumptions
-       WHERE singleton=true AND corp_id=$1
-       LIMIT 1`,
-      [this.corporationId],
-    );
-    return result.rows[0] ?? null;
+    try {
+      const result = await this.database.query<BootstrapRoot>(
+        `SELECT user_id,provider_user_id,corp_id
+         FROM owner_bootstrap_consumptions
+         WHERE singleton=true AND corp_id=$1
+         LIMIT 1`,
+        [this.corporationId],
+      );
+      return result.rows[0] ?? null;
+    } catch (error: unknown) {
+      if ((error as DatabaseError | null)?.code === "42P01") return null;
+      throw error;
+    }
   }
 
-  private async isEligibleDingTalkIdentity(
-    userId: string,
-    providerUserId: string,
-  ): Promise<boolean> {
+  private async isEligibleDingTalkIdentity(userId: string, providerUserId: string): Promise<boolean> {
     const result = await this.database.query(
       `SELECT 1
        FROM app_users u
