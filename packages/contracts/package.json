@@ -12,6 +12,10 @@
       "types": "./src/responsibility-queue.ts",
       "import": "./dist/responsibility-queue.js"
     },
+    "./responsibility-transfer": {
+      "types": "./src/responsibility-transfer.ts",
+      "import": "./dist/responsibility-transfer.js"
+    },
     "./external-responsibility": {
       "types": "./src/external-responsibility.ts",
       "import": "./dist/external-responsibility.js"
