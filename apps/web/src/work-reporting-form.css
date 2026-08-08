@@ -3,3 +3,29 @@
   margin-top: var(--dx-v2-space-4);
   padding-bottom: 0;
 }
+
+.work-reporting-page .whole-order-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: var(--dx-v2-space-2) 0;
+}
+
+.work-reporting-page .whole-order-actions {
+  position: static;
+  flex: 1 1 100%;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  width: 100%;
+  margin-top: var(--dx-v2-space-2);
+  padding: 0;
+  background: transparent;
+}
+
+.work-reporting-page .whole-order-actions .dx-field {
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .work-reporting-page .whole-order-actions {
+    grid-template-columns: 1fr;
+  }
+}
