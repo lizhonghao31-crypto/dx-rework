@@ -4,7 +4,7 @@ import pg from "pg";
 
 import { EmployeeAccessService } from "./access/employee-access-service.js";
 import { RootAuthority } from "./access/root-authority.js";
-import { AccessMasterDataService } from "./access/service.js";
+import { WorkerAwareAccessMasterDataService } from "./access/worker-aware-access-service.js";
 import { AdminAuditService } from "./admin-audit-service.js";
 import { AdminConsoleService } from "./admin-console-service.js";
 import { buildApp } from "./app.js";
@@ -54,7 +54,7 @@ const rootAuthority = new RootAuthority(
   config.rootDingtalkUserId,
 );
 const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
-const accessService = new AccessMasterDataService(database, config.dingtalk.corpId);
+const accessService = new WorkerAwareAccessMasterDataService(database, config.dingtalk.corpId);
 await accessService.ensureOrganizationPolicy();
 await rootAuthority.assertConfigurationConsistency();
 const dingtalkProvider = new OfficialDingTalkProvider(config.dingtalk);
