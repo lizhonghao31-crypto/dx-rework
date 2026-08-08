@@ -84,6 +84,23 @@
   gap: var(--space-2);
 }
 
+.external-revision-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.external-revision-choice input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
 .external-operation .dx-button,
 .external-evidence-uploader .dx-button,
 .external-evidence-uploader input[type="file"] {
