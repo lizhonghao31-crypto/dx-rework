@@ -76,6 +76,7 @@ describe("PR-31 employee access contracts", () => {
     ]);
     expect(authority).toContain('new Set(["owner_group", "system_admin"])');
     expect(authority).toContain("rootDingtalkUserId");
+    expect(authority).toContain("owner_bootstrap_consumptions");
     expect(authority).toContain("assertProtectedRoleMutation");
     expect(authority).toContain("assertTargetAccessMutation");
     expect(accessRoutes).toContain("filterAssignableRoles");
