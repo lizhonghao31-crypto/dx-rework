@@ -47,8 +47,9 @@ export function ReworkQueryPage() {
   useEffect(()=>{const focus=()=>setRefresh(value=>value+1);window.addEventListener("focus",focus);return()=>window.removeEventListener("focus",focus);},[]);
 
   const items = state.kind === "ready" ? state.value.items : [];
+  const canViewReports = state.kind === "ready" && state.value.canViewReports;
   return <Shell active="返工任务">
-    <Header title="返工统一查询" subtitle="按真实返工单、当前节点、责任、工资、扣款和异常查询" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} action={state.kind === "ready" && state.value.canViewReports ? "报表中心" : "返回总览"} actionHref={state.kind === "ready" && state.value.canViewReports ? "/ui/reports" : "/ui/management"} />
+    <Header title="返工统一查询" subtitle="按真实返工单、当前节点、责任、工资、扣款和异常查询" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} action={canViewReports ? "报表中心" : "返回工作台"} actionHref={canViewReports ? "/ui/reports" : "/"} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
