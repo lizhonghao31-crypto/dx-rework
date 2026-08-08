@@ -151,10 +151,6 @@
     {
       "version": "0038_worker_person_materialization",
       "checksum": "272674f7e034aab2f8d3a62eff53e95abae627ddf9f0f887c905ab173b97652d"
-    },
-    {
-      "version": "0039_external_deduction_ledger_bounds",
-      "checksum": "6f3643233c6b04b0e7687dc7af7a04d0e16914cc32dc58213994a748c709fc05"
     }
   ]
 }
