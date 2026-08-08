@@ -23,6 +23,10 @@ const request = async <T,>(path: string, parse: (value: unknown) => T, init?: Re
   if (!response.ok) { const body = await response.json().catch(() => null) as { error?: { message?: string } } | null; throw new Error(body?.error?.message ?? "请求未完成，请稍后重试"); }
   return parse(await response.json());
 };
+const formatMoney = (value: number): string => value.toLocaleString("zh-CN", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export function WorkReportingForm() {
   const reworkOrderId = new URLSearchParams(window.location.search).get("rework");
@@ -160,6 +164,10 @@ export function WorkReportingForm() {
       setMessage("按小时计价时，本次上数最多保留两位小数。");
       return;
     }
+    if (actualQuantity > task.remainingQuantity) {
+      setMessage(`本次上数不能超过当前剩余 ${task.remainingQuantity} ${task.pricingUnit === "piece" ? "件" : "小时"}；多人同时提交时仍以服务端最终校验为准。`);
+      return;
+    }
     const completedAt = new Date(draft.completedAt);
     if (Number.isNaN(completedAt.getTime())) {
       setMessage("完工时间格式无效，请重新填写。");
@@ -199,10 +207,10 @@ export function WorkReportingForm() {
       const share = personalShare(result);
       setMessage(
         result.groupAmount === null && share !== undefined
-          ? "上数已提交：你的本次分摊 ¥" + share.toFixed(8) + "。"
+          ? "上数已提交：你的本次分摊 ¥" + formatMoney(share) + "；系统保留精确分摊值。"
           : result.groupAmount === null
             ? "上数已提交；你的个人分摊已生成。"
-            : "上数已提交：组总额 ¥" + result.groupAmount.toFixed(8) + "；成员快照分摊已生成，不会因后续换人反算。",
+            : "上数已提交：组总额 ¥" + formatMoney(result.groupAmount) + "；成员快照分摊已生成，系统保留精确分摊值且不会因后续换人反算。",
       );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "上数提交失败");
@@ -217,7 +225,7 @@ export function WorkReportingForm() {
         <h1>工人分配与上数</h1>
         <StatusBadge tone="info">N04–N06</StatusBadge>
       </div>
-      <p>{data?.reworkOrderId ?? reworkOrderId ?? "返工任务"}</p>
+      <p>当前返工任务</p>
       <StatusBadge tone="success">服务端原子校验剩余量 · 网络重试不重复记数</StatusBadge>
     </div>
 
@@ -227,14 +235,18 @@ export function WorkReportingForm() {
       <div className="section-title">
         <div>
           <h2>{task.processName}</h2>
-          <p>{task.mode === "collective" ? "集体计件" : "个人计件"} · 计划 {task.plannedQuantity} {task.pricingUnit === "piece" ? "件" : "小时"} · 剩余 {task.remainingQuantity}</p>
+          <p>{task.mode === "collective" ? "集体计件" : "个人计件"} · 计划 {task.plannedQuantity} {task.pricingUnit === "piece" ? "件" : "小时"} · 剩余 {task.remainingQuantity} {task.pricingUnit === "piece" ? "件" : "小时"}</p>
         </div>
-        <StatusBadge tone={task.remainingQuantity ? "warning" : "success"}>V{task.version}</StatusBadge>
+        <StatusBadge tone={task.remainingQuantity ? "warning" : "success"}>成员版本 V{task.version}</StatusBadge>
       </div>
       <p>成员快照：{task.members.map((member) => member.displayName).join("、")}</p>
       {task.canSubmitReport ? <>
         <InsetField
           label={task.pricingUnit === "piece" ? "本次上数（件）" : "本次上数（小时）"}
+          type="number"
+          min={task.pricingUnit === "piece" ? "1" : "0.01"}
+          max={String(task.remainingQuantity)}
+          step={task.pricingUnit === "piece" ? "1" : "0.01"}
           value={draftFor(task.workTaskId).quantity}
           inputMode="decimal"
           onChange={(event) => setReportDrafts((current) => ({
