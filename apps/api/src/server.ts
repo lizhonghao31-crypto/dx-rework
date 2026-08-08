@@ -107,6 +107,7 @@ const workReportingService = new WorkReportingService(
   database,
   undefined,
   undefined,
+  undefined,
   todoProjection,
 );
 const wholeOrderReviewService = new WholeOrderReviewService(
@@ -158,6 +159,28 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
     root: rootAuthority,
+    listInitiationOptions: async () => {
+      const [directory, suppliers] = await Promise.all([
+        employeeAccessService.listDirectory(),
+        accessService.listSuppliers(false),
+      ]);
+      return {
+        merchandisers: directory.employees
+          .filter((employee) =>
+            employee.enabled
+            && employee.active
+            && employee.employed
+            && employee.businessRoles.includes("order_merchandiser"))
+          .map((employee) => ({ userId: employee.userId, displayName: employee.displayName })),
+        factories: suppliers
+          .filter((supplier) => supplier.active && supplier.supplierType === "factory")
+          .map((supplier) => ({
+            supplierId: supplier.supplierId,
+            supplierVersion: supplier.version,
+            supplierName: supplier.supplierName,
+          })),
+      };
+    },
     erp: {
       adapter: new DisabledErpAdapter(),
       service: erpIntegrationService,
