@@ -68,11 +68,19 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).toContain('name: "系统管理"');
   });
 
+  it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
+    const app = await readFile("apps/web/src/App.tsx", "utf8");
+    expect(app).toContain('path === "/ui/work-reporting" || path === "/ui/piecework/collective"');
+    expect(app).toContain('<Shell active="分工上数"><WorkReportingForm /></Shell>');
+    expect(app).not.toContain("<MobileForm piecework />");
+  });
+
   it("keeps high-frequency business selectors searchable without exposing internal IDs", async () => {
-    const [initiation, processConfiguration, workReporting] = await Promise.all([
+    const [initiation, processConfiguration, workReporting, externalResponsibility] = await Promise.all([
       readFile("apps/web/src/rework-form.tsx", "utf8"),
       readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
+      readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
     ]);
     expect(initiation).toContain("<SearchSelect");
     expect(initiation).toContain("输入姓名搜索订单跟单");
@@ -81,6 +89,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(processConfiguration).toContain("selectCatalogProcess");
     expect(workReporting).toContain("搜索返工人员");
     expect(workReporting).toContain("filteredPeople");
+    expect(externalResponsibility).toContain("输入供应商名称搜索");
   });
 
   it("keeps N04 people sourced from worker eligibility and explicit temporary-worker records", async () => {
