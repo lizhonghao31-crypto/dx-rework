@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   BUSINESS_READ_ALL_CAPABILITY,
   businessActor,
+  isRootUser,
 } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
@@ -43,7 +44,7 @@ const idempotencyKey = (request: FastifyRequest): string =>
 export type ProcessConfigurationHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ProcessConfigurationService;
-  root: RootAuthority;
+  root?: RootAuthority;
 }>;
 
 export function registerProcessConfigurationRoutes(
@@ -55,7 +56,7 @@ export function registerProcessConfigurationRoutes(
     mode: "read" | "configure" | "review",
   ): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
-    const isRoot = await dependencies.root.isRootUser(user.id);
+    const isRoot = await isRootUser(dependencies.root, user.id);
     const isOwnerReader = user.businessRoles?.includes("owner_group") === true
       && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY);
     const isSupervisor = user.businessRoles?.includes("tail_supervisor") === true
