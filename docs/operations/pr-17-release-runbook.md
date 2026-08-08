@@ -20,7 +20,7 @@ Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准�
 - `/opt/dx-rework/shared/deploy.env`：Node 22 路径、显式 Nginx 模式、HTTPS server name、TLS、真实 Nginx 配置路径和环境 profile；参考 `pr-17-deploy.env.example`；
 - `/opt/dx-rework/shared/restore.env`：仅恢复演练目标库及批准指纹；参考 `pr-17-restore.env.example`。API 进程不会读取该文件。
 
-首位老板 bootstrap 窗口是独立的安全操作窗口，不与 release/rollback 并发：只有当前 `0033_employee_access_management` 兼容 release 已稳定运行后，才允许临时把 `OWNER_BOOTSTRAP_DINGTALK_USER_ID` 与 `OWNER_BOOTSTRAP_SECRET` 成对写入 `.env` 并仅 reload `dx-rework-api`。完成一次性 bootstrap 后必须立即从 `.env` 删除两项、再次 reload 并确认 bootstrap 回到默认关闭状态。窗口期间禁止发起发布或代码回滚；尤其不得尝试回滚到不认识这两个环境键的更早 start wrapper。数据库的一次性 consumption 记录不因删除环境变量而撤销。
+首位老板 bootstrap 窗口是独立的安全操作窗口，不与 release/rollback 并发：只有**包含首位老板 bootstrap 能力、且其 migration manifest 与当前数据库完整一致**的 release 已稳定运行后，才允许临时把 `OWNER_BOOTSTRAP_DINGTALK_USER_ID` 与 `OWNER_BOOTSTRAP_SECRET` 成对写入 `.env` 并仅 reload `dx-rework-api`。完成一次性 bootstrap 后必须立即从 `.env` 删除两项、再次 reload 并确认 bootstrap 回到默认关闭状态。窗口期间禁止发起发布或代码回滚；尤其不得尝试回滚到不认识这两个环境键的更早 start wrapper。数据库的一次性 consumption 记录不因删除环境变量而撤销。
 
 配置文件是唯一事实源。加载前脚本会清空对应 allowlist 变量，文件缺失的值不得从调用 shell、PM2 或历史会话继承。`DX_REWORK_NODE_BIN` 必须指向普通、非软链接、可执行的 Node 22 文件；发布、migration、manifest 和 API 启动统一使用该路径。
 
@@ -71,7 +71,7 @@ DX_REWORK_APPLY_MIGRATIONS=true|false
 10. 运行外部 HTTPS smoke。shared-path 只访问 `/rework/` Web 与 `/rework/api/` API，不探测、不修改共享 origin 的其他根路径；
 11. 归档结构化证据并观察至少一个维护窗口。
 
-当前从已知 RDS `0032_erp_integration_contract` 升级到包含 PR-31 的 `0033_employee_access_management` 时存在 pending migration，因此该次真实 Pilot 发布必须显式 `apply_migrations=true`；仍须由发布时 preflight/数据库前缀校验再次确认，不以文档记录替代实时事实。
+**不得在手册中固定假定“当前数据库版本 → 目标版本”。** 发布时唯一事实源是目标 release 的 `apps/api/src/platform/migration-manifest.json` 与目标数据库的真实 migration history。必须先运行 `database-state.mjs verify-prefix` / preflight；只有实时检查确认存在 pending migration 时，才设置 `DX_REWORK_APPLY_MIGRATIONS=true`。历史文档中的旧版本号不能替代该检查。
 
 ## 5. 故障与恢复决策
 
