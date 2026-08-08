@@ -128,7 +128,7 @@ export function ResponsibilityQueuePage() {
               >
                 <TaskCard
                   task={{
-                    id: item.reworkNo ?? item.reworkOrderId,
+                    id: item.reworkNo ?? "返工单",
                     title,
                     meta,
                     tone,
