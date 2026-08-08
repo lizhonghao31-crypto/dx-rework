@@ -31,4 +31,14 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("reviewDecisionLabel(action.decision)");
     expect(source).toContain("formatBusinessTime(action.actedAt)");
   });
+
+  it("shows N08 approval proportions as percentages and times in the business timezone", async () => {
+    const source = await read("apps/web/src/own-factory-approval-panel.tsx");
+    expect(source).toContain("bpsToPercent(process.ownFactoryShareBps)");
+    expect(source).toContain("bpsToPercent(line.shareBps)");
+    expect(source).not.toContain("ownFactoryShareBps} bps");
+    expect(source).not.toContain("shareBps} bps");
+    expect(source).toContain('timeZone: "Asia/Shanghai"');
+    expect(source).toContain("formatBusinessTime(approval.decision.decidedAt)");
+  });
 });
