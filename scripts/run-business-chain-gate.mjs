@@ -53,6 +53,7 @@ const child = spawn(
     "--",
     "vitest",
     "run",
+    "tests/unit/current-migration-manifest-checksum.test.ts",
     "tests/unit/business-chain-ui-contract.test.ts",
     "tests/integration/full-business-chain-postgres.test.ts",
   ],
