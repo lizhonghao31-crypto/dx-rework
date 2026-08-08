@@ -13,7 +13,7 @@ import type { Task } from "./types.js";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 let employeeAccessPermission: Promise<boolean> | undefined;
-function canManageEmployeeAccess(): Promise<boolean> {
+function loadEmployeeAccessPermission(): Promise<boolean> {
   employeeAccessPermission ??= fetch(apiUrl("auth/me"), { credentials: "include" })
     .then(async (response) => {
       if (!response.ok) return false;
@@ -21,9 +21,8 @@ function canManageEmployeeAccess(): Promise<boolean> {
         status?: string;
         user?: AuthorizedUser;
       };
-      return body.status === "authorized"
-        && Boolean(body.user)
-        && hasPageAccess(body.user!, { requiredRole: "owner_group", requiredCapability: "access:admin" });
+      if (body.status !== "authorized" || !body.user) return false;
+      return hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" });
     })
     .catch(() => false);
   return employeeAccessPermission;
@@ -37,12 +36,12 @@ export function Shell({
   children: ReactNode;
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const [canManageAccess, setCanManageAccess] = useState(false);
+  const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    void canManageEmployeeAccess().then((allowed) => {
-      if (mounted) setCanManageAccess(allowed);
+    void loadEmployeeAccessPermission().then((allowed) => {
+      if (mounted) setCanManageEmployeeAccess(allowed);
     });
     return () => {
       mounted = false;
@@ -57,7 +56,7 @@ export function Shell({
     ["扣", "外部扣款", "/ui/external-responsibilities"],
     ["计", "集体计件", "/ui/piecework/collective"],
   ];
-  if (canManageAccess) {
+  if (canManageEmployeeAccess) {
     navigation.push(["权", "权限管理", "/ui/employee-access"]);
   }
   return (
