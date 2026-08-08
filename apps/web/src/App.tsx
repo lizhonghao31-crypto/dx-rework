@@ -69,9 +69,15 @@ function useInternalLocation(basePath: string): InternalLocation {
       if (anchor.target || anchor.hasAttribute("download")) return;
 
       const url = new URL(anchor.href, window.location.href);
-      const insideApp = url.origin === window.location.origin
-        && (basePath === "" || url.pathname === basePath || url.pathname.startsWith(`${basePath}/`));
-      if (!insideApp) return;
+      if (url.origin !== window.location.origin) return;
+      const relativePath = basePath !== "" && url.pathname.startsWith(basePath)
+        ? url.pathname.slice(basePath.length) || "/"
+        : url.pathname;
+      const isPageRoute = relativePath === "/"
+        || relativePath.startsWith("/ui/")
+        || relativePath.startsWith("/system/")
+        || relativePath.startsWith("/auth/");
+      if (!isPageRoute) return;
 
       event.preventDefault();
       window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
