@@ -7,7 +7,7 @@ import {
   type ReworkWorkTasksResponse,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
@@ -29,6 +29,7 @@ export function WorkReportingForm() {
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
   const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string }>>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [peopleQuery, setPeopleQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [mode, setMode] = useState<"individual" | "collective">("individual");
   const [reportDrafts, setReportDrafts] = useState<Record<string, WorkReportDraft>>({});
@@ -40,6 +41,15 @@ export function WorkReportingForm() {
   const reportAttempts = useRef<Record<string, PendingWorkReport>>({});
   const taskAttempts = useRef<Record<string, PendingWorkTask>>({});
   const draftFor = (taskId: string): WorkReportDraft => workReportDraft(reportDrafts, taskId);
+
+  const filteredPeople = useMemo(() => {
+    const needle = peopleQuery.trim().toLocaleLowerCase("zh-CN");
+    if (!needle) return people;
+    return people.filter((person) => {
+      const typeLabel = person.personType === "temporary" ? "临时工 代录" : "内部人员";
+      return `${person.displayName} ${typeLabel}`.toLocaleLowerCase("zh-CN").includes(needle);
+    });
+  }, [people, peopleQuery]);
 
   const reload = async () => {
     if (!reworkOrderId) return;
@@ -258,10 +268,20 @@ export function WorkReportingForm() {
       <p>同一工序可同时分给多人；个人任务只允许一人，集体任务按本次成员快照平均分摊组总额。</p>
       <label className="process-source"><input type="radio" checked={mode === "individual"} onChange={() => setMode("individual")} disabled={busy} /> 个人计件</label>
       <label className="process-source"><input type="radio" checked={mode === "collective"} onChange={() => setMode("collective")} disabled={busy} /> 集体计件</label>
-      {people.map((person) => <label className="process-source" key={person.personId}>
+      <InsetField
+        label="搜索返工人员"
+        type="search"
+        value={peopleQuery}
+        placeholder="输入姓名，或搜索“临时工”"
+        disabled={busy}
+        onChange={(event) => setPeopleQuery(event.target.value)}
+      />
+      {filteredPeople.map((person) => <label className="process-source" key={person.personId}>
         <input type="checkbox" checked={Boolean(selected[person.personId])} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} disabled={busy} />
         {person.displayName} · {person.personType === "temporary" ? "临时工（代录）" : "内部人员"}
       </label>)}
+      {people.length > 0 && filteredPeople.length === 0 && <p>没有匹配的返工人员。</p>}
+      {people.length === 0 && <p>当前没有可分配的返工人员；请先在人员资料或权限管理完成维护。</p>}
       <div className="mobile-actions work-reporting-actions">
         {configItems.map((item) => <Button key={item.configurationItemId} onClick={() => void assign(item.configurationItemId)} disabled={busy}>为 {item.processName} 新建任务版本</Button>)}
       </div>
