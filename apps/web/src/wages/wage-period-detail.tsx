@@ -24,6 +24,28 @@ const responseError = async (response: Response): Promise<string> => {
   }
 };
 
+const formatBusinessTime = (value: string | null): string => {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+};
+
+const adjustmentStatusLabel = (status: WageAdjustment["status"]): string =>
+  status === "pending" ? "待审批" : status === "approved" ? "已批准" : "已拒绝";
+
+const reviewStageLabel = (stage: WagePeriodDetail["reviewActions"][number]["stage"]): string =>
+  stage === "tail" ? "李同生初核" : "梁少萍复核";
+
+const reviewDecisionLabel = (decision: WagePeriodDetail["reviewActions"][number]["decision"]): string =>
+  decision === "approved" ? "通过" : "退回";
+
 export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   const [detail, setDetail] = useState<WagePeriodDetail | null>(null);
   const [periods, setPeriods] = useState<WagePeriod[]>([]);
@@ -220,9 +242,9 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
           <Surface key={item.wageItemId} className="wage-item-card">
             <h2>{item.personNameSnapshot} · ¥{item.payableAmount}</h2>
             <p>{item.reworkNoSnapshot} · {item.styleNoSnapshot}</p>
-            <p>{item.processNameSnapshot} · {item.actualQuantitySnapshot} {item.pricingUnitSnapshot} · 单价 ¥{item.unitPriceSnapshot}</p>
+            <p>{item.processNameSnapshot} · {item.actualQuantitySnapshot} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 单价 ¥{item.unitPriceSnapshot}</p>
             <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 ¥{item.groupAmount}</p>
-            <p>高精度份额 {item.exactPersonShare} · 尾差排名 {item.remainderRank}/{item.memberCount}</p>
+            <p>个人分摊原值 {item.exactPersonShare} · 尾差顺序 {item.remainderRank}/{item.memberCount}</p>
             {period.canRequestAdjustment && (
               <WageAdjustmentForm
                 item={item}
@@ -246,7 +268,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
           <div key={adjustment.adjustmentId} className="wage-history-row">
             <span>{adjustment.adjustmentAmount} 元 · {adjustment.reason}</span>
             <StatusBadge tone={adjustment.status === "approved" ? "success" : adjustment.status === "rejected" ? "danger" : "warning"}>
-              {adjustment.status}
+              {adjustmentStatusLabel(adjustment.status)}
             </StatusBadge>
             {adjustment.status === "pending" && period.canApproveAdjustment && (
               <span className="wage-actions">
@@ -263,11 +285,11 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
         {reviewActions.length === 0 && <p>尚未开始核对。</p>}
         {reviewActions.map((action) => (
           <p key={action.reviewActionId}>
-            {action.actedAt} · {action.stage} · {action.decision}
+            {formatBusinessTime(action.actedAt)} · {reviewStageLabel(action.stage)} · {reviewDecisionLabel(action.decision)}
             {action.reason ? ` · ${action.reason}` : ""}
           </p>
         ))}
-        {period.lockedAt && <p>锁定时间：{period.lockedAt}</p>}
+        {period.lockedAt && <p>锁定时间：{formatBusinessTime(period.lockedAt)}</p>}
       </Surface>
     </div>
   );
