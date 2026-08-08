@@ -2,7 +2,7 @@ import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { Detail, Foundation, MobileForm } from "./pages.js";
+import { Foundation, MobileForm } from "./pages.js";
 import {
   AuthGate,
   DeniedPage,
@@ -13,6 +13,7 @@ import {
 } from "./auth.js";
 import { Shell } from "./components.js";
 import { ReworkInitiationWorkbench } from "./rework-initiation-workbench.js";
+import { ReworkDetailPage } from "./rework-detail-page.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
 import { OwnFactoryApprovalQueuePage } from "./own-factory-approval-queue-page.js";
@@ -185,7 +186,7 @@ export function App() {
   else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <WagePage path={path} />;
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
-  else if (path.startsWith("/ui/tasks/")) page = <Detail />;
+  else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
   else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>;
   else if (path === "/ui/process-configuration") page = <ProcessConfigurationForm />;
   else if (path === "/ui/work-reporting") page = <WorkReportingForm />;
