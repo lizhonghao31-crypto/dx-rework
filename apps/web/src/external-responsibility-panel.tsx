@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
+import { SearchSelect } from "./search-select.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -451,21 +452,31 @@ export function ExternalResponsibilityPanel({
         <section className="external-operation">
           <h3>选择实际拟扣供应商</h3>
           <p>每个正式责任项目只能覆盖到一个有效供应商台账；系统不接受浏览器传入的拟扣金额。</p>
-          {unassigned.map((item) => (
-            <div className="external-operation-grid" key={item.externalItemId}>
-              <span>{String(item.processSnapshot.processName ?? item.configurationItemId)} · {item.responsibilityType} · 服务端拟扣 ¥{item.proposedAmount}</span>
-              <select
-                aria-label={`供应商 ${item.externalItemId}`}
-                value={selection[item.externalItemId] ?? ""}
-                onChange={(event) => setSelection((current) => ({ ...current, [item.externalItemId]: event.target.value }))}
-              >
-                <option value="">选择匹配供应商</option>
-                {suppliers.filter((supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType)).map((supplier) => (
-                  <option key={supplier.supplierId} value={supplier.supplierId}>{supplier.supplierName}</option>
-                ))}
-              </select>
-            </div>
-          ))}
+          {unassigned.map((item) => {
+            const matchingSuppliers = suppliers.filter(
+              (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
+            );
+            return (
+              <div className="external-operation-grid" key={item.externalItemId}>
+                <span>{String(item.processSnapshot.processName ?? item.configurationItemId)} · {item.responsibilityType} · 服务端拟扣 ¥{item.proposedAmount}</span>
+                <SearchSelect
+                  options={matchingSuppliers.map((supplier) => ({
+                    value: supplier.supplierId,
+                    label: supplier.supplierName,
+                  }))}
+                  value={selection[item.externalItemId] ?? ""}
+                  placeholder={matchingSuppliers.length ? "输入供应商名称搜索" : "没有匹配类型的供应商"}
+                  emptyText="没有匹配的供应商"
+                  ariaLabel={`供应商 ${String(item.processSnapshot.processName ?? "责任项目")}`}
+                  disabled={busy || matchingSuppliers.length === 0}
+                  onChange={(supplierId) => setSelection((current) => ({
+                    ...current,
+                    [item.externalItemId]: supplierId,
+                  }))}
+                />
+              </div>
+            );
+          })}
           {unassigned.some((item) => item.responsibilityType === "processing_factory") && (
             <InsetField
               label="加工厂改选原因"
