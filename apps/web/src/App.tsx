@@ -26,6 +26,7 @@ import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 import { MasterDataPage } from "./master-data-page.js";
+import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -177,6 +178,7 @@ export function App() {
   if (path === "/ui/admin" || path === "/ui/audit") page = <Shell active="系统管理"><AdminConsolePage /></Shell>;
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/master-data") page = <MasterDataPage />;
+  else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
@@ -201,7 +203,7 @@ export function App() {
       { requiredRole: "quality_control", requiredCapability: "rework:initiate" },
     ]}>{page}</AuthGate>;
   }
-  if (path === "/ui/master-data") {
+  if (path === "/ui/master-data" || path === "/ui/people") {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredCapability: "master_data:manage" },
