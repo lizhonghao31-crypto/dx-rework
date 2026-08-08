@@ -85,13 +85,17 @@ export function Shell({
   }
 
   const isOwner = currentUser?.businessRoles?.includes("owner_group") === true;
-  const canReadAudit = isOwner || (
+  const canReadAudit = currentUser?.isRoot === true || isOwner || (
     currentUser?.businessRoles?.includes("system_admin") === true
     && currentUser.capabilities.includes("audit:read")
   );
-  const roleText = currentUser?.businessRoles?.length
-    ? currentUser.businessRoles.map(roleLabel).join(" · ")
-    : "未分配角色";
+  const roleLabels = currentUser
+    ? [
+        ...(currentUser.isRoot === true ? ["超级用户"] : []),
+        ...(currentUser.businessRoles?.map(roleLabel) ?? []),
+      ]
+    : [];
+  const roleText = roleLabels.length ? roleLabels.join(" · ") : "未分配角色";
 
   return (
     <div className="app-shell">
