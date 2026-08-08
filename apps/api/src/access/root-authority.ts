@@ -4,6 +4,12 @@ import { ApplicationError } from "../platform/errors.js";
 
 const PROTECTED_ROLE_CODES = new Set(["owner_group", "system_admin"]);
 
+type BootstrapRoot = Readonly<{
+  user_id: string;
+  provider_user_id: string;
+  corp_id: string;
+}>;
+
 export class RootAuthority {
   constructor(
     private readonly database: Pool,
@@ -15,38 +21,33 @@ export class RootAuthority {
     return PROTECTED_ROLE_CODES.has(roleCode);
   }
 
+  async assertConfigurationConsistency(): Promise<void> {
+    const bootstrap = await this.bootstrapRoot();
+    if (
+      bootstrap
+      && this.rootDingtalkUserId
+      && bootstrap.provider_user_id !== this.rootDingtalkUserId
+    ) {
+      throw new ApplicationError(
+        "ROOT_IDENTITY_CONFLICT",
+        "服务器配置的超级用户与已锁定的首位超级用户身份不一致",
+        500,
+      );
+    }
+  }
+
   async isRootUser(userId: string): Promise<boolean> {
-    const result = await this.database.query(
-      `SELECT 1
-       FROM app_users u
-       WHERE u.id=$1
-         AND (
-           EXISTS (
-             SELECT 1
-             FROM identity_mappings i
-             WHERE i.user_id=u.id
-               AND i.provider='dingtalk'
-               AND i.corp_id=$2
-               AND $3::text IS NOT NULL
-               AND i.provider_user_id=$3
-           )
-           OR EXISTS (
-             SELECT 1
-             FROM owner_bootstrap_consumptions c
-             JOIN identity_mappings i
-               ON i.user_id=c.user_id
-              AND i.provider='dingtalk'
-              AND i.corp_id=c.corp_id
-              AND i.provider_user_id=c.provider_user_id
-             WHERE c.singleton=true
-               AND c.user_id=u.id
-               AND c.corp_id=$2
-           )
-         )
-       LIMIT 1`,
-      [userId, this.corporationId, this.rootDingtalkUserId ?? null],
-    );
-    return Boolean(result.rows[0]);
+    const bootstrap = await this.bootstrapRoot();
+    if (bootstrap) {
+      if (bootstrap.user_id !== userId) return false;
+      return this.isEligibleDingTalkIdentity(
+        userId,
+        bootstrap.provider_user_id,
+      );
+    }
+
+    if (!this.rootDingtalkUserId) return false;
+    return this.isEligibleDingTalkIdentity(userId, this.rootDingtalkUserId);
   }
 
   async assertProtectedRoleMutation(actorUserId: string, roleCode: string): Promise<void> {
@@ -93,39 +94,20 @@ export class RootAuthority {
         403,
       );
     }
-    const result = await this.database.query(
-      `SELECT 1
-       FROM app_users u
-       WHERE u.id=$1
-         AND (
-           EXISTS (
-             SELECT 1
-             FROM user_role_assignments ura
-             WHERE ura.user_id=u.id
-               AND ura.revoked_at IS NULL
-               AND ura.role_code IN ('owner_group','system_admin')
-           )
-           OR EXISTS (
-             SELECT 1
-             FROM identity_mappings i
-             WHERE i.user_id=u.id
-               AND i.provider='dingtalk'
-               AND i.corp_id=$2
-               AND $3::text IS NOT NULL
-               AND i.provider_user_id=$3
-           )
-           OR EXISTS (
-             SELECT 1
-             FROM owner_bootstrap_consumptions c
-             WHERE c.singleton=true
-               AND c.user_id=u.id
-               AND c.corp_id=$2
-           )
-         )
-       LIMIT 1`,
-      [targetUserId, this.corporationId, this.rootDingtalkUserId ?? null],
-    );
-    if (!result.rows[0]) return;
+
+    const [protectedRole, targetIsRoot] = await Promise.all([
+      this.database.query(
+        `SELECT 1
+         FROM user_role_assignments
+         WHERE user_id=$1
+           AND revoked_at IS NULL
+           AND role_code IN ('owner_group','system_admin')
+         LIMIT 1`,
+        [targetUserId],
+      ),
+      this.isRootUser(targetUserId),
+    ]);
+    if (!protectedRole.rows[0] && !targetIsRoot) return;
     if (actorIsRoot) return;
     throw new ApplicationError(
       "FORBIDDEN",
@@ -140,5 +122,38 @@ export class RootAuthority {
   ): Promise<T[]> {
     if (await this.isRootUser(actorUserId)) return [...roles];
     return roles.filter((role) => !this.isProtectedRole(role.roleCode));
+  }
+
+  private async bootstrapRoot(): Promise<BootstrapRoot | null> {
+    const result = await this.database.query<BootstrapRoot>(
+      `SELECT user_id,provider_user_id,corp_id
+       FROM owner_bootstrap_consumptions
+       WHERE singleton=true AND corp_id=$1
+       LIMIT 1`,
+      [this.corporationId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  private async isEligibleDingTalkIdentity(
+    userId: string,
+    providerUserId: string,
+  ): Promise<boolean> {
+    const result = await this.database.query(
+      `SELECT 1
+       FROM app_users u
+       JOIN identity_mappings i
+         ON i.user_id=u.id
+        AND i.provider='dingtalk'
+       WHERE u.id=$1
+         AND u.enabled=true
+         AND i.corp_id=$2
+         AND i.provider_user_id=$3
+         AND i.active=true
+         AND i.employed=true
+       LIMIT 1`,
+      [userId, this.corporationId, providerUserId],
+    );
+    return Boolean(result.rows[0]);
   }
 }
