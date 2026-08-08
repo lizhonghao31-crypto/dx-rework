@@ -70,6 +70,26 @@ const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
 
+let qrStartPromise: Promise<QrStartResponse> | undefined;
+async function getQrStart(): Promise<QrStartResponse> {
+  qrStartPromise ??= fetch(apiUrl("auth/qr/start"), {
+    method: "POST",
+    credentials: "include",
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`qr start failed: ${response.status}`);
+    return response.json() as Promise<QrStartResponse>;
+  });
+  try {
+    return await qrStartPromise;
+  } catch (error) {
+    qrStartPromise = undefined;
+    throw error;
+  }
+}
+function resetQrStart(): void {
+  qrStartPromise = undefined;
+}
+
 function StatePage({ tone, title, detail, children }: { tone: "info" | "warning" | "danger"; title: string; detail: string; children?: ReactNode }) {
   return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone={tone}>达兴组织准入</StatusBadge><h1>{title}</h1><p>{detail}</p>{children}</Surface></main>;
 }
@@ -190,7 +210,16 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
       setMessage(await loginErrorMessage(response));
       return false;
     }
-    window.location.assign(base);
+    const session = await fetch(apiUrl("auth/me"), {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!session.ok) {
+      setMessage("扫码已通过，但登录会话未建立成功。请不要重新扫码，联系管理员检查会话 Cookie。 ");
+      return false;
+    }
+    resetQrStart();
+    window.location.replace(base);
     return true;
   } catch {
     setMessage("扫码结果未送达服务端，请检查网络后重新生成二维码。");
@@ -204,7 +233,6 @@ export function QrLoginPage() {
   const [starting, setStarting] = useState(true);
   const completing = useRef(false);
   const challengeBusy = useRef(true);
-  const challengeQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +243,7 @@ export function QrLoginPage() {
     const consumeCode = async (code: string, returnedState?: string) => {
       if (cancelled || completing.current) return;
       if (returnedState && returnedState !== expectedState) {
-        setMessage("扫码状态校验失败，请重新生成二维码。");
+        setMessage("扫码状态校验失败，请点击重新生成二维码后再扫一次。");
         return;
       }
       completing.current = true;
@@ -262,21 +290,9 @@ export function QrLoginPage() {
     const start = async () => {
       setStarting(true);
       challengeBusy.current = true;
-      const previousStart = challengeQueue.current;
-      let releaseStart: (() => void) | undefined;
-      const thisStart = new Promise<void>((resolve) => { releaseStart = resolve; });
-      challengeQueue.current = previousStart.then(() => thisStart);
-      await previousStart;
-      if (cancelled) {
-        releaseStart?.();
-        return;
-      }
-
       setMessage("正在生成钉钉二维码…");
       try {
-        const response = await fetch(apiUrl("auth/qr/start"), { method: "POST", credentials: "include" });
-        if (!response.ok) throw new Error();
-        const body = await response.json() as QrStartResponse;
+        const body = await getQrStart();
         expectedState = body.frame.state;
         await loadDingTalkQrSdk();
         if (cancelled) return;
@@ -285,7 +301,6 @@ export function QrLoginPage() {
       } catch {
         if (!cancelled) setMessage("二维码生成失败，请点击重新生成；仍失败请联系管理员确认钉钉应用配置。");
       } finally {
-        releaseStart?.();
         if (!cancelled) {
           challengeBusy.current = false;
           setStarting(false);
@@ -305,6 +320,7 @@ export function QrLoginPage() {
 
   const regenerate = () => {
     if (challengeBusy.current) return;
+    resetQrStart();
     challengeBusy.current = true;
     setStarting(true);
     setAttempt((value) => value + 1);
