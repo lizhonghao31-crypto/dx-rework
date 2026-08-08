@@ -118,7 +118,7 @@ B 阶段先完成只读 preflight，再执行精确 SHA bundle、备份、必要
 
 不得 restart/reload/kill ERP 或样衣系统进程。routine release 不运行 `nginx -s reload`。不得通过删除历史 migration、清空数据库、跳过 readiness 或降低守卫换取成功。
 
-当前已知数据库从 `0032_erp_integration_contract` 升级至包含 PR-31 的 `0033_employee_access_management` 存在 pending migration，因此首个当前-main Pilot 发布预期需要 `apply_migrations=true`；最终仍以发布时数据库前缀检查为唯一事实。
+不得根据旧文档中的历史 schema 版本预判当前-main 是否存在 pending migration。发布时唯一事实源是待部署 release 的 `apps/api/src/platform/migration-manifest.json` 与目标数据库的真实 migration history；必须先验证精确前缀，只有实时检查确认存在 pending migration 时才设置 `apply_migrations=true`。
 
 ### 4.4 冒烟与上线核验
 
