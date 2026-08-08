@@ -9,6 +9,7 @@ import { createWebUrls } from "../url-contract.js";
 import "./own-factory-approval.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const approvalRefreshMilliseconds = 15_000;
 
 type PanelState =
   | { kind: "loading" }
@@ -89,12 +90,37 @@ export function OwnFactoryApprovalPanel({
       setState({ kind: "hidden" });
       return;
     }
-    void load().catch((error: unknown) =>
-      setState({
-        kind: "unavailable",
-        message: error instanceof Error ? error.message : "本厂承担审批加载失败",
-      }),
-    );
+    let requestInFlight = false;
+    let hasLoaded = false;
+    const refresh = async (): Promise<void> => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        await load();
+        hasLoaded = true;
+      } catch (error: unknown) {
+        if (!hasLoaded) {
+          setState({
+            kind: "unavailable",
+            message: error instanceof Error ? error.message : "本厂承担审批加载失败",
+          });
+        }
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    const refreshVisible = (): void => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    void refresh();
+    const intervalId = window.setInterval(refreshVisible, approvalRefreshMilliseconds);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, [reworkOrderId]);
 
   const decide = async (decision: "approved" | "rejected"): Promise<void> => {
