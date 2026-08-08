@@ -15,6 +15,11 @@ import {
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import {
+  BUSINESS_READ_ALL_CAPABILITY,
+  businessActor,
+} from "../access/business-authority.js";
+import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -31,55 +36,75 @@ const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, req
 export type WholeOrderReviewHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: WholeOrderReviewService;
+  root: RootAuthority;
 }>;
 
 export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencies: WholeOrderReviewHttpDependencies): void {
-  const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
+  const actor = async (
+    request: FastifyRequest,
+    capability: string,
+    rootActingRole?: string,
+  ): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
-    if (!user.businessRoles?.length) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
-    return {
-      actorId: user.id,
-      actorRoles: user.businessRoles,
-      authorizationCapability: capability,
-      authorizationCapabilities: user.capabilities,
-      requestId: request.id,
-    };
+    return businessActor(
+      dependencies.root,
+      user,
+      request.id,
+      capability,
+      rootActingRole,
+    );
   };
+
+  const readActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(token(request));
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    if (isRoot) {
+      return businessActor(dependencies.root, user, request.id, "submission:audit", "tail_supervisor");
+    }
+    if (
+      user.businessRoles?.includes("owner_group")
+      && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY)
+    ) {
+      return businessActor(dependencies.root, user, request.id, BUSINESS_READ_ALL_CAPABILITY);
+    }
+    return businessActor(dependencies.root, user, request.id, "submission:audit");
+  };
+
   app.get<{ Params: { reworkOrderId: string }; Querystring: { configurationItemId?: string } }>("/rework-orders/:reworkOrderId/whole-order-review", async (request) => {
     const query = parse(WholeOrderReviewQuerySchema, request.query);
-    const serviceActor = await actor(request, "submission:audit");
+    const serviceActor = await readActor(request);
     const orderId = parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId;
     return WholeOrderReviewResponseSchema.parse(query.configurationItemId
       ? await dependencies.service.get(serviceActor, orderId, query.configurationItemId)
       : await dependencies.service.get(serviceActor, orderId));
   });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/whole-order-review/approve", async (request, reply) => {
-    const result = await dependencies.service.approve(await actor(request, "submission:audit"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(ReviewWholeOrderSchema, request.body), key(request));
+    const result = await dependencies.service.approve(await actor(request, "submission:audit", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(ReviewWholeOrderSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
   });
   app.post<{ Params: { workReportId: string } }>("/work-reports/:workReportId/reject", async (request, reply) => {
-    const result = await dependencies.service.rejectReport(await actor(request, "submission:audit"), parse(WorkReportRejectionParamsSchema, request.params).workReportId, parse(RejectWorkReportSchema, request.body), key(request));
+    const result = await dependencies.service.rejectReport(await actor(request, "submission:audit", "tail_supervisor"), parse(WorkReportRejectionParamsSchema, request.params).workReportId, parse(RejectWorkReportSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
   });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/quantity-adjustments/decrease", async (request, reply) => {
-    const result = await dependencies.service.decrease(await actor(request, "quantity:adjust"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(CreateQuantityDecreaseSchema, request.body), key(request));
+    const result = await dependencies.service.decrease(await actor(request, "quantity:adjust", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(CreateQuantityDecreaseSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(QuantityAdjustmentResponseSchema.parse(result.value));
   });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/quantity-adjustments/increase", async (request, reply) => {
-    const result = await dependencies.service.requestIncrease(await actor(request, "quantity:adjust"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(CreateQuantityIncreaseSchema, request.body), key(request));
+    const result = await dependencies.service.requestIncrease(await actor(request, "quantity:adjust", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(CreateQuantityIncreaseSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(QuantityAdjustmentResponseSchema.parse(result.value));
   });
   app.post<{ Params: { adjustmentId: string } }>("/quantity-adjustments/:adjustmentId/confirm", async (request, reply) => {
-    const result = await dependencies.service.confirmIncrease(await actor(request, "quantity:confirm"), parse(QuantityAdjustmentParamsSchema, request.params).adjustmentId, parse(ConfirmQuantityIncreaseSchema, request.body), key(request));
+    const result = await dependencies.service.confirmIncrease(await actor(request, "quantity:confirm", "order_merchandiser"), parse(QuantityAdjustmentParamsSchema, request.params).adjustmentId, parse(ConfirmQuantityIncreaseSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return QuantityAdjustmentResponseSchema.parse(result.value);
   });
   app.post<{ Params: { adjustmentId: string } }>("/quantity-adjustments/:adjustmentId/ie-review", async (request, reply) => {
-    const result = await dependencies.service.reviewIncrease(await actor(request, "process:review"), parse(QuantityAdjustmentParamsSchema, request.params).adjustmentId, parse(ReviewQuantityIncreaseSchema, request.body), key(request));
+    const result = await dependencies.service.reviewIncrease(await actor(request, "process:review", "ie_reviewer"), parse(QuantityAdjustmentParamsSchema, request.params).adjustmentId, parse(ReviewQuantityIncreaseSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return QuantityAdjustmentResponseSchema.parse(result.value);
   });
