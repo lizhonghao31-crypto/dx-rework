@@ -390,12 +390,13 @@ export function Queue({ supervisor = false }: { supervisor?: boolean }) {
 }
 
 export function TaskCard({ task }: { task: Task }) {
-  const state =
+  const state = task.stateLabel ?? (
     task.tone === "danger"
       ? "已超时"
       : task.tone === "warning"
         ? "临近时限"
-        : "待跟进";
+        : "待跟进"
+  );
   return (
     <article className={`task task--${task.tone}`}>
       <b>{task.id}</b>
