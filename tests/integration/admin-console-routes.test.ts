@@ -12,19 +12,29 @@ const attachmentId = randomUUID();
 const delegationId = randomUUID();
 const sourceId = randomUUID();
 
-function appFor(capabilities: string[], businessRoles: string[]) {
+function appFor(capabilities: string[], businessRoles: string[], isRoot = false) {
   const service = {
     attachments: vi.fn().mockResolvedValue({ items: [{ attachmentId, filename: "evidence.pdf", mimeType: "application/pdf", sizeBytes: "1234567890123", sha256: "a".repeat(64), uploadedBy: actorId, uploaderDisplayName: "Admin", entityType: "wage_adjustment", entityId: "wage-1", status: "ready", rejectionReason: null, createdAt: "2026-08-05T00:00:00.000Z", readyAt: "2026-08-05T00:01:00.000Z" }], nextCursor: null }),
     delegations: vi.fn().mockResolvedValue({ items: [{ delegationId, grantor: { userId: actorId, displayName: "Grantor" }, grantee: { userId: randomUUID(), displayName: "Grantee" }, capability: "process:review", scopeType: "rework_order", scopeId: "order-1", validFrom: "2026-08-01T00:00:00.000Z", validUntil: "2026-08-31T00:00:00.000Z", grantedBy: actorId, grantReason: "休假", createdAt: "2026-08-01T00:00:00.000Z", revokedAt: null, revokedBy: null, revokeReason: null, effectiveNow: true }], nextCursor: null }),
     exceptions: vi.fn().mockResolvedValue({ items: [{ exceptionType: "message_outbox_failed", sourceEntityType: "message_outbox", sourceEntityId: sourceId, status: "failed", occurredAt: "2026-08-05T00:00:00.000Z", lastUpdatedAt: "2026-08-05T00:00:00.000Z", safeError: "[REDACTED]", retryable: true, deepLink: null, details: { version: 1 } }], nextCursor: null }),
     retry: vi.fn().mockResolvedValue({ retried: true, exceptionType: "message_outbox_failed", sourceEntityId: sourceId, operationEventId: randomUUID(), status: "pending" }),
   };
-  const app = buildApp({ config, checkDatabase: vi.fn(), getAppliedSchemaHistory: vi.fn(), adminConsole: { authenticate: vi.fn().mockResolvedValue({ id: actorId, displayName: "Admin", capabilities, businessRoles }), service: service as unknown as AdminConsoleService } });
+  const root = { isRootUser: vi.fn(async () => isRoot) };
+  const app = buildApp({
+    config,
+    checkDatabase: vi.fn(),
+    getAppliedSchemaHistory: vi.fn(),
+    adminConsole: {
+      authenticate: vi.fn().mockResolvedValue({ id: actorId, displayName: "Admin", capabilities, businessRoles }),
+      service: service as unknown as AdminConsoleService,
+      root: root as never,
+    },
+  });
   return { app, service };
 }
 
 describe("admin console routes", () => {
-  it("allows only system_admin with admin:read to query administrator metadata and parses boolean query strings exactly", async () => {
+  it("allows system_admin with admin:read to query administrator metadata and parses boolean query strings exactly", async () => {
     const { app, service } = appFor(["admin:read", "admin:exception:manage"], ["system_admin"]);
     expect((await app.inject({ method: "GET", url: `/admin/attachments?attachmentId=${attachmentId}&limit=100` })).statusCode).toBe(200);
     expect(service.attachments).toHaveBeenCalledWith(expect.objectContaining({ attachmentId, limit: 100 }));
@@ -44,8 +54,15 @@ describe("admin console routes", () => {
     expect((await app.inject({ method: "GET", url: "/admin/attachments?unexpected=true" })).statusCode).toBe(400);
   });
 
-  it.each(["owner_group", "production_management", "tail_supervisor", "finance_read"])("rejects %s from administrator console", async (role) => {
-    const { app } = appFor(["dashboard:management:read", "report:view"], [role]);
+  it("admits root to technical administration without requiring the system_admin role", async () => {
+    const { app, service } = appFor([], ["owner_group"], true);
+    expect((await app.inject({ method: "GET", url: "/admin/attachments" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/admin/exceptions" })).statusCode).toBe(200);
+    expect(service.attachments).toHaveBeenCalledOnce();
+  });
+
+  it.each(["owner_group", "production_management", "tail_supervisor", "finance_read"])("rejects non-root %s from administrator console", async (role) => {
+    const { app } = appFor(["dashboard:management:read", "report:view"], [role], false);
     expect((await app.inject({ method: "GET", url: "/admin/attachments" })).statusCode).toBe(403);
     expect((await app.inject({ method: "GET", url: "/admin/delegations" })).statusCode).toBe(403);
     expect((await app.inject({ method: "GET", url: "/admin/exceptions" })).statusCode).toBe(403);
