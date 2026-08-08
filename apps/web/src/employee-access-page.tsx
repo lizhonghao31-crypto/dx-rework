@@ -7,13 +7,19 @@ import "./employee-access.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
+const PROTECTED_ROLES = new Set(["owner_group", "system_admin"]);
+const BUILTIN_ROLE_NAMES: Record<string, string> = {
+  owner_group: "老板",
+  system_admin: "系统管理员",
+};
+
 type Role = Readonly<{
   roleCode: string;
   displayName: string;
   description: string;
   capabilities: string[];
 }>;
-type CurrentUser = Readonly<{ userId: string; displayName: string }>;
+type CurrentUser = Readonly<{ userId: string; displayName: string; isRoot: boolean }>;
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
@@ -74,7 +80,7 @@ export function EmployeeAccessPage() {
     () => new Map(roles.map((role) => [role.roleCode, role.displayName])),
     [roles],
   );
-  const roleName = (roleCode: string) => roleNameByCode.get(roleCode) ?? roleCode;
+  const roleName = (roleCode: string) => roleNameByCode.get(roleCode) ?? BUILTIN_ROLE_NAMES[roleCode] ?? roleCode;
 
   const usableOwnerCount = useMemo(
     () => directory?.employees.filter((employee) =>
@@ -90,7 +96,7 @@ export function EmployeeAccessPage() {
     const needle = query.trim().toLocaleLowerCase("zh-CN");
     if (!needle) return directory.employees;
     return directory.employees.filter((employee) => {
-      const roleNames = employee.businessRoles.map((code) => roleNameByCode.get(code) ?? code);
+      const roleNames = employee.businessRoles.map((code) => roleNameByCode.get(code) ?? BUILTIN_ROLE_NAMES[code] ?? code);
       const haystack = [
         employee.displayName,
         employee.providerUserId,
@@ -198,6 +204,8 @@ export function EmployeeAccessPage() {
                 const why = reasonByUser[employee.userId] ?? "";
                 const activeAssignments = employee.roleHistory.filter((history) => history.revokedAt === null);
                 const isSelf = me?.userId === employee.userId;
+                const protectedTarget = employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
+                const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
                 const wouldDisableLastOwner =
                   employee.businessRoles.includes("owner_group")
                   && employee.enabled
@@ -249,14 +257,14 @@ export function EmployeeAccessPage() {
                       </Button>
                       {employee.enabled ? (
                         <Button
-                          disabled={Boolean(busy) || wouldDisableLastOwner}
+                          disabled={Boolean(busy) || wouldDisableLastOwner || protectedTargetLocked}
                           onClick={() => changeAccess(employee, "disable")}
                         >
                           停用访问
                         </Button>
                       ) : (
                         <Button
-                          disabled={Boolean(busy) || !employee.active || !employee.employed}
+                          disabled={Boolean(busy) || !employee.active || !employee.employed || protectedTargetLocked}
                           onClick={() => changeAccess(employee, "restore")}
                         >
                           恢复访问
@@ -275,7 +283,9 @@ export function EmployeeAccessPage() {
                           </div>
                           {history.revokedAt === null ? (
                             <Button
-                              disabled={Boolean(busy) || (history.roleCode === "owner_group" && wouldDisableLastOwner)}
+                              disabled={Boolean(busy)
+                                || (PROTECTED_ROLES.has(history.roleCode) && me?.isRoot !== true)
+                                || (history.roleCode === "owner_group" && wouldDisableLastOwner)}
                               onClick={() => revoke(employee, history.assignmentId, history.roleCode)}
                             >
                               撤销
@@ -286,6 +296,7 @@ export function EmployeeAccessPage() {
                     </details>
 
                     {isSelf ? <p className="employee-access-note">当前账号不能给自己授予新角色。</p> : null}
+                    {protectedTargetLocked ? <p className="employee-access-note">老板和系统管理员账号仅可由超级用户维护。</p> : null}
                     {wouldDisableLastOwner ? <p className="employee-access-note">最后一名有效老板不可撤销老板角色或停用访问。</p> : null}
                     {activeAssignments.length === 0 ? <p className="employee-access-note">当前没有业务角色。</p> : null}
                   </article>
