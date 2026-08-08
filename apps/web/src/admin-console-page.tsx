@@ -3,13 +3,13 @@ import { Button, Surface } from "@dx-rework/ui";
 import type { AdminAuditEventsPage, AdminAuditExportsPage } from "@dx-rework/contracts";
 import type { AdminAttachmentsPage, AdminDelegationsPage, AdminExceptionsPage } from "@dx-rework/contracts/admin-console";
 import { createWebUrls } from "../url-contract.js";
-import { Shell } from "./components.js";
+import type { AuthorizedUser } from "./auth.js";
 import "./admin-console.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type Tab = "audit" | "attachments" | "delegations" | "exceptions";
 type LoadState<T> = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: T };
-const tabs: readonly [Tab, string][] = [["audit", "审计日志"], ["attachments", "附件管理"], ["delegations", "代理授权"], ["exceptions", "系统异常"]];
+const technicalTabs: readonly [Tab, string][] = [["audit", "审计日志"], ["attachments", "附件管理"], ["delegations", "代理授权"], ["exceptions", "系统异常"]];
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(apiUrl(path), { credentials: "include", headers: { accept: "application/json" } });
@@ -25,29 +25,48 @@ function Pager({ cursor, onNext }: { cursor: string | null; onNext: (cursor: str
   return <div className="admin-pager">{cursor ? <Button onClick={() => onNext(cursor)}>下一页</Button> : <span>没有更多数据</span>}</div>;
 }
 
-export function AdminConsolePage({ auditOnly = false }: { auditOnly?: boolean }) {
+export function AdminConsolePage() {
   const [tab, setTab] = useState<Tab>("audit");
-  const body = auditOnly ? (
-    <div className="admin-shell">
-      <Surface className="admin-card">
-        <h1>审计日志</h1>
-        <AuditTab />
-      </Surface>
-    </div>
-  ) : (
+  const [technicalAccess, setTechnicalAccess] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
+      .then(async (response) => response.ok ? await response.json() as { status: string; user?: AuthorizedUser } : null)
+      .then((body) => {
+        if (!mounted) return;
+        const user = body?.status === "authorized" ? body.user : undefined;
+        const allowed = user?.isRoot === true || (
+          user?.businessRoles?.includes("system_admin") === true
+          && user.capabilities.includes("admin:read")
+        );
+        setTechnicalAccess(allowed);
+        if (!allowed) setTab("audit");
+      })
+      .catch(() => {
+        if (mounted) setTechnicalAccess(false);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const visibleTabs = technicalAccess ? technicalTabs : technicalTabs.slice(0, 1);
+  return (
     <main className="admin-shell">
       <Surface className="admin-card">
         <h1>系统管理</h1>
-        <nav className="admin-tabs" aria-label="系统管理页签">
-          {tabs.map(([value, label]) => (
-            <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>
-          ))}
-        </nav>
-        {tab === "audit" ? <AuditTab /> : tab === "attachments" ? <AttachmentsTab /> : tab === "delegations" ? <DelegationsTab /> : <ExceptionsTab />}
+        {technicalAccess === null ? <p>正在加载管理权限…</p> : (
+          <>
+            <nav className="admin-tabs" aria-label="系统管理页签">
+              {visibleTabs.map(([value, label]) => (
+                <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>
+              ))}
+            </nav>
+            {tab === "audit" ? <AuditTab /> : tab === "attachments" ? <AttachmentsTab /> : tab === "delegations" ? <DelegationsTab /> : <ExceptionsTab />}
+          </>
+        )}
       </Surface>
     </main>
   );
-  return auditOnly ? <Shell active="审计日志">{body}</Shell> : body;
 }
 
 function AuditTab() {
