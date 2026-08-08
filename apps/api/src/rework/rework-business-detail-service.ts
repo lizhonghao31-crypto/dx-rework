@@ -20,6 +20,10 @@ export type ReworkBusinessDetail = Readonly<{
   problemDescription: string | null;
   reworkQuantity: number | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
+  processConfigurationCreatedBy: Readonly<{
+    userId: string;
+    displayName: string;
+  }> | null;
   createdAt: string;
   updatedAt: string;
   submittedAt: string | null;
@@ -43,6 +47,8 @@ type DetailRow = Readonly<{
   rework_quantity: string | null;
   created_by: string;
   creator_name: string;
+  configuration_created_by: string | null;
+  configuration_creator_name: string | null;
   created_at: Date;
   updated_at: Date;
   submitted_at: Date | null;
@@ -69,6 +75,8 @@ export class ReworkBusinessDetailService {
          orders.processing_factory_type,orders.processing_factory_supplier_id,
          supplier.supplier_name,orders.problem_part,orders.problem_description,
          orders.rework_quantity::text,orders.created_by,creator.display_name creator_name,
+         latest_configuration.created_by configuration_created_by,
+         configuration_creator.display_name configuration_creator_name,
          orders.created_at,orders.updated_at,orders.submitted_at,orders.cancelled_at,orders.cancel_reason
        FROM rework_orders orders
        JOIN app_users creator ON creator.id=orders.created_by
@@ -76,6 +84,15 @@ export class ReworkBusinessDetailService {
        LEFT JOIN supplier_catalog_versions supplier
          ON supplier.supplier_id=orders.processing_factory_supplier_id
         AND supplier.version=orders.processing_factory_supplier_version
+       LEFT JOIN LATERAL (
+         SELECT configuration.created_by
+         FROM rework_process_configurations configuration
+         WHERE configuration.rework_order_id=orders.rework_order_id
+         ORDER BY configuration.configuration_version DESC
+         LIMIT 1
+       ) latest_configuration ON true
+       LEFT JOIN app_users configuration_creator
+         ON configuration_creator.id=latest_configuration.created_by
        WHERE orders.rework_order_id=$1`,
       [reworkOrderId],
     );
@@ -107,6 +124,12 @@ export class ReworkBusinessDetailService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
       createdBy: { userId: row.created_by, displayName: row.creator_name },
+      processConfigurationCreatedBy: row.configuration_created_by && row.configuration_creator_name
+        ? {
+            userId: row.configuration_created_by,
+            displayName: row.configuration_creator_name,
+          }
+        : null,
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
       submittedAt: row.submitted_at?.toISOString() ?? null,
