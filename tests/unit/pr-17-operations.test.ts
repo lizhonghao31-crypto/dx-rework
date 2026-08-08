@@ -115,13 +115,15 @@ describe("PR-17 operations evidence", () => {
     expect(workflow).not.toMatch(/artifact[\s\S]{0,200}(\.env|DATABASE_URL|SSH_KEY)/);
   });
 
-  it("roadmap identifies merged predecessors and PR-17 current work", () => {
+  it("roadmap identifies merged predecessors and PR-17 runtime work", () => {
     const roadmap = read("docs/plan/pr-roadmap-v2.0.md");
     for (const id of ["PR-12", "PR-13", "PR-14", "PR-15", "PR-16"]) {
       expect(roadmap).toMatch(new RegExp(`\\| ${id} \\|.*已完成；GitHub #`));
     }
     expect(roadmap).toMatch(/\| PR-17 \|.*施工中；GitHub #27/);
-    expect(roadmap).toContain("PR-17 A 阶段");
+    expect(roadmap).toContain("PR-17 A 阶段仓库施工已合并");
+    expect(roadmap).toContain("当前进入 B 阶段隔离运行时验证");
+    expect(roadmap).toContain("未在真实环境执行的项目保持未通过");
   });
 
   it("documents isolated restore, S-04 and two-worker Guangzhou pilot", () => {
