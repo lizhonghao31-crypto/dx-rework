@@ -14,6 +14,7 @@ const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type User = {
   businessRoles?: readonly string[];
   capabilities: readonly string[];
+  isRoot?: boolean;
 };
 type ItemForm = {
   source: "catalog" | "custom";
@@ -96,10 +97,14 @@ export function ProcessConfigurationForm() {
   const [message, setMessage] = useState("正在加载工序配置…");
   const [busy, setBusy] = useState(false);
 
-  const canConfigure = user?.businessRoles?.includes("tail_supervisor")
-    && user.capabilities.includes("process:configure");
-  const canReview = user?.businessRoles?.includes("ie_reviewer")
-    && user.capabilities.includes("process:review");
+  const canConfigure = user?.isRoot === true || Boolean(
+    user?.businessRoles?.includes("tail_supervisor")
+    && user.capabilities.includes("process:configure"),
+  );
+  const canReview = user?.isRoot === true || Boolean(
+    user?.businessRoles?.includes("ie_reviewer")
+    && user.capabilities.includes("process:review"),
+  );
   const configuration = response?.configuration ?? null;
   const editable = Boolean(
     canConfigure
@@ -134,9 +139,11 @@ export function ProcessConfigurationForm() {
     }
     void request("auth/me", { parse: (value) => value as { user: User } }).then(async (me) => {
       setUser(me.user);
-      const isSupervisor = me.user.businessRoles?.includes("tail_supervisor")
-        && me.user.capabilities.includes("process:configure");
-      const loadedOptions = isSupervisor
+      const canLoadOptions = me.user.isRoot === true || Boolean(
+        me.user.businessRoles?.includes("tail_supervisor")
+        && me.user.capabilities.includes("process:configure"),
+      );
+      const loadedOptions = canLoadOptions
         ? await request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema)
         : { processes: [] };
       setOptions(loadedOptions);
