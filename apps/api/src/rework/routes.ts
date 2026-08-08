@@ -15,6 +15,7 @@ import type { AuthUser } from "../auth/service.js";
 import { registerErpIntegrationRoutes, type ErpIntegrationHttpDependencies } from "../erp/erp-integration-routes.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { ReworkBusinessDetailService } from "./rework-business-detail-service.js";
 import type { ReworkInitiationService } from "./service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
@@ -44,12 +45,28 @@ const translateTodoRoutingError = (error: unknown): never => {
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  businessDetailService?: ReworkBusinessDetailService;
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
 }>;
 
 export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkHttpDependencies): void {
+  const authenticatedActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    if (!user.businessRoles?.length && !isRoot) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability: "business:detail:read",
+      authorizationCapabilities: user.capabilities,
+      requestId: request.id,
+    };
+  };
+
   const actor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
@@ -109,6 +126,13 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     if (dependencies.listInitiationOptions) return dependencies.listInitiationOptions();
     return dependencies.service.listInitiationOptions(accessActor);
   });
+  if (dependencies.businessDetailService) {
+    app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/business-detail", async (request) =>
+      dependencies.businessDetailService!.get(
+        await authenticatedActor(request),
+        parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
+      ));
+  }
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId", async (request) => dependencies.service.getOwn(await actor(request), parse(ReworkOrderParamsSchema, request.params).reworkOrderId));
   app.get("/rework-orders", async (request) => {
     const query = parse(ReworkOrdersQuerySchema, request.query);
