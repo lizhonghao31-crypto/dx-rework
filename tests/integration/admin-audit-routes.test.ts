@@ -47,8 +47,14 @@ describe("admin audit routes", () => {
     expect((await app.inject({ method: "GET", url: "/admin/audit/exports?unexpected=true" })).statusCode).toBe(400);
   });
 
+  it("allows owner_group to read audit without requiring the technical administrator role", async () => {
+    const { app } = appFor(["dashboard:management:read"], ["owner_group"]);
+    expect((await app.inject({ method: "GET", url: "/admin/audit/events" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/admin/audit/exports" })).statusCode).toBe(200);
+  });
+
   it.each([
-    ["owner_group"], ["production_management"], ["tail_supervisor"], ["worker"],
+    ["production_management"], ["tail_supervisor"], ["worker"],
   ])("rejects %s even when other business capabilities exist", async (role) => {
     const { app } = appFor(["tools:user", "dashboard:management:read"], [role]);
     expect((await app.inject({ method: "GET", url: "/admin/audit/events" })).statusCode).toBe(403);
