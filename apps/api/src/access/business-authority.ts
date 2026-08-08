@@ -12,23 +12,31 @@ export async function businessActor(
   requestId: string,
   capability: string,
   actingRole?: string,
+  ownerReadActing = false,
 ): Promise<TrustedActorContext> {
   const isRoot = await root.isRootUser(user.id);
   if (!user.businessRoles?.length && !isRoot) {
     throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
   }
 
+  const ownerRead = ownerReadActing
+    && user.businessRoles?.includes("owner_group") === true
+    && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY);
+  const mayAct = isRoot || ownerRead;
   const actorRoles = [...(user.businessRoles ?? [])];
   const authorizationCapabilities = [...user.capabilities];
-  if (isRoot) {
-    if (!actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
-    if (actingRole && !actorRoles.includes(actingRole)) actorRoles.push(actingRole);
-    if (!authorizationCapabilities.includes(capability)) {
-      authorizationCapabilities.push(capability);
-    }
-    if (!authorizationCapabilities.includes(BUSINESS_READ_ALL_CAPABILITY)) {
-      authorizationCapabilities.push(BUSINESS_READ_ALL_CAPABILITY);
-    }
+
+  if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) {
+    actorRoles.push(ROOT_ACTOR_ROLE);
+  }
+  if (mayAct && actingRole && !actorRoles.includes(actingRole)) {
+    actorRoles.push(actingRole);
+  }
+  if (mayAct && !authorizationCapabilities.includes(capability)) {
+    authorizationCapabilities.push(capability);
+  }
+  if (isRoot && !authorizationCapabilities.includes(BUSINESS_READ_ALL_CAPABILITY)) {
+    authorizationCapabilities.push(BUSINESS_READ_ALL_CAPABILITY);
   }
 
   return {
