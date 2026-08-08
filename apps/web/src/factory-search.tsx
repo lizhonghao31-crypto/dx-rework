@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import "./factory-search.css";
 
 export type FactoryOption = Readonly<{
   supplierId: string;
