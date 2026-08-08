@@ -53,6 +53,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   const [busy, setBusy] = useState(false);
   const refreshing = useRef(false);
   const mounted = useRef(true);
+  const pendingMutationKeys = useRef<Record<string, string>>({});
 
   const load = useCallback(async () => {
     if (refreshing.current) return;
@@ -104,6 +105,9 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
     success: string,
   ): Promise<void> => {
     if (busy) return;
+    const signature = `${path}:${JSON.stringify(body)}`;
+    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
+    pendingMutationKeys.current[signature] = idempotencyKey;
     setBusy(true);
     setMessage("");
     try {
@@ -113,11 +117,12 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
         headers: {
           accept: "application/json",
           "content-type": "application/json",
-          "idempotency-key": crypto.randomUUID(),
+          "idempotency-key": idempotencyKey,
         },
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error(await responseError(response));
+      delete pendingMutationKeys.current[signature];
       await load();
       setMessage(success);
     } catch (error: unknown) {
