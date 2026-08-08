@@ -381,7 +381,7 @@ export function ReworkInitiationForm() {
         <div className="section-title">
           <h2>返工基本信息</h2>
           <StatusBadge tone={locked ? "warning" : "info"}>
-            一单一个款号
+            一张返工单一个款号
           </StatusBadge>
         </div>
         <div className="qc-form-grid">
@@ -392,9 +392,11 @@ export function ReworkInitiationForm() {
             onChange={(event) => setForm({ ...form, styleNo: event.target.value })}
           />
           <InsetField
-            label="订单号（知道时填写）"
+            label="订单号（可填多个，知道时填写）"
+            maxLength={100}
             value={form.orderNo}
             disabled={formDisabled}
+            placeholder="多个订单号用逗号分隔，例如：PO001，PO002"
             onChange={(event) => setForm({ ...form, orderNo: event.target.value })}
           />
           <label className="dx-field">
