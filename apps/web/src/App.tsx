@@ -174,8 +174,7 @@ export function App() {
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
-  if (path === "/ui/admin") page = <Shell active="系统管理"><AdminConsolePage /></Shell>;
-  else if (path === "/ui/audit") page = <AdminConsolePage auditOnly />;
+  if (path === "/ui/admin" || path === "/ui/audit") page = <Shell active="系统管理"><AdminConsolePage /></Shell>;
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/master-data") page = <MasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
@@ -188,8 +187,8 @@ export function App() {
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
   else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>;
-  else if (path === "/ui/process-configuration") page = <ProcessConfigurationForm />;
-  else if (path === "/ui/work-reporting") page = <WorkReportingForm />;
+  else if (path === "/ui/process-configuration") page = <Shell active="工序配置"><ProcessConfigurationForm /></Shell>;
+  else if (path === "/ui/work-reporting") page = <Shell active="分工上数"><WorkReportingForm /></Shell>;
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
@@ -250,7 +249,10 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/admin") {
-    return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "system_admin", requiredCapability: "admin:read" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/audit") {
     return <AuthGate requiredAnyOf={[
