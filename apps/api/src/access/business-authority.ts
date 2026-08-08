@@ -6,15 +6,22 @@ import type { RootAuthority } from "./root-authority.js";
 export const ROOT_ACTOR_ROLE = "root_superuser";
 export const BUSINESS_READ_ALL_CAPABILITY = "business:read_all";
 
+export async function isRootUser(
+  root: RootAuthority | undefined,
+  userId: string,
+): Promise<boolean> {
+  return root ? root.isRootUser(userId) : false;
+}
+
 export async function businessActor(
-  root: RootAuthority,
+  root: RootAuthority | undefined,
   user: AuthUser,
   requestId: string,
   capability: string,
   actingRole?: string,
   ownerReadActing = false,
 ): Promise<TrustedActorContext> {
-  const isRoot = await root.isRootUser(user.id);
+  const isRoot = await isRootUser(root, user.id);
   if (!user.businessRoles?.length && !isRoot) {
     throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
   }
