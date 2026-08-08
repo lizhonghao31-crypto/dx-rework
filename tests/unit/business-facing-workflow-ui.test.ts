@@ -60,13 +60,24 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("bpsToPercent(item.shareBpsSnapshot)");
     expect(source).toContain("deductionEntryLabel[entry.entryType]");
     expect(source).toContain("closureResultLabel[caseItem.closure.result]");
-    expect(source).toContain("caseItem.canRecordDeduction && <InsetField");
+    expect(source).toContain("caseItem.canRecordDeduction && <>");
     expect(source).toContain("hasEditableFields && <div className=\"external-operation\"");
     expect(source).not.toContain("item.configurationItemId)} · {item.responsibilityType}");
     expect(source).not.toContain("{caseItem.responsibilityType}");
     expect(source).not.toContain("{item.shareBpsSnapshot} bps");
     expect(source).not.toContain("· 版本 {caseItem.caseVersion}");
     expect(source).not.toContain("已生成 N07 草稿 {item.seededDeterminationId}");
+  });
+
+  it("records the real external deduction date and optional business reference", async () => {
+    const source = await read("apps/web/src/external-responsibility-panel.tsx");
+    expect(source).toContain('label="实际扣款日期"');
+    expect(source).toContain('type="date"');
+    expect(source).toContain("max={shanghaiBusinessDate()}");
+    expect(source).toContain('label="扣款凭证号（选填）"');
+    expect(source).toContain("deductedOn: deductedOn[caseItem.caseId] ?? shanghaiBusinessDate()");
+    expect(source).toContain("...(referenceNo ? { referenceNo } : {})");
+    expect(source).toContain('deductionDate > shanghaiBusinessDate()');
   });
 
   it("keeps worker reporting mobile-friendly without exposing the internal order id", async () => {
