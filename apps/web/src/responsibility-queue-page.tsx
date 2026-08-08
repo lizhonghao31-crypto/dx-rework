@@ -54,6 +54,7 @@ export function ResponsibilityQueuePage() {
         subtitle="仅展示当前登录人按角色、组织状态与订单级代理可见的 N07 返工单"
         badge={state.kind === "ready" ? `${items.length} 条 · 实时队列` : "实时队列"}
         action="返回全部任务"
+        actionHref="/ui/tasks"
       />
       <Surface className="responsibility-queue-summary">
         <div>
