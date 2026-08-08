@@ -1,6 +1,7 @@
 import { AdminAttachmentsPageSchema, AdminAttachmentsQuerySchema, AdminDelegationsPageSchema, AdminDelegationsQuerySchema, AdminExceptionRetryBodySchema, AdminExceptionRetryParamsSchema, AdminExceptionRetryResponseSchema, AdminExceptionsPageSchema, AdminExceptionsQuerySchema } from "@dx-rework/contracts/admin-console";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import type { RootAuthority } from "./access/root-authority.js";
 import type { AuthUser } from "./auth/service.js";
 import { ApplicationError } from "./platform/errors.js";
 import type { AdminConsoleService } from "./admin-console-service.js";
@@ -12,23 +13,41 @@ const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T 
 export type AdminConsoleHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: AdminConsoleService;
+  root: RootAuthority;
 }>;
 
-const requireCapability = (user: AuthUser, capability: "admin:read" | "admin:exception:manage"): void => {
+const requireCapability = async (
+  user: AuthUser,
+  capability: "admin:read" | "admin:exception:manage",
+  root: RootAuthority,
+): Promise<boolean> => {
+  if (await root.isRootUser(user.id)) return true;
   if (!user.businessRoles?.length) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
-  if (!user.capabilities.includes(capability) || !user.businessRoles.includes("system_admin")) throw new ApplicationError("FORBIDDEN", "Current user lacks administrator capability", 403);
+  if (!user.capabilities.includes(capability) || !user.businessRoles.includes("system_admin")) {
+    throw new ApplicationError("FORBIDDEN", "Current user lacks administrator capability", 403);
+  }
+  return false;
 };
 
 export function registerAdminConsoleRoutes(app: FastifyInstance, dependencies: AdminConsoleHttpDependencies): void {
   const authorizeRead = async (request: FastifyRequest): Promise<AuthUser> => {
     const user = await dependencies.authenticate(cookieToken(request));
-    requireCapability(user, "admin:read");
+    await requireCapability(user, "admin:read", dependencies.root);
     return user;
   };
   const authorizeManage = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
-    requireCapability(user, "admin:exception:manage");
-    return { actorId: user.id, actorRoles: user.businessRoles ?? [], authorizationCapability: "admin:exception:manage", authorizationCapabilities: user.capabilities, requestId: request.id };
+    const isRoot = await requireCapability(user, "admin:exception:manage", dependencies.root);
+    const capabilities = isRoot && !user.capabilities.includes("admin:exception:manage")
+      ? [...user.capabilities, "admin:exception:manage"]
+      : user.capabilities;
+    return {
+      actorId: user.id,
+      actorRoles: user.businessRoles ?? [],
+      authorizationCapability: "admin:exception:manage",
+      authorizationCapabilities: capabilities,
+      requestId: request.id,
+    };
   };
 
   app.get("/admin/attachments", async (request) => {
@@ -37,7 +56,6 @@ export function registerAdminConsoleRoutes(app: FastifyInstance, dependencies: A
   });
 
   app.get<{ Params: { attachmentId: string } }>("/admin/attachments/:attachmentId/download", async () => {
-    // Administrator download intentionally does not exist in batch 2; callers must use /tools/attachments/:id/download and its existing business authorization.
     throw new ApplicationError("FORBIDDEN", "Administrators cannot bypass existing attachment download authorization", 403);
   });
 
