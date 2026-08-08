@@ -135,6 +135,10 @@
     {
       "version": "0034_owner_business_master_data",
       "checksum": "a5e1b644fc2254159a5bbc8944ea947eaceda11ae1d909ef9d0e9f6f0af9739b"
+    },
+    {
+      "version": "0035_role_management_policy_closure",
+      "checksum": "44d052f64826ab5a039d822ca1dda9de6363f4d12850b7501278d0f9764a9934"
     }
   ]
 }
