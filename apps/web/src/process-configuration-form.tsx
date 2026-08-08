@@ -24,6 +24,14 @@ type ItemForm = {
   pricingUnit: "piece" | "hour";
   unitPrice: string;
 };
+type SavePayloadItem = {
+  source: "catalog" | "custom";
+  processId?: string;
+  customProcessName?: string;
+  plannedQuantity: number;
+  pricingUnit: "piece" | "hour";
+  unitPrice: number;
+};
 
 const emptyItem = (): ItemForm => ({
   source: "catalog",
@@ -85,6 +93,33 @@ const statusLabel = (response: ProcessConfigurationResponse): string => {
   if (response.reworkStatus === "pending_task_assignment") return "工序已生效 · 待分工";
   return "当前状态不在工序配置节点";
 };
+
+const validateItemForms = (items: readonly ItemForm[]): string | null => {
+  if (items.length === 0) return "至少需要配置一道工序。";
+  for (const [index, item] of items.entries()) {
+    const label = `工序 ${index + 1}`;
+    if (item.source === "catalog" && !item.processId) return `${label}：请选择公共工序。`;
+    if (item.source === "custom" && !item.customProcessName.trim()) return `${label}：请输入自定义工序名称。`;
+    if (!item.plannedQuantity.trim()) return `${label}：请输入计划数量。`;
+    const plannedQuantity = Number(item.plannedQuantity);
+    if (!Number.isFinite(plannedQuantity) || plannedQuantity <= 0) return `${label}：计划数量必须大于 0。`;
+    if (item.pricingUnit === "piece" && !Number.isInteger(plannedQuantity)) return `${label}：按件计价时计划数量必须是整数。`;
+    if (!item.unitPrice.trim()) return `${label}：请输入单价。`;
+    const unitPrice = Number(item.unitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) return `${label}：单价必须大于 0。`;
+  }
+  return null;
+};
+
+const payloadItems = (items: readonly ItemForm[]): SavePayloadItem[] => items.map((item) => ({
+  source: item.source,
+  ...(item.source === "catalog"
+    ? { processId: item.processId }
+    : { customProcessName: item.customProcessName.trim() }),
+  plannedQuantity: Number(item.plannedQuantity),
+  pricingUnit: item.pricingUnit,
+  unitPrice: Number(item.unitPrice),
+}));
 
 export function ProcessConfigurationForm() {
   const reworkOrderId = new URLSearchParams(window.location.search).get("rework");
@@ -159,38 +194,49 @@ export function ProcessConfigurationForm() {
     ));
   };
 
-  const payloadItems = () => items.map((item) => ({
-    source: item.source,
-    ...(item.source === "catalog"
-      ? { processId: item.processId }
-      : { customProcessName: item.customProcessName }),
-    plannedQuantity: Number(item.plannedQuantity),
-    pricingUnit: item.pricingUnit,
-    unitPrice: Number(item.unitPrice),
-  }));
+  const validateCurrentForm = (): boolean => {
+    const itemError = validateItemForms(items);
+    if (itemError) {
+      setMessage(itemError);
+      return false;
+    }
+    if (response?.reworkStatus === "pending_task_assignment" && !changeReason.trim()) {
+      setMessage("已生效工序发生变更时必须填写变更原因。");
+      return false;
+    }
+    return true;
+  };
+
+  const persistCurrentDraft = async (): Promise<ProcessConfigurationResponse> => {
+    if (!response || !editable) throw new Error("当前返工单不能保存工序配置。");
+    if (!validateCurrentForm()) throw new Error("请先补完整工序配置。 ");
+    const saved = await request(
+      "rework-orders/" + response.reworkOrderId + "/process-configuration/draft",
+      ProcessConfigurationResponseSchema,
+      {
+        method: "PUT",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          expectedOrderVersion: response.orderVersion,
+          items: payloadItems(items),
+          ...(response.reworkStatus === "pending_task_assignment"
+            ? { changeReason: changeReason.trim() }
+            : {}),
+        }),
+      },
+    );
+    setResponse(saved);
+    setItems(saved.configuration?.items.map(toItem) ?? [emptyItem()]);
+    return saved;
+  };
 
   const save = async () => {
     if (!response || !editable || busy) return;
+    if (!validateCurrentForm()) return;
     setBusy(true);
     try {
-      const saved = await request(
-        "rework-orders/" + response.reworkOrderId + "/process-configuration/draft",
-        ProcessConfigurationResponseSchema,
-        {
-          method: "PUT",
-          headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({
-            expectedOrderVersion: response.orderVersion,
-            items: payloadItems(),
-            ...(response.reworkStatus === "pending_task_assignment"
-              ? { changeReason }
-              : {}),
-          }),
-        },
-      );
-      setResponse(saved);
-      setItems(saved.configuration?.items.map(toItem) ?? [emptyItem()]);
-      setMessage("工序配置草稿已保存；价格按 3 位小数只舍不入保存。");
+      await persistCurrentDraft();
+      setMessage("工序配置草稿已保存；可继续修改，或直接提交 IE 审核。");
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "草稿保存失败");
     } finally {
@@ -199,26 +245,32 @@ export function ProcessConfigurationForm() {
   };
 
   const submit = async () => {
-    if (!response || !configuration || !editable || busy) return;
-    if (!window.confirm("确认提交工序、计划数量与单价给 IE 审核？")) return;
+    if (!response || !editable || busy) return;
+    if (!validateCurrentForm()) return;
+    if (!window.confirm("确认提交当前工序、计划数量与单价给 IE 审核？")) return;
     setBusy(true);
     try {
+      const saved = await persistCurrentDraft();
+      const savedConfiguration = saved.configuration;
+      if (!savedConfiguration || savedConfiguration.status !== "draft") {
+        throw new Error("配置草稿保存后状态异常，请刷新后重试。");
+      }
       const submitted = await request(
-        "rework-orders/" + response.reworkOrderId + "/process-configuration/submit",
+        "rework-orders/" + saved.reworkOrderId + "/process-configuration/submit",
         ProcessConfigurationResponseSchema,
         {
           method: "POST",
           headers: { "idempotency-key": crypto.randomUUID() },
           body: JSON.stringify({
-            expectedOrderVersion: response.orderVersion,
-            expectedConfigurationVersion: configuration.configurationVersion,
+            expectedOrderVersion: saved.orderVersion,
+            expectedConfigurationVersion: savedConfiguration.configurationVersion,
           }),
         },
       );
       setResponse(submitted);
-      setMessage("已提交给 IE 审核；提交后不能直接覆盖工序和单价。");
+      setMessage("已提交 IE 审核；当前工序配置已锁定，等待 IE 处理。");
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "提交IE审核失败");
+      setMessage(error instanceof Error ? error.message : "提交 IE 审核失败");
     } finally {
       setBusy(false);
     }
@@ -260,7 +312,7 @@ export function ProcessConfigurationForm() {
     }
   };
 
-  return <main className="mobile-page process-configuration-page">
+  return <div className="mobile-page process-configuration-page">
     <div className="mobile-hero">
       <div className="mobile-title">
         <h1>工序配置与 IE 审核</h1>
@@ -312,13 +364,13 @@ export function ProcessConfigurationForm() {
             <InsetField label={item.pricingUnit === "piece" ? "计划数量（件）" : "计划工时（小时）"} inputMode="decimal" value={item.plannedQuantity} onChange={(event) => setItem(index, { plannedQuantity: event.target.value })} disabled={busy} />
             <SelectField label="计价单位"><select value={item.pricingUnit} onChange={(event) => setItem(index, { pricingUnit: event.target.value as ItemForm["pricingUnit"] })} disabled={busy}><option value="piece">件</option><option value="hour">小时</option></select></SelectField>
           </div>
-          <InsetField label="单价（元）" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="0.000" />
+          <InsetField label="单价（元）" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="例如：0.550" />
         </div>)}
       </div>
       {response?.reworkStatus === "pending_task_assignment" && <InsetField label="变更原因" value={changeReason} onChange={(event) => setChangeReason(event.target.value)} disabled={busy} placeholder="说明改价或改数量的业务原因" />}
-      <div className="mobile-actions">
-        <Button onClick={() => void save()} disabled={busy}>保存配置草稿</Button>
-        <Button variant="primary" onClick={() => void submit()} disabled={busy || !configuration}>提交 IE 审核</Button>
+      <div className="mobile-actions process-configuration-actions">
+        <Button onClick={() => void save()} disabled={busy}>{busy ? "处理中…" : "保存配置草稿"}</Button>
+        <Button variant="primary" onClick={() => void submit()} disabled={busy || !response}>提交 IE 审核</Button>
       </div>
     </Surface>}
 
@@ -341,5 +393,5 @@ export function ProcessConfigurationForm() {
         <Button variant="primary" onClick={() => void review("approved")} disabled={busy}>审核通过并生效</Button>
       </div>
     </Surface>}
-  </main>;
+  </div>;
 }
