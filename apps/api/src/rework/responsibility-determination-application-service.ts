@@ -14,6 +14,17 @@ import { AuthorizedResponsibilityDeterminationService } from "./responsibility-d
 import { ResponsibilityDeterminationQueueService } from "./responsibility-determination-queue-service.js";
 import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
 
+type TransferPermissionRow = Readonly<{
+  status: string;
+  handler_user_id: string | null;
+  permitted: boolean;
+}>;
+
+type TransferCandidateRow = Readonly<{
+  user_id: string;
+  display_name: string;
+}>;
+
 /**
  * Production-facing responsibility application service.
  *
@@ -26,7 +37,10 @@ export class ResponsibilityDeterminationApplicationService {
   private readonly authorized: AuthorizedResponsibilityDeterminationService;
   private readonly queue: ResponsibilityDeterminationQueueService;
 
-  constructor(database: Pool, todos?: TodoProjectionService) {
+  constructor(
+    private readonly database: Pool,
+    todos?: TodoProjectionService,
+  ) {
     this.draftEngine = new ResponsibilityDeterminationService(
       database,
       undefined,
@@ -48,6 +62,48 @@ export class ResponsibilityDeterminationApplicationService {
 
   get(...args: Parameters<AuthorizedResponsibilityDeterminationService["get"]>) {
     return this.authorized.get(...args);
+  }
+
+  async listTransferCandidates(
+    actor: TrustedActorContext,
+    orderId: string,
+  ): Promise<{ items: Array<{ userId: string; displayName: string }> }> {
+    const permissionResult = await this.database.query<TransferPermissionRow>(
+      `SELECT o.status,
+              responsibility_effective_handler(o.rework_order_id) handler_user_id,
+              responsibility_can_determine($1,o.rework_order_id) permitted
+       FROM rework_orders o
+       WHERE o.rework_order_id=$2`,
+      [actor.actorId, orderId],
+    );
+    const permission = permissionResult.rows[0];
+    if (!permission) {
+      throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
+    }
+    const capabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
+    if (
+      permission.status !== "pending_responsibility_determination"
+      || permission.permitted !== true
+      || !capabilities.includes("responsibility:determine")
+      || permission.handler_user_id !== actor.actorId
+    ) {
+      throw new ApplicationError("FORBIDDEN", "只有当前有效责任处理人可以查看转交对象", 403);
+    }
+
+    const candidates = await this.database.query<TransferCandidateRow>(
+      `SELECT u.id user_id,u.display_name
+       FROM app_users u
+       WHERE u.id<>$1
+         AND responsibility_can_determine(u.id,$2)
+       ORDER BY u.display_name,u.id`,
+      [actor.actorId, orderId],
+    );
+    return {
+      items: candidates.rows.map((row) => ({
+        userId: row.user_id,
+        displayName: row.display_name,
+      })),
+    };
   }
 
   saveDraft(
