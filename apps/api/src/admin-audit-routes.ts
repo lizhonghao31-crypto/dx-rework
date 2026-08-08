@@ -26,8 +26,10 @@ export function registerAdminAuditRoutes(app: FastifyInstance, dependencies: Adm
   const authorize = async (request: FastifyRequest): Promise<void> => {
     const user = await dependencies.authenticate(cookieToken(request));
     if (!user.businessRoles?.length) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
-    if (!user.capabilities.includes("audit:read") || !user.businessRoles.includes("system_admin")) {
-      throw new ApplicationError("FORBIDDEN", "Current user lacks audit read capability", 403);
+    const owner = user.businessRoles.includes("owner_group");
+    const administrator = user.businessRoles.includes("system_admin") && user.capabilities.includes("audit:read");
+    if (!owner && !administrator) {
+      throw new ApplicationError("FORBIDDEN", "当前用户无权查看审计日志", 403);
     }
   };
 
