@@ -13,7 +13,8 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO role_capabilities(role_code,capability) VALUES
   ('owner_group','business:read_all'),
-  ('owner_group','audit:read')
+  ('owner_group','audit:read'),
+  ('owner_group','dashboard:site:read')
 ON CONFLICT DO NOTHING;
 
 -- system_admin is a technical administrator, not a business superuser.
@@ -210,3 +211,120 @@ CREATE OR REPLACE FUNCTION external_responsibility_can_sign(
     ELSE false
   END
 $$;
+
+-- Roles routed as a unique direct recipient must not become ambiguous only when
+-- a business action is submitted. Keep exactly one usable direct holder. A
+-- temporary hand-off should use the existing scoped delegation mechanism.
+CREATE OR REPLACE FUNCTION singleton_direct_role(role_code_value text)
+RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+  SELECT role_code_value=ANY(ARRAY[
+    'tail_supervisor',
+    'ie_reviewer',
+    'production_management',
+    'embroidery_washing_merchandiser',
+    'factory_payables',
+    'embroidery_washing_payables',
+    'fabric_payables',
+    'administrative_clerk',
+    'wage_month_close_accountant'
+  ]::text[])
+$$;
+
+CREATE OR REPLACE FUNCTION singleton_direct_role_conflict(
+  candidate_user_id uuid,
+  role_code_value text
+) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT singleton_direct_role(role_code_value) AND EXISTS(
+    SELECT 1
+    FROM user_role_assignments assignment
+    JOIN app_users target_user
+      ON target_user.id=assignment.user_id AND target_user.enabled=true
+    JOIN identity_mappings identity
+      ON identity.user_id=target_user.id
+     AND identity.provider='dingtalk'
+     AND identity.active=true
+     AND identity.employed=true
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary'
+     AND policy.dingtalk_corp_id=identity.corp_id
+    WHERE assignment.role_code=role_code_value
+      AND assignment.revoked_at IS NULL
+      AND assignment.user_id<>candidate_user_id
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION guard_singleton_direct_role_assignment()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT singleton_direct_role(NEW.role_code) THEN
+    RETURN NEW;
+  END IF;
+  PERFORM pg_advisory_xact_lock(
+    hashtext('dx_rework:singleton-direct-role:' || NEW.role_code)
+  );
+  IF singleton_direct_role_conflict(NEW.user_id,NEW.role_code) THEN
+    RAISE EXCEPTION 'singleton direct role already has an active assignee: %', NEW.role_code
+      USING ERRCODE='23505';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER user_role_assignments_singleton_direct_role
+  BEFORE INSERT ON user_role_assignments
+  FOR EACH ROW EXECUTE FUNCTION guard_singleton_direct_role_assignment();
+
+CREATE OR REPLACE FUNCTION guard_singleton_direct_role_reactivation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  candidate_user_id uuid;
+  candidate_enabled boolean;
+  role_code_value text;
+BEGIN
+  IF TG_TABLE_NAME='app_users' THEN
+    IF OLD.enabled IS NOT DISTINCT FROM NEW.enabled OR NEW.enabled IS DISTINCT FROM true THEN
+      RETURN NEW;
+    END IF;
+    candidate_user_id:=NEW.id;
+    candidate_enabled:=true;
+  ELSE
+    IF NEW.provider<>'dingtalk'
+       OR NEW.active IS DISTINCT FROM true
+       OR NEW.employed IS DISTINCT FROM true
+       OR (OLD.active,OLD.employed) IS NOT DISTINCT FROM (NEW.active,NEW.employed)
+    THEN
+      RETURN NEW;
+    END IF;
+    candidate_user_id:=NEW.user_id;
+    SELECT enabled INTO candidate_enabled FROM app_users WHERE id=candidate_user_id;
+    IF candidate_enabled IS DISTINCT FROM true THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  FOR role_code_value IN
+    SELECT assignment.role_code
+    FROM user_role_assignments assignment
+    WHERE assignment.user_id=candidate_user_id
+      AND assignment.revoked_at IS NULL
+      AND singleton_direct_role(assignment.role_code)
+    ORDER BY assignment.role_code
+  LOOP
+    PERFORM pg_advisory_xact_lock(
+      hashtext('dx_rework:singleton-direct-role:' || role_code_value)
+    );
+    IF singleton_direct_role_conflict(candidate_user_id,role_code_value) THEN
+      RAISE EXCEPTION 'reactivation would create multiple active assignees for role: %', role_code_value
+        USING ERRCODE='23505';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER app_users_singleton_direct_role_reactivation
+  BEFORE UPDATE OF enabled ON app_users
+  FOR EACH ROW EXECUTE FUNCTION guard_singleton_direct_role_reactivation();
+CREATE TRIGGER identity_mappings_singleton_direct_role_reactivation
+  BEFORE UPDATE OF active,employed ON identity_mappings
+  FOR EACH ROW EXECUTE FUNCTION guard_singleton_direct_role_reactivation();
