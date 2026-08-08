@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import "./process-configuration-form.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
