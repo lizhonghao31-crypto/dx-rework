@@ -40,6 +40,23 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain("latest_configuration.created_by");
   });
 
+  it("lets N06 quantity confirmation and IE-review roles reach their actual workflow", async () => {
+    const [app, shell, panel] = await Promise.all([
+      readFile("apps/web/src/App.tsx", "utf8"),
+      readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
+    ]);
+    expect(app).toContain('{ requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" }');
+    expect(app).toContain('{ requiredRole: "ie_reviewer", requiredCapability: "process:review" }');
+    expect(shell).toContain('hasRole("order_merchandiser") && hasCapability("quantity:confirm")');
+    expect(shell).toContain('hasRole("ie_reviewer") && hasCapability("process:review")');
+    expect(panel).toContain('if (cutInput === null) return');
+    expect(panel).toContain('if (returnInput === null) return');
+    expect(panel).toContain('if (maximumInput === null) return');
+    expect(panel).toContain("待订单跟单确认");
+    expect(panel).toContain("待 IE 复核");
+  });
+
   it("keeps N07 responsibility rows valid and transfer targets human-readable", async () => {
     const [panel, service, routes] = await Promise.all([
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
