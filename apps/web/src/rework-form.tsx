@@ -11,6 +11,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { FactorySearch } from "./factory-search.js";
 import {
   executeReworkSubmit,
   isReworkFormMutationAllowed,
@@ -117,7 +118,7 @@ export function ReworkInitiationForm() {
       void request(
         "rework-orders/initiation-options",
         ReworkInitiationOptionsResponseSchema,
-        { signal: controller.signal },
+        { signal: controller.signal, cache: "no-store" },
       ).then((next) => {
         if (active) setOptions(next);
       }).catch((error: unknown) => {
@@ -404,7 +405,7 @@ export function ReworkInitiationForm() {
                 disabled={formDisabled}
                 onChange={(event) => setForm({ ...form, merchandiserUserId: event.target.value })}
               >
-                <option value="">请选择订单跟单</option>
+                <option value="">{options.merchandisers.length ? "请选择订单跟单" : "暂无可选订单跟单"}</option>
                 {options.merchandisers.map((item) => (
                   <option key={item.userId} value={item.userId}>{item.displayName}</option>
                 ))}
@@ -416,21 +417,13 @@ export function ReworkInitiationForm() {
           </label>
           <label className="dx-field">
             <span>加工厂（必填）</span>
-            <span className="dx-field__control">
-              <select
-                aria-label="加工厂"
+            <span className="dx-field__control factory-search-control">
+              <FactorySearch
+                factories={options.factories}
                 value={form.factory}
                 disabled={formDisabled}
-                onChange={(event) => setForm({ ...form, factory: event.target.value })}
-              >
-                <option value="">请选择加工厂</option>
-                <option value="own_factory">本厂</option>
-                {options.factories.map((item) => (
-                  <option key={item.supplierId} value={`supplier:${item.supplierId}`}>
-                    {item.supplierName}
-                  </option>
-                ))}
-              </select>
+                onChange={(factory) => setForm({ ...form, factory })}
+              />
             </span>
             {!formDisabled && options.factories.length === 0 ? (
               <small>除本厂外暂无加工厂；可在“基础资料”维护。</small>
