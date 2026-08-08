@@ -157,6 +157,7 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    root: rootAuthority,
     erp: {
       adapter: new DisabledErpAdapter(),
       service: erpIntegrationService,
