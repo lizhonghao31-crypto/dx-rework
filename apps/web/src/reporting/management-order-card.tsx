@@ -16,7 +16,7 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
       <Surface className="reporting-order-card">
         <div className="reporting-order-card__heading">
           <div>
-            <strong>{order.reworkNo ?? order.reworkOrderId}</strong>
+            <strong>{order.reworkNo ?? "返工单"}</strong>
             <small>{order.styleNo ?? "款号未填写"} · {order.orderNo ?? "订单号未填写"}</small>
           </div>
           <StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge>
