@@ -11,7 +11,7 @@ import type { WageExportService } from "./wage-export-service.js";
 
 const token=(r:FastifyRequest)=>r.headers.cookie?.split(";").map(x=>x.trim()).find(x=>x.startsWith("dx_rework_session="))?.slice(18);
 const parse=<T>(s:{safeParse(v:unknown):{success:true;data:T}|{success:false}},v:unknown):T=>{const r=s.safeParse(v);if(!r.success)throw new ApplicationError("VALIDATION_ERROR","Request validation failed",400);return r.data};
-export type WageHttpDependencies=Readonly<{authenticate(v:string|undefined):Promise<AuthUser>;service:WageService;exportService:WageExportService;root:RootAuthority}>;
+export type WageHttpDependencies=Readonly<{authenticate(v:string|undefined):Promise<AuthUser>;service:WageService;exportService:WageExportService;root?:RootAuthority}>;
 export function registerWageRoutes(app:FastifyInstance,d:WageHttpDependencies):void{
  const actingRole=(cap:string):string|undefined=>cap==="wage:tail_review"||cap==="wage:adjustment_request"?"tail_supervisor":cap==="wage:administrative_review"||cap==="wage:adjustment_approve"?"administrative_clerk":cap==="wage:month_close"?"wage_month_close_accountant":cap==="wage:export"?"finance_read":undefined;
  const actor=async(r:FastifyRequest,cap:string):Promise<TrustedActorContext>=>businessActor(d.root,await d.authenticate(token(r)),r.id,cap,actingRole(cap));
