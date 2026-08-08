@@ -58,7 +58,7 @@ const ORDER_SELECT = `SELECT orders.*,
     FROM rework_orders other
     WHERE other.rework_order_id<>orders.rework_order_id
       AND other.style_no=orders.style_no
-      AND other.status<>'cancelled'
+      AND other.status NOT IN ('completed','cancelled')
   ) AS has_other_open_style_order
 FROM rework_orders orders`;
 
@@ -375,6 +375,9 @@ export class ReworkInitiationService {
       const current = await this.lockOwned(client, actor.actorId, reworkOrderId);
       this.ensureVersion(current, input.expectedVersion);
       transitionReworkOrder(current.status, "cancelled");
+      if (current.status !== "draft" && current.status !== "pending_process_configuration") {
+        throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不能取消", 409);
+      }
       if (current.status === "pending_process_configuration") {
         await this.ensureNoProcessConfigurationStarted(client, reworkOrderId);
       }
@@ -383,8 +386,8 @@ export class ReworkInitiationService {
       const after = {
         ...before,
         status: "cancelled" as const,
-        version: nextVersion,
         cancelReason: input.reason,
+        version: nextVersion,
       };
       const eventId = await this.events.append(client, actor, {
         action: "rework.cancel",
@@ -402,21 +405,22 @@ export class ReworkInitiationService {
          WHERE rework_order_id=$1`,
         [reworkOrderId, actor.actorId, input.reason, nextVersion],
       );
-      if (current.status === "pending_process_configuration") {
-        await this.outbox.enqueue(client, {
-          topic: "rework.cancelled",
-          aggregateType: "rework_order",
-          aggregateId: reworkOrderId,
-          payload: { reworkOrderId, reworkNo: current.rework_no, reason: input.reason },
-          recipientKey: "role:tail_supervisor",
-          idempotencyKey: `${reworkOrderId}:cancelled:${nextVersion}`,
-        });
-      }
+      await this.outbox.enqueue(client, {
+        topic: "rework.cancelled",
+        aggregateType: "rework_order",
+        aggregateId: reworkOrderId,
+        payload: { reworkOrderId, reworkNo: current.rework_no, reason: input.reason },
+        recipientKey: "role:tail_supervisor",
+        idempotencyKey: `${reworkOrderId}:cancelled:${nextVersion}`,
+      });
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
     });
   }
 
-  async getOwn(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkOrderResponse> {
+  async getOwn(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+  ): Promise<ReworkOrderResponse> {
     this.ensureInitiator(actor);
     return this.getOwnedWithClient(this.database, actor.actorId, reworkOrderId);
   }
@@ -823,7 +827,7 @@ export class ReworkInitiationService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
-      hasOtherOpenStyleOrder: row.has_other_open_style_order,
+      hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
       version: row.version,
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
