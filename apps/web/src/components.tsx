@@ -115,7 +115,12 @@ export function Shell({
     );
   }
   if (wageAccess) navigation.push(["薪", "工资核对", "/ui/wages"]);
-  if (masterDataAccess) navigation.push(["资", "基础资料", "/ui/master-data"]);
+  if (masterDataAccess) {
+    navigation.push(
+      ["资", "基础资料", "/ui/master-data"],
+      ["人", "人员资料", "/ui/people"],
+    );
+  }
   if (canManageEmployeeAccess) navigation.push(["权", "权限管理", "/ui/employee-access"]);
   if (auditAccess || technicalAdminAccess) navigation.push(["管", "系统管理", "/ui/admin"]);
 
