@@ -12,7 +12,7 @@ import {
   type AuthorizedUser,
 } from "./auth.js";
 import { Shell } from "./components.js";
-import { ReworkInitiationForm } from "./rework-form.js";
+import { ReworkInitiationWorkbench } from "./rework-initiation-workbench.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
 import { OwnFactoryApprovalQueuePage } from "./own-factory-approval-queue-page.js";
@@ -186,7 +186,7 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <Detail />;
-  else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationForm /></Shell>;
+  else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>;
   else if (path === "/ui/process-configuration") page = <ProcessConfigurationForm />;
   else if (path === "/ui/work-reporting") page = <WorkReportingForm />;
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
