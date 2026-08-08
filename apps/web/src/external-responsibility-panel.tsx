@@ -6,7 +6,7 @@ import {
   type ExternalResponsibilityRequestedChange,
 } from "@dx-rework/contracts/external-responsibility";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { shanghaiBusinessDate } from "./business-date.js";
@@ -125,6 +125,9 @@ export function ExternalResponsibilityPanel({
     useState<Record<string, string[]>>({});
   const [differenceDisposition, setDifferenceDisposition] =
     useState<Record<string, string>>({});
+  const [revisionToOwnFactory, setRevisionToOwnFactory] =
+    useState<Record<string, boolean>>({});
+  const pendingMutationKeys = useRef<Record<string, string>>({});
 
   const load = async (): Promise<void> => {
     if (!reworkOrderId) return;
@@ -195,24 +198,35 @@ export function ExternalResponsibilityPanel({
     [state],
   );
 
+  const mutationKey = (signature: string): string => {
+    const existing = pendingMutationKeys.current[signature];
+    if (existing) return existing;
+    const next = crypto.randomUUID();
+    pendingMutationKeys.current[signature] = next;
+    return next;
+  };
+
   const send = async (
     path: string,
     body: unknown,
   ): Promise<ExternalResponsibilityCaseResponse> => {
+    const signature = `case:${path}:${JSON.stringify(body)}`;
     const response = await fetch(apiUrl(path), {
       method: "POST",
       credentials: "include",
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        "idempotency-key": crypto.randomUUID(),
+        "idempotency-key": mutationKey(signature),
       },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(await requestError(response));
-    return ExternalResponsibilityCaseResponseSchema.parse(
+    const result = ExternalResponsibilityCaseResponseSchema.parse(
       await response.json(),
     );
+    delete pendingMutationKeys.current[signature];
+    return result;
   };
 
   const refresh = async (success: string): Promise<void> => {
@@ -252,32 +266,32 @@ export function ExternalResponsibilityPanel({
     }
     setBusy(true);
     setMessage("");
+    const path = `external-responsibility-batches/${state.value.batchId}/allocate-suppliers`;
+    const body = {
+      expectedBatchVersion: state.value.batchVersion,
+      allocations: [...grouped.values()],
+    };
+    const signature = `batch:${path}:${JSON.stringify(body)}`;
     try {
       const response = await fetch(
-        apiUrl(
-          `external-responsibility-batches/${state.value.batchId}/allocate-suppliers`,
-        ),
+        apiUrl(path),
         {
           method: "POST",
           credentials: "include",
           headers: {
             accept: "application/json",
             "content-type": "application/json",
-            "idempotency-key": crypto.randomUUID(),
+            "idempotency-key": mutationKey(signature),
           },
-          body: JSON.stringify({
-            expectedBatchVersion: state.value.batchVersion,
-            allocations: [...grouped.values()],
-          }),
+          body: JSON.stringify(body),
         },
       );
       if (!response.ok) throw new Error(await requestError(response));
-      setState({
-        kind: "ready",
-        value: ExternalResponsibilityBatchResponseSchema.parse(
-          await response.json(),
-        ),
-      });
+      const value = ExternalResponsibilityBatchResponseSchema.parse(
+        await response.json(),
+      );
+      delete pendingMutationKeys.current[signature];
+      setState({ kind: "ready", value });
       setMessage(
         "供应商与拟扣台账已由服务端锁定，下一步由业务经办人提交签收。",
       );
@@ -300,10 +314,7 @@ export function ExternalResponsibilityPanel({
     if (
       caseItem.closure
       && caseItem.closure.remainingAmount !== "0.00"
-      && (
-        caseItem.closure.remainingDifferenceDisposition?.includes("本厂")
-        || differenceDisposition[caseItem.caseId]?.includes("本厂")
-      )
+      && revisionToOwnFactory[caseItem.caseId] === true
     ) {
       return {
         kind: "remaining_difference_to_own_factory",
@@ -486,6 +497,7 @@ export function ExternalResponsibilityPanel({
         [caseItem.caseId]: [],
       }));
       setRemark((current) => ({ ...current, [caseItem.caseId]: "" }));
+      setRevisionToOwnFactory((current) => ({ ...current, [caseItem.caseId]: false }));
       await refresh(
         kind === "revision-approve"
           ? "责任变更已批准，并已生成可继续编辑的 N07 判责草稿。"
@@ -659,6 +671,20 @@ export function ExternalResponsibilityPanel({
                   onChange={(event) => setDifferenceDisposition((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="部分/未扣关闭时必填，例如：申请转本厂承担并进入责任重判"
                 />}
+                {caseItem.canRequestRevision && caseItem.closure && caseItem.closure.remainingAmount !== "0.00" && (
+                  <label className="external-revision-choice">
+                    <input
+                      type="checkbox"
+                      checked={revisionToOwnFactory[caseItem.caseId] === true}
+                      onChange={(event) => setRevisionToOwnFactory((current) => ({
+                        ...current,
+                        [caseItem.caseId]: event.target.checked,
+                      }))}
+                      disabled={busy}
+                    />
+                    <span>将未扣差额转为本厂承担，并进入 N07 重新判责</span>
+                  </label>
+                )}
                 {caseItem.canRecordDeduction && <>
                   <InsetField
                     label="实际扣款金额"
