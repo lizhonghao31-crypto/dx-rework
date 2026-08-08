@@ -2,7 +2,7 @@ import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { Foundation, MobileForm } from "./pages.js";
+import { Foundation } from "./pages.js";
 import {
   AuthGate,
   DeniedPage,
@@ -190,8 +190,7 @@ export function App() {
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
   else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>;
   else if (path === "/ui/process-configuration") page = <Shell active="工序配置"><ProcessConfigurationForm /></Shell>;
-  else if (path === "/ui/work-reporting") page = <Shell active="分工上数"><WorkReportingForm /></Shell>;
-  else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
+  else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = <Shell active="分工上数"><WorkReportingForm /></Shell>;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
 
@@ -216,7 +215,7 @@ export function App() {
       { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
     ]}>{page}</AuthGate>;
   }
-  if (path === "/ui/work-reporting") {
+  if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
