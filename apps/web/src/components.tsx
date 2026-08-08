@@ -297,7 +297,7 @@ export function Header({
   title: string;
   subtitle?: string;
   badge: string;
-  action: string;
+  action?: string;
   actionHref?: string;
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -310,7 +310,11 @@ export function Header({
       </div>
       <div className="header-actions">
         <StatusBadge tone="info">{badge}</StatusBadge>
-        {resolvedActionHref ? <a href={resolvedActionHref}><Button>{action}</Button></a> : <Button>{action}</Button>}
+        {action ? (
+          resolvedActionHref
+            ? <a href={resolvedActionHref}><Button>{action}</Button></a>
+            : <Button>{action}</Button>
+        ) : null}
       </div>
     </header>
   );
