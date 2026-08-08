@@ -11,6 +11,7 @@ import {
   QrRelayPage,
   type AuthorizedUser,
 } from "./auth.js";
+import { Shell } from "./components.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
@@ -23,6 +24,7 @@ import { ReworkQueryPage } from "./reporting/rework-query-page.js";
 import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
+import { MasterDataPage } from "./master-data-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -116,7 +118,8 @@ function HomeLanding() {
         const { user } = body;
         let target = "ui/work-reporting";
         if (
-          user.businessRoles?.includes("owner_group") === true
+          user.isRoot === true
+          || user.businessRoles?.includes("owner_group") === true
           || user.capabilities.includes("dashboard:management:read")
         ) {
           target = "ui/management";
@@ -168,6 +171,7 @@ export function App() {
   if (path === "/ui/admin") page = <AdminConsolePage />;
   else if (path === "/ui/audit") page = <AdminConsolePage auditOnly />;
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
+  else if (path === "/ui/master-data") page = <MasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
@@ -177,7 +181,7 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <Detail />;
-  else if (path === "/ui/qc/new") page = <ReworkInitiationForm />;
+  else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationForm /></Shell>;
   else if (path === "/ui/process-configuration") page = <ProcessConfigurationForm />;
   else if (path === "/ui/work-reporting") page = <WorkReportingForm />;
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
@@ -190,6 +194,12 @@ export function App() {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredRole: "quality_control", requiredCapability: "rework:initiate" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/master-data") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "master_data:manage" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/process-configuration") {
