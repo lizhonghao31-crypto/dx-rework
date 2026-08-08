@@ -58,7 +58,7 @@ export function WagePeriodList() {
   }, [load]);
 
   return (
-    <main className="wage-page">
+    <div className="wage-page">
       <header className="page-heading">
         <div>
           <p className="eyebrow">N10-A · 工资核对与月结</p>
@@ -94,6 +94,6 @@ export function WagePeriodList() {
       {periods.length === 0 && !message && (
         <Surface><p>暂无已通过整单审核的工资来源。</p></Surface>
       )}
-    </main>
+    </div>
   );
 }
