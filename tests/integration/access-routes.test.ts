@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "@dx-rework/config";
 import { buildApp } from "../../apps/api/src/app.js";
 import { AuthDeniedError } from "../../apps/api/src/auth/service.js";
+import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 
 const config = loadConfig({
   NODE_ENV: "test",
@@ -19,9 +20,19 @@ const config = loadConfig({
 const apps: FastifyInstance[] = [];
 afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 
-const create = (capabilities: readonly string[], businessRoles: readonly string[] = ["system_admin"]) => {
+const protectedRoles = new Set(["owner_group", "system_admin"]);
+
+const create = (
+  capabilities: readonly string[],
+  businessRoles: readonly string[] = ["system_admin"],
+  isRoot = false,
+) => {
   const service = {
-    listRoles: vi.fn(async () => []),
+    listRoles: vi.fn(async () => [
+      { roleCode: "worker", displayName: "员工", description: "", capabilities: [] },
+      { roleCode: "owner_group", displayName: "老板", description: "", capabilities: [] },
+      { roleCode: "system_admin", displayName: "系统管理员", description: "", capabilities: [] },
+    ]),
     listRoleAssignments: vi.fn(async () => []),
     listDelegations: vi.fn(async () => []),
     listPeople: vi.fn(async () => []),
@@ -40,6 +51,19 @@ const create = (capabilities: readonly string[], businessRoles: readonly string[
     createDelegation: vi.fn(),
     revokeDelegation: vi.fn(),
   };
+  const root = {
+    isRootUser: vi.fn(async () => isRoot),
+    isProtectedRole: (roleCode: string) => protectedRoles.has(roleCode),
+    assertProtectedRoleMutation: vi.fn(async (_actorId: string, roleCode: string) => {
+      if (protectedRoles.has(roleCode) && !isRoot) {
+        throw new ApplicationError("FORBIDDEN", "老板和系统管理员角色仅可由超级用户维护", 403);
+      }
+    }),
+    assertAssignmentMutation: vi.fn(async () => undefined),
+    assertTargetAccessMutation: vi.fn(async () => undefined),
+    filterAssignableRoles: vi.fn(async (_actorId: string, roles: Array<{ roleCode: string }>) =>
+      isRoot ? roles : roles.filter((role) => !protectedRoles.has(role.roleCode))),
+  };
   const app = buildApp({
     config,
     checkDatabase: async () => undefined,
@@ -55,10 +79,11 @@ const create = (capabilities: readonly string[], businessRoles: readonly string[
         };
       },
       service: service as never,
+      root: root as never,
     },
   });
   apps.push(app);
-  return { app, service };
+  return { app, service, root };
 };
 
 describe("access routes", () => {
@@ -75,6 +100,7 @@ describe("access routes", () => {
       displayName: "管理员",
       businessRoles: ["system_admin"],
       capabilities: ["access:admin"],
+      isRoot: false,
     });
   });
 
@@ -97,6 +123,47 @@ describe("access routes", () => {
       authorizationCapability: "access:admin",
       requestId: "access-request-1",
     });
+  });
+
+  it("keeps owner and system administrator assignment root-only", async () => {
+    const normalOwner = create(["access:admin"], ["owner_group"], false);
+    const rejected = await normalOwner.app.inject({
+      method: "POST",
+      url: "/access/role-assignments",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        userId: "00000000-0000-4000-8000-000000000002",
+        roleCode: "system_admin",
+        reason: "尝试授予管理员",
+      },
+    });
+    expect(rejected.statusCode).toBe(403);
+    expect(normalOwner.service.assignRole).not.toHaveBeenCalled();
+
+    const rootOwner = create([], [], true);
+    const allowed = await rootOwner.app.inject({
+      method: "POST",
+      url: "/access/role-assignments",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        userId: "00000000-0000-4000-8000-000000000002",
+        roleCode: "owner_group",
+        reason: "超级用户授予老板",
+      },
+    });
+    expect(allowed.statusCode).toBe(201);
+    expect(rootOwner.service.assignRole).toHaveBeenCalledOnce();
+  });
+
+  it("hides protected roles from non-root role options", async () => {
+    const normalOwner = create(["access:admin"], ["owner_group"], false);
+    const response = await normalOwner.app.inject({
+      method: "GET",
+      url: "/access/roles",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().map((role: { roleCode: string }) => role.roleCode)).toEqual(["worker"]);
   });
 
   it("adds an audited alias to an existing stable person ID", async () => {
@@ -150,7 +217,7 @@ describe("access routes", () => {
   });
 
   it("rejects empty roles, missing capabilities and untrusted sessions", async () => {
-    const noRole = create(["access:admin"], []);
+    const noRole = create(["access:admin"], [], false);
     expect((await noRole.app.inject({
       method: "POST",
       url: "/access/role-assignments",
@@ -158,7 +225,7 @@ describe("access routes", () => {
       payload: { userId: "00000000-0000-4000-8000-000000000002", roleCode: "worker", reason: "test" },
     })).json().error.code).toBe("NO_BUSINESS_ROLE");
 
-    const forbidden = create([], ["system_admin"]);
+    const forbidden = create([], ["system_admin"], false);
     expect((await forbidden.app.inject({
       method: "POST",
       url: "/access/role-assignments",
