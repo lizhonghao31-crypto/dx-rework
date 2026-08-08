@@ -1,11 +1,16 @@
 import type { WageItem, WagePeriod } from "@dx-rework/contracts/wages";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../../url-contract.js";
 import { ExternalEvidenceUploader } from "../external-evidence-uploader.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+
+type PendingAdjustmentAttempt = Readonly<{
+  signature: string;
+  key: string;
+}>;
 
 export function WageAdjustmentForm({
   item,
@@ -37,10 +42,24 @@ export function WageAdjustmentForm({
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const pendingAttempt = useRef<PendingAdjustmentAttempt | null>(null);
 
   const submit = async () => {
     const target = targets.find((period) => period.periodId === targetPeriodId);
     if (!target || busy) return;
+    const payload = {
+      originalWageItemId: item.wageItemId,
+      targetPeriodId,
+      adjustmentAmount: amount,
+      reason,
+      attachmentIds,
+      expectedVersion: target.periodVersion,
+    };
+    const signature = JSON.stringify(payload);
+    const attempt = pendingAttempt.current?.signature === signature
+      ? pendingAttempt.current
+      : { signature, key: crypto.randomUUID() };
+    pendingAttempt.current = attempt;
     setBusy(true);
     setMessage("");
     try {
@@ -50,21 +69,15 @@ export function WageAdjustmentForm({
         headers: {
           accept: "application/json",
           "content-type": "application/json",
-          "idempotency-key": crypto.randomUUID(),
+          "idempotency-key": attempt.key,
         },
-        body: JSON.stringify({
-          originalWageItemId: item.wageItemId,
-          targetPeriodId,
-          adjustmentAmount: amount,
-          reason,
-          attachmentIds,
-          expectedVersion: target.periodVersion,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const body = await response.json() as { error?: { message?: string } };
         throw new Error(body.error?.message ?? "工资调整提交失败");
       }
+      pendingAttempt.current = null;
       setAmount("");
       setReason("");
       setAttachmentIds([]);
