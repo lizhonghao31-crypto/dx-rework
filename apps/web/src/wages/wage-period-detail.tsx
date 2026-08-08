@@ -223,11 +223,14 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
             <Button
               variant="primary"
               disabled={busy}
-              onClick={() => void command(
-                `wage-periods/${period.periodId}/lock`,
-                { expectedVersion: period.periodVersion, lockNote: null },
-                "工资月份已锁定。",
-              )}
+              onClick={() => {
+                if (!window.confirm("确认锁定本月工资？锁定后本月不能直接修改，只能在后续未锁定月份生成调整。")) return;
+                void command(
+                  `wage-periods/${period.periodId}/lock`,
+                  { expectedVersion: period.periodVersion, lockNote: null },
+                  "工资月份已锁定。",
+                );
+              }}
             >月结锁定</Button>
           )}
           {period.canExport && (
