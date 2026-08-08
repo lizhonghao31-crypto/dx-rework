@@ -219,8 +219,12 @@ export function App() {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
+      { requiredRole: "tail_supervisor", requiredCapability: "submission:audit" },
+      { requiredRole: "tail_supervisor", requiredCapability: "quantity:adjust" },
       { requiredRole: "worker", requiredCapability: "work:report" },
       { requiredCapability: "work:report_for_worker" },
+      { requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" },
+      { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/responsibility") {
