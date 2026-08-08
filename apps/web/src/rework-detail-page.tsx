@@ -1,5 +1,5 @@
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell } from "./components.js";
@@ -9,6 +9,7 @@ import { ResponsibilityDeterminationPanel } from "./responsibility-determination
 import "./rework-detail.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const detailRefreshMilliseconds = 2_000;
 
 type ReworkStatus =
   | "draft"
@@ -61,7 +62,7 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成审核，正在判定责任、倍率和承担比例" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任签收" },
-  completed: { label: "已完成", next: "返工生产流程已完成，历史数据保持只读可追溯" },
+  completed: { label: "已完成", next: "返工生产流程已完成；工资核对和未完外部扣款按各自生命周期继续" },
   cancelled: { label: "已取消", next: "返工单已取消，历史资料和操作记录继续保留" },
 };
 
@@ -103,6 +104,9 @@ const nextAction = (detail: ReworkBusinessDetail): { label: string; href: string
   ].includes(detail.status)) {
     return { label: "进入分工 / 上数 / 整单审核", href: `/ui/work-reporting?rework=${detail.reworkOrderId}` };
   }
+  if (detail.status === "completed") {
+    return { label: "查看工资核对", href: "/ui/wages" };
+  }
   return null;
 };
 
@@ -110,29 +114,46 @@ export function ReworkDetailPage() {
   const reworkOrderId = orderIdFromLocation();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
 
+  const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
+    if (!reworkOrderId) {
+      setState({ kind: "error", message: "返工单链接无效" });
+      return;
+    }
+    const response = await fetch(apiUrl(`rework-orders/${reworkOrderId}/business-detail`), {
+      credentials: "include",
+      headers: { accept: "application/json" },
+      ...(signal ? { signal } : {}),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+      throw new Error(body?.error?.message ?? `返工单加载失败（${response.status}）`);
+    }
+    const value = await response.json() as ReworkBusinessDetail;
+    setState({ kind: "ready", value });
+  }, [reworkOrderId]);
+
   useEffect(() => {
     if (!reworkOrderId) {
       setState({ kind: "error", message: "返工单链接无效" });
       return;
     }
     const controller = new AbortController();
-    void fetch(apiUrl(`rework-orders/${reworkOrderId}/business-detail`), {
-      credentials: "include",
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    }).then(async (response) => {
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(body?.error?.message ?? `返工单加载失败（${response.status}）`);
-      }
-      return await response.json() as ReworkBusinessDetail;
-    }).then((value) => setState({ kind: "ready", value })).catch((error: unknown) => {
+    void load(controller.signal).catch((error: unknown) => {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         setState({ kind: "error", message: error instanceof Error ? error.message : "返工单加载失败" });
       }
     });
-    return () => controller.abort();
-  }, [reworkOrderId]);
+    const refresh = () => {
+      void load().catch(() => undefined);
+    };
+    const intervalId = window.setInterval(refresh, detailRefreshMilliseconds);
+    window.addEventListener("focus", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load, reworkOrderId]);
 
   if (state.kind === "loading") {
     return <Shell active="返工任务"><Header title="返工单详情" badge="实时读取" action="返回任务列表" actionHref="/ui/tasks" /><Surface>正在加载返工单…</Surface></Shell>;
@@ -149,6 +170,7 @@ export function ReworkDetailPage() {
     "pending_responsibility_action",
     "completed",
   ].includes(detail.status);
+  const responsibilityKey = `${detail.status}:${detail.updatedAt}`;
 
   return (
     <Shell active="返工任务">
@@ -196,7 +218,7 @@ export function ReworkDetailPage() {
         </div>
 
         {showResponsibility ? (
-          <div className="rework-detail-responsibility">
+          <div className="rework-detail-responsibility" key={responsibilityKey}>
             <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} />
             <OwnFactoryApprovalPanel reworkOrderId={detail.reworkOrderId} />
             <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} />
