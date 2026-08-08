@@ -76,8 +76,6 @@ export function OwnFactoryApprovalQueuePage() {
         title="本厂承担审批"
         subtitle="N08-A 仅显示当前登录人按服务端角色、在职状态和订单范围代理可见的待审批事项"
         badge={state.kind === "ready" ? `${items.length} 条 · 实时队列` : "实时队列"}
-        action="返回责任处理"
-        actionHref="/ui/responsibility"
       />
       <Surface className="responsibility-queue-summary">
         <div>
@@ -94,7 +92,7 @@ export function OwnFactoryApprovalQueuePage() {
           {items.map((item) => (
             <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.approvalId}>
               <TaskCard task={{
-                id: item.reworkNo ?? item.reworkOrderId,
+                id: item.reworkNo ?? "返工单",
                 title: item.canDecide ? "本厂承担待终局审批" : "本厂承担待查看",
                 meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", item.problemPart ?? "问题部位未填写", `本厂 ¥${item.ownFactoryTotalAmount}`, item.canDecide ? "可审批" : "仅查看"].join(" · "),
                 tone: item.canDecide ? "warning" : "info",
