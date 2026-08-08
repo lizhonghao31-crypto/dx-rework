@@ -37,14 +37,13 @@ export type ExternalResponsibilityHttpDependencies = Readonly<{
 }>;
 
 export function registerExternalResponsibilityRoutes(app: FastifyInstance, dependencies: ExternalResponsibilityHttpDependencies): void {
-  const actingRole = (capability: string): string | undefined => {
-    if (capability === "external_responsibility:sign" || capability === "external_responsibility:request_revision" || capability === "external_deduction:follow_up") return "order_merchandiser";
-    if (capability === "external_responsibility:payables_confirm" || capability === "external_deduction:record" || capability === "external_deduction:close") return "factory_payables";
-    if (capability === "external_responsibility:approve_revision") return "owner_group";
-    return undefined;
-  };
   const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> =>
-    businessActor(dependencies.root, await dependencies.authenticate(token(request)), request.id, capability, actingRole(capability));
+    businessActor(
+      dependencies.root,
+      await dependencies.authenticate(token(request)),
+      request.id,
+      capability,
+    );
   const key = (request: FastifyRequest) => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
   app.get("/external-responsibilities/queue", async (request) => ExternalResponsibilityQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "external_responsibility:view"))));
