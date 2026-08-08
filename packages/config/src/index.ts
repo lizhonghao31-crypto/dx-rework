@@ -33,6 +33,7 @@ const EnvironmentSchema = z
     APP_BASE_PATH: z.string().regex(/^\/(?!\/)[^?#\\]*$/).refine((value) => !value.includes("//"), "must not contain empty path segments").default("/"),
     SESSION_SECRET: z.string().min(32),
     SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
+    ROOT_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_SECRET: z.string().min(32).max(1024).optional(),
     TODO_RUNTIME_ENABLED: BooleanTextSchema,
@@ -88,7 +89,7 @@ const EnvironmentSchema = z
     for (const key of ["DINGTALK_CORP_ID", "DINGTALK_H5_APP_KEY", "DINGTALK_H5_APP_SECRET", "DINGTALK_WEB_CLIENT_ID", "DINGTALK_WEB_CLIENT_SECRET", "DINGTALK_QR_REDIRECT_URI", "SESSION_SECRET"] as const) {
       if (environment[key].toLowerCase().includes("replace")) context.addIssue({ code: "custom", path: [key], message: "production rejects placeholder values" });
     }
-    for (const key of ["OWNER_BOOTSTRAP_DINGTALK_USER_ID", "OWNER_BOOTSTRAP_SECRET"] as const) {
+    for (const key of ["ROOT_DINGTALK_USER_ID", "OWNER_BOOTSTRAP_DINGTALK_USER_ID", "OWNER_BOOTSTRAP_SECRET"] as const) {
       if (environment[key]?.toLowerCase().includes("replace")) {
         context.addIssue({ code: "custom", path: [key], message: "production rejects placeholder values" });
       }
@@ -118,6 +119,7 @@ export type AppConfig = Readonly<{
   appBasePath: string;
   sessionSecret: string;
   sessionTtlSeconds: number;
+  rootDingtalkUserId: string | undefined;
   ownerBootstrap: Readonly<{
     enabled: boolean;
     dingtalkUserId: string | undefined;
@@ -152,6 +154,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     appBasePath: result.data.APP_BASE_PATH.endsWith("/") ? result.data.APP_BASE_PATH : `${result.data.APP_BASE_PATH}/`,
     sessionSecret: result.data.SESSION_SECRET,
     sessionTtlSeconds: result.data.SESSION_TTL_SECONDS,
+    rootDingtalkUserId: result.data.ROOT_DINGTALK_USER_ID,
     ownerBootstrap: {
       enabled: Boolean(result.data.OWNER_BOOTSTRAP_DINGTALK_USER_ID && result.data.OWNER_BOOTSTRAP_SECRET),
       dingtalkUserId: result.data.OWNER_BOOTSTRAP_DINGTALK_USER_ID,
