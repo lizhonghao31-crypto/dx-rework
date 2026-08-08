@@ -166,6 +166,7 @@ export function App() {
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
   if (path === "/ui/admin") page = <AdminConsolePage />;
+  else if (path === "/ui/audit") page = <AdminConsolePage auditOnly />;
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
@@ -207,6 +208,12 @@ export function App() {
   }
   if (path === "/ui/admin") {
     return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
+  }
+  if (path === "/ui/audit") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "owner_group" },
+      { requiredRole: "system_admin", requiredCapability: "audit:read" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/employee-access") {
     return <AuthGate requiredRole="owner_group" requiredCapability="access:admin">{page}</AuthGate>;
