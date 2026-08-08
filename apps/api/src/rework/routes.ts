@@ -9,6 +9,7 @@ import {
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { registerErpIntegrationRoutes, type ErpIntegrationHttpDependencies } from "../erp/erp-integration-routes.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -39,6 +40,7 @@ const idempotencyKey = (request: FastifyRequest): string =>
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  root?: RootAuthority;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
 }>;
 
@@ -48,18 +50,22 @@ export function registerReworkRoutes(
 ): void {
   const actor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
-    if (!user.businessRoles?.length) {
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    if (!user.businessRoles?.length && !isRoot) {
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
     }
     if (
-      !user.businessRoles.includes("quality_control")
-      || !user.capabilities.includes("rework:initiate")
+      !isRoot
+      && (
+        !user.businessRoles?.includes("quality_control")
+        || !user.capabilities.includes("rework:initiate")
+      )
     ) {
       throw new ApplicationError("FORBIDDEN", "只有品控人员可以发起和维护返工单", 403);
     }
     return {
       actorId: user.id,
-      actorRoles: user.businessRoles,
+      actorRoles: user.businessRoles ?? [],
       authorizationCapability: "rework:initiate",
       requestId: request.id,
     };
