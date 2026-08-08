@@ -104,6 +104,8 @@ export function ExternalResponsibilityPanel({
   const [busy, setBusy] = useState(false);
   const [remark, setRemark] = useState<Record<string, string>>({});
   const [amount, setAmount] = useState<Record<string, string>>({});
+  const [deductedOn, setDeductedOn] = useState<Record<string, string>>({});
+  const [deductionReference, setDeductionReference] = useState<Record<string, string>>({});
   const [attachments, setAttachments] =
     useState<Record<string, string[]>>({});
   const [differenceDisposition, setDifferenceDisposition] =
@@ -328,8 +330,13 @@ export function ExternalResponsibilityPanel({
     }
     if (kind === "deduct") {
       const deductionAmount = amount[caseItem.caseId]?.trim() ?? "";
+      const deductionDate = deductedOn[caseItem.caseId] ?? shanghaiBusinessDate();
       if (!/^\d+(?:\.\d{1,2})?$/.test(deductionAmount) || Number(deductionAmount) <= 0) {
         setMessage("请先填写大于 0、最多两位小数的实际扣款金额。");
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(deductionDate) || deductionDate > shanghaiBusinessDate()) {
+        setMessage("实际扣款日期必须有效且不能晚于今天。");
         return;
       }
     }
@@ -383,16 +390,21 @@ export function ExternalResponsibilityPanel({
         );
       }
       if (kind === "deduct") {
+        const referenceNo = deductionReference[caseItem.caseId]?.trim() ?? "";
         await send(
           `external-responsibility-cases/${caseItem.caseId}/deductions`,
           {
             expectedCaseVersion: caseItem.caseVersion,
             entryType: "deduction",
             amount: amount[caseItem.caseId]!.trim(),
-            deductedOn: shanghaiBusinessDate(),
+            deductedOn: deductedOn[caseItem.caseId] ?? shanghaiBusinessDate(),
+            ...(referenceNo ? { referenceNo } : {}),
             attachmentIds: files,
           },
         );
+        setAmount((current) => ({ ...current, [caseItem.caseId]: "" }));
+        setDeductedOn((current) => ({ ...current, [caseItem.caseId]: shanghaiBusinessDate() }));
+        setDeductionReference((current) => ({ ...current, [caseItem.caseId]: "" }));
       }
       if (kind.startsWith("close")) {
         const result = kind === "close-full"
@@ -598,12 +610,29 @@ export function ExternalResponsibilityPanel({
                   onChange={(event) => setDifferenceDisposition((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="部分/未扣关闭时必填，例如：申请转本厂承担并进入责任重判"
                 />}
-                {caseItem.canRecordDeduction && <InsetField
-                  label="实际扣款金额"
-                  value={amount[caseItem.caseId] ?? ""}
-                  onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-                  placeholder="仅记录本次实际扣款；系统自动累计"
-                />}
+                {caseItem.canRecordDeduction && <>
+                  <InsetField
+                    label="实际扣款金额"
+                    inputMode="decimal"
+                    value={amount[caseItem.caseId] ?? ""}
+                    onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
+                    placeholder="仅记录本次实际扣款；系统自动累计"
+                  />
+                  <InsetField
+                    label="实际扣款日期"
+                    type="date"
+                    max={shanghaiBusinessDate()}
+                    value={deductedOn[caseItem.caseId] ?? shanghaiBusinessDate()}
+                    onChange={(event) => setDeductedOn((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
+                  />
+                  <InsetField
+                    label="扣款凭证号（选填）"
+                    maxLength={200}
+                    value={deductionReference[caseItem.caseId] ?? ""}
+                    onChange={(event) => setDeductionReference((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
+                    placeholder="例如：付款单号、对账单号或银行流水号"
+                  />
+                </>}
                 {canAttachEvidence && <ExternalEvidenceUploader
                   attachmentIds={evidence}
                   disabled={busy}
