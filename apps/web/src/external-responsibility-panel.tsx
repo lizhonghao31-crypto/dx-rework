@@ -73,6 +73,19 @@ const processName = (snapshot: Record<string, unknown>): string => {
   return typeof value === "string" && value.trim() ? value.trim() : "工序";
 };
 
+const formatBusinessTime = (value: string | null): string => {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(value));
+};
+
 const requiredSupplierType = (
   type: ResponsibilityType,
 ): Supplier["supplierType"] =>
@@ -103,6 +116,8 @@ export function ExternalResponsibilityPanel({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [remark, setRemark] = useState<Record<string, string>>({});
+  const [supplierFeedback, setSupplierFeedback] = useState<Record<string, string>>({});
+  const [nextFollowUpAt, setNextFollowUpAt] = useState<Record<string, string>>({});
   const [amount, setAmount] = useState<Record<string, string>>({});
   const [deductedOn, setDeductedOn] = useState<Record<string, string>>({});
   const [deductionReference, setDeductionReference] = useState<Record<string, string>>({});
@@ -328,6 +343,16 @@ export function ExternalResponsibilityPanel({
       setMessage("当前操作必须填写原因或跟进内容。");
       return;
     }
+    if (kind === "follow") {
+      const nextValue = nextFollowUpAt[caseItem.caseId]?.trim() ?? "";
+      if (nextValue) {
+        const nextDate = new Date(nextValue);
+        if (Number.isNaN(nextDate.getTime()) || nextDate.getTime() <= Date.now()) {
+          setMessage("下次跟进时间必须有效且晚于当前时间。");
+          return;
+        }
+      }
+    }
     if (kind === "deduct") {
       const deductionAmount = amount[caseItem.caseId]?.trim() ?? "";
       const deductionDate = deductedOn[caseItem.caseId] ?? shanghaiBusinessDate();
@@ -380,14 +405,20 @@ export function ExternalResponsibilityPanel({
         );
       }
       if (kind === "follow") {
+        const feedback = supplierFeedback[caseItem.caseId]?.trim() ?? "";
+        const nextValue = nextFollowUpAt[caseItem.caseId]?.trim() ?? "";
         await send(
           `external-responsibility-cases/${caseItem.caseId}/follow-ups`,
           {
             expectedCaseVersion: caseItem.caseVersion,
             content: note,
+            ...(feedback ? { supplierFeedback: feedback } : {}),
+            ...(nextValue ? { nextFollowUpAt: new Date(nextValue).toISOString() } : {}),
             attachmentIds: files,
           },
         );
+        setSupplierFeedback((current) => ({ ...current, [caseItem.caseId]: "" }));
+        setNextFollowUpAt((current) => ({ ...current, [caseItem.caseId]: "" }));
       }
       if (kind === "deduct") {
         const referenceNo = deductionReference[caseItem.caseId]?.trim() ?? "";
@@ -454,10 +485,13 @@ export function ExternalResponsibilityPanel({
         ...current,
         [caseItem.caseId]: [],
       }));
+      setRemark((current) => ({ ...current, [caseItem.caseId]: "" }));
       await refresh(
         kind === "revision-approve"
           ? "责任变更已批准，并已生成可继续编辑的 N07 判责草稿。"
-          : "操作已写入服务端台账；金额、权限与当前责任版本已重新核验。",
+          : kind === "follow"
+            ? "扣款跟进已记录；设置了下次跟进时间的事项会在到期未更新时进入逾期提示。"
+            : "操作已写入服务端台账；金额、权限与当前责任版本已重新核验。",
       );
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "操作失败");
@@ -599,11 +633,26 @@ export function ExternalResponsibilityPanel({
 
               {hasEditableFields && <div className="external-operation">
                 {canEditRemark && <InsetField
-                  label="备注 / 退回、部分扣款、未扣、变更或审核意见"
+                  label="处理说明 / 跟进内容"
                   value={remark[caseItem.caseId] ?? ""}
                   onChange={(event) => setRemark((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-                  placeholder="退回、部分/未扣、责任变更时必填；审核意见可选"
+                  placeholder="跟进、退回、部分/未扣、责任变更时填写；审核意见可选"
                 />}
+                {caseItem.canFollowUp && <>
+                  <InsetField
+                    label="供应商反馈（选填）"
+                    value={supplierFeedback[caseItem.caseId] ?? ""}
+                    onChange={(event) => setSupplierFeedback((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
+                    placeholder="例如：已确认，预计本周五完成扣款"
+                  />
+                  <InsetField
+                    label="下次跟进时间（选填）"
+                    type="datetime-local"
+                    value={nextFollowUpAt[caseItem.caseId] ?? ""}
+                    onChange={(event) => setNextFollowUpAt((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
+                  />
+                  <small>设置下次跟进时间后，如到期仍没有新的跟进记录，外部扣款队列会提示逾期。</small>
+                </>}
                 {canEditDisposition && <InsetField
                   label="未扣差额最终处理"
                   value={differenceDisposition[caseItem.caseId] ?? caseItem.closure?.remainingDifferenceDisposition ?? ""}
@@ -641,6 +690,17 @@ export function ExternalResponsibilityPanel({
                 />}
               </div>}
 
+              {caseItem.followUps.length > 0 && <div className="external-ledger-list">
+                {caseItem.followUps.map((followUp) => (
+                  <div key={followUp.followUpId}>
+                    <span>
+                      跟进 {formatBusinessTime(followUp.createdAt)} · {followUp.content}
+                      {followUp.supplierFeedback ? ` · 供应商反馈：${followUp.supplierFeedback}` : ""}
+                    </span>
+                    <b>{followUp.nextFollowUpAt ? `下次 ${formatBusinessTime(followUp.nextFollowUpAt)}` : "已记录"}</b>
+                  </div>
+                ))}
+              </div>}
               {caseItem.deductions.length > 0 && <div className="external-ledger-list">
                 {caseItem.deductions.map((entry) => (
                   <div key={entry.deductionEntryId}>
