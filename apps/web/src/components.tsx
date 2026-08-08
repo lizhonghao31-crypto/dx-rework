@@ -12,6 +12,23 @@ import type { Task } from "./types.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
+let employeeAccessPermission: Promise<boolean> | undefined;
+function canManageEmployeeAccess(): Promise<boolean> {
+  employeeAccessPermission ??= fetch(apiUrl("auth/me"), { credentials: "include" })
+    .then(async (response) => {
+      if (!response.ok) return false;
+      const body = await response.json() as {
+        status?: string;
+        user?: AuthorizedUser;
+      };
+      return body.status === "authorized"
+        && Boolean(body.user)
+        && hasPageAccess(body.user!, { requiredRole: "owner_group", requiredCapability: "access:admin" });
+    })
+    .catch(() => false);
+  return employeeAccessPermission;
+}
+
 export function Shell({
   active,
   children,
@@ -20,27 +37,13 @@ export function Shell({
   children: ReactNode;
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
+  const [canManageAccess, setCanManageAccess] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    void fetch(apiUrl("auth/me"), { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) return;
-        const body = await response.json() as {
-          status?: string;
-          user?: AuthorizedUser;
-        };
-        if (
-          mounted
-          && body.status === "authorized"
-          && body.user
-          && hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })
-        ) {
-          setCanManageEmployeeAccess(true);
-        }
-      })
-      .catch(() => undefined);
+    void canManageEmployeeAccess().then((allowed) => {
+      if (mounted) setCanManageAccess(allowed);
+    });
     return () => {
       mounted = false;
     };
@@ -54,18 +57,13 @@ export function Shell({
     ["扣", "外部扣款", "/ui/external-responsibilities"],
     ["计", "集体计件", "/ui/piecework/collective"],
   ];
-  if (canManageEmployeeAccess) {
+  if (canManageAccess) {
     navigation.push(["权", "权限管理", "/ui/employee-access"]);
   }
   return (
     <div className="app-shell">
       <aside>
         <h2>达兴 · 质检返工</h2>
-        <small>
-          李总 · 伍总 · 张文豪
-          <br />
-          同一事实视图
-        </small>
         <nav aria-label="主导航">
           {navigation.map(([icon, name, href]) => (
             <a href={`${basePath}${href}`} key={name}>
@@ -74,23 +72,9 @@ export function Shell({
               </NavigationItem>
             </a>
           ))}
-          <button
-            className="nav-disabled"
-            type="button"
-            disabled
-            aria-disabled="true"
-          >
-            <NavigationItem icon="审">审计日志</NavigationItem>
-          </button>
         </nav>
         <div className="org">
           <StatusBadge tone="success">组织内已认证</StatusBadge>
-          <b>共享事实 · 全量可见</b>
-          <small>
-            操作按钮按登录身份开放；
-            <br />
-            所有接管与审批写入日志
-          </small>
         </div>
       </aside>
       <main>{children}</main>
@@ -106,7 +90,7 @@ export function Header({
   actionHref,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   badge: string;
   action: string;
   actionHref?: string;
@@ -117,7 +101,7 @@ export function Header({
     <header>
       <div>
         <h1>{title}</h1>
-        <p>{subtitle}</p>
+        {subtitle ? <p>{subtitle}</p> : null}
       </div>
       <div className="header-actions">
         <StatusBadge tone="info">{badge}</StatusBadge>
@@ -179,7 +163,6 @@ export function Queue({ supervisor = false }: { supervisor?: boolean }) {
       <div className="section-title">
         <div>
           <h2>{supervisor ? "今日行动队列" : "全流程节点监控"}</h2>
-          <p>按 N00–N09 统一看板，工资核对与外部扣款独立跟踪</p>
         </div>
         {!supervisor && <StatusBadge tone="info">更新 14:32</StatusBadge>}
       </div>
