@@ -1,5 +1,5 @@
-import { Button, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState } from "react";
+import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
@@ -41,6 +41,7 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export function WorkforceMasterDataPage() {
   const [people, setPeople] = useState<Person[]>([]);
+  const [query, setQuery] = useState("");
   const [name, setName] = useState("");
   const [aliases, setAliases] = useState("");
   const [message, setMessage] = useState("");
@@ -133,8 +134,24 @@ export function WorkforceMasterDataPage() {
     }, "临时工档案已停用，历史任务和工资快照不受影响。 ");
   };
 
-  const internal = people.filter((person) => person.personType === "internal");
-  const temporary = people.filter((person) => person.personType === "temporary");
+  const filteredPeople = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("zh-CN");
+    if (!needle) return people;
+    return people.filter((person) => {
+      const activeAliases = person.aliases
+        .filter((alias) => alias.revokedAt === null)
+        .map((alias) => alias.alias)
+        .join(" ");
+      const type = person.personType === "temporary" ? "临时工" : "内部工人 内部员工";
+      const status = person.active ? "有效 可分配" : "停用";
+      return `${person.displayName} ${activeAliases} ${type} ${status}`
+        .toLocaleLowerCase("zh-CN")
+        .includes(needle);
+    });
+  }, [people, query]);
+
+  const internal = filteredPeople.filter((person) => person.personType === "internal");
+  const temporary = filteredPeople.filter((person) => person.personType === "temporary");
 
   return (
     <Shell active="人员资料">
@@ -159,14 +176,31 @@ export function WorkforceMasterDataPage() {
           </div>
         </Surface>
 
+        <Surface>
+          <div className="section-title">
+            <div>
+              <h2>查找人员</h2>
+              <p>按姓名、现场别名、人员类型或状态搜索；业务页面不展示系统内部 ID。</p>
+            </div>
+            <StatusBadge tone="info">{filteredPeople.length} / {people.length} 人</StatusBadge>
+          </div>
+          <InsetField
+            label="搜索人员"
+            type="search"
+            value={query}
+            placeholder="输入姓名、别名、临时工或停用"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </Surface>
+
         <div className="workforce-grid">
           <Surface>
             <h2>内部工人</h2>
             <p>授予“工人”角色后自动进入这里；撤销角色、停用账号或离职后不能再被新分配。</p>
             <div className="workforce-list">
-              {internal.length === 0 ? <p>暂无已建档内部工人。</p> : internal.map((person) => (
+              {internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internal.map((person) => (
                 <article key={person.personId}>
-                  <div><b>{person.displayName}</b><small>{person.appUserId}</small></div>
+                  <div><b>{person.displayName}</b><small>内部员工 · 可登录</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "档案有效" : "档案停用"}</StatusBadge>
                   <Button disabled={busy || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
                   {person.aliases.filter((alias) => alias.revokedAt === null).map((alias) => (
@@ -180,7 +214,7 @@ export function WorkforceMasterDataPage() {
           <Surface>
             <h2>临时工</h2>
             <div className="workforce-list">
-              {temporary.length === 0 ? <p>暂无临时工档案。</p> : temporary.map((person) => (
+              {temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporary.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>临时工 · 不登录</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "可分配" : "已停用"}</StatusBadge>
