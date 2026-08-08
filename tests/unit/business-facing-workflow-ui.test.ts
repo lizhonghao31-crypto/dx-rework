@@ -68,4 +68,17 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("· 版本 {caseItem.caseVersion}");
     expect(source).not.toContain("已生成 N07 草稿 {item.seededDeterminationId}");
   });
+
+  it("keeps worker reporting mobile-friendly without exposing the internal order id", async () => {
+    const source = await read("apps/web/src/work-reporting-form.tsx");
+    expect(source).toContain("actualQuantity > task.remainingQuantity");
+    expect(source).toContain('max={String(task.remainingQuantity)}');
+    expect(source).toContain('type="number"');
+    expect(source).toContain("formatMoney(result.groupAmount)");
+    expect(source).toContain("成员版本 V{task.version}");
+    expect(source).toContain("当前返工任务");
+    expect(source).not.toContain('data?.reworkOrderId ?? reworkOrderId ?? "返工任务"');
+    expect(source).not.toContain("share.toFixed(8)");
+    expect(source).not.toContain("result.groupAmount.toFixed(8)");
+  });
 });
