@@ -29,26 +29,14 @@ const parse = <T>(
   value: unknown,
 ): T => {
   const result = schema.safeParse(value);
-  if (!result.success) {
-    throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
-  }
+  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
   return result.data;
 };
-
-const idempotencyKey = (request: FastifyRequest): string =>
-  parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
+const idempotencyKey = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
 const translateTodoRoutingError = (error: unknown): never => {
-  if (
-    error instanceof ApplicationError
-    && error.code === "CONFLICT"
-    && error.message.includes("Todo recipient is not uniquely routable")
-  ) {
-    throw new ApplicationError(
-      "CONFLICT",
-      "尾部主管接收人尚未唯一配置，请在权限管理确认“尾部主管”角色后重试",
-      409,
-    );
+  if (error instanceof ApplicationError && error.code === "CONFLICT" && error.message.includes("Todo recipient is not uniquely routable")) {
+    throw new ApplicationError("CONFLICT", "尾部主管接收人尚未唯一配置，请在权限管理确认“尾部主管”角色后重试", 409);
   }
   throw error;
 };
@@ -56,144 +44,75 @@ const translateTodoRoutingError = (error: unknown): never => {
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
-  rootAcceptanceService?: ReworkInitiationService;
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
 }>;
 
-export function registerReworkRoutes(
-  app: FastifyInstance,
-  dependencies: ReworkHttpDependencies,
-): void {
+export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkHttpDependencies): void {
   const actor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
     const isOwner = user.businessRoles?.includes("owner_group") === true;
-    const isQualityControl = user.businessRoles?.includes("quality_control") === true
-      && user.capabilities.includes("rework:initiate");
-    if (!user.businessRoles?.length && !isRoot) {
-      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
-    }
-    if (!isRoot && !isOwner && !isQualityControl) {
-      throw new ApplicationError("FORBIDDEN", "只有品控、老板或超级用户可以发起和维护返工单", 403);
-    }
+    const isQualityControl = user.businessRoles?.includes("quality_control") === true && user.capabilities.includes("rework:initiate");
+    if (!user.businessRoles?.length && !isRoot) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    if (!isRoot && !isOwner && !isQualityControl) throw new ApplicationError("FORBIDDEN", "只有品控、老板或超级用户可以发起和维护返工单", 403);
     const actorRoles = [...(user.businessRoles ?? [])];
+    const authorizationCapabilities = [...user.capabilities];
     if (isRoot && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
     if ((isRoot || isOwner) && !actorRoles.includes("quality_control")) actorRoles.push("quality_control");
+    if ((isRoot || isOwner) && !authorizationCapabilities.includes("rework:initiate")) authorizationCapabilities.push("rework:initiate");
     return {
       actorId: user.id,
       actorRoles,
       authorizationCapability: "rework:initiate",
+      authorizationCapabilities,
       requestId: request.id,
     };
   };
 
   app.post("/rework-orders/drafts", async (request, reply) => {
-    const result = await dependencies.service.createDraft(
-      await actor(request),
-      parse(CreateReworkDraftSchema, request.body),
-      idempotencyKey(request),
-    );
+    const result = await dependencies.service.createDraft(await actor(request), parse(CreateReworkDraftSchema, request.body), idempotencyKey(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
-
-  app.put<{ Params: { reworkOrderId: string } }>(
-    "/rework-orders/:reworkOrderId/draft",
-    async (request, reply) => {
-      const params = parse(ReworkOrderParamsSchema, request.params);
-      const result = await dependencies.service.updateDraft(
-        await actor(request),
-        params.reworkOrderId,
-        parse(UpdateReworkDraftSchema, request.body),
-        idempotencyKey(request),
-      );
+  app.put<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/draft", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    const result = await dependencies.service.updateDraft(await actor(request), params.reworkOrderId, parse(UpdateReworkDraftSchema, request.body), idempotencyKey(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return result.value;
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/submit", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    try {
+      const result = await dependencies.service.submit(await actor(request), params.reworkOrderId, parse(SubmitReworkOrderSchema, request.body), idempotencyKey(request));
       if (result.reused) void reply.header("idempotency-replayed", "true");
       return result.value;
-    },
-  );
-
-  app.post<{ Params: { reworkOrderId: string } }>(
-    "/rework-orders/:reworkOrderId/submit",
-    async (request, reply) => {
-      const params = parse(ReworkOrderParamsSchema, request.params);
-      const accessActor = await actor(request);
-      const submitService = accessActor.actorRoles.includes("root_superuser")
-        && dependencies.rootAcceptanceService
-        ? dependencies.rootAcceptanceService
-        : dependencies.service;
-      try {
-        const result = await submitService.submit(
-          accessActor,
-          params.reworkOrderId,
-          parse(SubmitReworkOrderSchema, request.body),
-          idempotencyKey(request),
-        );
-        if (result.reused) void reply.header("idempotency-replayed", "true");
-        return result.value;
-      } catch (error: unknown) {
-        return translateTodoRoutingError(error);
-      }
-    },
-  );
-
-  app.post<{ Params: { reworkOrderId: string } }>(
-    "/rework-orders/:reworkOrderId/withdraw",
-    async (request, reply) => {
-      const params = parse(ReworkOrderParamsSchema, request.params);
-      const result = await dependencies.service.withdraw(
-        await actor(request),
-        params.reworkOrderId,
-        parse(TransitionReworkOrderSchema, request.body),
-        idempotencyKey(request),
-      );
-      if (result.reused) void reply.header("idempotency-replayed", "true");
-      return result.value;
-    },
-  );
-
-  app.post<{ Params: { reworkOrderId: string } }>(
-    "/rework-orders/:reworkOrderId/cancel",
-    async (request, reply) => {
-      const params = parse(ReworkOrderParamsSchema, request.params);
-      const result = await dependencies.service.cancel(
-        await actor(request),
-        params.reworkOrderId,
-        parse(TransitionReworkOrderSchema, request.body),
-        idempotencyKey(request),
-      );
-      if (result.reused) void reply.header("idempotency-replayed", "true");
-      return result.value;
-    },
-  );
-
+    } catch (error: unknown) {
+      return translateTodoRoutingError(error);
+    }
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/withdraw", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    const result = await dependencies.service.withdraw(await actor(request), params.reworkOrderId, parse(TransitionReworkOrderSchema, request.body), idempotencyKey(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return result.value;
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/cancel", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    const result = await dependencies.service.cancel(await actor(request), params.reworkOrderId, parse(TransitionReworkOrderSchema, request.body), idempotencyKey(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return result.value;
+  });
   app.get("/rework-orders/initiation-options", async (request) => {
     const accessActor = await actor(request);
     if (dependencies.listInitiationOptions) return dependencies.listInitiationOptions();
     return dependencies.service.listInitiationOptions(accessActor);
   });
-
-  app.get<{ Params: { reworkOrderId: string } }>(
-    "/rework-orders/:reworkOrderId",
-    async (request) => dependencies.service.getOwn(
-      await actor(request),
-      parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
-    ),
-  );
-
+  app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId", async (request) => dependencies.service.getOwn(await actor(request), parse(ReworkOrderParamsSchema, request.params).reworkOrderId));
   app.get("/rework-orders", async (request) => {
     const query = parse(ReworkOrdersQuerySchema, request.query);
-    return dependencies.service.listOwn(
-      await actor(request),
-      query.status,
-    );
+    return dependencies.service.listOwn(await actor(request), query.status);
   });
-
-  if (dependencies.erp) {
-    registerErpIntegrationRoutes(app, {
-      authenticateSession: dependencies.authenticate,
-      ...dependencies.erp,
-    });
-  }
+  if (dependencies.erp) registerErpIntegrationRoutes(app, { authenticateSession: dependencies.authenticate, ...dependencies.erp });
 }
