@@ -64,8 +64,26 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   };
   const adjust = async (configurationItemId: string, kind: "decrease" | "increase") => {
     if (!data) return;
+    const process = data.processes.find((item) => item.configurationItemId === configurationItemId);
+    if (!process) { setMessage("当前工序已刷新，请重新进入返工单。"); return; }
     const target = Number(targets[configurationItemId]);
     if (!Number.isFinite(target) || target <= 0) { setMessage("请填写有效的新计划数量。"); return; }
+    if (process.pricingUnit === "piece" && !Number.isInteger(target)) {
+      setMessage("按件计价的计划数量必须是整数。");
+      return;
+    }
+    if (kind === "decrease" && target >= process.plannedQuantity) {
+      setMessage(`减少后的计划数量必须小于当前计划 ${process.plannedQuantity}。`);
+      return;
+    }
+    if (kind === "decrease" && target < process.completedQuantity) {
+      setMessage(`计划数量不能低于已经完成的 ${process.completedQuantity}。`);
+      return;
+    }
+    if (kind === "increase" && target <= process.plannedQuantity) {
+      setMessage(`增加后的计划数量必须大于当前计划 ${process.plannedQuantity}。`);
+      return;
+    }
     const reason = window.prompt(kind === "decrease" ? "请填写减少原因" : "请填写增加原因");
     if (!reason?.trim()) return;
     try {
@@ -122,9 +140,9 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   };
   if (!data) return null;
   return <><Surface><div className="section-title"><div><h2>整单审核与数量调整</h2><p>{message}</p></div><StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge></div><p>当前有效计划与未驳回上数逐工序校验；任何驳回都会使整单重新补齐。</p></Surface>
-    <Surface><h2>工序完成判断</h2>{data.processes.map((process) => <div className="section-title" key={process.configurationItemId}><div><b>{process.processName}</b><p>有效上数 {process.completedQuantity} / 当前计划 {process.plannedQuantity} {process.pricingUnit === "piece" ? "件" : "小时"}</p></div><StatusBadge tone={process.complete ? "success" : "warning"}>{process.complete ? "已完成" : "未完成"}</StatusBadge>{data.canAdjustQuantity && <div className="mobile-actions"><InsetField label="新计划数量" inputMode="decimal" value={targets[process.configurationItemId] ?? ""} onChange={(event) => setTargets((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} disabled={busy} /><Button onClick={() => void adjust(process.configurationItemId, "decrease")} disabled={busy}>减少计划</Button><Button onClick={() => void adjust(process.configurationItemId, "increase")} disabled={busy}>申请增加</Button></div>}</div>)}</Surface>
-    <Surface><h2>上数记录与单条驳回</h2>{data.reports.map((report) => <div className="section-title" key={report.workReportId}><div><b>上数 {report.actualQuantity}</b><p>{report.members.map((member) => member.displayName).join("、")} · {report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</p></div>{data.canReview && !report.rejected && <div className="mobile-actions">{report.assignmentMode === "collective" ? <Button onClick={() => void reject(report.workReportId, null)} disabled={busy}>驳回整条集体记录</Button> : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId)} disabled={busy}>驳回 {member.displayName}</Button>)}</div>}</div>)}{data.reports.length === 0 && <p>尚无上数记录。</p>}</Surface>
-    <Surface><h2>数量调整记录</h2>{data.adjustments.map((adjustment) => <div className="section-title" key={adjustment.adjustmentId}><div><b>{adjustment.kind === "increase" ? "增加" : "减少"}：{adjustment.previousPlannedQuantity} → {adjustment.requestedPlannedQuantity}</b><p>{adjustmentStatusLabel(adjustment.status)} · {adjustment.reason}</p></div>{data.canConfirmQuantity && adjustment.status === "pending_merchandiser_confirmation" && <div className="mobile-actions"><Button variant="primary" onClick={() => void confirm(adjustment.adjustmentId, "confirmed")} disabled={busy}>确认实裁/回货</Button><Button onClick={() => void confirm(adjustment.adjustmentId, "rejected")} disabled={busy}>拒绝申请</Button></div>}{data.canReviewQuantityIncrease && adjustment.status === "pending_ie_review" && <div className="mobile-actions"><Button variant="primary" onClick={() => void reviewIncrease(adjustment.adjustmentId, "approved")} disabled={busy}>IE通过</Button><Button onClick={() => void reviewIncrease(adjustment.adjustmentId, "rejected")} disabled={busy}>IE驳回</Button></div>}</div>)}{data.adjustments.length === 0 && <p>尚无数量调整。</p>}</Surface>
+    <Surface><h2>工序完成判断</h2>{data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}><div><b>{process.processName}</b><p>有效上数 {process.completedQuantity} / 当前计划 {process.plannedQuantity} {process.pricingUnit === "piece" ? "件" : "小时"}</p></div><StatusBadge tone={process.complete ? "success" : "warning"}>{process.complete ? "已完成" : "未完成"}</StatusBadge>{data.canAdjustQuantity && <div className="mobile-actions whole-order-actions"><InsetField label="新计划数量" type="number" min={process.pricingUnit === "piece" ? "1" : "0.01"} step={process.pricingUnit === "piece" ? "1" : "0.01"} inputMode="decimal" value={targets[process.configurationItemId] ?? ""} onChange={(event) => setTargets((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} disabled={busy} /><Button onClick={() => void adjust(process.configurationItemId, "decrease")} disabled={busy}>减少计划</Button><Button onClick={() => void adjust(process.configurationItemId, "increase")} disabled={busy}>申请增加</Button></div>}</div>)}</Surface>
+    <Surface><h2>上数记录与单条驳回</h2>{data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}><div><b>上数 {report.actualQuantity}</b><p>{report.members.map((member) => member.displayName).join("、")} · {report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</p></div>{data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">{report.assignmentMode === "collective" ? <Button onClick={() => void reject(report.workReportId, null)} disabled={busy}>驳回整条集体记录</Button> : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId)} disabled={busy}>驳回 {member.displayName}</Button>)}</div>}</div>)}{data.reports.length === 0 && <p>尚无上数记录。</p>}</Surface>
+    <Surface><h2>数量调整记录</h2>{data.adjustments.map((adjustment) => <div className="section-title whole-order-row" key={adjustment.adjustmentId}><div><b>{adjustment.kind === "increase" ? "增加" : "减少"}：{adjustment.previousPlannedQuantity} → {adjustment.requestedPlannedQuantity}</b><p>{adjustmentStatusLabel(adjustment.status)} · {adjustment.reason}</p></div>{data.canConfirmQuantity && adjustment.status === "pending_merchandiser_confirmation" && <div className="mobile-actions whole-order-actions"><Button variant="primary" onClick={() => void confirm(adjustment.adjustmentId, "confirmed")} disabled={busy}>确认实裁/回货</Button><Button onClick={() => void confirm(adjustment.adjustmentId, "rejected")} disabled={busy}>拒绝申请</Button></div>}{data.canReviewQuantityIncrease && adjustment.status === "pending_ie_review" && <div className="mobile-actions whole-order-actions"><Button variant="primary" onClick={() => void reviewIncrease(adjustment.adjustmentId, "approved")} disabled={busy}>IE通过</Button><Button onClick={() => void reviewIncrease(adjustment.adjustmentId, "rejected")} disabled={busy}>IE驳回</Button></div>}</div>)}{data.adjustments.length === 0 && <p>尚无数量调整。</p>}</Surface>
     {data.canReview && <div className="mobile-actions"><Button variant="primary" onClick={() => void approve()} disabled={busy || data.reworkStatus !== "pending_order_review" || data.processes.some((process) => !process.complete)}>整单审核通过</Button></div>}
   </>;
 }
