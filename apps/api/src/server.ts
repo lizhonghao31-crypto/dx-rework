@@ -19,15 +19,15 @@ import {
 } from "./platform/database.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
+import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-whole-order-review-service.js";
 import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
 import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "./rework/service.js";
-import { WholeOrderReviewService } from "./rework/whole-order-review-service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
-import { TodoProjectionService } from "./todos/projection-service.js";
+import { RootAwareTodoProjectionService } from "./todos/root-aware-projection-service.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 import { TodoService } from "./todos/service.js";
 import { AttachmentService } from "./tools/attachments.js";
@@ -55,6 +55,7 @@ const rootAuthority = new RootAuthority(
 const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
 const accessService = new AccessMasterDataService(database, config.dingtalk.corpId);
 await accessService.ensureOrganizationPolicy();
+await rootAuthority.assertConfigurationConsistency();
 const dingtalkProvider = new OfficialDingTalkProvider(config.dingtalk);
 const auth = new AuthService(
   dingtalkProvider,
@@ -79,7 +80,7 @@ const attachments = new AttachmentService(database, storage, {
   maxUploadBytes: config.objectStorage.maxUploadBytes,
 });
 const todoService = new TodoService(database);
-const todoProjection = new TodoProjectionService(todoService);
+const todoProjection = new RootAwareTodoProjectionService(todoService);
 const reworkService = new ReworkInitiationService(
   database,
   config.dingtalk.corpId,
@@ -87,10 +88,6 @@ const reworkService = new ReworkInitiationService(
   undefined,
   undefined,
   todoProjection,
-);
-const rootAcceptanceReworkService = new ReworkInitiationService(
-  database,
-  config.dingtalk.corpId,
 );
 const erpIntegrationService = new ErpIntegrationService(
   database,
@@ -113,11 +110,8 @@ const workReportingService = new WorkReportingService(
   undefined,
   todoProjection,
 );
-const wholeOrderReviewService = new WholeOrderReviewService(
+const wholeOrderReviewService = new BusinessAwareWholeOrderReviewService(
   database,
-  undefined,
-  undefined,
-  undefined,
   todoProjection,
 );
 const responsibilityDeterminationService = new ResponsibilityDeterminationApplicationService(
@@ -161,7 +155,6 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
-    rootAcceptanceService: rootAcceptanceReworkService,
     root: rootAuthority,
     listInitiationOptions: async () => {
       const [directory, suppliers] = await Promise.all([
@@ -193,28 +186,39 @@ const app = buildApp({
   processConfiguration: {
     authenticate: (token) => auth.authenticate(token),
     service: processConfigurationService,
+    root: rootAuthority,
   },
   workReporting: {
     authenticate: (token) => auth.authenticate(token),
     service: workReportingService,
+    root: rootAuthority,
   },
   wholeOrderReview: {
     authenticate: (token) => auth.authenticate(token),
     service: wholeOrderReviewService,
+    root: rootAuthority,
   },
   responsibilityDetermination: {
     authenticate: (token) => auth.authenticate(token),
     service: responsibilityDeterminationService,
+    root: rootAuthority,
   },
   ownFactoryApproval: {
     authenticate: (token) => auth.authenticate(token),
     service: ownFactoryApprovalService,
+    root: rootAuthority,
   },
   externalResponsibility: {
     authenticate: (token) => auth.authenticate(token),
     service: externalResponsibilityService,
+    root: rootAuthority,
   },
-  wages: { authenticate: (token) => auth.authenticate(token), service: wageService, exportService: new WageExportService(database) },
+  wages: {
+    authenticate: (token) => auth.authenticate(token),
+    service: wageService,
+    exportService: new WageExportService(database),
+    root: rootAuthority,
+  },
   todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
   reporting: {
     authenticate: (token) => auth.authenticate(token),
