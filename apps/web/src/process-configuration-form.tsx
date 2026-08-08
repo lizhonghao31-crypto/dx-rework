@@ -13,11 +13,16 @@ import "./process-configuration-form.css";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type User = {
+  id: string;
   businessRoles?: readonly string[];
   capabilities: readonly string[];
   isRoot?: boolean;
 };
-type ReworkQuantityDetail = { reworkQuantity: number | null };
+type ReworkConfigurationDetail = {
+  reworkQuantity: number | null;
+  createdBy: { userId: string; displayName: string };
+  processConfigurationCreatedBy: { userId: string; displayName: string } | null;
+};
 type ItemForm = {
   source: "catalog" | "custom";
   processId: string;
@@ -134,6 +139,7 @@ export function ProcessConfigurationForm() {
   const [user, setUser] = useState<User | null>(null);
   const [options, setOptions] = useState<ProcessConfigurationOptionsResponse>({ processes: [] });
   const [response, setResponse] = useState<ProcessConfigurationResponse | null>(null);
+  const [detail, setDetail] = useState<ReworkConfigurationDetail | null>(null);
   const [reworkQuantity, setReworkQuantity] = useState<number | null>(null);
   const [items, setItems] = useState<ItemForm[]>([emptyItem()]);
   const [changeReason, setChangeReason] = useState("");
@@ -156,11 +162,23 @@ export function ProcessConfigurationForm() {
     && (response.reworkStatus === "pending_process_configuration"
       || response.reworkStatus === "pending_task_assignment"),
   );
-  const reviewable = Boolean(canReview && response?.reworkStatus === "pending_ie_review");
+  const reviewSeparationBlocked = Boolean(
+    user
+    && detail
+    && (
+      user.id === detail.createdBy.userId
+      || user.id === detail.processConfigurationCreatedBy?.userId
+    ),
+  );
+  const reviewable = Boolean(
+    canReview
+    && response?.reworkStatus === "pending_ie_review"
+    && !reviewSeparationBlocked,
+  );
 
   const reload = async () => {
     if (!reworkOrderId) return;
-    const [me, loaded, detail] = await Promise.all([
+    const [me, loaded, loadedDetail] = await Promise.all([
       request("auth/me", { parse: (value) => value as { user: User } }),
       request(
         "rework-orders/" + reworkOrderId + "/process-configuration",
@@ -168,18 +186,19 @@ export function ProcessConfigurationForm() {
       ),
       request(
         "rework-orders/" + reworkOrderId + "/business-detail",
-        { parse: (value) => value as ReworkQuantityDetail },
+        { parse: (value) => value as ReworkConfigurationDetail },
       ),
     ]);
     setUser(me.user);
     setResponse(loaded);
-    setReworkQuantity(detail.reworkQuantity);
+    setDetail(loadedDetail);
+    setReworkQuantity(loadedDetail.reworkQuantity);
     if (loaded.configuration && loaded.configuration.status !== "pending_ie_review") {
       setItems(loaded.configuration.items.map(toItem));
       setChangeReason(loaded.configuration.changeReason ?? "");
     } else if (!loaded.configuration && loaded.reworkStatus === "pending_process_configuration") {
       setItems((current) => current.length === 1 && current[0] && isPristineItem(current[0])
-        ? [emptyItem(detail.reworkQuantity)]
+        ? [emptyItem(loadedDetail.reworkQuantity)]
         : current);
     }
     setMessage(statusLabel(loaded));
@@ -421,9 +440,19 @@ export function ProcessConfigurationForm() {
       </div>
     </Surface>}
 
+    {canReview && response?.reworkStatus === "pending_ie_review" && reviewSeparationBlocked && <Surface className="ie-review">
+      <div className="section-title">
+        <h2>IE 审核</h2>
+        <StatusBadge tone="warning">多人补验</StatusBadge>
+      </div>
+      <p>
+        当前账号曾发起该返工单或配置当前工序，按审核分离规则不能进行 IE 自审；请使用另一名 IE 账号完成审核。
+      </p>
+    </Surface>}
+
     {reviewable && <Surface className="ie-review">
       <h2>IE 审核</h2>
-      <p>郎飞确认计划数量、计价单位与单价。通过后配置生效；驳回必须留下原因。</p>
+      <p>IE 确认计划数量、计价单位与单价。通过后配置生效；驳回必须留下原因。</p>
       <InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" />
       <div className="qc-secondary-actions">
         <Button onClick={() => void review("rejected")} disabled={busy}>驳回修改</Button>
