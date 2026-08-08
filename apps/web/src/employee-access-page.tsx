@@ -125,16 +125,26 @@ export function EmployeeAccessPage() {
   const reason = (userId: string) => reasonByUser[userId]?.trim() ?? "";
   const selectedRole = (userId: string) => roleByUser[userId] ?? roles[0]?.roleCode ?? "";
 
+  const requireReason = (employee: EmployeeAccessEmployee, action: string): string => {
+    const existing = reason(employee.userId);
+    if (existing) return existing;
+    const entered = window.prompt(`${action}前请输入操作原因`, "")?.trim() ?? "";
+    if (!entered) return "";
+    setReasonByUser((current) => ({ ...current, [employee.userId]: entered }));
+    return entered;
+  };
+
   const sync = () => void mutate("sync", () =>
     json("employee-access/directory/sync", { method: "POST" }));
 
   const grant = (employee: EmployeeAccessEmployee) => {
     const selected = selectedRole(employee.userId);
-    const why = reason(employee.userId);
-    if (!selected || !why) {
-      setError("授予角色前必须选择角色并填写原因。");
+    if (!selected) {
+      setError("请先选择要授予的角色。");
       return;
     }
+    const why = requireReason(employee, "授予角色");
+    if (!why) return;
     void mutate(`grant:${employee.userId}`, () =>
       json(`employee-access/employees/${employee.userId}/roles`, {
         method: "POST",
@@ -143,11 +153,8 @@ export function EmployeeAccessPage() {
   };
 
   const revoke = (employee: EmployeeAccessEmployee, assignmentId: string, roleCode: string) => {
-    const why = reason(employee.userId);
-    if (!why) {
-      setError("撤销角色前必须填写原因。");
-      return;
-    }
+    const why = requireReason(employee, "撤销角色");
+    if (!why) return;
     if (!window.confirm(`确认撤销 ${employee.displayName} 的 ${roleName(roleCode)}？`)) return;
     void mutate(`revoke:${assignmentId}`, () =>
       json(`employee-access/assignments/${assignmentId}`, {
@@ -157,11 +164,9 @@ export function EmployeeAccessPage() {
   };
 
   const changeAccess = (employee: EmployeeAccessEmployee, action: "disable" | "restore") => {
-    const why = reason(employee.userId);
-    if (!why) {
-      setError(`${action === "disable" ? "停用" : "恢复"}访问前必须填写原因。`);
-      return;
-    }
+    const label = action === "disable" ? "停用访问" : "恢复访问";
+    const why = requireReason(employee, label);
+    if (!why) return;
     if (!window.confirm(`确认${action === "disable" ? "停用" : "恢复"} ${employee.displayName} 的系统访问？`)) return;
     void mutate(`${action}:${employee.userId}`, () =>
       json(`employee-access/employees/${employee.userId}/${action}`, {
@@ -232,11 +237,11 @@ export function EmployeeAccessPage() {
                     </dl>
 
                     <label className="employee-access-reason">
-                      操作原因
+                      操作原因（必填）
                       <input
                         value={why}
                         maxLength={500}
-                        placeholder="例如：岗位调整"
+                        placeholder="例如：岗位调整；留空点击操作时会提示填写"
                         onChange={(event) => setReasonByUser((current) => ({ ...current, [employee.userId]: event.target.value }))}
                       />
                     </label>
