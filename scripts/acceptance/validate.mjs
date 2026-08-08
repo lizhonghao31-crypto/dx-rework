@@ -58,6 +58,9 @@ const required = [
   "defectLinks",
 ];
 const placeholder = (value) => JSON.stringify(value).includes("TBD");
+const nonBlankList = (value) => Array.isArray(value)
+  && value.length > 0
+  && value.every((entry) => typeof entry === "string" && entry.trim().length > 0);
 
 for (let index = 0; index < 22; index += 1) {
   const item = items[index];
@@ -78,17 +81,20 @@ for (let index = 0; index < 22; index += 1) {
   if (!/^\d{4}_[a-z0-9_]+$/.test(item.schemaVersion) || !Number.isFinite(Date.parse(item.executedAt))) {
     throw new Error(`${id} invalid schema/time`);
   }
-  for (const key of ["environment", "testDataIds", "roles", "steps", "expected", "actual", "executor", "reviewer"]) {
-    if (placeholder(item[key]) || (Array.isArray(item[key]) && item[key].length === 0)) {
-      throw new Error(`${id} placeholder ${key}`);
-    }
+  for (const key of ["environment", "testDataIds", "roles", "steps", "expected", "actual", "executor", "reviewer", "evidenceRefs", "defectLinks"]) {
+    if (placeholder(item[key])) throw new Error(`${id} placeholder ${key}`);
   }
-  if (item.executor === item.reviewer) throw new Error(`${id} requires independent executor/reviewer`);
-  if (item.result === "passed" && !item.evidenceRefs.length) throw new Error(`${id} passed requires evidence`);
-  if (item.result === "failed" && (!item.evidenceRefs.length || !item.defectLinks.length)) {
+  for (const key of ["testDataIds", "roles", "steps"]) {
+    if (!nonBlankList(item[key])) throw new Error(`${id} empty ${key}`);
+  }
+  if (item.executor.trim() === item.reviewer.trim()) throw new Error(`${id} requires independent executor/reviewer`);
+  if (item.result === "passed" && !nonBlankList(item.evidenceRefs)) {
+    throw new Error(`${id} passed requires evidence`);
+  }
+  if (item.result === "failed" && (!nonBlankList(item.evidenceRefs) || !nonBlankList(item.defectLinks))) {
     throw new Error(`${id} failed requires evidence and defect`);
   }
-  if (item.result === "blocked" && (!item.actual.trim() || (!item.evidenceRefs.length && !item.defectLinks.length))) {
+  if (item.result === "blocked" && (!item.actual.trim() || (!nonBlankList(item.evidenceRefs) && !nonBlankList(item.defectLinks)))) {
     throw new Error(`${id} blocked requires reason and evidence/dependency`);
   }
 }
