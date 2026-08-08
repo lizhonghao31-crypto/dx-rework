@@ -132,6 +132,12 @@ export function Shell({
     || hasCapability("work:report_for_worker")
     || (hasRole("order_merchandiser") && hasCapability("quantity:confirm"))
     || (hasRole("ie_reviewer") && hasCapability("process:review"));
+  const responsibilityAccess = isRoot || isOwner
+    || hasCapability("responsibility:determine")
+    || hasCapability("responsibility:takeover")
+    || hasCapability("responsibility:confirm_high_multiplier");
+  const ownFactoryAccess = isRoot || isOwner || hasCapability("own_factory:view");
+  const externalResponsibilityAccess = isRoot || isOwner || hasCapability("external_responsibility:view");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
@@ -178,27 +184,29 @@ export function Shell({
       href: "/ui/work-reporting",
     });
   }
-  if (managementAccess) {
-    navigation.push(
-      {
-        step: "5",
-        name: "责任处理",
-        description: "判定责任、倍率和承担比例",
-        href: "/ui/responsibility",
-      },
-      {
-        step: "6",
-        name: "本厂审批",
-        description: "老板确认本厂承担金额",
-        href: "/ui/own-factory-approvals",
-      },
-      {
-        step: "7",
-        name: "外部扣款",
-        description: "外部签收、应付确认和实扣跟进",
-        href: "/ui/external-responsibilities",
-      },
-    );
+  if (responsibilityAccess) {
+    navigation.push({
+      step: "5",
+      name: "责任处理",
+      description: "判定责任、倍率和承担比例",
+      href: "/ui/responsibility",
+    });
+  }
+  if (ownFactoryAccess) {
+    navigation.push({
+      step: "6",
+      name: "本厂审批",
+      description: "老板确认本厂承担金额",
+      href: "/ui/own-factory-approvals",
+    });
+  }
+  if (externalResponsibilityAccess) {
+    navigation.push({
+      step: "7",
+      name: "外部扣款",
+      description: "外部签收、应付确认和实扣跟进",
+      href: "/ui/external-responsibilities",
+    });
   }
   if (wageAccess) {
     navigation.push({
