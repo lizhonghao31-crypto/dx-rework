@@ -221,7 +221,7 @@ export function ReworkInitiationForm() {
 
   const submit = async () => {
     if (!isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
-    if (!window.confirm("确认提交返工单并通知李同生配置工序？")) return;
+    if (!window.confirm("确认提交返工单？")) return;
     setBusy(true);
     try {
       const submitted = await executeReworkSubmit(
@@ -351,6 +351,7 @@ export function ReworkInitiationForm() {
     : order?.status === "pending_process_configuration"
       ? "success"
       : "info";
+  const showStatus = Boolean(order) || message !== "填写中，尚未保存";
 
   return (
     <main className="mobile-page">
@@ -359,7 +360,6 @@ export function ReworkInitiationForm() {
           <h1>发起返工</h1>
           {order?.reworkNo && <StatusBadge tone="info">{order.reworkNo}</StatusBadge>}
         </div>
-        <p>品控现场录入 · 提交后通知李同生</p>
         <StatusBadge tone={badgeTone}>{statusText(order?.status ?? "draft")}</StatusBadge>
       </div>
 
@@ -465,7 +465,7 @@ export function ReworkInitiationForm() {
             {attachmentIds.length} 份
           </StatusBadge>
         </div>
-        <p>支持 JPG、PNG、WebP 与 PDF；上传完成后随草稿一并绑定。</p>
+        <p>支持 JPG、PNG、WebP 与 PDF。</p>
         {!formDisabled && (
           <>
             <label className="qc-file-button">
@@ -501,10 +501,11 @@ export function ReworkInitiationForm() {
         )}
       </Surface>
 
-      <Surface className="qc-status">
-        <h2>当前结果</h2>
-        <p role="status">{message}</p>
-      </Surface>
+      {showStatus && (
+        <Surface className="qc-status">
+          <p role="status">{message}</p>
+        </Surface>
+      )}
 
       {!locked && (
         <div className="mobile-actions">
@@ -516,7 +517,7 @@ export function ReworkInitiationForm() {
             disabled={mutationDisabled || !complete}
             onClick={() => void submit()}
           >
-            预览提交并通知
+            提交返工
           </Button>
         </div>
       )}
