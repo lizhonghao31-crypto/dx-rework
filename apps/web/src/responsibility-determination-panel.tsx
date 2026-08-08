@@ -253,6 +253,9 @@ export function ResponsibilityDeterminationPanel({
           ...(process.highMultiplierReason.trim()
             ? { highMultiplierReason: process.highMultiplierReason.trim() }
             : {}),
+          // Zero means “not responsible” in the form. The production service
+          // intentionally accepts only positive responsibility rows, so omit
+          // zero-share choices from the persisted payload.
           allocations: process.allocations
             .map((allocation) => ({
               responsibilityType: allocation.responsibilityType,
@@ -262,7 +265,7 @@ export function ResponsibilityDeterminationPanel({
               (allocation): allocation is {
                 responsibilityType: ResponsibilityType;
                 shareBps: bigint;
-              } => allocation.shareBps !== null && allocation.shareBps >= 0n,
+              } => allocation.shareBps !== null && allocation.shareBps > 0n,
             )
             .map((allocation) => ({
               responsibilityType: allocation.responsibilityType,
