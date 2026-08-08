@@ -14,6 +14,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   BUSINESS_READ_ALL_CAPABILITY,
   businessActor,
+  isRootUser,
 } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
@@ -28,13 +29,13 @@ const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, req
 export type WorkReportingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: WorkReportingService;
-  root: RootAuthority;
+  root?: RootAuthority;
 }>;
 
 export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: WorkReportingHttpDependencies): void {
   const actor = async (request: FastifyRequest, mode: "read" | "assign" | "report"): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
-    const isRoot = await dependencies.root.isRootUser(user.id);
+    const isRoot = await isRootUser(dependencies.root, user.id);
     const ownerReader = user.businessRoles?.includes("owner_group") === true
       && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY);
     const supervisor = user.businessRoles?.includes("tail_supervisor") === true
