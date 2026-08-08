@@ -69,12 +69,13 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
       );
       return {
         ...rootActor,
-        actorRoles: [...new Set([...rootActor.actorRoles, "ie_reviewer"])],
+        actorRoles: [...new Set([...rootActor.actorRoles, "ie_reviewer", "order_merchandiser"])],
         authorizationCapabilities: [
           ...new Set([
             ...(rootActor.authorizationCapabilities ?? []),
             "submission:audit",
             "quantity:adjust",
+            "quantity:confirm",
             "process:review",
           ]),
         ],
@@ -85,6 +86,24 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
       && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY)
     ) {
       return businessActor(dependencies.root, user, request.id, BUSINESS_READ_ALL_CAPABILITY);
+    }
+    if (
+      user.businessRoles?.includes("tail_supervisor")
+      && user.capabilities.includes("submission:audit")
+    ) {
+      return businessActor(dependencies.root, user, request.id, "submission:audit");
+    }
+    if (
+      user.businessRoles?.includes("order_merchandiser")
+      && user.capabilities.includes("quantity:confirm")
+    ) {
+      return businessActor(dependencies.root, user, request.id, "quantity:confirm");
+    }
+    if (
+      user.businessRoles?.includes("ie_reviewer")
+      && user.capabilities.includes("process:review")
+    ) {
+      return businessActor(dependencies.root, user, request.id, "process:review");
     }
     return businessActor(dependencies.root, user, request.id, "submission:audit");
   };
