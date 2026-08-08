@@ -72,8 +72,6 @@ export function serializeRequestForLog(request: { id?: string; method?: string; 
 export function buildApp(dependencies: AppDependencies): FastifyInstance {
   const { config } = dependencies;
   const app = Fastify({
-    // Production traffic is proxied by the local Nginx only. Never trust forwarding
-    // headers from a client connected directly or through a non-loopback proxy.
     trustProxy: (address) => address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1",
     logger:
       config.nodeEnv === "test"
@@ -119,6 +117,9 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       mobileClientId: config.dingtalk.h5AppKey,
       webClientId: config.dingtalk.webClientId,
       qrRedirectUri: config.dingtalk.qrRedirectUri,
+      ...(dependencies.access ? {
+        isRootUser: (userId: string) => dependencies.access!.root.isRootUser(userId),
+      } : {}),
     });
   }
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
