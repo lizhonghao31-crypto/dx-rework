@@ -77,6 +77,7 @@ export function OwnFactoryApprovalQueuePage() {
         subtitle="N08-A 仅显示当前登录人按服务端角色、在职状态和订单范围代理可见的待审批事项"
         badge={state.kind === "ready" ? `${items.length} 条 · 实时队列` : "实时队列"}
         action="返回责任处理"
+        actionHref="/ui/responsibility"
       />
       <Surface className="responsibility-queue-summary">
         <div>
