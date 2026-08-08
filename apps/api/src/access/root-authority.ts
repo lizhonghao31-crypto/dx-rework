@@ -41,18 +41,39 @@ export class RootAuthority {
   }
 
   async assertAssignmentMutation(actorUserId: string, assignmentId: string): Promise<void> {
-    const result = await this.database.query<{ role_code: string }>(
-      `SELECT role_code
+    const result = await this.database.query<{ user_id: string; role_code: string }>(
+      `SELECT user_id,role_code
        FROM user_role_assignments
        WHERE assignment_id=$1 AND revoked_at IS NULL
        LIMIT 1`,
       [assignmentId],
     );
-    const roleCode = result.rows[0]?.role_code;
-    if (roleCode) await this.assertProtectedRoleMutation(actorUserId, roleCode);
+    const assignment = result.rows[0];
+    if (!assignment) return;
+    const actorIsRoot = await this.isRootUser(actorUserId);
+    if (
+      actorIsRoot
+      && assignment.user_id === actorUserId
+      && this.isProtectedRole(assignment.role_code)
+    ) {
+      throw new ApplicationError(
+        "FORBIDDEN",
+        "超级用户不能撤销自己的受保护角色",
+        403,
+      );
+    }
+    await this.assertProtectedRoleMutation(actorUserId, assignment.role_code);
   }
 
   async assertTargetAccessMutation(actorUserId: string, targetUserId: string): Promise<void> {
+    const actorIsRoot = await this.isRootUser(actorUserId);
+    if (actorIsRoot && actorUserId === targetUserId) {
+      throw new ApplicationError(
+        "FORBIDDEN",
+        "超级用户不能停用自己的系统访问",
+        403,
+      );
+    }
     const result = await this.database.query(
       `SELECT 1
        FROM app_users u
@@ -78,7 +99,7 @@ export class RootAuthority {
       [targetUserId, this.corporationId, this.rootDingtalkUserId ?? ""],
     );
     if (!result.rows[0]) return;
-    if (await this.isRootUser(actorUserId)) return;
+    if (actorIsRoot) return;
     throw new ApplicationError(
       "FORBIDDEN",
       "老板、系统管理员和超级用户账号仅可由超级用户停用或恢复",
