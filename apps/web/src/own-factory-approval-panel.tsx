@@ -189,12 +189,8 @@ export function OwnFactoryApprovalPanel({
 
       <section className="own-factory-approval-section">
         <h3>QC 与整单审核来源</h3>
-        <p>
-          QC 发起：{approval.sourceSnapshot.qualityControl.initiatedBy} · {formatBusinessTime(approval.sourceSnapshot.qualityControl.initiatedAt)}
-        </p>
-        <p>
-          整单审核：{approval.sourceSnapshot.wholeOrderReview.reviewedBy} · {formatBusinessTime(approval.sourceSnapshot.wholeOrderReview.reviewedAt)}
-        </p>
+        <p>QC 发起记录 · {formatBusinessTime(approval.sourceSnapshot.qualityControl.initiatedAt)}</p>
+        <p>整单审核记录 · {formatBusinessTime(approval.sourceSnapshot.wholeOrderReview.reviewedAt)}</p>
         <small>{reviewSnapshotSummary(approval.sourceSnapshot.wholeOrderReview.reviewSnapshot)}</small>
       </section>
 
