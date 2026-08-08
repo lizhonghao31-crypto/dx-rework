@@ -31,13 +31,20 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain("latest_configuration.created_by");
   });
 
-  it("does not send zero-share N07 responsibility rows", async () => {
-    const source = await readFile(
-      "apps/web/src/responsibility-determination-panel.tsx",
-      "utf8",
-    );
-    expect(source).toContain("allocation.shareBps > 0n");
-    expect(source).toContain("total === 10000n");
+  it("keeps N07 responsibility rows valid and transfer targets human-readable", async () => {
+    const [panel, service, routes] = await Promise.all([
+      readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
+      readFile("apps/api/src/rework/responsibility-determination-application-service.ts", "utf8"),
+      readFile("apps/api/src/rework/responsibility-determination-routes.ts", "utf8"),
+    ]);
+    expect(panel).toContain("allocation.shareBps > 0n");
+    expect(panel).toContain("total === 10000n");
+    expect(panel).toContain("输入姓名搜索");
+    expect(panel).toContain("ResponsibilityTransferOptionsResponseSchema");
+    expect(panel).not.toContain('label="目标用户 UUID"');
+    expect(service).toContain("responsibility_can_determine(u.id,$2)");
+    expect(service).toContain("只有当前有效责任处理人可以查看转交对象");
+    expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
   it("keeps process, work and wage nodes inside the shared numbered workflow shell", async () => {
