@@ -24,7 +24,7 @@ const protectedRoles = new Set(["owner_group", "system_admin"]);
 
 const create = (
   capabilities: readonly string[],
-  businessRoles: readonly string[] = ["system_admin"],
+  businessRoles: readonly string[] = ["owner_group"],
   isRoot = false,
 ) => {
   const service = {
@@ -98,7 +98,7 @@ describe("access routes", () => {
     expect(response.json()).toEqual({
       userId: "00000000-0000-4000-8000-000000000001",
       displayName: "管理员",
-      businessRoles: ["system_admin"],
+      businessRoles: ["owner_group"],
       capabilities: ["access:admin"],
       isRoot: false,
     });
@@ -119,7 +119,7 @@ describe("access routes", () => {
     expect(response.statusCode).toBe(201);
     expect(service.assignRole.mock.calls[0]?.[0]).toEqual({
       actorId: "00000000-0000-4000-8000-000000000001",
-      actorRoles: ["system_admin"],
+      actorRoles: ["owner_group"],
       authorizationCapability: "access:admin",
       requestId: "access-request-1",
     });
@@ -153,6 +153,22 @@ describe("access routes", () => {
     });
     expect(allowed.statusCode).toBe(201);
     expect(rootOwner.service.assignRole).toHaveBeenCalledOnce();
+  });
+
+  it("does not let a technical administrator manage business roles", async () => {
+    const administrator = create(["access:admin"], ["system_admin"], false);
+    const response = await administrator.app.inject({
+      method: "POST",
+      url: "/access/role-assignments",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        userId: "00000000-0000-4000-8000-000000000002",
+        roleCode: "worker",
+        reason: "技术管理员尝试分配业务角色",
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(administrator.service.assignRole).not.toHaveBeenCalled();
   });
 
   it("hides protected roles from non-root role options", async () => {
@@ -223,9 +239,9 @@ describe("access routes", () => {
       url: "/access/role-assignments",
       headers: { cookie: "dx_rework_session=trusted" },
       payload: { userId: "00000000-0000-4000-8000-000000000002", roleCode: "worker", reason: "test" },
-    })).json().error.code).toBe("NO_BUSINESS_ROLE");
+    })).statusCode).toBe(403);
 
-    const forbidden = create([], ["system_admin"], false);
+    const forbidden = create([], ["owner_group"], false);
     expect((await forbidden.app.inject({
       method: "POST",
       url: "/access/role-assignments",
