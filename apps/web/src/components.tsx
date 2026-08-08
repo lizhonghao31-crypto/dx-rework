@@ -123,9 +123,15 @@ export function Shell({
     || (hasRole("tail_supervisor") && hasCapability("process:configure"))
     || (hasRole("ie_reviewer") && hasCapability("process:review"));
   const workAccess = isRoot || isOwner
-    || (hasRole("tail_supervisor") && hasCapability("work:assign"))
+    || (hasRole("tail_supervisor") && (
+      hasCapability("work:assign")
+      || hasCapability("submission:audit")
+      || hasCapability("quantity:adjust")
+    ))
     || (hasRole("worker") && hasCapability("work:report"))
-    || hasCapability("work:report_for_worker");
+    || hasCapability("work:report_for_worker")
+    || (hasRole("order_merchandiser") && hasCapability("quantity:confirm"))
+    || (hasRole("ie_reviewer") && hasCapability("process:review"));
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
