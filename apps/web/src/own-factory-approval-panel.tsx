@@ -25,6 +25,22 @@ const requestError = async (response: Response): Promise<string> => {
   }
 };
 
+const formatBusinessTime = (value: string): string =>
+  new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+
+const bpsToPercent = (value: number): string => {
+  const percent = value / 100;
+  return Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+};
+
 const reviewSnapshotSummary = (snapshot: unknown): string => {
   if (!snapshot || typeof snapshot !== "object") return "整单审核快照已锁定";
   const source = snapshot as {
@@ -174,10 +190,10 @@ export function OwnFactoryApprovalPanel({
       <section className="own-factory-approval-section">
         <h3>QC 与整单审核来源</h3>
         <p>
-          QC 发起：{approval.sourceSnapshot.qualityControl.initiatedBy} · {approval.sourceSnapshot.qualityControl.initiatedAt}
+          QC 发起：{approval.sourceSnapshot.qualityControl.initiatedBy} · {formatBusinessTime(approval.sourceSnapshot.qualityControl.initiatedAt)}
         </p>
         <p>
-          整单审核：{approval.sourceSnapshot.wholeOrderReview.reviewedBy} · {approval.sourceSnapshot.wholeOrderReview.reviewedAt}
+          整单审核：{approval.sourceSnapshot.wholeOrderReview.reviewedBy} · {formatBusinessTime(approval.sourceSnapshot.wholeOrderReview.reviewedAt)}
         </p>
         <small>{reviewSnapshotSummary(approval.sourceSnapshot.wholeOrderReview.reviewSnapshot)}</small>
       </section>
@@ -188,7 +204,7 @@ export function OwnFactoryApprovalPanel({
           {approval.sourceSnapshot.processes.map((process) => (
             <div key={process.configurationItemId}>
               <span>{process.processName}</span>
-              <small>{process.pricingUnit === "piece" ? "件" : "小时"} · 倍率 {process.multiplier} · 本厂 {process.ownFactoryShareBps} bps</small>
+              <small>{process.pricingUnit === "piece" ? "件" : "小时"} · 倍率 {process.multiplier} · 本厂 {bpsToPercent(process.ownFactoryShareBps)}%</small>
               <b>¥{process.ownFactoryRoundedAmount}</b>
             </div>
           ))}
@@ -201,7 +217,7 @@ export function OwnFactoryApprovalPanel({
           {approval.sourceSnapshot.amountLines.map((line) => (
             <div key={`${line.workReportId}:${line.personId}`}>
               <span>{line.workerDisplayName}</span>
-              <small>{line.taskMode === "collective" ? "集体上数" : "个人上数"} · 倍率 {line.multiplier} · {line.shareBps} bps</small>
+              <small>{line.taskMode === "collective" ? "集体上数" : "个人上数"} · 倍率 {line.multiplier} · {bpsToPercent(line.shareBps)}%</small>
               <b>¥{line.roundedAmount}</b>
             </div>
           ))}
@@ -219,7 +235,7 @@ export function OwnFactoryApprovalPanel({
         <section className="own-factory-approval-section own-factory-decision">
           <h3>终局决定</h3>
           <p>
-            {approval.decision.decision === "approved" ? "通过" : "驳回"} · {approval.decision.decidedAt}
+            {approval.decision.decision === "approved" ? "通过" : "驳回"} · {formatBusinessTime(approval.decision.decidedAt)}
             {approval.decision.opinion ? ` · ${approval.decision.opinion}` : ""}
           </p>
         </section>
@@ -248,7 +264,7 @@ export function OwnFactoryApprovalPanel({
           {value.history.map((item) => (
             <div key={item.approvalId}>
               <span>责任版本 V{item.finalizedDeterminationVersion}</span>
-              <small>{item.status === "pending" ? "待审批" : item.status === "approved" ? "已通过" : "已驳回"} · {item.createdAt}</small>
+              <small>{item.status === "pending" ? "待审批" : item.status === "approved" ? "已通过" : "已驳回"} · {formatBusinessTime(item.createdAt)}</small>
               <b>¥{item.ownFactoryTotalAmount}</b>
             </div>
           ))}
