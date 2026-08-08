@@ -6,6 +6,7 @@ import "@dx-rework/ui/tokens.css";
 import "@dx-rework/ui/components.css";
 import "./styles.css";
 import "./responsibility-determination.css";
+import "./workflow-shell.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element is missing");
