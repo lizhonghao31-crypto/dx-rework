@@ -5,6 +5,7 @@ import type {
   CreateExternalDeductionFollowUp,
   ExternalResponsibilityBatchResponse,
   ExternalResponsibilityCaseResponse,
+  ExternalResponsibilityQueueResponse,
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
 } from "@dx-rework/contracts/external-responsibility";
@@ -44,11 +45,11 @@ const databaseError = (error: unknown): DatabaseError | null =>
 const deductionLedgerValidationMessage = (error: unknown): string | null => {
   const candidate = databaseError(error);
   if (candidate?.code !== "23514" || typeof candidate.message !== "string") return null;
-  if (candidate.message.includes("external deduction cumulative actual must stay between zero and proposed amount")) {
+  if (candidate.message.includes("deduction entry would make actual amount invalid")) {
     return "累计实扣金额不能低于 0，也不能超过当前拟扣金额。";
   }
-  if (candidate.message.includes("external deduction correction must reference an entry from the same case")) {
-    return "扣款调整或冲销只能引用当前这笔扣款台账中的原流水。";
+  if (candidate.message.includes("deduction adjustment or reversal must reference its own case ledger entry")) {
+    return "扣款调整或冲销只能引用当前这笔扣款台账中的原流水，冲销金额必须与原流水相反。";
   }
   return null;
 };
@@ -78,6 +79,39 @@ export class ProductionExternalResponsibilityService
       this,
       todos,
     );
+  }
+
+  override async listQueue(
+    actor: TrustedActorContext,
+  ): Promise<ExternalResponsibilityQueueResponse> {
+    const value = await super.listQueue(actor);
+    if (value.items.length === 0) return value;
+    const latestDeadlines = await this.productionDatabase.query<{
+      case_id: string;
+      overdue: boolean;
+    }>(
+      `SELECT requested.case_id,
+              COALESCE((
+                SELECT follow.next_follow_up_at<CURRENT_TIMESTAMP
+                FROM rework_external_deduction_follow_ups follow
+                WHERE follow.case_id=requested.case_id
+                ORDER BY follow.created_at DESC,follow.follow_up_id DESC
+                LIMIT 1
+              ),false) overdue
+       FROM unnest($1::uuid[]) requested(case_id)`,
+      [value.items.map((item) => item.caseId)],
+    );
+    const overdueByCase = new Map(
+      latestDeadlines.rows.map((item) => [item.case_id, item.overdue]),
+    );
+    return {
+      items: value.items.map((item) => ({
+        ...item,
+        overdue:
+          item.status === "deduction_follow_up"
+          && (overdueByCase.get(item.caseId) ?? false),
+      })),
+    };
   }
 
   override allocateSuppliers(
