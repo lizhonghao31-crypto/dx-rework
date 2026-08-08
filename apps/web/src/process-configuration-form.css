@@ -1,0 +1,9 @@
+.process-configuration-page .process-configuration-actions {
+  position: static;
+  margin-top: var(--dx-v2-space-4);
+  padding-bottom: 0;
+}
+
+.process-configuration-page .process-line .dx-field:last-child {
+  margin-bottom: var(--dx-v2-space-2);
+}
