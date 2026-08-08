@@ -120,6 +120,13 @@ export function ResponsibilityQueuePage() {
               : item.canDetermine || item.canTakeover
                 ? "warning"
                 : "info";
+            const stateLabel = item.highMultiplierPending
+              ? "待独立确认"
+              : item.canDetermine
+                ? "待处理"
+                : item.canTakeover
+                  ? "可接管"
+                  : "仅查看";
             return (
               <a
                 className="responsibility-task-link"
@@ -132,6 +139,7 @@ export function ResponsibilityQueuePage() {
                     title,
                     meta,
                     tone,
+                    stateLabel,
                   }}
                 />
                 <span>打开责任判定 →</span>
