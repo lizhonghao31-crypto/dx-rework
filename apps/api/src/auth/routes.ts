@@ -17,6 +17,7 @@ type AuthRouteOptions = Readonly<{
   mobileClientId: string;
   webClientId: string;
   qrRedirectUri: string;
+  isRootUser?: (userId: string) => Promise<boolean>;
 }>;
 
 export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, options: AuthRouteOptions): void {
@@ -85,7 +86,11 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
   });
   app.get("/auth/me", async (request) => {
     const user = await auth.authenticate(cookieToken(request));
-    return { user, status: user.capabilities.length ? "authorized" : "no_role" };
+    const isRoot = options.isRootUser ? await options.isRootUser(user.id) : false;
+    return {
+      user: { ...user, isRoot },
+      status: user.capabilities.length || isRoot ? "authorized" : "no_role",
+    };
   });
   app.post("/auth/logout", async (request, reply) => {
     await auth.logout(cookieToken(request));
@@ -93,7 +98,8 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
   });
   app.get("/protected", async (request, reply) => {
     const user = await auth.authenticate(cookieToken(request));
-    if (!user.capabilities.length) return reply.code(403).send({ error: { code: "NO_BUSINESS_ROLE", message: "尚未分配业务角色，请联系管理员", requestId: request.id } });
+    const isRoot = options.isRootUser ? await options.isRootUser(user.id) : false;
+    if (!user.capabilities.length && !isRoot) return reply.code(403).send({ error: { code: "NO_BUSINESS_ROLE", message: "尚未分配业务角色，请联系管理员", requestId: request.id } });
     return { actorId: user.id };
   });
 }
