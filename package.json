@@ -32,6 +32,7 @@
     "pretest:integration": "npm run build:packages",
     "test:integration": "vitest run tests/integration",
     "build": "npm run build --workspaces --if-present",
+    "postbuild": "vitest run tests/unit/business-chain-ui-contract.test.ts tests/integration/full-business-chain-postgres.test.ts",
     "db:migrate": "node scripts/migrate.mjs",
     "db:migrate:lint": "node scripts/check-migrations.mjs",
     "db:migrate:check": "node scripts/migration-integration-check.mjs",
