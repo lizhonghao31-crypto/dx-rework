@@ -113,15 +113,25 @@ export function ReworkInitiationForm() {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    void request(
-      "rework-orders/initiation-options",
-      ReworkInitiationOptionsResponseSchema,
-      { signal: controller.signal },
-    ).then(setOptions).catch((error: unknown) => {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        setMessage(error instanceof Error ? error.message : "基础资料加载失败");
-      }
-    });
+    const loadOptions = () => {
+      void request(
+        "rework-orders/initiation-options",
+        ReworkInitiationOptionsResponseSchema,
+        { signal: controller.signal },
+      ).then((next) => {
+        if (active) setOptions(next);
+      }).catch((error: unknown) => {
+        if (active && !(error instanceof DOMException && error.name === "AbortError")) {
+          setMessage(error instanceof Error ? error.message : "基础资料加载失败");
+        }
+      });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadOptions();
+    };
+    loadOptions();
+    window.addEventListener("focus", loadOptions);
+    document.addEventListener("visibilitychange", onVisibility);
     if (initialDraftId) {
       void request(
         `rework-orders/${initialDraftId}`,
@@ -144,6 +154,8 @@ export function ReworkInitiationForm() {
     return () => {
       active = false;
       controller.abort();
+      window.removeEventListener("focus", loadOptions);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -354,7 +366,7 @@ export function ReworkInitiationForm() {
   const showStatus = Boolean(order) || message !== "填写中，尚未保存";
 
   return (
-    <main className="mobile-page">
+    <div className="mobile-page">
       <div className="mobile-hero">
         <div className="mobile-title">
           <h1>发起返工</h1>
@@ -398,6 +410,9 @@ export function ReworkInitiationForm() {
                 ))}
               </select>
             </span>
+            {!formDisabled && options.merchandisers.length === 0 ? (
+              <small>暂无可选订单跟单；请先在权限管理分配“订单跟单”角色。</small>
+            ) : null}
           </label>
           <label className="dx-field">
             <span>加工厂（必填）</span>
@@ -417,6 +432,9 @@ export function ReworkInitiationForm() {
                 ))}
               </select>
             </span>
+            {!formDisabled && options.factories.length === 0 ? (
+              <small>除本厂外暂无加工厂；可在“基础资料”维护。</small>
+            ) : null}
           </label>
         </div>
         {order?.hasOtherOpenStyleOrder && (
@@ -533,6 +551,6 @@ export function ReworkInitiationForm() {
           <Button disabled={mutationDisabled} onClick={() => void transition("cancel")}>取消此草稿</Button>
         </div>
       )}
-    </main>
+    </div>
   );
 }
