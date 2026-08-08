@@ -51,7 +51,7 @@ export function AdminConsolePage() {
 
   const visibleTabs = technicalAccess ? technicalTabs : technicalTabs.slice(0, 1);
   return (
-    <main className="admin-shell">
+    <div className="admin-shell">
       <Surface className="admin-card">
         <h1>系统管理</h1>
         {technicalAccess === null ? <p>正在加载管理权限…</p> : (
@@ -65,7 +65,7 @@ export function AdminConsolePage() {
           </>
         )}
       </Surface>
-    </main>
+    </div>
   );
 }
 
