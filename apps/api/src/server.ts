@@ -194,7 +194,11 @@ const app = buildApp({
     exportService: new ReportExportService(reportingService, database, config.gitSha),
   },
   adminAudit: { authenticate: (token) => auth.authenticate(token), service: new AdminAuditService(database) },
-  adminConsole: { authenticate: (token) => auth.authenticate(token), service: new AdminConsoleService(database) },
+  adminConsole: {
+    authenticate: (token) => auth.authenticate(token),
+    service: new AdminConsoleService(database),
+    root: rootAuthority,
+  },
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
