@@ -40,8 +40,8 @@ describe("authorization policy closure", () => {
     ]) {
       expect(migration).toContain(`'${role}'`);
     }
-    expect(migration).toContain("guard_singleton_direct_role_assignment");
-    expect(migration).toContain("guard_singleton_direct_role_reactivation");
+    expect(migration).toContain("CREATE UNIQUE INDEX user_role_assignments_singleton_direct_role_idx");
+    expect(migration).toContain("WHERE revoked_at IS NULL");
   });
 
   it("uses the same Root authority in the major business HTTP boundaries", async () => {
