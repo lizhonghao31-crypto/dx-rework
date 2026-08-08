@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { FactorySearch } from "./factory-search.js";
+import { SearchSelect } from "./search-select.js";
 import {
   executeReworkSubmit,
   isReworkFormMutationAllowed,
@@ -398,18 +399,15 @@ export function ReworkInitiationForm() {
           />
           <label className="dx-field">
             <span>订单跟单（必填）</span>
-            <span className="dx-field__control">
-              <select
-                aria-label="订单跟单"
+            <span className="dx-field__control search-select-control">
+              <SearchSelect
+                options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))}
                 value={form.merchandiserUserId}
+                placeholder={options.merchandisers.length ? "输入姓名搜索订单跟单" : "暂无可选订单跟单"}
+                emptyText="没有匹配的订单跟单"
                 disabled={formDisabled}
-                onChange={(event) => setForm({ ...form, merchandiserUserId: event.target.value })}
-              >
-                <option value="">{options.merchandisers.length ? "请选择订单跟单" : "暂无可选订单跟单"}</option>
-                {options.merchandisers.map((item) => (
-                  <option key={item.userId} value={item.userId}>{item.displayName}</option>
-                ))}
-              </select>
+                onChange={(merchandiserUserId) => setForm({ ...form, merchandiserUserId })}
+              />
             </span>
             {!formDisabled && options.merchandisers.length === 0 ? (
               <small>暂无可选订单跟单；请先在权限管理分配“订单跟单”角色。</small>
