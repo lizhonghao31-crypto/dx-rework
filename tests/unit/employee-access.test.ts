@@ -75,7 +75,7 @@ describe("PR-31 employee access contracts", () => {
       readFile("scripts/deploy/lib.sh", "utf8"),
     ]);
     expect(authority).toContain('new Set(["owner_group", "system_admin"])');
-    expect(authority).toContain("ROOT").not;
+    expect(authority).toContain("rootDingtalkUserId");
     expect(authority).toContain("assertProtectedRoleMutation");
     expect(authority).toContain("assertTargetAccessMutation");
     expect(accessRoutes).toContain("filterAssignableRoles");
