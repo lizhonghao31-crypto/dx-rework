@@ -70,6 +70,23 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     };
   };
 
+  const roleManager = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    if (!isRoot && user.businessRoles?.includes("owner_group") !== true) {
+      throw new ApplicationError("FORBIDDEN", "仅老板或超级用户可管理业务角色", 403);
+    }
+    if (!isRoot && !user.capabilities.includes("access:admin")) {
+      throw new ApplicationError("FORBIDDEN", "无权执行该操作", 403);
+    }
+    return {
+      actorId: user.id,
+      actorRoles: user.businessRoles ?? [],
+      authorizationCapability: "access:admin",
+      requestId: request.id,
+    };
+  };
+
   app.get("/access/me", async (request) => {
     const user = await authenticated(request);
     return {
@@ -82,7 +99,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   });
 
   app.get("/access/roles", async (request) => {
-    const accessActor = await actor(request, "access:admin");
+    const accessActor = await roleManager(request);
     return dependencies.root.filterAssignableRoles(
       accessActor.actorId,
       await dependencies.service.listRoles(),
@@ -90,7 +107,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   });
 
   app.get("/access/role-assignments", async (request) => {
-    await actor(request, "access:admin");
+    await roleManager(request);
     const query = parse(RoleAssignmentsQuerySchema, request.query);
     return dependencies.service.listRoleAssignments({
       ...(query.userId ? { userId: query.userId } : {}),
@@ -129,7 +146,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   });
 
   app.post("/access/role-assignments", async (request, reply) => {
-    const accessActor = await actor(request, "access:admin");
+    const accessActor = await roleManager(request);
     const input = parse(AssignRoleSchema, request.body);
     await dependencies.root.assertProtectedRoleMutation(accessActor.actorId, input.roleCode);
     return reply.code(201).send(
@@ -140,7 +157,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   app.delete<{ Params: { assignmentId: string } }>("/access/role-assignments/:assignmentId", async (request, reply) => {
     const input = parse(RoleAssignmentParamsSchema, request.params);
     const body = parse(RevokeAccessSchema, request.body);
-    const accessActor = await actor(request, "access:admin");
+    const accessActor = await roleManager(request);
     await dependencies.root.assertAssignmentMutation(accessActor.actorId, input.assignmentId);
     await dependencies.service.revokeRole(accessActor, input.assignmentId, body.reason);
     return reply.code(204).send();
