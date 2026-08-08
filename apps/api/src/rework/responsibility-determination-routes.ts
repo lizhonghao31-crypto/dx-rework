@@ -10,6 +10,7 @@ import {
   TransferResponsibilitySchema,
 } from "@dx-rework/contracts";
 import { ResponsibilityQueueResponseSchema } from "@dx-rework/contracts/responsibility-queue";
+import { ResponsibilityTransferOptionsResponseSchema } from "@dx-rework/contracts/responsibility-transfer";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
@@ -18,7 +19,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ResponsibilityDeterminationApplicationService } from "./responsibility-determination-application-service.js";
 
-type ResponsibilityDeterminationHttpService = Pick<ResponsibilityDeterminationApplicationService, "listQueue" | "get" | "saveDraft" | "finalize" | "transfer" | "takeover" | "confirmHighMultiplier">;
+type ResponsibilityDeterminationHttpService = Pick<ResponsibilityDeterminationApplicationService, "listQueue" | "get" | "listTransferCandidates" | "saveDraft" | "finalize" | "transfer" | "takeover" | "confirmHighMultiplier">;
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((value) => value.trim()).find((value) => value.startsWith("dx_rework_session="))?.slice(18);
 const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
 
@@ -38,6 +39,13 @@ export function registerResponsibilityDeterminationRoutes(app: FastifyInstance, 
     const currentActor = await actor(request, "responsibility:determine");
     const result = await dependencies.service.get(currentActor, parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId);
     return ResponsibilityDeterminationResponseSchema.parse({ ...result, handlerUserId: result.handlerUserId ?? (result.canDetermine ? currentActor.actorId : null) });
+  });
+  app.get("/rework-orders/:reworkOrderId/responsibility-determinations/transfer-options", async (request) => {
+    const result = await dependencies.service.listTransferCandidates(
+      await actor(request, "responsibility:determine"),
+      parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId,
+    );
+    return ResponsibilityTransferOptionsResponseSchema.parse(result);
   });
   app.post("/rework-orders/:reworkOrderId/responsibility-determinations/drafts", async (request, reply) => { const result = await dependencies.service.saveDraft(await actor(request, "responsibility:determine"), parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId, parse(CreateResponsibilityDraftSchema, request.body), key(request)); if (result.reused) reply.header("idempotency-replayed", "true"); return reply.code(201).send(ResponsibilityDeterminationResponseSchema.parse(result.value)); });
   app.post("/rework-orders/:reworkOrderId/responsibility-determinations/finalize", async (request, reply) => { const result = await dependencies.service.finalize(await actor(request, "responsibility:determine"), parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId, parse(FinalizeResponsibilitySchema, request.body), key(request)); if (result.reused) reply.header("idempotency-replayed", "true"); return ResponsibilityDeterminationResponseSchema.parse(result.value); });
