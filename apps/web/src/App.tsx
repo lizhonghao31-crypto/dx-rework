@@ -27,6 +27,7 @@ import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 import { MasterDataPage } from "./master-data-page.js";
 import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
+import { landingTarget } from "./landing-target.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -117,32 +118,10 @@ function HomeLanding() {
           return;
         }
 
-        const { user } = body;
-        let target = "ui/work-reporting";
-        if (
-          user.isRoot === true
-          || user.businessRoles?.includes("owner_group") === true
-          || user.capabilities.includes("dashboard:management:read")
-        ) {
-          target = "ui/management";
-        } else if (
-          user.businessRoles?.includes("system_admin") === true
-          && user.capabilities.includes("admin:read")
-        ) {
-          target = "ui/admin";
-        } else if (user.capabilities.includes("dashboard:site:read")) {
-          target = "ui/supervisor";
-        } else if (user.capabilities.includes("rework:initiate")) {
-          target = "ui/qc/new";
-        } else if (
-          user.capabilities.includes("process:configure")
-          || user.capabilities.includes("process:review")
-        ) {
-          target = "ui/process-configuration";
-        } else if (user.capabilities.includes("wage:view")) {
-          target = "ui/wages";
-        } else if (user.capabilities.includes("report:view")) {
-          target = "ui/reports";
+        const target = landingTarget(body.user);
+        if (!target) {
+          if (mounted) setMessage("当前角色暂时没有可进入的业务模块，请联系管理员核对岗位权限。");
+          return;
         }
         window.location.replace(pageUrl(target));
       })
