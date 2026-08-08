@@ -64,7 +64,10 @@ export function registerReworkRoutes(
       throw new ApplicationError("FORBIDDEN", "只有品控人员可以发起和维护返工单", 403);
     }
     const actorRoles = [...(user.businessRoles ?? [])];
-    if (isRoot) actorRoles.push("root_superuser");
+    if (isRoot) {
+      actorRoles.push("root_superuser");
+      if (!actorRoles.includes("quality_control")) actorRoles.push("quality_control");
+    }
     return {
       actorId: user.id,
       actorRoles,
