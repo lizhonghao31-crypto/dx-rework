@@ -11,6 +11,7 @@ import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { EmployeeAccessService } from "./employee-access-service.js";
+import type { RootAuthority } from "./root-authority.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -31,6 +32,7 @@ const parse = <T>(
 export type EmployeeAccessHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: EmployeeAccessService;
+  root: RootAuthority;
 }>;
 
 export function registerEmployeeAccessRoutes(
@@ -42,15 +44,19 @@ export function registerEmployeeAccessRoutes(
 
   const ownerActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
     if (
-      user.businessRoles?.includes("owner_group") !== true
-      || !user.capabilities.includes("access:admin")
+      !isRoot
+      && (
+        user.businessRoles?.includes("owner_group") !== true
+        || !user.capabilities.includes("access:admin")
+      )
     ) {
       throw new ApplicationError("FORBIDDEN", "仅老板权限组可维护员工权限", 403);
     }
     return {
       actorId: user.id,
-      actorRoles: user.businessRoles,
+      actorRoles: user.businessRoles ?? [],
       authorizationCapability: "access:admin",
       requestId: request.id,
     };
@@ -65,6 +71,7 @@ export function registerEmployeeAccessRoutes(
     const actor = await ownerActor(request);
     const params = parse(EmployeeAccessUserParamsSchema, request.params);
     const body = parse(EmployeeAccessGrantRoleSchema, request.body);
+    await dependencies.root.assertProtectedRoleMutation(actor.actorId, body.roleCode);
     return reply.code(201).send(
       await dependencies.service.grantRole(actor, {
         userId: params.userId,
@@ -78,6 +85,7 @@ export function registerEmployeeAccessRoutes(
     const actor = await ownerActor(request);
     const params = parse(EmployeeAccessAssignmentParamsSchema, request.params);
     const body = parse(EmployeeAccessReasonSchema, request.body);
+    await dependencies.root.assertAssignmentMutation(actor.actorId, params.assignmentId);
     await dependencies.service.revokeRole(actor, params.assignmentId, body.reason);
     return reply.code(204).send();
   });
@@ -86,6 +94,7 @@ export function registerEmployeeAccessRoutes(
     const actor = await ownerActor(request);
     const params = parse(EmployeeAccessUserParamsSchema, request.params);
     const body = parse(EmployeeAccessReasonSchema, request.body);
+    await dependencies.root.assertTargetAccessMutation(actor.actorId, params.userId);
     await dependencies.service.disableAccess(actor, params.userId, body.reason);
     return reply.code(204).send();
   });
@@ -94,6 +103,7 @@ export function registerEmployeeAccessRoutes(
     const actor = await ownerActor(request);
     const params = parse(EmployeeAccessUserParamsSchema, request.params);
     const body = parse(EmployeeAccessReasonSchema, request.body);
+    await dependencies.root.assertTargetAccessMutation(actor.actorId, params.userId);
     await dependencies.service.restoreAccess(actor, params.userId, body.reason);
     return reply.code(204).send();
   });
