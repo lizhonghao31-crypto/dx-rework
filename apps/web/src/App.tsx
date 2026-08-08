@@ -183,56 +183,71 @@ export function App() {
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
+
+  const owner = { requiredRole: "owner_group" } as const;
+
   if (path === "/ui/qc/new") {
-    return (
-      <AuthGate requiredRole="quality_control" requiredCapability="rework:initiate">
-        {page}
-      </AuthGate>
-    );
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "quality_control", requiredCapability: "rework:initiate" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/process-configuration") {
-    return (
-      <AuthGate requiredAnyOf={[
-        { requiredRole: "tail_supervisor", requiredCapability: "process:configure" },
-        { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
-      ]}>
-        {page}
-      </AuthGate>
-    );
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "tail_supervisor", requiredCapability: "process:configure" },
+      { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/work-reporting") {
     return <AuthGate>{page}</AuthGate>;
   }
   if (path === "/ui/wages" || path.startsWith("/ui/wages/")) {
-    return <AuthGate requiredCapability="wage:view">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "wage:view" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/admin") {
     return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
   }
   if (path === "/ui/audit") {
     return <AuthGate requiredAnyOf={[
-      { requiredRole: "owner_group" },
+      owner,
       { requiredRole: "system_admin", requiredCapability: "audit:read" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/employee-access") {
-    return <AuthGate requiredRole="owner_group" requiredCapability="access:admin">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "owner_group", requiredCapability: "access:admin" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/management") {
-    return <AuthGate requiredCapability="dashboard:management:read">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "dashboard:management:read" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/supervisor") {
-    return <AuthGate requiredCapability="dashboard:site:read">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "dashboard:site:read" },
+    ]}>{page}</AuthGate>;
   }
   if (path === "/ui/tasks") {
     return <AuthGate requiredAnyOf={[
+      owner,
       { requiredCapability: "dashboard:management:read" },
       { requiredCapability: "dashboard:site:read" },
       { requiredCapability: "report:view" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/reports") {
-    return <AuthGate requiredCapability="report:view">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "report:view" },
+    ]}>{page}</AuthGate>;
   }
   return <AuthGate>{page}</AuthGate>;
 }
