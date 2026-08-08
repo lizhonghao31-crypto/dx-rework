@@ -60,7 +60,25 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
     const user = await dependencies.authenticate(token(request));
     const isRoot = await isRootUser(dependencies.root, user.id);
     if (isRoot) {
-      return businessActor(dependencies.root, user, request.id, "submission:audit", "tail_supervisor");
+      const rootActor = await businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        "submission:audit",
+        "tail_supervisor",
+      );
+      return {
+        ...rootActor,
+        actorRoles: [...new Set([...rootActor.actorRoles, "ie_reviewer"])],
+        authorizationCapabilities: [
+          ...new Set([
+            ...(rootActor.authorizationCapabilities ?? []),
+            "submission:audit",
+            "quantity:adjust",
+            "process:review",
+          ]),
+        ],
+      };
     }
     if (
       user.businessRoles?.includes("owner_group")
