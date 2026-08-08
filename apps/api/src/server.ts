@@ -3,6 +3,7 @@ import { DisabledErpAdapter } from "@dx-rework/domain";
 import pg from "pg";
 
 import { EmployeeAccessService } from "./access/employee-access-service.js";
+import { RootAuthority } from "./access/root-authority.js";
 import { AccessMasterDataService } from "./access/service.js";
 import { AdminAuditService } from "./admin-audit-service.js";
 import { AdminConsoleService } from "./admin-console-service.js";
@@ -46,6 +47,11 @@ const database = new Pool({
   idleTimeoutMillis: 30_000,
 });
 
+const rootAuthority = new RootAuthority(
+  database,
+  config.dingtalk.corpId,
+  config.rootDingtalkUserId,
+);
 const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
 const accessService = new AccessMasterDataService(database, config.dingtalk.corpId);
 await accessService.ensureOrganizationPolicy();
@@ -132,10 +138,12 @@ const app = buildApp({
   access: {
     authenticate: (token) => auth.authenticate(token),
     service: accessService,
+    root: rootAuthority,
   },
   employeeAccess: {
     authenticate: (token) => auth.authenticate(token),
     service: employeeAccessService,
+    root: rootAuthority,
   },
   tools: {
     authenticate: (token) => auth.authenticate(token),
