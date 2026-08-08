@@ -16,16 +16,35 @@ export class RootAuthority {
   }
 
   async isRootUser(userId: string): Promise<boolean> {
-    if (!this.rootDingtalkUserId) return false;
     const result = await this.database.query(
       `SELECT 1
-       FROM identity_mappings
-       WHERE user_id=$1
-         AND provider='dingtalk'
-         AND corp_id=$2
-         AND provider_user_id=$3
+       FROM app_users u
+       WHERE u.id=$1
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM identity_mappings i
+             WHERE i.user_id=u.id
+               AND i.provider='dingtalk'
+               AND i.corp_id=$2
+               AND $3::text IS NOT NULL
+               AND i.provider_user_id=$3
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM owner_bootstrap_consumptions c
+             JOIN identity_mappings i
+               ON i.user_id=c.user_id
+              AND i.provider='dingtalk'
+              AND i.corp_id=c.corp_id
+              AND i.provider_user_id=c.provider_user_id
+             WHERE c.singleton=true
+               AND c.user_id=u.id
+               AND c.corp_id=$2
+           )
+         )
        LIMIT 1`,
-      [userId, this.corporationId, this.rootDingtalkUserId],
+      [userId, this.corporationId, this.rootDingtalkUserId ?? null],
     );
     return Boolean(result.rows[0]);
   }
@@ -92,11 +111,19 @@ export class RootAuthority {
              WHERE i.user_id=u.id
                AND i.provider='dingtalk'
                AND i.corp_id=$2
+               AND $3::text IS NOT NULL
                AND i.provider_user_id=$3
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM owner_bootstrap_consumptions c
+             WHERE c.singleton=true
+               AND c.user_id=u.id
+               AND c.corp_id=$2
            )
          )
        LIMIT 1`,
-      [targetUserId, this.corporationId, this.rootDingtalkUserId ?? ""],
+      [targetUserId, this.corporationId, this.rootDingtalkUserId ?? null],
     );
     if (!result.rows[0]) return;
     if (actorIsRoot) return;
