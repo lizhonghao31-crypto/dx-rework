@@ -1,5 +1,16 @@
+import { StatusBadge, Surface } from "@dx-rework/ui";
+import { useEffect, useState } from "react";
+
+import { createWebUrls } from "../url-contract.js";
 import { Detail, Foundation, MobileForm } from "./pages.js";
-import { AuthGate, DeniedPage, LoginPage, QrLoginPage, QrRelayPage } from "./auth.js";
+import {
+  AuthGate,
+  DeniedPage,
+  LoginPage,
+  QrLoginPage,
+  QrRelayPage,
+  type AuthorizedUser,
+} from "./auth.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
@@ -13,11 +24,79 @@ import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+
+type LandingMe = {
+  status: "authorized" | "no_role";
+  user: AuthorizedUser;
+};
+
+function HomeLanding() {
+  const [message, setMessage] = useState("正在进入业务工作台…");
+
+  useEffect(() => {
+    let mounted = true;
+    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          window.location.replace(pageUrl("auth/login"));
+          return;
+        }
+        const body = await response.json() as LandingMe;
+        if (body.status === "no_role") {
+          if (mounted) setMessage("当前账号尚未分配业务角色，请联系管理员。");
+          return;
+        }
+
+        const { user } = body;
+        let target = "ui/work-reporting";
+        if (
+          user.businessRoles?.includes("owner_group") === true
+          || user.capabilities.includes("dashboard:management:read")
+        ) {
+          target = "ui/management";
+        } else if (user.capabilities.includes("dashboard:site:read")) {
+          target = "ui/supervisor";
+        } else if (user.capabilities.includes("rework:initiate")) {
+          target = "ui/qc/new";
+        } else if (
+          user.capabilities.includes("process:configure")
+          || user.capabilities.includes("process:review")
+        ) {
+          target = "ui/process-configuration";
+        } else if (user.capabilities.includes("wage:view")) {
+          target = "ui/wages";
+        } else if (user.capabilities.includes("report:view")) {
+          target = "ui/reports";
+        }
+        window.location.replace(pageUrl(target));
+      })
+      .catch(() => {
+        if (mounted) setMessage("工作台加载失败，请刷新页面重试。");
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <main className="auth-shell">
+      <Surface className="auth-card">
+        <StatusBadge tone="info">达兴组织准入</StatusBadge>
+        <h1>正在进入业务工作台</h1>
+        <p>{message}</p>
+      </Surface>
+    </main>
+  );
+}
+
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const path = window.location.pathname.startsWith(basePath)
     ? window.location.pathname.slice(basePath.length) || "/"
     : window.location.pathname;
+  if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
@@ -39,7 +118,7 @@ export function App() {
   else if (path === "/ui/work-reporting") page = <WorkReportingForm />;
   else if (path === "/ui/piecework/collective") page = <MobileForm piecework />;
   else if (path === "/system/foundation") page = <Foundation />;
-  else page = <Foundation />;
+  else return <HomeLanding />;
   if (path === "/ui/qc/new") {
     return (
       <AuthGate requiredRole="quality_control" requiredCapability="rework:initiate">
