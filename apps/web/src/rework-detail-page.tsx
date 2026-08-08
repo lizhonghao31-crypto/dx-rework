@@ -2,6 +2,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import type { AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
@@ -52,6 +53,11 @@ type LoadState =
   | { kind: "ready"; value: ReworkBusinessDetail }
   | { kind: "error"; message: string };
 
+type AuthMe = Readonly<{
+  status: "authorized" | "no_role";
+  user: AuthorizedUser;
+}>;
+
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
   pending_process_configuration: { label: "待配置工序", next: "下一步由尾部主管配置工序、计划数量和单价" },
@@ -89,30 +95,83 @@ const formatTime = (value: string | null): string => {
   }).format(new Date(value));
 };
 
-const nextAction = (detail: ReworkBusinessDetail): { label: string; href: string } | null => {
-  if (detail.status === "pending_process_configuration") {
-    return { label: "进入工序配置", href: `/ui/process-configuration?rework=${detail.reworkOrderId}` };
-  }
-  if (detail.status === "pending_ie_review") {
-    return { label: "进入 IE 审核", href: `/ui/process-configuration?rework=${detail.reworkOrderId}` };
+const hasRole = (user: AuthorizedUser | null, role: string): boolean =>
+  user?.businessRoles?.includes(role) === true;
+const hasCapability = (user: AuthorizedUser | null, capability: string): boolean =>
+  user?.capabilities.includes(capability) === true;
+const elevated = (user: AuthorizedUser | null): boolean =>
+  user?.isRoot === true || hasRole(user, "owner_group");
+
+const canUseProcessWorkspace = (user: AuthorizedUser | null): boolean =>
+  elevated(user)
+  || (hasRole(user, "tail_supervisor") && hasCapability(user, "process:configure"))
+  || (hasRole(user, "ie_reviewer") && hasCapability(user, "process:review"));
+
+const canUseWorkWorkspace = (user: AuthorizedUser | null): boolean =>
+  elevated(user)
+  || (hasRole(user, "tail_supervisor") && (
+    hasCapability(user, "work:assign")
+    || hasCapability(user, "submission:audit")
+    || hasCapability(user, "quantity:adjust")
+  ))
+  || (hasRole(user, "worker") && hasCapability(user, "work:report"))
+  || hasCapability(user, "work:report_for_worker")
+  || (hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm"))
+  || (hasRole(user, "ie_reviewer") && hasCapability(user, "process:review"));
+
+const canUseTaskList = (user: AuthorizedUser | null): boolean =>
+  elevated(user)
+  || hasCapability(user, "dashboard:management:read")
+  || hasCapability(user, "dashboard:site:read")
+  || hasCapability(user, "report:view");
+
+const nextAction = (
+  detail: ReworkBusinessDetail,
+  user: AuthorizedUser | null,
+): { label: string; href: string } | null => {
+  if (
+    ["pending_process_configuration", "pending_ie_review"].includes(detail.status)
+    && canUseProcessWorkspace(user)
+  ) {
+    return {
+      label: detail.status === "pending_ie_review" ? "进入 IE 审核" : "进入工序配置",
+      href: `/ui/process-configuration?rework=${detail.reworkOrderId}`,
+    };
   }
   if ([
     "pending_task_assignment",
     "in_progress",
     "pending_order_review",
     "pending_quantity_adjustment_ie_review",
-  ].includes(detail.status)) {
+  ].includes(detail.status) && canUseWorkWorkspace(user)) {
     return { label: "进入分工 / 上数 / 整单审核", href: `/ui/work-reporting?rework=${detail.reworkOrderId}` };
   }
-  if (detail.status === "completed") {
+  if (detail.status === "completed" && (elevated(user) || hasCapability(user, "wage:view"))) {
     return { label: "查看工资核对", href: "/ui/wages" };
   }
   return null;
 };
 
+const detailActiveNav = (user: AuthorizedUser | null): string => {
+  if (canUseTaskList(user)) return "返工任务";
+  if (
+    elevated(user)
+    || hasCapability(user, "responsibility:determine")
+    || hasCapability(user, "responsibility:takeover")
+    || hasCapability(user, "responsibility:confirm_high_multiplier")
+  ) return "责任处理";
+  if (hasCapability(user, "own_factory:view")) return "本厂审批";
+  if (hasCapability(user, "external_responsibility:view")) return "外部扣款";
+  if (hasCapability(user, "wage:view")) return "工资核对";
+  if (canUseWorkWorkspace(user)) return "分工上数";
+  if (canUseProcessWorkspace(user)) return "工序配置";
+  return "返工任务";
+};
+
 export function ReworkDetailPage() {
   const reworkOrderId = orderIdFromLocation();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
     if (!reworkOrderId) {
@@ -131,6 +190,20 @@ export function ReworkDetailPage() {
     const value = await response.json() as ReworkBusinessDetail;
     setState({ kind: "ready", value });
   }, [reworkOrderId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(apiUrl("auth/me"), {
+      credentials: "include",
+      signal: controller.signal,
+      headers: { accept: "application/json" },
+    }).then(async (response) => response.ok ? await response.json() as AuthMe : null)
+      .then((body) => {
+        if (body?.status === "authorized") setCurrentUser(body.user);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!reworkOrderId) {
@@ -155,31 +228,39 @@ export function ReworkDetailPage() {
     };
   }, [load, reworkOrderId]);
 
+  const activeNav = detailActiveNav(currentUser);
+  const showBackToTasks = canUseTaskList(currentUser);
+
   if (state.kind === "loading") {
-    return <Shell active="返工任务"><Header title="返工单详情" badge="实时读取" action="返回任务列表" actionHref="/ui/tasks" /><Surface>正在加载返工单…</Surface></Shell>;
+    return <Shell active={activeNav}><Header title="返工单详情" badge="实时读取" {...(showBackToTasks ? { action: "返回任务列表", actionHref: "/ui/tasks" } : {})} /><Surface>正在加载返工单…</Surface></Shell>;
   }
   if (state.kind === "error") {
-    return <Shell active="返工任务"><Header title="返工单详情" badge="无法读取" action="返回任务列表" actionHref="/ui/tasks" /><Surface>{state.message}</Surface></Shell>;
+    return <Shell active={activeNav}><Header title="返工单详情" badge="无法读取" {...(showBackToTasks ? { action: "返回任务列表", actionHref: "/ui/tasks" } : {})} /><Surface>{state.message}</Surface></Shell>;
   }
 
   const detail = state.value;
   const meta = statusMeta[detail.status];
-  const action = nextAction(detail);
+  const action = nextAction(detail, currentUser);
   const showResponsibility = [
     "pending_responsibility_determination",
     "pending_responsibility_action",
     "completed",
   ].includes(detail.status);
+  const canSeeResponsibility = elevated(currentUser)
+    || hasCapability(currentUser, "responsibility:determine")
+    || hasCapability(currentUser, "responsibility:takeover")
+    || hasCapability(currentUser, "responsibility:confirm_high_multiplier");
+  const canSeeOwnFactory = elevated(currentUser) || hasCapability(currentUser, "own_factory:view");
+  const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
   const responsibilityKey = `${detail.status}:${detail.updatedAt}`;
 
   return (
-    <Shell active="返工任务">
+    <Shell active={activeNav}>
       <Header
         title={detail.reworkNo ?? "未提交返工草稿"}
         subtitle={`${detail.styleNo ?? "款号未填写"} · ${meta.label}`}
         badge="返工单详情"
-        action="返回任务列表"
-        actionHref="/ui/tasks"
+        {...(showBackToTasks ? { action: "返回任务列表", actionHref: "/ui/tasks" } : {})}
       />
 
       <div className="rework-detail-layout">
@@ -217,11 +298,11 @@ export function ReworkDetailPage() {
           </Surface>
         </div>
 
-        {showResponsibility ? (
+        {showResponsibility && (canSeeResponsibility || canSeeOwnFactory || canSeeExternal) ? (
           <div className="rework-detail-responsibility" key={responsibilityKey}>
-            <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} />
-            <OwnFactoryApprovalPanel reworkOrderId={detail.reworkOrderId} />
-            <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} />
+            {canSeeResponsibility ? <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} /> : null}
+            {canSeeOwnFactory ? <OwnFactoryApprovalPanel reworkOrderId={detail.reworkOrderId} /> : null}
+            {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} /> : null}
           </div>
         ) : null}
       </div>
