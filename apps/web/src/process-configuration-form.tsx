@@ -17,6 +17,7 @@ type User = {
   capabilities: readonly string[];
   isRoot?: boolean;
 };
+type ReworkQuantityDetail = { reworkQuantity: number | null };
 type ItemForm = {
   source: "catalog" | "custom";
   processId: string;
@@ -34,14 +35,20 @@ type SavePayloadItem = {
   unitPrice: number;
 };
 
-const emptyItem = (): ItemForm => ({
+const emptyItem = (defaultPieceQuantity: number | null = null): ItemForm => ({
   source: "catalog",
   processId: "",
   customProcessName: "",
-  plannedQuantity: "",
+  plannedQuantity: defaultPieceQuantity === null ? "" : String(defaultPieceQuantity),
   pricingUnit: "piece",
   unitPrice: "",
 });
+
+const isPristineItem = (item: ItemForm): boolean =>
+  item.source === "catalog"
+  && item.processId === ""
+  && item.customProcessName === ""
+  && item.unitPrice === "";
 
 function SelectField({ label, children }: { label: string; children: ReactNode }) {
   return <label className="dx-field">
@@ -127,6 +134,7 @@ export function ProcessConfigurationForm() {
   const [user, setUser] = useState<User | null>(null);
   const [options, setOptions] = useState<ProcessConfigurationOptionsResponse>({ processes: [] });
   const [response, setResponse] = useState<ProcessConfigurationResponse | null>(null);
+  const [reworkQuantity, setReworkQuantity] = useState<number | null>(null);
   const [items, setItems] = useState<ItemForm[]>([emptyItem()]);
   const [changeReason, setChangeReason] = useState("");
   const [reviewReason, setReviewReason] = useState("");
@@ -152,18 +160,27 @@ export function ProcessConfigurationForm() {
 
   const reload = async () => {
     if (!reworkOrderId) return;
-    const [me, loaded] = await Promise.all([
+    const [me, loaded, detail] = await Promise.all([
       request("auth/me", { parse: (value) => value as { user: User } }),
       request(
         "rework-orders/" + reworkOrderId + "/process-configuration",
         ProcessConfigurationResponseSchema,
       ),
+      request(
+        "rework-orders/" + reworkOrderId + "/business-detail",
+        { parse: (value) => value as ReworkQuantityDetail },
+      ),
     ]);
     setUser(me.user);
     setResponse(loaded);
+    setReworkQuantity(detail.reworkQuantity);
     if (loaded.configuration && loaded.configuration.status !== "pending_ie_review") {
       setItems(loaded.configuration.items.map(toItem));
       setChangeReason(loaded.configuration.changeReason ?? "");
+    } else if (!loaded.configuration && loaded.reworkStatus === "pending_process_configuration") {
+      setItems((current) => current.length === 1 && current[0] && isPristineItem(current[0])
+        ? [emptyItem(detail.reworkQuantity)]
+        : current);
     }
     setMessage(statusLabel(loaded));
   };
@@ -193,6 +210,23 @@ export function ProcessConfigurationForm() {
     setItems((current) => current.map((item, itemIndex) =>
       itemIndex === index ? { ...item, ...next } : item,
     ));
+  };
+
+  const setPricingUnit = (index: number, nextUnit: ItemForm["pricingUnit"]) => {
+    setItems((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const inheritedQuantity = reworkQuantity !== null
+        && item.plannedQuantity === String(reworkQuantity);
+      return {
+        ...item,
+        pricingUnit: nextUnit,
+        plannedQuantity: nextUnit === "hour" && inheritedQuantity
+          ? ""
+          : nextUnit === "piece" && item.plannedQuantity === "" && reworkQuantity !== null
+            ? String(reworkQuantity)
+            : item.plannedQuantity,
+      };
+    }));
   };
 
   const validateCurrentForm = (): boolean => {
@@ -227,7 +261,7 @@ export function ProcessConfigurationForm() {
       },
     );
     setResponse(saved);
-    setItems(saved.configuration?.items.map(toItem) ?? [emptyItem()]);
+    setItems(saved.configuration?.items.map(toItem) ?? [emptyItem(reworkQuantity)]);
     return saved;
   };
 
@@ -340,9 +374,12 @@ export function ProcessConfigurationForm() {
       <div className="section-title">
         <div>
           <h2>工序、计划数量与单价</h2>
-          <p>件必须为整数；小时保留 2 位；单价只舍不入保留 3 位。</p>
+          <p>
+            {reworkQuantity === null ? "计划数量按实际工序填写。" : `返工总量 ${reworkQuantity} 件；按件工序默认带入该数量，可按实际工序调整。`}
+            小时工序请填写计划工时；单价只舍不入保留 3 位。
+          </p>
         </div>
-        <Button onClick={() => setItems((current) => [...current, emptyItem()])} disabled={busy}>增加工序</Button>
+        <Button onClick={() => setItems((current) => [...current, emptyItem(reworkQuantity)])} disabled={busy}>增加工序</Button>
       </div>
       <div className="process-lines">
         {items.map((item, index) => <div className="process-line" key={index}>
@@ -355,15 +392,14 @@ export function ProcessConfigurationForm() {
           {item.source === "catalog"
             ? <SelectField label="选择公共工序"><select value={item.processId} onChange={(event) => {
               const selected = options.processes.find((process) => process.processId === event.target.value);
-              setItem(index, {
-                processId: event.target.value,
-                pricingUnit: selected?.pricingUnit ?? item.pricingUnit,
-              });
+              const nextUnit = selected?.pricingUnit ?? item.pricingUnit;
+              setItem(index, { processId: event.target.value });
+              setPricingUnit(index, nextUnit);
             }} disabled={busy}><option value="">请选择</option>{options.processes.map((process) => <option key={process.processId} value={process.processId}>{process.processName} · {process.pricingUnit === "piece" ? "件" : "小时"}</option>)}</select></SelectField>
             : <InsetField label="自定义工序" value={item.customProcessName} onChange={(event) => setItem(index, { customProcessName: event.target.value })} disabled={busy} placeholder="例如：特殊翻边返修" />}
           <div className="process-line__grid">
             <InsetField label={item.pricingUnit === "piece" ? "计划数量（件）" : "计划工时（小时）"} inputMode="decimal" value={item.plannedQuantity} onChange={(event) => setItem(index, { plannedQuantity: event.target.value })} disabled={busy} />
-            <SelectField label="计价单位"><select value={item.pricingUnit} onChange={(event) => setItem(index, { pricingUnit: event.target.value as ItemForm["pricingUnit"] })} disabled={busy}><option value="piece">件</option><option value="hour">小时</option></select></SelectField>
+            <SelectField label="计价单位"><select value={item.pricingUnit} onChange={(event) => setPricingUnit(index, event.target.value as ItemForm["pricingUnit"])} disabled={busy}><option value="piece">件</option><option value="hour">小时</option></select></SelectField>
           </div>
           <InsetField label="单价（元）" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="例如：0.550" />
         </div>)}
