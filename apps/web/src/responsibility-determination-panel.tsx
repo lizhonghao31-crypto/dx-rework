@@ -25,7 +25,7 @@ const responsibilityTypes: ReadonlyArray<{
 
 type AllocationForm = {
   responsibilityType: ResponsibilityType;
-  shareBps: string;
+  sharePercent: string;
 };
 
 type ProcessForm = {
@@ -77,10 +77,18 @@ async function requestTransferOptions(
   return ResponsibilityTransferOptionsResponseSchema.parse(await response.json()).items;
 }
 
-const parseBps = (value: string): bigint | null => {
-  if (!/^\d{1,5}$/.test(value)) return null;
-  const parsed = BigInt(value);
+const parsePercentToBps = (value: string): bigint | null => {
+  if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  const parsed = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
   return parsed <= 10000n ? parsed : null;
+};
+
+const bpsToPercent = (value: number | bigint): string => {
+  const parsed = BigInt(value);
+  const whole = parsed / 100n;
+  const fraction = (parsed % 100n).toString().padStart(2, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
 };
 
 const multiplierScaled = (value: string): bigint | null => {
@@ -109,7 +117,7 @@ const formsFromResponse = (
       highMultiplierReason: current?.highMultiplierReason ?? "",
       allocations: responsibilityTypes.map(({ value }) => ({
         responsibilityType: value,
-        shareBps: String(
+        sharePercent: bpsToPercent(
           current?.allocations.find(
             (allocation) => allocation.responsibilityType === value,
           )?.shareBps ?? (value === "own_factory" ? 10000 : 0),
@@ -125,7 +133,7 @@ const processValid = (process: ProcessForm): boolean => {
   if (scaled > 2000n && !process.highMultiplierReason.trim()) return false;
   let total = 0n;
   for (const allocation of process.allocations) {
-    const share = parseBps(allocation.shareBps);
+    const share = parsePercentToBps(allocation.sharePercent);
     if (share === null) return false;
     total += share;
   }
@@ -224,7 +232,7 @@ export function ResponsibilityDeterminationPanel({
   const setShare = (
     configurationItemId: string,
     responsibilityType: ResponsibilityType,
-    shareBps: string,
+    sharePercent: string,
   ): void => {
     setProcesses((current) =>
       current.map((process) =>
@@ -233,7 +241,7 @@ export function ResponsibilityDeterminationPanel({
               ...process,
               allocations: process.allocations.map((allocation) =>
                 allocation.responsibilityType === responsibilityType
-                  ? { ...allocation, shareBps }
+                  ? { ...allocation, sharePercent }
                   : allocation,
               ),
             }
@@ -287,7 +295,7 @@ export function ResponsibilityDeterminationPanel({
           allocations: process.allocations
             .map((allocation) => ({
               responsibilityType: allocation.responsibilityType,
-              shareBps: parseBps(allocation.shareBps),
+              shareBps: parsePercentToBps(allocation.sharePercent),
             }))
             .filter(
               (allocation): allocation is {
@@ -388,11 +396,7 @@ export function ResponsibilityDeterminationPanel({
       <div className="section-title responsibility-heading">
         <div>
           <h2>责任判定与金额</h2>
-          <p>
-            返工单：{response?.reworkOrderId ?? reworkOrderId ?? "—"}
-            <br />
-            当前处理人：{currentHandlerLabel}
-          </p>
+          <p>当前处理人：{currentHandlerLabel}</p>
         </div>
         <StatusBadge
           tone={determination?.stage === "finalized" ? "success" : "warning"}
@@ -412,7 +416,7 @@ export function ResponsibilityDeterminationPanel({
           (row) => row.configurationItemId === process.configurationItemId,
         );
         const shareTotal = process.allocations.reduce(
-          (sum, allocation) => sum + (parseBps(allocation.shareBps) ?? 0n),
+          (sum, allocation) => sum + (parsePercentToBps(allocation.sharePercent) ?? 0n),
           0n,
         );
         const highMultiplier =
@@ -504,9 +508,9 @@ export function ResponsibilityDeterminationPanel({
                   <div key={allocation.responsibilityType}>
                     <span>{label}</span>
                     <InsetField
-                      label="比例（bps）"
-                      value={allocation.shareBps}
-                      inputMode="numeric"
+                      label="比例（%）"
+                      value={allocation.sharePercent}
+                      inputMode="decimal"
                       disabled={!editable || Boolean(busyAction)}
                       onChange={(event) =>
                         setShare(
@@ -518,7 +522,7 @@ export function ResponsibilityDeterminationPanel({
                     />
                     <b>
                       {persisted
-                        ? `${persisted.shareBps} bps · ${displayMoney(persisted.roundedAmount)}`
+                        ? `${bpsToPercent(persisted.shareBps)}% · ${displayMoney(persisted.roundedAmount)}`
                         : "保存后由服务器计算"}
                     </b>
                   </div>
@@ -526,8 +530,8 @@ export function ResponsibilityDeterminationPanel({
               })}
             </div>
             <p className={shareTotal === 10000n ? "share-ok" : "share-error"}>
-              比例合计 {shareTotal.toString()} bps
-              {shareTotal === 10000n ? " · 校验通过" : " · 必须严格等于 10000"}
+              比例合计 {bpsToPercent(shareTotal)}%
+              {shareTotal === 10000n ? " · 校验通过" : " · 必须严格等于 100%"}
             </p>
           </section>
         );
