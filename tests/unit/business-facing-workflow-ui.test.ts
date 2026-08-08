@@ -96,4 +96,17 @@ describe("business-facing workflow UI", () => {
     expect(css).toContain("position: static;");
     expect(css).toContain("grid-template-columns: 1fr;");
   });
+
+  it("uses business state labels for queue cards instead of generic deadline wording", async () => {
+    const [components, responsibility, ownFactory, external] = await Promise.all([
+      read("apps/web/src/components.tsx"),
+      read("apps/web/src/responsibility-queue-page.tsx"),
+      read("apps/web/src/own-factory-approval-queue-page.tsx"),
+      read("apps/web/src/external-responsibility-queue-page.tsx"),
+    ]);
+    expect(components).toContain("task.stateLabel ?? (");
+    expect(responsibility).toContain("stateLabel,");
+    expect(ownFactory).toContain('stateLabel: item.canDecide ? "待审批" : "仅查看"');
+    expect(external).toContain('stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看"');
+  });
 });
