@@ -14,6 +14,7 @@
     "@dx-rework/config": "0.1.0",
     "@dx-rework/contracts": "0.1.0",
     "@dx-rework/domain": "0.1.0",
+    "ali-oss": "6.23.0",
     "fastify": "5.11.0",
     "pg": "8.22.0"
   }
