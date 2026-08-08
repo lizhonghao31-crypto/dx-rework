@@ -16,7 +16,7 @@ const reworkForm = read("../../apps/web/src/rework-form.tsx");
 const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
 
 describe("PR-01A UI prototype contract", () => {
-  it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/process-configuration", "/ui/piecework/collective", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
+  it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/process-configuration", "/ui/piecework/collective", "/ui/audit", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
   it("routes the authenticated root to a business landing instead of the technical foundation", () => {
     expect(app).toContain('if (path === "/") return <HomeLanding />;');
     expect(app).toContain('target = "ui/management"');
@@ -73,10 +73,10 @@ describe("PR-01A UI prototype contract", () => {
     expect(components).toContain("min-height: 44px");
     expect(pages).not.toContain('href="#"');
   });
-  it("turns only the approved QC page into an idempotent real workflow", () => {
+  it("turns only the approved QC page into an idempotent real workflow while admitting owners", () => {
     expect(app).toContain('page = <ReworkInitiationForm />');
-    expect(app).toContain('requiredRole="quality_control"');
-    expect(app).toContain('requiredCapability="rework:initiate"');
+    expect(app).toContain('{ requiredRole: "quality_control", requiredCapability: "rework:initiate" }');
+    expect(app).toContain('const owner = { requiredRole: "owner_group" } as const');
     expect(reworkForm).toContain('"rework-orders/initiation-options"');
     expect(reworkForm).toContain('"idempotency-key"');
     expect(reworkForm).toContain("executeReworkSubmit");
