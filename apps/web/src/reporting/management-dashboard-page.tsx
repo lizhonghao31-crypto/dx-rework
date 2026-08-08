@@ -55,24 +55,23 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
     <Shell active={mode === "management" ? "总览" : "现场工作台"}>
       <Header
         title={mode === "management" ? "管理层共享座舱" : "李同生 · 现场返工工作台"}
-        subtitle={mode === "management" ? "李总、伍总、张文豪查看相同业务事实；操作按钮按 capability 开放" : "聚焦工序、分工、上数、整单审核、数量调整和工资初核"}
         badge={ready ? `数据截至 ${new Date(ready.asOf).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Singapore" })}` : "实时读取"}
         action={ready?.availableActions.includes("export_reports") ? "报表中心" : "统一查询"}
         actionHref={ready?.availableActions.includes("export_reports") ? "/ui/reports" : "/ui/tasks"}
       />
-      {state.kind === "loading" && <Surface className="reporting-state">正在加载真实 Dashboard…</Surface>}
+      {state.kind === "loading" && <Surface className="reporting-state">加载中…</Surface>}
       {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
       {management && (
         <>
           <div className="kpis">
-            <KpiInstrument label="未完结返工" value={management.kpis.openOrders} detail="排除已完成与取消" tone="info" />
+            <KpiInstrument label="未完结返工" value={management.kpis.openOrders} detail="进行中" tone="info" />
             <KpiInstrument label="本月已完成" value={management.kpis.completedOrders} detail={`${management.range.from} 至 ${management.range.to}`} tone="success" />
-            <KpiInstrument label="逾期待办" value={management.kpis.overdueTodos} detail="按数据库 due_at" tone="warning" />
-            <KpiInstrument label="当前异常" value={management.kpis.exceptionCount} detail="阻断、投递失败、扣款逾期" tone="warning" />
+            <KpiInstrument label="逾期待办" value={management.kpis.overdueTodos} detail="待处理" tone="warning" />
+            <KpiInstrument label="当前异常" value={management.kpis.exceptionCount} detail="待处理" tone="warning" />
           </div>
           <div className="reporting-dashboard-grid">
             <Surface>
-              <div className="section-title"><div><h2>全流程节点</h2><p>只统计当前状态，不重复计算历史版本。</p></div><StatusBadge tone="info">15 秒刷新</StatusBadge></div>
+              <div className="section-title"><h2>全流程节点</h2></div>
               <div className="queue">{management.nodeCounts.map((item) => <div key={item.node}><span>{item.node} · {item.label}</span><StatusBadge tone={item.count > 0 ? "info" : "success"}>{item.count} 单</StatusBadge></div>)}</div>
             </Surface>
             <Surface>
@@ -91,7 +90,7 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
             <Surface>
               <div className="section-title"><h2>当前异常</h2>{management.availableActions.includes("export_reports") && <a href={reportingPageUrl("ui/reports?type=exceptions")}><Button>查看全部</Button></a>}</div>
               <div className="reporting-exceptions">{management.exceptions.map((item) => <a href={reportingPageUrl(item.deepLink)} key={`${item.exceptionType}:${item.entityId}`}><StatusBadge tone="warning">{item.exceptionType}</StatusBadge><span>{item.label}</span><small>{new Date(item.occurredAt).toLocaleString("zh-CN", { timeZone: "Asia/Singapore" })}</small></a>)}</div>
-              {management.exceptions.length === 0 && <p>当前没有阻断、投递失败或逾期事项。</p>}
+              {management.exceptions.length === 0 && <p>暂无异常。</p>}
             </Surface>
             <Surface>
               <div className="section-title"><h2>最近返工</h2><a href={reportingPageUrl("ui/tasks")}><Button>统一查询</Button></a></div>
@@ -103,12 +102,12 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
       {site && (
         <>
           <div className="kpis">
-            <KpiInstrument label="待配置工序" value={site.kpis.pendingConfiguration} detail="现场下一步" tone="info" />
-            <KpiInstrument label="待分工" value={site.kpis.pendingAssignment} detail="含成员快照" tone="info" />
-            <KpiInstrument label="上数中" value={site.kpis.inProgress} detail="有效上数实时汇总" tone="success" />
-            <KpiInstrument label="待整单审核" value={site.kpis.pendingOrderReview} detail="含数量调整复核" tone="warning" />
-            <KpiInstrument label="待工资初核" value={site.kpis.pendingWageReview} detail="N10-A" tone="info" />
-            <KpiInstrument label="现场异常" value={site.kpis.siteExceptions} detail="不混入老板终审" tone="warning" />
+            <KpiInstrument label="待配置工序" value={site.kpis.pendingConfiguration} detail="待处理" tone="info" />
+            <KpiInstrument label="待分工" value={site.kpis.pendingAssignment} detail="待处理" tone="info" />
+            <KpiInstrument label="上数中" value={site.kpis.inProgress} detail="进行中" tone="success" />
+            <KpiInstrument label="待整单审核" value={site.kpis.pendingOrderReview} detail="待处理" tone="warning" />
+            <KpiInstrument label="待工资初核" value={site.kpis.pendingWageReview} detail="待处理" tone="info" />
+            <KpiInstrument label="现场异常" value={site.kpis.siteExceptions} detail="待处理" tone="warning" />
           </div>
           <div className="reporting-dashboard-grid">
             <Surface><h2>今日行动队列</h2><div className="queue">{site.nodeCounts.map((item) => <div key={item.node}><span>{item.node} · {item.label}</span><StatusBadge tone="info">{item.count} 单</StatusBadge></div>)}</div></Surface>
