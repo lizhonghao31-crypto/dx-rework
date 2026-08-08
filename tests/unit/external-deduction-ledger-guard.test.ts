@@ -33,4 +33,15 @@ describe("external deduction ledger integrity guard", () => {
       checksum: "6f3643233c6b04b0e7687dc7af7a04d0e16914cc32dc58213994a748c709fc05",
     });
   });
+
+  it("maps the database guard to a usable 400 business validation response", async () => {
+    const source = await readFile(
+      "apps/api/src/rework/production-external-responsibility-service.ts",
+      "utf8",
+    );
+    expect(source).toContain('candidate?.code !== "23514"');
+    expect(source).toContain("累计实扣金额不能低于 0，也不能超过当前拟扣金额。");
+    expect(source).toContain("扣款调整或冲销只能引用当前这笔扣款台账中的原流水。");
+    expect(source).toContain('new ApplicationError("VALIDATION_ERROR", message, 400)');
+  });
 });
