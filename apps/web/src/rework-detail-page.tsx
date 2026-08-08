@@ -6,6 +6,7 @@ import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
+import "./rework-detail.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
