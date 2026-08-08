@@ -25,11 +25,12 @@ const ROLE_LABELS: Record<string, string> = {
   tail_supervisor: "尾部主管",
   ie_reviewer: "IE 审核",
   order_merchandiser: "订单跟单",
+  embroidery_washing_merchandiser: "印绣花/洗水跟单",
   factory_payables: "加工厂应付会计",
   embroidery_washing_payables: "印绣花洗水应付会计",
   fabric_payables: "面料供应商应付会计",
-  payroll_review: "工资复核",
-  payroll_close: "工资月结会计",
+  administrative_clerk: "行政文员",
+  wage_month_close_accountant: "工资月结会计",
   finance_read: "财务全局查看",
   worker: "员工",
 };
@@ -78,6 +79,7 @@ export function Shell({
 
   const isRoot = currentUser?.isRoot === true;
   const isOwner = currentUser?.businessRoles?.includes("owner_group") === true;
+  const isSystemAdmin = currentUser?.businessRoles?.includes("system_admin") === true;
   const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
   const managementAccess = isRoot || isOwner || hasCapability("dashboard:management:read");
   const initiationAccess = isRoot || isOwner
@@ -103,10 +105,12 @@ export function Shell({
   }
   if (masterDataAccess) navigation.push(["资", "基础资料", "/ui/master-data"]);
   if (canManageEmployeeAccess) navigation.push(["权", "权限管理", "/ui/employee-access"]);
+  if (isRoot || (isSystemAdmin && hasCapability("admin:read"))) {
+    navigation.push(["管", "系统管理", "/ui/admin"]);
+  }
 
   const canReadAudit = isRoot || isOwner || (
-    currentUser?.businessRoles?.includes("system_admin") === true
-    && currentUser.capabilities.includes("audit:read")
+    isSystemAdmin && currentUser?.capabilities.includes("audit:read") === true
   );
   const roleLabels = currentUser
     ? [
