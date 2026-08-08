@@ -17,6 +17,15 @@ describe("business-chain UI handoff contracts", () => {
     );
   });
 
+  it("warns about another same-style order only while that order is unfinished", async () => {
+    const [service, form] = await Promise.all([
+      readFile("apps/api/src/rework/service.ts", "utf8"),
+      readFile("apps/web/src/rework-form.tsx", "utf8"),
+    ]);
+    expect(service).toContain("other.status NOT IN ('completed','cancelled')");
+    expect(form).toContain("同款号存在其他未完结单；系统仅提示，不会自动合并");
+  });
+
   it("explains N03 self-review separation before the user sends a doomed request", async () => {
     const [form, detail] = await Promise.all([
       readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
