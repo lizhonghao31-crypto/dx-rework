@@ -18,6 +18,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   BUSINESS_READ_ALL_CAPABILITY,
   businessActor,
+  isRootUser,
 } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
@@ -36,7 +37,7 @@ const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, req
 export type WholeOrderReviewHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: WholeOrderReviewService;
-  root: RootAuthority;
+  root?: RootAuthority;
 }>;
 
 export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencies: WholeOrderReviewHttpDependencies): void {
@@ -57,7 +58,7 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
 
   const readActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
-    const isRoot = await dependencies.root.isRootUser(user.id);
+    const isRoot = await isRootUser(dependencies.root, user.id);
     if (isRoot) {
       return businessActor(dependencies.root, user, request.id, "submission:audit", "tail_supervisor");
     }
