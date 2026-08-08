@@ -5,7 +5,7 @@ import {
   type ProcessConfigurationResponse,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { SearchSelect } from "./search-select.js";
@@ -40,6 +40,14 @@ type SavePayloadItem = {
   pricingUnit: "piece" | "hour";
   unitPrice: number;
 };
+type PendingSubmitAttempt = Readonly<{
+  reworkOrderId: string;
+  body: {
+    expectedOrderVersion: number;
+    expectedConfigurationVersion: number;
+  };
+  key: string;
+}>;
 
 const emptyItem = (defaultPieceQuantity: number | null = null): ItemForm => ({
   source: "catalog",
@@ -147,6 +155,8 @@ export function ProcessConfigurationForm() {
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载工序配置…");
   const [busy, setBusy] = useState(false);
+  const pendingMutationKeys = useRef<Record<string, string>>({});
+  const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
 
   const canConfigure = user?.isRoot === true || Boolean(
     user?.businessRoles?.includes("tail_supervisor")
@@ -271,24 +281,36 @@ export function ProcessConfigurationForm() {
     return true;
   };
 
+  const mutationKey = (signature: string): string => {
+    const existing = pendingMutationKeys.current[signature];
+    if (existing) return existing;
+    const next = crypto.randomUUID();
+    pendingMutationKeys.current[signature] = next;
+    return next;
+  };
+
   const persistCurrentDraft = async (): Promise<ProcessConfigurationResponse> => {
     if (!response || !editable) throw new Error("当前返工单不能保存工序配置。");
     if (!validateCurrentForm()) throw new Error("请先补完整工序配置。 ");
+    const path = "rework-orders/" + response.reworkOrderId + "/process-configuration/draft";
+    const body = {
+      expectedOrderVersion: response.orderVersion,
+      items: payloadItems(items),
+      ...(response.reworkStatus === "pending_task_assignment"
+        ? { changeReason: changeReason.trim() }
+        : {}),
+    };
+    const signature = `draft:${path}:${JSON.stringify(body)}`;
     const saved = await request(
-      "rework-orders/" + response.reworkOrderId + "/process-configuration/draft",
+      path,
       ProcessConfigurationResponseSchema,
       {
         method: "PUT",
-        headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({
-          expectedOrderVersion: response.orderVersion,
-          items: payloadItems(items),
-          ...(response.reworkStatus === "pending_task_assignment"
-            ? { changeReason: changeReason.trim() }
-            : {}),
-        }),
+        headers: { "idempotency-key": mutationKey(signature) },
+        body: JSON.stringify(body),
       },
     );
+    delete pendingMutationKeys.current[signature];
     setResponse(saved);
     setItems(saved.configuration?.items.map(toItem) ?? [emptyItem(reworkQuantity)]);
     return saved;
@@ -314,27 +336,39 @@ export function ProcessConfigurationForm() {
     if (!window.confirm("确认提交当前工序、计划数量与单价给 IE 审核？")) return;
     setBusy(true);
     try {
-      const saved = await persistCurrentDraft();
-      const savedConfiguration = saved.configuration;
-      if (!savedConfiguration || savedConfiguration.status !== "draft") {
-        throw new Error("配置草稿保存后状态异常，请刷新后重试。");
+      let attempt = pendingSubmit.current;
+      if (!attempt) {
+        const saved = await persistCurrentDraft();
+        const savedConfiguration = saved.configuration;
+        if (!savedConfiguration || savedConfiguration.status !== "draft") {
+          throw new Error("配置草稿保存后状态异常，请刷新后重试。");
+        }
+        attempt = {
+          reworkOrderId: saved.reworkOrderId,
+          body: {
+            expectedOrderVersion: saved.orderVersion,
+            expectedConfigurationVersion: savedConfiguration.configurationVersion,
+          },
+          key: crypto.randomUUID(),
+        };
+        pendingSubmit.current = attempt;
       }
       const submitted = await request(
-        "rework-orders/" + saved.reworkOrderId + "/process-configuration/submit",
+        "rework-orders/" + attempt.reworkOrderId + "/process-configuration/submit",
         ProcessConfigurationResponseSchema,
         {
           method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({
-            expectedOrderVersion: saved.orderVersion,
-            expectedConfigurationVersion: savedConfiguration.configurationVersion,
-          }),
+          headers: { "idempotency-key": attempt.key },
+          body: JSON.stringify(attempt.body),
         },
       );
+      pendingSubmit.current = null;
       setResponse(submitted);
       setMessage("已提交 IE 审核；当前工序配置已锁定，等待 IE 处理。");
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "提交 IE 审核失败");
+      setMessage(pendingSubmit.current
+        ? "提交结果暂未确认；请直接再次点击“提交 IE 审核”，系统会复用同一次提交，不会重复生成配置。"
+        : error instanceof Error ? error.message : "提交 IE 审核失败");
     } finally {
       setBusy(false);
     }
@@ -350,21 +384,25 @@ export function ProcessConfigurationForm() {
       return;
     }
     setBusy(true);
+    const path = "rework-orders/" + response.reworkOrderId + "/process-configuration/review";
+    const body = {
+      expectedOrderVersion: response.orderVersion,
+      expectedConfigurationVersion: configuration.configurationVersion,
+      decision,
+      reason: reviewReason.trim() || undefined,
+    };
+    const signature = `review:${path}:${JSON.stringify(body)}`;
     try {
       const reviewed = await request(
-        "rework-orders/" + response.reworkOrderId + "/process-configuration/review",
+        path,
         ProcessConfigurationResponseSchema,
         {
           method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({
-            expectedOrderVersion: response.orderVersion,
-            expectedConfigurationVersion: configuration.configurationVersion,
-            decision,
-            reason: reviewReason.trim() || undefined,
-          }),
+          headers: { "idempotency-key": mutationKey(signature) },
+          body: JSON.stringify(body),
         },
       );
+      delete pendingMutationKeys.current[signature];
       setResponse(reviewed);
       setMessage(decision === "approved"
         ? "IE 已通过；工序已生效，自定义工序已进入公共工序库。"
