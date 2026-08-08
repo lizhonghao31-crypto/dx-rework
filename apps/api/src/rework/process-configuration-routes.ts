@@ -9,6 +9,11 @@ import {
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import {
+  BUSINESS_READ_ALL_CAPABILITY,
+  businessActor,
+} from "../access/business-authority.js";
+import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -38,6 +43,7 @@ const idempotencyKey = (request: FastifyRequest): string =>
 export type ProcessConfigurationHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ProcessConfigurationService;
+  root: RootAuthority;
 }>;
 
 export function registerProcessConfigurationRoutes(
@@ -49,26 +55,53 @@ export function registerProcessConfigurationRoutes(
     mode: "read" | "configure" | "review",
   ): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
-    const isSupervisor = user.businessRoles?.includes("tail_supervisor")
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    const isOwnerReader = user.businessRoles?.includes("owner_group") === true
+      && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY);
+    const isSupervisor = user.businessRoles?.includes("tail_supervisor") === true
       && user.capabilities.includes("process:configure");
-    const isReviewer = user.businessRoles?.includes("ie_reviewer")
+    const isReviewer = user.businessRoles?.includes("ie_reviewer") === true
       && user.capabilities.includes("process:review");
-    if (
-      !user.businessRoles?.length
-      || (mode === "configure" && !isSupervisor)
-      || (mode === "review" && !isReviewer)
-      || (mode === "read" && !isSupervisor && !isReviewer)
-    ) {
-      throw new ApplicationError("FORBIDDEN", "当前角色无权处理工序配置", 403);
+
+    if (mode === "configure") {
+      if (!isRoot && !isSupervisor) {
+        throw new ApplicationError("FORBIDDEN", "当前角色无权配置返工工序", 403);
+      }
+      return businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        "process:configure",
+        isRoot ? "tail_supervisor" : undefined,
+      );
     }
-    return {
-      actorId: user.id,
-      actorRoles: user.businessRoles,
-      authorizationCapability: mode === "review"
-        ? "process:review"
-        : isSupervisor ? "process:configure" : "process:review",
-      requestId: request.id,
-    };
+    if (mode === "review") {
+      if (!isRoot && !isReviewer) {
+        throw new ApplicationError("FORBIDDEN", "当前角色无权审核返工工序", 403);
+      }
+      return businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        "process:review",
+        isRoot ? "ie_reviewer" : undefined,
+      );
+    }
+    if (isRoot || isOwnerReader) {
+      return businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        BUSINESS_READ_ALL_CAPABILITY,
+      );
+    }
+    if (isSupervisor) {
+      return businessActor(dependencies.root, user, request.id, "process:configure");
+    }
+    if (isReviewer) {
+      return businessActor(dependencies.root, user, request.id, "process:review");
+    }
+    throw new ApplicationError("FORBIDDEN", "当前角色无权查看工序配置", 403);
   };
 
   app.get("/rework-process-configurations/options", async (request) =>
