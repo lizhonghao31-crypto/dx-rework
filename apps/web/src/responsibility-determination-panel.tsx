@@ -3,10 +3,12 @@ import {
   type ResponsibilityDeterminationResponse,
   type ResponsibilityType,
 } from "@dx-rework/contracts";
+import { ResponsibilityTransferOptionsResponseSchema } from "@dx-rework/contracts/responsibility-transfer";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { SearchSelect } from "./search-select.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -36,6 +38,8 @@ type ProcessForm = {
   allocations: AllocationForm[];
 };
 
+type TransferOption = Readonly<{ userId: string; displayName: string }>;
+
 const requestError = async (response: Response): Promise<string> => {
   try {
     const body = (await response.json()) as { error?: { message?: string } };
@@ -60,6 +64,17 @@ async function request(
   });
   if (!response.ok) throw new Error(await requestError(response));
   return ResponsibilityDeterminationResponseSchema.parse(await response.json());
+}
+
+async function requestTransferOptions(
+  reworkOrderId: string,
+): Promise<TransferOption[]> {
+  const response = await fetch(
+    apiUrl(`rework-orders/${reworkOrderId}/responsibility-determinations/transfer-options`),
+    { credentials: "include", headers: { accept: "application/json" } },
+  );
+  if (!response.ok) throw new Error(await requestError(response));
+  return ResponsibilityTransferOptionsResponseSchema.parse(await response.json()).items;
 }
 
 const parseBps = (value: string): bigint | null => {
@@ -127,6 +142,7 @@ export function ResponsibilityDeterminationPanel({
   const [processes, setProcesses] = useState<ProcessForm[]>([]);
   const [changeReason, setChangeReason] = useState("");
   const [transferUserId, setTransferUserId] = useState("");
+  const [transferOptions, setTransferOptions] = useState<TransferOption[]>([]);
   const [transferReason, setTransferReason] = useState("");
   const [takeoverReason, setTakeoverReason] = useState("");
   const [confirmationReason, setConfirmationReason] = useState("");
@@ -136,6 +152,18 @@ export function ResponsibilityDeterminationPanel({
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next);
     setProcesses(formsFromResponse(next));
+    if (
+      next.canDetermine
+      && next.reworkStatus === "pending_responsibility_determination"
+      && next.determination?.stage === "draft"
+    ) {
+      void requestTransferOptions(next.reworkOrderId)
+        .then(setTransferOptions)
+        .catch(() => setTransferOptions([]));
+    } else {
+      setTransferOptions([]);
+      setTransferUserId("");
+    }
   };
 
   const reload = async (): Promise<void> => {
@@ -153,7 +181,7 @@ export function ResponsibilityDeterminationPanel({
 
   useEffect(() => {
     if (!reworkOrderId) {
-      setMessage("缺少有效的返工单 UUID，请从返工单详情进入责任处理。");
+      setMessage("缺少有效的返工单编号，请从返工单详情进入责任处理。");
       return;
     }
     void reload().catch((error: unknown) => {
@@ -169,6 +197,9 @@ export function ResponsibilityDeterminationPanel({
       response.reworkStatus === "pending_responsibility_determination",
   );
   const finalizable = Boolean(
+    editable && determination?.stage === "draft",
+  );
+  const transferable = Boolean(
     editable && determination?.stage === "draft",
   );
 
@@ -253,9 +284,6 @@ export function ResponsibilityDeterminationPanel({
           ...(process.highMultiplierReason.trim()
             ? { highMultiplierReason: process.highMultiplierReason.trim() }
             : {}),
-          // Zero means “not responsible” in the form. The production service
-          // intentionally accepts only positive responsibility rows, so omit
-          // zero-share choices from the persisted payload.
           allocations: process.allocations
             .map((allocation) => ({
               responsibilityType: allocation.responsibilityType,
@@ -294,21 +322,23 @@ export function ResponsibilityDeterminationPanel({
   };
 
   const transfer = async (): Promise<void> => {
-    if (!response?.canDetermine || !transferUserId.trim() || !transferReason.trim()) {
-      setMessage("转交必须填写目标用户 UUID 和原因。");
+    if (!transferable || !transferUserId || !transferReason.trim()) {
+      setMessage("请选择新的责任处理人并填写转交原因。");
       return;
     }
     await runWrite(
       "transfer",
-      `rework-orders/${response.reworkOrderId}/responsibility-determinations/transfer`,
+      `rework-orders/${response!.reworkOrderId}/responsibility-determinations/transfer`,
       {
-        expectedOrderVersion: response.orderVersion,
-        expectedCurrentDeterminationVersion: determination?.version ?? null,
-        toUserId: transferUserId.trim(),
+        expectedOrderVersion: response!.orderVersion,
+        expectedCurrentDeterminationVersion: determination!.version,
+        toUserId: transferUserId,
         reason: transferReason.trim(),
       },
       "责任处理已转交，原处理人不再拥有本单处理权。",
     );
+    setTransferUserId("");
+    setTransferReason("");
   };
 
   const takeover = async (): Promise<void> => {
@@ -349,6 +379,10 @@ export function ResponsibilityDeterminationPanel({
     );
   };
 
+  const currentHandlerLabel = response?.handlerUserId
+    ? response.canDetermine ? "当前账号" : "其他已授权处理人"
+    : "尚未分配";
+
   return (
     <Surface className="responsibility-panel">
       <div className="section-title responsibility-heading">
@@ -357,7 +391,7 @@ export function ResponsibilityDeterminationPanel({
           <p>
             返工单：{response?.reworkOrderId ?? reworkOrderId ?? "—"}
             <br />
-            当前处理人：{response?.handlerUserId ?? "尚未分配"}
+            当前处理人：{currentHandlerLabel}
           </p>
         </div>
         <StatusBadge
@@ -532,30 +566,39 @@ export function ResponsibilityDeterminationPanel({
         </Button>
       </div>
 
-      {response?.canDetermine &&
-        response.reworkStatus === "pending_responsibility_determination" && (
-          <div className="responsibility-command-box">
-            <h3>转交当前责任处理</h3>
-            <InsetField
-              label="目标用户 UUID"
-              value={transferUserId}
-              disabled={Boolean(busyAction)}
-              onChange={(event) => setTransferUserId(event.target.value)}
-            />
-            <InsetField
-              label="转交原因"
-              value={transferReason}
-              disabled={Boolean(busyAction)}
-              onChange={(event) => setTransferReason(event.target.value)}
-            />
-            <Button
-              onClick={() => void transfer()}
-              disabled={Boolean(busyAction)}
-            >
-              {busyAction === "transfer" ? "转交中…" : "确认转交"}
-            </Button>
-          </div>
-        )}
+      {transferable && (
+        <div className="responsibility-command-box">
+          <h3>转交当前责任处理</h3>
+          <label className="dx-field">
+            <span>新的责任处理人</span>
+            <span className="dx-field__control search-select-control">
+              <SearchSelect
+                options={transferOptions.map((item) => ({
+                  value: item.userId,
+                  label: item.displayName,
+                }))}
+                value={transferUserId}
+                placeholder={transferOptions.length ? "输入姓名搜索" : "没有其他可转交处理人"}
+                emptyText="没有匹配的处理人"
+                disabled={Boolean(busyAction) || transferOptions.length === 0}
+                onChange={setTransferUserId}
+              />
+            </span>
+          </label>
+          <InsetField
+            label="转交原因"
+            value={transferReason}
+            disabled={Boolean(busyAction)}
+            onChange={(event) => setTransferReason(event.target.value)}
+          />
+          <Button
+            onClick={() => void transfer()}
+            disabled={Boolean(busyAction) || !transferUserId || !transferReason.trim()}
+          >
+            {busyAction === "transfer" ? "转交中…" : "确认转交"}
+          </Button>
+        </div>
+      )}
 
       {response?.canTakeover && (
         <div className="responsibility-command-box">
