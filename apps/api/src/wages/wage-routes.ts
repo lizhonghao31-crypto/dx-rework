@@ -1,7 +1,7 @@
 import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import { AdministrativeReturnSchema, CreateWageAdjustmentSchema, DecideWageAdjustmentSchema, ExpectedWagePeriodVersionSchema, LockWagePeriodSchema, RejectWageAdjustmentSchema, WageAdjustmentParamsSchema, WageItemParamsSchema, WagePeriodParamsSchema } from "@dx-rework/contracts/wages";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { businessActor } from "../access/business-authority.js";
+import { businessActor, isRootUser } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -14,7 +14,14 @@ const parse=<T>(s:{safeParse(v:unknown):{success:true;data:T}|{success:false}},v
 export type WageHttpDependencies=Readonly<{authenticate(v:string|undefined):Promise<AuthUser>;service:WageService;exportService:WageExportService;root?:RootAuthority}>;
 export function registerWageRoutes(app:FastifyInstance,d:WageHttpDependencies):void{
  const actingRole=(cap:string):string|undefined=>cap==="wage:tail_review"||cap==="wage:adjustment_request"?"tail_supervisor":cap==="wage:administrative_review"||cap==="wage:adjustment_approve"?"administrative_clerk":cap==="wage:month_close"?"wage_month_close_accountant":cap==="wage:export"?"finance_read":undefined;
- const actor=async(r:FastifyRequest,cap:string):Promise<TrustedActorContext>=>businessActor(d.root,await d.authenticate(token(r)),r.id,cap,actingRole(cap));
+ const actor=async(r:FastifyRequest,cap:string):Promise<TrustedActorContext>=>{
+   const user=await d.authenticate(token(r));
+   const trusted=await businessActor(d.root,user,r.id,cap,actingRole(cap));
+   if(cap==="wage:view"&&await isRootUser(d.root,user.id)){
+     return {...trusted,authorizationCapabilities:[...new Set([...(trusted.authorizationCapabilities??[]),"wage:export"])]};
+   }
+   return trusted;
+ };
  const key=(r:FastifyRequest)=>parse(IdempotencyKeySchema,r.headers["idempotency-key"]);
  const replay=(reply:{header(k:string,v:string):unknown},reused:boolean)=>{if(reused)reply.header("idempotency-replayed","true")};
  app.get("/wage-periods",async r=>d.service.list(await actor(r,"wage:view")));
