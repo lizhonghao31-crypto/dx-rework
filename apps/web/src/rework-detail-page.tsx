@@ -1,4 +1,4 @@
-import { Button, StatusBadge, Surface } from "@dx-rework/ui";
+import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -9,7 +9,7 @@ import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 import "./rework-detail.css";
 
-const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const detailRefreshMilliseconds = 2_000;
 
 type ReworkStatus =
@@ -63,9 +63,9 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_process_configuration: { label: "待配置工序", next: "下一步由尾部主管配置工序、计划数量和单价" },
   pending_ie_review: { label: "待 IE 审核", next: "下一步由 IE 审核工序、数量、单位和单价" },
   pending_task_assignment: { label: "待分配任务", next: "工序已生效，下一步由尾部主管分配返工人员" },
-  in_progress: { label: "返工上数中", next: "工人按任务上数，完成后进入整单审核" },
-  pending_order_review: { label: "待整单审核", next: "下一步由尾部主管审核全部返工上数" },
-  pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "数量增加申请等待 IE 复核" },
+  in_progress: { label: "返工执行中", next: "工人按实际完成进度登记完成数量，全部完成后进入整单审核" },
+  pending_order_review: { label: "待整单审核", next: "下一步由尾部主管确认整张返工单已完成" },
+  pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成审核，正在判定责任、倍率和承担比例" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任签收" },
   completed: { label: "已完成", next: "返工生产流程已完成；工资核对和未完外部扣款按各自生命周期继续" },
@@ -125,33 +125,6 @@ const canUseTaskList = (user: AuthorizedUser | null): boolean =>
   || hasCapability(user, "dashboard:management:read")
   || hasCapability(user, "dashboard:site:read")
   || hasCapability(user, "report:view");
-
-const nextAction = (
-  detail: ReworkBusinessDetail,
-  user: AuthorizedUser | null,
-): { label: string; href: string } | null => {
-  if (
-    ["pending_process_configuration", "pending_ie_review"].includes(detail.status)
-    && canUseProcessWorkspace(user)
-  ) {
-    return {
-      label: detail.status === "pending_ie_review" ? "进入 IE 审核" : "进入工序配置",
-      href: `/ui/process-configuration?rework=${detail.reworkOrderId}`,
-    };
-  }
-  if ([
-    "pending_task_assignment",
-    "in_progress",
-    "pending_order_review",
-    "pending_quantity_adjustment_ie_review",
-  ].includes(detail.status) && canUseWorkWorkspace(user)) {
-    return { label: "进入分工 / 上数 / 整单审核", href: `/ui/work-reporting?rework=${detail.reworkOrderId}` };
-  }
-  if (detail.status === "completed" && (elevated(user) || hasCapability(user, "wage:view"))) {
-    return { label: "查看工资核对", href: "/ui/wages" };
-  }
-  return null;
-};
 
 const detailActiveNav = (user: AuthorizedUser | null): string => {
   if (canUseTaskList(user)) return "返工任务";
@@ -241,7 +214,6 @@ export function ReworkDetailPage() {
 
   const detail = state.value;
   const meta = statusMeta[detail.status];
-  const action = nextAction(detail, currentUser);
   const showResponsibility = [
     "pending_responsibility_determination",
     "pending_responsibility_action",
@@ -270,7 +242,7 @@ export function ReworkDetailPage() {
             <div className="section-title">
               <div>
                 <h2>返工单信息</h2>
-                <p>业务人员先看单据事实，再按当前节点处理。</p>
+                <p>统一查询只保留单据事实和全链路信息，不再承担日常节点操作入口。</p>
               </div>
               <StatusBadge tone={detail.status === "cancelled" ? "danger" : detail.status === "completed" ? "success" : "info"}>
                 {meta.label}
@@ -295,7 +267,7 @@ export function ReworkDetailPage() {
           <Surface className="rework-detail-current-node">
             <h2>当前进度</h2>
             <p>{meta.next}</p>
-            {action ? <a href={pageUrl(action.href)}><Button variant="primary">{action.label}</Button></a> : null}
+            <p>需要处理业务时，请从对应节点工作台进入；订单会随真实状态自动流转到相应队列。</p>
           </Surface>
         </div>
 
