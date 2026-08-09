@@ -676,9 +676,8 @@ export class WholeOrderReviewService {
     if (adjustment.adjustment_version !== expected) error("数量调整已被其他操作更新，请刷新后重试", 409, "CONFLICT");
   }
 
-  private ensureQuantityPrecision(item: ItemRow, quantity: number): void {
-    if (item.pricing_unit === "piece" && !Number.isInteger(quantity)) error("按件工序的计划数量必须为整数", 400, "VALIDATION_ERROR");
-    if (item.pricing_unit === "hour" && !/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(String(quantity))) error("按小时工序的计划数量最多保留两位小数", 400, "VALIDATION_ERROR");
+  private ensureQuantityPrecision(_item: ItemRow, quantity: number): void {
+    if (!/^(?:0|[1-9]\d*)(?:\.\d)?$/.test(String(quantity))) error("计划数量最多保留一位小数", 400, "VALIDATION_ERROR");
   }
 
   private orderAudit(order: OrderRow, status = order.status, version = order.version): Record<string, unknown> {
