@@ -386,6 +386,22 @@ export function ExternalResponsibilityPanel({
         return;
       }
     }
+    if (kind.startsWith("close")) {
+      const closeLabel = kind === "close-full"
+        ? "按全额扣款关闭"
+        : kind === "close-partial"
+          ? "按部分扣款关闭"
+          : "按未扣成功关闭";
+      if (!window.confirm(`确认${closeLabel}？关闭后本条扣款台账进入终局状态；如后续需要改责任，必须通过责任变更重新进入 N07。`)) {
+        return;
+      }
+    }
+    if (
+      kind === "revision-approve"
+      && !window.confirm("确认通过责任变更？通过后会生成新的 N07 判责草稿，并按新责任版本重新进入后续处理。")
+    ) {
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
