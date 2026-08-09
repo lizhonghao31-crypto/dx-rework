@@ -499,10 +499,17 @@ export class ProcessConfigurationService {
       let customProcessName: string | null = null;
       let processName: string;
       if (item.source === "catalog") {
+        const stableProcess = await client.query<{ process_id: string }>(
+          "SELECT process_id FROM process_catalog_items WHERE process_id=$1 FOR SHARE",
+          [item.processId],
+        );
+        if (!stableProcess.rows[0]) {
+          throw new ApplicationError("NOT_FOUND", "所选公共工序不存在或已停用", 404);
+        }
         const catalog = await client.query<{
           process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour";
         }>(
-          "SELECT process_id,version,process_name,pricing_unit FROM current_process_catalog WHERE process_id=$1 AND active=true FOR SHARE",
+          "SELECT process_id,version,process_name,pricing_unit FROM current_process_catalog WHERE process_id=$1 AND active=true",
           [item.processId],
         );
         const row = catalog.rows[0];
