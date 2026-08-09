@@ -13,6 +13,8 @@ export type PendingWorkReport = Readonly<{ signature: string; key: string }>;
 export type PendingWorkTask = Readonly<{ signature: string; key: string }>;
 export type WorkReportDraft = Readonly<{ quantity: string; completedAt: string }>;
 
+export const createBrowserIdempotencyKey = (): string => globalThis.crypto.randomUUID();
+
 const attempt = <T,>(
   existing: Readonly<{ signature: string; key: string }> | undefined,
   payload: T,
