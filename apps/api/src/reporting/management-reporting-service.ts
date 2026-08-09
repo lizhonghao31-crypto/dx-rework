@@ -11,6 +11,15 @@ import { factDto } from "./management-reporting-dto.js";
 import { reportData } from "./management-reporting-report-core.js";
 import { recalculateDisplayedTotals } from "./management-reporting-report-exceptions.js";
 
+const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> = {
+  pending_process_configuration: ["process:configure"],
+  pending_ie_review: ["process:review"],
+  pending_task_assignment: ["work:assign"],
+  in_progress: ["work:assign", "work:report", "work:report_for_worker"],
+  pending_order_review: ["submission:audit"],
+  pending_quantity_adjustment_ie_review: ["quantity:adjust", "quantity:confirm", "process:review"],
+};
+
 export class ManagementReportingService {
   constructor(private readonly db: Pool) {}
 
@@ -117,12 +126,41 @@ export class ManagementReportingService {
   }
 
   async listReworkOrders(actor: TrustedActorContext, query: ManagementReworkQuery): Promise<ManagementReworkPage> {
-    if (capabilities(actor).includes("dashboard:management:read")) await this.require(actor, "dashboard:management:read");
-    else if (capabilities(actor).includes("dashboard:site:read")) await this.require(actor, "dashboard:site:read");
-    else await this.require(actor, "report:view");
+    const currentCapabilities = capabilities(actor);
+    const broadCapability = currentCapabilities.includes("dashboard:management:read")
+      ? "dashboard:management:read"
+      : currentCapabilities.includes("dashboard:site:read")
+        ? "dashboard:site:read"
+        : currentCapabilities.includes("report:view")
+          ? "report:view"
+          : undefined;
+    let workflowCapability: string | undefined;
+    if (broadCapability) {
+      await this.require(actor, broadCapability);
+    } else {
+      if (!query.status) {
+        fail("节点工作台必须指定当前业务节点", 400, "VALIDATION_ERROR");
+      }
+      workflowCapability = workflowCapabilitiesByStatus[query.status]
+        ?.find((capability) => currentCapabilities.includes(capability));
+      if (!workflowCapability) {
+        fail("当前岗位无权查看这个业务节点", 403, "FORBIDDEN");
+      }
+      await this.require(actor, workflowCapability);
+    }
+
     const cursor = decodeCursor(query.cursor);
     const overdue = query.overdue === "true" ? true : query.overdue === "false" ? false : undefined;
     const exception = query.exception === "true" ? true : query.exception === "false" ? false : undefined;
+    const workerScoped = !broadCapability
+      && query.status === "in_progress"
+      && actor.actorRoles.includes("worker")
+      && currentCapabilities.includes("work:report")
+      && !currentCapabilities.includes("work:assign");
+    const proxyScoped = !broadCapability
+      && query.status === "in_progress"
+      && currentCapabilities.includes("work:report_for_worker")
+      && !currentCapabilities.includes("work:assign");
     const [result, clock] = await Promise.all([fetchFacts(this.db, {
       ...(query.q ? { q: query.q } : {}),
       ...(query.status ? { status: query.status } : {}),
@@ -133,6 +171,8 @@ export class ManagementReportingService {
       ...(exception === undefined ? {} : { exception }),
       ...(query.from ? { from: query.from } : {}),
       ...(query.to ? { to: query.to } : {}),
+      ...(workerScoped ? { workTaskActorUserId: actor.actorId } : {}),
+      ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
       limit: query.limit + 1,
       ...(cursor ? { cursor } : {}),
     }), this.db.query<{ as_of: Date }>("SELECT CURRENT_TIMESTAMP as_of")]);
@@ -142,7 +182,7 @@ export class ManagementReportingService {
       asOf: (clock.rows[0]?.as_of ?? new Date(0)).toISOString(),
       items: rows.map((row) => factDto(row)),
       nextCursor: hasMore && rows.at(-1) ? encodeCursor(rows.at(-1)!) : null,
-      canViewReports: capabilities(actor).includes("report:view"),
+      canViewReports: currentCapabilities.includes("report:view"),
     };
   }
 

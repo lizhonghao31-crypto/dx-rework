@@ -23,6 +23,7 @@ import { WagePage } from "./wages/wage-page.js";
 import { ManagementDashboardPage } from "./reporting/management-dashboard-page.js";
 import { ReworkQueryPage } from "./reporting/rework-query-page.js";
 import { ReportCenterPage } from "./reporting/report-center-page.js";
+import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 import { MasterDataPage } from "./master-data-page.js";
@@ -30,6 +31,17 @@ import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { landingTarget } from "./landing-target.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+
+const PROCESS_QUEUE_STATUSES = [
+  "pending_process_configuration",
+  "pending_ie_review",
+] as const;
+const WORK_QUEUE_STATUSES = [
+  "pending_task_assignment",
+  "in_progress",
+  "pending_order_review",
+  "pending_quantity_adjustment_ie_review",
+] as const;
 
 type LandingMe = {
   status: "authorized" | "no_role";
@@ -147,7 +159,8 @@ function HomeLanding() {
 
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const { path } = useInternalLocation(basePath);
+  const { path, search } = useInternalLocation(basePath);
+  const hasReworkContext = new URLSearchParams(search).has("rework");
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;
@@ -168,8 +181,12 @@ export function App() {
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
   else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>;
-  else if (path === "/ui/process-configuration") page = <Shell active="工序配置"><ProcessConfigurationForm /></Shell>;
-  else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = <Shell active="分工上数"><WorkReportingForm /></Shell>;
+  else if (path === "/ui/process-configuration") page = hasReworkContext
+    ? <Shell active="工序配置"><ProcessConfigurationForm /></Shell>
+    : <WorkflowQueuePage active="工序配置" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
+  else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
+    ? <Shell active="返工执行"><WorkReportingForm /></Shell>
+    : <WorkflowQueuePage active="返工执行" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
 

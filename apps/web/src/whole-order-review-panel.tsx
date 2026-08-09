@@ -21,7 +21,7 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
   pending_process_configuration: "待配置工序",
   pending_ie_review: "待 IE 审核",
   pending_task_assignment: "待分工",
-  in_progress: "上数中",
+  in_progress: "返工执行中",
   pending_order_review: "待整单审核",
   pending_quantity_adjustment_ie_review: "数量调整待 IE",
   pending_responsibility_determination: "待责任判定",
@@ -42,14 +42,22 @@ const oneDecimalQuantity = /^\d+(?:\.\d)?$/;
 
 export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrderId: string; onChanged: () => Promise<void> }) {
   const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
-  const [message, setMessage] = useState("正在加载整单审核…");
+  const [message, setMessage] = useState("正在加载整单完成状态…");
   const [busy, setBusy] = useState(false);
   const [targets, setTargets] = useState<Record<string, string>>({});
   const attempts = useRef<Record<string, string>>({});
   const load = async () => {
     const overview = await request("rework-orders/" + reworkOrderId + "/whole-order-review", WholeOrderReviewResponseSchema.parse);
     setData(overview);
-    setMessage(overview.reviewId ? "整单已审核，已进入待责任判定。" : "数量与驳回均以服务端当前有效记录为准。");
+    if (overview.reviewId) {
+      setMessage("本单已完成整单确认并进入责任判定。完成记录继续保留供追溯。");
+    } else if (overview.reworkStatus === "pending_order_review") {
+      setMessage("所有工序均已达到当前有效计划。请尾部主管核对完成记录后确认本单返工全部完成。");
+    } else if (overview.reworkStatus === "in_progress") {
+      setMessage("当前仍在 N05 · 返工执行中。系统会自动判断各工序是否完成；全部完成后才进入整单确认。");
+    } else {
+      setMessage(`当前状态：${reworkStatusLabel(overview.reworkStatus)}。`);
+    }
   };
   useEffect(() => {
     let requestInFlight = false;
@@ -79,6 +87,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       document.removeEventListener("visibilitychange", refreshVisible);
     };
   }, [reworkOrderId]);
+
   const call = async <T,>(path: string, parse: (value: unknown) => T, body: unknown, method = "POST") => {
     const signature = path + JSON.stringify(body);
     const idempotencyKey = attempts.current[signature] ?? crypto.randomUUID();
@@ -92,10 +101,11 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       return result;
     } finally { setBusy(false); }
   };
+
   const adjust = async (configurationItemId: string, kind: "decrease" | "increase") => {
     if (!data) return;
     const process = data.processes.find((item) => item.configurationItemId === configurationItemId);
-    if (!process) { setMessage("当前工序已刷新，请重新进入返工单。"); return; }
+    if (!process) { setMessage("当前工序已刷新，请重新进入订单。"); return; }
     const rawTarget = targets[configurationItemId]?.trim() ?? "";
     const target = Number(rawTarget);
     if (!Number.isFinite(target) || target <= 0) { setMessage("请填写有效的新计划数量。"); return; }
@@ -115,22 +125,27 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       setMessage(`增加后的计划数量必须大于当前计划 ${process.plannedQuantity}。`);
       return;
     }
-    const reason = window.prompt(kind === "decrease" ? "请填写减少原因" : "请填写增加原因");
+    const reason = window.prompt(kind === "decrease" ? "请填写减少计划数量的业务原因" : "请填写增加计划数量的业务原因");
     if (!reason?.trim()) return;
     try {
       const body = kind === "decrease"
         ? { expectedOrderVersion: data.orderVersion, configurationItemId, newPlannedQuantity: target, reason }
         : { expectedOrderVersion: data.orderVersion, configurationItemId, newPlannedQuantity: target, reason, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), requiresIeReview: true };
       await call("rework-orders/" + reworkOrderId + "/quantity-adjustments/" + kind, QuantityAdjustmentResponseSchema.parse, body);
-      setMessage(kind === "decrease" ? "计划数量已减少并留存历史版本。" : "增加申请已创建，未改变有效计划，等待订单跟单确认。");
+      setMessage(kind === "decrease" ? "异常数量调整已生效并留存历史版本。" : "增加申请已创建；当前有效计划暂不改变，等待订单跟单确认。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "数量调整失败"); }
   };
+
   const reject = async (reportId: string, personId: string | null) => {
     if (!data) return;
-    const reason = window.prompt("请填写驳回原因");
+    const reason = window.prompt("请填写驳回这条完成记录的原因");
     if (!reason?.trim()) return;
-    try { await call("work-reports/" + reportId + "/reject", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion, rejectedPersonId: personId, reason }); setMessage(personId ? "已驳回个人上数；其余记录未变。" : "已驳回整条集体上数及其完整成员分摊；其余记录未变。"); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "驳回失败"); }
+    try {
+      await call("work-reports/" + reportId + "/reject", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion, rejectedPersonId: personId, reason });
+      setMessage(personId ? "已驳回该人员的完成记录；订单将按有效完成数量重新判断是否补齐。" : "已驳回整条集体完成记录；订单将按有效完成数量重新判断是否补齐。");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完成记录驳回失败"); }
   };
+
   const confirm = async (adjustmentId: string, decision: "confirmed" | "rejected") => {
     if (!data) return;
     const adjustment = data.adjustments.find((item) => item.adjustmentId === adjustmentId);
@@ -157,25 +172,126 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     }
     const reason = decision === "rejected" ? window.prompt("请填写拒绝原因") : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
-    try { await call("quantity-adjustments/" + adjustmentId + "/confirm", QuantityAdjustmentResponseSchema.parse, { expectedOrderVersion: data.orderVersion, expectedAdjustmentVersion: adjustment.adjustmentVersion, decision, actualCutQuantity, actualReturnQuantity, allowedMaximumQuantity, ...(reason ? { reason } : {}) }); setMessage(decision === "confirmed" ? "跟单确认已留痕；下一步由 IE 复核增加数量。" : "增加申请已拒绝，当前有效计划未改变。"); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "确认失败"); }
+    try {
+      await call("quantity-adjustments/" + adjustmentId + "/confirm", QuantityAdjustmentResponseSchema.parse, { expectedOrderVersion: data.orderVersion, expectedAdjustmentVersion: adjustment.adjustmentVersion, decision, actualCutQuantity, actualReturnQuantity, allowedMaximumQuantity, ...(reason ? { reason } : {}) });
+      setMessage(decision === "confirmed" ? "跟单确认已留痕；下一步由 IE 复核增加数量。" : "增加申请已拒绝，当前有效计划未改变。");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "确认失败"); }
   };
+
   const reviewIncrease = async (adjustmentId: string, decision: "approved" | "rejected") => {
     if (!data) return;
     const adjustment = data.adjustments.find((item) => item.adjustmentId === adjustmentId);
     if (!adjustment) return;
-    const reason = decision === "rejected" ? window.prompt("请填写IE驳回原因") : undefined;
+    const reason = decision === "rejected" ? window.prompt("请填写 IE 驳回原因") : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
-    try { await call("quantity-adjustments/" + adjustmentId + "/ie-review", QuantityAdjustmentResponseSchema.parse, { expectedOrderVersion: data.orderVersion, expectedAdjustmentVersion: adjustment.adjustmentVersion, decision, ...(reason ? { reason } : {}) }); setMessage(decision === "approved" ? "IE已通过增加调整，返工单已回到上数补齐。" : "IE已驳回增加调整，当前有效计划未改变。"); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "IE复核失败"); }
+    try {
+      await call("quantity-adjustments/" + adjustmentId + "/ie-review", QuantityAdjustmentResponseSchema.parse, { expectedOrderVersion: data.orderVersion, expectedAdjustmentVersion: adjustment.adjustmentVersion, decision, ...(reason ? { reason } : {}) });
+      setMessage(decision === "approved" ? "IE 已通过增加调整，订单已回到返工执行节点补齐新增数量。" : "IE 已驳回增加调整，当前有效计划未改变。");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "IE 复核失败"); }
   };
+
   const approve = async () => {
-    if (!data || !window.confirm("确认所有有效上数和成员快照无误，并进入待责任判定？")) return;
-    try { await call("rework-orders/" + reworkOrderId + "/whole-order-review/approve", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion }); setMessage("整单审核已通过，已进入待责任判定。"); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "整单审核失败"); }
+    if (!data || !window.confirm("确认本单所有有效完成记录无误，并进入责任判定？")) return;
+    try {
+      await call("rework-orders/" + reworkOrderId + "/whole-order-review/approve", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion });
+      setMessage("本单返工已确认全部完成，已流转到 N07 · 待责任判定。");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "整单完成确认失败"); }
   };
-  if (!data || data.reworkStatus === "pending_task_assignment") return null;
-  return <><Surface><div className="section-title"><div><h2>整单审核与数量调整</h2><p>{message}</p></div><StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge></div><p>当前有效计划与未驳回上数逐工序校验；任何驳回都会使整单重新补齐。</p></Surface>
-    <Surface><h2>工序完成判断</h2>{data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}><div><b>{process.processName}</b><p>有效上数 {process.completedQuantity} / 当前计划 {process.plannedQuantity} {process.pricingUnit === "piece" ? "件" : "小时"}</p></div><StatusBadge tone={process.complete ? "success" : "warning"}>{process.complete ? "已完成" : "未完成"}</StatusBadge>{data.canAdjustQuantity && <div className="mobile-actions whole-order-actions"><InsetField label="新计划数量" type="number" min="0.1" step="0.1" inputMode="decimal" value={targets[process.configurationItemId] ?? ""} onChange={(event) => setTargets((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} disabled={busy} /><Button onClick={() => void adjust(process.configurationItemId, "decrease")} disabled={busy}>减少计划</Button><Button onClick={() => void adjust(process.configurationItemId, "increase")} disabled={busy}>申请增加</Button></div>}</div>)}</Surface>
-    <Surface><h2>上数记录与单条驳回</h2>{data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}><div><b>上数 {report.actualQuantity}</b><p>{report.members.map((member) => member.displayName).join("、")} · {report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</p></div>{data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">{report.assignmentMode === "collective" ? <Button onClick={() => void reject(report.workReportId, null)} disabled={busy}>驳回整条集体记录</Button> : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId)} disabled={busy}>驳回 {member.displayName}</Button>)}</div>}</div>)}{data.reports.length === 0 && <p>尚无上数记录。</p>}</Surface>
-    <Surface><h2>数量调整记录</h2>{data.adjustments.map((adjustment) => <div className="section-title whole-order-row" key={adjustment.adjustmentId}><div><b>{adjustment.kind === "increase" ? "增加" : "减少"}：{adjustment.previousPlannedQuantity} → {adjustment.requestedPlannedQuantity}</b><p>{adjustmentStatusLabel(adjustment.status)} · {adjustment.reason}</p></div>{data.canConfirmQuantity && adjustment.status === "pending_merchandiser_confirmation" && <div className="mobile-actions whole-order-actions"><Button variant="primary" onClick={() => void confirm(adjustment.adjustmentId, "confirmed")} disabled={busy}>确认实裁/回货</Button><Button onClick={() => void confirm(adjustment.adjustmentId, "rejected")} disabled={busy}>拒绝申请</Button></div>}{data.canReviewQuantityIncrease && adjustment.status === "pending_ie_review" && <div className="mobile-actions whole-order-actions"><Button variant="primary" onClick={() => void reviewIncrease(adjustment.adjustmentId, "approved")} disabled={busy}>IE通过</Button><Button onClick={() => void reviewIncrease(adjustment.adjustmentId, "rejected")} disabled={busy}>IE驳回</Button></div>}</div>)}{data.adjustments.length === 0 && <p>尚无数量调整。</p>}</Surface>
-    {data.canReview && <div className="mobile-actions"><Button variant="primary" onClick={() => void approve()} disabled={busy || data.reworkStatus !== "pending_order_review" || data.processes.some((process) => !process.complete)}>整单审核通过</Button></div>}
-  </>;
+
+  if (!data || ["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
+
+  const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
+  const hasAdjustmentWork = data.canAdjustQuantity
+    || data.canConfirmQuantity
+    || data.canReviewQuantityIncrease
+    || data.adjustments.length > 0;
+
+  return <div className="whole-order-review-flow">
+    <Surface>
+      <div className="section-title">
+        <div>
+          <h2>{data.reworkStatus === "pending_order_review" ? "N06 · 整单完成确认" : "返工完成进度"}</h2>
+          <p>{message}</p>
+        </div>
+        <StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : allComplete ? "success" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge>
+      </div>
+      <div className="workflow-queue-guide">
+        <div><small>谁来处理</small><strong>{data.reworkStatus === "pending_order_review" ? "尾部主管" : "系统自动判断 / 授权主管查看"}</strong></div>
+        <div><small>当前要做什么</small><strong>{data.reworkStatus === "pending_order_review" ? "核对所有有效完成记录，确认整张返工单已经做完" : "等待工人把各工序实际完成数量补齐"}</strong></div>
+        <div><small>完成后去哪里</small><strong>{data.reworkStatus === "pending_order_review" ? "确认后进入 N07 · 责任判定" : "全部工序完成后自动进入 N06 · 整单审核"}</strong></div>
+      </div>
+    </Surface>
+
+    <Surface>
+      <h2>工序完成状态（系统自动计算）</h2>
+      <p>这里只显示结果，不需要人工再次判断。系统按“有效完成数量 / 当前有效计划”自动决定是否完成。</p>
+      {data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}>
+        <div>
+          <b>{process.processName}</b>
+          <p>有效完成 {process.completedQuantity} / 当前计划 {process.plannedQuantity} {process.pricingUnit === "piece" ? "件" : "小时"}</p>
+        </div>
+        <StatusBadge tone={process.complete ? "success" : "warning"}>{process.complete ? "已完成" : "未完成"}</StatusBadge>
+      </div>)}
+    </Surface>
+
+    {(data.canReview || data.reports.length > 0) && <Surface>
+      <h2>完成记录与驳回</h2>
+      <p>主管只在记录确有错误时驳回；正常情况下无需逐条重复确认。</p>
+      {data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}>
+        <div>
+          <b>完成 {report.actualQuantity}</b>
+          <p>{report.members.map((member) => member.displayName).join("、")} · {report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</p>
+        </div>
+        {data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">
+          {report.assignmentMode === "collective"
+            ? <Button onClick={() => void reject(report.workReportId, null)} disabled={busy}>驳回整条集体记录</Button>
+            : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId)} disabled={busy}>驳回 {member.displayName}</Button>)}
+        </div>}
+      </div>)}
+      {data.reports.length === 0 && <p>尚无完成记录。</p>}
+    </Surface>}
+
+    {data.canReview && data.reworkStatus === "pending_order_review" && <Surface>
+      <h2>确认本单返工全部完成</h2>
+      <p>确认后生产返工部分结束并流转到责任判定。若发现完成数量错误，请先在上方驳回对应记录。</p>
+      <div className="mobile-actions">
+        <Button variant="primary" onClick={() => void approve()} disabled={busy || !allComplete}>{busy ? "确认中…" : "确认本单返工全部完成，进入责任判定"}</Button>
+      </div>
+    </Surface>}
+
+    {hasAdjustmentWork && <Surface>
+      <details className="quantity-exception-panel">
+        <summary><b>异常处理：数量调整</b>（正常返工无需进入）</summary>
+        <p>只有计划数量与真实业务事实不一致时才使用。减少计划直接留痕；增加计划需要按现有确认/IE 复核流程处理。</p>
+        {data.processes.map((process) => data.canAdjustQuantity ? <div className="section-title whole-order-row" key={process.configurationItemId}>
+          <div>
+            <b>{process.processName}</b>
+            <p>当前计划 {process.plannedQuantity} · 已有效完成 {process.completedQuantity}</p>
+          </div>
+          <div className="mobile-actions whole-order-actions">
+            <InsetField label="调整后的计划数量" type="number" min="0.1" step="0.1" inputMode="decimal" value={targets[process.configurationItemId] ?? ""} onChange={(event) => setTargets((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} disabled={busy} />
+            <Button onClick={() => void adjust(process.configurationItemId, "decrease")} disabled={busy}>减少计划</Button>
+            <Button onClick={() => void adjust(process.configurationItemId, "increase")} disabled={busy}>申请增加</Button>
+          </div>
+        </div> : null)}
+
+        <h3>数量调整记录</h3>
+        {data.adjustments.map((adjustment) => <div className="section-title whole-order-row" key={adjustment.adjustmentId}>
+          <div>
+            <b>{adjustment.kind === "increase" ? "增加" : "减少"}：{adjustment.previousPlannedQuantity} → {adjustment.requestedPlannedQuantity}</b>
+            <p>{adjustmentStatusLabel(adjustment.status)} · {adjustment.reason}</p>
+          </div>
+          {data.canConfirmQuantity && adjustment.status === "pending_merchandiser_confirmation" && <div className="mobile-actions whole-order-actions">
+            <Button variant="primary" onClick={() => void confirm(adjustment.adjustmentId, "confirmed")} disabled={busy}>确认实裁/回货</Button>
+            <Button onClick={() => void confirm(adjustment.adjustmentId, "rejected")} disabled={busy}>拒绝申请</Button>
+          </div>}
+          {data.canReviewQuantityIncrease && adjustment.status === "pending_ie_review" && <div className="mobile-actions whole-order-actions">
+            <Button variant="primary" onClick={() => void reviewIncrease(adjustment.adjustmentId, "approved")} disabled={busy}>IE 通过</Button>
+            <Button onClick={() => void reviewIncrease(adjustment.adjustmentId, "rejected")} disabled={busy}>IE 驳回</Button>
+          </div>}
+        </div>)}
+        {data.adjustments.length === 0 && <p>暂无数量调整记录。</p>}
+      </details>
+    </Surface>}
+  </div>;
 }

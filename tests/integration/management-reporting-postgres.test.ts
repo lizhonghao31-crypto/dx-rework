@@ -16,7 +16,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
   const schema = `management_reporting_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
-  const ids = { owner: randomUUID(), tail: randomUUID(), admin: randomUUID() };
+  const ids = { owner: randomUUID(), tail: randomUUID(), admin: randomUUID(), worker: randomUUID() };
   let service: ManagementReportingService;
 
   const actor = (id: string, roles: string[], primary: string, capabilities: string[]): TrustedActorContext => ({
@@ -34,18 +34,20 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
   const tail = () => actor(ids.tail, ["tail_supervisor"], "dashboard:site:read", [
     "dashboard:site:read", "process:configure", "work:assign", "submission:audit", "wage:tail_review",
   ]);
+  const worker = () => actor(ids.worker, ["worker"], "work:report", ["work:report"]);
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
     const directory = new URL("../../apps/api/migrations/", import.meta.url);
     const migrations = (await readdir(directory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-    expect(migrations.at(-1)).toBe("0033_employee_access_management.sql");
+    expect(migrations.at(-1)).toBe("0041_root_wage_decider_constraint.sql");
     for (const migration of migrations) await database.query(await readFile(new URL(migration, directory), "utf8"));
 
     for (const [id, name, role] of [
       [ids.owner, "Reporting owner", "owner_group"],
       [ids.tail, "Reporting tail", "tail_supervisor"],
       [ids.admin, "Reporting admin", "system_admin"],
+      [ids.worker, "Reporting worker", "worker"],
     ] as const) {
       await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)", [id, name]);
       await database.query(
@@ -104,6 +106,13 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
       const exported = await service.exportData(owner(), reportType, { limit: 100 });
       expect(exported.data.rows).toEqual([]);
     }
+  });
+
+  it("lets operational roles read only a status-scoped workflow queue without report access", async () => {
+    const page = await service.listReworkOrders(worker(), { status: "in_progress", limit: 25 });
+    expect(page).toMatchObject({ items: [], nextCursor: null, canViewReports: false });
+    await expect(service.listReworkOrders(worker(), { limit: 25 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(service.listReworkOrders(worker(), { status: "pending_order_review", limit: 25 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("keeps site users out of management reports and records every successful export", async () => {

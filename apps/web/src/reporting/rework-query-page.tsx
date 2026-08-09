@@ -9,7 +9,7 @@ import "./reporting.css";
 
 const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
   ["", "全部状态"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],
-  ["pending_task_assignment","待分工"],["in_progress","上数中"],["pending_order_review","待整单审核"],
+  ["pending_task_assignment","待分工"],["in_progress","返工执行中"],["pending_order_review","待整单审核"],
   ["pending_quantity_adjustment_ie_review","数量调整待 IE"],["pending_responsibility_determination","待责任判定"],
   ["pending_responsibility_action","责任处理中"],["completed","已完成"],["cancelled","已取消"],
 ];
@@ -49,7 +49,7 @@ export function ReworkQueryPage() {
   const items = state.kind === "ready" ? state.value.items : [];
   const canViewReports = state.kind === "ready" && state.value.canViewReports;
   return <Shell active="返工任务">
-    <Header title="返工统一查询" subtitle="按真实返工单、当前节点、责任、工资、扣款和异常查询" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} action={canViewReports ? "报表中心" : "返回工作台"} actionHref={canViewReports ? "/ui/reports" : "/"} />
+    <Header title="返工统一查询" subtitle="只用于查询当前状态、历史事实、责任、工资、扣款和异常；日常处理请进入对应节点工作台" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} action={canViewReports ? "报表中心" : "返回工作台"} actionHref={canViewReports ? "/ui/reports" : "/"} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>

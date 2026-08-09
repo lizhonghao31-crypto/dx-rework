@@ -265,6 +265,7 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: reportingService,
     exportService: new ReportExportService(reportingService, database, config.gitSha),
+    root: rootAuthority,
   },
   adminAudit: { authenticate: (token) => auth.authenticate(token), service: new AdminAuditService(database) },
   adminConsole: {
