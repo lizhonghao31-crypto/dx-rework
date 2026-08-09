@@ -99,6 +99,10 @@ export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>
   wages: new Set(["pending_tail_review", "pending_admin_review", "ready_to_lock", "locked"]),
   responsibilities: new Set(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
   own_factory: new Set(["pending", "approved", "rejected"]),
-  external_deductions: new Set(["pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up", "returned", "pending_responsibility_revision", "closed", "superseded"]),
+  external_deductions: new Set([
+    "pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up",
+    "returned", "pending_responsibility_revision", "closed", "superseded",
+    "full", "partial", "not_deducted",
+  ]),
   exceptions: new Set(["overdue_todo", "blocked_recipient", "todo_delivery_failed", "deduction_follow_up_overdue"]),
 };
