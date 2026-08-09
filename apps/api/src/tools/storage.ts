@@ -34,9 +34,9 @@ export type AliyunPostPolicyCondition =
   | readonly ["content-length-range", number, number];
 
 /**
- * Narrow bootstrap adapter over the official `ali-oss` SDK. Its implementation
- * must use `signPostObjectPolicyV4`; the application layer never implements OSS
- * signing algorithms itself.
+ * Narrow Aliyun OSS V4 client contract. The runtime implementation may use an
+ * official SDK or Alibaba Cloud's documented manual V4 algorithm, but the
+ * application layer never receives long-term credentials or implements signing.
  */
 export interface AliyunOssSdkClient {
   createPostObjectUploadGrant(options: {
