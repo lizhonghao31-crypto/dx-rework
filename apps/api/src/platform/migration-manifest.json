@@ -1,44 +1,164 @@
 {
   "migrations": [
-    { "version": "0001_platform_foundation", "checksum": "c9f69f74ef47ef8b1bc54db28a6b91c81614949a1e9ee40b8a91212b1fb0b9fe" },
-    { "version": "0002_dingtalk_identity_access", "checksum": "155fd00415e4a15c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f" },
-    { "version": "0003_identity_union_continuity", "checksum": "44def9af2f392049de30b77206ec41f40b238991979724498cf24655c23a5b68" },
-    { "version": "0004_public_tools_foundation", "checksum": "d1bd3c09355e3737f3587583f8d2a9d0c78d73c8099b6d785dc1d887efbeb600" },
-    { "version": "0005_access_master_data", "checksum": "13a8fff97ce6fd21ca5da835a4378576a5d28b8e4148b8115c9ac1cf97a51d47" },
-    { "version": "0006_rework_initiation", "checksum": "290c5dfba0f67c0c1d3c20cd2cc3d6dd4b086bbec6c499e7f01fbaaeff5e4fd6" },
-    { "version": "0007_process_configuration_ie_review", "checksum": "174955cd25c251347ef8336c6051890e21ced81f68d3a620beccd3bc19c60747" },
-    { "version": "0008_worker_assignment_reporting", "checksum": "e57037cad35d8f7e09c473a16a3779bfd6623bedbf2ac2a079fc2c486cacad1c" },
-    { "version": "0009_whole_order_review_quantity_adjustment", "checksum": "01f542e7ec7610620ea72f51f67a2afc07d56435aa8aa60a992fd10b838dc575" },
-    { "version": "0010_responsibility_determination_amount_engine", "checksum": "c1883196817a777fb61e941f61e3385d4665ea101f4a3a0d29887cdd10ccab4e" },
-    { "version": "0011_responsibility_authorization_handler_closure", "checksum": "dfc909a56dedae61531c26bc3269123d983a1a9f99a02fedeeda2babffa2ed13" },
-    { "version": "0012_responsibility_direct_delegation", "checksum": "5e40152c10bab23cac1f2c1a07679f1f1a4ffededd07983dc9517dfcc808ecf0" },
-    { "version": "0013_responsibility_review_closure", "checksum": "b5703c4525791a3c1784af468576ba82882badbf186df55ea860dfcdf335c794" },
-    { "version": "0014_responsibility_source_share_coverage", "checksum": "78ab96bde7e029cfc1683839e6efd9ccb5de9a5601f98e615c6bd0373720afa4" },
-    { "version": "0015_own_factory_responsibility_approval", "checksum": "4904e7efd14a4e7a68212f67aff06881dc4c7e20144f61940c00c7f66fca1d49" },
-    { "version": "0016_responsibility_amount_contract_restore", "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925" },
-    { "version": "0017_external_responsibility_deduction", "checksum": "11320eebff234300d7243897fbcab90144dd2c61cb450b957def3a0394887e97" },
-    { "version": "0018_external_responsibility_review_closure", "checksum": "ccaf2c0f99451a27502db18a270ddaa94c7e997228ad85f5b602608cb016b010" },
-    { "version": "0019_external_revision_seed_ordering", "checksum": "199c2fc265628ed0cf40bb86ecd25ec823f081f06f880d15e84eb6e9bdf19ecc" },
-    { "version": "0020_external_responsibility_codex_closure", "checksum": "7df9f581820a1fe5c96db916c9bc2856445fd81d081e9abcbea95ca9ad35c831" },
-    { "version": "0021_external_processing_factory_override_closure", "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695" },
-    { "version": "0022_wage_reconciliation_month_close", "checksum": "4c2063864df0ee1791a8eecb59fdef2857fccd5c2dfb2dde3a5ea60a0671d1af" },
-    { "version": "0023_wage_materialization_closure", "checksum": "a4cad0d4d5387b438cb3cd0f933103805bb467d7656f2960860319caf1b80ddb" },
-    { "version": "0024_wage_adjustment_attachment_closure", "checksum": "73672ecd1d44f46ffd58e3409d80eb0b7315d48e4c3753a2f950e5d88b1fe852" },
-    { "version": "0025_wage_completion_month_backfill_access", "checksum": "0a52386e46a6ffa650398f490c8ba84d092084bb5c6bf2c6c1c62caf6de4e261" },
-    { "version": "0026_todo_notification_foundation", "checksum": "9b69f0246e4644349f41636940bb268bf2057f70ded563227b0c2d14e47a3297" },
-    { "version": "0027_todo_routing_lifecycle_closure", "checksum": "c0ba02504429e9fe1db70887785c7b330f5ac245c7a6dd0c5fad2f7c33422b29" },
-    { "version": "0028_dingtalk_todo_external_bindings", "checksum": "3daf7ab0bf74bdff1540ef819ad270f721d77ff83e867f9757791f66c45587a9" },
-    { "version": "0029_management_dashboard_reporting", "checksum": "63cab12ef8256ee7715ef3e7228e1f2ad81dc0209ce5784327183257ce3afc27" },
-    { "version": "0030_admin_audit_query_foundation", "checksum": "ab2edd636589220c34b928ff7fe0a05be91f213ac777f175bf5ff70f660bfc02" },
-    { "version": "0031_administrator_console_foundation", "checksum": "a5ce466bc4d2c61761580c1b480911622735d17974c6db912dd4bf1403813d6d" },
-    { "version": "0032_erp_integration_contract", "checksum": "3535f8dac5e887d72ebb41dc514b17fe365fa367fa0fa2abe3ba186f65145f0a" },
-    { "version": "0033_employee_access_management", "checksum": "bb87700794a244c80d90afd87faf514375916d7085b1bd999d26416cef5ffe1d" },
-    { "version": "0034_owner_business_master_data", "checksum": "a5e1b644fc2254159a5bbc8944ea947eaceda11ae1d909ef9d0e9f6f0af9739b" },
-    { "version": "0035_role_management_policy_closure", "checksum": "44d052f64826ab5a039d822ca1dda9de6363f4d12850b7501278d0f9764a9934" },
-    { "version": "0036_permission_authority_closure", "checksum": "53a91eee979ae876313254c395733b747245713aae1c9cea09b1401169ffefe5" },
-    { "version": "0037_system_admin_role_description", "checksum": "853b2e3b4c562228ee3b08aa01947f684482fb3bd748196f7f725324113c1e7a" },
-    { "version": "0038_worker_person_materialization", "checksum": "272674f7e034aab2f8d3a62eff53e95abae627ddf9f0f887c905ab173b97652d" },
-    { "version": "0039_practical_quantity_amount_precision", "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3" },
-    { "version": "0040_root_identity_separation_bypass", "checksum": "213c43110d67caaebc9227e7492567e9146c459b934f2281c95e47df74b2ca15" }
+    {
+      "version": "0001_platform_foundation",
+      "checksum": "c9f69f74ef47ef8b1bc54db28a6b91c81614949a1e9ee40b8a91212b1fb0b9fe"
+    },
+    {
+      "version": "0002_dingtalk_identity_access",
+      "checksum": "155fd00415e4a15c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f"
+    },
+    {
+      "version": "0003_identity_union_continuity",
+      "checksum": "44def9af2f392049de30b77206ec41f40b238991979724498cf24655c23a5b68"
+    },
+    {
+      "version": "0004_public_tools_foundation",
+      "checksum": "d1bd3c09355e3737f3587583f8d2a9d0c78d73c8099b6d785dc1d887efbeb600"
+    },
+    {
+      "version": "0005_access_master_data",
+      "checksum": "13a8fff97ce6fd21ca5da835a4378576a5d28b8e4148b8115c9ac1cf97a51d47"
+    },
+    {
+      "version": "0006_rework_initiation",
+      "checksum": "290c5dfba0f67c0c1d3c20cd2cc3d6dd4b086bbec6c499e7f01fbaaeff5e4fd6"
+    },
+    {
+      "version": "0007_process_configuration_ie_review",
+      "checksum": "174955cd25c251347ef8336c6051890e21ced81f68d3a620beccd3bc19c60747"
+    },
+    {
+      "version": "0008_worker_assignment_reporting",
+      "checksum": "e57037cad35d8f7e09c473a16a3779bfd6623bedbf2ac2a079fc2c486cacad1c"
+    },
+    {
+      "version": "0009_whole_order_review_quantity_adjustment",
+      "checksum": "01f542e7ec7610620ea72f51f67a2afc07d56435aa8aa60a992fd10b838dc575"
+    },
+    {
+      "version": "0010_responsibility_determination_amount_engine",
+      "checksum": "c1883196817a777fb61e941f61e3385d4665ea101f4a3a0d29887cdd10ccab4e"
+    },
+    {
+      "version": "0011_responsibility_authorization_handler_closure",
+      "checksum": "dfc909a56dedae61531c26bc3269123d983a1a9f99a02fedeeda2babffa2ed13"
+    },
+    {
+      "version": "0012_responsibility_direct_delegation",
+      "checksum": "5e40152c10bab23cac1f2c1a07679f1f1a4ffededd07983dc9517dfcc808ecf0"
+    },
+    {
+      "version": "0013_responsibility_review_closure",
+      "checksum": "b5703c4525791a3c1784af468576ba82882badbf186df55ea860dfcdf335c794"
+    },
+    {
+      "version": "0014_responsibility_source_share_coverage",
+      "checksum": "78ab96bde7e029cfc1683839e6efd9ccb5de9a5601f98e615c6bd0373720afa4"
+    },
+    {
+      "version": "0015_own_factory_responsibility_approval",
+      "checksum": "4904e7efd14a4e7a68212f67aff06881dc4c7e20144f61940c00c7f66fca1d49"
+    },
+    {
+      "version": "0016_responsibility_amount_contract_restore",
+      "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925"
+    },
+    {
+      "version": "0017_external_responsibility_deduction",
+      "checksum": "11320eebff234300d7243897fbcab90144dd2c61cb450b957def3a0394887e97"
+    },
+    {
+      "version": "0018_external_responsibility_review_closure",
+      "checksum": "ccaf2c0f99451a27502db18a270ddaa94c7e997228ad85f5b602608cb016b010"
+    },
+    {
+      "version": "0019_external_revision_seed_ordering",
+      "checksum": "199c2fc265628ed0cf40bb86ecd25ec823f081f06f880d15e84eb6e9bdf19ecc"
+    },
+    {
+      "version": "0020_external_responsibility_codex_closure",
+      "checksum": "7df9f581820a1fe5c96db916c9bc2856445fd81d081e9abcbea95ca9ad35c831"
+    },
+    {
+      "version": "0021_external_processing_factory_override_closure",
+      "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
+    },
+    {
+      "version": "0022_wage_reconciliation_month_close",
+      "checksum": "4c2063864df0ee1791a8eecb59fdef2857fccd5c2dfb2dde3a5ea60a0671d1af"
+    },
+    {
+      "version": "0023_wage_materialization_closure",
+      "checksum": "a4cad0d4d5387b438cb3cd0f933103805bb467d7656f2960860319caf1b80ddb"
+    },
+    {
+      "version": "0024_wage_adjustment_attachment_closure",
+      "checksum": "73672ecd1d44f46ffd58e3409d80eb0b7315d48e4c3753a2f950e5d88b1fe852"
+    },
+    {
+      "version": "0025_wage_completion_month_backfill_access",
+      "checksum": "0a52386e46a6ffa650398f490c8ba84d092084bb5c6bf2c6c1c62caf6de4e261"
+    },
+    {
+      "version": "0026_todo_notification_foundation",
+      "checksum": "9b69f0246e4644349f41636940bb268bf2057f70ded563227b0c2d14e47a3297"
+    },
+    {
+      "version": "0027_todo_routing_lifecycle_closure",
+      "checksum": "c0ba02504429e9fe1db70887785c7b330f5ac245c7a6dd0c5fad2f7c33422b29"
+    },
+    {
+      "version": "0028_dingtalk_todo_external_bindings",
+      "checksum": "3daf7ab0bf74bdff1540ef819ad270f721d77ff83e867f9757791f66c45587a9"
+    },
+    {
+      "version": "0029_management_dashboard_reporting",
+      "checksum": "63cab12ef8256ee7715ef3e7228e1f2ad81dc0209ce5784327183257ce3afc27"
+    },
+    {
+      "version": "0030_admin_audit_query_foundation",
+      "checksum": "ab2edd636589220c34b928ff7fe0a05be91f213ac777f175bf5ff70f660bfc02"
+    },
+    {
+      "version": "0031_administrator_console_foundation",
+      "checksum": "a5ce466bc4d2c61761580c1b480911622735d17974c6db912dd4bf1403813d6d"
+    },
+    {
+      "version": "0032_erp_integration_contract",
+      "checksum": "3535f8dac5e887d72ebb41dc514b17fe365fa367fa0fa2abe3ba186f65145f0a"
+    },
+    {
+      "version": "0033_employee_access_management",
+      "checksum": "bb87700794a244c80d90afd87faf514375916d7085b1bd999d26416cef5ffe1d"
+    },
+    {
+      "version": "0034_owner_business_master_data",
+      "checksum": "a5e1b644fc2254159a5bbc8944ea947eaceda11ae1d909ef9d0e9f6f0af9739b"
+    },
+    {
+      "version": "0035_role_management_policy_closure",
+      "checksum": "44d052f64826ab5a039d822ca1dda9de6363f4d12850b7501278d0f9764a9934"
+    },
+    {
+      "version": "0036_permission_authority_closure",
+      "checksum": "53a91eee979ae876313254c395733b747245713aae1c9cea09b1401169ffefe5"
+    },
+    {
+      "version": "0037_system_admin_role_description",
+      "checksum": "853b2e3b4c562228ee3b08aa01947f684482fb3bd748196f7f725324113c1e7a"
+    },
+    {
+      "version": "0038_worker_person_materialization",
+      "checksum": "272674f7e034aab2f8d3a62eff53e95abae627ddf9f0f887c905ab173b97652d"
+    },
+    {
+      "version": "0039_practical_quantity_amount_precision",
+      "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3"
+    },
+    {
+      "version": "0040_root_identity_separation_bypass",
+      "checksum": "213c43110d67caaebc9227e7492567e9146c459b934f2281c95e47df74b2ca15"
+    }
   ]
 }
