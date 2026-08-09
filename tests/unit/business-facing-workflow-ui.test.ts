@@ -126,14 +126,18 @@ describe("business-facing workflow UI", () => {
   });
 
   it("uses real dynamic node workbenches instead of empty pages requiring a rework id", async () => {
-    const [app, queue, dashboard, detail] = await Promise.all([
+    const [app, queue, dashboard, detail, navigation] = await Promise.all([
       read("apps/web/src/App.tsx"),
       read("apps/web/src/reporting/workflow-queue-page.tsx"),
       read("apps/web/src/reporting/management-dashboard-page.tsx"),
       read("apps/web/src/rework-detail-page.tsx"),
+      read("apps/web/src/components.tsx"),
     ]);
     expect(app).toContain("<WorkflowQueuePage active=\"工序配置\"");
-    expect(app).toContain("<WorkflowQueuePage active=\"分工上数\"");
+    expect(app).toContain("<WorkflowQueuePage active=\"返工执行\"");
+    expect(navigation).toContain('name: "返工执行"');
+    expect(navigation).toContain('description: "分配人员、登记完成数量、整单确认"');
+    expect(navigation).not.toContain('name: "分工上数"');
     expect(queue).toContain("搜索当前节点订单");
     expect(queue).toContain("谁来处理");
     expect(queue).toContain("当前要做什么");
