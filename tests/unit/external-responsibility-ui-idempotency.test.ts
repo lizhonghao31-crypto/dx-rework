@@ -20,4 +20,13 @@ describe("N08-B/N10-B external responsibility UI safety", () => {
     expect(source).toContain("将未扣差额转为本厂承担，并进入 N07 重新判责");
     expect(source).not.toContain('includes("本厂")');
   });
+
+  it("requires confirmation before terminal close and responsibility-revision approval", async () => {
+    const source = await read("apps/web/src/external-responsibility-panel.tsx");
+
+    expect(source).toContain('kind.startsWith("close")');
+    expect(source).toContain("关闭后本条扣款台账进入终局状态");
+    expect(source).toContain("确认通过责任变更？通过后会生成新的 N07 判责草稿");
+    expect(source).toContain("window.confirm");
+  });
 });
