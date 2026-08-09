@@ -8,6 +8,7 @@ import type {
 } from "@dx-rework/contracts";
 import type { Pool } from "pg";
 
+import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
@@ -115,7 +116,7 @@ export class ResponsibilityDeterminationApplicationService {
       permission.status !== "pending_responsibility_determination"
       || permission.permitted !== true
       || !capabilities.includes("responsibility:determine")
-      || permission.handler_user_id !== actor.actorId
+      || (!isRootActor(actor) && permission.handler_user_id !== actor.actorId)
     ) {
       throw new ApplicationError("FORBIDDEN", "只有当前有效责任处理人可以查看转交对象", 403);
     }
