@@ -32,12 +32,12 @@ export class ResponsibilityDeterminationQueueService {
     actor: TrustedActorContext,
   ): Promise<ResponsibilityQueueResponse> {
     const actorCapabilities = capabilities(actor);
-    const hasDetermine = actorCapabilities.includes("responsibility:determine");
-    const hasTakeover = actorCapabilities.includes("responsibility:takeover");
-    const hasConfirm = actorCapabilities.includes(
+    const root = isRootActor(actor);
+    const hasDetermine = root || actorCapabilities.includes("responsibility:determine");
+    const hasTakeover = root || actorCapabilities.includes("responsibility:takeover");
+    const hasConfirm = root || actorCapabilities.includes(
       "responsibility:confirm_high_multiplier",
     );
-    const root = isRootActor(actor);
 
     if (!hasDetermine && !hasTakeover && !hasConfirm) {
       return { items: [] };
