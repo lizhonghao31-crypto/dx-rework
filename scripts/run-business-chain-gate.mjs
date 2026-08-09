@@ -196,7 +196,6 @@ if (hasDatabase) {
 }
 
 if (hasDatabase) await cleanupIsolatedGateSchemas();
-await verifyOssRuntime();
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 let exitCode;
@@ -235,6 +234,14 @@ try {
 if (exitCode !== 0) {
   throw new Error(`BUSINESS_CHAIN_GATE_FAILED: vitest exited ${exitCode}`);
 }
+
+process.stdout.write(
+  hasDatabase
+    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: N01-N10 + two fresh Root single-account passes\n"
+    : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
+);
+
+await verifyOssRuntime();
 
 process.stdout.write(
   hasDatabase
