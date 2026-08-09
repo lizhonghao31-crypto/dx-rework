@@ -41,7 +41,12 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
 
   beforeAll(async () => {
     await admin.query("CREATE SCHEMA " + schema);
-    for (const migration of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql", "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0006_rework_initiation.sql", "0007_process_configuration_ie_review.sql", "0008_worker_assignment_reporting.sql", "0009_whole_order_review_quantity_adjustment.sql"]) {
+    for (const migration of [
+      "0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql",
+      "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0006_rework_initiation.sql",
+      "0007_process_configuration_ie_review.sql", "0008_worker_assignment_reporting.sql",
+      "0009_whole_order_review_quantity_adjustment.sql", "0039_practical_quantity_amount_precision.sql",
+    ]) {
       await database.query(await readFile(new URL("../../apps/api/migrations/" + migration, import.meta.url), "utf8"));
     }
     const users: Array<readonly [string, string, string]> = [
@@ -164,19 +169,19 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     await expect(review.get(processDelegate, anotherOrder.reworkOrderId, order.configurationItemId)).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("accepts canonical two-decimal hour quantities and rejects three decimals", async () => {
-    const first = await createOrder(1, [1], "hour");
-    const firstView = await review.get(tailAdjust(), first.reworkOrderId);
-    const firstIncrease = await review.requestIncrease(tailAdjust(), first.reworkOrderId, { expectedOrderVersion: firstView.orderVersion, configurationItemId: first.configurationItemId, newPlannedQuantity: 1.15, reason: "小时补量", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
-    expect(firstIncrease.value.requestedPlannedQuantity).toBe(1.15);
+  it("accepts one-decimal quantities for both units and rejects further precision", async () => {
+    const hourOrder = await createOrder(1, [1], "hour");
+    const hourView = await review.get(tailAdjust(), hourOrder.reworkOrderId);
+    const hourIncrease = await review.requestIncrease(tailAdjust(), hourOrder.reworkOrderId, { expectedOrderVersion: hourView.orderVersion, configurationItemId: hourOrder.configurationItemId, newPlannedQuantity: 1.1, reason: "小时补量", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
+    expect(hourIncrease.value.requestedPlannedQuantity).toBe(1.1);
 
-    const second = await createOrder(0.2, [0.2], "hour");
-    const secondView = await review.get(tailAdjust(), second.reworkOrderId);
-    const secondIncrease = await review.requestIncrease(tailAdjust(), second.reworkOrderId, { expectedOrderVersion: secondView.orderVersion, configurationItemId: second.configurationItemId, newPlannedQuantity: 0.29, reason: "小时补量", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
-    expect(secondIncrease.value.requestedPlannedQuantity).toBe(0.29);
+    const pieceOrder = await createOrder(1, [1], "piece");
+    const pieceView = await review.get(tailAdjust(), pieceOrder.reworkOrderId);
+    const pieceIncrease = await review.requestIncrease(tailAdjust(), pieceOrder.reworkOrderId, { expectedOrderVersion: pieceView.orderVersion, configurationItemId: pieceOrder.configurationItemId, newPlannedQuantity: 1.1, reason: "按件补量", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID());
+    expect(pieceIncrease.value.requestedPlannedQuantity).toBe(1.1);
 
-    const third = await createOrder(1, [1], "hour");
-    const thirdView = await review.get(tailAdjust(), third.reworkOrderId);
-    await expect(review.requestIncrease(tailAdjust(), third.reworkOrderId, { expectedOrderVersion: thirdView.orderVersion, configurationItemId: third.configurationItemId, newPlannedQuantity: 1.151, reason: "精度错误", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    const invalidOrder = await createOrder(1, [1], "hour");
+    const invalidView = await review.get(tailAdjust(), invalidOrder.reworkOrderId);
+    await expect(review.requestIncrease(tailAdjust(), invalidOrder.reworkOrderId, { expectedOrderVersion: invalidView.orderVersion, configurationItemId: invalidOrder.configurationItemId, newPlannedQuantity: 1.25, reason: "精度错误", expiresAt: new Date(Date.now() + 60_000).toISOString(), requiresIeReview: false }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });
