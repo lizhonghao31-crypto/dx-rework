@@ -170,12 +170,8 @@ export function WorkReportingForm() {
       setMessage("本次上数必须是大于 0 的数字。");
       return;
     }
-    if (task.pricingUnit === "piece" && !Number.isInteger(actualQuantity)) {
-      setMessage("按件计价时，本次上数必须是整数。");
-      return;
-    }
-    if (task.pricingUnit === "hour" && !/^\d+(?:\.\d{1,2})?$/.test(draft.quantity.trim())) {
-      setMessage("按小时计价时，本次上数最多保留两位小数。");
+    if (!/^\d+(?:\.\d)?$/.test(draft.quantity.trim())) {
+      setMessage("本次上数最多保留一位小数。");
       return;
     }
     if (actualQuantity > task.remainingQuantity) {
@@ -221,10 +217,10 @@ export function WorkReportingForm() {
       const share = personalShare(result);
       setMessage(
         result.groupAmount === null && share !== undefined
-          ? "上数已提交：你的本次分摊 ¥" + formatMoney(share) + "；系统保留精确分摊值。"
+          ? "上数已提交：你的本次分摊 ¥" + formatMoney(share) + "。"
           : result.groupAmount === null
             ? "上数已提交；你的个人分摊已生成。"
-            : "上数已提交：组总额 ¥" + formatMoney(result.groupAmount) + "；成员快照分摊已生成，系统保留精确分摊值且不会因后续换人反算。",
+            : "上数已提交：组总额 ¥" + formatMoney(result.groupAmount) + "；成员快照已按 0.001 元做确定性尾差分配，后续换人不反算。",
       );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "上数提交失败");
@@ -258,9 +254,9 @@ export function WorkReportingForm() {
         <InsetField
           label={task.pricingUnit === "piece" ? "本次上数（件）" : "本次上数（小时）"}
           type="number"
-          min={task.pricingUnit === "piece" ? "1" : "0.01"}
+          min="0.1"
           max={String(task.remainingQuantity)}
-          step={task.pricingUnit === "piece" ? "1" : "0.01"}
+          step="0.1"
           value={draftFor(task.workTaskId).quantity}
           inputMode="decimal"
           onChange={(event) => setReportDrafts((current) => ({
