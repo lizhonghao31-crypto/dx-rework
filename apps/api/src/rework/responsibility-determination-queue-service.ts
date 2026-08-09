@@ -1,6 +1,7 @@
 import type { ResponsibilityQueueResponse } from "@dx-rework/contracts/responsibility-queue";
 import type { Pool } from "pg";
 
+import { isRootActor } from "../access/business-authority.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 
 type QueueRow = {
@@ -31,9 +32,10 @@ export class ResponsibilityDeterminationQueueService {
     actor: TrustedActorContext,
   ): Promise<ResponsibilityQueueResponse> {
     const actorCapabilities = capabilities(actor);
-    const hasDetermine = actorCapabilities.includes("responsibility:determine");
-    const hasTakeover = actorCapabilities.includes("responsibility:takeover");
-    const hasConfirm = actorCapabilities.includes(
+    const root = isRootActor(actor);
+    const hasDetermine = root || actorCapabilities.includes("responsibility:determine");
+    const hasTakeover = root || actorCapabilities.includes("responsibility:takeover");
+    const hasConfirm = root || actorCapabilities.includes(
       "responsibility:confirm_high_multiplier",
     );
 
@@ -134,7 +136,7 @@ export class ResponsibilityDeterminationQueueService {
         canDetermine:
           hasDetermine &&
           row.determine_eligible &&
-          (row.handler_user_id === null || row.handler_user_id === actor.actorId),
+          (root || row.handler_user_id === null || row.handler_user_id === actor.actorId),
         canTakeover:
           hasTakeover &&
           row.direct_takeover &&
@@ -144,7 +146,7 @@ export class ResponsibilityDeterminationQueueService {
           row.direct_confirm &&
           row.determination_stage === "draft" &&
           row.high_multiplier_pending &&
-          row.leaf_created_by !== actor.actorId,
+          (root || row.leaf_created_by !== actor.actorId),
         highMultiplierPending: row.high_multiplier_pending,
       })),
     };

@@ -8,6 +8,7 @@ import type {
   TransferResponsibility,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
+import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import {
   IdempotencyService,
@@ -120,7 +121,7 @@ export class AuthorizedResponsibilityDeterminationService {
       this.ensureVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_responsibility_determination") fail("返工单不在待判责状态");
       const permission = await this.permissions(client, actor, order);
-      if (!permission.canDetermine || permission.handlerUserId !== actor.actorId) {
+      if (!permission.canDetermine || (!isRootActor(actor) && permission.handlerUserId !== actor.actorId)) {
         fail("只有当前有效处理人可以正式判定", 403, "FORBIDDEN");
       }
       const current = (await this.leaf(client, orderId, true)) ?? fail("判责版本冲突");
@@ -172,18 +173,8 @@ export class AuthorizedResponsibilityDeterminationService {
          FROM rework_responsibility_amount_lines WHERE determination_id=$4`,
         [id, eventId, actor.requestId, current.determination_id],
       );
-      await this.ownFactoryApprovals.ensureForFinalized(
-        client,
-        actor,
-        order,
-        id,
-      );
-      await this.externalResponsibilities.ensureForFinalized(
-        client,
-        actor,
-        order,
-        id,
-      );
+      await this.ownFactoryApprovals.ensureForFinalized(client, actor, order, id);
+      await this.externalResponsibilities.ensureForFinalized(client, actor, order, id);
       await this.advance(client, orderId, actor.actorId, "pending_responsibility_action");
       await maybeCompleteResponsibilityAction(client, actor, {
         ...order,
@@ -211,7 +202,7 @@ export class AuthorizedResponsibilityDeterminationService {
       this.ensureVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_responsibility_determination") fail("只有待判责返工单可以转交");
       const permission = await this.permissions(client, actor, order);
-      if (!permission.canDetermine || permission.handlerUserId !== actor.actorId) {
+      if (!permission.canDetermine || (!isRootActor(actor) && permission.handlerUserId !== actor.actorId)) {
         fail("只有当前有效处理人可以转交", 403, "FORBIDDEN");
       }
       if (input.toUserId === actor.actorId) fail("不能转交给当前处理人", 400, "VALIDATION_ERROR");
@@ -228,12 +219,7 @@ export class AuthorizedResponsibilityDeterminationService {
          VALUES($1,$2,$3,'transferred',$4,$5,$6,$7,DEFAULT,$8,$9)`,
         [randomUUID(), orderId, current?.determination_id ?? null, permission.handlerUserId, input.toUserId, actor.actorId, input.reason, eventId, actor.requestId],
       );
-      await this.todos?.cancelOpenByDedupePrefix(
-        client,
-        actor,
-        `responsibility:${orderId}:`,
-        "Responsibility handler transferred",
-      );
+      await this.todos?.cancelOpenByDedupePrefix(client, actor, `responsibility:${orderId}:`, "Responsibility handler transferred");
       await this.todos?.actionableForResponsibilityHandler(client, actor, {
         category: "responsibility_determination",
         sourceEventId: eventId,
@@ -272,12 +258,7 @@ export class AuthorizedResponsibilityDeterminationService {
          VALUES($1,$2,$3,'taken_over',$4,$5,$5,$6,DEFAULT,$7,$8)`,
         [randomUUID(), orderId, current?.determination_id ?? null, permission.handlerUserId, actor.actorId, input.reason, eventId, actor.requestId],
       );
-      await this.todos?.cancelOpenByDedupePrefix(
-        client,
-        actor,
-        `responsibility:${orderId}:`,
-        "Responsibility handler taken over",
-      );
+      await this.todos?.cancelOpenByDedupePrefix(client, actor, `responsibility:${orderId}:`, "Responsibility handler taken over");
       await this.todos?.actionableForResponsibilityHandler(client, actor, {
         category: "responsibility_determination",
         sourceEventId: eventId,
@@ -312,7 +293,7 @@ export class AuthorizedResponsibilityDeterminationService {
       if (current.stage !== "draft" || current.determination_version !== input.expectedCurrentDeterminationVersion) fail("判责版本冲突");
       const permission = await this.permissions(client, actor, order);
       if (!permission.directConfirm) fail("只有直接有效的老板权限组可以确认高倍率", 403, "FORBIDDEN");
-      if (current.created_by === actor.actorId) fail("提交人与确认人必须是不同老板", 403, "FORBIDDEN");
+      if (!isRootActor(actor) && current.created_by === actor.actorId) fail("提交人与确认人必须是不同老板", 403, "FORBIDDEN");
       const rows = await client.query<HighMultiplierRow>(
         `SELECT configuration_item_id,multiplier::text,high_multiplier_reason
          FROM rework_responsibility_processes
@@ -384,19 +365,25 @@ export class AuthorizedResponsibilityDeterminationService {
     const row = result.rows[0]!;
     const caps = capabilities(actor);
     const pending = order.status === "pending_responsibility_determination";
-    const canView =
+    const root = isRootActor(actor);
+    const canView = root ||
       (row.determine_eligible && caps.includes("responsibility:determine")) ||
       (row.direct_takeover && caps.includes("responsibility:takeover")) ||
       (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"));
     return {
       canView,
-      canDetermine: pending && row.determine_eligible && caps.includes("responsibility:determine") &&
-        (row.handler_user_id === null || row.handler_user_id === actor.actorId),
-      canTakeover: pending && row.direct_takeover && caps.includes("responsibility:takeover") && row.handler_user_id !== actor.actorId,
-      canConfirmHighMultiplier: pending && row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier") &&
-        row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed && row.leaf_created_by !== actor.actorId,
-      directTakeover: row.direct_takeover && caps.includes("responsibility:takeover"),
-      directConfirm: row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"),
+      canDetermine: pending && (root || (
+        row.determine_eligible && caps.includes("responsibility:determine") &&
+        (row.handler_user_id === null || row.handler_user_id === actor.actorId)
+      )),
+      canTakeover: pending && row.handler_user_id !== actor.actorId &&
+        (root || (row.direct_takeover && caps.includes("responsibility:takeover"))),
+      canConfirmHighMultiplier: pending &&
+        (root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"))) &&
+        row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed &&
+        (root || row.leaf_created_by !== actor.actorId),
+      directTakeover: root || (row.direct_takeover && caps.includes("responsibility:takeover")),
+      directConfirm: root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")),
       handlerUserId: row.handler_user_id,
     };
   }

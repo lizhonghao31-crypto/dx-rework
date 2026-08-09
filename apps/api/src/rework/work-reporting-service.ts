@@ -9,6 +9,7 @@ import type {
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
+import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import {
   IdempotencyService,
@@ -315,6 +316,7 @@ export class WorkReportingService {
   }
 
   private canProxyReport(actor: TrustedActorContext, members?: readonly PersonRow[]): boolean {
+    if (isRootActor(actor)) return true;
     return this.capabilities(actor).includes("work:report_for_worker")
       && (members === undefined || members.some((person) => person.person_type === "temporary"));
   }

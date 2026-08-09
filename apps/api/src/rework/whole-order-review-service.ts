@@ -12,6 +12,7 @@ import type {
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
+import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import {
   IdempotencyService,
@@ -361,7 +362,7 @@ export class WholeOrderReviewService {
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       this.ensureAdjustmentVersion(adjustment, input.expectedAdjustmentVersion);
       if (adjustment.adjustment_kind !== "increase" || adjustment.status !== "pending_merchandiser_confirmation") error("该数量调整不等待跟单确认", 409, "INVALID_STATE_TRANSITION");
-      if (adjustment.requested_by === actor.actorId) error("任何人不得确认自己发起的历史调整", 403, "FORBIDDEN");
+      if (!isRootActor(actor) && adjustment.requested_by === actor.actorId) error("任何人不得确认自己发起的历史调整", 403, "FORBIDDEN");
       if (!adjustment.expires_at || adjustment.expires_at.getTime() <= Date.now()) error("该增加申请已过期，未改变有效计划数量", 409, "CONFLICT");
       const item = await this.item(client, order.rework_order_id, adjustment.configuration_item_id);
       this.ensureQuantityPrecision(item, input.actualCutQuantity);
@@ -410,7 +411,7 @@ export class WholeOrderReviewService {
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       this.ensureAdjustmentVersion(adjustment, input.expectedAdjustmentVersion);
       if (adjustment.status !== "pending_ie_review") error("该数量调整不在IE复核节点", 409, "INVALID_STATE_TRANSITION");
-      if (adjustment.requested_by === actor.actorId) error("任何人不得审核自己发起的历史调整", 403, "FORBIDDEN");
+      if (!isRootActor(actor) && adjustment.requested_by === actor.actorId) error("任何人不得审核自己发起的历史调整", 403, "FORBIDDEN");
       const approved = input.decision === "approved";
       const nextOrderStatus = approved ? "in_progress" : "pending_order_review";
       const eventId = await this.events.append(client, this.withCapability(actor, "process:review"), {
@@ -623,6 +624,7 @@ export class WholeOrderReviewService {
   }
 
   private async can(actor: TrustedActorContext, role: string, capability: string, order: OrderRow, configurationItemId?: string, client: Pick<Pool, "query"> | PoolClient = this.database): Promise<boolean> {
+    if (isRootActor(actor)) return true;
     if (actor.actorRoles.includes(role) && this.capabilities(actor).includes(capability)) return true;
     return this.hasDelegation(client, actor.actorId, capability, order, configurationItemId);
   }
@@ -636,6 +638,7 @@ export class WholeOrderReviewService {
   }
 
   private async canConfirm(actor: TrustedActorContext, order: OrderRow, configurationItemId?: string, client: Pick<Pool, "query"> | PoolClient = this.database): Promise<boolean> {
+    if (isRootActor(actor)) return true;
     if (!order.merchandiser_user_id) return false;
     if (actor.actorId === order.merchandiser_user_id && actor.actorRoles.includes("order_merchandiser") && this.capabilities(actor).includes("quantity:confirm")) return true;
     return this.hasDelegation(client, actor.actorId, "quantity:confirm", order, configurationItemId, order.merchandiser_user_id);
