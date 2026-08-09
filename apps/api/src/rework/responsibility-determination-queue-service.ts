@@ -14,8 +14,10 @@ type QueueRow = {
   handler_user_id: string | null;
   determination_version: number | null;
   determination_stage: "draft" | "finalized" | null;
+  leaf_created_by: string | null;
   determine_eligible: boolean;
   direct_takeover: boolean;
+  direct_confirm: boolean;
   high_multiplier_pending: boolean;
 };
 
@@ -51,6 +53,7 @@ export class ResponsibilityDeterminationQueueService {
                 handler_user_id,
               leaf.determination_version,
               leaf.stage determination_stage,
+              leaf.created_by leaf_created_by,
               responsibility_can_determine($1,order_record.rework_order_id)
                 determine_eligible,
               responsibility_actor_has_direct_role(
@@ -58,6 +61,11 @@ export class ResponsibilityDeterminationQueueService {
                 'responsibility:takeover',
                 ARRAY['owner_group']
               ) direct_takeover,
+              responsibility_actor_has_direct_role(
+                $1,
+                'responsibility:confirm_high_multiplier',
+                ARRAY['owner_group']
+              ) direct_confirm,
               coalesce(
                 leaf.stage='draft'
                 AND EXISTS(
@@ -77,7 +85,8 @@ export class ResponsibilityDeterminationQueueService {
        LEFT JOIN LATERAL (
          SELECT determination.determination_id,
                 determination.determination_version,
-                determination.stage
+                determination.stage,
+                determination.created_by
          FROM rework_responsibility_determinations determination
          WHERE determination.rework_order_id=order_record.rework_order_id
            AND NOT EXISTS(
@@ -130,6 +139,12 @@ export class ResponsibilityDeterminationQueueService {
           hasTakeover &&
           row.direct_takeover &&
           row.handler_user_id !== actor.actorId,
+        canConfirmHighMultiplier:
+          hasConfirm &&
+          row.direct_confirm &&
+          row.determination_stage === "draft" &&
+          row.high_multiplier_pending &&
+          row.leaf_created_by !== actor.actorId,
         highMultiplierPending: row.high_multiplier_pending,
       })),
     };
