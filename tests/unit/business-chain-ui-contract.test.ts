@@ -73,17 +73,17 @@ describe("business-chain UI handoff contracts", () => {
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
-  it("keeps process, work and wage nodes inside the shared numbered workflow shell", async () => {
+  it("keeps process, execution and wage nodes inside the shared numbered workflow shell", async () => {
     const [app, shell] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
     ]);
     expect(app).toContain('<Shell active="工序配置"><ProcessConfigurationForm /></Shell>');
-    expect(app).toContain('<Shell active="分工上数"><WorkReportingForm /></Shell>');
+    expect(app).toContain('<Shell active="返工执行"><WorkReportingForm /></Shell>');
     expect(app).toContain('<Shell active="工资核对"><WagePage path={path} /></Shell>');
     expect(shell).toContain('name: "工序配置"');
     expect(shell).toContain('href: "/ui/process-configuration"');
-    expect(shell).toContain('name: "分工上数"');
+    expect(shell).toContain('name: "返工执行"');
     expect(shell).toContain('href: "/ui/work-reporting"');
     expect(shell).toContain('name: "工资核对"');
     expect(shell).toContain('href: "/ui/wages"');
@@ -97,7 +97,7 @@ describe("business-chain UI handoff contracts", () => {
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
     const app = await readFile("apps/web/src/App.tsx", "utf8");
     expect(app).toContain('path === "/ui/work-reporting" || path === "/ui/piecework/collective"');
-    expect(app).toContain('<Shell active="分工上数"><WorkReportingForm /></Shell>');
+    expect(app).toContain('<Shell active="返工执行"><WorkReportingForm /></Shell>');
     expect(app).not.toContain("<MobileForm piecework />");
   });
 
@@ -148,15 +148,18 @@ describe("business-chain UI handoff contracts", () => {
     expect(source).toContain("部分扣款或未扣成功关闭必须填写剩余差额最终处理方式");
   });
 
-  it("keeps N07-N08 queue header actions as real navigation rather than dead buttons", async () => {
+  it("keeps N07-N08 queue navigation real without exposing dead or unauthorized header links", async () => {
     const [responsibilityQueue, ownFactoryQueue, externalQueue] = await Promise.all([
       readFile("apps/web/src/responsibility-queue-page.tsx", "utf8"),
       readFile("apps/web/src/own-factory-approval-queue-page.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-queue-page.tsx", "utf8"),
     ]);
-    expect(responsibilityQueue).toContain('actionHref="/ui/tasks"');
-    expect(ownFactoryQueue).toContain('actionHref="/ui/responsibility"');
-    expect(externalQueue).toContain('actionHref="/ui/responsibility"');
+    for (const source of [responsibilityQueue, ownFactoryQueue, externalQueue]) {
+      expect(source).toContain('href={`${basePath}/ui/tasks/${item.reworkOrderId}`}');
+    }
+    expect(responsibilityQueue).not.toContain('actionHref="/ui/tasks"');
+    expect(ownFactoryQueue).not.toContain('actionHref="/ui/responsibility"');
+    expect(externalQueue).not.toContain('actionHref="/ui/responsibility"');
   });
 
   it("keeps N08-A approval retry-safe and visually prioritizes the safe forward action", async () => {
