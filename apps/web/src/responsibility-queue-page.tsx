@@ -79,8 +79,6 @@ export function ResponsibilityQueuePage() {
         title="待责任判定"
         subtitle="订单进入 N07 后自动出现在这里；责任提交完成后自动离开本队列"
         badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"}
-        action="返工统一查询"
-        actionHref="/ui/tasks"
       />
       <Surface className="responsibility-queue-summary">
         <div>
