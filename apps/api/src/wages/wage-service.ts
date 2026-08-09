@@ -11,6 +11,7 @@ import type {
 } from "@dx-rework/contracts/wages";
 import type { Pool, PoolClient } from "pg";
 
+import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import {
   IdempotencyService,
@@ -323,11 +324,11 @@ export class WageService {
       if (input.attachmentIds.length > 0) {
         const ready = await client.query(
           `SELECT attachment_id FROM attachments
-           WHERE attachment_id=ANY($1::uuid[]) AND uploaded_by=$2 AND status='ready'
+           WHERE attachment_id=ANY($1::uuid[]) AND ($3::boolean OR uploaded_by=$2) AND status='ready'
              AND entity_type IS NULL AND entity_id IS NULL FOR UPDATE`,
-          [input.attachmentIds, actor.actorId],
+          [input.attachmentIds, actor.actorId, isRootActor(actor)],
         );
-        if (ready.rowCount !== input.attachmentIds.length) fail("附件未完成、并非本人上传或已绑定其他业务", 409, "ATTACHMENT_NOT_READY");
+        if (ready.rowCount !== input.attachmentIds.length) fail("附件未完成、无权使用或已绑定其他业务", 409, "ATTACHMENT_NOT_READY");
       }
       const adjustmentId = randomUUID();
       const eventId = await this.events.append(client, { ...actor, authorizationCapability: "wage:adjustment_request" }, {
@@ -396,7 +397,7 @@ export class WageService {
     return this.mutate(actor, approved ? "wage.adjustment.approve" : "wage.adjustment.reject", key, { adjustmentId, expectedVersion, reason }, async (client) => {
       const adjustment = await this.adjustmentRow(client, adjustmentId, true);
       if (adjustment.version !== expectedVersion || adjustment.status !== "pending") fail("调整版本或状态冲突");
-      if (adjustment.requested_by === actor.actorId) fail("发起人不得审批自己的调整", 403, "FORBIDDEN");
+      if (!isRootActor(actor) && adjustment.requested_by === actor.actorId) fail("发起人不得审批自己的调整", 403, "FORBIDDEN");
       if (!approved && !reason?.trim()) fail("拒绝必须填写原因", 400, "VALIDATION_ERROR");
       const target = await this.period(client, adjustment.target_period_id);
       if (target.status === "locked") fail("锁定月份不得处理调整");
