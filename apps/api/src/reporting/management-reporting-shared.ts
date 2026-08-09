@@ -85,7 +85,7 @@ export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; lab
   pending_process_configuration: { node: "N02", label: "待配置工序" },
   pending_ie_review: { node: "N03", label: "待 IE 审核" },
   pending_task_assignment: { node: "N04", label: "待分配人员" },
-  in_progress: { node: "N05", label: "返工上数中" },
+  in_progress: { node: "N05", label: "返工执行中" },
   pending_order_review: { node: "N06", label: "待整单审核" },
   pending_quantity_adjustment_ie_review: { node: "N06-A", label: "数量调整待 IE" },
   pending_responsibility_determination: { node: "N07", label: "待责任判定" },
@@ -99,10 +99,6 @@ export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>
   wages: new Set(["pending_tail_review", "pending_admin_review", "ready_to_lock", "locked"]),
   responsibilities: new Set(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
   own_factory: new Set(["pending", "approved", "rejected"]),
-  external_deductions: new Set([
-    "pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up",
-    "returned", "pending_responsibility_revision", "closed", "superseded",
-    "full", "partial", "not_deducted",
-  ]),
+  external_deductions: new Set(["pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up", "returned", "pending_responsibility_revision", "closed", "superseded"]),
   exceptions: new Set(["overdue_todo", "blocked_recipient", "todo_delivery_failed", "deduction_follow_up_overdue"]),
 };
