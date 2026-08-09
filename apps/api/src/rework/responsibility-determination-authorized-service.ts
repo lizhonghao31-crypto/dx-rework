@@ -366,19 +366,24 @@ export class AuthorizedResponsibilityDeterminationService {
     const caps = capabilities(actor);
     const pending = order.status === "pending_responsibility_determination";
     const root = isRootActor(actor);
-    const canView =
+    const canView = root ||
       (row.determine_eligible && caps.includes("responsibility:determine")) ||
       (row.direct_takeover && caps.includes("responsibility:takeover")) ||
       (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"));
     return {
       canView,
-      canDetermine: pending && row.determine_eligible && caps.includes("responsibility:determine") &&
-        (root || row.handler_user_id === null || row.handler_user_id === actor.actorId),
-      canTakeover: pending && row.direct_takeover && caps.includes("responsibility:takeover") && row.handler_user_id !== actor.actorId,
-      canConfirmHighMultiplier: pending && row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier") &&
-        row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed && (root || row.leaf_created_by !== actor.actorId),
-      directTakeover: row.direct_takeover && caps.includes("responsibility:takeover"),
-      directConfirm: row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"),
+      canDetermine: pending && (root || (
+        row.determine_eligible && caps.includes("responsibility:determine") &&
+        (row.handler_user_id === null || row.handler_user_id === actor.actorId)
+      )),
+      canTakeover: pending && row.handler_user_id !== actor.actorId &&
+        (root || (row.direct_takeover && caps.includes("responsibility:takeover"))),
+      canConfirmHighMultiplier: pending &&
+        (root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"))) &&
+        row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed &&
+        (root || row.leaf_created_by !== actor.actorId),
+      directTakeover: root || (row.direct_takeover && caps.includes("responsibility:takeover")),
+      directConfirm: root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")),
       handlerUserId: row.handler_user_id,
     };
   }
