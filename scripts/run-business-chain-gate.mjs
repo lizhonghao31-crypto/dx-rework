@@ -43,6 +43,7 @@ const tests = [
   "tests/unit/work-reporting.test.ts",
   "tests/unit/root-superuser-self-review.test.ts",
   "tests/unit/root-global-business-bypass.test.ts",
+  "tests/unit/root-ui-entry-contract.test.ts",
 ];
 if (hasDatabase) {
   tests.push(
