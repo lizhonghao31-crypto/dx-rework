@@ -76,8 +76,6 @@ export function OwnFactoryApprovalQueuePage() {
         title="本厂承担审批"
         subtitle="责任分支进入本厂审批后自动出现在这里；审批完成后自动离开当前队列"
         badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"}
-        action="返回责任处理"
-        actionHref="/ui/responsibility"
       />
       <Surface className="responsibility-queue-summary">
         <div>
