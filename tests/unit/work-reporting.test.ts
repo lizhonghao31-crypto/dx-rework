@@ -40,6 +40,8 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("reportDrafts");
     expect(form).toContain('step="0.1"');
     expect(form).toContain("本次上数最多保留一位小数");
+    const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
+    expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
 
   it("reuses the idempotency key only while a report payload remains unresolved", () => {
