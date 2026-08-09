@@ -137,7 +137,7 @@ const detailActiveNav = (user: AuthorizedUser | null): string => {
   if (hasCapability(user, "own_factory:view")) return "本厂审批";
   if (hasCapability(user, "external_responsibility:view")) return "外部扣款";
   if (hasCapability(user, "wage:view")) return "工资核对";
-  if (canUseWorkWorkspace(user)) return "分工上数";
+  if (canUseWorkWorkspace(user)) return "返工执行";
   if (canUseProcessWorkspace(user)) return "工序配置";
   return "返工任务";
 };
