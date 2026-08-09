@@ -82,7 +82,7 @@
     },
     {
       "version": "0021_external_processing_factory_override_closure",
-      "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
+      "checksum": "51921f323676d9276098e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
     },
     {
       "version": "0022_wage_reconciliation_month_close",
@@ -159,6 +159,10 @@
     {
       "version": "0040_root_identity_separation_bypass",
       "checksum": "213c43110d67caaebc9227e7492567e9146c459b934f2281c95e47df74b2ca15"
+    },
+    {
+      "version": "0041_root_wage_decider_constraint",
+      "checksum": "0500ca59ec0658d4b5a2631add02bbd1ec993d48f2d747f034218180e1ad39aa"
     }
   ]
 }
