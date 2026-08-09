@@ -64,6 +64,11 @@ describe("root global business bypass policy", () => {
     expect(application).toContain("!isRootActor(actor) && permission.handler_user_id !== actor.actorId");
     expect(queue).toContain("const hasTakeover = root || actorCapabilities.includes");
     expect(queue).toContain("const hasConfirm = root || actorCapabilities.includes");
+
+    expect(migration).toContain("event_actor IS DISTINCT FROM effective_handler");
+    expect(migration).toContain("NOT access_is_root_actor(event_actor)");
+    expect(migration).toContain("NEW.acted_by IS DISTINCT FROM current_handler");
+    expect(migration).toContain("NOT access_is_root_actor(NEW.acted_by)");
     expect(migration).toContain("NEW.confirmed_by = determination.created_by");
     expect(migration).toContain("NOT access_is_root_actor(NEW.confirmed_by)");
     expect(migration).toContain("determination.stage <> 'draft'");
