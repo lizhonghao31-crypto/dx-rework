@@ -83,6 +83,7 @@ const queueResponse: ResponsibilityQueueResponse = {
       determinationStage: "draft",
       canDetermine: true,
       canTakeover: false,
+      canConfirmHighMultiplier: false,
       highMultiplierPending: false,
     },
   ],
