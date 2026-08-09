@@ -43,7 +43,7 @@ export function ExternalResponsibilityQueuePage() {
     return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.supplierName, statusLabel[item.status]]
       .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
   }, [allItems, q]);
-  return <Shell active="外部扣款"><Header title="外部责任签收与扣款" subtitle="外部责任进入对应阶段后自动出现在这里；关闭或替代后退出当前处理队列" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"} action="返回责任处理" actionHref="/ui/responsibility" />
+  return <Shell active="外部扣款"><Header title="外部责任签收与扣款" subtitle="外部责任进入对应阶段后自动出现在这里；关闭或替代后退出当前处理队列" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"} />
     <Surface className="external-queue-summary"><div><h2>外部责任工作台</h2><p>谁来处理：对应业务签收人或应付人员；当前要做：按状态完成签收、确认和实扣跟进。</p></div><StatusBadge tone="info">N08-B / N10-B</StatusBadge></Surface>
     <Surface className="reporting-filters"><InsetField label="搜索当前节点事项" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 供应商 / 状态" /></Surface>
     {state.kind === "loading" && <Surface className="external-state">正在加载外部责任队列…</Surface>}
