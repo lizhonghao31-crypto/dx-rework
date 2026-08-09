@@ -46,11 +46,11 @@ const view: ResponsibilityDeterminationResponse = {
 };
 
 describe("responsibility production amount view", () => {
-  it("keeps internal precision out of business-facing base amounts", () => {
+  it("exposes base work amounts at three decimals while final money stays at two", () => {
     const normalized = normalizeResponsibilityAmountView(view);
 
-    expect(normalized.sourceProcesses[0]?.baseAmount).toBe("110.00");
-    expect(normalized.determination?.processes[0]?.baseAmount).toBe("1.01");
+    expect(normalized.sourceProcesses[0]?.baseAmount).toBe("110.000");
+    expect(normalized.determination?.processes[0]?.baseAmount).toBe("1.005");
     expect(normalized.determination?.processes[0]?.responsibilityAmount).toBe("1.01");
     expect(normalized.determination?.processes[0]?.allocations[0]?.roundedAmount).toBe("1.01");
   });
