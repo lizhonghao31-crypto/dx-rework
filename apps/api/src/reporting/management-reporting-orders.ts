@@ -23,14 +23,20 @@ export async function fetchFacts(source: Queryable, options: {
     const p = bind(`%${options.q}%`);
     where.push(`(order_record.rework_no ILIKE ${p} OR order_record.style_no ILIKE ${p} OR order_record.order_no ILIKE ${p}
       OR EXISTS(SELECT 1 FROM active_cases searched_case WHERE searched_case.rework_order_id=order_record.rework_order_id AND searched_case.supplier_name_snapshot ILIKE ${p})
-      OR EXISTS(SELECT 1 FROM app_users searched_user WHERE searched_user.id=COALESCE(todo_stats.current_handler,current_determination.handler_user_id,order_record.merchandiser_user_id) AND searched_user.display_name ILIKE ${p}))`);
+      OR EXISTS(SELECT 1 FROM app_users searched_user WHERE searched_user.id=COALESCE(todo_stats.current_handler,current_determination.handler_user_id,order_record.merchandiser_user_id) AND searched_user.display_name ILIKE ${p})
+      OR EXISTS(
+        SELECT 1 FROM rework_work_tasks searched_task
+        JOIN rework_work_task_members searched_member ON searched_member.work_task_id=searched_task.work_task_id
+        JOIN business_people searched_person ON searched_person.person_id=searched_member.person_id
+        WHERE searched_task.rework_order_id=order_record.rework_order_id AND searched_person.display_name ILIKE ${p}
+      ))`);
   }
   if (options.status) where.push(`order_record.status=${bind(options.status)}`);
   if (options.responsibilityType) where.push(`EXISTS(SELECT 1 FROM responsibility_types types WHERE types.rework_order_id=order_record.rework_order_id AND types.responsibility_type=${bind(options.responsibilityType)})`);
   if (options.currentHandlerUserId) where.push(`COALESCE(todo_stats.current_handler,current_determination.handler_user_id,order_record.merchandiser_user_id)=${bind(options.currentHandlerUserId)}::uuid`);
   if (options.supplierId) where.push(`EXISTS(SELECT 1 FROM active_cases filtered_case WHERE filtered_case.rework_order_id=order_record.rework_order_id AND filtered_case.supplier_id=${bind(options.supplierId)}::uuid)`);
-  if (options.overdue !== undefined) where.push(`COALESCE(todo_stats.overdue,false)=${bind(options.overdue)}`);
-  if (options.exception !== undefined) where.push(`COALESCE(todo_stats.exception_count,0)+COALESCE(followup_stats.exception_count,0)${options.exception ? ">" : "="}0`);
+  if (options.overdue !== undefined) where.push(`(CASE WHEN order_record.status='cancelled' THEN false ELSE COALESCE(todo_stats.overdue,false) OR COALESCE(followup_stats.overdue,false) END)=${bind(options.overdue)}`);
+  if (options.exception !== undefined) where.push(`(CASE WHEN order_record.status='cancelled' THEN 0 ELSE COALESCE(todo_stats.exception_count,0)+COALESCE(followup_stats.exception_count,0) END)${options.exception ? ">" : "="}0`);
   if (options.from) where.push(`(order_record.created_at AT TIME ZONE '${TIMEZONE}')::date>=${bind(options.from)}::date`);
   if (options.to) where.push(`(order_record.created_at AT TIME ZONE '${TIMEZONE}')::date<=${bind(options.to)}::date`);
   if (options.cursor) {
@@ -152,7 +158,7 @@ export async function fetchFacts(source: Queryable, options: {
        CASE order_record.status
          WHEN 'draft' THEN '草稿' WHEN 'pending_process_configuration' THEN '待配置工序'
          WHEN 'pending_ie_review' THEN '待 IE 审核' WHEN 'pending_task_assignment' THEN '待分配人员'
-         WHEN 'in_progress' THEN '返工上数中' WHEN 'pending_order_review' THEN '待整单审核'
+         WHEN 'in_progress' THEN '返工执行中' WHEN 'pending_order_review' THEN '待整单审核'
          WHEN 'pending_quantity_adjustment_ie_review' THEN '数量调整待 IE'
          WHEN 'pending_responsibility_determination' THEN '待责任判定'
          WHEN 'pending_responsibility_action' THEN '责任分支处理中'
@@ -165,9 +171,9 @@ export async function fetchFacts(source: Queryable, options: {
        COALESCE(wages.wage_amount,'0') wage_amount,COALESCE(responsibility.responsibility_amount,'0') responsibility_amount,
        COALESCE(responsibility.own_factory_amount,'0') own_factory_amount,COALESCE(external.proposed,'0') external_proposed_amount,
        COALESCE(external.deducted,'0') external_deducted_amount,COALESCE(external.remaining,'0') external_remaining_amount,
-       CASE WHEN order_record.status IN ('completed','cancelled') THEN false
+       CASE WHEN order_record.status='cancelled' THEN false
          ELSE COALESCE(todo_stats.overdue,false) OR COALESCE(followup_stats.overdue,false) END overdue,
-       CASE WHEN order_record.status IN ('completed','cancelled') THEN 0
+       CASE WHEN order_record.status='cancelled' THEN 0
          ELSE COALESCE(todo_stats.exception_count,0)+COALESCE(followup_stats.exception_count,0) END exception_count,
        order_record.updated_at
      FROM rework_orders order_record
