@@ -63,14 +63,28 @@ describe("root global business bypass policy", () => {
   });
 
   it("bypasses root wage adjustment actor separation without bypassing wage state rules", async () => {
-    const source = await readFile(
-      new URL("../../apps/api/src/wages/wage-service.ts", import.meta.url),
-      "utf8",
-    );
-    expect(source).toContain("!isRootActor(actor) && adjustment.requested_by === actor.actorId");
-    expect(source).toContain("($3::boolean OR uploaded_by=$2)");
-    expect(source).toContain("target.status === \"locked\"");
-    expect(source).toContain("period.status !== \"ready_to_lock\"");
+    const [service, migration] = await Promise.all([
+      readFile(
+        new URL("../../apps/api/src/wages/wage-service.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../apps/api/migrations/0040_root_wage_identity_bypass.sql", import.meta.url),
+        "utf8",
+      ),
+    ]);
+    expect(service).toContain("!isRootActor(actor) && adjustment.requested_by === actor.actorId");
+    expect(service).toContain("($3::boolean OR uploaded_by=$2)");
+    expect(service).toContain("target.status === \"locked\"");
+    expect(service).toContain("period.status !== \"ready_to_lock\"");
+
+    expect(migration).toContain("NEW.decided_by=OLD.requested_by");
+    expect(migration).toContain("NOT access_is_root_actor(NEW.decided_by)");
+    expect(migration).toContain("NOT access_is_root_actor(NEW.requested_by)");
+    expect(migration).toContain("NOT access_is_root_actor(target_adjustment.requested_by)");
+    expect(migration).toContain("target_period.status='locked'");
+    expect(migration).toContain("period_status='locked'");
+    expect(migration).toContain("person_total<0");
   });
 
   it("does not let recipient routing or account-separation setup block root UAT", async () => {
