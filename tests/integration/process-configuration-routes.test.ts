@@ -77,9 +77,9 @@ describe("process configuration routes", () => {
         items: [{
           source: "custom",
           customProcessName: "特殊翻边返修",
-          plannedQuantity: 2,
+          plannedQuantity: 2.1,
           pricingUnit: "piece",
-          unitPrice: 0.5569,
+          unitPrice: 0.55,
         }],
       },
     });
@@ -91,9 +91,41 @@ describe("process configuration routes", () => {
         requestId: "process-request-1",
       }),
       "00000000-0000-4000-8000-000000000010",
-      expect.objectContaining({ expectedOrderVersion: 2 }),
+      expect.objectContaining({
+        expectedOrderVersion: 2,
+        items: [expect.objectContaining({ plannedQuantity: 2.1, unitPrice: 0.55 })],
+      }),
       "process-save-1",
     );
+  });
+
+  it("rejects impractical quantity and price precision before calling the service", async () => {
+    const { app, service } = create();
+    for (const [index, item] of [
+      { plannedQuantity: 2.12, unitPrice: 0.55 },
+      { plannedQuantity: 2.1, unitPrice: 0.556 },
+      { plannedQuantity: 2.1, unitPrice: 0.001 },
+    ].entries()) {
+      const result = await app.inject({
+        method: "PUT",
+        url: "/rework-orders/00000000-0000-4000-8000-000000000010/process-configuration/draft",
+        headers: {
+          cookie: "dx_rework_session=trusted",
+          "idempotency-key": `process-precision-${index}`,
+        },
+        payload: {
+          expectedOrderVersion: 2,
+          items: [{
+            source: "custom",
+            customProcessName: "特殊翻边返修",
+            pricingUnit: "hour",
+            ...item,
+          }],
+        },
+      });
+      expect(result.statusCode).toBe(400);
+    }
+    expect(service.saveDraft).not.toHaveBeenCalled();
   });
 
   it("does not let a supervisor impersonate IE review", async () => {
