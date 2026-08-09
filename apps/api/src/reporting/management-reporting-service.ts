@@ -134,17 +134,17 @@ export class ManagementReportingService {
         : currentCapabilities.includes("report:view")
           ? "report:view"
           : undefined;
-    let workflowCapability: string | undefined;
     if (broadCapability) {
       await this.require(actor, broadCapability);
     } else {
-      if (!query.status) {
-        fail("节点工作台必须指定当前业务节点", 400, "VALIDATION_ERROR");
+      const workflowStatus = query.status;
+      if (!workflowStatus) {
+        throw new ApplicationError("VALIDATION_ERROR", "节点工作台必须指定当前业务节点", 400);
       }
-      workflowCapability = workflowCapabilitiesByStatus[query.status]
-        ?.find((capability) => currentCapabilities.includes(capability));
+      const workflowCapability = workflowCapabilitiesByStatus[workflowStatus]
+        ?.find((capability: string) => currentCapabilities.includes(capability));
       if (!workflowCapability) {
-        fail("当前岗位无权查看这个业务节点", 403, "FORBIDDEN");
+        throw new ApplicationError("FORBIDDEN", "当前岗位无权查看这个业务节点", 403);
       }
       await this.require(actor, workflowCapability);
     }
