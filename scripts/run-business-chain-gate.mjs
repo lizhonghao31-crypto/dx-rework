@@ -7,6 +7,8 @@ import pg from "pg";
 
 const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
+const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
+const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
 const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32})$/;
 const RUNTIME_ENV_KEYS = new Set([
   "TEST_DATABASE_URL",
@@ -32,10 +34,9 @@ function parseEnvValue(raw) {
 }
 
 async function hydrateRuntimeEnv() {
-  const envFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
-  if (!existsSync(envFile)) return;
+  if (!hasSharedRuntimeEnv) return;
 
-  const text = await readFile(envFile, "utf8");
+  const text = await readFile(runtimeEnvFile, "utf8");
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
@@ -73,7 +74,12 @@ function ossBrowserBaseUrl(endpointValue, bucket) {
 
 async function verifyOssRuntime() {
   if (!hasOss) {
-    process.stdout.write("OSS_RUNTIME_PREFLIGHT_SKIPPED: OSS is not configured\n");
+    if (hasSharedRuntimeEnv) {
+      throw new Error(
+        "OSS_RUNTIME_PREFLIGHT_FAILED: business acceptance runtime must configure OSS",
+      );
+    }
+    process.stdout.write("OSS_RUNTIME_PREFLIGHT_SKIPPED: OSS is not configured in this local environment\n");
     return;
   }
 
