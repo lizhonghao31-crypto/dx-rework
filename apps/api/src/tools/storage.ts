@@ -62,7 +62,6 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     const expiresAt = grantExpiry(this.now(), options.ttlSeconds);
     const fields = Object.freeze({
       key: objectKey,
-      "Content-Type": options.mimeType,
       "x-oss-meta-sha256": options.sha256,
       "x-oss-object-acl": "private",
       "x-oss-forbid-overwrite": "true",
@@ -70,7 +69,7 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     });
     const conditions: readonly AliyunPostPolicyCondition[] = [
       ["eq", "$key", objectKey],
-      ["eq", "$Content-Type", options.mimeType],
+      ["eq", "$content-type", options.mimeType],
       ["eq", "$x-oss-meta-sha256", options.sha256],
       ["eq", "$x-oss-object-acl", "private"],
       ["eq", "$x-oss-forbid-overwrite", "true"],
@@ -190,7 +189,6 @@ export class FakeObjectStorage implements ObjectStorage {
       uploadUrl: "https://private.example.test/",
       fields: {
         key: objectKey,
-        "Content-Type": options.mimeType,
         "x-oss-meta-sha256": options.sha256,
         "x-oss-object-acl": "private",
         "x-oss-forbid-overwrite": "true",
