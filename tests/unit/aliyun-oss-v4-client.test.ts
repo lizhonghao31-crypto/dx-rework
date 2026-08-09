@@ -155,16 +155,35 @@ describe("Aliyun OSS V4 REST client", () => {
     );
   });
 
-  it("requires production server wiring to use the V4 client when OSS is enabled", async () => {
-    const source = await readFile(
-      new URL("../../apps/api/src/server.ts", import.meta.url),
-      "utf8",
-    );
+  it("rejects an internal endpoint because upload grants are browser-facing", () => {
+    expect(() => new AliyunOssV4RestClient({
+      ...baseOptions,
+      endpoint: "https://oss-cn-hangzhou-internal.aliyuncs.com/",
+    })).toThrow("Browser direct upload requires a public Aliyun OSS endpoint");
+  });
 
-    expect(source).toContain("AliyunOssV4RestClient");
-    expect(source).toContain("AliyunPrivateObjectStorage");
-    expect(source).not.toContain(
+  it("requires production server wiring and ECS read-only OSS/CORS preflight", async () => {
+    const [server, gate] = await Promise.all([
+      readFile(
+        new URL("../../apps/api/src/server.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../scripts/run-business-chain-gate.mjs", import.meta.url),
+        "utf8",
+      ),
+    ]);
+
+    expect(server).toContain("AliyunOssV4RestClient");
+    expect(server).toContain("AliyunPrivateObjectStorage");
+    expect(server).not.toContain(
       "OSS is configured but the official Aliyun OSS SDK client has not been injected",
     );
+    expect(gate).toContain("business acceptance runtime must configure OSS");
+    expect(gate).toContain("await client.head(missingObjectKey)");
+    expect(gate).toContain('method: "OPTIONS"');
+    expect(gate).toContain('"Access-Control-Request-Method": "POST"');
+    expect(gate).toContain("OSS_RUNTIME_PREFLIGHT_PASSED");
+    expect(gate).not.toContain("console.log(process.env.OSS_ACCESS_KEY_SECRET)");
   });
 });
