@@ -92,7 +92,7 @@ export function ResponsibilityQueuePage() {
       )}
       {state.kind === "ready" && items.length === 0 && (
         <Surface className="responsibility-queue-state">
-          当前没有你可处理或可接管的待判责返工单。
+          当前没有你可处理、可接管或可独立确认的待判责返工单。
         </Surface>
       )}
       {state.kind === "ready" && items.length > 0 && (
