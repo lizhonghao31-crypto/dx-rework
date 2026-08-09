@@ -65,6 +65,7 @@ async function cleanupIsolatedGateSchemas() {
 const tests = [
   "tests/unit/current-migration-manifest-checksum.test.ts",
   "tests/unit/business-chain-ui-contract.test.ts",
+  "tests/unit/business-chain-schema-cleanup.test.ts",
   "tests/unit/work-reporting.test.ts",
   "tests/unit/root-superuser-self-review.test.ts",
   "tests/unit/root-global-business-bypass.test.ts",
