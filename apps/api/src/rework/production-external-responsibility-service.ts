@@ -28,6 +28,7 @@ type SupplierOption = {
   supplierType: "factory" | "embroidery_washing" | "fabric";
   supplierName: string;
 };
+type ExternalItem = NonNullable<ExternalResponsibilityBatchResponse>["items"][number];
 
 type PermissionRow = {
   can_sign: boolean;
@@ -215,6 +216,7 @@ export class ProductionExternalResponsibilityService
     const actor = args[0];
     return {
       ...value,
+      items: value.items.map((item) => this.normalizeAmountLineSnapshot(item)),
       cases: await Promise.all(
         value.cases.map((item) => this.enrichPermissions(actor, item)),
       ),
@@ -355,6 +357,12 @@ export class ProductionExternalResponsibilityService
     };
   }
 
+  private normalizeAmountLineSnapshot(item: ExternalItem): ExternalItem {
+    return Array.isArray(item.amountLineSnapshot)
+      ? { ...item, amountLineSnapshot: { lines: item.amountLineSnapshot } }
+      : item;
+  }
+
   private async enrichPermissions(
     actor: TrustedActorContext,
     value: ExternalResponsibilityCaseResponse,
@@ -364,6 +372,7 @@ export class ProductionExternalResponsibilityService
     const followUp = active && value.status === "deduction_follow_up";
     return {
       ...value,
+      items: value.items.map((item) => this.normalizeAmountLineSnapshot(item)),
       canPayablesConfirm:
         active
         && value.status === "pending_payables_confirmation"
