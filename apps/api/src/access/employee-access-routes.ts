@@ -10,6 +10,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import { businessActor } from "./business-authority.js";
 import type { EmployeeAccessService } from "./employee-access-service.js";
 import type { RootAuthority } from "./root-authority.js";
 
@@ -54,12 +55,12 @@ export function registerEmployeeAccessRoutes(
     ) {
       throw new ApplicationError("FORBIDDEN", "仅老板权限组可维护员工权限", 403);
     }
-    return {
-      actorId: user.id,
-      actorRoles: user.businessRoles ?? [],
-      authorizationCapability: "access:admin",
-      requestId: request.id,
-    };
+    return businessActor(
+      dependencies.root,
+      user,
+      request.id,
+      "access:admin",
+    );
   };
 
   app.get("/employee-access/employees", async (request) => {
