@@ -201,12 +201,27 @@ export function ResponsibilityDeterminationPanel({
   const allProcessesValid =
     processes.length > 0 && processes.every(processValid);
   const determination = response?.determination ?? null;
+  const hasUnsavedChanges = useMemo(
+    () => response !== null
+      && JSON.stringify(processes) !== JSON.stringify(formsFromResponse(response)),
+    [processes, response],
+  );
+  const highMultiplierPending = Boolean(
+    determination?.stage === "draft"
+    && determination.processes.some(
+      (process) => (multiplierScaled(process.multiplier) ?? 0n) > 2000n,
+    )
+    && !determination.highMultiplierConfirmed,
+  );
   const editable = Boolean(
     response?.canDetermine &&
       response.reworkStatus === "pending_responsibility_determination",
   );
   const finalizable = Boolean(
-    editable && determination?.stage === "draft",
+    editable
+      && determination?.stage === "draft"
+      && !hasUnsavedChanges
+      && !highMultiplierPending,
   );
   const transferable = Boolean(
     editable && determination?.stage === "draft",
@@ -319,7 +334,16 @@ export function ResponsibilityDeterminationPanel({
   };
 
   const finalize = async (): Promise<void> => {
-    if (!response || !determination || !finalizable) return;
+    if (!response || !determination) return;
+    if (hasUnsavedChanges) {
+      setMessage("当前页面有未保存修改，请先保存草稿，再正式判定。");
+      return;
+    }
+    if (highMultiplierPending) {
+      setMessage("当前草稿含超过 2 倍的倍率，必须先由另一位老板独立确认。");
+      return;
+    }
+    if (!finalizable) return;
     if (!window.confirm("确认正式判定？正式版本将原样复制当前草稿并进入责任处理。")) {
       return;
     }
@@ -571,7 +595,13 @@ export function ResponsibilityDeterminationPanel({
           onClick={() => void finalize()}
           disabled={!finalizable || Boolean(busyAction)}
         >
-          {busyAction === "finalize" ? "判定中…" : "正式判定"}
+          {busyAction === "finalize"
+            ? "判定中…"
+            : hasUnsavedChanges
+              ? "请先保存草稿"
+              : highMultiplierPending
+                ? "等待高倍率复核"
+                : "正式判定"}
         </Button>
       </div>
 
