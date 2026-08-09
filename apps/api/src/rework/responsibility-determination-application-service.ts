@@ -14,9 +14,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 import { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
 import { ResponsibilityDeterminationQueueService } from "./responsibility-determination-queue-service.js";
 import {
-  cents,
   decimalToScaled,
-  halfUp2,
   ResponsibilityDeterminationService,
 } from "./responsibility-determination-service.js";
 
@@ -31,8 +29,11 @@ type TransferCandidateRow = Readonly<{
   display_name: string;
 }>;
 
-const baseAmountToMoney = (value: string): string =>
-  cents(halfUp2(decimalToScaled(value, 8), 100_000_000n));
+const baseAmountToBusinessAmount = (value: string): string => {
+  const scale8 = decimalToScaled(value, 8);
+  const mills = (scale8 + 50_000n) / 100_000n;
+  return `${mills / 1_000n}.${(mills % 1_000n).toString().padStart(3, "0")}`;
+};
 
 export const normalizeResponsibilityAmountView = (
   value: ResponsibilityDeterminationResponse,
@@ -40,14 +41,14 @@ export const normalizeResponsibilityAmountView = (
   ...value,
   sourceProcesses: value.sourceProcesses.map((process) => ({
     ...process,
-    baseAmount: baseAmountToMoney(process.baseAmount),
+    baseAmount: baseAmountToBusinessAmount(process.baseAmount),
   })),
   determination: value.determination
     ? {
         ...value.determination,
         processes: value.determination.processes.map((process) => ({
           ...process,
-          baseAmount: baseAmountToMoney(process.baseAmount),
+          baseAmount: baseAmountToBusinessAmount(process.baseAmount),
         })),
       }
     : null,
@@ -56,11 +57,9 @@ export const normalizeResponsibilityAmountView = (
 /**
  * Production-facing responsibility application service.
  *
- * Draft creation stays in the exact-decimal engine and returns the response
- * persisted by the idempotency repository. All reads and subsequent commands
- * go through database-authorized services. Exact internal base-amount precision
- * is retained in PostgreSQL; the production-facing view exposes money at two
- * decimal places without changing responsibility calculations.
+ * Responsibility calculations remain exact and final financial amounts remain
+ * two-decimal money. The business-facing base amount is normalized to the
+ * confirmed three-decimal work-amount precision.
  */
 export class ResponsibilityDeterminationApplicationService {
   private readonly draftEngine: ResponsibilityDeterminationService;
