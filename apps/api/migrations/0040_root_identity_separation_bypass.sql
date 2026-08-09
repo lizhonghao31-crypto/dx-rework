@@ -2,6 +2,149 @@
 -- that exist only to protect ordinary business users. Root still follows all
 -- state, amount, version, immutability, evidence-readiness and snapshot rules.
 
+CREATE OR REPLACE FUNCTION guard_determination_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  order_status text;
+  event_actor uuid;
+  event_action text;
+  effective_handler uuid;
+  predecessor rework_responsibility_determinations%ROWTYPE;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('responsibility:' || NEW.rework_order_id::text));
+
+  SELECT status INTO order_status
+  FROM rework_orders
+  WHERE rework_order_id = NEW.rework_order_id
+  FOR SHARE;
+
+  IF order_status IS NULL THEN
+    RAISE EXCEPTION 'rework order does not exist' USING ERRCODE = '23503';
+  END IF;
+  IF order_status <> 'pending_responsibility_determination' THEN
+    RAISE EXCEPTION 'responsibility versions require pending_responsibility_determination'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM rework_order_reviews review
+    WHERE review.order_review_id = NEW.source_order_review_id
+      AND review.rework_order_id = NEW.rework_order_id
+  ) THEN
+    RAISE EXCEPTION 'source review must belong to order' USING ERRCODE = '23514';
+  END IF;
+
+  IF (NEW.replaces_determination_id IS NULL AND NEW.determination_version <> 1)
+     OR (
+       NEW.replaces_determination_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1
+         FROM rework_responsibility_determinations previous
+         WHERE previous.determination_id = NEW.replaces_determination_id
+           AND previous.rework_order_id = NEW.rework_order_id
+           AND previous.determination_version + 1 = NEW.determination_version
+       )
+     ) THEN
+    RAISE EXCEPTION 'invalid determination version chain' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT actor_id, action
+  INTO event_actor, event_action
+  FROM operation_events
+  WHERE event_id = NEW.operation_event_id
+    AND request_id = NEW.request_id;
+
+  PERFORM require_responsibility_event(
+    NEW.operation_event_id,
+    NEW.request_id,
+    NEW.rework_order_id,
+    NEW.created_by
+  );
+
+  IF event_actor IS DISTINCT FROM NEW.created_by THEN
+    RAISE EXCEPTION 'determination creator must match operation actor'
+      USING ERRCODE = '55000';
+  END IF;
+
+  effective_handler := responsibility_effective_handler(NEW.rework_order_id);
+
+  IF NEW.stage = 'draft' THEN
+    IF event_action NOT IN ('rework.responsibility.draft', 'rework.responsibility.reopen') THEN
+      RAISE EXCEPTION 'draft determination requires draft or reopen event'
+        USING ERRCODE = '55000';
+    END IF;
+    IF NOT responsibility_can_determine(event_actor, NEW.rework_order_id) THEN
+      RAISE EXCEPTION 'actor is not authorized to determine responsibility'
+        USING ERRCODE = '42501';
+    END IF;
+    IF effective_handler IS NULL THEN
+      IF access_is_root_actor(event_actor) THEN
+        IF NOT responsibility_can_determine(NEW.handler_user_id, NEW.rework_order_id) THEN
+          RAISE EXCEPTION 'first draft handler must be eligible to determine responsibility'
+            USING ERRCODE = '42501';
+        END IF;
+      ELSIF NEW.handler_user_id IS DISTINCT FROM event_actor THEN
+        RAISE EXCEPTION 'first draft handler must be the authorized actor'
+          USING ERRCODE = '42501';
+      END IF;
+    ELSIF NEW.handler_user_id IS DISTINCT FROM effective_handler
+       OR (
+         event_actor IS DISTINCT FROM effective_handler
+         AND NOT access_is_root_actor(event_actor)
+       ) THEN
+      RAISE EXCEPTION 'only the effective handler may create the next draft'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM rework_responsibility_determinations current_draft
+      WHERE current_draft.rework_order_id = NEW.rework_order_id
+        AND current_draft.stage = 'draft'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM rework_responsibility_determinations successor
+          WHERE successor.replaces_determination_id = current_draft.determination_id
+        )
+        AND current_draft.determination_id IS DISTINCT FROM NEW.replaces_determination_id
+    ) THEN
+      RAISE EXCEPTION 'order already has a current draft' USING ERRCODE = '23505';
+    END IF;
+  ELSE
+    IF event_action <> 'rework.responsibility.finalize' THEN
+      RAISE EXCEPTION 'finalized determination requires finalize event'
+        USING ERRCODE = '55000';
+    END IF;
+    SELECT *
+    INTO predecessor
+    FROM rework_responsibility_determinations
+    WHERE determination_id = NEW.replaces_determination_id;
+
+    IF predecessor.determination_id IS NULL
+       OR predecessor.stage <> 'draft'
+       OR predecessor.rework_order_id <> NEW.rework_order_id THEN
+      RAISE EXCEPTION 'finalized version must directly replace the current draft'
+        USING ERRCODE = '23514';
+    END IF;
+    IF effective_handler IS NULL
+       OR NEW.handler_user_id IS DISTINCT FROM effective_handler
+       OR (
+         event_actor IS DISTINCT FROM effective_handler
+         AND NOT access_is_root_actor(event_actor)
+       )
+       OR NOT responsibility_can_determine(event_actor, NEW.rework_order_id) THEN
+      RAISE EXCEPTION 'only the effective handler may finalize responsibility'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END
+$$;
+
 CREATE OR REPLACE FUNCTION guard_responsibility_confirmation_insert()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -103,6 +246,104 @@ BEGIN
     determination.rework_order_id,
     NEW.confirmed_by
   );
+
+  RETURN NEW;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION guard_responsibility_handler_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  order_status text;
+  current_leaf uuid;
+  current_handler uuid;
+  event_action text;
+BEGIN
+  SELECT status INTO order_status
+  FROM rework_orders
+  WHERE rework_order_id = NEW.rework_order_id
+  FOR SHARE;
+
+  IF order_status <> 'pending_responsibility_determination' THEN
+    RAISE EXCEPTION 'handler changes require pending responsibility determination'
+      USING ERRCODE = '23514';
+  END IF;
+
+  SELECT leaf.determination_id
+  INTO current_leaf
+  FROM rework_responsibility_determinations leaf
+  WHERE leaf.rework_order_id = NEW.rework_order_id
+    AND NOT EXISTS (
+      SELECT 1
+      FROM rework_responsibility_determinations successor
+      WHERE successor.replaces_determination_id = leaf.determination_id
+    );
+
+  IF NEW.determination_id IS NOT NULL
+     AND NEW.determination_id IS DISTINCT FROM current_leaf THEN
+    RAISE EXCEPTION 'handler event must reference the current determination leaf'
+      USING ERRCODE = '23514';
+  END IF;
+
+  current_handler := responsibility_effective_handler(NEW.rework_order_id);
+
+  IF NEW.from_user_id IS DISTINCT FROM current_handler THEN
+    RAISE EXCEPTION 'handler event from_user_id must match the effective handler'
+      USING ERRCODE = '23514';
+  END IF;
+
+  SELECT action INTO event_action
+  FROM operation_events
+  WHERE event_id = NEW.operation_event_id
+    AND request_id = NEW.request_id;
+
+  PERFORM require_responsibility_event(
+    NEW.operation_event_id,
+    NEW.request_id,
+    NEW.rework_order_id,
+    NEW.acted_by
+  );
+
+  IF NEW.event_type = 'transferred' THEN
+    IF event_action <> 'rework.responsibility.transfer'
+       OR current_handler IS NULL
+       OR (
+         NEW.acted_by IS DISTINCT FROM current_handler
+         AND NOT access_is_root_actor(NEW.acted_by)
+       )
+       OR NOT responsibility_can_determine(NEW.acted_by, NEW.rework_order_id)
+       OR NOT responsibility_can_determine(NEW.to_user_id, NEW.rework_order_id) THEN
+      RAISE EXCEPTION 'responsibility transfer is not authorized'
+        USING ERRCODE = '42501';
+    END IF;
+  ELSIF NEW.event_type = 'taken_over' THEN
+    IF event_action <> 'rework.responsibility.takeover'
+       OR NEW.to_user_id IS DISTINCT FROM NEW.acted_by
+       OR NOT responsibility_actor_has_direct_role(
+         NEW.acted_by,
+         'responsibility:takeover',
+         ARRAY['owner_group']
+       ) THEN
+      RAISE EXCEPTION 'responsibility takeover requires a direct active owner'
+        USING ERRCODE = '42501';
+    END IF;
+  ELSE
+    IF event_action <> 'rework.responsibility.transfer'
+       OR current_handler IS NOT NULL
+       OR NEW.from_user_id IS NOT NULL
+       OR NEW.to_user_id IS DISTINCT FROM NEW.acted_by
+       OR NOT responsibility_can_determine(NEW.acted_by, NEW.rework_order_id) THEN
+      RAISE EXCEPTION 'initial responsibility handler assignment is not authorized'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF NEW.to_user_id IS NOT DISTINCT FROM current_handler THEN
+    RAISE EXCEPTION 'handler change must select a different handler'
+      USING ERRCODE = '23514';
+  END IF;
 
   RETURN NEW;
 END
