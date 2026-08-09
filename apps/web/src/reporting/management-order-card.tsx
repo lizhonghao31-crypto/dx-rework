@@ -20,6 +20,15 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
           ? "success"
           : "info";
   const terminal = order.status === "completed" || order.status === "cancelled";
+  const activityMessage = order.status === "cancelled"
+    ? "已退出在途、逾期和当前异常统计"
+    : order.exceptionCount > 0
+      ? `${order.status === "completed" ? "生产返工已结束 · " : ""}${order.exceptionCount} 项后续异常`
+      : order.overdue
+        ? `${order.status === "completed" ? "生产返工已结束 · " : ""}存在逾期后续事项`
+        : order.status === "completed"
+          ? "生产返工流程已结束；独立的外部扣款后续仍按实际状态统计"
+          : "无当前异常";
   return (
     <a className="reporting-order-link" href={reportingPageUrl(order.deepLink)}>
       <Surface className="reporting-order-card">
@@ -36,15 +45,7 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
           <div><dt>责任</dt><dd>¥{order.responsibilityAmount}</dd></div>
           <div><dt>外部差额</dt><dd>¥{order.externalRemainingAmount}</dd></div>
         </dl>
-        <small>{order.status === "cancelled"
-          ? "已退出在途、逾期和当前异常统计"
-          : order.status === "completed"
-            ? "生产返工流程已结束"
-            : order.exceptionCount > 0
-              ? `${order.exceptionCount} 项异常`
-              : order.overdue
-                ? "存在逾期事项"
-                : "无当前异常"}</small>
+        <small>{activityMessage}</small>
       </Surface>
     </a>
   );
