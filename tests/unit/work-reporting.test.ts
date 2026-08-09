@@ -54,6 +54,25 @@ describe("work reporting monetary snapshots", () => {
     });
   });
 
+  it("invokes the real Web Crypto randomUUID method with its required receiver", () => {
+    const taskPayload = {
+      expectedOrderVersion: 2,
+      configurationItemId: "00000000-0000-4000-8000-000000000011",
+      mode: "collective" as const,
+      members: [{ personId: "00000000-0000-4000-8000-000000000010" }],
+    };
+    const reportPayload = {
+      expectedOrderVersion: 3,
+      actualQuantity: 1,
+      completedAt: "2026-08-09T06:00:00.000Z",
+    };
+
+    expect(taskAttempt(undefined, taskPayload, globalThis.crypto.randomUUID).key)
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(reportAttempt(undefined, reportPayload, globalThis.crypto.randomUUID).key)
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  });
+
   it("keeps report drafts separate by task and reuses task assignment keys across uncertain responses", () => {
     const firstDraft = workReportDraft({}, "task-1", new Date(2026, 7, 2, 22, 3, 4));
     const secondDraft = workReportDraft({ "task-1": { ...firstDraft, quantity: "1" } }, "task-2", new Date(2026, 7, 2, 22, 4, 4));

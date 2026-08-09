@@ -13,13 +13,16 @@ export type PendingWorkReport = Readonly<{ signature: string; key: string }>;
 export type PendingWorkTask = Readonly<{ signature: string; key: string }>;
 export type WorkReportDraft = Readonly<{ quantity: string; completedAt: string }>;
 
+const invokeKeyFactory = (createKey: () => string): string =>
+  createKey.call(globalThis.crypto);
+
 const attempt = <T,>(
   existing: Readonly<{ signature: string; key: string }> | undefined,
   payload: T,
   createKey: () => string,
 ): Readonly<{ signature: string; key: string }> => {
   const signature = JSON.stringify(payload);
-  return existing?.signature === signature ? existing : { signature, key: createKey() };
+  return existing?.signature === signature ? existing : { signature, key: invokeKeyFactory(createKey) };
 };
 
 export const reportAttempt = (
