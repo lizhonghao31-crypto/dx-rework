@@ -4,10 +4,10 @@ import {
   ProcessConfigurationParamsSchema,
   ProcessConfigurationResponseSchema,
   ReviewProcessConfigurationSchema,
-  SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { z } from "zod";
 
 import {
   BUSINESS_READ_ALL_CAPABILITY,
@@ -26,6 +26,50 @@ const cookieToken = (request: FastifyRequest): string | undefined =>
     .map((value) => value.trim())
     .find((value) => value.startsWith("dx_rework_session="))
     ?.slice("dx_rework_session=".length);
+
+const decimalPlaces = (value: number): number => {
+  const [coefficient = "", exponentText = "0"] = String(value).toLowerCase().split("e");
+  const fractionLength = coefficient.split(".")[1]?.length ?? 0;
+  return Math.max(0, fractionLength - Number(exponentText));
+};
+
+const PracticalProcessItemSchema = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("catalog"),
+    processId: z.string().uuid(),
+    plannedQuantity: z.number().finite().positive(),
+    pricingUnit: z.enum(["piece", "hour"]),
+    unitPrice: z.number().finite().min(0.01),
+  }).strict(),
+  z.object({
+    source: z.literal("custom"),
+    customProcessName: z.string().trim().min(1).max(100),
+    plannedQuantity: z.number().finite().positive(),
+    pricingUnit: z.enum(["piece", "hour"]),
+    unitPrice: z.number().finite().min(0.01),
+  }).strict(),
+]).superRefine((value, context) => {
+  if (decimalPlaces(value.plannedQuantity) > 1) {
+    context.addIssue({
+      code: "custom",
+      path: ["plannedQuantity"],
+      message: "计划数量最多保留一位小数",
+    });
+  }
+  if (decimalPlaces(value.unitPrice) > 2) {
+    context.addIssue({
+      code: "custom",
+      path: ["unitPrice"],
+      message: "单价最多保留两位小数",
+    });
+  }
+});
+
+const PracticalSaveProcessConfigurationSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  items: z.array(PracticalProcessItemSchema).min(1).max(100),
+  changeReason: z.string().trim().min(1).max(500).optional(),
+}).strict();
 
 const parse = <T>(
   schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
@@ -132,7 +176,7 @@ export function registerProcessConfigurationRoutes(
       const result = await dependencies.service.saveDraft(
         await actor(request, "configure"),
         parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
-        parse(SaveProcessConfigurationSchema, request.body),
+        parse(PracticalSaveProcessConfigurationSchema, request.body),
         idempotencyKey(request),
       );
       if (result.reused) void reply.header("idempotency-replayed", "true");
