@@ -31,9 +31,13 @@ import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
 import { RootAwareTodoProjectionService } from "./todos/root-aware-projection-service.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 import { TodoService } from "./todos/service.js";
+import { AliyunOssV4RestClient } from "./tools/aliyun-oss-v4-client.js";
 import { AttachmentService } from "./tools/attachments.js";
 import { ExportJobService } from "./tools/exports.js";
-import { DisabledObjectStorage } from "./tools/storage.js";
+import {
+  AliyunPrivateObjectStorage,
+  DisabledObjectStorage,
+} from "./tools/storage.js";
 import { canDownloadWageAttachment } from "./wages/wage-attachment-access.js";
 import { WageExportService } from "./wages/wage-export-service.js";
 import { WageService } from "./wages/wage-service.js";
@@ -73,8 +77,15 @@ const employeeAccessService = new EmployeeAccessService(
   dingtalkProvider,
   config.ownerBootstrap,
 );
-const storage = new DisabledObjectStorage();
-if (config.objectStorage.enabled) throw new Error("OSS is configured but the official Aliyun OSS SDK client has not been injected");
+const storage = config.objectStorage.enabled
+  ? new AliyunPrivateObjectStorage(new AliyunOssV4RestClient({
+      region: config.objectStorage.region!,
+      endpoint: config.objectStorage.endpoint!,
+      bucket: config.objectStorage.bucket!,
+      accessKeyId: config.objectStorage.accessKeyId!,
+      accessKeySecret: config.objectStorage.accessKeySecret!,
+    }))
+  : new DisabledObjectStorage();
 const attachments = new AttachmentService(database, storage, {
   prefix: config.objectStorage.privatePrefix,
   ttlSeconds: config.objectStorage.signedUrlTtlSeconds,

@@ -34,9 +34,9 @@ export type AliyunPostPolicyCondition =
   | readonly ["content-length-range", number, number];
 
 /**
- * Narrow bootstrap adapter over the official `ali-oss` SDK. Its implementation
- * must use `signPostObjectPolicyV4`; the application layer never implements OSS
- * signing algorithms itself.
+ * Narrow Aliyun OSS V4 client contract. The runtime implementation may use an
+ * official SDK or Alibaba Cloud's documented manual V4 algorithm, but the
+ * application layer never receives long-term credentials or implements signing.
  */
 export interface AliyunOssSdkClient {
   createPostObjectUploadGrant(options: {
@@ -62,7 +62,6 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     const expiresAt = grantExpiry(this.now(), options.ttlSeconds);
     const fields = Object.freeze({
       key: objectKey,
-      "Content-Type": options.mimeType,
       "x-oss-meta-sha256": options.sha256,
       "x-oss-object-acl": "private",
       "x-oss-forbid-overwrite": "true",
@@ -70,7 +69,7 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     });
     const conditions: readonly AliyunPostPolicyCondition[] = [
       ["eq", "$key", objectKey],
-      ["eq", "$Content-Type", options.mimeType],
+      ["eq", "$content-type", options.mimeType],
       ["eq", "$x-oss-meta-sha256", options.sha256],
       ["eq", "$x-oss-object-acl", "private"],
       ["eq", "$x-oss-forbid-overwrite", "true"],
@@ -190,7 +189,6 @@ export class FakeObjectStorage implements ObjectStorage {
       uploadUrl: "https://private.example.test/",
       fields: {
         key: objectKey,
-        "Content-Type": options.mimeType,
         "x-oss-meta-sha256": options.sha256,
         "x-oss-object-acl": "private",
         "x-oss-forbid-overwrite": "true",
