@@ -1,14 +1,14 @@
 -- PR-37 practical precision contract.
--- Keep the existing piece/hour business units, but stop carrying precision that
--- has no practical meaning for the rework shop floor.
+-- Keep the existing piece/hour business units and use only precision that has
+-- real meaning for the rework shop floor.
 --
--- New business facts:
+-- Business rules for new writes:
 --   planned / reported / adjusted quantity: at most 1 decimal place
 --   unit price: at most 2 decimal places and at least 0.01 yuan
 --   group amount / member share: at most 3 decimal places
 --
--- Historical rows remain immutable. NOT VALID constraints enforce the new rule
--- for new rows without rewriting previously accepted history.
+-- Existing historical rows are not rewritten. NOT VALID constraints enforce
+-- the new rule for future writes while preserving prior audit facts.
 
 DO $$
 DECLARE
