@@ -164,7 +164,7 @@ export function Shell({
     navigation.push({
       step: "2",
       name: "返工任务",
-      description: "查返工单状态并进入当前节点",
+      description: "统一查询当前状态和历史事实",
       href: "/ui/tasks",
     });
   }
@@ -179,8 +179,8 @@ export function Shell({
   if (workAccess) {
     navigation.push({
       step: "4",
-      name: "分工上数",
-      description: "分配人员、上数并做整单审核",
+      name: "返工执行",
+      description: "分配人员、登记完成数量、整单确认",
       href: "/ui/work-reporting",
     });
   }
@@ -362,7 +362,7 @@ export function Queue({ supervisor = false }: { supervisor?: boolean }) {
     : [
         "N01　待主管配置",
         "N03　待 IE 复核",
-        "N05　返工上数中",
+        "N05　返工执行中",
         "N07　待责任确认",
         "N08-A　本厂承担审批",
         "N08-B　外部签收 / 扣款跟进",
