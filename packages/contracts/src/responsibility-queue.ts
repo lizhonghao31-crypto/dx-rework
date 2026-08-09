@@ -15,6 +15,7 @@ export const ResponsibilityQueueItemSchema = z.object({
   determinationStage: z.enum(["draft", "finalized"]).nullable(),
   canDetermine: z.boolean(),
   canTakeover: z.boolean(),
+  canConfirmHighMultiplier: z.boolean(),
   highMultiplierPending: z.boolean(),
 }).strict();
 
