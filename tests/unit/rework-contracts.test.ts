@@ -126,6 +126,10 @@ describe("rework initiation contracts", () => {
     expect(practical).toContain("actual_quantity = trunc(actual_quantity, 1)");
     expect(practical).toContain("group_amount = trunc(group_amount, 3)");
     expect(practical).toContain("amount = trunc(amount, 3)");
+    expect(practical).toContain("requested_planned_quantity = trunc(requested_planned_quantity, 1)");
+    expect(practical).toContain("actual_cut_quantity = trunc(actual_cut_quantity, 1)");
+    expect(practical).toContain("actual_return_quantity = trunc(actual_return_quantity, 1)");
+    expect(practical).toContain("allowed_maximum_quantity = trunc(allowed_maximum_quantity, 1)");
   });
 
   it("keeps migration-level audit, attachment and identity guards", async () => {
