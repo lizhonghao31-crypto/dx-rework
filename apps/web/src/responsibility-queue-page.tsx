@@ -99,15 +99,19 @@ export function ResponsibilityQueuePage() {
         <div className="task-grid responsibility-queue-grid">
           {items.map((item) => {
             const title = item.highMultiplierPending
-              ? "高倍率待独立确认"
+              ? item.canConfirmHighMultiplier
+                ? "高倍率待你独立确认"
+                : "高倍率待其他老板独立确认"
               : item.determinationStage === "draft"
                 ? `责任草稿 V${item.determinationVersion}`
                 : "待创建责任草稿";
-            const permission = item.canDetermine
-              ? "可处理"
-              : item.canTakeover
-                ? "可接管"
-                : "可查看";
+            const permission = item.canConfirmHighMultiplier
+              ? "可独立确认高倍率"
+              : item.canDetermine
+                ? "可处理"
+                : item.canTakeover
+                  ? "可接管"
+                  : "可查看";
             const meta = [
               item.styleNo ?? "款号未填写",
               item.orderNo ?? "订单号未填写",
@@ -120,13 +124,15 @@ export function ResponsibilityQueuePage() {
               : item.canDetermine || item.canTakeover
                 ? "warning"
                 : "info";
-            const stateLabel = item.highMultiplierPending
-              ? "待独立确认"
-              : item.canDetermine
-                ? "待处理"
-                : item.canTakeover
-                  ? "可接管"
-                  : "仅查看";
+            const stateLabel = item.canConfirmHighMultiplier
+              ? "待你独立确认"
+              : item.highMultiplierPending
+                ? "待其他老板确认"
+                : item.canDetermine
+                  ? "待处理"
+                  : item.canTakeover
+                    ? "可接管"
+                    : "仅查看";
             return (
               <a
                 className="responsibility-task-link"
