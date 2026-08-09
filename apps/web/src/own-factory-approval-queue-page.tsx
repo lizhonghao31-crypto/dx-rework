@@ -2,8 +2,8 @@ import {
   OwnFactoryApprovalQueueResponseSchema,
   type OwnFactoryApprovalQueueResponse,
 } from "@dx-rework/contracts";
-import { StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState } from "react";
+import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell, TaskCard } from "./components.js";
@@ -19,6 +19,7 @@ type QueueState =
 
 export function OwnFactoryApprovalQueuePage() {
   const [state, setState] = useState<QueueState>({ kind: "loading" });
+  const [q, setQ] = useState("");
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   useEffect(() => {
@@ -35,18 +36,14 @@ export function OwnFactoryApprovalQueuePage() {
           headers: { accept: "application/json" },
         });
         if (!response.ok) throw new Error("本厂承担审批队列加载失败");
-        const value = OwnFactoryApprovalQueueResponseSchema.parse(
-          await response.json(),
-        );
+        const value = OwnFactoryApprovalQueueResponseSchema.parse(await response.json());
         setState({ kind: "ready", value });
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         if (initial) {
           setState({
             kind: "unavailable",
-            message: error instanceof Error
-              ? error.message
-              : "本厂承担审批队列加载失败",
+            message: error instanceof Error ? error.message : "本厂承担审批队列加载失败",
           });
         }
       } finally {
@@ -54,14 +51,10 @@ export function OwnFactoryApprovalQueuePage() {
       }
     };
 
-    const refresh = (): void => {
-      void load(false);
-    };
-
+    const refresh = (): void => { void load(false); };
     void load(true);
     const intervalId = window.setInterval(refresh, queueRefreshMilliseconds);
     window.addEventListener("focus", refresh);
-
     return () => {
       controller.abort();
       window.clearInterval(intervalId);
@@ -69,26 +62,36 @@ export function OwnFactoryApprovalQueuePage() {
     };
   }, []);
 
-  const items = state.kind === "ready" ? state.value.items : [];
+  const allItems = state.kind === "ready" ? state.value.items : [];
+  const items = useMemo(() => {
+    const needle = q.trim().toLocaleLowerCase("zh-CN");
+    if (!needle) return allItems;
+    return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.problemPart]
+      .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
+  }, [allItems, q]);
+
   return (
     <Shell active="本厂审批">
       <Header
         title="本厂承担审批"
-        subtitle="N08-A 仅显示当前登录人按服务端角色、在职状态和订单范围代理可见的待审批事项"
-        badge={state.kind === "ready" ? `${items.length} 条 · 实时队列` : "实时队列"}
+        subtitle="责任分支进入本厂审批后自动出现在这里；审批完成后自动离开当前队列"
+        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"}
         action="返回责任处理"
         actionHref="/ui/responsibility"
       />
       <Surface className="responsibility-queue-summary">
         <div>
-          <h2>终局审批入口</h2>
-          <p>金额和工人上数均是正式责任版本的不可变服务端快照；不在浏览器重算。</p>
+          <h2>本厂承担审批工作台</h2>
+          <p>谁来处理：有最终审批权限的老板；当前要做：核对锁定责任快照并决定；完成后继续责任分支闭环。</p>
         </div>
         <StatusBadge tone="warning">N08-A · 待审批</StatusBadge>
       </Surface>
+      <Surface className="reporting-filters">
+        <InsetField label="搜索当前节点订单" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />
+      </Surface>
       {state.kind === "loading" && <Surface className="responsibility-queue-state">正在加载本厂承担审批…</Surface>}
       {state.kind === "unavailable" && <Surface className="responsibility-queue-state">{state.message}</Surface>}
-      {state.kind === "ready" && items.length === 0 && <Surface className="responsibility-queue-state">当前没有你可查看的本厂承担审批。</Surface>}
+      {state.kind === "ready" && items.length === 0 && <Surface className="responsibility-queue-state">当前没有符合条件的本厂承担审批。</Surface>}
       {state.kind === "ready" && items.length > 0 && (
         <div className="task-grid responsibility-queue-grid">
           {items.map((item) => (
