@@ -52,7 +52,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       "0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0006_rework_initiation.sql",
       "0007_process_configuration_ie_review.sql", "0008_worker_assignment_reporting.sql",
-      "0009_whole_order_review_quantity_adjustment.sql",
+      "0009_whole_order_review_quantity_adjustment.sql", "0039_practical_quantity_amount_precision.sql",
     ]) {
       await database.query(await readFile(new URL("../../apps/api/migrations/" + migration, import.meta.url), "utf8"));
     }
@@ -99,7 +99,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     await admin.end();
   });
 
-  it("only assigns report-eligible people, preserves 40 hourly shares, advances a completed order, and reserves ERP mappings", async () => {
+  it("only assigns report-eligible people, splits a realistic 40-person hourly amount, advances a completed order, and reserves ERP mappings", async () => {
     const draft = await initiation.createDraft(qc(), {
       styleNo: "PD20700001", merchandiserUserId: ids.merchandiser, processingFactory: { type: "own_factory" },
       problemPart: "袖口", problemDescription: "全量返修", reworkQuantity: 1,
@@ -107,7 +107,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
     const saved = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
       expectedOrderVersion: submitted.value.version,
-      items: [{ source: "custom", customProcessName: "八位分摊工序", pricingUnit: "hour", plannedQuantity: 0.01, unitPrice: 0.001 }],
+      items: [{ source: "custom", customProcessName: "集体返工工序", pricingUnit: "hour", plannedQuantity: 1.5, unitPrice: 12.5 }],
     }, randomUUID());
     const queued = await configuration.submit(tail(), submitted.value.reworkOrderId, {
       expectedOrderVersion: saved.value.orderVersion,
@@ -137,19 +137,26 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       authorizationCapabilities: ["work:report", "work:report_for_worker"],
     };
     const report = await reporting.submitReport(dualWorker, task.value.workTaskId, {
-      expectedOrderVersion: inProgress.orderVersion, actualQuantity: 0.01, completedAt: new Date().toISOString(),
+      expectedOrderVersion: inProgress.orderVersion, actualQuantity: 1.5, completedAt: new Date().toISOString(),
     }, randomUUID());
     expect(report.value.groupAmount).toBeNull();
-    expect(report.value.memberShares).toEqual([{ personId: workerPersonIds[0], amount: 0.00000025 }]);
+    expect([0.468, 0.469]).toContain(report.value.memberShares[0]?.amount);
     expect((await reporting.list(tailAssign(), submitted.value.reworkOrderId)).reworkStatus).toBe("pending_order_review");
     expect((await database.query(
-      "SELECT group_amount::text AS group_amount FROM rework_work_reports WHERE work_report_id=$1",
+      "SELECT group_amount::numeric(18,3)::text AS group_amount FROM rework_work_reports WHERE work_report_id=$1",
       [report.value.workReportId],
-    )).rows[0]).toEqual({ group_amount: "0.00001000" });
+    )).rows[0]).toEqual({ group_amount: "18.750" });
     expect((await database.query(
-      "SELECT amount::text AS amount FROM rework_work_report_member_shares WHERE work_report_id=$1",
+      `SELECT amount::numeric(18,3)::text AS amount,count(*)::int AS count
+       FROM rework_work_report_member_shares
+       WHERE work_report_id=$1
+       GROUP BY amount
+       ORDER BY amount`,
       [report.value.workReportId],
-    )).rows).toEqual(Array.from({ length: 40 }, () => ({ amount: "0.00000025" })));
+    )).rows).toEqual([
+      { amount: "0.468", count: 10 },
+      { amount: "0.469", count: 30 },
+    ]);
     expect((await database.query<{ authorization_capability: string }>(
       "SELECT authorization_capability FROM operation_events WHERE entity_id=$1 AND action='rework.work_report.submit'",
       [submitted.value.reworkOrderId],
