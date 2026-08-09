@@ -151,6 +151,10 @@
     {
       "version": "0038_worker_person_materialization",
       "checksum": "272674f7e034aab2f8d3a62eff53e95abae627ddf9f0f887c905ab173b97652d"
+    },
+    {
+      "version": "0039_practical_quantity_amount_precision",
+      "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3"
     }
   ]
 }

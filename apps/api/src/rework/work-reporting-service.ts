@@ -36,7 +36,7 @@ const hash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope, payload })).digest("hex");
 const numberValue = (value: string | number): number => Number(value);
 type Decimal = Readonly<{ units: bigint; scale: number }>;
-const MONEY_SCALE = 8;
+const MONEY_SCALE = 3;
 
 const decimal = (value: string | number): Decimal => {
   const match = /^([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(String(value));
@@ -212,8 +212,7 @@ export class WorkReportingService {
       const reportingCapability = this.reportCapability(actor, members);
       if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability! };
-      if (task.pricing_unit === "piece" && !Number.isInteger(input.actualQuantity)) error("按件计价的上数必须为整数", 400, "VALIDATION_ERROR");
-      if (task.pricing_unit === "hour" && !hasAtMostDecimalPlaces(input.actualQuantity, 2)) error("按小时计价的上数最多保留两位小数", 400, "VALIDATION_ERROR");
+      if (!hasAtMostDecimalPlaces(input.actualQuantity, 1)) error("本次上数最多保留一位小数", 400, "VALIDATION_ERROR");
       const completedAt = new Date(input.completedAt);
       const now = Date.now();
       if (Number.isNaN(completedAt.getTime()) || completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
@@ -261,6 +260,10 @@ export class WorkReportingService {
         if (!rejected.rows[0]) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
       }
       const reportId = randomUUID();
+      const groupMills = atScale(decimal(groupAmount), MONEY_SCALE);
+      if (groupMills < BigInt(members.length)) {
+        error("本次计件总额过低，无法按0.001元分摊给当前成员", 400, "VALIDATION_ERROR");
+      }
       const shares = splitAmount(groupAmount, members.length);
       const event = {
         action: "rework.work_report.submit", entityType: "rework_order", entityId: task.rework_order_id,

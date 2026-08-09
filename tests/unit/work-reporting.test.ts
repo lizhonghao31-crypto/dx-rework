@@ -10,31 +10,36 @@ import { localDateTimeValue, reportAttempt, taskAttempt, workReportDraft } from 
 import { describe, expect, it } from "vitest";
 
 describe("work reporting monetary snapshots", () => {
-  it("allocates the eight-decimal residual deterministically so every valid collective share stays positive", () => {
-    const shares = splitAmount(0.1, 3);
-    expect(shares).toEqual([0.03333334, 0.03333333, 0.03333333]);
-    expect(shares.reduce((total, share) => total + share, 0)).toBeCloseTo(0.1, 10);
-    expect(splitAmount(0.001, 40)).toEqual(Array.from({ length: 40 }, () => 0.000025));
-    expect(splitAmount(0.00001, 40)).toEqual(Array.from({ length: 40 }, () => 0.00000025));
+  it("allocates practical 0.001-yuan residuals deterministically", () => {
+    const small = splitAmount(0.1, 3);
+    expect(small).toEqual([0.034, 0.033, 0.033]);
+    expect(small.reduce((total, share) => total + share, 0)).toBeCloseTo(0.1, 3);
+
+    const fortyPeople = splitAmount(18.75, 40);
+    expect(fortyPeople.slice(0, 30)).toEqual(Array.from({ length: 30 }, () => 0.469));
+    expect(fortyPeople.slice(30)).toEqual(Array.from({ length: 10 }, () => 0.468));
+    expect(fortyPeople.reduce((total, share) => total + share, 0)).toBeCloseTo(18.75, 3);
   });
 
-  it("validates hour quantities and calculates report amounts from decimal values rather than binary products", () => {
-    expect(hasAtMostDecimalPlaces(0.29, 2)).toBe(true);
-    expect(hasAtMostDecimalPlaces(0.291, 2)).toBe(false);
-    expect(calculateWorkAmount(1, "1.005")).toBe(1.005);
-    expect(calculateWorkAmount(1.15, "2.239")).toBe(2.57485);
+  it("accepts one-decimal quantities and two-decimal prices for three-decimal work amounts", () => {
+    expect(hasAtMostDecimalPlaces(0.2, 1)).toBe(true);
+    expect(hasAtMostDecimalPlaces(0.21, 1)).toBe(false);
+    expect(calculateWorkAmount(0.1, "0.55")).toBe(0.055);
+    expect(calculateWorkAmount(1.2, "12.50")).toBe(15);
   });
 
   it("does not give worker-only users supervisor data requests or assignment controls", async () => {
     expect(canAssignWork({ businessRoles: ["worker"], capabilities: ["work:report"] })).toBe(false);
     expect(canAssignWork({ businessRoles: ["tail_supervisor"], capabilities: ["work:assign"] })).toBe(true);
     const form = await readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8");
-    expect(form).toContain("if (!assignable) { setPeople([]); setConfigItems([]); return; }");
+    expect(form).toContain("if (!assignable) {");
     expect(form).toContain("request(\"work-task-options\"");
     expect(form).toContain("data && canAssign && <Surface>");
     expect(form).toContain("你的本次分摊 ¥");
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportDrafts");
+    expect(form).toContain('step="0.1"');
+    expect(form).toContain("本次上数最多保留一位小数");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });

@@ -56,25 +56,25 @@ describe("rework initiation contracts", () => {
       .toThrowError(/Cannot transition/);
   });
 
-  it("keeps configuration units, quantities and IE rejection reasons explicit", () => {
+  it("keeps configuration units and IE rejection reasons explicit", () => {
     expect(SaveProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 2,
       items: [{
         source: "custom",
         customProcessName: "特殊翻边返修",
         pricingUnit: "piece",
-        plannedQuantity: 12.5,
-        unitPrice: 0.555,
+        plannedQuantity: 12,
+        unitPrice: 0.55,
       }],
-    }).success).toBe(false);
+    }).success).toBe(true);
     expect(SaveProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 2,
       items: [{
         source: "custom",
         customProcessName: "特殊翻边返修",
         pricingUnit: "hour",
-        plannedQuantity: 1.25,
-        unitPrice: 0.5559,
+        plannedQuantity: 1.2,
+        unitPrice: 0.55,
       }],
     }).success).toBe(true);
     expect(ReviewProcessConfigurationSchema.safeParse({
@@ -98,27 +98,38 @@ describe("rework initiation contracts", () => {
     expect(migration).not.toMatch(/ALTER TABLE\s+.*000[1-6]/i);
   });
 
-  it("enforces individual versus collective task snapshots and report precision", () => {
+  it("enforces individual versus collective task snapshots and structural report input", () => {
     const personId = "00000000-0000-4000-8000-000000000010";
     const itemId = "00000000-0000-4000-8000-000000000011";
     expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "individual", members: [{ personId }] }).success).toBe(true);
     expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "individual", members: [{ personId }, { personId: "00000000-0000-4000-8000-000000000012" }] }).success).toBe(false);
     expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "collective", members: [{ personId }, { personId }] }).success).toBe(false);
-    expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.25, completedAt: "2026-08-02T12:00:00.000Z" }).success).toBe(true);
-    expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.25, completedAt: "2026-08-02T12:00:00.000Z", remark: "   " }).success).toBe(false);
+    expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.2, completedAt: "2026-08-02T12:00:00.000Z" }).success).toBe(true);
+    expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.2, completedAt: "2026-08-02T12:00:00.000Z", remark: "   " }).success).toBe(false);
   });
 
-  it("adds PR-07 task, snapshot and report storage without modifying earlier migrations", async () => {
-    const migration = await readFile(new URL("../../apps/api/migrations/0008_worker_assignment_reporting.sql", import.meta.url), "utf8");
-    expect(migration).toContain("rework_work_tasks");
-    expect(migration).toContain("rework_work_task_members");
-    expect(migration).toContain("rework_work_reports");
-    expect(migration).toContain("rework_work_report_member_shares");
-    expect(migration).toContain("work:report_for_worker");
-    expect(migration).toContain("numeric(18,8)");
-    expect(migration).toContain("pending_order_review");
-    expect(migration).toContain("rework_work_tasks_external_source_idx");
-    expect(migration).toContain("rework_work_reports_external_source_idx");
+  it("keeps historical PR-07 storage intact while the practical precision migration governs new writes", async () => {
+    const historical = await readFile(new URL("../../apps/api/migrations/0008_worker_assignment_reporting.sql", import.meta.url), "utf8");
+    expect(historical).toContain("rework_work_tasks");
+    expect(historical).toContain("rework_work_task_members");
+    expect(historical).toContain("rework_work_reports");
+    expect(historical).toContain("rework_work_report_member_shares");
+    expect(historical).toContain("work:report_for_worker");
+    expect(historical).toContain("pending_order_review");
+    expect(historical).toContain("rework_work_tasks_external_source_idx");
+    expect(historical).toContain("rework_work_reports_external_source_idx");
+
+    const practical = await readFile(new URL("../../apps/api/migrations/0039_practical_quantity_amount_precision.sql", import.meta.url), "utf8");
+    expect(practical).toContain("planned_quantity = trunc(planned_quantity, 1)");
+    expect(practical).toContain("unit_price >= 0.01");
+    expect(practical).toContain("unit_price = trunc(unit_price, 2)");
+    expect(practical).toContain("actual_quantity = trunc(actual_quantity, 1)");
+    expect(practical).toContain("group_amount = trunc(group_amount, 3)");
+    expect(practical).toContain("amount = trunc(amount, 3)");
+    expect(practical).toContain("requested_planned_quantity = trunc(requested_planned_quantity, 1)");
+    expect(practical).toContain("actual_cut_quantity = trunc(actual_cut_quantity, 1)");
+    expect(practical).toContain("actual_return_quantity = trunc(actual_return_quantity, 1)");
+    expect(practical).toContain("allowed_maximum_quantity = trunc(allowed_maximum_quantity, 1)");
   });
 
   it("keeps migration-level audit, attachment and identity guards", async () => {

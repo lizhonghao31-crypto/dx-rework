@@ -95,6 +95,19 @@ describe("work reporting routes", () => {
     );
   });
 
+  it("rejects work-report quantities beyond one decimal place", async () => {
+    const { app, service } = create(["worker"], ["work:report"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/work-tasks/${taskId}/reports`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "precision-report-1" },
+      payload: { expectedOrderVersion: 2, actualQuantity: 1.25, completedAt: "2026-08-02T12:00:00.000Z" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(service.submitReport).not.toHaveBeenCalled();
+  });
+
   it("honors delegated proxy-report capability for an authorized non-supervisor", async () => {
     const { app, service } = create(["order_merchandiser"], ["work:report_for_worker"]);
     const response = await app.inject({

@@ -2,6 +2,7 @@ import type {
   ConfirmHighMultiplier,
   CreateResponsibilityDraft,
   FinalizeResponsibility,
+  ResponsibilityDeterminationResponse,
   TakeoverResponsibility,
   TransferResponsibility,
 } from "@dx-rework/contracts";
@@ -12,7 +13,10 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
 import { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
 import { ResponsibilityDeterminationQueueService } from "./responsibility-determination-queue-service.js";
-import { ResponsibilityDeterminationService } from "./responsibility-determination-service.js";
+import {
+  decimalToScaled,
+  ResponsibilityDeterminationService,
+} from "./responsibility-determination-service.js";
 
 type TransferPermissionRow = Readonly<{
   status: string;
@@ -25,12 +29,38 @@ type TransferCandidateRow = Readonly<{
   display_name: string;
 }>;
 
+const baseAmountToBusinessAmount = (value: string): string => {
+  const scale8 = decimalToScaled(value, 8);
+  const mills = (scale8 + 50_000n) / 100_000n;
+  const fraction = (mills % 1_000n).toString().padStart(3, "0");
+  return `${mills / 1_000n}.${fraction.endsWith("0") ? fraction.slice(0, -1) : fraction}`;
+};
+
+export const normalizeResponsibilityAmountView = (
+  value: ResponsibilityDeterminationResponse,
+): ResponsibilityDeterminationResponse => ({
+  ...value,
+  sourceProcesses: value.sourceProcesses.map((process) => ({
+    ...process,
+    baseAmount: baseAmountToBusinessAmount(process.baseAmount),
+  })),
+  determination: value.determination
+    ? {
+        ...value.determination,
+        processes: value.determination.processes.map((process) => ({
+          ...process,
+          baseAmount: baseAmountToBusinessAmount(process.baseAmount),
+        })),
+      }
+    : null,
+});
+
 /**
  * Production-facing responsibility application service.
  *
- * Draft creation stays in the exact-decimal engine and returns the response
- * persisted by the idempotency repository. All reads and subsequent commands
- * go through database-authorized services.
+ * Responsibility calculations remain exact and final financial amounts remain
+ * two-decimal money. The business-facing base amount keeps up to three decimals
+ * and does not expose legacy eight-decimal storage formatting.
  */
 export class ResponsibilityDeterminationApplicationService {
   private readonly draftEngine: ResponsibilityDeterminationService;
@@ -60,8 +90,8 @@ export class ResponsibilityDeterminationApplicationService {
     return this.queue.list(...args);
   }
 
-  get(...args: Parameters<AuthorizedResponsibilityDeterminationService["get"]>) {
-    return this.authorized.get(...args);
+  async get(...args: Parameters<AuthorizedResponsibilityDeterminationService["get"]>) {
+    return normalizeResponsibilityAmountView(await this.authorized.get(...args));
   }
 
   async listTransferCandidates(
@@ -106,7 +136,7 @@ export class ResponsibilityDeterminationApplicationService {
     };
   }
 
-  saveDraft(
+  async saveDraft(
     actor: TrustedActorContext,
     orderId: string,
     input: CreateResponsibilityDraft,
@@ -123,47 +153,52 @@ export class ResponsibilityDeterminationApplicationService {
         400,
       );
     }
-    return this.draftEngine.saveDraft(actor, orderId, input, key);
+    const result = await this.draftEngine.saveDraft(actor, orderId, input, key);
+    return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
 
-  finalize(
+  async finalize(
     actor: TrustedActorContext,
     orderId: string,
     input: FinalizeResponsibility,
     key: string,
   ) {
-    return this.authorized.finalize(actor, orderId, input, key);
+    const result = await this.authorized.finalize(actor, orderId, input, key);
+    return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
 
-  transfer(
+  async transfer(
     actor: TrustedActorContext,
     orderId: string,
     input: TransferResponsibility,
     key: string,
   ) {
-    return this.authorized.transfer(actor, orderId, input, key);
+    const result = await this.authorized.transfer(actor, orderId, input, key);
+    return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
 
-  takeover(
+  async takeover(
     actor: TrustedActorContext,
     orderId: string,
     input: TakeoverResponsibility,
     key: string,
   ) {
-    return this.authorized.takeover(actor, orderId, input, key);
+    const result = await this.authorized.takeover(actor, orderId, input, key);
+    return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
 
-  confirmHighMultiplier(
+  async confirmHighMultiplier(
     actor: TrustedActorContext,
     determinationId: string,
     input: ConfirmHighMultiplier,
     key: string,
   ) {
-    return this.authorized.confirmHighMultiplier(
+    const result = await this.authorized.confirmHighMultiplier(
       actor,
       determinationId,
       input,
       key,
     );
+    return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
 }
