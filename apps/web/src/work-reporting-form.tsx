@@ -104,6 +104,20 @@ export function WorkReportingForm() {
     void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "任务加载失败"));
   }, [reworkOrderId]);
 
+  const changeMode = (nextMode: "individual" | "collective") => {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setSelected({});
+  };
+
+  const selectPerson = (personId: string, checked: boolean) => {
+    if (mode === "individual") {
+      setSelected(checked ? { [personId]: true } : {});
+      return;
+    }
+    setSelected((current) => ({ ...current, [personId]: checked }));
+  };
+
   const assign = async (configurationItemId: string) => {
     if (!data || busy) return;
     const members = people
@@ -278,8 +292,8 @@ export function WorkReportingForm() {
     {data && canAssign && <Surface>
       <h2>创建任务</h2>
       <p>同一工序可同时分给多人；个人任务只允许一人，集体任务按本次成员快照平均分摊组总额。</p>
-      <label className="process-source"><input type="radio" checked={mode === "individual"} onChange={() => setMode("individual")} disabled={busy} /> 个人计件</label>
-      <label className="process-source"><input type="radio" checked={mode === "collective"} onChange={() => setMode("collective")} disabled={busy} /> 集体计件</label>
+      <label className="process-source"><input type="radio" checked={mode === "individual"} onChange={() => changeMode("individual")} disabled={busy} /> 个人计件</label>
+      <label className="process-source"><input type="radio" checked={mode === "collective"} onChange={() => changeMode("collective")} disabled={busy} /> 集体计件</label>
       <InsetField
         label="搜索返工人员"
         type="search"
@@ -289,7 +303,13 @@ export function WorkReportingForm() {
         onChange={(event) => setPeopleQuery(event.target.value)}
       />
       {filteredPeople.map((person) => <label className="process-source" key={person.personId}>
-        <input type="checkbox" checked={Boolean(selected[person.personId])} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} disabled={busy} />
+        <input
+          type={mode === "individual" ? "radio" : "checkbox"}
+          name={mode === "individual" ? "individual-worker" : undefined}
+          checked={Boolean(selected[person.personId])}
+          onChange={(event) => selectPerson(person.personId, event.target.checked)}
+          disabled={busy}
+        />
         {person.displayName} · {person.personType === "temporary" ? "临时工（代录）" : "内部人员"}
       </label>)}
       {people.length > 0 && filteredPeople.length === 0 && <p>没有匹配的返工人员。</p>}
