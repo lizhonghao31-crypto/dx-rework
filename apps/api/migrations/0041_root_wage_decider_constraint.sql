@@ -6,14 +6,14 @@ DO $$
 DECLARE
   constraint_name text;
 BEGIN
-  SELECT constraint.conname
+  SELECT c.conname
   INTO constraint_name
-  FROM pg_constraint constraint
-  WHERE constraint.conrelid='rework_wage_adjustments'::regclass
-    AND constraint.contype='c'
-    AND pg_get_constraintdef(constraint.oid)
+  FROM pg_constraint c
+  WHERE c.conrelid='rework_wage_adjustments'::regclass
+    AND c.contype='c'
+    AND pg_get_constraintdef(c.oid)
       LIKE '%requested_by IS DISTINCT FROM decided_by%'
-  ORDER BY constraint.conname
+  ORDER BY c.conname
   LIMIT 1;
 
   IF constraint_name IS NULL THEN
