@@ -12,7 +12,7 @@ import {
 import { ResponsibilityQueueResponseSchema } from "@dx-rework/contracts/responsibility-queue";
 import { ResponsibilityTransferOptionsResponseSchema } from "@dx-rework/contracts/responsibility-transfer";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { businessActor } from "../access/business-authority.js";
+import { businessActor, isRootUser } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -30,8 +30,28 @@ export type ResponsibilityDeterminationHttpDependencies = Readonly<{
 }>;
 
 export function registerResponsibilityDeterminationRoutes(app: FastifyInstance, dependencies: ResponsibilityDeterminationHttpDependencies): void {
-  const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> =>
-    businessActor(dependencies.root, await dependencies.authenticate(token(request)), request.id, capability, "owner_group");
+  const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(token(request));
+    const trusted = await businessActor(
+      dependencies.root,
+      user,
+      request.id,
+      capability,
+      "owner_group",
+    );
+    if (!(await isRootUser(dependencies.root, user.id))) return trusted;
+    return {
+      ...trusted,
+      authorizationCapabilities: [
+        ...new Set([
+          ...(trusted.authorizationCapabilities ?? []),
+          "responsibility:determine",
+          "responsibility:takeover",
+          "responsibility:confirm_high_multiplier",
+        ]),
+      ],
+    };
+  };
   const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
   app.get("/responsibility-determinations/queue", async (request) => ResponsibilityQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "responsibility:determine"))));
