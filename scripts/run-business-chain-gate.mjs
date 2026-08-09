@@ -40,6 +40,9 @@ const hasDatabase = Boolean(
 const tests = [
   "tests/unit/current-migration-manifest-checksum.test.ts",
   "tests/unit/business-chain-ui-contract.test.ts",
+  "tests/unit/work-reporting.test.ts",
+  "tests/unit/root-superuser-self-review.test.ts",
+  "tests/unit/root-global-business-bypass.test.ts",
 ];
 if (hasDatabase) {
   tests.push(
@@ -47,7 +50,7 @@ if (hasDatabase) {
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
   );
   process.stdout.write(
-    "BUSINESS_CHAIN_GATE_START: current-schema N01-N10 + two fresh Root single-account passes\n",
+    "BUSINESS_CHAIN_GATE_START: current-schema N01-N10 + two fresh Root single-account HTTP passes + browser/root regressions\n",
   );
 } else {
   process.stdout.write(
