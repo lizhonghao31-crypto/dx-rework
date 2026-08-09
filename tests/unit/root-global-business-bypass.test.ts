@@ -53,6 +53,10 @@ describe("root global business bypass policy", () => {
       new URL("../../apps/api/src/rework/responsibility-determination-queue-service.ts", import.meta.url),
       "utf8",
     );
+    const migration = await readFile(
+      new URL("../../apps/api/migrations/0040_root_identity_separation_bypass.sql", import.meta.url),
+      "utf8",
+    );
     expect(authorized).toContain("!isRootActor(actor) && permission.handlerUserId !== actor.actorId");
     expect(authorized).toContain("!isRootActor(actor) && current.created_by === actor.actorId");
     expect(authorized).toContain("root || row.leaf_created_by !== actor.actorId");
@@ -60,6 +64,11 @@ describe("root global business bypass policy", () => {
     expect(application).toContain("!isRootActor(actor) && permission.handler_user_id !== actor.actorId");
     expect(queue).toContain("const hasTakeover = root || actorCapabilities.includes");
     expect(queue).toContain("const hasConfirm = root || actorCapabilities.includes");
+    expect(migration).toContain("NEW.confirmed_by = determination.created_by");
+    expect(migration).toContain("NOT access_is_root_actor(NEW.confirmed_by)");
+    expect(migration).toContain("determination.stage <> 'draft'");
+    expect(migration).toContain("process.multiplier > 2");
+    expect(migration).toContain("confirmation snapshot does not match the draft");
   });
 
   it("bypasses root wage adjustment actor separation without bypassing wage state rules", async () => {
@@ -69,7 +78,7 @@ describe("root global business bypass policy", () => {
         "utf8",
       ),
       readFile(
-        new URL("../../apps/api/migrations/0040_root_wage_identity_bypass.sql", import.meta.url),
+        new URL("../../apps/api/migrations/0040_root_identity_separation_bypass.sql", import.meta.url),
         "utf8",
       ),
     ]);
