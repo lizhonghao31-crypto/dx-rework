@@ -185,8 +185,8 @@ export function App() {
     ? <Shell active="工序配置"><ProcessConfigurationForm /></Shell>
     : <WorkflowQueuePage active="工序配置" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
   else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
-    ? <Shell active="分工上数"><WorkReportingForm /></Shell>
-    : <WorkflowQueuePage active="分工上数" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
+    ? <Shell active="返工执行"><WorkReportingForm /></Shell>
+    : <WorkflowQueuePage active="返工执行" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
 
