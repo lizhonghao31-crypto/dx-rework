@@ -10,6 +10,8 @@ import {
 } from "@dx-rework/contracts/reporting";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import { businessActor } from "../access/business-authority.js";
+import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -32,6 +34,7 @@ export type ManagementReportingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: ManagementReportingService;
   exportService: ReportExportService;
+  root?: RootAuthority;
 }>;
 
 export function registerManagementReportingRoutes(
@@ -40,14 +43,7 @@ export function registerManagementReportingRoutes(
 ): void {
   const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
-    if (!user.businessRoles?.length) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
-    return {
-      actorId: user.id,
-      actorRoles: user.businessRoles,
-      authorizationCapability: capability,
-      authorizationCapabilities: user.capabilities,
-      requestId: request.id,
-    };
+    return businessActor(dependencies.root, user, request.id, capability);
   };
 
   app.get("/management/dashboard", async (request) => ManagementDashboardResponseSchema.parse(
