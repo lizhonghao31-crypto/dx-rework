@@ -10,7 +10,16 @@ const age = (seconds: number): string => {
 };
 
 export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
-  const tone = order.exceptionCount > 0 ? "danger" : order.overdue ? "warning" : order.status === "completed" ? "success" : "info";
+  const tone = order.status === "cancelled"
+    ? "danger"
+    : order.exceptionCount > 0
+      ? "danger"
+      : order.overdue
+        ? "warning"
+        : order.status === "completed"
+          ? "success"
+          : "info";
+  const terminal = order.status === "completed" || order.status === "cancelled";
   return (
     <a className="reporting-order-link" href={reportingPageUrl(order.deepLink)}>
       <Surface className="reporting-order-card">
@@ -22,12 +31,20 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
           <StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge>
         </div>
         <dl>
-          <div><dt>节点停留</dt><dd>{age(order.agingSeconds)}</dd></div>
+          <div><dt>{terminal ? "流程状态" : "节点停留"}</dt><dd>{order.status === "cancelled" ? "已取消 · 停止计时" : order.status === "completed" ? "已完成 · 停止计时" : age(order.agingSeconds)}</dd></div>
           <div><dt>工资</dt><dd>¥{order.wageAmount}</dd></div>
           <div><dt>责任</dt><dd>¥{order.responsibilityAmount}</dd></div>
           <div><dt>外部差额</dt><dd>¥{order.externalRemainingAmount}</dd></div>
         </dl>
-        <small>{order.exceptionCount > 0 ? `${order.exceptionCount} 项异常` : order.overdue ? "存在逾期事项" : "无当前异常"}</small>
+        <small>{order.status === "cancelled"
+          ? "已退出在途、逾期和当前异常统计"
+          : order.status === "completed"
+            ? "生产返工流程已结束"
+            : order.exceptionCount > 0
+              ? `${order.exceptionCount} 项异常`
+              : order.overdue
+                ? "存在逾期事项"
+                : "无当前异常"}</small>
       </Surface>
     </a>
   );
