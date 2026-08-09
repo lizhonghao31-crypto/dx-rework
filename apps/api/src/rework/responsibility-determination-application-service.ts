@@ -32,7 +32,8 @@ type TransferCandidateRow = Readonly<{
 const baseAmountToBusinessAmount = (value: string): string => {
   const scale8 = decimalToScaled(value, 8);
   const mills = (scale8 + 50_000n) / 100_000n;
-  return `${mills / 1_000n}.${(mills % 1_000n).toString().padStart(3, "0")}`;
+  const fraction = (mills % 1_000n).toString().padStart(3, "0");
+  return `${mills / 1_000n}.${fraction.endsWith("0") ? fraction.slice(0, -1) : fraction}`;
 };
 
 export const normalizeResponsibilityAmountView = (
@@ -58,8 +59,8 @@ export const normalizeResponsibilityAmountView = (
  * Production-facing responsibility application service.
  *
  * Responsibility calculations remain exact and final financial amounts remain
- * two-decimal money. The business-facing base amount is normalized to the
- * confirmed three-decimal work-amount precision.
+ * two-decimal money. The business-facing base amount keeps up to three decimals
+ * and does not expose legacy eight-decimal storage formatting.
  */
 export class ResponsibilityDeterminationApplicationService {
   private readonly draftEngine: ResponsibilityDeterminationService;
