@@ -26,7 +26,6 @@ describe("Aliyun OSS V4 REST client", () => {
     const client = new AliyunOssV4RestClient(baseOptions);
     const fields = {
       key: "private/a.pdf",
-      "Content-Type": "application/pdf",
       "x-oss-meta-sha256": sha256,
       "x-oss-object-acl": "private",
       "x-oss-forbid-overwrite": "true",
@@ -37,7 +36,7 @@ describe("Aliyun OSS V4 REST client", () => {
       fields,
       conditions: [
         ["eq", "$key", "private/a.pdf"],
-        ["eq", "$Content-Type", "application/pdf"],
+        ["eq", "$content-type", "application/pdf"],
         ["eq", "$x-oss-meta-sha256", sha256],
         ["eq", "$x-oss-object-acl", "private"],
         ["eq", "$x-oss-forbid-overwrite", "true"],
@@ -56,13 +55,19 @@ describe("Aliyun OSS V4 REST client", () => {
         "test-access/20241203/cn-hangzhou/oss/aliyun_v4_request",
       "x-oss-date": "20241203T034420Z",
       "x-oss-signature":
-        "5bfa43fe474168b6a89c80aace7549aafcf553140e844b82296b24009d41c14b",
+        "7be92d355ed651fdad3fe1a6faffe442ef9992fb384c85869c8f53ddc1c44aa3",
     });
+    expect(signed.fields).not.toHaveProperty("Content-Type");
     const policy = JSON.parse(
       Buffer.from(signed.fields.policy!, "base64").toString("utf8"),
     ) as { expiration: string; conditions: unknown[] };
     expect(policy.expiration).toBe("2024-12-03T03:49:20.000Z");
     expect(policy.conditions).toContainEqual({ bucket: "examplebucket" });
+    expect(policy.conditions).toContainEqual([
+      "eq",
+      "$content-type",
+      "application/pdf",
+    ]);
     expect(policy.conditions).toContainEqual([
       "content-length-range",
       123,
@@ -162,10 +167,14 @@ describe("Aliyun OSS V4 REST client", () => {
     })).toThrow("Browser direct upload requires a public Aliyun OSS endpoint");
   });
 
-  it("requires production server wiring and ECS read-only OSS/CORS preflight", async () => {
-    const [server, gate] = await Promise.all([
+  it("requires production server wiring, file-last browser upload, and ECS read-only OSS/CORS preflight", async () => {
+    const [server, uploader, gate] = await Promise.all([
       readFile(
         new URL("../../apps/api/src/server.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../apps/web/src/external-evidence-uploader.tsx", import.meta.url),
         "utf8",
       ),
       readFile(
@@ -179,6 +188,12 @@ describe("Aliyun OSS V4 REST client", () => {
     expect(server).not.toContain(
       "OSS is configured but the official Aliyun OSS SDK client has not been injected",
     );
+    const signedFieldsAt = uploader.indexOf(
+      "for (const [name, value] of Object.entries(intent.uploadFields))",
+    );
+    const fileAt = uploader.indexOf('form.append("file", file)');
+    expect(signedFieldsAt).toBeGreaterThanOrEqual(0);
+    expect(fileAt).toBeGreaterThan(signedFieldsAt);
     expect(gate).toContain("business acceptance runtime must configure OSS");
     expect(gate).toContain("await client.head(missingObjectKey)");
     expect(gate).toContain('method: "OPTIONS"');
