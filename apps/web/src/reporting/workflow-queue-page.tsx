@@ -108,7 +108,6 @@ export function WorkflowQueuePage({
   const [to, setTo] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const statusKey = statuses.join("|");
   const baseFilters = useMemo(() => ({
     q: q.trim() || undefined,
     overdue: overdue || undefined,
@@ -157,7 +156,7 @@ export function WorkflowQueuePage({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [baseFilters, refresh, statusKey]);
+  }, [baseFilters, refresh, statuses]);
 
   useEffect(() => {
     const focus = () => setRefresh((value) => value + 1);
@@ -176,6 +175,7 @@ export function WorkflowQueuePage({
   const page = ready?.pages[selected];
   const items = page?.items ?? [];
   const meta = queueMeta[selected];
+  const canUseUnifiedQuery = ready?.available.some((status) => ready.pages[status]?.canViewReports === true) === true;
 
   return (
     <Shell active={active}>
@@ -183,8 +183,7 @@ export function WorkflowQueuePage({
         title={title}
         subtitle="订单按真实当前状态进入对应节点；处理完成后自动离开本节点并流转到下一节点"
         badge={ready ? `${items.length}${page?.nextCursor ? "+" : ""} 单当前结果` : "实时节点队列"}
-        action="返工统一查询"
-        actionHref="/ui/tasks"
+        {...(canUseUnifiedQuery ? { action: "返工统一查询", actionHref: "/ui/tasks" } : {})}
       />
 
       {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
@@ -192,15 +191,18 @@ export function WorkflowQueuePage({
       {ready && (
         <>
           <Surface className="workflow-queue-tabs">
-            {ready.available.map((status) => (
-              <Button
-                key={status}
-                variant={selected === status ? "primary" : undefined}
-                onClick={() => selectStatus(status)}
-              >
-                {queueMeta[status].node} · {queueMeta[status].label} · {ready.pages[status]?.items.length ?? 0} 单
-              </Button>
-            ))}
+            {ready.available.map((status) => {
+              const statusPage = ready.pages[status];
+              return (
+                <Button
+                  key={status}
+                  {...(selected === status ? { variant: "primary" as const } : {})}
+                  onClick={() => selectStatus(status)}
+                >
+                  {queueMeta[status].node} · {queueMeta[status].label} · {statusPage?.items.length ?? 0}{statusPage?.nextCursor ? "+" : ""} 单
+                </Button>
+              );
+            })}
           </Surface>
 
           <Surface className="workflow-queue-guide">
@@ -242,7 +244,7 @@ export function WorkflowQueuePage({
                     </div>
                     <dl>
                       <div><dt>当前节点停留</dt><dd>{age(order.agingSeconds)}</dd></div>
-                      <div><dt>完成进度</dt><dd>{order.reportedQuantity} / {order.plannedQuantity ?? "—"}</dd></div>
+                      <div><dt>返工数量</dt><dd>{order.plannedQuantity ?? "—"}</dd></div>
                       <div><dt>最近更新</dt><dd>{new Date(order.updatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</dd></div>
                       <div><dt>当前异常</dt><dd>{order.exceptionCount ? `${order.exceptionCount} 项` : "无"}</dd></div>
                     </dl>
