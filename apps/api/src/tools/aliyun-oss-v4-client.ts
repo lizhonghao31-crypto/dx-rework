@@ -120,6 +120,13 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
         503,
       );
     }
+    if (endpoint.hostname.includes("-internal.")) {
+      throw new ApplicationError(
+        "STORAGE_UNAVAILABLE",
+        "Browser direct upload requires a public Aliyun OSS endpoint",
+        503,
+      );
+    }
     if (endpoint.pathname !== "/" || endpoint.search || endpoint.hash) {
       throw new ApplicationError(
         "STORAGE_UNAVAILABLE",
