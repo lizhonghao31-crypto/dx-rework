@@ -34,12 +34,13 @@ describe("work reporting monetary snapshots", () => {
     const form = await readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8");
     expect(form).toContain("if (!assignable) {");
     expect(form).toContain("request(\"work-task-options\"");
-    expect(form).toContain("data && canAssign && <Surface>");
-    expect(form).toContain("你的本次分摊 ¥");
+    expect(form).toContain('data && canAssign && data.reworkStatus === "pending_task_assignment" && <Surface>');
+    expect(form).toContain("你的本次计件金额 ¥");
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportDrafts");
     expect(form).toContain('step="0.1"');
-    expect(form).toContain("本次上数最多保留一位小数");
+    expect(form).toContain("本次完成数量最多保留一位小数");
+    expect(form).toContain("当前岗位只处理整单确认或数量异常，不展示工人的个人完成登记");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
