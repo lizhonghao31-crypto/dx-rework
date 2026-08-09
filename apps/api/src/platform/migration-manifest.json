@@ -6,7 +6,7 @@
     },
     {
       "version": "0002_dingtalk_identity_access",
-      "checksum": "155fd00415e4a15c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f"
+      "checksum": "155fd00415c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f"
     },
     {
       "version": "0003_identity_union_continuity",
@@ -155,6 +155,10 @@
     {
       "version": "0039_practical_quantity_amount_precision",
       "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3"
+    },
+    {
+      "version": "0040_root_wage_identity_bypass",
+      "checksum": "533c45c926a86dba2f9daf10bb14a29fd82b8163c6cea00dad25cfff3530e7a1"
     }
   ]
 }
