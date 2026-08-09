@@ -145,11 +145,7 @@ export function WorkflowQueuePage({
           return;
         }
         setState({ kind: "ready", pages, available });
-        setSelected((current) => {
-          if (available.includes(current) && (pages[current]?.items.length ?? 0) > 0) return current;
-          const firstWithOrders = available.find((status) => (pages[status]?.items.length ?? 0) > 0);
-          return firstWithOrders ?? (available.includes(current) ? current : available[0]!);
-        });
+        setSelected((current) => available.includes(current) ? current : available[0]!);
       });
     }, 180);
     return () => {
