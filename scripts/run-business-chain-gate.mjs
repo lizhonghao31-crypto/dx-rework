@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
+import pg from "pg";
+
+const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32})$/;
 
 function parseEnvValue(raw) {
   const value = raw.trim();
@@ -34,9 +38,30 @@ async function hydrateDatabaseUrl() {
 
 await hydrateDatabaseUrl();
 
-const hasDatabase = Boolean(
-  process.env.TEST_DATABASE_URL || process.env.DATABASE_URL,
-);
+const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const hasDatabase = Boolean(databaseUrl);
+
+async function cleanupIsolatedGateSchemas() {
+  if (!databaseUrl) return;
+  const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+  try {
+    const result = await pool.query(
+      `SELECT nspname
+       FROM pg_namespace
+       WHERE nspname LIKE 'full_chain_%'
+          OR nspname LIKE 'root_http_%'`,
+    );
+    for (const row of result.rows) {
+      const schema = String(row.nspname);
+      if (!ISOLATED_GATE_SCHEMA.test(schema)) continue;
+      await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+      process.stdout.write(`BUSINESS_CHAIN_GATE_SCHEMA_CLEANED: ${schema}\n`);
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
 const tests = [
   "tests/unit/current-migration-manifest-checksum.test.ts",
   "tests/unit/business-chain-ui-contract.test.ts",
@@ -59,34 +84,41 @@ if (hasDatabase) {
   );
 }
 
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const child = spawn(
-  npmCommand,
-  [
-    "exec",
-    "--",
-    "vitest",
-    "run",
-    "--config",
-    "vitest.business-chain.config.ts",
-    ...tests,
-  ],
-  {
-    stdio: "inherit",
-    env: process.env,
-  },
-);
+if (hasDatabase) await cleanupIsolatedGateSchemas();
 
-const exitCode = await new Promise((resolve, reject) => {
-  child.once("error", reject);
-  child.once("exit", (code, signal) => {
-    if (signal) {
-      reject(new Error(`business chain gate terminated by ${signal}`));
-      return;
-    }
-    resolve(code ?? 1);
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+let exitCode;
+try {
+  const child = spawn(
+    npmCommand,
+    [
+      "exec",
+      "--",
+      "vitest",
+      "run",
+      "--config",
+      "vitest.business-chain.config.ts",
+      ...tests,
+    ],
+    {
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+
+  exitCode = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (signal) {
+        reject(new Error(`business chain gate terminated by ${signal}`));
+        return;
+      }
+      resolve(code ?? 1);
+    });
   });
-});
+} finally {
+  if (hasDatabase) await cleanupIsolatedGateSchemas();
+}
 
 if (exitCode !== 0) {
   throw new Error(`BUSINESS_CHAIN_GATE_FAILED: vitest exited ${exitCode}`);
