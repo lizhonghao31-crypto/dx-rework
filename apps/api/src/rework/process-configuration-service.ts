@@ -11,6 +11,7 @@ import type {
 import type { ReworkOrderStatus } from "@dx-rework/domain";
 import type { Pool, PoolClient } from "pg";
 
+import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import {
   IdempotencyService,
@@ -131,6 +132,13 @@ export const truncateDecimal = (value: number, scale: number): number => {
   const [whole = "", fraction = ""] = decimalSource(value).split(".");
   return Number(fraction.length === 0 ? whole : whole + "." + fraction.slice(0, scale));
 };
+
+export const isIeSelfReviewBlocked = (
+  actor: TrustedActorContext,
+  orderCreatedBy: string,
+  configurationCreatedBy: string,
+): boolean => !isRootActor(actor)
+  && (orderCreatedBy === actor.actorId || configurationCreatedBy === actor.actorId);
 
 const translateDatabaseError = (error: unknown): never => {
   if (error instanceof ApplicationError) throw error;
@@ -347,7 +355,7 @@ export class ProcessConfigurationService {
       if (!configuration || configuration.status !== "pending_ie_review" || configuration.configuration_version !== input.expectedConfigurationVersion) {
         throw new ApplicationError("CONFLICT", "待审核工序配置已发生变化，请刷新后处理", 409);
       }
-      if (order.created_by === actor.actorId || configuration.created_by === actor.actorId) {
+      if (isIeSelfReviewBlocked(actor, order.created_by, configuration.created_by)) {
         throw new ApplicationError("FORBIDDEN", "IE审核人不得是返工单发起人或当前工序配置人", 403);
       }
       const items = await this.items(client, configuration.configuration_id);

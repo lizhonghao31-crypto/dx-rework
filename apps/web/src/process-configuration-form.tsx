@@ -179,6 +179,7 @@ export function ProcessConfigurationForm() {
   );
   const reviewSeparationBlocked = Boolean(
     user
+    && user.isRoot !== true
     && detail
     && (
       user.id === detail.createdBy.userId
