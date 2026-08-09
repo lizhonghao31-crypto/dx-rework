@@ -72,11 +72,14 @@ const signingKey = (
   return hmac(serviceKey, REQUEST_TYPE);
 };
 
+const compareEncoded = (left: string, right: string): number =>
+  left < right ? -1 : left > right ? 1 : 0;
+
 const queryString = (values: Readonly<Record<string, string>>): string =>
   Object.entries(values)
     .map(([key, value]) => [rfc3986Encode(key), rfc3986Encode(value)] as const)
     .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
-      leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
+      compareEncoded(leftKey, rightKey) || compareEncoded(leftValue, rightValue),
     )
     .map(([key, value]) => `${key}=${value}`)
     .join("&");
