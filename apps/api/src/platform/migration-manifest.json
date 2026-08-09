@@ -157,8 +157,8 @@
       "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3"
     },
     {
-      "version": "0040_root_wage_identity_bypass",
-      "checksum": "533c45c926a86dba2f9daf10bb14a29fd82b8163c6cea00dad25cfff3530e7a1"
+      "version": "0040_root_identity_separation_bypass",
+      "checksum": "3aae93433c27e8e48a24a60a2586b132faa54a0084d0d44fa6ebff4c7cf9899a"
     }
   ]
 }
