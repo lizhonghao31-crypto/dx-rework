@@ -217,6 +217,7 @@ export function ResponsibilityDeterminationPanel({
     response?.canDetermine &&
       response.reworkStatus === "pending_responsibility_determination",
   );
+  const saveNeeded = determination === null || hasUnsavedChanges;
   const finalizable = Boolean(
     editable
       && determination?.stage === "draft"
@@ -294,7 +295,7 @@ export function ResponsibilityDeterminationPanel({
   };
 
   const save = async (): Promise<void> => {
-    if (!response || !editable || !allProcessesValid) return;
+    if (!response || !editable || !allProcessesValid || !saveNeeded) return;
     const existingVersion = determination?.version ?? null;
     await runWrite(
       "save",
@@ -359,6 +360,10 @@ export function ResponsibilityDeterminationPanel({
   };
 
   const transfer = async (): Promise<void> => {
+    if (hasUnsavedChanges) {
+      setMessage("当前页面有未保存修改，请先保存草稿，再转交处理人。");
+      return;
+    }
     if (!transferable || !transferUserId || !transferReason.trim()) {
       setMessage("请选择新的责任处理人并填写转交原因。");
       return;
@@ -586,9 +591,9 @@ export function ResponsibilityDeterminationPanel({
       <div className="responsibility-actions">
         <Button
           onClick={() => void save()}
-          disabled={!editable || !allProcessesValid || Boolean(busyAction)}
+          disabled={!editable || !allProcessesValid || !saveNeeded || Boolean(busyAction)}
         >
-          {busyAction === "save" ? "保存中…" : "保存草稿"}
+          {busyAction === "save" ? "保存中…" : determination && !hasUnsavedChanges ? "草稿已保存" : "保存草稿"}
         </Button>
         <Button
           variant="primary"
@@ -608,6 +613,7 @@ export function ResponsibilityDeterminationPanel({
       {transferable && (
         <div className="responsibility-command-box">
           <h3>转交当前责任处理</h3>
+          {hasUnsavedChanges && <p>当前有未保存修改；请先保存草稿再转交，避免丢失本次编辑。</p>}
           <label className="dx-field">
             <span>新的责任处理人</span>
             <span className="dx-field__control search-select-control">
@@ -619,7 +625,7 @@ export function ResponsibilityDeterminationPanel({
                 value={transferUserId}
                 placeholder={transferOptions.length ? "输入姓名搜索" : "没有其他可转交处理人"}
                 emptyText="没有匹配的处理人"
-                disabled={Boolean(busyAction) || transferOptions.length === 0}
+                disabled={Boolean(busyAction) || transferOptions.length === 0 || hasUnsavedChanges}
                 onChange={setTransferUserId}
               />
             </span>
@@ -627,12 +633,12 @@ export function ResponsibilityDeterminationPanel({
           <InsetField
             label="转交原因"
             value={transferReason}
-            disabled={Boolean(busyAction)}
+            disabled={Boolean(busyAction) || hasUnsavedChanges}
             onChange={(event) => setTransferReason(event.target.value)}
           />
           <Button
             onClick={() => void transfer()}
-            disabled={Boolean(busyAction) || !transferUserId || !transferReason.trim()}
+            disabled={Boolean(busyAction) || hasUnsavedChanges || !transferUserId || !transferReason.trim()}
           >
             {busyAction === "transfer" ? "转交中…" : "确认转交"}
           </Button>
