@@ -73,7 +73,11 @@ export function ResponsibilityTaskPage() {
     if (!response.ok) throw new Error(`任务加载失败（${response.status}）`);
     const { todos } = TodoListResponseSchema.parse(await response.json());
     const todo = todos.find((item) => item.todoId === todoId);
-    if (!todo || todo.status === "completed" || todo.status === "cancelled") {
+    if (!todo) {
+      setState({ kind: "error", message: "该任务已不再分配给你，请返回我的待办查看当前任务。" });
+      return;
+    }
+    if (todo.status === "completed" || todo.status === "cancelled") {
       const next = todos.find((item) =>
         item.todoId !== todoId
         && item.todoType !== "information"
