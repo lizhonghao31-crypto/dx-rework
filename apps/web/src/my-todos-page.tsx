@@ -134,6 +134,11 @@ export function MyTodosPage() {
           {actionable.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
+            const orderSummary = order
+              ? `${order.reworkNo ?? "返工单号待生成"} · 订单号：${order.orderNo ?? "未填写"} · 款号：${order.styleNo ?? "未填写"}`
+              : todo.route.routeName === "wage_period_detail"
+                ? "工资期间核对任务"
+                : "返工单关联信息待读取";
             return (
               <Surface className="my-todo-card" key={todo.todoId}>
                 {blocked ? (
@@ -153,7 +158,7 @@ export function MyTodosPage() {
                         <h2>{taskLabel[todo.route.routeName]}</h2>
                         <StatusBadge tone="warning">待处理</StatusBadge>
                       </div>
-                      <p>{order?.reworkNo ?? "返工单号待生成"} · 订单号：{order?.orderNo ?? "未填写"} · 款号：{order?.styleNo ?? "未填写"}</p>
+                      <p>{orderSummary}</p>
                     </div>
                     <div className="my-todo-metrics" aria-label="待办业务信息">
                       <span><small>当前节点</small>{todo.category}</span>
