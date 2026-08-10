@@ -321,7 +321,7 @@ export function Header({
         <StatusBadge tone="info">{badge}</StatusBadge>
         {action ? (
           resolvedActionHref
-            ? <a href={resolvedActionHref}><Button>{action}</Button></a>
+            ? <a className="dx-button dx-button--secondary header-action-link" href={resolvedActionHref}>{action}</a>
             : <Button>{action}</Button>
         ) : null}
       </div>
