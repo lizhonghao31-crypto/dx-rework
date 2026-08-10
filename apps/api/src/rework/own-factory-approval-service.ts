@@ -110,6 +110,7 @@ export class OwnFactoryApprovalService {
     actor: TrustedActorContext,
     order: OrderRow,
     finalizedDeterminationId: string,
+    createPendingAction = true,
   ): Promise<string | null> {
     const existing = await client.query<{ approval_id: string }>(
       "SELECT approval_id FROM rework_own_factory_approvals WHERE finalized_determination_id=$1",
@@ -167,21 +168,36 @@ export class OwnFactoryApprovalService {
         actor.requestId,
       ],
     );
-    await this.enqueuePendingNotices(client, approvalId, order, actor.requestId);
-    await this.todos?.actionableForParallelDirectRole(client, actor, {
-      category: "own_factory_approval",
-      sourceEventId: eventId,
-      sourceAction: "rework.own_factory_approval.create",
-      entityType: "rework_order",
-      entityId: order.rework_order_id,
-      requiredRole: "owner_group",
-      requiredCapability: "own_factory:approve",
-      route: { routeName: "own_factory_approval", entityId: order.rework_order_id },
-      policyKey: "general",
-      dedupeKey: `own-factory-approval:${approvalId}`,
-      expectedRecipientCount: 2,
-    });
+    if (createPendingAction) {
+      await this.enqueuePendingNotices(client, approvalId, order, actor.requestId);
+      await this.todos?.actionableForParallelDirectRole(client, actor, {
+        category: "own_factory_approval",
+        sourceEventId: eventId,
+        sourceAction: "rework.own_factory_approval.create",
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        requiredRole: "owner_group",
+        requiredCapability: "own_factory:approve",
+        route: { routeName: "own_factory_approval", entityId: order.rework_order_id },
+        policyKey: "general",
+        dedupeKey: `own-factory-approval:${approvalId}`,
+        expectedRecipientCount: 2,
+      });
+    }
     return approvalId;
+  }
+
+  async approveDuringFinalization(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    approvalId: string,
+    expectedOrderVersion: number,
+  ): Promise<void> {
+    await this.writeDecision(client, actor, approvalId, {
+      expectedOrderVersion,
+      expectedApprovalVersion: 1,
+      opinion: "责任判定由具备本厂审批权限的老板本人最终确认，系统不再重复发起审批。",
+    }, "approved");
   }
 
   async get(
