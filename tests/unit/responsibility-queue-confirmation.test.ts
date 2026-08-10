@@ -14,6 +14,9 @@ describe("N07 independent high-multiplier queue", () => {
     expect(service).toContain('row.determination_stage === "draft"');
     expect(service).toContain("row.high_multiplier_pending");
     expect(page).toContain("高倍率待你独立确认");
-    expect(page).toContain("高倍率待其他老板独立确认");
+    expect(page).toContain("高倍率待独立确认");
+    expect(page).toMatch(
+      /item\.canConfirmHighMultiplier\s*\?\s*"待你独立确认"/,
+    );
   });
 });

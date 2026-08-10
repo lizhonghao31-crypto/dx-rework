@@ -14,13 +14,16 @@ const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
 const reworkForm = read("../../apps/web/src/rework-form.tsx");
 const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
+const landingTarget = read("../../apps/web/src/landing-target.ts");
 
 describe("PR-01A UI prototype contract", () => {
   it.each(["/ui/management", "/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/master-data", "/ui/process-configuration", "/ui/piecework/collective", "/ui/audit", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
   it("routes the authenticated root to a business landing instead of the technical foundation", () => {
     expect(app).toContain('if (path === "/") return <HomeLanding />;');
-    expect(app).toContain('target = "ui/management"');
-    expect(app).toContain('user.businessRoles?.includes("owner_group")');
+    expect(app).toContain("const target = landingTarget(body.user);");
+    expect(landingTarget).toContain('user.isRoot === true');
+    expect(landingTarget).toContain('hasRole(user, "owner_group")');
+    expect(landingTarget).toContain('return "ui/management"');
     expect(app).not.toContain("else page = <Foundation />;");
   });
   it("exports and explicitly imports reusable UI styles", () => {
@@ -74,7 +77,7 @@ describe("PR-01A UI prototype contract", () => {
     expect(pages).not.toContain('href="#"');
   });
   it("turns only the approved QC page into an idempotent real workflow while admitting owners", () => {
-    expect(app).toContain('<Shell active="发起返工"><ReworkInitiationForm /></Shell>');
+    expect(app).toContain('<Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>');
     expect(app).toContain('{ requiredRole: "quality_control", requiredCapability: "rework:initiate" }');
     expect(app).toContain('const owner = { requiredRole: "owner_group" } as const');
     expect(reworkForm).toContain('"rework-orders/initiation-options"');
@@ -82,8 +85,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkForm).toContain("executeReworkSubmit");
     expect(reworkForm).toContain("crypto.subtle.digest");
     expect(reworkForm).toContain('upload.append("file", file)');
-    expect(reworkForm).toContain("一单一个款号");
-    expect(reworkForm).toContain("订单号（知道时填写）");
+    expect(reworkForm).toContain("一张返工单一个款号");
+    expect(reworkForm).toContain("订单号（可填多个，知道时填写）");
     expect(reworkForm).toContain("撤回修改");
     expect(reworkForm).toContain("取消返工单");
     expect(reworkForm).not.toContain("styleNos");

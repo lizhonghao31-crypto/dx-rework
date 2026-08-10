@@ -20,7 +20,9 @@ describe("Root single-user acceptance routing", () => {
       "apps/api/src/todos/root-aware-projection-service.ts",
       "utf8",
     );
-    expect(projection).toContain("if (rootActor(args[1]) && isAcceptanceRoutingConflict(error)) return");
+    expect(projection).toContain("private suppress(actor: TrustedActorContext, error: unknown): boolean");
+    expect(projection).toContain("return rootActor(actor) && isAcceptanceRoutingConflict(error);");
+    expect(projection).toContain("if (this.suppress(args[1], error)) return;");
     expect(projection).toContain("throw error");
   });
 });

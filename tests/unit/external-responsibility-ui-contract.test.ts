@@ -11,7 +11,8 @@ describe("external responsibility UI contract", () => {
 
   it("records deductions using the Shanghai business date", async () => {
     const source = await readFile("apps/web/src/external-responsibility-panel.tsx", "utf8");
-    expect(source).toContain("deductedOn: shanghaiBusinessDate()");
+    expect(source).toContain("deductedOn: deductedOn[caseItem.caseId] ?? shanghaiBusinessDate()");
+    expect(source).toContain("max={shanghaiBusinessDate()}");
     expect(source).not.toContain("toISOString().slice(0, 10)");
   });
 });

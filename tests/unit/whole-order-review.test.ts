@@ -56,7 +56,8 @@ describe("whole-order review contracts", () => {
     expect(form).toContain("WholeOrderReviewPanel");
     expect(form).toContain("const taskReadable");
     expect(form).toContain("reworkOrderId && reviewEligible");
-    expect(form).toContain('setReviewEligible(me.status === "authorized")');
+    expect(form).toContain('const orderReviewable = me.status === "authorized" && canReviewOrder(me.user);');
+    expect(form).toContain("setReviewEligible(orderReviewable);");
     expect(panel).toContain("whole-order-review/approve");
     expect(panel).toContain("quantity-adjustments");
     expect(panel).toContain('report.assignmentMode === "collective"');

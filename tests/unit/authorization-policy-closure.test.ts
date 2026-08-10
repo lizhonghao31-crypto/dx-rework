@@ -70,6 +70,7 @@ describe("authorization policy closure", () => {
     expect(projection).toContain('actor.actorRoles.includes("root_superuser")');
     expect(projection).toContain("isAcceptanceRoutingConflict");
     expect(projection).toContain("throw error");
-    expect(projection).not.toContain("actionableForIndependentOwner(");
+    expect(projection).toContain("override async actionableForIndependentOwner(");
+    expect(projection).toContain("if (this.suppress(args[1], error)) return;");
   });
 });

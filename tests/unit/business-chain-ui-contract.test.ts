@@ -64,7 +64,7 @@ describe("business-chain UI handoff contracts", () => {
       readFile("apps/api/src/rework/responsibility-determination-routes.ts", "utf8"),
     ]);
     expect(panel).toContain("allocation.shareBps > 0n");
-    expect(panel).toContain("total === 10000n");
+    expect(panel).toContain("shareTotalBps(process.allocations) === 10000n");
     expect(panel).toContain("输入姓名搜索");
     expect(panel).toContain("ResponsibilityTransferOptionsResponseSchema");
     expect(panel).not.toContain('label="目标用户 UUID"');
