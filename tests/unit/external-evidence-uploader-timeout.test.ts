@@ -16,6 +16,7 @@ describe("external evidence upload timeout UX", () => {
     expect(source).toContain('setStage("uploading")');
     expect(source).toContain('setStage("verifying")');
     expect(source).toContain("可重新选择同一文件重试");
+    expect(source).toContain("setFailedFile(activeFileName)");
     expect(source).toContain("setUploading(false)");
   });
 });
