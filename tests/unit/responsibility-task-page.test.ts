@@ -15,6 +15,7 @@ describe("responsibility task page", () => {
     expect(list).toContain('todo.todoType !== "information"');
     expect(task).toContain('item.todoId === todoId');
     expect(task).toContain('todo.status === "completed"');
+    expect(task).toContain("该任务已不再分配给你");
     expect(task).toContain("您在本订单内的任务已全部完成，谢谢");
     expect(task).toContain("window.location.replace");
     expect(external).toContain("focusCaseId");
