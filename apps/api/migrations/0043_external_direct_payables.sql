@@ -8,6 +8,7 @@ DECLARE
   batch rework_external_responsibility_batches%ROWTYPE;
   supplier current_supplier_catalog%ROWTYPE;
   order_record rework_orders%ROWTYPE;
+  event_action text;
   automatic_route boolean;
 BEGIN
   SELECT * INTO batch
@@ -19,6 +20,9 @@ BEGIN
   SELECT * INTO order_record
   FROM rework_orders
   WHERE rework_order_id=NEW.rework_order_id;
+  SELECT action INTO event_action
+  FROM operation_events
+  WHERE event_id=NEW.operation_event_id;
 
   IF batch.batch_id IS NULL
      OR batch.rework_order_id<>NEW.rework_order_id
@@ -46,13 +50,17 @@ BEGIN
   END IF;
 
   automatic_route :=
-    NEW.responsibility_type='processing_factory'
-    AND order_record.processing_factory_type='supplier'
-    AND NEW.supplier_id=order_record.processing_factory_supplier_id
-    AND NEW.business_handler_user_id IS NOT DISTINCT FROM order_record.merchandiser_user_id
-    AND NEW.processing_factory_override_reason IS NULL;
+    event_action='rework.external_responsibility.auto_route';
 
   IF automatic_route THEN
+    IF NEW.responsibility_type<>'processing_factory'
+       OR order_record.processing_factory_type IS DISTINCT FROM 'supplier'
+       OR NEW.supplier_id<>order_record.processing_factory_supplier_id
+       OR NEW.business_handler_user_id IS DISTINCT FROM order_record.merchandiser_user_id
+       OR NEW.processing_factory_override_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'automatic processing-factory route is not valid'
+        USING ERRCODE='23514';
+    END IF;
     PERFORM require_external_responsibility_event(
       'rework.external_responsibility.auto_route',
       'responsibility:determine',
@@ -84,6 +92,7 @@ DECLARE
   target_case rework_external_responsibility_cases%ROWTYPE;
   item rework_external_responsibility_items%ROWTYPE;
   order_record rework_orders%ROWTYPE;
+  event_action text;
   automatic_route boolean;
 BEGIN
   SELECT * INTO target_case
@@ -95,6 +104,9 @@ BEGIN
   SELECT * INTO order_record
   FROM rework_orders
   WHERE rework_order_id=target_case.rework_order_id;
+  SELECT action INTO event_action
+  FROM operation_events
+  WHERE event_id=target_case.operation_event_id;
 
   IF target_case.case_id IS NULL
      OR item.external_item_id IS NULL
@@ -107,13 +119,17 @@ BEGIN
   END IF;
 
   automatic_route :=
-    target_case.responsibility_type='processing_factory'
-    AND order_record.processing_factory_type='supplier'
-    AND target_case.supplier_id=order_record.processing_factory_supplier_id
-    AND target_case.business_handler_user_id IS NOT DISTINCT FROM order_record.merchandiser_user_id
-    AND target_case.processing_factory_override_reason IS NULL;
+    event_action='rework.external_responsibility.auto_route';
 
   IF automatic_route THEN
+    IF target_case.responsibility_type<>'processing_factory'
+       OR order_record.processing_factory_type IS DISTINCT FROM 'supplier'
+       OR target_case.supplier_id<>order_record.processing_factory_supplier_id
+       OR target_case.business_handler_user_id IS DISTINCT FROM order_record.merchandiser_user_id
+       OR target_case.processing_factory_override_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'automatic processing-factory route is not valid'
+        USING ERRCODE='23514';
+    END IF;
     PERFORM require_external_responsibility_event(
       'rework.external_responsibility.auto_route',
       'responsibility:determine',
