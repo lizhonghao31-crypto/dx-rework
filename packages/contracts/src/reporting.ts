@@ -113,6 +113,7 @@ export const ManagementReworkRowSchema = z.object({
   externalRemainingAmount: MoneySchema,
   overdue: z.boolean(),
   exceptionCount: z.number().int().nonnegative(),
+  attachmentCount: z.number().int().nonnegative(),
   deepLink: z.string().startsWith("/"),
   updatedAt: DateTimeSchema,
 }).strict();
