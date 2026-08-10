@@ -18,13 +18,14 @@ const styleUrl = new URL(
 );
 
 describe("own-factory approval web integration", () => {
-  it("uses server snapshots, exact versions, and idempotency instead of browser money calculations", async () => {
+  it("uses server snapshots, exact versions, and stable idempotency instead of browser money calculations", async () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).toContain("OwnFactoryApprovalResponseSchema");
     expect(source).toContain("own-factory-approval");
     expect(source).toContain("expectedOrderVersion");
     expect(source).toContain("expectedApprovalVersion");
-    expect(source).toContain('"idempotency-key": crypto.randomUUID()');
+    expect(source).toContain('"idempotency-key": idempotencyKey');
+    expect(source).toContain("pendingDecisionKeys.current[signature]");
     expect(source).toContain("sourceSnapshot.processes");
     expect(source).toContain("sourceSnapshot.amountLines");
     expect(source).toContain("sourceSnapshot.qualityControl");
