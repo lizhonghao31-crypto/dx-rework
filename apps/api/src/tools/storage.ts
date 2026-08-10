@@ -23,7 +23,7 @@ export interface ObjectStorage {
     objectKey: string,
     options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number },
   ): Promise<UploadGrant>;
-  createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<DownloadGrant>;
+  createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant>;
   head(objectKey: string): Promise<StoredObjectMetadata>;
   computeSha256(objectKey: string): Promise<string>;
 }
@@ -97,14 +97,14 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     };
   }
 
-  async createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string }): Promise<DownloadGrant> {
+  async createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant> {
     // Capture before signing so the advertised timestamp can never exceed the URL's real lifetime.
     const expiresAt = grantExpiry(this.now(), options.ttlSeconds);
     const downloadUrl = this.client.signatureUrl(objectKey, {
       method: "GET",
       expires: options.ttlSeconds,
       response: {
-        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(options.filename)}`,
+        "content-disposition": `${options.disposition ?? "attachment"}; filename*=UTF-8''${encodeURIComponent(options.filename)}`,
       },
     });
     if (!isHttpsUrl(downloadUrl)) {
@@ -200,7 +200,7 @@ export class FakeObjectStorage implements ObjectStorage {
     };
   }
 
-  async createDownloadGrant(objectKey: string, options: { ttlSeconds: number }): Promise<DownloadGrant> {
+  async createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant> {
     this.signed.push({ method: "GET", objectKey, ttlSeconds: options.ttlSeconds });
     return {
       downloadUrl: `https://private.example.test/${encodeURIComponent(objectKey)}?method=GET`,
