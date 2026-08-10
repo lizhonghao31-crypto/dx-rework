@@ -124,6 +124,7 @@ export function ResponsibilityTaskPage() {
       return <ReworkDetailPage
         reworkOrderId={route.reworkOrderId ?? route.entityId}
         focusedNode={workflowNodeByRoute[route.routeName]}
+        {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
         returnToTodos
       />;
     }
@@ -143,7 +144,12 @@ export function ResponsibilityTaskPage() {
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
   if (route.routeName !== "wage_period_detail") {
-    return <ReworkDetailPage reworkOrderId={orderId} focusedNode={workflowNodeByRoute[route.routeName]} returnToTodos />;
+    return <ReworkDetailPage
+      reworkOrderId={orderId}
+      focusedNode={workflowNodeByRoute[route.routeName]}
+      {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
+      returnToTodos
+    />;
   }
   return (
     <Shell active="我的待办">
