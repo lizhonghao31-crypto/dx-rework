@@ -188,7 +188,11 @@ export class ManagementReportingService {
 
   async report(actor: TrustedActorContext, reportType: ReportType, query: ReportQuery): Promise<ReportPreviewResponse> {
     this.validateReportStatus(reportType, query.status);
-    await this.require(actor, "report:view");
+    const currentCapabilities = capabilities(actor);
+    const requiredCapability = reportType === "wages" && currentCapabilities.includes("wage:view")
+      ? "wage:view"
+      : "report:view";
+    await this.require(actor, requiredCapability);
     const range = await this.range(query);
     const data = await reportData(this.db, reportType, query, range, query.limit + 1);
     const truncated = data.rows.length > query.limit;
