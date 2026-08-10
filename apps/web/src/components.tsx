@@ -121,6 +121,14 @@ export function Shell({
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
   const todoAccess = hasCapability("todo:view");
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
+  const workReportingAccess = isRoot || isOwner || (
+    (hasRole("tail_supervisor") && ["work:assign", "submission:audit", "quantity:adjust"].some(hasCapability))
+    || (hasRole("worker") && hasCapability("work:report"))
+    || hasCapability("work:report_for_worker")
+    || (hasRole("order_merchandiser") && hasCapability("quantity:confirm"))
+    || (hasRole("ie_reviewer") && hasCapability("process:review"))
+  );
+  const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const systemManagementAccess = auditAccess || technicalAdminAccess || canManageEmployeeAccess
     || isRoot || isOwner || hasCapability("master_data:manage");
 
@@ -146,6 +154,13 @@ export function Shell({
       href: "/ui/tasks",
     });
   }
+  if (workReportingAccess) {
+    navigation.push({
+      name: "返工上数",
+      description: "分工、登记完成数量及整单审核",
+      href: "/ui/work-reporting",
+    });
+  }
   if (systemManagementAccess) {
     navigation.push({
       name: "系统管理",
@@ -157,6 +172,11 @@ export function Shell({
     name: "财务报表",
     description: "查询返工、责任、工资与扣款报表",
     href: "/ui/reports",
+  });
+  if (wageAccess) navigation.push({
+    name: "工资管理",
+    description: "核对工资、调整、月结和导出",
+    href: "/ui/wages",
   });
 
   const roleLabels = currentUser
