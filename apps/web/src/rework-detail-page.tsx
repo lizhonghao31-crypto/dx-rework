@@ -66,6 +66,11 @@ type ReworkBusinessDetail = Readonly<{
   submittedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  attachments: readonly Readonly<{
+    attachmentId: string;
+    filename: string;
+    mimeType: string;
+  }>[];
 }>;
 
 type LoadState =
@@ -419,6 +424,14 @@ export function ReworkDetailPage({
             <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
             <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
             <div className="rework-detail-wide"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
+            <div className="rework-detail-wide"><dt>已上传附件</dt><dd>{detail.attachments.length
+              ? detail.attachments.map((attachment) => <a
+                href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}
+                key={attachment.attachmentId}
+                rel="noreferrer"
+                target="_blank"
+              >{attachment.filename}（{attachment.mimeType}）</a>)
+              : "无"}</dd></div>
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
             {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
