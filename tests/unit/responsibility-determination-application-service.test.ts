@@ -48,7 +48,7 @@ const storedResponse: ResponsibilityDeterminationResponse = {
 describe("ResponsibilityDeterminationApplicationService", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("returns the idempotency repository response without re-reading mutable state", async () => {
+  it("returns the normalized idempotency repository response without re-reading mutable state", async () => {
     const storedResult = { value: storedResponse, reused: true };
     const saveDraft = vi
       .spyOn(ResponsibilityDeterminationService.prototype, "saveDraft")
@@ -68,7 +68,8 @@ describe("ResponsibilityDeterminationApplicationService", () => {
       "stable-draft-key",
     );
 
-    expect(result).toBe(storedResult);
+    expect(result).toStrictEqual(storedResult);
+    expect(result.reused).toBe(true);
     expect(saveDraft).toHaveBeenCalledWith(
       actor,
       storedResponse.reworkOrderId,
@@ -78,7 +79,7 @@ describe("ResponsibilityDeterminationApplicationService", () => {
     expect(authorizedGet).not.toHaveBeenCalled();
   });
 
-  it("rejects zero-bps responsibility allocations before the amount engine", () => {
+  it("rejects zero-bps responsibility allocations before the amount engine", async () => {
     const saveDraft = vi.spyOn(
       ResponsibilityDeterminationService.prototype,
       "saveDraft",
@@ -97,12 +98,12 @@ describe("ResponsibilityDeterminationApplicationService", () => {
       }],
     };
 
-    expect(() => service.saveDraft(
+    await expect(service.saveDraft(
       actor,
       storedResponse.reworkOrderId,
       invalid,
       "zero-bps-key",
-    )).toThrow("Responsibility shares must be greater than zero");
+    )).rejects.toThrow("Responsibility shares must be greater than zero");
     expect(saveDraft).not.toHaveBeenCalled();
   });
 });
