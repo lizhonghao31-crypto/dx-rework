@@ -180,7 +180,7 @@ export function EmployeeAccessPage() {
   };
 
   return (
-    <Shell active="权限管理">
+    <Shell active="系统管理">
       <div className="employee-access-shell">
         <Surface className="employee-access-card">
           <div className="employee-access-heading">
