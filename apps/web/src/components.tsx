@@ -140,7 +140,7 @@ export function Shell({
       href: "/ui/qc/new",
     });
   }
-  if (reportAccess || managementAccess) {
+  if (reportAccess) {
     navigation.push({
       name: "全部订单",
       description: "查看权限范围内订单及完整流程",
