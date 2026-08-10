@@ -41,15 +41,15 @@ describe("business-chain UI handoff contracts", () => {
   });
 
   it("lets N06 quantity confirmation and IE-review roles reach their actual workflow", async () => {
-    const [app, shell, panel] = await Promise.all([
+    const [app, detail, panel] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
-      readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
     ]);
     expect(app).toContain('{ requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" }');
     expect(app).toContain('{ requiredRole: "ie_reviewer", requiredCapability: "process:review" }');
-    expect(shell).toContain('hasRole("order_merchandiser") && hasCapability("quantity:confirm")');
-    expect(shell).toContain('hasRole("ie_reviewer") && hasCapability("process:review")');
+    expect(detail).toContain('hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm")');
+    expect(detail).toContain('hasRole(user, "ie_reviewer") && hasCapability(user, "process:review")');
     expect(panel).toContain('if (cutInput === null) return');
     expect(panel).toContain('if (returnInput === null) return');
     expect(panel).toContain('if (maximumInput === null) return');
