@@ -441,32 +441,31 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const externalItems = batch!.items.filter(
       (item) => item.responsibilityType === "processing_factory",
     );
-    expect(externalItems.length).toBeGreaterThan(0);
-    const allocated = await http<ExternalResponsibilityBatchResponse>(
-      fixture.app,
-      "POST",
-      `/external-responsibility-batches/${batch!.batchId}/allocate-suppliers`,
-      {
-        expectedBatchVersion: batch!.batchVersion,
-        allocations: [{
-          responsibilityType: "processing_factory",
-          supplierId: fixture.supplierId,
-          externalItemIds: externalItems.map((item) => item.externalItemId),
-        }],
-      },
+    expect(externalItems).toHaveLength(1);
+    const n07ProcessingFactoryAmount = finalized.determination!.processes
+      .flatMap((process) => process.allocations)
+      .find((allocation) =>
+        allocation.responsibilityType === "processing_factory"
+      )!.roundedAmount;
+    expect(externalItems[0]).toMatchObject({
+      proposedAmount: n07ProcessingFactoryAmount,
+    });
+    expect(batch!.cases).toHaveLength(1);
+    let externalCase = batch!.cases[0]!;
+    expect(externalCase).toMatchObject({
+      responsibilityType: "processing_factory",
+      supplier: { supplierId: fixture.supplierId },
+      businessHandlerUserId: fixture.merchandiserUserId,
+      proposedDeductionAmount: n07ProcessingFactoryAmount,
+      actualDeductedAmount: "0.00",
+      remainingAmount: n07ProcessingFactoryAmount,
+      status: "pending_payables_confirmation",
+      caseVersion: 1,
+    });
+    expect(externalCase.items.map((item) => item.externalItemId)).toEqual(
+      externalItems.map((item) => item.externalItemId),
     );
-    let externalCase = allocated!.cases[0]!;
-    expect(externalCase.canSign).toBe(true);
-    externalCase = await http<ExternalResponsibilityCaseResponse>(
-      fixture.app,
-      "POST",
-      `/external-responsibility-cases/${externalCase.caseId}/submit`,
-      {
-        expectedCaseVersion: externalCase.caseVersion,
-        remark: `Root 第 ${pass} 遍业务签收`,
-        attachmentIds: [],
-      },
-    );
+    expect(externalCase.canSign).toBe(false);
     expect(externalCase.canPayablesConfirm).toBe(true);
     externalCase = await http<ExternalResponsibilityCaseResponse>(
       fixture.app,
