@@ -36,6 +36,8 @@ const migrations = [
   "0018_external_responsibility_review_closure.sql",
   "0019_external_revision_seed_ordering.sql",
   "0020_external_responsibility_codex_closure.sql",
+  "0021_external_processing_factory_override_closure.sql",
+  "0042_external_processing_factory_auto_route.sql",
 ] as const;
 
 type ReviewedOrder = {
@@ -336,45 +338,23 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     const order = await createReviewedOrder("lifecycle");
     await finalizeExternal(order);
     const batch = await external.get(merchActor(), order.orderId);
-    expect(batch).not.toBeNull();
-    const allocated = await external.allocateSuppliers(
-      merchActor(),
-      batch!.batchId,
-      {
-        expectedBatchVersion: batch!.batchVersion,
-        allocations: [{
-          responsibilityType: "processing_factory",
-          supplierId,
-          externalItemIds: [batch!.items[0]!.externalItemId],
-        }],
-      },
-      randomUUID(),
-    );
-    const pending = allocated.value!.cases[0]!;
-    expect(pending).toMatchObject({
-      status: "pending_business_signoff",
-      proposedDeductionAmount: "1.00",
-      caseVersion: 1,
+    expect(batch).toMatchObject({
+      cases: [expect.objectContaining({
+        status: "pending_payables_confirmation",
+        proposedDeductionAmount: "1.00",
+        caseVersion: 1,
+      })],
     });
-    const submitted = await external.submit(
-      merchActor(),
-      pending.caseId,
-      { expectedCaseVersion: 1, attachmentIds: [] },
-      randomUUID(),
-    );
-    expect(submitted.value).toMatchObject({
-      status: "pending_payables_confirmation",
-      caseVersion: 2,
-    });
+    const pending = batch!.cases[0]!;
     const accepted = await external.payablesAccept(
       payablesActor(),
       pending.caseId,
-      { expectedCaseVersion: 2 },
+      { expectedCaseVersion: pending.caseVersion },
       randomUUID(),
     );
     expect(accepted.value).toMatchObject({
       status: "deduction_follow_up",
-      caseVersion: 3,
+      caseVersion: 2,
       actualDeductedAmount: "0.00",
     });
     const completed = await database.query<{ status: string }>(

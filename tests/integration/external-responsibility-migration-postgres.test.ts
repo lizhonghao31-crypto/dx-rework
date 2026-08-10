@@ -28,6 +28,7 @@ const migrations = [
   "0019_external_revision_seed_ordering.sql",
   "0020_external_responsibility_codex_closure.sql",
   "0021_external_processing_factory_override_closure.sql",
+  "0042_external_processing_factory_auto_route.sql",
 ] as const;
 
 runWithPostgres("external responsibility migration replay", () => {
