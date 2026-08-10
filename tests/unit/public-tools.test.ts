@@ -137,6 +137,11 @@ describe("private object storage", () => {
       ttlSeconds: 300,
     });
     const download = await storage.createDownloadGrant("private/x.png", { filename: "x.png", ttlSeconds: 60 });
+    const preview = await storage.createDownloadGrant("private/x.png", {
+      filename: "x.png",
+      ttlSeconds: 60,
+      disposition: "inline",
+    });
 
     expect(postCalls[0]).toMatchObject({ expiration: "2026-08-01T00:05:00.000Z" });
     expect(postCalls[0]?.conditions).toEqual(expect.arrayContaining([
@@ -154,7 +159,19 @@ describe("private object storage", () => {
       fields: { key: "private/x.png", "x-oss-forbid-overwrite": "true" },
     });
     expect(download.expiresAt).toBe("2026-08-01T00:01:00.000Z");
-    expect(getCalls[0]).toMatchObject({ name: "private/x.png", method: "GET", expires: 60 });
+    expect(preview.expiresAt).toBe("2026-08-01T00:01:00.000Z");
+    expect(getCalls[0]).toMatchObject({
+      name: "private/x.png",
+      method: "GET",
+      expires: 60,
+      response: { "content-disposition": "attachment; filename*=UTF-8''x.png" },
+    });
+    expect(getCalls[1]).toMatchObject({
+      name: "private/x.png",
+      method: "GET",
+      expires: 60,
+      response: { "content-disposition": "inline; filename*=UTF-8''x.png" },
+    });
     expect(await storage.head("private/x.png")).toEqual({ sizeBytes: 4, mimeType: "image/png", sha256: "abcd" });
     expect(await storage.computeSha256("private/x.png")).toBe("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
   });

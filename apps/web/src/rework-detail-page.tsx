@@ -188,6 +188,11 @@ const formatTime = (value: string | null): string => {
   }).format(new Date(value));
 };
 
+const attachmentUrl = (
+  attachmentId: string,
+  mode: "preview" | "download",
+): string => apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
+
 const hasRole = (user: AuthorizedUser | null, role: string): boolean =>
   user?.businessRoles?.includes(role) === true;
 const hasCapability = (user: AuthorizedUser | null, capability: string): boolean =>
@@ -424,12 +429,11 @@ export function ReworkDetailPage({
                 <span>处理意见：{event.remark ?? "未填写备注"}</span>
               </div>
             )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
-            {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <a
-              href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}
-              key={attachment.attachmentId}
-              rel="noreferrer"
-              target="_blank"
-            >{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}</a>)}</p>}
+            {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
+              {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}{" "}
+              <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
+              <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
+            </span>)}</p>}
           </div>
         )}
       </Surface>;
@@ -481,13 +485,12 @@ export function ReworkDetailPage({
             <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
             <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
             <div className="rework-detail-wide"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
-            <div className="rework-detail-wide"><dt>已上传附件</dt><dd>{detail.attachments.length
-              ? detail.attachments.map((attachment) => <a
-                href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}
-                key={attachment.attachmentId}
-                rel="noreferrer"
-                target="_blank"
-              >{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）</a>)
+            <div className="rework-detail-wide"><dt>订单关联附件（含外部责任凭证）</dt><dd>{detail.attachments.length
+              ? detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
+                {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
+                <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
+                <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
+              </span>)
               : "无"}</dd></div>
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
