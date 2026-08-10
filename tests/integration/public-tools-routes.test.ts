@@ -36,7 +36,10 @@ function create(
       input,
     })),
     finalize: vi.fn(),
-    createDownloadIntent: vi.fn(),
+    createDownloadIntent: vi.fn(async () => ({
+      downloadUrl: "https://private.test/attachment",
+      expiresAt: new Date(0).toISOString(),
+    })),
   };
   const exports = { create: vi.fn(), query: vi.fn(), isOwnedBy: vi.fn(async () => true) };
   const app = buildApp({
@@ -116,6 +119,26 @@ describe("public tools routes", () => {
     expect(await authorizeBound({ entityType: "export_job", entityId: "00000000-0000-4000-8000-000000000002", uploadedBy: "worker" })).toBe(true);
     expect(await authorizeBound({ entityType: "rework", entityId: "00000000-0000-4000-8000-000000000003", uploadedBy: "worker" })).toBe(false);
     expect(exports.isOwnedBy).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000099", "00000000-0000-4000-8000-000000000002");
+  });
+
+  it("redirects explicit preview and download navigations through the existing authorization path", async () => {
+    const { app, attachments } = create();
+    const preview = await app.inject({
+      method: "GET",
+      url: "/tools/attachments/00000000-0000-4000-8000-000000000001/download?mode=preview",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(preview.statusCode).toBe(302);
+    expect(preview.headers.location).toBe("https://private.test/attachment");
+    expect(attachments.createDownloadIntent.mock.calls[0]?.[3]).toBe("inline");
+
+    const download = await app.inject({
+      method: "GET",
+      url: "/tools/attachments/00000000-0000-4000-8000-000000000001/download?mode=download",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(download.statusCode).toBe(302);
+    expect(attachments.createDownloadIntent.mock.calls[1]?.[3]).toBe("attachment");
   });
 
   it("requires current QC role and rework capability before authorizing bound QC evidence", async () => {
