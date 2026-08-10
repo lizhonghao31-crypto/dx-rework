@@ -167,6 +167,10 @@
     {
       "version": "0042_external_processing_factory_auto_route",
       "checksum": "bbbaa9ce36f09c11486f9c742b505d2cc1b10bb6330a849b1eaf20829d6e9aac"
+    },
+    {
+      "version": "0043_external_direct_payables",
+      "checksum": "3128524ca523ed7141d635f45444ece8ca15b4b082fc8b9a2281272db10f3fdb"
     }
   ]
 }
