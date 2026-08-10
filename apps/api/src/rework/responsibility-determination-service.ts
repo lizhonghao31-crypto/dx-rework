@@ -549,7 +549,7 @@ export class ResponsibilityDeterminationService {
             row.configuration_item_id === processInput.configurationItemId,
         ) ?? fail("工序不属于 approved 配置", 400, "VALIDATION_ERROR");
       const shareResult = await client.query<WorkReportShareRow>(
-        `SELECT report.work_report_id,share.person_id,share.amount::text,
+        `SELECT report.work_report_id,share.person_id,round(share.amount,2)::text amount,
                 member.display_name_snapshot,task.assignment_mode
          FROM rework_work_reports report
          JOIN rework_work_report_member_shares share USING(work_report_id)
