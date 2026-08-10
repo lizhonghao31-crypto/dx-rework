@@ -106,8 +106,10 @@ const requestError = async (response: Response): Promise<string> => {
 
 export function ExternalResponsibilityPanel({
   reworkOrderId,
+  focusCaseId,
 }: {
   reworkOrderId: string | null;
+  focusCaseId?: string;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -540,6 +542,13 @@ export function ExternalResponsibilityPanel({
   }
 
   const batch = state.value;
+  const visibleCases = focusCaseId
+    ? batch.cases.filter((caseItem) => caseItem.caseId === focusCaseId)
+    : batch.cases;
+  const visibleUnassigned = focusCaseId ? [] : unassigned;
+  if (focusCaseId && visibleCases.length === 0) {
+    return <Surface className="external-state">该供应商扣款任务不在当前有效台账中。</Surface>;
+  }
   return (
     <Surface className="external-responsibility-panel">
       <div className="section-title">
@@ -553,11 +562,11 @@ export function ExternalResponsibilityPanel({
       </div>
       {message && <div className="own-factory-approval-message" role="status">{message}</div>}
 
-      {unassigned.length > 0 && (
+      {visibleUnassigned.length > 0 && (
         <section className="external-operation">
           <h3>选择实际拟扣供应商</h3>
           <p>每个正式责任项目只能覆盖到一个有效供应商台账；系统不接受浏览器传入的拟扣金额。</p>
-          {unassigned.map((item) => {
+          {visibleUnassigned.map((item) => {
             const matchingSuppliers = suppliers.filter(
               (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
             );
@@ -582,7 +591,7 @@ export function ExternalResponsibilityPanel({
               </div>
             );
           })}
-          {unassigned.some((item) => item.responsibilityType === "processing_factory") && (
+          {visibleUnassigned.some((item) => item.responsibilityType === "processing_factory") && (
             <InsetField
               label="加工厂改选原因"
               value={processingOverrideReason}
@@ -594,12 +603,12 @@ export function ExternalResponsibilityPanel({
         </section>
       )}
 
-      {batch.cases.length === 0 && unassigned.length === 0 && (
+      {visibleCases.length === 0 && visibleUnassigned.length === 0 && (
         <StatusBadge tone="info">当前外部责任项目金额均为 0.00，不创建无意义扣款台账。</StatusBadge>
       )}
 
       <section className="external-case-list">
-        {batch.cases.map((caseItem) => {
+        {visibleCases.map((caseItem) => {
           const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
           const evidence = attachments[caseItem.caseId] ?? [];
           const canEditRemark = caseItem.canSign
