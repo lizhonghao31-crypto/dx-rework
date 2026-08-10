@@ -71,6 +71,12 @@ type ReworkBusinessDetail = Readonly<{
     filename: string;
     mimeType: string;
   }>[];
+  workflowHistory: readonly Readonly<{
+    action: string;
+    handledBy: string;
+    handledAt: string;
+    remark: string | null;
+  }>[];
 }>;
 
 type LoadState =
@@ -282,6 +288,32 @@ const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.ever
 
 const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
 
+const historyNode = (action: string): WorkflowNodeKey | null => {
+  if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
+  if (action.includes("process_configuration")) return "process_configuration";
+  if (action.includes("ie_review")) return "ie_review";
+  if (action.includes("work_task")) return "task_assignment";
+  if (action.includes("work_report")) return "work_reporting";
+  if (action.includes("whole_order") || action.includes("quantity.")) return "whole_order_review";
+  if (action.includes("responsibility") && !action.includes("external") && !action.includes("own_factory")) return "responsibility";
+  if (action.includes("external") || action.includes("own_factory")) return "responsibility_settlement";
+  return null;
+};
+
+const historyActionLabel = (action: string): string => {
+  if (action === "rework.submit") return "提交返工单";
+  if (action.includes("process_configuration")) return "工序配置处理";
+  if (action.includes("ie_review")) return "IE 审核";
+  if (action.includes("work_task")) return "返工人员分配";
+  if (action.includes("work_report")) return "完成数量登记";
+  if (action.includes("whole_order")) return "整单审核";
+  if (action.includes("quantity.")) return "数量调整";
+  if (action.includes("external")) return "外部责任结算";
+  if (action.includes("own_factory")) return "本厂承担审批";
+  if (action.includes("responsibility")) return "责任判定";
+  return "流程处理";
+};
+
 export function ReworkDetailPage({
   reworkOrderId: providedReworkOrderId,
   focusedNode,
@@ -370,11 +402,30 @@ export function ReworkDetailPage({
   const renderSelectedTask = () => {
     if (!selected) return null;
     if (selected.state !== "current") {
+      const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
       return <Surface className="rework-detail-node-preview">
         <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : "未开始 · 可预览"}</StatusBadge>
         <h2>{selected.number} · {selected.label}</h2>
         <p>{selected.preview}</p>
         <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
+        {selected.state === "completed" && (
+          <div className="rework-detail-node-history">
+            <h3>处理历史</h3>
+            {nodeHistory.length ? nodeHistory.map((event, index) => (
+              <div key={`${event.action}-${event.handledAt}-${index}`}>
+                <b>{historyActionLabel(event.action)}</b>
+                <span>处理人：{event.handledBy} · 处理时间：{formatTime(event.handledAt)}</span>
+                <span>处理意见：{event.remark ?? "未填写备注"}</span>
+              </div>
+            )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
+            {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <a
+              href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}
+              key={attachment.attachmentId}
+              rel="noreferrer"
+              target="_blank"
+            >{attachment.filename}</a>)}</p>}
+          </div>
+        )}
       </Surface>;
     }
     if (selected.key === "process_configuration" || selected.key === "ie_review") {
