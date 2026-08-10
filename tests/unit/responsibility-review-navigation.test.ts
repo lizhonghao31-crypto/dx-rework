@@ -23,7 +23,9 @@ describe("responsibility review navigation closure", () => {
     expect(components).not.toContain(
       "/ui/tasks?status=pending_responsibility_determination",
     );
-    expect(components).toContain('["责", "责任处理", "/ui/responsibility"]');
+    const responsibilityNav = components.indexOf('name: "责任处理"');
+    expect(responsibilityNav).toBeGreaterThan(-1);
+    expect(components.slice(responsibilityNav, responsibilityNav + 220)).toContain('href: "/ui/responsibility"');
     expect(app).toContain('path === "/ui/responsibility"');
     expect(app).toContain("<ResponsibilityQueuePage />");
   });
