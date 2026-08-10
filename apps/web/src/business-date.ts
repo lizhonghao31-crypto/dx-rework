@@ -1,5 +1,5 @@
 export function shanghaiBusinessDate(date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
