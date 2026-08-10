@@ -5,6 +5,15 @@
 -- allocation generated when the whole order is approved.  Responsibility uses
 -- that settled amount as its base before applying allocation and multiplier.
 
+-- The application already truncates unit prices to three decimals.  The prior
+-- practical-precision check still limited new rows to two decimals, making a
+-- valid price such as 5.495 impossible to persist.
+ALTER TABLE rework_process_configuration_items
+  DROP CONSTRAINT rework_process_item_unit_price_practical_precision;
+ALTER TABLE rework_process_configuration_items
+  ADD CONSTRAINT rework_process_item_unit_price_practical_precision
+  CHECK (unit_price >= 0.001 AND unit_price = trunc(unit_price, 3)) NOT VALID;
+
 CREATE OR REPLACE FUNCTION guard_responsibility_line()
 RETURNS trigger
 LANGUAGE plpgsql
