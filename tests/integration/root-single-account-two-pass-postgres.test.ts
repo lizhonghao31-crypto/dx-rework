@@ -56,6 +56,7 @@ type PassFixture = Readonly<{
   app: FastifyInstance;
   database: pg.Pool;
   rootUserId: string;
+  businessDetail: ReworkBusinessDetailService;
   merchandiserUserId: string;
   workerPersonIds: string[];
   supplierId: string;
@@ -260,6 +261,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       app,
       database,
       rootUserId,
+      businessDetail,
       merchandiserUserId,
       workerPersonIds,
       supplierId,
@@ -293,6 +295,15 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       `/rework-orders/${draft.reworkOrderId}/submit`,
       { expectedVersion: draft.version },
     );
+
+    const directDetail = await fixture.businessDetail.get({
+      actorId: fixture.rootUserId,
+      actorRoles: ["root_superuser"],
+      authorizationCapability: "business:detail:read",
+      authorizationCapabilities: ["business:read_all"],
+      requestId: randomUUID(),
+    }, draft.reworkOrderId);
+    expect(directDetail.reworkOrderId).toBe(draft.reworkOrderId);
 
     const detail = await http<{
       reworkOrderId: string;
