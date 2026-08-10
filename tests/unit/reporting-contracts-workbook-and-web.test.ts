@@ -81,7 +81,8 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
     expect(report).toContain("reportExportUrl");
     expect(client).toContain("ManagementDashboardResponseSchema");
     expect(client).toContain("createWebUrls");
-    expect(client).toContain('timeZone: "Asia/Singapore"');
+    expect(client).toContain('import { shanghaiBusinessDate } from "../business-date.js";');
+    expect(client).toContain("export const reportingBusinessDate = (value = new Date()): string => shanghaiBusinessDate(value);");
     expect(dashboard).toContain("reportingPageUrl(item.deepLink)");
     expect(query).toContain("canViewReports");
     expect(migration).not.toContain("dashboard:management:read");
