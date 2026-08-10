@@ -1,0 +1,164 @@
+name: Full Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - labeled
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  full-validate:
+    name: Full Gate exact Head
+    if: contains(github.event.pull_request.labels.*.name, 'full-gate')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci
+      TEST_DATABASE_URL: postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci
+      GIT_SHA: ${{ github.event.pull_request.head.sha }}
+      SERVICE_NAME: dx-rework-api
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dx_rework
+          POSTGRES_PASSWORD: dx_rework_ci
+          POSTGRES_DB: dx_rework_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dx_rework -d dx_rework_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        run: npm install --global npm@10.9.9
+
+      - name: Verify exact Head
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
+
+      - name: Verify Actions usage policy
+        run: node scripts/ci/verify-actions-policy.mjs
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Full repository validation
+        run: npm run check
+
+      - name: Seed database with base-revision migration history
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/seed-base-migrations.sh
+
+      - name: Apply and validate exact Head migration history against PostgreSQL
+        run: npm run db:migrate:check
+
+      - name: PostgreSQL backup and isolated restore drill
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/pr17-db-drill"
+          node_bin="$(readlink -f "$(command -v node)")"
+          mkdir -p "$root/shared" "$root/backups/postgres"
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > "$root/shared/.env"
+          printf 'DX_REWORK_NODE_BIN=%s\n' "$node_bin" > "$root/shared/deploy.env"
+          chmod 0600 "$root/shared/.env" "$root/shared/deploy.env"
+          state="$(node scripts/deploy/database-state.mjs print-current)"
+          target_version="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).version")"
+          target_checksum="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).checksum")"
+          DX_REWORK_ROOT="$root" DX_REWORK_APP_ENV_FILE="$root/shared/.env" DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
+            GIT_SHA="$(git rev-parse HEAD)" CURRENT_DATABASE_STATE="$state" TARGET_SCHEMA_VERSION="$target_version" \
+            TARGET_SCHEMA_CHECKSUM="$target_checksum" scripts/backup-postgres.sh
+          admin_url='postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/postgres'
+          target_name='dx_rework_drill_ci'
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $target_name"
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $target_name"
+          target_url="postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/$target_name"
+          target_identity="$(psql "$target_url" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()")"
+          target_fp="$(printf %s "$target_identity" | sha256sum | cut -d' ' -f1)"
+          {
+            printf 'DX_REWORK_RESTORE_DATABASE_URL=%s\n' "$target_url"
+            printf 'DX_REWORK_APPROVED_TARGET_FINGERPRINT=%s\n' "$target_fp"
+            printf 'DX_REWORK_APPROVED_TARGET_DATABASE=%s\n' "$target_name"
+          } > "$root/shared/restore.env"
+          chmod 0600 "$root/shared/restore.env"
+          backup_set="$(find "$root/backups/postgres" -mindepth 1 -maxdepth 1 -type d ! -name '.tmp-*' -print -quit)"
+          test -n "$backup_set"
+          DX_REWORK_ROOT="$root" DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
+            DX_REWORK_RESTORE_ENV_FILE="$root/shared/restore.env" DX_REWORK_RESTORE_DRILL=true \
+            DX_REWORK_RESTORE_CONFIRM=RESTORE_TO_ISOLATED_DRILL \
+            DX_REWORK_RESTORE_MANIFEST="$PWD/apps/api/src/platform/migration-manifest.json" \
+            scripts/restore-postgres.sh "$backup_set"
+          DATABASE_URL="$target_url" node scripts/deploy/verify-database-readiness.mjs apps/api/src/platform/migration-manifest.json
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE $target_name"
+
+      - name: PR-17 exact-head acceptance and lifecycle
+        shell: bash
+        run: |
+          TARGET_SHA="$(git rev-parse HEAD)" npm run pr17:acceptance
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          npx vitest run \
+            tests/unit/pr-17-deployment.test.ts \
+            tests/unit/pr-17-operations.test.ts \
+            tests/integration/pr-17-release-lifecycle.test.ts \
+            tests/integration/pr-17-deploy-failure.test.ts \
+            tests/integration/pr-17-review-fixes.test.ts
+
+      - name: PR-17 package, runtime and relocation-safe transfer
+        shell: bash
+        env:
+          DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/pr17-build
+        run: |
+          sha="$(git rev-parse HEAD)"
+          out="$DX_REWORK_BUILD_ROOT/$sha"
+          mkdir -p "$DX_REWORK_BUILD_ROOT"
+          scripts/deploy/package-release.sh "$sha" "$BUILD_TIME" "$out"
+          scripts/deploy/verify-runtime.sh "$out/api"
+          scripts/deploy/create-transfer-bundle.sh "$out" "$RUNNER_TEMP/pr17-$sha.tar.gz"
+          (cd "$RUNNER_TEMP" && sha256sum -c --strict "pr17-$sha.tar.gz.sha256")
+
+      - name: Write Full Gate summary
+        shell: bash
+        run: |
+          {
+            echo "## Full Gate"
+            echo
+            echo "- Head SHA: $(git rev-parse HEAD)"
+            echo "- Full repository tests and business-chain postbuild: passed"
+            echo "- PostgreSQL migration replay and restore drill: passed"
+            echo "- PR-17 acceptance / package / runtime / transfer: passed"
+          } >> "${GITHUB_STEP_SUMMARY}"
