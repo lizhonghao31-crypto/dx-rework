@@ -14,8 +14,6 @@ import {
   AllocateExternalSuppliersSchema,
   CloseExternalDeductionCaseSchema,
   CreateExternalDeductionEntrySchema,
-  PayablesAcceptExternalResponsibilityCaseSchema,
-  SubmitExternalResponsibilityCaseSchema,
 } from "@dx-rework/contracts/external-responsibility";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -601,18 +599,22 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       }),
     ]);
     const externalCase = externalBatch!.cases[0]!;
-    const accepted = await external.payablesAccept(
+    const deduction = await external.recordDeduction(
       payables(),
       externalCase.caseId,
-      PayablesAcceptExternalResponsibilityCaseSchema.parse({
+      CreateExternalDeductionEntrySchema.parse({
         expectedCaseVersion: externalCase.caseVersion,
+        entryType: "deduction",
+        amount: "55.00",
+        deductedOn: new Date().toISOString().slice(0, 10),
+        attachmentIds: [],
       }),
       randomUUID(),
     );
-    expect(accepted.value).toMatchObject({
+    expect(deduction.value).toMatchObject({
       status: "deduction_follow_up",
-      actualDeductedAmount: "0.00",
-      remainingAmount: "55.00",
+      actualDeductedAmount: "55.00",
+      remainingAmount: "0.00",
     });
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
@@ -647,47 +649,31 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     expect(embroideryCase).toMatchObject({
       responsibilityType: "embroidery_factory",
       proposedDeductionAmount: "27.50",
-      status: "pending_business_signoff",
+      status: "pending_payables_confirmation",
     });
-    const embroiderySigned = await external.submit(
-      embroideryMerchandiser(),
+    const embroideryDeduction = await external.recordDeduction(
+      embroideryPayables(),
       embroideryCase.caseId,
-      SubmitExternalResponsibilityCaseSchema.parse({
+      CreateExternalDeductionEntrySchema.parse({
         expectedCaseVersion: embroideryCase.caseVersion,
+        entryType: "deduction",
+        amount: "27.50",
+        deductedOn: new Date().toISOString().slice(0, 10),
         attachmentIds: [],
       }),
       randomUUID(),
     );
-    await external.payablesAccept(
-      embroideryPayables(),
-      embroideryCase.caseId,
-      PayablesAcceptExternalResponsibilityCaseSchema.parse({
-        expectedCaseVersion: embroiderySigned.value.caseVersion,
-      }),
-      randomUUID(),
-    );
+    expect(embroideryDeduction.value).toMatchObject({
+      status: "deduction_follow_up",
+      actualDeductedAmount: "27.50",
+      remainingAmount: "0.00",
+    });
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
 
     // N10-B - actual deduction remains a separate lifecycle after N09.
-    const deduction = await external.recordDeduction(
-      payables(),
-      externalCase.caseId,
-      CreateExternalDeductionEntrySchema.parse({
-        expectedCaseVersion: accepted.value.caseVersion,
-        entryType: "deduction",
-        amount: "55.00",
-        deductedOn: new Date().toISOString().slice(0, 10),
-        attachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    expect(deduction.value).toMatchObject({
-      actualDeductedAmount: "55.00",
-      remainingAmount: "0.00",
-    });
     const closed = await external.close(
       payables(),
       externalCase.caseId,
