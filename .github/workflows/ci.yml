@@ -30,15 +30,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: npm
-
-      - name: Pin npm 10
-        run: npm install --global npm@10.9.9
-
       - name: Verify immutable evidence and governance files
         shell: bash
         env:
@@ -58,28 +49,111 @@ jobs:
           for path in "${required_files[@]}"; do test -f "${path}"; done
           printf 'repository=%s\nhead_sha=%s\n' "${GITHUB_REPOSITORY}" "${actual_sha}"
 
+      - name: Classify Quick Gate scope
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          governance_only=false
+
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            test -n "${BASE_SHA}"
+            test -n "${HEAD_SHA}"
+            test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
+            git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+
+            mapfile -t changed_files < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+            if (( ${#changed_files[@]} > 0 )); then
+              governance_only=true
+              for path in "${changed_files[@]}"; do
+                case "${path}" in
+                  .github/workflows/*|.github/pull_request_template.md|AGENTS.md|docs/governance/*|scripts/ci/*)
+                    ;;
+                  *)
+                    governance_only=false
+                    ;;
+                esac
+              done
+            fi
+          fi
+
+          echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
+          echo "GOVERNANCE_ONLY=${governance_only}" >> "${GITHUB_ENV}"
+          echo "Quick Gate governance-only: ${governance_only}"
+
       - name: Verify Actions usage policy
         run: node scripts/ci/verify-actions-policy.mjs
 
+      - name: Verify changed governance script syntax
+        if: ${{ steps.classify.outputs.governance_only == 'true' }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r path; do
+            case "${path}" in
+              scripts/ci/*.mjs) node --check "${path}" ;;
+            esac
+          done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+
+      - name: Set up Node 22
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        run: npm install --global npm@10.9.9
+
       - name: Install locked dependencies
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm ci
 
       - name: Lint
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm run lint
 
       - name: Typecheck
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm run typecheck
 
       - name: Build workspaces without root postbuild business-chain gate
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm run build --workspaces --if-present
 
       - name: Validate migration files statically
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm run db:migrate:lint
 
       - name: Scan repository for committed secret signatures
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm run secret:scan
 
-      - name: Write quick-gate summary
+      - name: Write governance-only quick-gate summary
+        if: ${{ steps.classify.outputs.governance_only == 'true' }}
+        shell: bash
+        run: |
+          {
+            echo "## Quick Gate"
+            echo
+            echo "- Head SHA: $(git rev-parse HEAD)"
+            echo "- Exact Head / governance: passed"
+            echo "- Actions policy: passed"
+            echo "- Governance script syntax: passed"
+            echo "- Business checks skipped: governance-only change"
+            echo "- Heavy DB, full test, release and preview work intentionally deferred to Full Gate"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Write business quick-gate summary
+        if: ${{ steps.classify.outputs.governance_only != 'true' }}
         shell: bash
         run: |
           {
