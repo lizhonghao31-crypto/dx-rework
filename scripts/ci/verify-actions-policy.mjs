@@ -1,0 +1,43 @@
+import { readFile } from "node:fs/promises";
+
+const files = {
+  quick: ".github/workflows/ci.yml",
+  full: ".github/workflows/full-gate.yml",
+  governance: ".github/workflows/governance.yml",
+  preview: ".github/workflows/pr-preview.yml",
+};
+
+const read = async (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
+const [quick, full, governance, preview] = await Promise.all(Object.values(files).map(read));
+
+const assert = (condition, message) => {
+  if (!condition) throw new Error(`GitHub Actions usage policy violation: ${message}`);
+};
+
+assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
+assert(quick.includes("cancel-in-progress: true"), "Quick Gate must cancel stale runs");
+assert(quick.includes("npm run build --workspaces --if-present"), "Quick Gate must avoid the root postbuild business-chain gate");
+assert(quick.includes("node scripts/ci/verify-actions-policy.mjs"), "Quick Gate must verify its own usage policy");
+
+for (const forbidden of [
+  "postgres:16-alpine",
+  "npm test",
+  "db:migrate:check",
+  "backup-postgres.sh",
+  "restore-postgres.sh",
+  "pr17:acceptance",
+  "package-release.sh",
+  "actions/upload-artifact",
+  "playwright install",
+]) {
+  assert(!quick.includes(forbidden), `Quick Gate must not contain ${forbidden}`);
+}
+
+assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
+assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
+assert(full.includes("full-gate"), "Full Gate must require the full-gate label");
+assert(full.includes("contains(github.event.pull_request.labels.*.name, 'full-gate')"), "Full Gate label guard must remain explicit");
+assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
+assert(full.includes("synchronize"), "a labeled PR must re-run Full Gate when its Head changes");
+
+console.log("ACTIONS_USAGE_POLICY_OK");
