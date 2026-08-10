@@ -1,0 +1,40 @@
+.primary-navigation {
+  display: grid;
+  gap: 4px;
+}
+
+.primary-navigation__entry a {
+  display: block;
+  text-decoration: none;
+}
+
+.primary-navigation__copy {
+  display: grid;
+  gap: 2px;
+}
+
+.primary-navigation__copy strong {
+  letter-spacing: .02em;
+}
+
+.primary-navigation__copy small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.app-shell aside {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell__identity {
+  margin-top: auto;
+  padding-top: var(--dx-v2-space-4);
+}
+
+@media (max-width: 760px) {
+  .primary-navigation__copy small {
+    display: none;
+  }
+}
