@@ -16,6 +16,7 @@ describe("UAT 1.6 closure regressions", () => {
     expect(detail).toContain('action.includes("process_configuration.review") || action.includes("ie_review")');
     expect(detail).toContain('action.includes(".complete") || action.includes(".archive")');
     expect(detail).toContain("已上传附件");
+    expect(detail).toContain("external_responsibility_case");
     for (const field of [
       "customerSupplyCode",
       "factoryStyleNo",
@@ -49,5 +50,15 @@ describe("UAT 1.6 closure regressions", () => {
     expect(adminService).not.toContain("attachment_pending_overdue");
     expect(adminPage).toContain("待上传（尚未完成）");
     expect(adminPage).toContain("已上传");
+  });
+
+  it("includes ready external evidence in the detail record and authorizes it through the same business view", async () => {
+    const [detailService, server] = await Promise.all([
+      readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
+      readFile("apps/api/src/server.ts", "utf8"),
+    ]);
+    expect(detailService).toContain("external_responsibility_case");
+    expect(detailService).toContain("canDownloadBoundAttachment");
+    expect(server).toContain("reworkBusinessDetailService.canDownloadBoundAttachment");
   });
 });
