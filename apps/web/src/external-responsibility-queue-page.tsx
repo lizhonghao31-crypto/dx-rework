@@ -13,7 +13,7 @@ const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const queueRefreshMilliseconds = 15_000;
 type State = { kind: "loading" } | { kind: "ready"; value: ExternalResponsibilityQueueResponse } | { kind: "unavailable"; message: string };
 const statusLabel: Record<ExternalResponsibilityQueueResponse["items"][number]["status"], string> = {
-  pending_business_signoff: "待业务签收", pending_payables_confirmation: "待应付确认", deduction_follow_up: "扣款跟进中", returned: "已退回", pending_responsibility_revision: "待责任变更", closed: "已关闭", superseded: "已替代",
+  pending_business_signoff: "待补充资料", pending_payables_confirmation: "待记录扣款", deduction_follow_up: "扣款跟进中", returned: "资料已退回", pending_responsibility_revision: "待责任变更", closed: "已关闭", superseded: "已替代",
 };
 
 export function ExternalResponsibilityQueuePage() {
@@ -43,8 +43,8 @@ export function ExternalResponsibilityQueuePage() {
     return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.supplierName, statusLabel[item.status]]
       .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
   }, [allItems, q]);
-  return <Shell active="外部扣款"><Header title="外部责任签收与扣款" subtitle="外部责任进入对应阶段后自动出现在这里；关闭或替代后退出当前处理队列" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"} />
-    <Surface className="external-queue-summary"><div><h2>外部责任工作台</h2><p>谁来处理：对应业务签收人或应付人员；当前要做：按状态完成签收、确认和实扣跟进。</p></div><StatusBadge tone="info">N08-B / N10-B</StatusBadge></Surface>
+  return <Shell active="外部扣款"><Header title="供应商扣款处理" subtitle="供应商确定后直接由对应应付记录扣款；资料有误可退回经办人修正" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"} />
+    <Surface className="external-queue-summary"><div><h2>供应商扣款工作台</h2><p>应付直接记录实际扣款或退回资料问题；经办人只在资料退回后修正并重新提交。</p></div><StatusBadge tone="info">扣款台账</StatusBadge></Surface>
     <Surface className="reporting-filters"><InsetField label="搜索当前节点事项" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 供应商 / 状态" /></Surface>
     {state.kind === "loading" && <Surface className="external-state">正在加载外部责任队列…</Surface>}
     {state.kind === "unavailable" && <Surface className="external-state">{state.message}</Surface>}
