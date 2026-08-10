@@ -49,8 +49,8 @@ describe("UAT interface closure", () => {
     expect(admin).toContain("businessActionLabel(event.action)");
     expect(admin).toContain("businessEntityLabel(event.entityType)");
     expect(admin).toContain("businessFieldLabel(key)");
-    expect(display).toContain('"cancelled": "已取消"');
-    expect(display).toContain('"attachment_upload_not_completed": "附件上传未完成"');
+    expect(display).toContain('cancelled: "已取消"');
+    expect(display).toContain('attachment_upload_not_completed: "附件上传未完成"');
   });
 
   it("shows ready attachment counts on every order card", async () => {
