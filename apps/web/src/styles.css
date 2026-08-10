@@ -20,7 +20,7 @@ small { font-size: 12px; }
 .dx-field input { min-height: 44px; }
 .dx-field__control:focus-within { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
 .app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
-.app-shell > aside { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: var(--dx-v2-space-6); overflow-y: auto; background: var(--dx-v2-color-control); color: #fff; }
+.app-shell > aside { position: sticky; top: 0; display: flex; flex-direction: column; box-sizing: border-box; height: 100vh; height: 100dvh; padding: var(--dx-v2-space-6); overflow-y: auto; background: var(--dx-v2-color-control); color: #fff; }
 .app-shell > aside h2 { margin: 0 0 20px; font-size: 18px; }
 .app-shell > aside small { color: #8293a3; }
 .app-shell nav { display: grid; gap: var(--dx-v2-space-3); margin-top: 28px; }
