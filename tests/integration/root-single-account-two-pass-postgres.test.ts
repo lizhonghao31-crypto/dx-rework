@@ -387,6 +387,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       },
     );
     expect(determination.canDetermine).toBe(true);
+    expect(determination.determination?.stage).toBe("draft");
 
     if (pass === 2) {
       expect(determination.canConfirmHighMultiplier).toBe(true);
