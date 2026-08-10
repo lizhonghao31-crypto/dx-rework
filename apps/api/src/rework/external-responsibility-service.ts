@@ -192,14 +192,151 @@ export class ExternalResponsibilityService {
        VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
       [batchId, order.rework_order_id, determinationId, finalized.determination_version, jsonbParameter(finalized.source_snapshot), finalized.created_by, finalized.operation_event_id, finalized.request_id],
     );
+    const createdItems: Array<{
+      externalItemId: string;
+      responsibilityType: ResponsibilityType;
+      proposedAmount: string;
+    }> = [];
     for (const item of external.rows) {
+      const externalItemId = randomUUID();
       await client.query(
         `INSERT INTO rework_external_responsibility_items(external_item_id,batch_id,determination_id,configuration_item_id,responsibility_type,process_snapshot,multiplier_snapshot,share_bps_snapshot,proposed_amount,amount_line_snapshot,operation_event_id,request_id)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [randomUUID(), batchId, determinationId, item.configuration_item_id, item.responsibility_type, jsonbParameter(item.process_snapshot), item.multiplier, item.share_bps, item.proposed_amount, jsonbParameter(item.amount_line_snapshot), finalized.operation_event_id, finalized.request_id],
+        [externalItemId, batchId, determinationId, item.configuration_item_id, item.responsibility_type, jsonbParameter(item.process_snapshot), item.multiplier, item.share_bps, item.proposed_amount, jsonbParameter(item.amount_line_snapshot), finalized.operation_event_id, finalized.request_id],
+      );
+      createdItems.push({
+        externalItemId,
+        responsibilityType: item.responsibility_type,
+        proposedAmount: item.proposed_amount,
+      });
+    }
+    await this.autoRouteOriginalProcessingFactory(
+      client,
+      actor,
+      order,
+      batchId,
+      createdItems,
+    );
+    return batchId;
+  }
+
+  private async autoRouteOriginalProcessingFactory(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    order: OrderRow,
+    batchId: string,
+    items: ReadonlyArray<{
+      externalItemId: string;
+      responsibilityType: ResponsibilityType;
+      proposedAmount: string;
+    }>,
+  ): Promise<void> {
+    const processingFactoryItems = items.filter(
+      (item) => item.responsibilityType === "processing_factory",
+    );
+    if (
+      processingFactoryItems.length === 0
+      || order.processing_factory_type !== "supplier"
+      || order.processing_factory_supplier_id === null
+      || order.merchandiser_user_id === null
+    ) {
+      return;
+    }
+
+    const supplier = await client.query<{
+      supplier_code: string;
+      supplier_name: string;
+      supplier_type: "factory";
+      version: number;
+    }>(
+      `SELECT supplier_code,supplier_name,supplier_type,version
+       FROM current_supplier_catalog
+       WHERE supplier_id=$1 AND active=true AND supplier_type='factory'`,
+      [order.processing_factory_supplier_id],
+    );
+    const selected = supplier.rows[0];
+    if (!selected) return;
+
+    const eventId = await this.event(
+      client,
+      actor,
+      "rework.external_responsibility.auto_route",
+      "responsibility:determine",
+      order,
+    );
+    const caseId = randomUUID();
+    const proposedDeductionAmount = money(
+      processingFactoryItems.reduce(
+        (total, item) => total + toCents(item.proposedAmount),
+        0n,
+      ),
+    );
+    await client.query(
+      `INSERT INTO rework_external_responsibility_cases(
+         case_id,batch_id,rework_order_id,responsibility_type,
+         supplier_id,supplier_version,supplier_code_snapshot,
+         supplier_name_snapshot,supplier_type_snapshot,
+         business_handler_user_id,payables_handler_role_snapshot,
+         proposed_deduction_amount,status,submitted_at,
+         created_by,operation_event_id,request_id
+       ) VALUES(
+         $1,$2,$3,'processing_factory',$4,$5,$6,$7,$8,$9,$10,
+         $11,'pending_payables_confirmation',CURRENT_TIMESTAMP,$12,$13,$14
+       )`,
+      [
+        caseId,
+        batchId,
+        order.rework_order_id,
+        order.processing_factory_supplier_id,
+        selected.version,
+        selected.supplier_code,
+        selected.supplier_name,
+        selected.supplier_type,
+        order.merchandiser_user_id,
+        payablesRole("processing_factory"),
+        proposedDeductionAmount,
+        actor.actorId,
+        eventId,
+        actor.requestId,
+      ],
+    );
+    for (const item of processingFactoryItems) {
+      await client.query(
+        `INSERT INTO rework_external_responsibility_case_items(
+           case_id,external_item_id,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4)`,
+        [caseId, item.externalItemId, eventId, actor.requestId],
       );
     }
-    return batchId;
+    await this.outbox.enqueue(client, {
+      topic: "rework.external_responsibility.pending_payables",
+      aggregateType: "external_responsibility_case",
+      aggregateId: caseId,
+      recipientKey: payablesRole("processing_factory"),
+      idempotencyKey: `external-case:pending-payables:${caseId}:1`,
+      payload: {
+        caseId,
+        reworkOrderId: order.rework_order_id,
+        delivery: "intent_only",
+      },
+    });
+    await this.todos?.actionableForUniqueRoleOrOrderDelegate(client, actor, {
+      category: "external_payables_confirmation",
+      sourceEventId: eventId,
+      sourceAction: "rework.external_responsibility.auto_route",
+      entityType: "rework_order",
+      entityId: order.rework_order_id,
+      requiredRole: payablesRole("processing_factory"),
+      requiredCapability: "external_responsibility:payables_confirm",
+      delegationScopeId: order.rework_order_id,
+      route: {
+        routeName: "external_responsibility_detail",
+        entityId: caseId,
+        reworkOrderId: order.rework_order_id,
+      },
+      policyKey: "general",
+      dedupeKey: `external-payables:${caseId}:1`,
+    });
   }
 
   /** A successor responsibility leaf makes every directly replaced N08-B batch historical. */
