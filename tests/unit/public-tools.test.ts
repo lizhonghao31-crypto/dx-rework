@@ -141,10 +141,11 @@ describe("private object storage", () => {
     expect(postCalls[0]).toMatchObject({ expiration: "2026-08-01T00:05:00.000Z" });
     expect(postCalls[0]?.conditions).toEqual(expect.arrayContaining([
       ["eq", "$key", "private/x.png"],
-      ["eq", "$Content-Type", "image/png"],
+      ["eq", "$content-type", "image/png"],
       ["eq", "$x-oss-meta-sha256", "abcd"],
       ["eq", "$x-oss-object-acl", "private"],
       ["eq", "$x-oss-forbid-overwrite", "true"],
+      ["eq", "$success_action_status", "204"],
       ["content-length-range", 4, 4],
     ]));
     expect(upload).toMatchObject({
