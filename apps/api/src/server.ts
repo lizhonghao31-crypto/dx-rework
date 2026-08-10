@@ -161,7 +161,14 @@ const app = buildApp({
     attachments,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {
-      if (await reworkBusinessDetailService.canDownloadBoundAttachment(actor, binding)) return true;
+      const businessReader = {
+        actorId: actor.actorId,
+        actorRoles: actor.actorRoles,
+        authorizationCapability: "tools:user",
+        authorizationCapabilities: actor.capabilities,
+        requestId: "attachment-download",
+      };
+      if (await reworkBusinessDetailService.canDownloadBoundAttachment(businessReader, binding)) return true;
       if (await reworkService.canDownloadBoundAttachment(actor, binding)) return true;
       return canDownloadWageAttachment(database, actor, binding);
     },
