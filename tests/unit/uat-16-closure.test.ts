@@ -1,5 +1,11 @@
 import { readFile } from "node:fs/promises";
 
+import { truncateDecimal } from "../../apps/api/src/rework/process-configuration-service.js";
+import {
+  cents,
+  decimalToScaled,
+  halfUp2,
+} from "../../apps/api/src/rework/responsibility-determination-service.js";
 import { describe, expect, it } from "vitest";
 
 describe("UAT 1.6 closure regressions", () => {
@@ -43,6 +49,14 @@ describe("UAT 1.6 closure regressions", () => {
     expect(access).toContain('capability === "master_data:manage"');
   });
 
+  it("truncates unit prices to three decimals and rounds settled piecework money half up", () => {
+    expect(truncateDecimal(5.4959, 3)).toBe(5.495);
+    const scaled = decimalToScaled("5.495", 8)
+      * decimalToScaled("1.000", 3)
+      * 10_000n;
+    expect(cents(halfUp2(scaled, 10n ** 15n))).toBe("5.50");
+  });
+
   it("does not describe an unfinished upload as an attachment processing exception", async () => {
     const [adminService, adminPage] = await Promise.all([
       readFile("apps/api/src/admin-console-service.ts", "utf8"),
@@ -67,5 +81,6 @@ describe("UAT 1.6 closure regressions", () => {
       "utf8",
     );
     expect(settledWageMigration).toContain("wage.payable_amount = NEW.base_member_share_amount");
+    expect(settledWageMigration).toContain("unit_price = trunc(unit_price, 3)");
   });
 });
