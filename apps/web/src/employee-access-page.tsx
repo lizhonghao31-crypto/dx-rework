@@ -123,7 +123,12 @@ export function EmployeeAccessPage() {
   };
 
   const reason = (userId: string) => reasonByUser[userId]?.trim() ?? "";
-  const selectedRole = (userId: string) => roleByUser[userId] ?? roles[0]?.roleCode ?? "";
+  const selectedRole = (userId: string, assignableRoles: Role[]) => {
+    const selected = roleByUser[userId];
+    return assignableRoles.some((role) => role.roleCode === selected)
+      ? selected!
+      : assignableRoles[0]?.roleCode ?? "";
+  };
 
   const requireReason = (employee: EmployeeAccessEmployee, action: string): string => {
     const existing = reason(employee.userId);
@@ -137,8 +142,7 @@ export function EmployeeAccessPage() {
   const sync = () => void mutate("sync", () =>
     json("employee-access/directory/sync", { method: "POST" }));
 
-  const grant = (employee: EmployeeAccessEmployee) => {
-    const selected = selectedRole(employee.userId);
+  const grant = (employee: EmployeeAccessEmployee, selected: string) => {
     if (!selected) {
       setError("请先选择要授予的角色。");
       return;
@@ -208,6 +212,9 @@ export function EmployeeAccessPage() {
               {filteredEmployees.map((employee) => {
                 const why = reasonByUser[employee.userId] ?? "";
                 const activeAssignments = employee.roleHistory.filter((history) => history.revokedAt === null);
+                const assignableRoles = roles.filter((role) =>
+                  !activeAssignments.some((history) => history.roleCode === role.roleCode));
+                const selected = selectedRole(employee.userId, assignableRoles);
                 const isSelf = me?.userId === employee.userId;
                 const protectedTarget = employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
                 const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
@@ -249,14 +256,15 @@ export function EmployeeAccessPage() {
                     <div className="employee-access-actions">
                       <select
                         aria-label={`${employee.displayName} 授予角色`}
-                        value={selectedRole(employee.userId)}
+                        value={selected}
+                        disabled={assignableRoles.length === 0}
                         onChange={(event) => setRoleByUser((current) => ({ ...current, [employee.userId]: event.target.value }))}
                       >
-                        {roles.map((role) => <option key={role.roleCode} value={role.roleCode}>{role.displayName}</option>)}
+                        {assignableRoles.map((role) => <option key={role.roleCode} value={role.roleCode}>{role.displayName}</option>)}
                       </select>
                       <Button
-                        disabled={Boolean(busy) || isSelf || !employee.active || !employee.employed || !employee.enabled}
-                        onClick={() => grant(employee)}
+                        disabled={Boolean(busy) || !selected || isSelf || !employee.active || !employee.employed || !employee.enabled}
+                        onClick={() => grant(employee, selected)}
                       >
                         授予角色
                       </Button>
@@ -304,6 +312,7 @@ export function EmployeeAccessPage() {
                     {protectedTargetLocked ? <p className="employee-access-note">老板和系统管理员账号仅可由超级用户维护。</p> : null}
                     {wouldDisableLastOwner ? <p className="employee-access-note">最后一名有效老板不可撤销老板角色或停用访问。</p> : null}
                     {activeAssignments.length === 0 ? <p className="employee-access-note">当前没有业务角色。</p> : null}
+                    {activeAssignments.length > 0 && assignableRoles.length === 0 ? <p className="employee-access-note">所有可授予角色均已生效。</p> : null}
                   </article>
                 );
               })}
