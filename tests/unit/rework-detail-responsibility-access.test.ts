@@ -21,5 +21,7 @@ describe("rework business detail responsibility access", () => {
     expect(service).toContain("to_jsonb(orders)->>'rework_reason'");
     expect(service).toContain("to_jsonb(orders)->>'rework_process'");
     expect(service).toContain("orderQuantity: row.order_quantity === null ? null : Number(row.order_quantity)");
+    expect(service).toContain("attachment.entity_id=$1::text");
+    expect(service).toContain("external_case.rework_order_id=$1::uuid");
   });
 });
