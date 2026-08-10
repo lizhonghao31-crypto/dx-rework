@@ -14,7 +14,7 @@ const queueUrl = new URL(
 );
 
 describe("responsibility review navigation closure", () => {
-  it("routes the normal responsibility entry to the live queue", async () => {
+  it("keeps the live responsibility queue as a route, not a global navigation item", async () => {
     const [app, components] = await Promise.all([
       readFile(appUrl, "utf8"),
       readFile(componentsUrl, "utf8"),
@@ -23,9 +23,7 @@ describe("responsibility review navigation closure", () => {
     expect(components).not.toContain(
       "/ui/tasks?status=pending_responsibility_determination",
     );
-    const responsibilityNav = components.indexOf('name: "责任处理"');
-    expect(responsibilityNav).toBeGreaterThan(-1);
-    expect(components.slice(responsibilityNav, responsibilityNav + 220)).toContain('href: "/ui/responsibility"');
+    expect(components).not.toContain('name: "责任处理"');
     expect(app).toContain('path === "/ui/responsibility"');
     expect(app).toContain("<ResponsibilityQueuePage />");
   });
