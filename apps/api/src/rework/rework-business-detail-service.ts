@@ -154,14 +154,14 @@ export class ReworkBusinessDetailService {
        FROM attachments attachment
        WHERE attachment.status='ready'
          AND (
-           (attachment.entity_type='rework_order' AND attachment.entity_id=$1)
+           (attachment.entity_type='rework_order' AND attachment.entity_id=$1::text)
            OR (
              attachment.entity_type='external_responsibility_case'
              AND EXISTS (
                SELECT 1
                FROM rework_external_responsibility_cases external_case
                WHERE external_case.case_id::text=attachment.entity_id
-                 AND external_case.rework_order_id=$1
+                 AND external_case.rework_order_id=$1::uuid
              )
            )
          )
