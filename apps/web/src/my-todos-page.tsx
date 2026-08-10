@@ -123,9 +123,12 @@ export function MyTodosPage() {
                   {blocked && todo.blockedReason ? <small className="my-todo-error">{todo.blockedReason}</small> : null}
                 </div>
                 {!blocked && <a href={[
+                  "process_configuration",
+                  "whole_order_review",
                   "responsibility_detail",
                   "own_factory_approval",
                   "external_responsibility_detail",
+                  "wage_period_detail",
                 ].includes(todo.route.routeName)
                   ? pageUrl(`ui/my-tasks/${todo.todoId}`)
                   : todoHref(todo)}><Button>开始处理</Button></a>}

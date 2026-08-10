@@ -41,8 +41,15 @@ const canReadWorkFacts = (user: WorkReportingUser): boolean =>
   || user.capabilities.includes("work:report_for_worker")
   || (user.businessRoles?.includes("owner_group") === true && user.capabilities.includes("business:read_all"));
 
-export function WorkReportingForm() {
-  const reworkOrderId = new URLSearchParams(window.location.search).get("rework");
+export function WorkReportingForm({
+  reworkOrderId: providedReworkOrderId,
+  taskMode = "workspace",
+}: {
+  reworkOrderId?: string;
+  taskMode?: "workspace" | "whole_order_review";
+} = {}) {
+  const reworkOrderId = providedReworkOrderId
+    ?? new URLSearchParams(window.location.search).get("rework");
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
   const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string }>>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -267,6 +274,18 @@ export function WorkReportingForm() {
   };
 
   const orderReportingOpen = data && ["pending_task_assignment", "in_progress"].includes(data.reworkStatus);
+
+  if (taskMode === "whole_order_review") {
+    return <div className="mobile-page work-reporting-page">
+      {!reviewEligible && <Surface>{message}</Surface>}
+      {reworkOrderId && reviewEligible && (
+        <WholeOrderReviewPanel
+          reworkOrderId={reworkOrderId}
+          onChanged={() => canReadTasks ? reload().then(() => undefined) : Promise.resolve()}
+        />
+      )}
+    </div>;
+  }
 
   return <div className="mobile-page work-reporting-page">
     <div className="mobile-hero">
