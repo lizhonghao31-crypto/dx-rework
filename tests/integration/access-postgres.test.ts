@@ -114,7 +114,9 @@ runWithPostgres("role permissions and versioned master data", () => {
   it("binds two owners identically while keeping production management and 李同生 distinct", async () => {
     await service.assignRole(ownerActor, { userId: liOwnerId, roleCode: "owner_group", reason: "老板同级同权" });
     await service.assignRole(ownerActor, { userId: wuOwnerId, roleCode: "owner_group", reason: "老板同级同权" });
-    await service.assignRole(adminActor, { userId: zhangId, roleCode: "production_management", reason: "生产执行" });
+    const zhangAssignment = await service.assignRole(adminActor, { userId: zhangId, roleCode: "production_management", reason: "生产执行" });
+    const repeatedZhangAssignment = await service.assignRole(adminActor, { userId: zhangId, roleCode: "production_management", reason: "重复提交不得重复授权" });
+    expect(repeatedZhangAssignment.assignmentId).toBe(zhangAssignment.assignmentId);
     await service.assignRole(adminActor, { userId: liTongshengId, roleCode: "tail_supervisor", reason: "尾部主管" });
 
     const li = await authStore.findSession("li-token", new Date());
