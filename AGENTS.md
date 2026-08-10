@@ -132,3 +132,17 @@ PR 描述必须包含：
 - 把尚未确认的业务选择伪装成确定规则。
 
 发现冲突、权限不足、数据含义不清或 Golden Source 不一致时，停止施工并提交证据，不得猜测。
+
+## 11. GitHub Actions Usage Constitution（P0）
+
+详细制度见 `docs/governance/github-actions-usage-policy-v1.0.md`。以下规则高于施工便利性，适用于 ChatGPT、Codex、开发人员和其他 Agent：
+
+- GitHub Remote 是阶段验收层，不是开发 scratchpad；能在本地/Codex 工作区完成的诊断、定向测试和集中修复不得通过连续 push 调试。
+- 普通 PR Head 更新只能自动分配 `.github/workflows/ci.yml` 的单个 Quick Gate hosted job；禁止恢复第二个自动 Governance runner 或自动 Preview runner。
+- Quick Gate 禁止 PostgreSQL、全量测试、migration replay、backup/restore、PR-17 acceptance、release packaging、Playwright/browser install 和 Preview。
+- 重型验证只允许在 PR 带 `full-gate` label 时由 `.github/workflows/full-gate.yml` 执行；label 存在后的任何新 Head 都必须重新 Full Gate。
+- 禁止 noop commit 仅为触发 CI；同一 Head 的失败 Job 最多 rerun 一次，再失败必须先查根因。
+- Codex Review 只能在最终 intended Head 的 Full Gate 全绿后发起，默认每 PR 一次；第二次仅限明确 P0/P1 或业务负责人授权。
+- Full Gate 默认每 PR 最多两次；第三次需要业务负责人明确授权并说明前两次为何未收口。
+- 正常开发 GitHub-hosted Linux minutes 月度目标不超过 1200，至少保留 800 included minutes 作为非计划储备。
+- `scripts/ci/verify-actions-policy.mjs` 是机器红线。未经业务负责人在具体 PR 中明确授权，不得删除、绕过或弱化该脚本及本节规则。
