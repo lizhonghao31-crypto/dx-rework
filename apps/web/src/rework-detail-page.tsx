@@ -290,20 +290,24 @@ const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`
 
 const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
+  // IE approval is recorded by the configuration service, so distinguish the
+  // terminal review action before the broader process-configuration match.
+  if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
   if (action.includes("process_configuration")) return "process_configuration";
-  if (action.includes("ie_review")) return "ie_review";
   if (action.includes("work_task")) return "task_assignment";
   if (action.includes("work_report")) return "work_reporting";
-  if (action.includes("whole_order") || action.includes("quantity.")) return "whole_order_review";
-  if (action.includes("responsibility") && !action.includes("external") && !action.includes("own_factory")) return "responsibility";
+  if (action.includes("whole_order")) return "whole_order_review";
+  if (action.includes("quantity.")) return "quantity_adjustment";
   if (action.includes("external") || action.includes("own_factory")) return "responsibility_settlement";
+  if (action.includes("responsibility")) return "responsibility";
+  if (action.includes(".complete") || action.includes(".archive")) return "archive";
   return null;
 };
 
 const historyActionLabel = (action: string): string => {
   if (action === "rework.submit") return "提交返工单";
+  if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
   if (action.includes("process_configuration")) return "工序配置处理";
-  if (action.includes("ie_review")) return "IE 审核";
   if (action.includes("work_task")) return "返工人员分配";
   if (action.includes("work_report")) return "完成数量登记";
   if (action.includes("whole_order")) return "整单审核";
@@ -311,6 +315,7 @@ const historyActionLabel = (action: string): string => {
   if (action.includes("external")) return "外部责任结算";
   if (action.includes("own_factory")) return "本厂承担审批";
   if (action.includes("responsibility")) return "责任判定";
+  if (action.includes(".complete") || action.includes(".archive")) return "订单归档";
   return "流程处理";
 };
 
