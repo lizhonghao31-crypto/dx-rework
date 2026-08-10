@@ -17,7 +17,9 @@ describe("my todos first-entry navigation", () => {
     expect(components).toContain('name: "我的待办"');
     expect(page).toContain('apiUrl("todos/mine")');
     expect(page).toContain("这里只显示现在轮到你处理的事项");
-    expect(page).toContain("开始处理");
+    expect(page).toContain("my-todo-row");
+    expect(page).toContain("my-todo-index");
+    expect(page).toContain("节点停留");
     expect(page).toContain("您当前的任务已全部完成，谢谢");
   });
 });

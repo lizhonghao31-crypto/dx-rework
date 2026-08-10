@@ -125,26 +125,20 @@ describe("business-facing workflow UI", () => {
     expect(css).toContain("grid-template-columns: 1fr;");
   });
 
-  it("uses real dynamic node workbenches instead of empty pages requiring a rework id", async () => {
-    const [app, queue, dashboard, detail, navigation] = await Promise.all([
-      read("apps/web/src/App.tsx"),
-      read("apps/web/src/reporting/workflow-queue-page.tsx"),
-      read("apps/web/src/reporting/management-dashboard-page.tsx"),
+  it("uses real order-node workbenches instead of competing standalone workflow menus", async () => {
+    const [detail, navigation] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/components.tsx"),
     ]);
-    expect(app).toContain("<WorkflowQueuePage active=\"工序配置\"");
-    expect(app).toContain("<WorkflowQueuePage active=\"返工执行\"");
-    expect(navigation).toContain('name: "返工执行"');
-    expect(navigation).toContain('description: "分配人员、登记完成数量、整单确认"');
-    expect(navigation).not.toContain('name: "分工上数"');
-    expect(queue).toContain("搜索当前节点订单");
-    expect(queue).toContain("谁来处理");
-    expect(queue).toContain("当前要做什么");
-    expect(queue).toContain("完成后去哪里");
-    expect(queue).toContain("订单只有进入这个真实节点后才会出现在这里");
-    expect(dashboard).toContain("进入节点工作台 →");
-    expect(detail).toContain("统一查询只保留单据事实和全链路信息，不再承担日常节点操作入口");
+    for (const entry of ["我的待办", "发起返工", "全部订单", "系统管理", "财务报表"]) {
+      expect(navigation).toContain(`name: "${entry}"`);
+    }
+    expect(navigation).not.toContain('name: "返工执行"');
+    expect(detail).toContain("订单是唯一的流程与执行载体");
+    expect(detail).toContain("rework-workflow__stage");
+    expect(detail).toContain("<ProcessConfigurationForm");
+    expect(detail).toContain("<WorkReportingForm");
+    expect(detail).toContain("<ResponsibilityDeterminationPanel");
     expect(detail).not.toContain("const nextAction =");
   });
 

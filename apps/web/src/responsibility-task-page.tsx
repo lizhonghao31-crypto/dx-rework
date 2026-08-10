@@ -4,14 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell } from "./components.js";
-import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
-import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
-import { ProcessConfigurationForm } from "./process-configuration-form.js";
-import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
+import { ReworkDetailPage, type WorkflowNodeKey } from "./rework-detail-page.js";
 import { WagePeriodDetailPage } from "./wages/wage-period-detail.js";
-import { WorkReportingForm } from "./work-reporting-form.js";
 
-const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const refreshMilliseconds = 1_500;
 
 type TaskRouteName =
@@ -21,6 +17,7 @@ type TaskRouteName =
   | "own_factory_approval"
   | "external_responsibility_detail"
   | "wage_period_detail";
+type OrderTaskRouteName = Exclude<TaskRouteName, "wage_period_detail">;
 
 type ActionTodo = TodoResponse & {
   route: TodoResponse["route"] & { routeName: TaskRouteName };
@@ -29,35 +26,16 @@ type ActionTodo = TodoResponse & {
 type State =
   | { kind: "loading" }
   | { kind: "ready"; todo: ActionTodo }
-  | { kind: "completed"; nextTodoId: string | null }
+  | { kind: "completed"; todo: ActionTodo }
   | { kind: "blocked"; reason: string }
   | { kind: "error"; message: string };
 
-const meta: Record<TaskRouteName, { title: string; after: string }> = {
-  process_configuration: {
-    title: "配置或审核返工工序",
-    after: "完成后进入下一位处理人的个人待办。",
-  },
-  whole_order_review: {
-    title: "审核整张返工单",
-    after: "确认完成后进入责任判定。",
-  },
-  responsibility_detail: {
-    title: "确认本单责任分配",
-    after: "系统会按责任结果，把本厂承担或各供应商扣款分别交给对应处理人。",
-  },
-  own_factory_approval: {
-    title: "审批本厂承担金额",
-    after: "审批完成后，本厂部分结束；外部责任继续由对应供应商经办和应付处理。",
-  },
-  external_responsibility_detail: {
-    title: "处理这一家供应商的扣款",
-    after: "本任务完成后，下一步会进入对应处理人的个人待办。",
-  },
-  wage_period_detail: {
-    title: "核对本期返工工资",
-    after: "完成后进入下一位工资核对或月结处理人。",
-  },
+const workflowNodeByRoute: Record<OrderTaskRouteName, WorkflowNodeKey> = {
+  process_configuration: "process_configuration",
+  whole_order_review: "whole_order_review",
+  responsibility_detail: "responsibility",
+  own_factory_approval: "responsibility_settlement",
+  external_responsibility_detail: "responsibility_settlement",
 };
 
 const todoIdFromLocation = (): string | null => {
@@ -98,21 +76,16 @@ export function ResponsibilityTaskPage() {
       setState({ kind: "error", message: "该任务已不再分配给你，请返回我的待办查看当前任务。" });
       return;
     }
+    if (!isActionTodo(todo)) {
+      setState({ kind: "error", message: "该任务暂不支持独立处理，请返回我的待办。" });
+      return;
+    }
     if (todo.status === "completed" || todo.status === "cancelled") {
-      const next = todos.find((item) =>
-        item.todoId !== todoId
-        && item.todoType !== "information"
-        && item.status === "pending"
-        && isActionTodo(item));
-      setState({ kind: "completed", nextTodoId: next?.todoId ?? null });
+      setState({ kind: "completed", todo });
       return;
     }
     if (todo.status === "blocked_recipient") {
       setState({ kind: "blocked", reason: todo.blockedReason ?? "当前任务需要由管理人员转交。" });
-      return;
-    }
-    if (!isActionTodo(todo)) {
-      setState({ kind: "error", message: "该任务暂不支持独立处理，请返回我的待办。" });
       return;
     }
     setState({ kind: "ready", todo });
@@ -135,12 +108,6 @@ export function ResponsibilityTaskPage() {
     };
   }, [load]);
 
-  useEffect(() => {
-    if (state.kind === "completed" && state.nextTodoId) {
-      window.location.replace(pageUrl(`ui/my-tasks/${state.nextTodoId}`));
-    }
-  }, [state]);
-
   if (state.kind === "loading") {
     return <Shell active="我的待办"><Header title="正在打开任务" badge="个人任务" /><Surface>正在确认任务状态…</Surface></Shell>;
   }
@@ -153,6 +120,16 @@ export function ResponsibilityTaskPage() {
     );
   }
   if (state.kind === "completed") {
+    if (state.todo.route.routeName !== "wage_period_detail") {
+      const route = state.todo.route;
+      const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
+      return <ReworkDetailPage
+        reworkOrderId={route.reworkOrderId ?? route.entityId}
+        focusedNode={node}
+        {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
+        returnToTodos
+      />;
+    }
     return (
       <Shell active="我的待办">
         <Header title="任务已完成" badge="已完成" action="返回我的待办" actionHref="/ui/my-tasks" />
@@ -168,24 +145,23 @@ export function ResponsibilityTaskPage() {
   const todo = state.todo;
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
-  const pageMeta = meta[route.routeName];
+  if (route.routeName !== "wage_period_detail") {
+    const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
+    return <ReworkDetailPage
+      reworkOrderId={orderId}
+      focusedNode={node}
+      {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
+      returnToTodos
+    />;
+  }
   return (
     <Shell active="我的待办">
-      <Header title={pageMeta.title} subtitle={todo.category} badge="当前由你处理" action="返回我的待办" actionHref="/ui/my-tasks" />
+      <Header title="核对本期返工工资" subtitle={todo.category} badge="当前由你处理" action="返回我的待办" actionHref="/ui/my-tasks" />
       <Surface className="task-guidance">
-        <p><b>你现在要做：</b>{pageMeta.title}</p>
-        <p><b>完成后：</b>{pageMeta.after}</p>
+        <p><b>你现在要做：</b>核对本期返工工资</p>
+        <p><b>完成后：</b>进入下一位工资核对或月结处理人。</p>
       </Surface>
-      {route.routeName === "process_configuration" && <ProcessConfigurationForm reworkOrderId={orderId} />}
-      {route.routeName === "whole_order_review" && (
-        <WorkReportingForm reworkOrderId={orderId} taskMode="whole_order_review" />
-      )}
-      {route.routeName === "responsibility_detail" && <ResponsibilityDeterminationPanel reworkOrderId={orderId} />}
-      {route.routeName === "own_factory_approval" && <OwnFactoryApprovalPanel reworkOrderId={orderId} />}
-      {route.routeName === "external_responsibility_detail" && (
-        <ExternalResponsibilityPanel reworkOrderId={orderId} focusCaseId={route.entityId} />
-      )}
-      {route.routeName === "wage_period_detail" && <WagePeriodDetailPage periodId={route.entityId} />}
+      <WagePeriodDetailPage periodId={route.entityId} />
     </Shell>
   );
 }

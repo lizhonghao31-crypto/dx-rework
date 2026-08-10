@@ -56,9 +56,194 @@
   margin-top: var(--dx-v2-space-2);
 }
 
+.rework-workflow,
+.rework-detail-task {
+  display: grid;
+  gap: var(--dx-v2-space-3);
+}
+
+.rework-workflow__heading,
+.rework-detail-task__heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-3);
+}
+
+.rework-workflow__heading h2,
+.rework-detail-task__heading h2 {
+  margin: 0;
+}
+
+.rework-workflow__heading p,
+.rework-detail-task__heading p {
+  margin: 5px 0 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+}
+
+.rework-workflow__stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--dx-v2-space-3);
+}
+
+.rework-workflow__stage {
+  min-width: 0;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+}
+
+.rework-workflow__stage > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-2);
+  min-height: 62px;
+  padding: var(--dx-v2-space-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.rework-workflow__stage > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rework-workflow__stage > summary span {
+  display: grid;
+  gap: 3px;
+}
+
+.rework-workflow__stage > summary small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+
+.rework-workflow__stage > summary > strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.rework-workflow__stage.is-completed {
+  opacity: .72;
+}
+
+.rework-workflow__stage.is-current {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 2px 0 var(--color-primary);
+}
+
+.rework-workflow__stage.is-future {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--dx-v2-color-border));
+}
+
+.rework-workflow__nodes {
+  display: grid;
+  gap: 6px;
+  padding: 0 var(--dx-v2-space-3) var(--dx-v2-space-3);
+}
+
+.rework-workflow__node {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: 6px;
+  background: var(--dx-v2-color-inset);
+}
+
+.rework-workflow__node > b {
+  color: var(--color-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.rework-workflow__node > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rework-workflow__node > span strong,
+.rework-workflow__node > span small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rework-workflow__node > span strong {
+  font-size: 13px;
+}
+
+.rework-workflow__node > span small,
+.rework-workflow__node > em {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.rework-workflow__node.is-completed {
+  filter: grayscale(1);
+  opacity: .68;
+}
+
+.rework-workflow__node.is-current,
+.rework-workflow__node:hover {
+  border-color: var(--color-primary);
+}
+
+.rework-workflow__node.is-selected {
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.rework-workflow__pending-path {
+  grid-column: 3;
+  padding: var(--dx-v2-space-3);
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px dashed var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+}
+
+.rework-detail-task {
+  padding-top: var(--dx-v2-space-4);
+  border-top: 1px solid var(--dx-v2-color-border);
+}
+
+.rework-detail-node-preview {
+  display: grid;
+  gap: var(--dx-v2-space-2);
+  padding: var(--dx-v2-space-4);
+}
+
+.rework-detail-node-preview h2,
+.rework-detail-node-preview p {
+  margin: 0;
+}
+
+.rework-detail-node-preview p {
+  color: var(--dx-v2-color-text-secondary);
+  line-height: 1.6;
+}
+
 @media (max-width: 980px) {
   .rework-detail-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rework-workflow__stages {
+    grid-template-columns: 1fr;
+  }
+
+  .rework-workflow__pending-path {
+    grid-column: auto;
   }
 }
 
@@ -69,5 +254,18 @@
 
   .rework-detail-wide {
     grid-column: auto;
+  }
+
+  .rework-workflow__heading,
+  .rework-detail-task__heading {
+    align-items: flex-start;
+  }
+
+  .rework-workflow__node {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .rework-workflow__node > em {
+    grid-column: 2;
   }
 }

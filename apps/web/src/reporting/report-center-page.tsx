@@ -29,7 +29,7 @@ export function ReportCenterPage(){
   const filters=useMemo(()=>({from,to,q:q.trim()||undefined,status:status||undefined,limit:"100"}),[from,to,q,status]);
   useEffect(()=>{const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters]);
   const value=state.kind==="ready"?state.value:null;
-  return <Shell active="报表中心"><Header title="管理报表中心" subtitle="页面预览与 Excel 使用同一服务端查询口径；金额不在浏览器重新计算" badge={value?`${value.rowCount} 行 · ${value.range.from} 至 ${value.range.to}`:"真实数据"} action="返回总览" actionHref="/ui/management" />
+  return <Shell active="财务报表"><Header title="财务报表" subtitle="页面预览与 Excel 使用同一服务端查询口径；金额不在浏览器重新计算" badge={value?`${value.rowCount} 行 · ${value.range.from} 至 ${value.range.to}`:"真实数据"} action="返回全部订单" actionHref="/ui/tasks" />
     <Surface className="reporting-filters report-center-filters">
       <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
       <label>开始日期<input type="date" value={from} onChange={event=>setFrom(event.target.value)} /></label>

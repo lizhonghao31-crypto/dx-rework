@@ -4,15 +4,78 @@
 }
 
 .my-todo-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.my-todo-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-4);
+  grid-template-columns: 42px minmax(240px, 1fr) minmax(410px, 1.25fr);
+  gap: var(--space-3);
   align-items: center;
-  padding: var(--space-4);
+  min-height: 94px;
+  padding: var(--space-3) var(--space-4);
+  color: inherit;
+  text-decoration: none;
+  border-left: 3px solid var(--color-primary);
+}
+
+.my-todo-row:not(.my-todo-row--blocked):hover {
+  background: var(--dx-v2-color-inset);
+}
+
+.my-todo-row--blocked {
+  border-left-color: var(--color-danger);
+}
+
+.my-todo-index {
+  color: var(--dx-v2-color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  letter-spacing: .04em;
+}
+
+.my-todo-primary {
+  min-width: 0;
+}
+
+.my-todo-title {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
 }
 
 .my-todo-card h2 {
-  margin-top: var(--space-2);
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.my-todo-primary p {
+  margin: 6px 0 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.my-todo-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.my-todo-metrics span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.my-todo-metrics small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
 }
 
 .my-todo-card small,
@@ -40,12 +103,24 @@
 }
 
 @media (max-width: 600px) {
-  .my-todo-card {
+  .my-todo-row {
     grid-template-columns: 1fr;
+    gap: var(--space-2);
+    min-height: 0;
   }
 
-  .my-todo-card a,
-  .my-todo-card .dx-button {
-    width: 100%;
+  .my-todo-index {
+    position: absolute;
+    margin-left: -2px;
+    margin-top: -2px;
+  }
+
+  .my-todo-primary {
+    padding-left: 32px;
+  }
+
+  .my-todo-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-left: 32px;
   }
 }
