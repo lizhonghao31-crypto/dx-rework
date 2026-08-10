@@ -105,10 +105,12 @@ export function ExternalEvidenceUploader({
     if (!files?.length || disabled || uploading) return;
     setUploading(true);
     setFailedFile(null);
+    let activeFileName = "所选文件";
     try {
       const nextIds = [...attachmentIds];
       const nextUploaded = [...uploaded];
       for (const file of Array.from(files)) {
+        activeFileName = file.name;
         setStage("preparing");
         if (!supportedTypes.has(file.type)) {
           throw new Error(`${file.name} 不是支持的图片或 PDF`);
@@ -167,9 +169,7 @@ export function ExternalEvidenceUploader({
       setUploaded(nextUploaded);
       onMessage(`${nextIds.length} 份证据附件已就绪，提交动作后将锁定到该台账。`);
     } catch (error: unknown) {
-      const failed = Array.from(files).find((file) =>
-        !uploaded.some((item) => item.filename === file.name));
-      setFailedFile(failed?.name ?? "所选文件");
+      setFailedFile(activeFileName);
       onMessage(`${error instanceof Error ? error.message : "附件上传失败"}，请重新选择文件重试。`);
     } finally {
       setUploading(false);
