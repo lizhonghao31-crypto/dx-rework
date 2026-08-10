@@ -277,7 +277,7 @@ export function WorkReportingForm({
 
   if (taskMode === "whole_order_review") {
     return <div className="mobile-page work-reporting-page">
-      {!reviewEligible && <Surface>正在核验整单审核权限…</Surface>}
+      {!reviewEligible && <Surface>{message}</Surface>}
       {reworkOrderId && reviewEligible && (
         <WholeOrderReviewPanel
           reworkOrderId={reworkOrderId}
