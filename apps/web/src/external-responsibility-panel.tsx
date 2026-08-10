@@ -132,8 +132,8 @@ export function ExternalResponsibilityPanel({
     useState<Record<string, boolean>>({});
   const pendingMutationKeys = useRef<Record<string, string>>({});
 
-  const load = async (): Promise<void> => {
-    if (!reworkOrderId) return;
+  const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
+    if (!reworkOrderId) return null;
     const response = await fetch(
       apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities`),
       {
@@ -143,15 +143,14 @@ export function ExternalResponsibilityPanel({
     );
     if (response.status === 403) {
       setState({ kind: "hidden" });
-      return;
+      return null;
     }
     if (!response.ok) throw new Error(await requestError(response));
-    setState({
-      kind: "ready",
-      value: ExternalResponsibilityBatchResponseSchema.parse(
-        await response.json(),
-      ),
-    });
+    const value = ExternalResponsibilityBatchResponseSchema.parse(
+      await response.json(),
+    );
+    setState({ kind: "ready", value });
+    return value;
   };
 
   useEffect(() => {
@@ -160,18 +159,25 @@ export function ExternalResponsibilityPanel({
       return;
     }
     const controller = new AbortController();
-    void Promise.all([
-      load(),
-      fetch(apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`), {
-        credentials: "include",
-        signal: controller.signal,
-        headers: { accept: "application/json" },
-      }).then(async (response) => {
-        if (response.status === 403) return [] as Supplier[];
-        if (!response.ok) throw new Error(await requestError(response));
-        return await response.json() as Supplier[];
-      }),
-    ]).then(([, catalog]) => {
+    void load().then(async (batch) => {
+      const hasUnassigned = batch?.items.some(
+        (item) => !batch.cases.some((entry) =>
+          entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
+        ),
+      ) ?? false;
+      if (!batch || !hasUnassigned) return [] as Supplier[];
+      const response = await fetch(
+        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
+        {
+          credentials: "include",
+          signal: controller.signal,
+          headers: { accept: "application/json" },
+        },
+      );
+      if (response.status === 403) return [] as Supplier[];
+      if (!response.ok) throw new Error(await requestError(response));
+      return await response.json() as Supplier[];
+    }).then((catalog) => {
       setSuppliers(catalog);
     }).catch((error: unknown) => {
       if (!(error instanceof DOMException && error.name === "AbortError")) {

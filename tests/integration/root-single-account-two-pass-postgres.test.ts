@@ -36,6 +36,7 @@ import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rew
 import { OwnFactoryApprovalApplicationService } from "../../apps/api/src/rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
+import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
@@ -55,6 +56,7 @@ type PassFixture = Readonly<{
   app: FastifyInstance;
   database: pg.Pool;
   rootUserId: string;
+  businessDetail: ReworkBusinessDetailService;
   merchandiserUserId: string;
   workerPersonIds: string[];
   supplierId: string;
@@ -206,6 +208,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
 
     const todoProjection = new RootAwareTodoProjectionService(new TodoService(database));
     const initiation = new ReworkInitiationService(database, "corp", undefined, undefined, undefined, todoProjection);
+    const businessDetail = new ReworkBusinessDetailService(database);
     const configuration = new ProcessConfigurationService(database, undefined, undefined, undefined, todoProjection);
     const work = new WorkReportingService(database, undefined, undefined, todoProjection);
     const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
@@ -234,7 +237,12 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       config,
       checkDatabase: async () => undefined,
       getAppliedSchemaHistory: async () => null,
-      rework: { authenticate, service: initiation, root },
+      rework: {
+        authenticate,
+        service: initiation,
+        businessDetailService: businessDetail,
+        root,
+      },
       processConfiguration: { authenticate, service: configuration, root },
       workReporting: { authenticate, service: work, root },
       wholeOrderReview: { authenticate, service: wholeOrder, root },
@@ -253,6 +261,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       app,
       database,
       rootUserId,
+      businessDetail,
       merchandiserUserId,
       workerPersonIds,
       supplierId,
@@ -286,6 +295,32 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       `/rework-orders/${draft.reworkOrderId}/submit`,
       { expectedVersion: draft.version },
     );
+
+    const directDetail = await fixture.businessDetail.get({
+      actorId: fixture.rootUserId,
+      actorRoles: ["root_superuser"],
+      authorizationCapability: "business:detail:read",
+      authorizationCapabilities: ["business:read_all"],
+      requestId: randomUUID(),
+    }, draft.reworkOrderId);
+    expect(directDetail.reworkOrderId).toBe(draft.reworkOrderId);
+
+    const detail = await http<{
+      reworkOrderId: string;
+      status: string;
+      styleNo: string | null;
+      orderNo: string | null;
+    }>(
+      fixture.app,
+      "GET",
+      `/rework-orders/${draft.reworkOrderId}/business-detail`,
+    );
+    expect(detail).toMatchObject({
+      reworkOrderId: draft.reworkOrderId,
+      status: "pending_process_configuration",
+      styleNo: `ROOT-PASS-${pass}`,
+      orderNo: `ROOT-ORDER-${pass}`,
+    });
 
     const save = (expectedOrderVersion: number) =>
       http<ProcessConfigurationResponse>(
