@@ -20,13 +20,14 @@ small { font-size: 12px; }
 .dx-field input { min-height: 44px; }
 .dx-field__control:focus-within { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
 .app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
-.app-shell > aside { position: sticky; top: 0; height: 100vh; padding: var(--dx-v2-space-6); background: var(--dx-v2-color-control); color: #fff; }
+.app-shell > aside { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: var(--dx-v2-space-6); overflow-y: auto; background: var(--dx-v2-color-control); color: #fff; }
 .app-shell > aside h2 { margin: 0 0 20px; font-size: 18px; }
 .app-shell > aside small { color: #8293a3; }
 .app-shell nav { display: grid; gap: var(--dx-v2-space-3); margin-top: 28px; }
 .app-shell a { color: inherit; text-decoration: none; }
 .nav-disabled { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; opacity: 0.55; }
-.org { position: absolute; bottom: 24px; display: grid; gap: var(--dx-v2-space-2); }
+.org { display: grid; gap: var(--dx-v2-space-2); }
+.app-shell__identity { margin-top: auto; padding-top: var(--dx-v2-space-4); }
 .app-shell > main { min-width: 0; padding: 32px; }
 header { display: flex; justify-content: space-between; align-items: start; gap: 20px; margin-bottom: 28px; }
 .header-actions { display: flex; align-items: center; gap: var(--dx-v2-space-3); }
