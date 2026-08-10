@@ -73,31 +73,30 @@ describe("business-chain UI handoff contracts", () => {
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
-  it("keeps process, execution and wage nodes inside the shared numbered workflow shell", async () => {
-    const [app, shell] = await Promise.all([
+  it("keeps process, execution and wage work inside the five-entry order shell", async () => {
+    const [app, shell, detail] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
     ]);
-    expect(app).toContain('<Shell active="工序配置"><ProcessConfigurationForm /></Shell>');
-    expect(app).toContain('<Shell active="返工执行"><WorkReportingForm /></Shell>');
-    expect(app).toContain('<Shell active="工资核对"><WagePage path={path} /></Shell>');
-    expect(shell).toContain('name: "工序配置"');
-    expect(shell).toContain('href: "/ui/process-configuration"');
-    expect(shell).toContain('name: "返工执行"');
-    expect(shell).toContain('href: "/ui/work-reporting"');
-    expect(shell).toContain('name: "工资核对"');
-    expect(shell).toContain('href: "/ui/wages"');
-    expect(shell).toContain('step: "0"');
-    expect(shell).toContain('step: "12"');
-    expect(shell).toContain("flow-navigation__arrow");
-    expect(shell).toContain('name: "权限管理"');
-    expect(shell).toContain('name: "系统管理"');
+    expect(app).toContain('<Shell active="全部订单"><ProcessConfigurationForm /></Shell>');
+    expect(app).toContain('<Shell active="全部订单"><WorkReportingForm /></Shell>');
+    expect(app).toContain('<Shell active="财务报表"><WagePage path={path} /></Shell>');
+    for (const label of ["我的待办", "发起返工", "全部订单", "系统管理", "财务报表"]) {
+      expect(shell).toContain(`name: "${label}"`);
+    }
+    expect(shell).not.toContain("flow-navigation__arrow");
+    expect(detail).toContain('title: "发起与方案"');
+    expect(detail).toContain('title: "返工执行"');
+    expect(detail).toContain('title: "责任与归档"');
+    expect(detail).toContain('node("initiation", "01"');
+    expect(detail).toContain('node("responsibility_settlement", "08"');
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
     const app = await readFile("apps/web/src/App.tsx", "utf8");
     expect(app).toContain('path === "/ui/work-reporting" || path === "/ui/piecework/collective"');
-    expect(app).toContain('<Shell active="返工执行"><WorkReportingForm /></Shell>');
+    expect(app).toContain('<Shell active="全部订单"><WorkReportingForm /></Shell>');
     expect(app).not.toContain("<MobileForm piecework />");
   });
 
@@ -134,8 +133,8 @@ describe("business-chain UI handoff contracts", () => {
     expect(migration).toContain("rework_work_task_members_employee_eligibility");
     expect(migration).toContain("assignment.role_code='worker'");
     expect(app).toContain('path === "/ui/people"');
-    expect(shell).toContain('name: "人员资料"');
-    expect(shell).toContain('href: "/ui/people"');
+    expect(shell).toContain('name: "系统管理"');
+    expect(shell).toContain('href: "/ui/admin"');
   });
 
   it("prevalidates N10-B deduction and unresolved-difference closure inputs", async () => {
