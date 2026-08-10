@@ -45,8 +45,9 @@ describe("UAT 1.6 closure regressions", () => {
     expect(responsibility).toContain("sum(wage.payable_amount)");
     expect(responsibility).not.toContain("round(share.amount,2)::text amount");
     expect(external).toContain("新增并选择");
-    expect(external).toContain("master-data/suppliers");
-    expect(access).toContain('capability === "master_data:manage"');
+    expect(external).toContain("external-responsibilities/temporary-suppliers");
+    expect(external).not.toContain('apiUrl("master-data/suppliers")');
+    expect(access).not.toContain('capability === "master_data:manage"');
   });
 
   it("truncates unit prices to three decimals and rounds settled piecework money half up", () => {
