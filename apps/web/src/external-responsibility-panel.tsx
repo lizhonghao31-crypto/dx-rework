@@ -95,6 +95,16 @@ const requiredSupplierType = (
       ? "fabric"
       : "embroidery_washing";
 
+const temporarySupplierCode = (type: Supplier["supplierType"]): string => {
+  const prefix: Record<Supplier["supplierType"], string> = {
+    factory: "FAC",
+    embroidery_washing: "EMB",
+    fabric: "FAB",
+    other: "OTH",
+  };
+  return `TMP-${prefix[type]}-${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
+};
+
 const requestError = async (response: Response): Promise<string> => {
   try {
     const body = await response.json() as { error?: { message?: string } };
@@ -114,6 +124,7 @@ export function ExternalResponsibilityPanel({
   const [state, setState] = useState<State>({ kind: "loading" });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selection, setSelection] = useState<Record<string, string>>({});
+  const [temporarySupplierName, setTemporarySupplierName] = useState<Partial<Record<ResponsibilityType, string>>>({});
   const [processingOverrideReason, setProcessingOverrideReason] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -199,6 +210,55 @@ export function ExternalResponsibilityPanel({
         : [],
     [state],
   );
+
+  const createTemporarySupplier = async (
+    item: NonNullable<ExternalResponsibilityBatchResponse>["items"][number],
+  ): Promise<void> => {
+    const supplierName = temporarySupplierName[item.responsibilityType]?.trim() ?? "";
+    if (!supplierName) {
+      setMessage(`请先填写${responsibilityTypeLabel[item.responsibilityType]}名称。`);
+      return;
+    }
+    const supplierType = requiredSupplierType(item.responsibilityType);
+    setBusy(true);
+    setMessage("");
+    try {
+      const createResponse = await fetch(apiUrl("master-data/suppliers"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          supplierCode: temporarySupplierCode(supplierType),
+          supplierType,
+          supplierName,
+          active: true,
+          changeReason: `外部责任处理临时新增：${reworkOrderId}`,
+        }),
+      });
+      if (!createResponse.ok) throw new Error(await requestError(createResponse));
+      const optionsResponse = await fetch(
+        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
+        { credentials: "include", headers: { accept: "application/json" } },
+      );
+      if (!optionsResponse.ok) throw new Error(await requestError(optionsResponse));
+      const catalog = await optionsResponse.json() as Supplier[];
+      const created = catalog.find(
+        (supplier) => supplier.supplierType === supplierType && supplier.supplierName === supplierName,
+      );
+      if (!created) throw new Error("供应商已新增，但未能重新读取可选名录，请刷新后重试。");
+      setSuppliers(catalog);
+      setSelection((current) => ({ ...current, [item.externalItemId]: created.supplierId }));
+      setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: "" }));
+      setMessage(`${supplierName} 已新增到供应商名录并自动选中。`);
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "新增供应商失败");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const mutationKey = (signature: string): string => {
     const existing = pendingMutationKeys.current[signature];
@@ -581,6 +641,24 @@ export function ExternalResponsibilityPanel({
                     [item.externalItemId]: supplierId,
                   }))}
                 />
+                {matchingSuppliers.length === 0 && (
+                  <div className="external-temporary-supplier">
+                    <InsetField
+                      label={`新增${responsibilityTypeLabel[item.responsibilityType]}名称`}
+                      value={temporarySupplierName[item.responsibilityType] ?? ""}
+                      disabled={busy}
+                      onChange={(event) => setTemporarySupplierName((current) => ({
+                        ...current,
+                        [item.responsibilityType]: event.target.value,
+                      }))}
+                      placeholder="名录中暂无可选项时，在此临时新增"
+                    />
+                    <Button disabled={busy} onClick={() => void createTemporarySupplier(item)}>
+                      新增并选择
+                    </Button>
+                    <small>新增后保留在供应商名录，供后续返工和扣款复用。</small>
+                  </div>
+                )}
               </div>
             );
           })}
