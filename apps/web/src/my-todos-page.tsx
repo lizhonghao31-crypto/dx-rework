@@ -65,6 +65,26 @@ const formatDueAt = (value: string | null): string => {
   }).format(new Date(value));
 };
 
+const formatNodeDuration = (value: string): string => {
+  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时 ${minutes % 60} 分`;
+  return `${Math.floor(hours / 24)} 天 ${hours % 24} 小时`;
+};
+
+const taskHref = (todo: TodoResponse): string => [
+  "process_configuration",
+  "whole_order_review",
+  "responsibility_detail",
+  "own_factory_approval",
+  "external_responsibility_detail",
+  "wage_period_detail",
+].includes(todo.route.routeName)
+  ? pageUrl(`ui/my-tasks/${todo.todoId}`)
+  : todoHref(todo);
+
 export function MyTodosPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
 
@@ -111,27 +131,38 @@ export function MyTodosPage() {
       )}
       {actionable.length > 0 && (
         <div className="my-todos-list">
-          {actionable.map((todo) => {
+          {actionable.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
+            const order = todo.orderContext;
             return (
               <Surface className="my-todo-card" key={todo.todoId}>
-                <div>
-                  <StatusBadge tone={blocked ? "danger" : "warning"}>{blocked ? "需要转交" : "待处理"}</StatusBadge>
-                  <h2>{taskLabel[todo.route.routeName]}</h2>
-                  <p>{todo.category}</p>
-                  <small>截止：{formatDueAt(todo.dueAt)}</small>
-                  {blocked && todo.blockedReason ? <small className="my-todo-error">{todo.blockedReason}</small> : null}
-                </div>
-                {!blocked && <a href={[
-                  "process_configuration",
-                  "whole_order_review",
-                  "responsibility_detail",
-                  "own_factory_approval",
-                  "external_responsibility_detail",
-                  "wage_period_detail",
-                ].includes(todo.route.routeName)
-                  ? pageUrl(`ui/my-tasks/${todo.todoId}`)
-                  : todoHref(todo)}><Button>开始处理</Button></a>}
+                {blocked ? (
+                  <div className="my-todo-row my-todo-row--blocked">
+                    <b className="my-todo-index">{String(index + 1).padStart(2, "0")}</b>
+                    <div className="my-todo-primary">
+                      <StatusBadge tone="danger">需要转交</StatusBadge>
+                      <h2>{taskLabel[todo.route.routeName]}</h2>
+                      <p>{todo.blockedReason ?? "当前任务需要由管理人员转交。"}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <a className="my-todo-row" href={taskHref(todo)}>
+                    <b className="my-todo-index">{String(index + 1).padStart(2, "0")}</b>
+                    <div className="my-todo-primary">
+                      <div className="my-todo-title">
+                        <h2>{taskLabel[todo.route.routeName]}</h2>
+                        <StatusBadge tone="warning">待处理</StatusBadge>
+                      </div>
+                      <p>{order?.reworkNo ?? "返工单号待生成"} · 订单号：{order?.orderNo ?? "未填写"} · 款号：{order?.styleNo ?? "未填写"}</p>
+                    </div>
+                    <div className="my-todo-metrics" aria-label="待办业务信息">
+                      <span><small>当前节点</small>{todo.category}</span>
+                      <span><small>节点停留</small>{formatNodeDuration(todo.createdAt)}</span>
+                      <span><small>相关金额</small>待核定</span>
+                      <span><small>截止</small>{formatDueAt(todo.dueAt)}</span>
+                    </div>
+                  </a>
+                )}
               </Surface>
             );
           })}
