@@ -75,14 +75,20 @@ let verifiedSession: VerifiedSession | undefined;
 let sessionVerification: Promise<VerifiedSession> | undefined;
 
 const verifySession = (): Promise<VerifiedSession> => {
-  if (verifiedSession) return Promise.resolve(verifiedSession);
-  sessionVerification ??= fetch(apiUrl("auth/me"), { credentials: "include" })
-    .then(async (response) => response.ok ? await response.json() as Me : "denied")
-    .catch(() => "denied")
-    .then((state) => {
-      verifiedSession = state;
-      return state;
-    });
+  if (verifiedSession !== undefined) return Promise.resolve(verifiedSession);
+
+  if (!sessionVerification) {
+    sessionVerification = fetch(apiUrl("auth/me"), { credentials: "include" })
+      .then(async (response): Promise<VerifiedSession> =>
+        response.ok ? await response.json() as Me : "denied",
+      )
+      .catch((): VerifiedSession => "denied")
+      .then((state): VerifiedSession => {
+        verifiedSession = state;
+        return state;
+      });
+  }
+
   return sessionVerification;
 };
 
