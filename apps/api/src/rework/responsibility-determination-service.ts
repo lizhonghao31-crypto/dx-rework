@@ -583,7 +583,8 @@ export class ResponsibilityDeterminationService {
                ON wage.rework_order_id=report.rework_order_id
               AND wage.configuration_item_id=report.configuration_item_id
               AND wage.work_report_id=report.work_report_id
-             LEFT JOIN rework_work_report_rejections rejection USING(work_report_id)
+             LEFT JOIN rework_work_report_rejections rejection
+               ON rejection.work_report_id=report.work_report_id
              WHERE report.rework_order_id=$1
                AND report.configuration_item_id=$2
                AND report.status='submitted'
