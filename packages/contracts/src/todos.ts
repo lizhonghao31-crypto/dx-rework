@@ -53,6 +53,14 @@ export const TodoPolicySchema = z.object({
   enabled: z.boolean(),
 }).strict();
 
+export const TodoOrderContextSchema = z.object({
+  reworkNo: z.string().nullable(),
+  orderNo: z.string().nullable(),
+  styleNo: z.string().nullable(),
+  status: z.string().min(1),
+  updatedAt: z.string().datetime(),
+}).strict();
+
 export const TodoResponseSchema = z.object({
   todoId: TodoIdSchema,
   todoType: TodoTypeSchema,
@@ -70,6 +78,8 @@ export const TodoResponseSchema = z.object({
   reminderCount: z.number().int().min(0).max(2),
   status: TodoStatusSchema,
   blockedReason: z.string().nullable(),
+  /** Present when the action is attached to a single rework order. */
+  orderContext: TodoOrderContextSchema.nullable(),
   version: z.number().int().positive(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -123,6 +133,7 @@ export const TransferTodoRoutingExceptionSchema = z.object({
 
 export type TodoRouteDescriptor = z.infer<typeof TodoRouteDescriptorSchema>;
 export type TodoPolicy = z.infer<typeof TodoPolicySchema>;
+export type TodoOrderContext = z.infer<typeof TodoOrderContextSchema>;
 export type TodoResponse = z.infer<typeof TodoResponseSchema>;
 export type TodoDeliveryAttempt = z.infer<typeof TodoDeliveryAttemptSchema>;
 export type TodoRoutingException = z.infer<typeof TodoRoutingExceptionSchema>;
