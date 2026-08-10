@@ -44,13 +44,18 @@ type ReworkBusinessDetail = Readonly<{
   reworkNo: string | null;
   status: ReworkStatus;
   styleNo: string | null;
+  customerSupplyCode: string | null;
+  factoryStyleNo: string | null;
   orderNo: string | null;
+  orderQuantity: number | null;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
     supplierId: string | null;
     displayName: string;
   }> | null;
+  reworkReason: string | null;
+  reworkProcess: string | null;
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
@@ -407,9 +412,12 @@ export function ReworkDetailPage({
             <StatusBadge tone={detail.status === "cancelled" ? "danger" : detail.status === "completed" ? "success" : "info"}>{meta.label}</StatusBadge>
           </div>
           <dl className="rework-detail-facts">
-            <div><dt>款号</dt><dd>{detail.styleNo ?? "—"}</dd></div><div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
+            <div><dt>款号</dt><dd>{detail.styleNo ?? "—"}</dd></div><div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
+            <div><dt>工厂货号</dt><dd>{detail.factoryStyleNo ?? "—"}</dd></div><div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
+            <div><dt>订单数量</dt><dd>{detail.orderQuantity === null ? "—" : `${detail.orderQuantity} 件`}</dd></div><div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
             <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div><div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
-            <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div><div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
+            <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
+            <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
             <div className="rework-detail-wide"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
