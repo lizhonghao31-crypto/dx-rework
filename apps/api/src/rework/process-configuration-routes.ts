@@ -39,14 +39,14 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
     processId: z.string().uuid(),
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: z.enum(["piece", "hour"]),
-    unitPrice: z.number().finite().min(0.01),
+    unitPrice: z.number().finite().min(0.001),
   }).strict(),
   z.object({
     source: z.literal("custom"),
     customProcessName: z.string().trim().min(1).max(100),
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: z.enum(["piece", "hour"]),
-    unitPrice: z.number().finite().min(0.01),
+    unitPrice: z.number().finite().min(0.001),
   }).strict(),
 ]).superRefine((value, context) => {
   if (decimalPlaces(value.plannedQuantity) > 1) {
@@ -56,11 +56,11 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
       message: "计划数量最多保留一位小数",
     });
   }
-  if (decimalPlaces(value.unitPrice) > 2) {
+  if (decimalPlaces(value.unitPrice) > 3) {
     context.addIssue({
       code: "custom",
       path: ["unitPrice"],
-      message: "单价最多保留两位小数",
+      message: "单价最多保留三位小数",
     });
   }
 });

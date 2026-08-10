@@ -99,12 +99,44 @@ describe("process configuration routes", () => {
     );
   });
 
+  it("accepts three-decimal unit prices without rounding them at the HTTP boundary", async () => {
+    const { app, service } = create();
+    const result = await app.inject({
+      method: "PUT",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/process-configuration/draft",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "process-three-decimal-price",
+      },
+      payload: {
+        expectedOrderVersion: 2,
+        items: [{
+          source: "custom",
+          customProcessName: "细分返修",
+          plannedQuantity: 2.1,
+          pricingUnit: "hour",
+          unitPrice: 0.555,
+        }],
+      },
+    });
+
+    expect(result.statusCode).toBe(201);
+    expect(service.saveDraft).toHaveBeenCalledWith(
+      expect.anything(),
+      "00000000-0000-4000-8000-000000000010",
+      expect.objectContaining({
+        items: [expect.objectContaining({ unitPrice: 0.555 })],
+      }),
+      "process-three-decimal-price",
+    );
+  });
+
   it("rejects impractical quantity and price precision before calling the service", async () => {
     const { app, service } = create();
     for (const [index, item] of [
       { plannedQuantity: 2.12, unitPrice: 0.55 },
-      { plannedQuantity: 2.1, unitPrice: 0.556 },
-      { plannedQuantity: 2.1, unitPrice: 0.001 },
+      { plannedQuantity: 2.1, unitPrice: 0.5555 },
+      { plannedQuantity: 2.1, unitPrice: 0.0001 },
     ].entries()) {
       const result = await app.inject({
         method: "PUT",
