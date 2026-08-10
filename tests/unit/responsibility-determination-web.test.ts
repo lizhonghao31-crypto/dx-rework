@@ -24,7 +24,22 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("responsibility-determinations/transfer");
     expect(source).toContain("responsibility-determinations/takeover");
     expect(source).toContain("high-multiplier-confirm");
-    expect(source).toContain('"idempotency-key": crypto.randomUUID()');
+    expect(source).toContain(
+      "pendingMutationKeys.current[signature] ?? crypto.randomUUID()",
+    );
+    expect(source).toContain('"idempotency-key": idempotencyKey');
+  });
+
+  it("treats an empty responsibility share as zero without masking malformed input", async () => {
+    const source = await readFile(panelUrl, "utf8");
+    expect(source).toContain('if (value === "") return 0n;');
+    expect(source).toContain("const shareTotalBps = (");
+    expect(source).toContain("return shareTotalBps(process.allocations) === 10000n;");
+    expect(source).toContain("const shareTotal = shareTotalBps(process.allocations);");
+    expect(source).toContain('shareTotal === null ? "输入有误"');
+    expect(source).toContain(
+      "allocation.shareBps !== null && allocation.shareBps > 0n",
+    );
   });
 
   it("does not hardcode or calculate responsibility money in the browser", async () => {
