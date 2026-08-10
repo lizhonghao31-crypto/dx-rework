@@ -134,6 +134,7 @@ describe("business-facing workflow UI", () => {
       expect(navigation).toContain(`name: "${entry}"`);
     }
     expect(navigation).not.toContain('name: "返工执行"');
+    expect(navigation).not.toContain('name: "返工上数"');
     expect(detail).toContain("订单是唯一的流程与执行载体");
     expect(detail).toContain("rework-workflow__stage");
     expect(detail).toContain("<ProcessConfigurationForm");
