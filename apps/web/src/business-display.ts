@@ -46,6 +46,17 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   revoked: "已撤销",
   failed: "失败",
   ready: "已就绪",
+  rework_overview: "返工总览",
+  wages: "工资明细",
+  responsibilities: "责任明细",
+  own_factory_report: "本厂承担",
+  external_deductions: "外部扣款",
+  exceptions: "异常明细",
+  global: "全局",
+  order: "指定订单",
+  "image/jpeg": "JPEG 图片",
+  "image/png": "PNG 图片",
+  "application/pdf": "PDF 文档",
 };
 
 const FIELD_LABELS: Readonly<Record<string, string>> = {
