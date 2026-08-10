@@ -131,6 +131,12 @@ function State<T>({ state, render }: { state: LoadState<T>; render: (value: T) =
   return render(state.data);
 }
 
+const attachmentStatusLabel: Record<"pending" | "ready" | "rejected", string> = {
+  pending: "待上传（尚未完成）",
+  ready: "已上传",
+  rejected: "已拒绝",
+};
+
 function AttachmentsTab() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [state, setState] = useState<LoadState<AdminAttachmentsPage>>({ kind: "loading" });
@@ -142,7 +148,7 @@ function AttachmentsTab() {
   }, [cursor]);
   return (
     <section className="admin-panel">
-      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{item.status} · {item.mimeType} · {item.sizeBytes} bytes</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ?? "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><Pager cursor={data.nextCursor} onNext={setCursor} /></>} />
+      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {item.mimeType} · {item.sizeBytes} bytes</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ?? "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><Pager cursor={data.nextCursor} onNext={setCursor} /></>} />
     </section>
   );
 }
