@@ -2,6 +2,7 @@ import { ReportTypeSchema, type ReportPreviewResponse, type ReportType } from "@
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
+import { businessFieldLabel, businessValue, formatBusinessTime } from "../business-display.js";
 import { Header, Shell } from "../components.js";
 import { loadReport, reportExportUrl, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
 import "./reporting.css";
@@ -41,8 +42,8 @@ export function ReportCenterPage(){
     {state.kind==="loading"&&<Surface className="reporting-state">正在生成服务端预览…</Surface>}
     {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
     {value&&<>
-      <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>数据快照：{new Date(value.asOf).toLocaleString("zh-CN", { timeZone: "Asia/Singapore" })}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{key}: {total}</StatusBadge>)}</div></Surface>
-      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{value.rows.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{String(row[column.key]??"")}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}</Surface>
+      <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>数据快照：{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{businessValue(key, total)}</StatusBadge>)}</div></Surface>
+      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{value.rows.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{businessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}</Surface>
     </>}
   </Shell>;
 }
