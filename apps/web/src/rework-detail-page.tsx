@@ -70,6 +70,7 @@ type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
+    entityType: "rework_order" | "external_responsibility_case";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -428,7 +429,7 @@ export function ReworkDetailPage({
               key={attachment.attachmentId}
               rel="noreferrer"
               target="_blank"
-            >{attachment.filename}</a>)}</p>}
+            >{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}</a>)}</p>}
           </div>
         )}
       </Surface>;
@@ -486,7 +487,7 @@ export function ReworkDetailPage({
                 key={attachment.attachmentId}
                 rel="noreferrer"
                 target="_blank"
-              >{attachment.filename}（{attachment.mimeType}）</a>)
+              >{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）</a>)
               : "无"}</dd></div>
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
