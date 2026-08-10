@@ -71,7 +71,7 @@ type DetailRow = Readonly<{
   customer_supply_code: string | null;
   factory_style_no: string | null;
   order_no: string | null;
-  order_quantity: number | null;
+  order_quantity: string | null;
   merchandiser_user_id: string | null;
   merchandiser_name: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
@@ -111,10 +111,15 @@ export class ReworkBusinessDetailService {
     const result = await this.database.query<DetailRow>(
       `SELECT
          orders.rework_order_id,orders.rework_no,orders.status,orders.style_no,
-         orders.customer_supply_code,orders.factory_style_no,orders.order_no,orders.order_quantity,
+         to_jsonb(orders)->>'customer_supply_code' customer_supply_code,
+         to_jsonb(orders)->>'factory_style_no' factory_style_no,
+         orders.order_no,
+         to_jsonb(orders)->>'order_quantity' order_quantity,
          orders.merchandiser_user_id,merchandiser.display_name merchandiser_name,
          orders.processing_factory_type,orders.processing_factory_supplier_id,
-         supplier.supplier_name,orders.rework_reason,orders.rework_process,
+         supplier.supplier_name,
+         to_jsonb(orders)->>'rework_reason' rework_reason,
+         to_jsonb(orders)->>'rework_process' rework_process,
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
          orders.created_by,creator.display_name creator_name,
          latest_configuration.created_by configuration_created_by,
@@ -185,7 +190,7 @@ export class ReworkBusinessDetailService {
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
       orderNo: row.order_no,
-      orderQuantity: row.order_quantity,
+      orderQuantity: row.order_quantity === null ? null : Number(row.order_quantity),
       merchandiser: row.merchandiser_user_id && row.merchandiser_name
         ? { userId: row.merchandiser_user_id, displayName: row.merchandiser_name }
         : null,
