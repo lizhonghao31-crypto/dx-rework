@@ -373,14 +373,8 @@ export function ReworkInitiationForm() {
   const mutationDisabled = !isReworkFormMutationAllowed({ busy, uploading, restoringDraft });
   const complete = Boolean(
     form.styleNo.trim()
-    && form.customerSupplyCode.trim()
-    && form.factoryStyleNo.trim()
-    && Number.isInteger(Number(form.orderQuantity))
-    && Number(form.orderQuantity) > 0
     && form.merchandiserUserId
     && form.factory
-    && form.reworkReason.trim()
-    && form.reworkProcess.trim()
     && form.problemPart.trim()
     && form.problemDescription.trim()
     && Number.isInteger(Number(form.reworkQuantity))
@@ -412,13 +406,13 @@ export function ReworkInitiationForm() {
         </div>
         <div className="qc-form-grid">
           <InsetField
-            label="客供代号（必填）"
+            label="客供代号（可补充）"
             value={form.customerSupplyCode}
             disabled={formDisabled}
             onChange={(event) => setForm({ ...form, customerSupplyCode: event.target.value })}
           />
           <InsetField
-            label="工厂货号（必填）"
+            label="工厂货号（可补充）"
             value={form.factoryStyleNo}
             disabled={formDisabled}
             onChange={(event) => setForm({ ...form, factoryStyleNo: event.target.value })}
@@ -430,7 +424,7 @@ export function ReworkInitiationForm() {
             onChange={(event) => setForm({ ...form, styleNo: event.target.value })}
           />
           <InsetField
-            label="订单数量（必填）"
+            label="订单数量（可补充）"
             type="number"
             min="1"
             step="1"
@@ -487,13 +481,13 @@ export function ReworkInitiationForm() {
         <h2>返工问题与数量</h2>
         <div className="qc-form-grid">
           <InsetField
-            label="返工原因（必填）"
+            label="返工原因（可补充）"
             value={form.reworkReason}
             disabled={formDisabled}
             onChange={(event) => setForm({ ...form, reworkReason: event.target.value })}
           />
           <InsetField
-            label="返工工序（必填）"
+            label="返工工序（可补充）"
             value={form.reworkProcess}
             disabled={formDisabled}
             placeholder="例如：车缝、锁眼、后整；多项用逗号分隔"
