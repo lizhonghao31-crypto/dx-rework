@@ -40,6 +40,8 @@ type ReworkOrderRow = Readonly<{
   processing_factory_type: "own_factory" | "supplier" | null;
   processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null;
+  rework_reason: string | null;
+  rework_process: string | null;
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
