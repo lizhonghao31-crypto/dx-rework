@@ -326,6 +326,18 @@ export class AccessMasterDataService {
       await ensureActiveOrganizationUser(client, input.userId, this.corporationId, "目标用户不存在、不在职或已停用");
       const role = await client.query<{ enabled: boolean }>("SELECT enabled FROM business_roles WHERE role_code=$1 FOR SHARE", [input.roleCode]);
       if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用", 404);
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        [`dx_rework:role_assignment:${input.userId}:${input.roleCode}`],
+      );
+      const existing = await client.query<{ assignment_id: string }>(
+        `SELECT assignment_id
+         FROM user_role_assignments
+         WHERE user_id=$1 AND role_code=$2 AND revoked_at IS NULL`,
+        [input.userId, input.roleCode],
+      );
+      if (existing.rows[0]) return { assignmentId: existing.rows[0].assignment_id };
+
       const assignmentId = randomUUID();
       await client.query(
         `SELECT

@@ -85,6 +85,8 @@ describe("PR-31 employee access contracts", () => {
     expect(employeeRoutes).toContain("assertAssignmentMutation");
     expect(employeeRoutes).toContain("assertTargetAccessMutation");
     expect(employeePage).toContain('new Set(["owner_group", "system_admin"])');
+    expect(employeePage).toContain("const assignableRoles = roles.filter");
+    expect(employeePage).toContain("所有可授予角色均已生效。");
     expect(deployLib).toContain("ROOT_DINGTALK_USER_ID");
   });
 
