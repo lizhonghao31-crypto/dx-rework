@@ -12,7 +12,8 @@ describe("order-centered workflow UI", () => {
     expect(todos).toContain("orderContext:");
     expect(todos).toContain("LEFT JOIN rework_orders orders");
     expect(page).toContain("my-todo-index");
-    expect(page).toContain("订单号：{order?.orderNo");
+    expect(page).toContain("const orderSummary");
+    expect(page).toContain("订单号：");
     expect(page).toContain("节点停留");
     expect(page).toContain("相关金额");
   });
