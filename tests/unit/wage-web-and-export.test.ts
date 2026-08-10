@@ -23,14 +23,15 @@ describe("wage web and xlsx delivery", () => {
       readFile(new URL("../../apps/web/src/wages/wage-period-detail.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/wages/wage-adjustment-form.tsx", import.meta.url), "utf8"),
     ]);
-    expect(app).toContain('path === "/ui/wages"');
-    expect(app).toContain('requiredCapability="wage:view"');
+    expect(app).toContain('path === "/ui/wages" || path.startsWith("/ui/wages/")');
+    expect(app).toContain('{ requiredCapability: "wage:view" }');
     expect(list).toContain("15_000");
     expect(list).toContain('window.addEventListener("focus"');
     expect(detail).toContain("administrative-approve");
     expect(detail).toContain("administrative-return");
     expect(detail).toContain("export.xlsx");
     expect(adjustment).toContain("ExternalEvidenceUploader");
-    expect(adjustment).toContain('"idempotency-key": crypto.randomUUID()');
+    expect(adjustment).toContain('"idempotency-key": attempt.key');
+    expect(adjustment).toContain("pendingAttempt.current = attempt");
   });
 });
