@@ -30,6 +30,7 @@ import { MasterDataPage } from "./master-data-page.js";
 import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { landingTarget } from "./landing-target.js";
 import { MyTodosPage } from "./my-todos-page.js";
+import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -174,6 +175,7 @@ export function App() {
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
+  else if (path.startsWith("/ui/my-tasks/")) page = <ResponsibilityTaskPage />;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
@@ -200,7 +202,7 @@ export function App() {
       { requiredRole: "quality_control", requiredCapability: "rework:initiate" },
     ]}>{page}</AuthGate>;
   }
-  if (path === "/ui/my-tasks") {
+  if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
   }
   if (path === "/ui/master-data" || path === "/ui/people") {
