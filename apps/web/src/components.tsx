@@ -9,6 +9,7 @@ import {
 import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
+import "./shell-navigation.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -18,7 +19,6 @@ type ShellMe = Readonly<{
 }>;
 
 type NavigationEntry = Readonly<{
-  step: string;
   name: string;
   description: string;
   href: string;
@@ -61,7 +61,7 @@ function loadEmployeeAccessPermission(): Promise<boolean> {
   return employeeAccessPermission;
 }
 
-function FlowNavigation({
+function PrimaryNavigation({
   navigation,
   active,
   basePath,
@@ -71,18 +71,17 @@ function FlowNavigation({
   basePath: string;
 }) {
   return (
-    <nav className="flow-navigation" aria-label="主导航">
-      {navigation.map((entry, index) => (
-        <div className="flow-navigation__entry" key={entry.name}>
+    <nav className="primary-navigation" aria-label="主导航">
+      {navigation.map((entry) => (
+        <div className="primary-navigation__entry" key={entry.name}>
           <a href={`${basePath}${entry.href}`}>
-            <NavigationItem icon={entry.step} active={active === entry.name}>
-              <span className="flow-navigation__copy">
+            <NavigationItem icon="•" active={active === entry.name}>
+              <span className="primary-navigation__copy">
                 <strong>{entry.name}</strong>
                 <small>{entry.description}</small>
               </span>
             </NavigationItem>
           </a>
-          {index < navigation.length - 1 ? <span className="flow-navigation__arrow" aria-hidden="true">↓</span> : null}
         </div>
       ))}
     </nav>
@@ -119,144 +118,47 @@ export function Shell({
   const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
   const managementAccess = isRoot || isOwner || hasCapability("dashboard:management:read");
   const initiationAccess = isRoot || isOwner || hasRole("quality_control") || hasCapability("rework:initiate");
-  const processAccess = isRoot || isOwner
-    || (hasRole("tail_supervisor") && hasCapability("process:configure"))
-    || (hasRole("ie_reviewer") && hasCapability("process:review"));
-  const workAccess = isRoot || isOwner
-    || (hasRole("tail_supervisor") && (
-      hasCapability("work:assign")
-      || hasCapability("submission:audit")
-      || hasCapability("quantity:adjust")
-    ))
-    || (hasRole("worker") && hasCapability("work:report"))
-    || hasCapability("work:report_for_worker")
-    || (hasRole("order_merchandiser") && hasCapability("quantity:confirm"))
-    || (hasRole("ie_reviewer") && hasCapability("process:review"));
-  const responsibilityAccess = isRoot || isOwner
-    || hasCapability("responsibility:determine")
-    || hasCapability("responsibility:takeover")
-    || hasCapability("responsibility:confirm_high_multiplier");
-  const ownFactoryAccess = isRoot || isOwner || hasCapability("own_factory:view");
-  const externalResponsibilityAccess = isRoot || isOwner || hasCapability("external_responsibility:view");
-  const wageAccess = isRoot || isOwner || hasCapability("wage:view");
-  const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
   const todoAccess = hasCapability("todo:view");
+  const reportAccess = isRoot || isOwner || hasCapability("report:view");
+  const systemManagementAccess = auditAccess || technicalAdminAccess || canManageEmployeeAccess
+    || isRoot || isOwner || hasCapability("master_data:manage");
 
   const navigation: NavigationEntry[] = [];
   if (todoAccess) {
     navigation.push({
-      step: "0",
       name: "我的待办",
       description: "只看现在轮到你处理的事项",
       href: "/ui/my-tasks",
     });
   }
-  if (managementAccess) {
-    navigation.push({
-      step: "·",
-      name: "总览",
-      description: "看全局进度、待办和异常",
-      href: "/ui/management",
-    });
-  }
   if (initiationAccess) {
     navigation.push({
-      step: "1",
       name: "发起返工",
       description: "登记款号、问题、数量和证据",
       href: "/ui/qc/new",
     });
   }
-  if (managementAccess) {
+  if (reportAccess || managementAccess) {
     navigation.push({
-      step: "2",
-      name: "返工任务",
-      description: "统一查询当前状态和历史事实",
+      name: "全部订单",
+      description: "查看权限范围内订单及完整流程",
       href: "/ui/tasks",
     });
   }
-  if (processAccess) {
+  if (systemManagementAccess) {
     navigation.push({
-      step: "3",
-      name: "工序配置",
-      description: "配工序单价并完成 IE 审核",
-      href: "/ui/process-configuration",
-    });
-  }
-  if (workAccess) {
-    navigation.push({
-      step: "4",
-      name: "返工执行",
-      description: "分配人员、登记完成数量、整单确认",
-      href: "/ui/work-reporting",
-    });
-  }
-  if (responsibilityAccess) {
-    navigation.push({
-      step: "5",
-      name: "责任处理",
-      description: "判定责任、倍率和承担比例",
-      href: "/ui/responsibility",
-    });
-  }
-  if (ownFactoryAccess) {
-    navigation.push({
-      step: "6",
-      name: "本厂审批",
-      description: "老板确认本厂承担金额",
-      href: "/ui/own-factory-approvals",
-    });
-  }
-  if (externalResponsibilityAccess) {
-    navigation.push({
-      step: "7",
-      name: "外部扣款",
-      description: "外部签收、应付确认和实扣跟进",
-      href: "/ui/external-responsibilities",
-    });
-  }
-  if (wageAccess) {
-    navigation.push({
-      step: "8",
-      name: "工资核对",
-      description: "返工工资初核、复核和月结",
-      href: "/ui/wages",
-    });
-  }
-  if (masterDataAccess) {
-    navigation.push(
-      {
-        step: "9",
-        name: "基础资料",
-        description: "维护工厂、供应商和工序",
-        href: "/ui/master-data",
-      },
-      {
-        step: "10",
-        name: "人员资料",
-        description: "维护作业人员和临时工",
-        href: "/ui/people",
-      },
-    );
-  }
-  if (canManageEmployeeAccess) {
-    navigation.push({
-      step: "11",
-      name: "权限管理",
-      description: "给在职员工分配业务角色",
-      href: "/ui/employee-access",
-    });
-  }
-  if (auditAccess || technicalAdminAccess) {
-    navigation.push({
-      step: "12",
       name: "系统管理",
-      description: "审计、附件、代理和异常",
+      description: "权限、人员、资料与审计配置",
       href: "/ui/admin",
     });
   }
+  if (reportAccess) navigation.push({
+    name: "财务报表",
+    description: "查询返工、责任、工资与扣款报表",
+    href: "/ui/reports",
+  });
 
   const roleLabels = currentUser
     ? [
@@ -271,8 +173,8 @@ export function Shell({
     <div className="app-shell">
       <aside>
         <h2>达兴 · 质检返工</h2>
-        <FlowNavigation navigation={navigation} active={active} basePath={basePath} />
-        <div className="org">
+        <PrimaryNavigation navigation={navigation} active={active} basePath={basePath} />
+        <div className="org app-shell__identity">
           {currentUser ? (
             <div className="current-user">
               <b>{currentUser.displayName}</b>
@@ -285,10 +187,10 @@ export function Shell({
 
       <details className="mobile-flow-navigation">
         <summary>
-          <span>流程导航</span>
-          <b>{activeEntry ? `${activeEntry.step}. ${activeEntry.name}` : active}</b>
+          <span>主导航</span>
+          <b>{activeEntry?.name ?? active}</b>
         </summary>
-        <FlowNavigation navigation={navigation} active={active} basePath={basePath} />
+        <PrimaryNavigation navigation={navigation} active={active} basePath={basePath} />
       </details>
 
       <main>{children}</main>
