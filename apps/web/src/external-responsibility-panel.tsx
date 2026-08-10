@@ -35,10 +35,10 @@ type DeductionEntryType =
 type ClosureResult = NonNullable<ExternalResponsibilityCaseResponse["closure"]>["result"];
 
 const caseLabel: Record<CaseStatus, string> = {
-  pending_business_signoff: "待业务签收",
-  pending_payables_confirmation: "待应付确认",
+  pending_business_signoff: "待补充资料",
+  pending_payables_confirmation: "待记录扣款",
   deduction_follow_up: "扣款跟进中",
-  returned: "应付已退回",
+  returned: "资料已退回",
   pending_responsibility_revision: "待责任变更审核",
   closed: "扣款已关闭",
   superseded: "已由新责任版本替代",
@@ -295,7 +295,7 @@ export function ExternalResponsibilityPanel({
       delete pendingMutationKeys.current[signature];
       setState({ kind: "ready", value });
       setMessage(
-        "供应商与拟扣台账已由服务端锁定，下一步由业务经办人提交签收。",
+        "供应商与拟扣台账已锁定，下一步已直接交给对应应付记录扣款。",
       );
     } catch (error: unknown) {
       setMessage(
@@ -334,7 +334,6 @@ export function ExternalResponsibilityPanel({
     caseItem: ExternalResponsibilityCaseResponse,
     kind:
       | "submit"
-      | "accept"
       | "return"
       | "follow"
       | "deduct"
@@ -415,12 +414,6 @@ export function ExternalResponsibilityPanel({
             remark: note || undefined,
             attachmentIds: files,
           },
-        );
-      }
-      if (kind === "accept") {
-        await send(
-          `external-responsibility-cases/${caseItem.caseId}/payables-accept`,
-          { expectedCaseVersion: caseItem.caseVersion },
         );
       }
       if (kind === "return") {
@@ -553,8 +546,8 @@ export function ExternalResponsibilityPanel({
     <Surface className="external-responsibility-panel">
       <div className="section-title">
         <div>
-          <h2>外部责任签收与扣款跟进</h2>
-          <p>N08-B · 正式责任版本 V{batch.finalizedDeterminationVersion}；拟扣、实扣和差额均为独立的服务端事实。</p>
+          <h2>供应商扣款处理</h2>
+          <p>正式责任版本 V{batch.finalizedDeterminationVersion} · 供应商确定后直接由应付记录扣款；资料有误可退回经办人修正。</p>
         </div>
         <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>
           {batch.status === "active" ? "当前责任版本" : "已替代历史"}
@@ -649,13 +642,16 @@ export function ExternalResponsibilityPanel({
               </div>
 
               <div className="external-case-actions">
-                {caseItem.canSign && <Button disabled={busy} onClick={() => void operation(caseItem, "submit")}>提交业务签收</Button>}
-                {caseItem.canPayablesConfirm && <>
-                  <Button disabled={busy} onClick={() => void operation(caseItem, "accept")}>应付接受</Button>
-                  <Button disabled={busy} onClick={() => void operation(caseItem, "return")}>退回业务经办</Button>
-                </>}
+                {caseItem.canSign && (
+                  <Button disabled={busy} onClick={() => void operation(caseItem, "submit")}>
+                    {caseItem.status === "returned" ? "资料已修正，重新交应付" : "补充资料并交应付"}
+                  </Button>
+                )}
+                {caseItem.canPayablesConfirm && (
+                  <Button disabled={busy} onClick={() => void operation(caseItem, "return")}>退回资料问题</Button>
+                )}
                 {caseItem.canFollowUp && <Button disabled={busy} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
-                {caseItem.canRecordDeduction && <Button disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
+                {caseItem.canRecordDeduction && <Button variant="primary" disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
                 {caseItem.canClose && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-full")}>按全额关闭</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-partial")}>按部分关闭</Button>
@@ -673,7 +669,7 @@ export function ExternalResponsibilityPanel({
                   label="处理说明 / 跟进内容"
                   value={remark[caseItem.caseId] ?? ""}
                   onChange={(event) => setRemark((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-                  placeholder="跟进、退回、部分/未扣、责任变更时填写；审核意见可选"
+                  placeholder="退回资料、跟进、部分/未扣或责任变更时填写"
                 />}
                 {caseItem.canFollowUp && <>
                   <InsetField
