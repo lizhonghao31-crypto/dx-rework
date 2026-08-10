@@ -105,6 +105,7 @@ describe("rework initiation routes", () => {
       actorId: "00000000-0000-4000-8000-000000000001",
       actorRoles: ["quality_control"],
       authorizationCapability: "rework:initiate",
+      authorizationCapabilities: ["rework:initiate"],
       requestId: "rework-request-1",
     }, { styleNo: "PD20529725" }, "qc-create-1");
   });
