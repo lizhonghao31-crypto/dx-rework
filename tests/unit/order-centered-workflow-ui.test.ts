@@ -34,4 +34,10 @@ describe("order-centered workflow UI", () => {
     expect(task).toContain("<ReworkDetailPage");
     expect(task).toContain("returnToTodos");
   });
+
+  it("treats the terminal completed status as completion of node 09 archive", async () => {
+    const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
+    expect(detail).toContain('if (status === "completed") return "completed";');
+    expect(detail).toContain("09 订单归档");
+  });
 });

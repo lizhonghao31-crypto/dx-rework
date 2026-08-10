@@ -1,5 +1,6 @@
 import type {
   AllocateExternalSuppliers,
+  CreateExternalTemporarySupplier,
   CloseExternalDeductionCase,
   CreateExternalDeductionEntry,
   CreateExternalDeductionFollowUp,
@@ -31,6 +32,15 @@ export class ExternalResponsibilityApplicationService {
     ...args: Parameters<ProductionExternalResponsibilityService["listSupplierOptions"]>
   ) {
     return this.service.listSupplierOptions(...args);
+  }
+
+  createTemporarySupplier(
+    actor: TrustedActorContext,
+    orderId: string,
+    input: CreateExternalTemporarySupplier,
+    key: string,
+  ) {
+    return this.service.createTemporarySupplier(actor, orderId, input, key);
   }
 
   get(...args: Parameters<ProductionExternalResponsibilityService["get"]>) {

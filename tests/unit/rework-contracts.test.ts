@@ -21,6 +21,17 @@ describe("rework initiation contracts", () => {
     }).success).toBe(false);
   });
 
+  it("captures the complete initiation context while keeping quantities integral", () => {
+    expect(CreateReworkDraftSchema.safeParse({
+      customerSupplyCode: "CUST-001",
+      factoryStyleNo: "FAC-001",
+      orderQuantity: 100,
+      reworkReason: "抽检发现车缝不良",
+      reworkProcess: "车缝, 后整",
+    }).success).toBe(true);
+    expect(CreateReworkDraftSchema.safeParse({ orderQuantity: 1.5 }).success).toBe(false);
+  });
+
   it("rejects invalid quantities, duplicate attachments and ambiguous factories", () => {
     const attachmentId = "00000000-0000-4000-8000-000000000001";
     expect(UpdateReworkDraftSchema.safeParse({

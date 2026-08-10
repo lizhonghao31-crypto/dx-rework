@@ -44,13 +44,18 @@ type ReworkBusinessDetail = Readonly<{
   reworkNo: string | null;
   status: ReworkStatus;
   styleNo: string | null;
+  customerSupplyCode: string | null;
+  factoryStyleNo: string | null;
   orderNo: string | null;
+  orderQuantity: number | null;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
     supplierId: string | null;
     displayName: string;
   }> | null;
+  reworkReason: string | null;
+  reworkProcess: string | null;
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
@@ -61,6 +66,18 @@ type ReworkBusinessDetail = Readonly<{
   submittedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  attachments: readonly Readonly<{
+    attachmentId: string;
+    filename: string;
+    mimeType: string;
+    entityType: "rework_order" | "external_responsibility_case";
+  }>[];
+  workflowHistory: readonly Readonly<{
+    action: string;
+    handledBy: string;
+    handledAt: string;
+    remark: string | null;
+  }>[];
 }>;
 
 type LoadState =
@@ -195,6 +212,9 @@ const canUseOrderIndex = (user: AuthorizedUser | null): boolean => elevated(user
 
 const workflowState = (status: ReworkStatus, key: WorkflowNodeKey): WorkflowNodeState => {
   if (status === "cancelled") return "future";
+  // `completed` is the terminal business fact: all numbered nodes, including
+  // 09 订单归档, must render as completed rather than leaving a false current node.
+  if (status === "completed") return "completed";
   if (currentNodeByStatus[status] === key) return "current";
   return statusRank[status] > nodeRank[key] ? "completed" : "future";
 };
@@ -268,6 +288,37 @@ const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.ever
   : stage.nodes.some((node) => node.state === "current") ? "current" : "future";
 
 const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
+
+const historyNode = (action: string): WorkflowNodeKey | null => {
+  if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
+  // IE approval is recorded by the configuration service, so distinguish the
+  // terminal review action before the broader process-configuration match.
+  if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
+  if (action.includes("process_configuration")) return "process_configuration";
+  if (action.includes("work_task")) return "task_assignment";
+  if (action.includes("work_report")) return "work_reporting";
+  if (action.includes("whole_order")) return "whole_order_review";
+  if (action.includes("quantity.")) return "quantity_adjustment";
+  if (action.includes("external") || action.includes("own_factory")) return "responsibility_settlement";
+  if (action.includes("responsibility")) return "responsibility";
+  if (action.includes(".complete") || action.includes(".archive")) return "archive";
+  return null;
+};
+
+const historyActionLabel = (action: string): string => {
+  if (action === "rework.submit") return "提交返工单";
+  if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
+  if (action.includes("process_configuration")) return "工序配置处理";
+  if (action.includes("work_task")) return "返工人员分配";
+  if (action.includes("work_report")) return "完成数量登记";
+  if (action.includes("whole_order")) return "整单审核";
+  if (action.includes("quantity.")) return "数量调整";
+  if (action.includes("external")) return "外部责任结算";
+  if (action.includes("own_factory")) return "本厂承担审批";
+  if (action.includes("responsibility")) return "责任判定";
+  if (action.includes(".complete") || action.includes(".archive")) return "订单归档";
+  return "流程处理";
+};
 
 export function ReworkDetailPage({
   reworkOrderId: providedReworkOrderId,
@@ -357,11 +408,30 @@ export function ReworkDetailPage({
   const renderSelectedTask = () => {
     if (!selected) return null;
     if (selected.state !== "current") {
+      const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
       return <Surface className="rework-detail-node-preview">
         <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : "未开始 · 可预览"}</StatusBadge>
         <h2>{selected.number} · {selected.label}</h2>
         <p>{selected.preview}</p>
         <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
+        {selected.state === "completed" && (
+          <div className="rework-detail-node-history">
+            <h3>处理历史</h3>
+            {nodeHistory.length ? nodeHistory.map((event, index) => (
+              <div key={`${event.action}-${event.handledAt}-${index}`}>
+                <b>{historyActionLabel(event.action)}</b>
+                <span>处理人：{event.handledBy} · 处理时间：{formatTime(event.handledAt)}</span>
+                <span>处理意见：{event.remark ?? "未填写备注"}</span>
+              </div>
+            )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
+            {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <a
+              href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}
+              key={attachment.attachmentId}
+              rel="noreferrer"
+              target="_blank"
+            >{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}</a>)}</p>}
+          </div>
+        )}
       </Surface>;
     }
     if (selected.key === "process_configuration" || selected.key === "ie_review") {
@@ -404,10 +474,21 @@ export function ReworkDetailPage({
             <StatusBadge tone={detail.status === "cancelled" ? "danger" : detail.status === "completed" ? "success" : "info"}>{meta.label}</StatusBadge>
           </div>
           <dl className="rework-detail-facts">
-            <div><dt>款号</dt><dd>{detail.styleNo ?? "—"}</dd></div><div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
+            <div><dt>款号</dt><dd>{detail.styleNo ?? "—"}</dd></div><div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
+            <div><dt>工厂货号</dt><dd>{detail.factoryStyleNo ?? "—"}</dd></div><div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
+            <div><dt>订单数量</dt><dd>{detail.orderQuantity === null ? "—" : `${detail.orderQuantity} 件`}</dd></div><div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
             <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div><div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
-            <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div><div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
+            <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
+            <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
             <div className="rework-detail-wide"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
+            <div className="rework-detail-wide"><dt>已上传附件</dt><dd>{detail.attachments.length
+              ? detail.attachments.map((attachment) => <a
+                href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}
+                key={attachment.attachmentId}
+                rel="noreferrer"
+                target="_blank"
+              >{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）</a>)
+              : "无"}</dd></div>
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
             {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}

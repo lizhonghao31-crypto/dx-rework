@@ -171,6 +171,18 @@
     {
       "version": "0043_external_direct_payables",
       "checksum": "2044da29575d700b9930d9d759fb317c03eb50648c4c791628baa04b6afeeb87"
+    },
+    {
+      "version": "0044_uat_initiation_context",
+      "checksum": "3a16b7a7d980609efd4bd706b775714868c13efbaf43019caaf4d9d295542de0"
+    },
+    {
+      "version": "0045_responsibility_settled_wage_base",
+      "checksum": "8153c0182b0c6cb91e47ea102807e4930bc8d2f34faad1f453b27991123d155d"
+    },
+    {
+      "version": "0046_external_temporary_supplier_scope",
+      "checksum": "06529ad63fbd65d28dcce2fb2ee8f05421f207c0cd9226611cc1380a76a20b92"
     }
   ]
 }

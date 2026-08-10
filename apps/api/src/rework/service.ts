@@ -32,11 +32,16 @@ type ReworkOrderRow = Readonly<{
   rework_no: string | null;
   status: ReworkOrderStatus;
   style_no: string | null;
+  customer_supply_code: string | null;
+  factory_style_no: string | null;
   order_no: string | null;
+  order_quantity: number | null;
   merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
   processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null;
+  rework_reason: string | null;
+  rework_process: string | null;
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
@@ -132,9 +137,14 @@ export class ReworkInitiationService {
         reworkNo: null,
         status: "draft" as const,
         styleNo: input.styleNo ?? null,
+        customerSupplyCode: input.customerSupplyCode ?? null,
+        factoryStyleNo: input.factoryStyleNo ?? null,
         orderNo: input.orderNo ?? null,
+        orderQuantity: input.orderQuantity ?? null,
         merchandiserUserId: input.merchandiserUserId ?? null,
         processingFactory: factory,
+        reworkReason: input.reworkReason ?? null,
+        reworkProcess: input.reworkProcess ?? null,
         problemPart: input.problemPart ?? null,
         problemDescription: input.problemDescription ?? null,
         reworkQuantity: input.reworkQuantity ?? null,
@@ -150,19 +160,25 @@ export class ReworkInitiationService {
       await this.setAuditContext(client, eventId, actor.requestId);
       await client.query(
         `INSERT INTO rework_orders(
-           rework_order_id,style_no,order_no,merchandiser_user_id,
+           rework_order_id,style_no,customer_supply_code,factory_style_no,
+           order_no,order_quantity,merchandiser_user_id,
            processing_factory_type,processing_factory_supplier_id,
-           processing_factory_supplier_version,problem_part,problem_description,
-           rework_quantity,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
+           processing_factory_supplier_version,rework_reason,rework_process,
+           problem_part,problem_description,rework_quantity,created_by,updated_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)`,
         [
           reworkOrderId,
           next.styleNo,
+          next.customerSupplyCode,
+          next.factoryStyleNo,
           next.orderNo,
+          next.orderQuantity,
           next.merchandiserUserId,
           factory?.type ?? null,
           factory?.supplierId ?? null,
           factory?.supplierVersion ?? null,
+          next.reworkReason,
+          next.reworkProcess,
           next.problemPart,
           next.problemDescription,
           next.reworkQuantity,
@@ -203,9 +219,24 @@ export class ReworkInitiationService {
         reworkNo: current.rework_no,
         status: "draft" as const,
         styleNo: input.styleNo === undefined ? current.style_no : input.styleNo,
+        customerSupplyCode: input.customerSupplyCode === undefined
+          ? current.customer_supply_code
+          : input.customerSupplyCode,
+        factoryStyleNo: input.factoryStyleNo === undefined
+          ? current.factory_style_no
+          : input.factoryStyleNo,
         orderNo: input.orderNo === undefined ? current.order_no : input.orderNo,
+        orderQuantity: input.orderQuantity === undefined
+          ? current.order_quantity
+          : input.orderQuantity,
         merchandiserUserId,
         processingFactory: factory,
+        reworkReason: input.reworkReason === undefined
+          ? current.rework_reason
+          : input.reworkReason,
+        reworkProcess: input.reworkProcess === undefined
+          ? current.rework_process
+          : input.reworkProcess,
         problemPart: input.problemPart === undefined ? current.problem_part : input.problemPart,
         problemDescription: input.problemDescription === undefined
           ? current.problem_description
@@ -226,20 +257,27 @@ export class ReworkInitiationService {
       await this.setAuditContext(client, eventId, actor.requestId);
       await client.query(
         `UPDATE rework_orders
-         SET style_no=$2,order_no=$3,merchandiser_user_id=$4,
-             processing_factory_type=$5,processing_factory_supplier_id=$6,
-             processing_factory_supplier_version=$7,problem_part=$8,
-             problem_description=$9,rework_quantity=$10,updated_by=$11,
-             version=$12,updated_at=CURRENT_TIMESTAMP
+         SET style_no=$2,customer_supply_code=$3,factory_style_no=$4,
+             order_no=$5,order_quantity=$6,merchandiser_user_id=$7,
+             processing_factory_type=$8,processing_factory_supplier_id=$9,
+             processing_factory_supplier_version=$10,rework_reason=$11,
+             rework_process=$12,problem_part=$13,problem_description=$14,
+             rework_quantity=$15,updated_by=$16,version=$17,
+             updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
           reworkOrderId,
           next.styleNo,
+          next.customerSupplyCode,
+          next.factoryStyleNo,
           next.orderNo,
+          next.orderQuantity,
           next.merchandiserUserId,
           factory?.type ?? null,
           factory?.supplierId ?? null,
           factory?.supplierVersion ?? null,
+          next.reworkReason,
+          next.reworkProcess,
           next.problemPart,
           next.problemDescription,
           next.reworkQuantity,
@@ -778,9 +816,14 @@ export class ReworkInitiationService {
       reworkNo: row.rework_no,
       status: row.status,
       styleNo: row.style_no,
+      customerSupplyCode: row.customer_supply_code,
+      factoryStyleNo: row.factory_style_no,
       orderNo: row.order_no,
+      orderQuantity: row.order_quantity,
       merchandiserUserId: row.merchandiser_user_id,
       processingFactory: factoryFromRow(row),
+      reworkReason: row.rework_reason,
+      reworkProcess: row.rework_process,
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
@@ -812,7 +855,10 @@ export class ReworkInitiationService {
       reworkNo: row.rework_no,
       status: row.status,
       styleNo: row.style_no,
+      customerSupplyCode: row.customer_supply_code,
+      factoryStyleNo: row.factory_style_no,
       orderNo: row.order_no,
+      orderQuantity: row.order_quantity,
       merchandiserUserId: row.merchandiser_user_id,
       processingFactory: factory?.type === "supplier"
         ? {
@@ -823,6 +869,8 @@ export class ReworkInitiationService {
         : factory?.type === "own_factory"
           ? { type: "own_factory" }
           : null,
+      reworkReason: row.rework_reason,
+      reworkProcess: row.rework_process,
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,

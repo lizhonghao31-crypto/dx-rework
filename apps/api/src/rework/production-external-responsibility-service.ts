@@ -1,5 +1,8 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import type {
   AllocateExternalSuppliers,
+  CreateExternalTemporarySupplier,
   CloseExternalDeductionCase,
   CreateExternalDeductionEntry,
   CreateExternalDeductionFollowUp,
@@ -9,10 +12,13 @@ import type {
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
 } from "@dx-rework/contracts/external-responsibility";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
-import type { TrustedActorContext } from "../tools/repositories.js";
+import {
+  IdempotencyService,
+  type TrustedActorContext,
+} from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
 import { ExternalResponsibilityAllocationService } from "./external-responsibility-allocation-service.js";
 import { ExternalResponsibilityCloseService } from "./external-responsibility-close-service.js";
@@ -29,6 +35,7 @@ type SupplierOption = {
   supplierName: string;
 };
 type ExternalItem = NonNullable<ExternalResponsibilityBatchResponse>["items"][number];
+type Result<T> = { value: T; reused: boolean };
 
 type PermissionRow = {
   can_sign: boolean;
@@ -64,6 +71,7 @@ export class ProductionExternalResponsibilityService
   extends FinalExternalResponsibilityService {
   private readonly closeService: ExternalResponsibilityCloseService;
   private readonly allocationService: ExternalResponsibilityAllocationService;
+  private readonly temporarySupplierIdempotency = new IdempotencyService();
 
   constructor(
     private readonly productionDatabase: Pool,
@@ -291,6 +299,115 @@ export class ProductionExternalResponsibilityService
       supplierType: row.supplier_type,
       supplierName: row.supplier_name,
     }));
+  }
+
+  async createTemporarySupplier(
+    actor: TrustedActorContext,
+    orderId: string,
+    input: CreateExternalTemporarySupplier,
+    key: string,
+  ): Promise<Result<SupplierOption>> {
+    const client = await this.productionDatabase.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await this.temporarySupplierIdempotency.execute(client, {
+        scope: "rework.external_responsibility.temporary_supplier.create",
+        actorKey: actor.actorId,
+        key,
+        requestHash: createHash("sha256")
+          .update(JSON.stringify({ orderId, input }))
+          .digest("hex"),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      }, async () => ({
+        statusCode: 201,
+        response: await this.insertTemporarySupplier(
+          client,
+          actor,
+          orderId,
+          input,
+        ),
+      }));
+      await client.query("COMMIT");
+      return { value: result.response, reused: result.reused };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async insertTemporarySupplier(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    orderId: string,
+    input: CreateExternalTemporarySupplier,
+  ): Promise<SupplierOption> {
+    const permitted = await client.query<{ permitted: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1
+         FROM rework_external_responsibility_batches batch
+         JOIN rework_external_responsibility_items item
+           ON item.batch_id=batch.batch_id
+         WHERE batch.rework_order_id=$2
+           AND batch.status='active'
+           AND external_responsibility_expected_supplier_type(
+             item.responsibility_type
+           )=$3
+           AND external_responsibility_can_sign(
+             $1,$2,item.responsibility_type
+           )
+       ) permitted`,
+      [actor.actorId, orderId, input.supplierType],
+    );
+    if (!permitted.rows[0]?.permitted) {
+      throw new ApplicationError(
+        "FORBIDDEN",
+        "当前用户无权为该返工单新增此类供应商",
+        403,
+      );
+    }
+
+    const supplierId = randomUUID();
+    const supplierCode = `TMP-${{
+      factory: "FAC",
+      embroidery_washing: "EMB",
+      fabric: "FAB",
+    }[input.supplierType]}-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
+    await client.query(
+      `SELECT
+         set_config('dx_rework.supplier_version_event_id',$1,true),
+         set_config('dx_rework.supplier_version_request_id',$2,true),
+         set_config(
+           'dx_rework.supplier_version_authorization_capability',
+           'external_responsibility:sign',
+           true
+         ),
+         set_config('dx_rework.external_supplier_order_id',$3,true)`,
+      [randomUUID(), actor.requestId, orderId],
+    );
+    await client.query(
+      `INSERT INTO supplier_catalog_items(
+         supplier_id,supplier_code,supplier_type
+       ) VALUES($1,$2,$3)`,
+      [supplierId, supplierCode, input.supplierType],
+    );
+    await client.query(
+      `INSERT INTO supplier_catalog_versions(
+         supplier_id,version,supplier_name,active,changed_by,change_reason
+       ) VALUES($1,1,$2,true,$3,$4)`,
+      [
+        supplierId,
+        input.supplierName,
+        actor.actorId,
+        `外部责任处理临时新增：${orderId}`,
+      ],
+    );
+    return {
+      supplierId,
+      supplierType: input.supplierType,
+      supplierName: input.supplierName,
+    };
   }
 
   private async requirePayablesCapability(
