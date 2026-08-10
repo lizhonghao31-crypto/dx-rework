@@ -235,18 +235,12 @@ export class ResponsibilityDeterminationService {
 
     const sourceRows = await executor.query<SourceProcessRow>(
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
-              COALESCE(sum(share.amount),0)::text base_amount
+              COALESCE(sum(wage.payable_amount),0)::text base_amount
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item USING(configuration_id)
-       LEFT JOIN rework_work_reports report
-         ON report.rework_order_id=configuration.rework_order_id
-        AND report.configuration_item_id=item.configuration_item_id
-        AND report.status='submitted'
-        AND NOT EXISTS(
-          SELECT 1 FROM rework_work_report_rejections rejection
-          WHERE rejection.work_report_id=report.work_report_id
-        )
-       LEFT JOIN rework_work_report_member_shares share USING(work_report_id)
+       LEFT JOIN rework_wage_items wage
+         ON wage.rework_order_id=configuration.rework_order_id
+        AND wage.configuration_item_id=item.configuration_item_id
        WHERE configuration.rework_order_id=$1
          AND configuration.status='approved'
        GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit
@@ -549,14 +543,13 @@ export class ResponsibilityDeterminationService {
             row.configuration_item_id === processInput.configurationItemId,
         ) ?? fail("工序不属于 approved 配置", 400, "VALIDATION_ERROR");
       const shareResult = await client.query<WorkReportShareRow>(
-        `SELECT report.work_report_id,share.person_id,round(share.amount,2)::text amount,
-                member.display_name_snapshot,task.assignment_mode
+        `SELECT report.work_report_id,wage.person_id,wage.payable_amount::text amount,
+                wage.person_name_snapshot display_name_snapshot,wage.assignment_mode
          FROM rework_work_reports report
-         JOIN rework_work_report_member_shares share USING(work_report_id)
-         JOIN rework_work_tasks task USING(work_task_id)
-         JOIN rework_work_task_members member
-           ON member.work_task_id=task.work_task_id
-          AND member.person_id=share.person_id
+         JOIN rework_wage_items wage
+           ON wage.rework_order_id=report.rework_order_id
+          AND wage.configuration_item_id=report.configuration_item_id
+          AND wage.work_report_id=report.work_report_id
          LEFT JOIN rework_work_report_rejections rejection USING(work_report_id)
          WHERE report.rework_order_id=$1
            AND report.configuration_item_id=$2
