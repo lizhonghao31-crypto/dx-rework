@@ -38,6 +38,7 @@ export type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
+    entityType: "rework_order" | "external_responsibility_case";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -51,6 +52,7 @@ type AttachmentRow = Readonly<{
   attachment_id: string;
   original_filename: string;
   mime_type: string;
+  entity_type: "rework_order" | "external_responsibility_case";
 }>;
 
 type WorkflowHistoryRow = Readonly<{
@@ -143,10 +145,22 @@ export class ReworkBusinessDetailService {
     }
 
     const attachments = await this.database.query<AttachmentRow>(
-      `SELECT attachment_id,original_filename,mime_type
-       FROM attachments
-       WHERE entity_type='rework_order' AND entity_id=$1 AND status='ready'
-       ORDER BY created_at,attachment_id`,
+      `SELECT attachment.attachment_id,attachment.original_filename,attachment.mime_type,attachment.entity_type
+       FROM attachments attachment
+       WHERE attachment.status='ready'
+         AND (
+           (attachment.entity_type='rework_order' AND attachment.entity_id=$1)
+           OR (
+             attachment.entity_type='external_responsibility_case'
+             AND EXISTS (
+               SELECT 1
+               FROM rework_external_responsibility_cases external_case
+               WHERE external_case.case_id::text=attachment.entity_id
+                 AND external_case.rework_order_id=$1
+             )
+           )
+         )
+       ORDER BY attachment.created_at,attachment.attachment_id`,
       [reworkOrderId],
     );
 
@@ -205,6 +219,7 @@ export class ReworkBusinessDetailService {
         attachmentId: attachment.attachment_id,
         filename: attachment.original_filename,
         mimeType: attachment.mime_type,
+        entityType: attachment.entity_type,
       })),
       workflowHistory: workflowHistory.rows.map((event) => ({
         action: event.action,
@@ -213,6 +228,31 @@ export class ReworkBusinessDetailService {
         remark: event.reason,
       })),
     };
+  }
+
+  async canDownloadBoundAttachment(
+    actor: TrustedActorContext,
+    binding: Readonly<{ entityType: string; entityId: string }>,
+  ): Promise<boolean> {
+    let reworkOrderId: string | null = null;
+    if (binding.entityType === "rework_order") {
+      reworkOrderId = binding.entityId;
+    } else if (binding.entityType === "external_responsibility_case") {
+      const externalCase = await this.database.query<{ rework_order_id: string }>(
+        "SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
+        [binding.entityId],
+      );
+      reworkOrderId = externalCase.rows[0]?.rework_order_id ?? null;
+    }
+    if (!reworkOrderId) return false;
+
+    try {
+      await this.get(actor, reworkOrderId);
+      return true;
+    } catch (error) {
+      if (error instanceof ApplicationError && [403, 404].includes(error.statusCode)) return false;
+      throw error;
+    }
   }
 
   private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
