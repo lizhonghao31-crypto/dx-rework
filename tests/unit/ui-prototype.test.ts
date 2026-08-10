@@ -101,7 +101,7 @@ describe("PR-01A UI prototype contract", () => {
     expect(processConfigurationForm).toContain("/process-configuration/submit");
     expect(processConfigurationForm).toContain("/process-configuration/review");
     expect(processConfigurationForm).toContain("最多保留 1 位小数");
-    expect(processConfigurationForm).toContain("最低 0.01 元");
+    expect(processConfigurationForm).toContain("最低 0.001 元");
     expect(processConfigurationForm).toContain("驳回必须填写原因");
     expect(webCss).toContain(".process-line__grid");
   });
