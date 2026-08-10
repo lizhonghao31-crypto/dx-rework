@@ -370,6 +370,10 @@ export class ProductionExternalResponsibilityService
     const permission = await this.casePermissions(actor.actorId, value.caseId);
     const active = value.status !== "superseded";
     const followUp = active && value.status === "deduction_follow_up";
+    const recordable = active && [
+      "pending_payables_confirmation",
+      "deduction_follow_up",
+    ].includes(value.status);
     return {
       ...value,
       items: value.items.map((item) => this.normalizeAmountLineSnapshot(item)),
@@ -380,7 +384,7 @@ export class ProductionExternalResponsibilityService
       canFollowUp:
         followUp
         && (permission.can_sign || permission.can_payables_follow_up),
-      canRecordDeduction: followUp && permission.can_record,
+      canRecordDeduction: recordable && permission.can_record,
       canClose: followUp && permission.can_close,
     };
   }

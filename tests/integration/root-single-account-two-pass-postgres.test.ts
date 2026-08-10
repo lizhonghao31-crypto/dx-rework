@@ -419,18 +419,21 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       "GET",
       `/rework-orders/${reworkOrderId}/own-factory-approval`,
     );
-    expect(ownView.canDecide).toBe(true);
-    const ownApproved = await http<OwnFactoryApprovalResponse>(
-      fixture.app,
-      "POST",
-      `/own-factory-approvals/${ownView.approval!.approvalId}/approve`,
-      {
-        expectedOrderVersion: ownView.orderVersion,
-        expectedApprovalVersion: ownView.approval!.approvalVersion,
-        opinion: `Root 第 ${pass} 遍同意本厂承担`,
+    // Root is the direct owner finalizer in this single-account gate. Its
+    // N07 finalization already creates the immutable N08-A snapshot and
+    // approves it in the same transaction, so a second approval must not be
+    // actionable.
+    expect(ownView).toMatchObject({
+      reworkStatus: "pending_responsibility_action",
+      canDecide: false,
+      approval: {
+        status: "approved",
+        decision: {
+          actedBy: fixture.rootUserId,
+          decision: "approved",
+        },
       },
-    );
-    expect(ownApproved.approval!.status).toBe("approved");
+    });
 
     const batch = await http<ExternalResponsibilityBatchResponse>(
       fixture.app,
@@ -466,14 +469,9 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       externalItems.map((item) => item.externalItemId),
     );
     expect(externalCase.canSign).toBe(false);
-    expect(externalCase.canPayablesConfirm).toBe(true);
-    externalCase = await http<ExternalResponsibilityCaseResponse>(
-      fixture.app,
-      "POST",
-      `/external-responsibility-cases/${externalCase.caseId}/payables-accept`,
-      { expectedCaseVersion: externalCase.caseVersion },
-    );
-    expect(externalCase.status).toBe("deduction_follow_up");
+    // A supplier already resolved at N07 enters the payables queue directly.
+    // The current normal path records the deduction; it does not add a
+    // separate "accept" click before the ledger entry.
     expect(externalCase.canRecordDeduction).toBe(true);
     externalCase = await http<ExternalResponsibilityCaseResponse>(
       fixture.app,
