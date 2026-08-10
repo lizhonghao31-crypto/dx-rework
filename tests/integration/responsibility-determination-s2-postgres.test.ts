@@ -391,10 +391,22 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       "s2-owner-finalize",
     );
     expect(finalized.value).toMatchObject({
-      reworkStatus: "pending_responsibility_action",
+      reworkStatus: "completed",
       handlerUserId: ids.ownerOne,
       determination: { version: 2, stage: "finalized" },
     });
+    const autoApproved = await ownFactoryApproval.get(owner, order.orderId);
+    expect(autoApproved.approval).toMatchObject({
+      status: "approved",
+      approvalVersion: 2,
+      decision: { actedBy: ids.ownerOne, decision: "approved" },
+    });
+    const pendingNotices = await database.query<{ count: string }>(
+      `SELECT count(*)::text count FROM message_outbox
+       WHERE aggregate_id=$1 AND topic='rework.own_factory_approval.pending'`,
+      [autoApproved.approval!.approvalId],
+    );
+    expect(pendingNotices.rows[0]?.count).toBe("0");
     const persisted = await database.query<{
       handler_user_id: string; event_type: string;
       from_user_id: string; to_user_id: string;

@@ -173,14 +173,36 @@ export class AuthorizedResponsibilityDeterminationService {
          FROM rework_responsibility_amount_lines WHERE determination_id=$4`,
         [id, eventId, actor.requestId, current.determination_id],
       );
-      await this.ownFactoryApprovals.ensureForFinalized(client, actor, order, id);
+      const directOwnerFinalizer = (await client.query<{ permitted: boolean }>(
+        `SELECT responsibility_actor_has_direct_role(
+           $1,'own_factory:approve',ARRAY['owner_group']
+         ) permitted`,
+        [actor.actorId],
+      )).rows[0]?.permitted === true;
+      const ownFactoryApprovalId = await this.ownFactoryApprovals.ensureForFinalized(
+        client,
+        actor,
+        order,
+        id,
+        !directOwnerFinalizer,
+      );
       await this.externalResponsibilities.ensureForFinalized(client, actor, order, id);
       await this.advance(client, orderId, actor.actorId, "pending_responsibility_action");
-      await maybeCompleteResponsibilityAction(client, actor, {
+      const actionOrder = {
         ...order,
-        status: "pending_responsibility_action",
+        status: "pending_responsibility_action" as const,
         version: order.version + 1,
-      });
+      };
+      if (directOwnerFinalizer && ownFactoryApprovalId) {
+        await this.ownFactoryApprovals.approveDuringFinalization(
+          client,
+          actor,
+          ownFactoryApprovalId,
+          actionOrder.version,
+        );
+      } else {
+        await maybeCompleteResponsibilityAction(client, actor, actionOrder);
+      }
       await this.todos?.completeOpenByDedupeKey(
         client,
         actor,
