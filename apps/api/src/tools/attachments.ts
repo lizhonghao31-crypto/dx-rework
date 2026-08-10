@@ -134,12 +134,14 @@ export class AttachmentService {
     actor: TrustedActorContext,
     attachmentId: string,
     authorizeBound?: (row: Readonly<{ entityType: string; entityId: string; uploadedBy: string }>) => Promise<boolean>,
+    disposition: "attachment" | "inline" = "attachment",
   ): Promise<DownloadIntentResponse> {
     const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound);
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
     const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
       ttlSeconds: this.options.ttlSeconds,
       filename: row.original_filename,
+      disposition,
     }));
     const client = await this.pool.connect();
     try {
