@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { ReworkOrderResponse } from "@dx-rework/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -82,6 +83,14 @@ describe("PR-05 web behavior", () => {
     expect(persistDraft).toHaveBeenCalledOnce();
     expect(createAttempt).toHaveBeenCalledWith(saved);
     expect(send).toHaveBeenCalledWith(attempt);
+  });
+
+  it("keeps the submit idempotency attempt after the draft save that precedes it", async () => {
+    const form = await readFile("apps/web/src/rework-form.tsx", "utf8");
+
+    expect(form).toContain("const persistDraft = async (clearPendingSubmit = true)");
+    expect(form).toContain("if (clearPendingSubmit) pendingSubmit.current = null;");
+    expect(form).toContain("() => persistDraft(false)");
   });
 
   it("blocks every form mutation until an existing draft has finished restoring", () => {
