@@ -199,10 +199,18 @@ const workflowState = (status: ReworkStatus, key: WorkflowNodeKey): WorkflowNode
   return statusRank[status] > nodeRank[key] ? "completed" : "future";
 };
 
-const currentOwner = (state: WorkflowNodeState, user: AuthorizedUser | null, fallback: string): string =>
-  state === "current" && user ? user.displayName : fallback;
+const currentOwner = (
+  state: WorkflowNodeState,
+  user: AuthorizedUser | null,
+  fallback: string,
+  confirmedAssignee: boolean,
+): string => state === "current" && confirmedAssignee && user ? user.displayName : fallback;
 
-const buildWorkflow = (detail: ReworkBusinessDetail, user: AuthorizedUser | null): readonly WorkflowStage[] => {
+const buildWorkflow = (
+  detail: ReworkBusinessDetail,
+  user: AuthorizedUser | null,
+  assignedNode?: WorkflowNodeKey,
+): readonly WorkflowStage[] => {
   const node = (
     key: WorkflowNodeKey,
     number: string,
@@ -212,7 +220,15 @@ const buildWorkflow = (detail: ReworkBusinessDetail, user: AuthorizedUser | null
     preview: string,
   ): WorkflowNode => {
     const state = workflowState(detail.status, key);
-    return { key, number, label, ownerRole, ownerName: currentOwner(state, user, fallbackOwner), state, preview };
+    return {
+      key,
+      number,
+      label,
+      ownerRole,
+      ownerName: currentOwner(state, user, fallbackOwner, assignedNode === key),
+      state,
+      preview,
+    };
   };
 
   const executionNodes: WorkflowNode[] = [
@@ -326,7 +342,7 @@ export function ReworkDetailPage({
 
   const detail = state.value;
   const meta = statusMeta[detail.status];
-  const stages = buildWorkflow(detail, currentUser);
+  const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const currentNode = stages.flatMap((stage) => stage.nodes).find((node) => node.state === "current")?.key;
   const selectedFromUrl = workflowNodeFromSearch();
   const selectedNode = selectedFromUrl ?? (focusedNode === currentNode ? focusedNode : currentNode ?? "archive");
