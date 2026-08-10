@@ -17,6 +17,7 @@ type TaskRouteName =
   | "own_factory_approval"
   | "external_responsibility_detail"
   | "wage_period_detail";
+type OrderTaskRouteName = Exclude<TaskRouteName, "wage_period_detail">;
 
 type ActionTodo = TodoResponse & {
   route: TodoResponse["route"] & { routeName: TaskRouteName };
@@ -29,7 +30,7 @@ type State =
   | { kind: "blocked"; reason: string }
   | { kind: "error"; message: string };
 
-const workflowNodeByRoute: Record<Exclude<TaskRouteName, "wage_period_detail">, WorkflowNodeKey> = {
+const workflowNodeByRoute: Record<OrderTaskRouteName, WorkflowNodeKey> = {
   process_configuration: "process_configuration",
   whole_order_review: "whole_order_review",
   responsibility_detail: "responsibility",
@@ -75,16 +76,16 @@ export function ResponsibilityTaskPage() {
       setState({ kind: "error", message: "该任务已不再分配给你，请返回我的待办查看当前任务。" });
       return;
     }
+    if (!isActionTodo(todo)) {
+      setState({ kind: "error", message: "该任务暂不支持独立处理，请返回我的待办。" });
+      return;
+    }
     if (todo.status === "completed" || todo.status === "cancelled") {
       setState({ kind: "completed", todo });
       return;
     }
     if (todo.status === "blocked_recipient") {
       setState({ kind: "blocked", reason: todo.blockedReason ?? "当前任务需要由管理人员转交。" });
-      return;
-    }
-    if (!isActionTodo(todo)) {
-      setState({ kind: "error", message: "该任务暂不支持独立处理，请返回我的待办。" });
       return;
     }
     setState({ kind: "ready", todo });
@@ -121,9 +122,10 @@ export function ResponsibilityTaskPage() {
   if (state.kind === "completed") {
     if (state.todo.route.routeName !== "wage_period_detail") {
       const route = state.todo.route;
+      const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
       return <ReworkDetailPage
         reworkOrderId={route.reworkOrderId ?? route.entityId}
-        focusedNode={workflowNodeByRoute[route.routeName]}
+        focusedNode={node}
         {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
         returnToTodos
       />;
@@ -144,9 +146,10 @@ export function ResponsibilityTaskPage() {
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
   if (route.routeName !== "wage_period_detail") {
+    const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
     return <ReworkDetailPage
       reworkOrderId={orderId}
-      focusedNode={workflowNodeByRoute[route.routeName]}
+      focusedNode={node}
       {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
       returnToTodos
     />;
