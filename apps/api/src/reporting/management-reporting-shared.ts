@@ -30,6 +30,7 @@ export type FactRow = {
   external_remaining_amount: string;
   overdue: boolean;
   exception_count: number;
+  attachment_count: number;
   updated_at: Date;
 };
 export type CountRow = { status: string; count: string };
