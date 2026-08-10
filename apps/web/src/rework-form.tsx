@@ -23,9 +23,14 @@ const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type FormState = {
   styleNo: string;
+  customerSupplyCode: string;
+  factoryStyleNo: string;
   orderNo: string;
+  orderQuantity: string;
   merchandiserUserId: string;
   factory: string;
+  reworkReason: string;
+  reworkProcess: string;
   problemPart: string;
   problemDescription: string;
   reworkQuantity: string;
@@ -35,9 +40,14 @@ type ApiSchema<T> = { parse(value: unknown): T };
 
 const emptyForm: FormState = {
   styleNo: "",
+  customerSupplyCode: "",
+  factoryStyleNo: "",
   orderNo: "",
+  orderQuantity: "",
   merchandiserUserId: "",
   factory: "",
+  reworkReason: "",
+  reworkProcess: "",
   problemPart: "",
   problemDescription: "",
   reworkQuantity: "",
@@ -83,13 +93,18 @@ async function request<T>(
 
 const toForm = (order: ReworkOrderResponse): FormState => ({
   styleNo: order.styleNo ?? "",
+  customerSupplyCode: order.customerSupplyCode ?? "",
+  factoryStyleNo: order.factoryStyleNo ?? "",
   orderNo: order.orderNo ?? "",
+  orderQuantity: order.orderQuantity?.toString() ?? "",
   merchandiserUserId: order.merchandiserUserId ?? "",
   factory: order.processingFactory?.type === "supplier"
     ? `supplier:${order.processingFactory.supplierId}`
     : order.processingFactory?.type === "own_factory"
       ? "own_factory"
       : "",
+  reworkReason: order.reworkReason ?? "",
+  reworkProcess: order.reworkProcess ?? "",
   problemPart: order.problemPart ?? "",
   problemDescription: order.problemDescription ?? "",
   reworkQuantity: order.reworkQuantity?.toString() ?? "",
@@ -176,13 +191,18 @@ export function ReworkInitiationForm() {
 
   const payload = (): CreateReworkDraft => ({
     styleNo: optionalText(form.styleNo),
+    customerSupplyCode: optionalText(form.customerSupplyCode),
+    factoryStyleNo: optionalText(form.factoryStyleNo),
     orderNo: optionalText(form.orderNo),
+    orderQuantity: form.orderQuantity === "" ? null : Number(form.orderQuantity),
     merchandiserUserId: optionalText(form.merchandiserUserId),
     processingFactory: form.factory === "own_factory"
       ? { type: "own_factory" }
       : form.factory.startsWith("supplier:")
         ? { type: "supplier", supplierId: form.factory.slice("supplier:".length) }
         : null,
+    reworkReason: optionalText(form.reworkReason),
+    reworkProcess: optionalText(form.reworkProcess),
     problemPart: optionalText(form.problemPart),
     problemDescription: optionalText(form.problemDescription),
     reworkQuantity: form.reworkQuantity === ""
@@ -353,8 +373,14 @@ export function ReworkInitiationForm() {
   const mutationDisabled = !isReworkFormMutationAllowed({ busy, uploading, restoringDraft });
   const complete = Boolean(
     form.styleNo.trim()
+    && form.customerSupplyCode.trim()
+    && form.factoryStyleNo.trim()
+    && Number.isInteger(Number(form.orderQuantity))
+    && Number(form.orderQuantity) > 0
     && form.merchandiserUserId
     && form.factory
+    && form.reworkReason.trim()
+    && form.reworkProcess.trim()
     && form.problemPart.trim()
     && form.problemDescription.trim()
     && Number.isInteger(Number(form.reworkQuantity))
@@ -386,10 +412,32 @@ export function ReworkInitiationForm() {
         </div>
         <div className="qc-form-grid">
           <InsetField
+            label="客供代号（必填）"
+            value={form.customerSupplyCode}
+            disabled={formDisabled}
+            onChange={(event) => setForm({ ...form, customerSupplyCode: event.target.value })}
+          />
+          <InsetField
+            label="工厂货号（必填）"
+            value={form.factoryStyleNo}
+            disabled={formDisabled}
+            onChange={(event) => setForm({ ...form, factoryStyleNo: event.target.value })}
+          />
+          <InsetField
             label="款号（必填）"
             value={form.styleNo}
             disabled={formDisabled}
             onChange={(event) => setForm({ ...form, styleNo: event.target.value })}
+          />
+          <InsetField
+            label="订单数量（必填）"
+            type="number"
+            min="1"
+            step="1"
+            value={form.orderQuantity}
+            disabled={formDisabled}
+            suffix="件"
+            onChange={(event) => setForm({ ...form, orderQuantity: event.target.value })}
           />
           <InsetField
             label="订单号（可填多个，知道时填写）"
@@ -438,6 +486,19 @@ export function ReworkInitiationForm() {
       <Surface>
         <h2>返工问题与数量</h2>
         <div className="qc-form-grid">
+          <InsetField
+            label="返工原因（必填）"
+            value={form.reworkReason}
+            disabled={formDisabled}
+            onChange={(event) => setForm({ ...form, reworkReason: event.target.value })}
+          />
+          <InsetField
+            label="返工工序（必填）"
+            value={form.reworkProcess}
+            disabled={formDisabled}
+            placeholder="例如：车缝、锁眼、后整；多项用逗号分隔"
+            onChange={(event) => setForm({ ...form, reworkProcess: event.target.value })}
+          />
           <InsetField
             label="问题部位（必填）"
             value={form.problemPart}
