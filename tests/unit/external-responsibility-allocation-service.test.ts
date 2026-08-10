@@ -172,7 +172,7 @@ describe("ExternalResponsibilityAllocationService", () => {
       }));
     vi.spyOn(OperationEventRepository.prototype, "append")
       .mockResolvedValue(eventId);
-    vi.spyOn(MessageOutboxRepository.prototype, "enqueue")
+    const enqueue = vi.spyOn(MessageOutboxRepository.prototype, "enqueue")
       .mockResolvedValue(randomUUID());
     const fixture = databaseFixture();
     const service = new ExternalResponsibilityAllocationService(
@@ -189,6 +189,19 @@ describe("ExternalResponsibilityAllocationService", () => {
 
     expect(fixture.caseInsertParameters()?.[12]).toBe(
       "本厂原加工订单改由外部加工厂承担扣款",
+    );
+    const caseInsert = fixture.query.mock.calls.find(([sql]) =>
+      String(sql).includes("INSERT INTO rework_external_responsibility_cases")
+    );
+    expect(caseInsert?.[0]).toContain(
+      "'pending_payables_confirmation',CURRENT_TIMESTAMP",
+    );
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        topic: "rework.external_responsibility.pending_payables",
+        recipientKey: "factory_payables",
+      }),
     );
     expect(fixture.query).toHaveBeenCalledWith("COMMIT");
   });

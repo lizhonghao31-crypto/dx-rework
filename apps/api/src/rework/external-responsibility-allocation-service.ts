@@ -290,9 +290,10 @@ export class ExternalResponsibilityAllocationService {
            supplier_name_snapshot,supplier_type_snapshot,
            business_handler_user_id,payables_handler_role_snapshot,
            proposed_deduction_amount,processing_factory_override_reason,
-           created_by,operation_event_id,request_id
+           status,submitted_at,created_by,operation_event_id,request_id
          ) VALUES(
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$10,$14,$15
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+           'pending_payables_confirmation',CURRENT_TIMESTAMP,$10,$14,$15
          )`,
         [
           caseId,
@@ -321,33 +322,33 @@ export class ExternalResponsibilityAllocationService {
         );
       }
       await this.outbox.enqueue(client, {
-        topic: "rework.external_responsibility.pending_business_signoff",
+        topic: "rework.external_responsibility.pending_payables",
         aggregateType: "external_responsibility_case",
         aggregateId: caseId,
-        recipientKey: actor.actorId,
-        idempotencyKey: `external-case:pending-business:${caseId}`,
+        recipientKey: payablesRole(allocation.responsibilityType),
+        idempotencyKey: `external-case:pending-payables:${caseId}:1`,
         payload: {
           caseId,
           reworkOrderId: order.rework_order_id,
           delivery: "intent_only",
         },
       });
-      await this.todos?.actionableForNamedSourceActor(client, actor, {
-        category: "external_business_signoff",
+      await this.todos?.actionableForUniqueRoleOrOrderDelegate(client, actor, {
+        category: "external_deduction_follow_up",
         sourceEventId: eventId,
         sourceAction: "rework.external_responsibility.allocate",
         entityType: "rework_order",
         entityId: order.rework_order_id,
-        recipientUserId: actor.actorId,
-        sourceActorEventId: eventId,
-        permittedCapabilities: ["external_responsibility:sign"],
+        requiredRole: payablesRole(allocation.responsibilityType),
+        requiredCapability: "external_deduction:record",
+        delegationScopeId: order.rework_order_id,
         route: {
           routeName: "external_responsibility_detail",
           entityId: caseId,
           reworkOrderId: order.rework_order_id,
         },
         policyKey: "general",
-        dedupeKey: `external-signoff:${caseId}:1`,
+        dedupeKey: `deduction-follow-up:${caseId}:1`,
       });
     }
 
