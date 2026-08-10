@@ -59,6 +59,11 @@ export const ExternalResponsibilityOrderParamsSchema = z.object({
   reworkOrderId: IdSchema,
 }).strict();
 
+export const CreateExternalTemporarySupplierSchema = z.object({
+  supplierType: z.enum(["factory", "embroidery_washing", "fabric"]),
+  supplierName: z.string().trim().min(1).max(200),
+}).strict();
+
 export const AllocateExternalSuppliersSchema = z.object({
   expectedBatchVersion: z.number().int().positive(),
   allocations: z.array(z.object({
@@ -352,6 +357,8 @@ export const ExternalResponsibilityQueueResponseSchema = z.object({
   }).strict()),
 }).strict();
 
+export type CreateExternalTemporarySupplier =
+  z.infer<typeof CreateExternalTemporarySupplierSchema>;
 export type AllocateExternalSuppliers =
   z.infer<typeof AllocateExternalSuppliersSchema>;
 export type SubmitExternalResponsibilityCase =
