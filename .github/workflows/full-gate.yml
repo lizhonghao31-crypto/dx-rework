@@ -1,0 +1,233 @@
+name: Full Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - labeled
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  full-validate:
+    name: Full Gate exact Head
+    if: contains(github.event.pull_request.labels.*.name, 'full-gate')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      GIT_SHA: ${{ github.event.pull_request.head.sha }}
+      SERVICE_NAME: dx-rework-api
+
+    steps:
+      - name: Checkout exact PR Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        run: npm install --global npm@10.9.9
+
+      - name: Verify exact Head
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
+
+      - name: Verify Actions usage policy
+        run: node scripts/ci/verify-actions-policy.mjs
+
+      - name: Classify Full Gate risk from exact PR diff
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          migration_sensitive=false
+          deployment_sensitive=false
+          git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
+          while IFS= read -r path; do
+            case "$path" in
+              apps/api/migrations/*|apps/api/src/platform/migration-manifest.json|scripts/seed-base-migrations.sh|scripts/migrate.mjs|scripts/migration-integration-check.mjs|scripts/check-migrations.mjs)
+                migration_sensitive=true
+                ;;
+            esac
+            case "$path" in
+              scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
+                deployment_sensitive=true
+                ;;
+            esac
+          done < "$RUNNER_TEMP/full-gate-changed-files.txt"
+          db_required=false
+          if [[ "$migration_sensitive" == true || "$deployment_sensitive" == true ]]; then
+            db_required=true
+          fi
+          {
+            echo "MIGRATION_SENSITIVE=$migration_sensitive"
+            echo "DEPLOYMENT_SENSITIVE=$deployment_sensitive"
+            echo "DB_REQUIRED=$db_required"
+          } >> "$GITHUB_ENV"
+          printf 'migration_sensitive=%s\ndeployment_sensitive=%s\ndb_required=%s\n' \
+            "$migration_sensitive" "$deployment_sensitive" "$db_required"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build workspaces without deployment postbuild
+        run: npm run build --workspaces --if-present
+
+      - name: Full unit and integration suite without runtime DB escalation
+        run: npm test
+
+      - name: Validate migration files statically
+        run: npm run db:migrate:lint
+
+      - name: Scan repository for committed secret signatures
+        run: npm run secret:scan
+
+      - name: Start isolated PostgreSQL only for DB-sensitive changes
+        if: env.DB_REQUIRED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -d --name dx-rework-full-gate-postgres \
+            -e POSTGRES_USER=dx_rework \
+            -e POSTGRES_PASSWORD=dx_rework_ci \
+            -e POSTGRES_DB=dx_rework_ci \
+            -p 5432:5432 postgres:16-alpine
+          for _ in $(seq 1 30); do
+            if docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci
+          {
+            echo 'DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
+            echo 'TEST_DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
+          } >> "$GITHUB_ENV"
+
+      - name: Seed database with base-revision migration history
+        if: env.DB_REQUIRED == 'true'
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/seed-base-migrations.sh
+
+      - name: Apply and validate exact Head migration history against PostgreSQL
+        if: env.DB_REQUIRED == 'true'
+        run: npm run db:migrate:check
+
+      - name: Run PostgreSQL business chain only for deployment-sensitive changes
+        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        run: node scripts/run-business-chain-gate.mjs
+
+      - name: PostgreSQL backup and isolated restore drill
+        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/pr17-db-drill"
+          node_bin="$(readlink -f "$(command -v node)")"
+          mkdir -p "$root/shared" "$root/backups/postgres"
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > "$root/shared/.env"
+          printf 'DX_REWORK_NODE_BIN=%s\n' "$node_bin" > "$root/shared/deploy.env"
+          chmod 0600 "$root/shared/.env" "$root/shared/deploy.env"
+          state="$(node scripts/deploy/database-state.mjs print-current)"
+          target_version="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).version")"
+          target_checksum="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).checksum")"
+          DX_REWORK_ROOT="$root" DX_REWORK_APP_ENV_FILE="$root/shared/.env" DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
+            GIT_SHA="$(git rev-parse HEAD)" CURRENT_DATABASE_STATE="$state" TARGET_SCHEMA_VERSION="$target_version" \
+            TARGET_SCHEMA_CHECKSUM="$target_checksum" scripts/backup-postgres.sh
+          admin_url='postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/postgres'
+          target_name='dx_rework_drill_ci'
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $target_name"
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $target_name"
+          target_url="postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/$target_name"
+          target_identity="$(psql "$target_url" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()")"
+          target_fp="$(printf %s "$target_identity" | sha256sum | cut -d' ' -f1)"
+          {
+            printf 'DX_REWORK_RESTORE_DATABASE_URL=%s\n' "$target_url"
+            printf 'DX_REWORK_APPROVED_TARGET_FINGERPRINT=%s\n' "$target_fp"
+            printf 'DX_REWORK_APPROVED_TARGET_DATABASE=%s\n' "$target_name"
+          } > "$root/shared/restore.env"
+          chmod 0600 "$root/shared/restore.env"
+          backup_set="$(find "$root/backups/postgres" -mindepth 1 -maxdepth 1 -type d ! -name '.tmp-*' -print -quit)"
+          test -n "$backup_set"
+          DX_REWORK_ROOT="$root" DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
+            DX_REWORK_RESTORE_ENV_FILE="$root/shared/restore.env" DX_REWORK_RESTORE_DRILL=true \
+            DX_REWORK_RESTORE_CONFIRM=RESTORE_TO_ISOLATED_DRILL \
+            DX_REWORK_RESTORE_MANIFEST="$PWD/apps/api/src/platform/migration-manifest.json" \
+            scripts/restore-postgres.sh "$backup_set"
+          DATABASE_URL="$target_url" node scripts/deploy/verify-database-readiness.mjs apps/api/src/platform/migration-manifest.json
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE $target_name"
+
+      - name: PR-17 exact-head acceptance and lifecycle
+        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        shell: bash
+        run: |
+          TARGET_SHA="$(git rev-parse HEAD)" npm run pr17:acceptance
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          npx vitest run \
+            tests/unit/pr-17-deployment.test.ts \
+            tests/unit/pr-17-operations.test.ts \
+            tests/integration/pr-17-release-lifecycle.test.ts \
+            tests/integration/pr-17-deploy-failure.test.ts \
+            tests/integration/pr-17-review-fixes.test.ts
+
+      - name: PR-17 package, runtime and relocation-safe transfer
+        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        shell: bash
+        env:
+          DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/pr17-build
+        run: |
+          sha="$(git rev-parse HEAD)"
+          out="$DX_REWORK_BUILD_ROOT/$sha"
+          mkdir -p "$DX_REWORK_BUILD_ROOT"
+          scripts/deploy/package-release.sh "$sha" "$BUILD_TIME" "$out"
+          scripts/deploy/verify-runtime.sh "$out/api"
+          scripts/deploy/create-transfer-bundle.sh "$out" "$RUNNER_TEMP/pr17-$sha.tar.gz"
+          (cd "$RUNNER_TEMP" && sha256sum -c --strict "pr17-$sha.tar.gz.sha256")
+
+      - name: Stop isolated PostgreSQL
+        if: always() && env.DB_REQUIRED == 'true'
+        run: docker rm -f dx-rework-full-gate-postgres >/dev/null 2>&1 || true
+
+      - name: Write Full Gate summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Full Gate"
+            echo
+            echo "- Head SHA: $(git rev-parse HEAD)"
+            echo "- Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed"
+            echo "- Migration-sensitive: ${MIGRATION_SENSITIVE:-false}"
+            echo "- Deployment-sensitive: ${DEPLOYMENT_SENSITIVE:-false}"
+            echo "- PostgreSQL / release work runs only when exact diff classification requires it"
+          } >> "${GITHUB_STEP_SUMMARY}"
