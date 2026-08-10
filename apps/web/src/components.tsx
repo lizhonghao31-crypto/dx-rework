@@ -142,11 +142,20 @@ export function Shell({
   const masterDataAccess = isRoot || isOwner || hasCapability("master_data:manage");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
+  const todoAccess = hasCapability("todo:view");
 
   const navigation: NavigationEntry[] = [];
-  if (managementAccess) {
+  if (todoAccess) {
     navigation.push({
       step: "0",
+      name: "我的待办",
+      description: "只看现在轮到你处理的事项",
+      href: "/ui/my-tasks",
+    });
+  }
+  if (managementAccess) {
+    navigation.push({
+      step: "·",
       name: "总览",
       description: "看全局进度、待办和异常",
       href: "/ui/management",
