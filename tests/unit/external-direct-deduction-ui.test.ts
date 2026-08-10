@@ -1,0 +1,21 @@
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+
+describe("external direct deduction UI", () => {
+  it("shows deduction or data return without normal signoff and accept actions", async () => {
+    const [panel, queue] = await Promise.all([
+      readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
+      readFile("apps/web/src/external-responsibility-queue-page.tsx", "utf8"),
+    ]);
+
+    expect(panel).toContain("供应商确定后直接由应付记录扣款");
+    expect(panel).toContain("退回资料问题");
+    expect(panel).toContain('variant="primary"');
+    expect(panel).toContain("记录实际扣款");
+    expect(panel).not.toContain('operation(caseItem, "accept")');
+    expect(panel).not.toContain("/payables-accept");
+    expect(panel).not.toContain("应付接受");
+    expect(queue).toContain('pending_payables_confirmation: "待记录扣款"');
+    expect(queue).toContain("应付直接记录实际扣款或退回资料问题");
+  });
+});
