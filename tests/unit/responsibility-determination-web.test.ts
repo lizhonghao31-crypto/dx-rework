@@ -38,6 +38,9 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("const shareTotal = shareTotalBps(process.allocations);");
     expect(source).toContain('shareTotal === null ? "输入有误"');
     expect(source).toContain(
+      '?.shareBps ?? (current ? 0 : value === "own_factory" ? 10000 : 0)',
+    );
+    expect(source).toContain(
       "allocation.shareBps !== null && allocation.shareBps > 0n",
     );
   });
