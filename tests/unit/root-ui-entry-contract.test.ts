@@ -46,26 +46,19 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).toContain('status: user.capabilities.length || isRoot ? "authorized" : "no_role"');
   });
 
-  it("keeps all numbered workflow modules visible to Root", async () => {
+  it("keeps Root eligible for privileged primary entries without restoring legacy workflow menus", async () => {
     const source = await readFile(
       new URL("../../apps/web/src/components.tsx", import.meta.url),
       "utf8",
     );
 
     expect(source).toContain("const isRoot = currentUser?.isRoot === true;");
-    expect(source).toContain("const managementAccess = isRoot ||");
     expect(source).toContain("const initiationAccess = isRoot ||");
-    expect(source).toContain("const processAccess = isRoot ||");
-    expect(source).toContain("const workAccess = isRoot ||");
-    expect(source).toContain("const responsibilityAccess = isRoot ||");
-    expect(source).toContain("const ownFactoryAccess = isRoot ||");
-    expect(source).toContain("const externalResponsibilityAccess = isRoot ||");
-    expect(source).toContain("const wageAccess = isRoot ||");
-    expect(source).toContain("const masterDataAccess = isRoot ||");
-    expect(source).toContain("const auditAccess = isRoot ||");
-    expect(source).toContain("const technicalAdminAccess = isRoot ||");
-    for (let step = 0; step <= 12; step += 1) {
-      expect(source).toContain(`step: "${step}"`);
+    expect(source).toContain("const reportAccess = isRoot || isOwner");
+    expect(source).toContain("const systemManagementAccess = auditAccess || technicalAdminAccess");
+    for (const entry of ["发起返工", "全部订单", "系统管理", "财务报表"]) {
+      expect(source).toContain(`name: "${entry}"`);
     }
+    expect(source).not.toContain('step: "');
   });
 });
