@@ -37,6 +37,13 @@ const todo: TodoResponse = {
     entityId: "00000000-0000-4000-8000-000000000015",
     todoId: "00000000-0000-4000-8000-000000000013",
   },
+  orderContext: {
+    reworkNo: "RW-20260801-001",
+    orderNo: "PO-2026-001",
+    styleNo: "ST-001",
+    status: "pending_process_configuration",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  },
   policyKey: "general",
   dueAt: "2026-08-02T00:00:00.000Z",
   reminderCount: 0,
