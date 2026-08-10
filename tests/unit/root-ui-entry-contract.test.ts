@@ -46,6 +46,18 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).toContain('status: user.capabilities.length || isRoot ? "authorized" : "no_role"');
   });
 
+  it("reuses a verified session across route gates and keeps sidebar identity at the bottom", async () => {
+    const [auth, styles] = await Promise.all([
+      readFile(new URL("../../apps/web/src/auth.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/styles.css", import.meta.url), "utf8"),
+    ]);
+    expect(auth).toContain("let verifiedSession: VerifiedSession | undefined;");
+    expect(auth).toContain("const verifySession = (): Promise<VerifiedSession> =>");
+    expect(auth).toContain('useState<AuthGateState>(() => verifiedSession ?? "loading")');
+    expect(styles).toContain("display: flex; flex-direction: column;");
+    expect(styles).toContain(".app-shell__identity { margin-top: auto;");
+  });
+
   it("keeps Root eligible for privileged primary entries without restoring legacy workflow menus", async () => {
     const source = await readFile(
       new URL("../../apps/web/src/components.tsx", import.meta.url),
