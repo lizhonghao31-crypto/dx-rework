@@ -17,6 +17,11 @@ describe("business landing target", () => {
     expect(landingTarget(user(["responsibility:takeover"]))).toBe("ui/responsibility");
   });
 
+  it("routes wage and work-reporting roles to pages they can actually open", () => {
+    expect(landingTarget(user(["wage:view"]))).toBe("ui/wages");
+    expect(landingTarget(user(["work:report"], ["worker"]))).toBe("ui/work-reporting");
+  });
+
   it("routes master-data-only users to a page they can actually open", () => {
     expect(landingTarget(user(["master_data:manage"]))).toBe("ui/master-data");
   });
