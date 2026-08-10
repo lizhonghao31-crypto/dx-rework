@@ -39,7 +39,7 @@ export function ReworkQueryPage() {
       void loadReworkOrders(filters, controller.signal)
         .then((value) => setState({ kind: "ready", value }))
         .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError")) setState({ kind: "unavailable", message: error instanceof Error ? error.message : "返工查询失败" });
+          if (!(error instanceof DOMException && error.name === "AbortError")) setState({ kind: "unavailable", message: error instanceof Error ? error.message : "订单查询失败" });
         });
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
@@ -48,8 +48,8 @@ export function ReworkQueryPage() {
 
   const items = state.kind === "ready" ? state.value.items : [];
   const canViewReports = state.kind === "ready" && state.value.canViewReports;
-  return <Shell active="返工任务">
-    <Header title="返工统一查询" subtitle="只用于查询当前状态、历史事实、责任、工资、扣款和异常；日常处理请进入对应节点工作台" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} action={canViewReports ? "报表中心" : "返回工作台"} actionHref={canViewReports ? "/ui/reports" : "/"} />
+  return <Shell active="全部订单">
+    <Header title="全部订单" subtitle="查看权限范围内订单；点击订单后在同一页面查看完整流程并处理当前节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} action={canViewReports ? "财务报表" : "返回工作台"} actionHref={canViewReports ? "/ui/reports" : "/"} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
