@@ -69,6 +69,23 @@ type QrRelayMessage = { type: typeof QR_RELAY_MESSAGE; authCode: string; state: 
 type ErrorBody = { error?: { code?: string; message?: string } };
 
 const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+type AuthGateState = "loading" | "denied" | Me;
+type VerifiedSession = Exclude<AuthGateState, "loading">;
+let verifiedSession: VerifiedSession | undefined;
+let sessionVerification: Promise<VerifiedSession> | undefined;
+
+const verifySession = (): Promise<VerifiedSession> => {
+  if (verifiedSession) return Promise.resolve(verifiedSession);
+  sessionVerification ??= fetch(apiUrl("auth/me"), { credentials: "include" })
+    .then(async (response) => response.ok ? await response.json() as Me : "denied")
+    .catch(() => "denied")
+    .then((state) => {
+      verifiedSession = state;
+      return state;
+    });
+  return sessionVerification;
+};
+
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
 
@@ -107,8 +124,16 @@ export function AuthGate({
   requiredCapability?: string | undefined;
   requiredAnyOf?: readonly PageAccessRequirement[] | undefined;
 }) {
-  const [state, setState] = useState<"loading" | "denied" | Me>("loading");
-  useEffect(() => { void fetch(apiUrl("auth/me"), { credentials: "include" }).then(async (response) => response.ok ? setState(await response.json() as Me) : setState("denied")).catch(() => setState("denied")); }, []);
+  const [state, setState] = useState<AuthGateState>(() => verifiedSession ?? "loading");
+  useEffect(() => {
+    let mounted = true;
+    void verifySession().then((nextState) => {
+      if (mounted) setState(nextState);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在通过服务端核验钉钉组织与账号状态，请稍候。" />;
   if (state === "denied") return <LoginPage />;
   if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的达兴组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><Button onClick={() => void fetch(apiUrl("auth/logout"), { method: "POST", credentials: "include" }).then(() => window.location.assign(base))}>退出登录</Button></StatePage>;
