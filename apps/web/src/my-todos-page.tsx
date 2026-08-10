@@ -86,7 +86,9 @@ export function MyTodosPage() {
   }, []);
 
   const actionable = useMemo(() => state.kind === "ready"
-    ? state.todos.filter((todo) => todo.status === "pending" || todo.status === "blocked_recipient")
+    ? state.todos.filter((todo) =>
+        todo.todoType !== "information"
+        && (todo.status === "pending" || todo.status === "blocked_recipient"))
     : [], [state]);
 
   return (
@@ -120,7 +122,13 @@ export function MyTodosPage() {
                   <small>截止：{formatDueAt(todo.dueAt)}</small>
                   {blocked && todo.blockedReason ? <small className="my-todo-error">{todo.blockedReason}</small> : null}
                 </div>
-                {!blocked && <a href={todoHref(todo)}><Button>开始处理</Button></a>}
+                {!blocked && <a href={[
+                  "responsibility_detail",
+                  "own_factory_approval",
+                  "external_responsibility_detail",
+                ].includes(todo.route.routeName)
+                  ? pageUrl(`ui/my-tasks/${todo.todoId}`)
+                  : todoHref(todo)}><Button>开始处理</Button></a>}
               </Surface>
             );
           })}
