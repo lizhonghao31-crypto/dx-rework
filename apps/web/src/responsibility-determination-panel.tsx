@@ -133,7 +133,7 @@ const formsFromResponse = (
         sharePercent: bpsToPercent(
           current?.allocations.find(
             (allocation) => allocation.responsibilityType === value,
-          )?.shareBps ?? (value === "own_factory" ? 10000 : 0),
+          )?.shareBps ?? (current ? 0 : value === "own_factory" ? 10000 : 0),
         ),
       })),
     };
