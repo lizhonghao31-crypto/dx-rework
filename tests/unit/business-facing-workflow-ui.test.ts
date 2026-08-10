@@ -179,7 +179,8 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/external-responsibility-queue-page.tsx"),
     ]);
     expect(components).toContain("task.stateLabel ?? (");
-    expect(responsibility).toContain("stateLabel,");
+    expect(responsibility).toContain("const stateLabel = item.canConfirmHighMultiplier");
+    expect(responsibility).toContain("tone, stateLabel");
     expect(ownFactory).toContain('stateLabel: item.canDecide ? "待审批" : "仅查看"');
     expect(external).toContain('stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看"');
   });
