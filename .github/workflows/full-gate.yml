@@ -72,7 +72,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
+              tests/integration/root-single-account-two-pass-postgres.test.ts|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
                 deployment_sensitive=true
                 ;;
             esac
