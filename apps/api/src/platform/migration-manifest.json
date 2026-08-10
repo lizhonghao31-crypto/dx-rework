@@ -163,6 +163,10 @@
     {
       "version": "0041_root_wage_decider_constraint",
       "checksum": "d7e3c954e21e8a07dc4c4d2ea7a54247a58357577b8bba0964443d807ade77a4"
+    },
+    {
+      "version": "0042_external_processing_factory_auto_route",
+      "checksum": "bbbaa9ce36f09c11486f9c742b505d2cc1b10bb6330a849b1eaf20829d6e9aac"
     }
   ]
 }
