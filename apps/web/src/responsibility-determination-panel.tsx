@@ -78,10 +78,23 @@ async function requestTransferOptions(
 }
 
 const parsePercentToBps = (value: string): bigint | null => {
+  if (value === "") return 0n;
   if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(value)) return null;
   const [whole, fraction = ""] = value.split(".");
   const parsed = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
   return parsed <= 10000n ? parsed : null;
+};
+
+const shareTotalBps = (
+  allocations: readonly AllocationForm[],
+): bigint | null => {
+  let total = 0n;
+  for (const allocation of allocations) {
+    const share = parsePercentToBps(allocation.sharePercent);
+    if (share === null) return null;
+    total += share;
+  }
+  return total;
 };
 
 const bpsToPercent = (value: number | bigint): string => {
@@ -131,13 +144,7 @@ const processValid = (process: ProcessForm): boolean => {
   const scaled = multiplierScaled(process.multiplier);
   if (scaled === null || scaled < 1000n) return false;
   if (scaled > 2000n && !process.highMultiplierReason.trim()) return false;
-  let total = 0n;
-  for (const allocation of process.allocations) {
-    const share = parsePercentToBps(allocation.sharePercent);
-    if (share === null) return false;
-    total += share;
-  }
-  return total === 10000n;
+  return shareTotalBps(process.allocations) === 10000n;
 };
 
 export function ResponsibilityDeterminationPanel({
@@ -449,10 +456,7 @@ export function ResponsibilityDeterminationPanel({
         const current = determination?.processes.find(
           (row) => row.configurationItemId === process.configurationItemId,
         );
-        const shareTotal = process.allocations.reduce(
-          (sum, allocation) => sum + (parsePercentToBps(allocation.sharePercent) ?? 0n),
-          0n,
-        );
+        const shareTotal = shareTotalBps(process.allocations);
         const highMultiplier =
           (multiplierScaled(process.multiplier) ?? 0n) > 2000n;
         return (
@@ -564,8 +568,12 @@ export function ResponsibilityDeterminationPanel({
               })}
             </div>
             <p className={shareTotal === 10000n ? "share-ok" : "share-error"}>
-              比例合计 {bpsToPercent(shareTotal)}%
-              {shareTotal === 10000n ? " · 校验通过" : " · 必须严格等于 100%"}
+              比例合计 {shareTotal === null ? "输入有误" : `${bpsToPercent(shareTotal)}%`}
+              {shareTotal === 10000n
+                ? " · 校验通过"
+                : shareTotal === null
+                  ? " · 请输入 0–100，最多两位小数"
+                  : " · 必须严格等于 100%"}
             </p>
           </section>
         );
