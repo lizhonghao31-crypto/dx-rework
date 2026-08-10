@@ -195,6 +195,9 @@ const canUseOrderIndex = (user: AuthorizedUser | null): boolean => elevated(user
 
 const workflowState = (status: ReworkStatus, key: WorkflowNodeKey): WorkflowNodeState => {
   if (status === "cancelled") return "future";
+  // `completed` is the terminal business fact: all numbered nodes, including
+  // 09 订单归档, must render as completed rather than leaving a false current node.
+  if (status === "completed") return "completed";
   if (currentNodeByStatus[status] === key) return "current";
   return statusRank[status] > nodeRank[key] ? "completed" : "future";
 };
