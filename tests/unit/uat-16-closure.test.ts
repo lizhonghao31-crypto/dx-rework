@@ -35,7 +35,9 @@ describe("UAT 1.6 closure regressions", () => {
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
       readFile("apps/api/src/access/routes.ts", "utf8"),
     ]);
-    expect(responsibility).toContain("round(share.amount,2)::text amount");
+    expect(responsibility).toContain("wage.payable_amount::text amount");
+    expect(responsibility).toContain("sum(wage.payable_amount)");
+    expect(responsibility).not.toContain("round(share.amount,2)::text amount");
     expect(external).toContain("新增并选择");
     expect(external).toContain("master-data/suppliers");
     expect(access).toContain('capability === "master_data:manage"');
@@ -60,5 +62,10 @@ describe("UAT 1.6 closure regressions", () => {
     expect(detailService).toContain("external_responsibility_case");
     expect(detailService).toContain("canDownloadBoundAttachment");
     expect(server).toContain("reworkBusinessDetailService.canDownloadBoundAttachment");
+    const settledWageMigration = await readFile(
+      "apps/api/migrations/0045_responsibility_settled_wage_base.sql",
+      "utf8",
+    );
+    expect(settledWageMigration).toContain("wage.payable_amount = NEW.base_member_share_amount");
   });
 });
