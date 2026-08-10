@@ -256,10 +256,12 @@ const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`
 export function ReworkDetailPage({
   reworkOrderId: providedReworkOrderId,
   focusedNode,
+  focusedExternalCaseId,
   returnToTodos = false,
 }: {
   reworkOrderId?: string;
   focusedNode?: WorkflowNodeKey;
+  focusedExternalCaseId?: string;
   returnToTodos?: boolean;
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? orderIdFromLocation();
@@ -369,7 +371,7 @@ export function ReworkDetailPage({
     if (selected.key === "responsibility_settlement") {
       const panels = [
         canSeeOwnFactory ? <OwnFactoryApprovalPanel key="own-factory" reworkOrderId={detail.reworkOrderId} /> : null,
-        canSeeExternal ? <ExternalResponsibilityPanel key="external" reworkOrderId={detail.reworkOrderId} /> : null,
+        canSeeExternal ? <ExternalResponsibilityPanel key="external" reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null,
       ].filter(Boolean);
       return panels.length ? <div className="rework-detail-responsibility">{panels}</div> : <NodePermissionNotice node={selected} />;
     }
