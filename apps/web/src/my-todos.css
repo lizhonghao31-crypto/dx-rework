@@ -1,0 +1,45 @@
+.my-todos-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.my-todo-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+}
+
+.my-todo-card h2 {
+  margin-top: var(--space-2);
+}
+
+.my-todo-card small,
+.my-todo-error {
+  display: block;
+}
+
+.my-todo-error {
+  color: var(--color-danger);
+  margin-top: var(--space-2);
+}
+
+.my-todos-state {
+  padding: var(--space-5);
+}
+
+.my-todos-complete {
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .my-todo-card {
+    grid-template-columns: 1fr;
+  }
+
+  .my-todo-card a,
+  .my-todo-card .dx-button {
+    width: 100%;
+  }
+}
