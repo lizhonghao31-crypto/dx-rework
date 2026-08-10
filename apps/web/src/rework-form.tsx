@@ -211,7 +211,7 @@ export function ReworkInitiationForm() {
     attachmentIds,
   });
 
-  const persistDraft = async (): Promise<ReworkOrderResponse> => {
+  const persistDraft = async (clearPendingSubmit = true): Promise<ReworkOrderResponse> => {
     const draftPayload = payload();
     const action = order ? `update:${order.reworkOrderId}` : "create";
     const body = order
@@ -229,7 +229,7 @@ export function ReworkInitiationForm() {
       },
     );
     pendingKey.current = null;
-    pendingSubmit.current = null;
+    if (clearPendingSubmit) pendingSubmit.current = null;
     setOrder(saved);
     setAttachmentIds(saved.attachmentIds);
     setMessage(saved.reworkNo ? `${saved.reworkNo} · 草稿已保存` : "草稿已安全保存");
@@ -261,7 +261,7 @@ export function ReworkInitiationForm() {
       const submitted = await executeReworkSubmit(
         order,
         pendingSubmit.current,
-        persistDraft,
+        () => persistDraft(false),
         (saved) => {
           const attempt: PendingSubmitAttempt = {
             reworkOrderId: saved.reworkOrderId,
