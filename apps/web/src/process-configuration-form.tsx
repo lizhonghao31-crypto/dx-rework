@@ -147,8 +147,11 @@ const payloadItems = (items: readonly ItemForm[]): SavePayloadItem[] => items.ma
   unitPrice: Number(item.unitPrice),
 }));
 
-export function ProcessConfigurationForm() {
-  const reworkOrderId = new URLSearchParams(window.location.search).get("rework");
+export function ProcessConfigurationForm({
+  reworkOrderId: providedReworkOrderId,
+}: { reworkOrderId?: string } = {}) {
+  const reworkOrderId = providedReworkOrderId
+    ?? new URLSearchParams(window.location.search).get("rework");
   const [user, setUser] = useState<User | null>(null);
   const [options, setOptions] = useState<ProcessConfigurationOptionsResponse>({ processes: [] });
   const [response, setResponse] = useState<ProcessConfigurationResponse | null>(null);
