@@ -129,9 +129,9 @@ const todoResponse = (row: TodoRow): TodoResponse => ({
   blockedReason: row.blocked_reason,
   orderContext: row.rework_status && row.rework_updated_at
     ? {
-        reworkNo: row.rework_no,
-        orderNo: row.order_no,
-        styleNo: row.style_no,
+        reworkNo: row.rework_no ?? null,
+        orderNo: row.order_no ?? null,
+        styleNo: row.style_no ?? null,
         status: row.rework_status,
         updatedAt: row.rework_updated_at.toISOString(),
       }
