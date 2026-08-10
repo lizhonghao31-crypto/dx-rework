@@ -118,7 +118,6 @@ export function ExternalEvidenceUploader({
           prepareTimeoutMilliseconds,
           `${file.name} 文件准备超时`,
         ));
-        );
         const sha256 = Array.from(
           digest,
           (byte) => byte.toString(16).padStart(2, "0"),
