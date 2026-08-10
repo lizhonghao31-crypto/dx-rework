@@ -345,7 +345,7 @@ export function ReworkDetailPage({
         <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : "未开始 · 可预览"}</StatusBadge>
         <h2>{selected.number} · {selected.label}</h2>
         <p>{selected.preview}</p>
-        <p>负责角色：{selected.ownerRole}　实际负责人：{selected.ownerName}</p>
+        <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
       </Surface>;
     }
     if (selected.key === "process_configuration" || selected.key === "ie_review") {
