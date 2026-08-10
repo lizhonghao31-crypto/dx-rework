@@ -2,6 +2,7 @@ import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import {
   AllocateExternalSuppliersSchema,
   CloseExternalDeductionCaseSchema,
+  CreateExternalTemporarySupplierSchema,
   CreateExternalDeductionEntrySchema,
   CreateExternalDeductionFollowUpSchema,
   CreateExternalResponsibilityRevisionSchema,
@@ -26,7 +27,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ExternalResponsibilityApplicationService } from "./external-responsibility-application-service.js";
 
-type HttpService = Pick<ExternalResponsibilityApplicationService, "listQueue" | "listSupplierOptions" | "get" | "getCase" | "allocateSuppliers" | "submit" | "payablesAccept" | "payablesReturn" | "followUp" | "recordDeduction" | "close" | "requestRevision" | "approveRevision" | "rejectRevision">;
+type HttpService = Pick<ExternalResponsibilityApplicationService, "listQueue" | "listSupplierOptions" | "createTemporarySupplier" | "get" | "getCase" | "allocateSuppliers" | "submit" | "payablesAccept" | "payablesReturn" | "followUp" | "recordDeduction" | "close" | "requestRevision" | "approveRevision" | "rejectRevision">;
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((value) => value.trim()).find((value) => value.startsWith("dx_rework_session="))?.slice(18);
 const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
 
@@ -49,6 +50,16 @@ export function registerExternalResponsibilityRoutes(app: FastifyInstance, depen
   app.get("/external-responsibilities/queue", async (request) => ExternalResponsibilityQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "external_responsibility:view"))));
   app.get("/rework-orders/:reworkOrderId/external-responsibilities", async (request) => ExternalResponsibilityBatchResponseSchema.parse(await dependencies.service.get(await actor(request, "external_responsibility:view"), parse(ExternalResponsibilityOrderParamsSchema, request.params).reworkOrderId)));
   app.get("/rework-orders/:reworkOrderId/external-responsibilities/supplier-options", async (request) => dependencies.service.listSupplierOptions(await actor(request, "external_responsibility:sign"), parse(ExternalResponsibilityOrderParamsSchema, request.params).reworkOrderId));
+  app.post("/rework-orders/:reworkOrderId/external-responsibilities/temporary-suppliers", async (request, reply) => {
+    const result = await dependencies.service.createTemporarySupplier(
+      await actor(request, "external_responsibility:sign"),
+      parse(ExternalResponsibilityOrderParamsSchema, request.params).reworkOrderId,
+      parse(CreateExternalTemporarySupplierSchema, request.body),
+      key(request),
+    );
+    if (result.reused) reply.header("idempotency-replayed", "true");
+    return reply.code(result.reused ? 200 : 201).send(result.value);
+  });
   app.get("/external-responsibility-cases/:caseId", async (request) => ExternalResponsibilityCaseResponseSchema.parse(await dependencies.service.getCase(await actor(request, "external_responsibility:view"), parse(ExternalResponsibilityCaseParamsSchema, request.params).caseId)));
   app.post("/external-responsibility-batches/:batchId/allocate-suppliers", async (request, reply) => { const result = await dependencies.service.allocateSuppliers(await actor(request, "external_responsibility:sign"), parse(ExternalResponsibilityBatchParamsSchema, request.params).batchId, parse(AllocateExternalSuppliersSchema, request.body), key(request)); if (result.reused) reply.header("idempotency-replayed", "true"); return ExternalResponsibilityBatchResponseSchema.parse(result.value); });
   app.post("/external-responsibility-cases/:caseId/submit", async (request, reply) => { const result = await dependencies.service.submit(await actor(request, "external_responsibility:sign"), parse(ExternalResponsibilityCaseParamsSchema, request.params).caseId, parse(SubmitExternalResponsibilityCaseSchema, request.body), key(request)); if (result.reused) reply.header("idempotency-replayed", "true"); return ExternalResponsibilityCaseResponseSchema.parse(result.value); });
