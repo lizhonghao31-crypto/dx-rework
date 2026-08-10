@@ -116,7 +116,6 @@ export function Shell({
   const isSystemAdmin = currentUser?.businessRoles?.includes("system_admin") === true;
   const hasRole = (role: string) => currentUser?.businessRoles?.includes(role) === true;
   const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
-  const managementAccess = isRoot || isOwner || hasCapability("dashboard:management:read");
   const initiationAccess = isRoot || isOwner || hasRole("quality_control") || hasCapability("rework:initiate");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
