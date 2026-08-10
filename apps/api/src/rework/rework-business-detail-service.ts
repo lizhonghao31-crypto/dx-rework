@@ -34,6 +34,17 @@ export type ReworkBusinessDetail = Readonly<{
   submittedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  attachments: readonly Readonly<{
+    attachmentId: string;
+    filename: string;
+    mimeType: string;
+  }>[];
+}>;
+
+type AttachmentRow = Readonly<{
+  attachment_id: string;
+  original_filename: string;
+  mime_type: string;
 }>;
 
 type DetailRow = Readonly<{
@@ -117,6 +128,14 @@ export class ReworkBusinessDetailService {
       throw new ApplicationError("FORBIDDEN", "当前用户与该返工单无业务查看关系", 403);
     }
 
+    const attachments = await this.database.query<AttachmentRow>(
+      `SELECT attachment_id,original_filename,mime_type
+       FROM attachments
+       WHERE entity_type='rework_order' AND entity_id=$1 AND status='ready'
+       ORDER BY created_at,attachment_id`,
+      [reworkOrderId],
+    );
+
     return {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
@@ -155,6 +174,11 @@ export class ReworkBusinessDetailService {
       submittedAt: row.submitted_at?.toISOString() ?? null,
       cancelledAt: row.cancelled_at?.toISOString() ?? null,
       cancelReason: row.cancel_reason,
+      attachments: attachments.rows.map((attachment) => ({
+        attachmentId: attachment.attachment_id,
+        filename: attachment.original_filename,
+        mimeType: attachment.mime_type,
+      })),
     };
   }
 
