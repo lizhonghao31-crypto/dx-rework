@@ -207,7 +207,9 @@ export const formatBusinessTime = (value: string | Date | null | undefined): str
   });
 };
 
-export const formatFileSize = (bytes: number): string => {
+export const formatFileSize = (value: number | string): string => {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "大小未知";
   if (bytes < 1024) return `${bytes} 字节`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
