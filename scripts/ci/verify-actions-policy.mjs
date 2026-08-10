@@ -35,9 +35,15 @@ for (const forbidden of [
 
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
-assert(full.includes("full-gate"), "Full Gate must require the full-gate label");
 assert(full.includes("contains(github.event.pull_request.labels.*.name, 'full-gate')"), "Full Gate label guard must remain explicit");
 assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
 assert(full.includes("synchronize"), "a labeled PR must re-run Full Gate when its Head changes");
+assert(full.includes("Classify Full Gate risk from exact PR diff"), "Full Gate must classify the exact PR diff before heavy work");
+assert(full.includes("MIGRATION_SENSITIVE"), "Full Gate must retain migration-sensitive escalation");
+assert(full.includes("DEPLOYMENT_SENSITIVE"), "Full Gate must retain deployment-sensitive escalation");
+assert(full.includes("DB_REQUIRED"), "Full Gate must gate PostgreSQL startup behind exact diff classification");
+assert(!/^\s{4}services:/m.test(full), "Full Gate must not allocate PostgreSQL as an unconditional job service");
+assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must be conditional");
+assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must be conditional");
 
 console.log("ACTIONS_USAGE_POLICY_OK");
