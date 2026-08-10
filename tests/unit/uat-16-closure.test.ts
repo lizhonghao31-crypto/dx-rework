@@ -13,6 +13,8 @@ describe("UAT 1.6 closure regressions", () => {
     expect(detail).toContain("处理人：");
     expect(detail).toContain("处理时间：");
     expect(detail).toContain("处理意见：");
+    expect(detail).toContain('action.includes("process_configuration.review") || action.includes("ie_review")');
+    expect(detail).toContain('action.includes(".complete") || action.includes(".archive")');
     expect(detail).toContain("已上传附件");
     for (const field of [
       "customerSupplyCode",
