@@ -11,6 +11,7 @@ import {
 } from "@dx-rework/contracts/reporting";
 
 import { createWebUrls } from "../../url-contract.js";
+import { shanghaiBusinessDate } from "../business-date.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -71,12 +72,5 @@ export const reportExportUrl = (
 
 export const reportingPageUrl = (path: string): string => pageUrl(path);
 
-const businessDateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Singapore",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-export const reportingBusinessDate = (value = new Date()): string => businessDateFormatter.format(value);
+export const reportingBusinessDate = (value = new Date()): string => shanghaiBusinessDate(value);
 export const reportingBusinessMonthStart = (value = new Date()): string => `${reportingBusinessDate(value).slice(0, 7)}-01`;
