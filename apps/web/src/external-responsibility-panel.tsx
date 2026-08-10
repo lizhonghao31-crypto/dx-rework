@@ -95,16 +95,6 @@ const requiredSupplierType = (
       ? "fabric"
       : "embroidery_washing";
 
-const temporarySupplierCode = (type: Supplier["supplierType"]): string => {
-  const prefix: Record<Supplier["supplierType"], string> = {
-    factory: "FAC",
-    embroidery_washing: "EMB",
-    fabric: "FAB",
-    other: "OTH",
-  };
-  return `TMP-${prefix[type]}-${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
-};
-
 const requestError = async (response: Response): Promise<string> => {
   try {
     const body = await response.json() as { error?: { message?: string } };
@@ -220,37 +210,42 @@ export function ExternalResponsibilityPanel({
       return;
     }
     const supplierType = requiredSupplierType(item.responsibilityType);
+    const signature = `temporary-supplier:${reworkOrderId}:${supplierType}:${supplierName}`;
+    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
+    pendingMutationKeys.current[signature] = idempotencyKey;
     setBusy(true);
     setMessage("");
     try {
-      const createResponse = await fetch(apiUrl("master-data/suppliers"), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
+      const createResponse = await fetch(
+        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/temporary-suppliers`),
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            "idempotency-key": idempotencyKey,
+          },
+          body: JSON.stringify({ supplierType, supplierName }),
         },
-        body: JSON.stringify({
-          supplierCode: temporarySupplierCode(supplierType),
-          supplierType,
-          supplierName,
-          active: true,
-          changeReason: `外部责任处理临时新增：${reworkOrderId}`,
-        }),
-      });
+      );
       if (!createResponse.ok) throw new Error(await requestError(createResponse));
+      const created = await createResponse.json() as Supplier;
       const optionsResponse = await fetch(
         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
         { credentials: "include", headers: { accept: "application/json" } },
       );
       if (!optionsResponse.ok) throw new Error(await requestError(optionsResponse));
       const catalog = await optionsResponse.json() as Supplier[];
-      const created = catalog.find(
-        (supplier) => supplier.supplierType === supplierType && supplier.supplierName === supplierName,
+      const selected = catalog.find(
+        (supplier) => supplier.supplierId === created.supplierId,
       );
-      if (!created) throw new Error("供应商已新增，但未能重新读取可选名录，请刷新后重试。");
+      if (!selected) {
+        throw new Error("供应商已新增，但未能重新读取可选名录，请刷新后重试。");
+      }
+      delete pendingMutationKeys.current[signature];
       setSuppliers(catalog);
-      setSelection((current) => ({ ...current, [item.externalItemId]: created.supplierId }));
+      setSelection((current) => ({ ...current, [item.externalItemId]: selected.supplierId }));
       setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: "" }));
       setMessage(`${supplierName} 已新增到供应商名录并自动选中。`);
     } catch (error: unknown) {
