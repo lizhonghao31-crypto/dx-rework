@@ -597,18 +597,13 @@ export class ReworkInitiationService {
   private ensureComplete(row: ReworkOrderRow): void {
     if (
       !row.style_no
-      || !row.customer_supply_code
-      || !row.factory_style_no
-      || !row.order_quantity
       || !row.merchandiser_user_id
       || !row.processing_factory_type
-      || !row.rework_reason
-      || !row.rework_process
       || !row.problem_part
       || !row.problem_description
       || !row.rework_quantity
     ) {
-      throw new ApplicationError("VALIDATION_ERROR", "请完整填写款号、客供代号、工厂货号、订单数量、跟单、加工厂、返工原因、返工工序、问题和返工数量", 400);
+      throw new ApplicationError("VALIDATION_ERROR", "请完整填写款号、跟单、加工厂、问题和返工数量", 400);
     }
   }
 
@@ -827,8 +822,6 @@ export class ReworkInitiationService {
       processingFactory: factoryFromRow(row),
       reworkReason: row.rework_reason,
       reworkProcess: row.rework_process,
-      reworkReason: row.rework_reason,
-      reworkProcess: row.rework_process,
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
@@ -874,6 +867,8 @@ export class ReworkInitiationService {
         : factory?.type === "own_factory"
           ? { type: "own_factory" }
           : null,
+      reworkReason: row.rework_reason,
+      reworkProcess: row.rework_process,
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
