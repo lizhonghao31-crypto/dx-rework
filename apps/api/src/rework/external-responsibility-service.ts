@@ -243,6 +243,12 @@ export class ExternalResponsibilityService {
       return;
     }
 
+    const handler = await client.query<{ permitted: boolean }>(
+      "SELECT external_responsibility_can_sign($1,$2,'processing_factory') permitted",
+      [order.merchandiser_user_id, order.rework_order_id],
+    );
+    if (handler.rows[0]?.permitted !== true) return;
+
     const supplier = await client.query<{
       supplier_code: string;
       supplier_name: string;
