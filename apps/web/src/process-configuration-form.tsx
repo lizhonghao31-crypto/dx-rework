@@ -98,6 +98,9 @@ async function request<T>(
   return schema.parse(await response.json());
 }
 
+const formatUnitPrice = (value: number): string =>
+  value.toFixed(3).replace(/\.?0+$/, "");
+
 const toItem = (
   item: NonNullable<ProcessConfigurationResponse["configuration"]>["items"][number],
 ): ItemForm => ({
@@ -106,7 +109,7 @@ const toItem = (
   customProcessName: item.source === "custom" ? item.processName : "",
   plannedQuantity: item.plannedQuantity.toString(),
   pricingUnit: item.pricingUnit,
-  unitPrice: item.unitPrice.toFixed(2),
+  unitPrice: formatUnitPrice(item.unitPrice),
 });
 
 const statusLabel = (response: ProcessConfigurationResponse): string => {
@@ -117,7 +120,7 @@ const statusLabel = (response: ProcessConfigurationResponse): string => {
 };
 
 const oneDecimal = /^\d+(?:\.\d)?$/;
-const twoDecimals = /^\d+(?:\.\d{1,2})?$/;
+const threeDecimals = /^\d+(?:\.\d{1,3})?$/;
 
 const validateItemForms = (items: readonly ItemForm[]): string | null => {
   if (items.length === 0) return "至少需要配置一道工序。";
@@ -131,8 +134,8 @@ const validateItemForms = (items: readonly ItemForm[]): string | null => {
     if (!oneDecimal.test(item.plannedQuantity.trim())) return `${label}：计划数量最多保留一位小数。`;
     if (!item.unitPrice.trim()) return `${label}：请输入单价。`;
     const unitPrice = Number(item.unitPrice);
-    if (!Number.isFinite(unitPrice) || unitPrice < 0.01) return `${label}：单价不能低于 0.01 元。`;
-    if (!twoDecimals.test(item.unitPrice.trim())) return `${label}：单价最多保留两位小数。`;
+    if (!Number.isFinite(unitPrice) || unitPrice < 0.001) return `${label}：单价不能低于 0.001 元。`;
+    if (!threeDecimals.test(item.unitPrice.trim())) return `${label}：单价最多保留三位小数。`;
   }
   return null;
 };
@@ -451,7 +454,7 @@ export function ProcessConfigurationForm({
           <h2>工序、计划数量与单价</h2>
           <p>
             {reworkQuantity === null ? "计划数量按实际工序填写。" : `返工总量 ${reworkQuantity} 件；按件工序默认带入该数量，可按实际工序调整。`}
-            计划数量 / 工时最多保留 1 位小数；单价最多保留 2 位，最低 0.01 元。
+            计划数量 / 工时最多保留 1 位小数；单价最多保留 3 位，最低 0.001 元。
           </p>
         </div>
         <Button onClick={() => setItems((current) => [...current, emptyItem(reworkQuantity)])} disabled={busy}>增加工序</Button>
@@ -487,7 +490,7 @@ export function ProcessConfigurationForm({
             <InsetField label={item.pricingUnit === "piece" ? "计划数量（件）" : "计划工时（小时）"} type="number" min="0.1" step="0.1" inputMode="decimal" value={item.plannedQuantity} onChange={(event) => setItem(index, { plannedQuantity: event.target.value })} disabled={busy} />
             <SelectField label="计价单位"><select value={item.pricingUnit} onChange={(event) => setPricingUnit(index, event.target.value as ItemForm["pricingUnit"])} disabled={busy}><option value="piece">件</option><option value="hour">小时</option></select></SelectField>
           </div>
-          <InsetField label="单价（元）" type="number" min="0.01" step="0.01" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="例如：0.55" />
+          <InsetField label="单价（元）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="例如：0.555" />
         </div>)}
       </div>
       {response?.reworkStatus === "pending_task_assignment" && <InsetField label="变更原因" value={changeReason} onChange={(event) => setChangeReason(event.target.value)} disabled={busy} placeholder="说明改价或改数量的业务原因" />}
@@ -502,7 +505,7 @@ export function ProcessConfigurationForm({
       <div className="process-readonly-list">
         {configuration.items.map((item) => <div key={item.configurationItemId}>
           <b>{item.processName}</b>
-          <small>{item.source === "custom" ? "自定义工序" : "公共工序"} · 计划 {item.plannedQuantity} {item.pricingUnit === "piece" ? "件" : "小时"} · ¥{item.unitPrice.toFixed(2)} / {item.pricingUnit === "piece" ? "件" : "小时"}</small>
+          <small>{item.source === "custom" ? "自定义工序" : "公共工序"} · 计划 {item.plannedQuantity} {item.pricingUnit === "piece" ? "件" : "小时"} · ¥{formatUnitPrice(item.unitPrice)} / {item.pricingUnit === "piece" ? "件" : "小时"}</small>
         </div>)}
       </div>
     </Surface>}
