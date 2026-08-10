@@ -39,12 +39,26 @@ export type ReworkBusinessDetail = Readonly<{
     filename: string;
     mimeType: string;
   }>[];
+  workflowHistory: readonly Readonly<{
+    action: string;
+    handledBy: string;
+    handledAt: string;
+    remark: string | null;
+  }>[];
 }>;
 
 type AttachmentRow = Readonly<{
   attachment_id: string;
   original_filename: string;
   mime_type: string;
+}>;
+
+type WorkflowHistoryRow = Readonly<{
+  action: string;
+  actor_name: string | null;
+  actor_id: string;
+  created_at: Date;
+  reason: string | null;
 }>;
 
 type DetailRow = Readonly<{
@@ -136,6 +150,19 @@ export class ReworkBusinessDetailService {
       [reworkOrderId],
     );
 
+    const workflowHistory = await this.database.query<WorkflowHistoryRow>(
+      `SELECT event.action,event.actor_id,event.created_at,event.reason,
+              actor.display_name actor_name
+       FROM operation_events event
+       LEFT JOIN app_users actor ON actor.id=event.actor_id
+       WHERE (
+         event.entity_type='rework_order' AND event.entity_id=$1
+       ) OR event.after_state->>'reworkOrderId'=$1
+       ORDER BY event.created_at,event.event_id
+       LIMIT 200`,
+      [reworkOrderId],
+    );
+
     return {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
@@ -178,6 +205,12 @@ export class ReworkBusinessDetailService {
         attachmentId: attachment.attachment_id,
         filename: attachment.original_filename,
         mimeType: attachment.mime_type,
+      })),
+      workflowHistory: workflowHistory.rows.map((event) => ({
+        action: event.action,
+        handledBy: event.actor_name ?? event.actor_id,
+        handledAt: event.created_at.toISOString(),
+        remark: event.reason,
       })),
     };
   }
