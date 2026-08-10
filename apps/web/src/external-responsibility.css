@@ -127,6 +127,11 @@
   font-weight: 700;
 }
 
+.external-upload-error {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
 @media (max-width: 800px) {
   .external-queue-summary {
     align-items: stretch;
