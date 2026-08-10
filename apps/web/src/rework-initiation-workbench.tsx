@@ -60,7 +60,7 @@ export function ReworkInitiationWorkbench() {
         credentials: "include",
         cache: "no-store",
         headers: { accept: "application/json" },
-        signal: signal ?? null,
+        signal,
       });
       if (!response.ok) throw new Error(await errorMessage(response));
       const next = parseList(await response.json())
