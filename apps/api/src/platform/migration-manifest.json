@@ -175,6 +175,10 @@
     {
       "version": "0044_uat_initiation_context",
       "checksum": "3a16b7a7d980609efd4bd706b775714868c13efbaf43019caaf4d9d295542de0"
+    },
+    {
+      "version": "0045_responsibility_settled_wage_base",
+      "checksum": "54605ed54ef4b8bceda87aa25bd69fa1c8111adf0221ef2b94320d3c0523ded3"
     }
   ]
 }
