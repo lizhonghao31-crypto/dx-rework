@@ -34,6 +34,11 @@ type TodoRow = Readonly<{
   reminder_count: number;
   status: TodoResponse["status"];
   blocked_reason: string | null;
+  rework_no?: string | null;
+  order_no?: string | null;
+  style_no?: string | null;
+  rework_status?: string | null;
+  rework_updated_at?: Date | null;
   version: number;
   created_at: Date;
   updated_at: Date;
@@ -122,6 +127,15 @@ const todoResponse = (row: TodoRow): TodoResponse => ({
   reminderCount: row.reminder_count,
   status: row.status,
   blockedReason: row.blocked_reason,
+  orderContext: row.rework_status && row.rework_updated_at
+    ? {
+        reworkNo: row.rework_no,
+        orderNo: row.order_no,
+        styleNo: row.style_no,
+        status: row.rework_status,
+        updatedAt: row.rework_updated_at.toISOString(),
+      }
+    : null,
   version: row.version,
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),
@@ -158,13 +172,20 @@ export class TodoService {
   async listForActor(actor: TrustedActorContext): Promise<TodoResponse[]> {
     this.requireCapability(actor, "todo:view");
     const result = await this.database.query<TodoRow>(
-      `SELECT todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
+      `SELECT todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,todos.entity_type,todos.entity_id,
               recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
-              due_at,reminder_count,status,blocked_reason,version,created_at,updated_at
-       FROM rework_todos
-       WHERE recipient_user_id=$1
-       ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END,
-                due_at NULLS LAST,created_at DESC,todo_id DESC`,
+              due_at,reminder_count,todos.status,blocked_reason,todos.version,todos.created_at,todos.updated_at,
+              orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
+              orders.updated_at rework_updated_at
+       FROM rework_todos todos
+       LEFT JOIN rework_orders orders
+         ON orders.rework_order_id=COALESCE(
+           NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
+           CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
+         )
+       WHERE todos.recipient_user_id=$1
+       ORDER BY CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END,
+                due_at NULLS LAST,todos.created_at DESC,todos.todo_id DESC`,
       [actor.actorId],
     );
     return result.rows.map(todoResponse);
