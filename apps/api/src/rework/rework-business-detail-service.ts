@@ -9,13 +9,18 @@ export type ReworkBusinessDetail = Readonly<{
   reworkNo: string | null;
   status: ReworkOrderStatus;
   styleNo: string | null;
+  customerSupplyCode: string | null;
+  factoryStyleNo: string | null;
   orderNo: string | null;
+  orderQuantity: number | null;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
     supplierId: string | null;
     displayName: string;
   }> | null;
+  reworkReason: string | null;
+  reworkProcess: string | null;
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
@@ -36,12 +41,17 @@ type DetailRow = Readonly<{
   rework_no: string | null;
   status: ReworkOrderStatus;
   style_no: string | null;
+  customer_supply_code: string | null;
+  factory_style_no: string | null;
   order_no: string | null;
+  order_quantity: number | null;
   merchandiser_user_id: string | null;
   merchandiser_name: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
   processing_factory_supplier_id: string | null;
   supplier_name: string | null;
+  rework_reason: string | null;
+  rework_process: string | null;
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: string | null;
@@ -73,11 +83,13 @@ export class ReworkBusinessDetailService {
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkBusinessDetail> {
     const result = await this.database.query<DetailRow>(
       `SELECT
-         orders.rework_order_id,orders.rework_no,orders.status,orders.style_no,orders.order_no,
+         orders.rework_order_id,orders.rework_no,orders.status,orders.style_no,
+         orders.customer_supply_code,orders.factory_style_no,orders.order_no,orders.order_quantity,
          orders.merchandiser_user_id,merchandiser.display_name merchandiser_name,
          orders.processing_factory_type,orders.processing_factory_supplier_id,
-         supplier.supplier_name,orders.problem_part,orders.problem_description,
-         orders.rework_quantity::text,orders.created_by,creator.display_name creator_name,
+         supplier.supplier_name,orders.rework_reason,orders.rework_process,
+         orders.problem_part,orders.problem_description,orders.rework_quantity::text,
+         orders.created_by,creator.display_name creator_name,
          latest_configuration.created_by configuration_created_by,
          configuration_creator.display_name configuration_creator_name,
          orders.created_at,orders.updated_at,orders.submitted_at,orders.cancelled_at,orders.cancel_reason
@@ -110,7 +122,10 @@ export class ReworkBusinessDetailService {
       reworkNo: row.rework_no,
       status: row.status,
       styleNo: row.style_no,
+      customerSupplyCode: row.customer_supply_code,
+      factoryStyleNo: row.factory_style_no,
       orderNo: row.order_no,
+      orderQuantity: row.order_quantity,
       merchandiser: row.merchandiser_user_id && row.merchandiser_name
         ? { userId: row.merchandiser_user_id, displayName: row.merchandiser_name }
         : null,
@@ -123,6 +138,8 @@ export class ReworkBusinessDetailService {
               displayName: row.supplier_name ?? "加工厂资料已变更",
             }
           : null,
+      reworkReason: row.rework_reason,
+      reworkProcess: row.rework_process,
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
