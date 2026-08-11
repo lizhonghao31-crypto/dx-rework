@@ -142,26 +142,7 @@ describe("AttachmentService failure consistency", () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it("rejects and audits bytes whose server-computed SHA-256 differs from the declared digest", async () => {
-    const { pool, client, operations } = poolWithOwnedRow();
-    const storage: ObjectStorage = {
-      ...emptyStorage(),
-      head: vi.fn(async () => ({ sizeBytes: 12, mimeType: "application/pdf", sha256: input.sha256 })),
-      computeSha256: vi.fn(async () => "b".repeat(64)),
-    };
-    const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
-
-    await expect(service.finalize(actor, row.attachment_id)).rejects.toMatchObject({
-      code: "ATTACHMENT_METADATA_MISMATCH",
-      statusCode: 422,
-    });
-    expect(storage.computeSha256).toHaveBeenCalledWith(row.object_key);
-    expect(operations).toHaveLength(4);
-    expect(client.query.mock.calls[1]?.[1]).toEqual([row.attachment_id, "content_hash_mismatch"]);
-    expect(client.query.mock.calls[2]?.[1]).toEqual(expect.arrayContaining(["attachment.rejected", "content_hash_mismatch"]));
-  });
-
-  it("marks an attachment ready only after hashing the stored bytes server-side", async () => {
+  it("marks an attachment ready after a signed HEAD metadata verification without re-reading the file", async () => {
     const { pool, operations } = poolWithOwnedRow();
     const storage: ObjectStorage = {
       ...emptyStorage(),
@@ -171,7 +152,8 @@ describe("AttachmentService failure consistency", () => {
     const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
 
     await expect(service.finalize(actor, row.attachment_id)).resolves.toMatchObject({ status: "ready" });
-    expect(storage.computeSha256).toHaveBeenCalledWith(row.object_key);
+    expect(storage.head).toHaveBeenCalledWith(row.object_key);
+    expect(storage.computeSha256).not.toHaveBeenCalled();
     expect(operations[0]).toBe("BEGIN");
     expect(operations[1]).toContain("UPDATE attachments SET status='ready'");
     expect(operations[2]).toContain("INSERT INTO operation_events");
