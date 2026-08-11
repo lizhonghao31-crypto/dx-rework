@@ -4,6 +4,7 @@ import {
   ReworkOrderParamsSchema,
   ReworkOrdersQuerySchema,
   SubmitReworkOrderSchema,
+  SupplementReworkOrderImagesSchema,
   TransitionReworkOrderSchema,
   UpdateReworkDraftSchema,
   type ReworkInitiationOptionsResponse,
@@ -96,6 +97,17 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
   app.put<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/draft", async (request, reply) => {
     const params = parse(ReworkOrderParamsSchema, request.params);
     const result = await dependencies.service.updateDraft(await actor(request), params.reworkOrderId, parse(UpdateReworkDraftSchema, request.body), idempotencyKey(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return result.value;
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/supplemental-images", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    const result = await dependencies.service.supplementOrderImages(
+      await actor(request),
+      params.reworkOrderId,
+      parse(SupplementReworkOrderImagesSchema, request.body),
+      idempotencyKey(request),
+    );
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return result.value;
   });
