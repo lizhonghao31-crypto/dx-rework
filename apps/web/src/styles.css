@@ -283,11 +283,11 @@ dd { margin: 8px 0 0; overflow-wrap: anywhere; font-size: 18px; font-weight: 700
     font-weight: 700;
   }
 
-  .rework-initiation-optional[open] summary > small {
+  .rework-initiation-optional details[open] summary > small {
     font-size: 0;
   }
 
-  .rework-initiation-optional[open] summary > small::after {
+  .rework-initiation-optional details[open] summary > small::after {
     content: "收起";
     font-size: 12px;
   }
