@@ -1,10 +1,11 @@
+import { BUSINESS_TIME_ZONE } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkRow, ReportType } from "@dx-rework/contracts/reporting";
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 
-export const TIMEZONE = "Asia/Singapore" as const;
+export const TIMEZONE = BUSINESS_TIME_ZONE;
 export const ZERO = "0.00";
 
 export type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
