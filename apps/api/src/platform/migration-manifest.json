@@ -183,6 +183,10 @@
     {
       "version": "0046_external_temporary_supplier_scope",
       "checksum": "06529ad63fbd65d28dcce2fb2ee8f05421f207c0cd9226611cc1380a76a20b92"
+    },
+    {
+      "version": "0047_responsibility_rounding_reconciliation",
+      "checksum": "262f566e631ddc96205454ba9feece52fc2c755a3ece48413719e32fc77f1ba3"
     }
   ]
 }

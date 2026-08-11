@@ -190,8 +190,31 @@ export class ResponsibilityDeterminationService {
     const order =
       orderResult.rows[0] ?? fail("返工单不存在", 404, "NOT_FOUND");
 
+    const roundingAdjustmentsAvailable =
+      await this.roundingAdjustmentsAvailable(executor);
     const determinationResult = await executor.query<DeterminationRow>(
-      `SELECT d.*,
+      roundingAdjustmentsAvailable
+        ? `SELECT d.*,
+              (
+                d.calculation_total + COALESCE((
+                  SELECT sum(adjustment.adjustment_amount)
+                  FROM rework_responsibility_rounding_adjustments adjustment
+                  WHERE adjustment.determination_id=d.determination_id
+                ),0)
+              )::text calculation_total,
+              EXISTS(
+                SELECT 1
+                FROM rework_responsibility_high_multiplier_confirmations confirmation
+                WHERE confirmation.determination_id=d.determination_id
+              ) confirmed
+       FROM rework_responsibility_determinations d
+       WHERE d.rework_order_id=$1
+         AND NOT EXISTS(
+           SELECT 1
+           FROM rework_responsibility_determinations successor
+           WHERE successor.replaces_determination_id=d.determination_id
+         )`
+        : `SELECT d.*,
               EXISTS(
                 SELECT 1
                 FROM rework_responsibility_high_multiplier_confirmations confirmation
@@ -211,7 +234,49 @@ export class ResponsibilityDeterminationService {
     const processRows: ProcessViewRow[] = determination
       ? (
           await executor.query<ProcessViewRow>(
-            `SELECT process.*,
+            roundingAdjustmentsAvailable
+              ? `SELECT
+                    process.configuration_item_id,
+                    process.process_name_snapshot,
+                    process.pricing_unit_snapshot,
+                    process.multiplier::text,
+                    process.high_multiplier_reason,
+                    process.base_amount::text,
+                    (
+                      process.responsibility_amount +
+                      COALESCE(adjustment.adjustment_amount,0)
+                    )::text responsibility_amount,
+                    COALESCE(
+                      json_agg(
+                        json_build_object(
+                          'responsibilityType',allocation.responsibility_type,
+                          'shareBps',allocation.share_bps,
+                          'roundedAmount',(
+                            allocation.rounded_amount +
+                            CASE
+                              WHEN allocation.responsibility_type =
+                                adjustment.responsibility_type
+                              THEN COALESCE(adjustment.adjustment_amount,0)
+                              ELSE 0
+                            END
+                          )::text
+                        )
+                        ORDER BY allocation.responsibility_type
+                      ) FILTER (WHERE allocation.responsibility_type IS NOT NULL),
+                      '[]'
+                    ) allocations
+             FROM rework_responsibility_processes process
+             LEFT JOIN rework_responsibility_allocations allocation
+               USING(determination_id,configuration_item_id)
+             LEFT JOIN rework_responsibility_rounding_adjustments adjustment
+               USING(determination_id,configuration_item_id)
+             WHERE process.determination_id=$1
+             GROUP BY
+               process.determination_id,
+               process.configuration_item_id,
+               adjustment.adjustment_amount,
+               adjustment.responsibility_type`
+              : `SELECT process.*,
                     COALESCE(
                       json_agg(
                         json_build_object(
@@ -465,6 +530,15 @@ export class ResponsibilityDeterminationService {
         return this.get(actor, orderId, client);
       },
     );
+  }
+
+  private async roundingAdjustmentsAvailable(
+    client: Pick<Pool, "query"> | PoolClient,
+  ): Promise<boolean> {
+    const result = await client.query<{ available: boolean }>(
+      "SELECT to_regclass('rework_responsibility_rounding_adjustments') IS NOT NULL AS available",
+    );
+    return result.rows[0]?.available === true;
   }
 
   private async settledWageItemsAvailable(
