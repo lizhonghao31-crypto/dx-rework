@@ -191,6 +191,10 @@
     {
       "version": "0048_uat_systemic_closure",
       "checksum": "7f19f5b51e71738156c427ca1f1eaf9ef5ee486ed93fd972d42289da945fe422"
+    },
+    {
+      "version": "0049_post_creation_order_image_binding",
+      "checksum": "e4addfb490a18243e0b45600e2a1b49b8c1c6c3584aa3e8f0dc6c5dbb114a908"
     }
   ]
 }
