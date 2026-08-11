@@ -352,10 +352,8 @@ export function ReworkInitiationForm() {
     }
 
     setUploading(true);
-    setMessage(`正在优化并上传 ${selected.length} 份 QC 附件…`);
+    setMessage(`正在上传 ${selected.length} 份 QC 附件…`);
     const uploadConcurrency = currentQcUploadConcurrency();
-    const uploadStartedAt = performance.now();
-    let firstUploadStartedAt: number | null = null;
     let completedUploadCount = 0;
     try {
       const uploaded = await prepareAndUploadWithConcurrency(selected, uploadConcurrency, async (file, index) => {
@@ -363,7 +361,6 @@ export function ReworkInitiationForm() {
         const prepared = await prepareAttachmentForUpload(file);
         return { file: prepared, sha256: await sha256Hex(prepared) };
       }, async ({ file, sha256 }, _sourceFile, index): Promise<UploadedAttachment> => {
-        if (firstUploadStartedAt === null) firstUploadStartedAt = performance.now();
         setMessage(`正在上传第 ${index + 1}/${selected.length} 份 QC 附件…`);
         const intent = await request(
           "tools/attachments/upload-intents",
@@ -403,9 +400,7 @@ export function ReworkInitiationForm() {
       setAttachmentIds(nextIds);
       setUploadedAttachments((current) => [...current, ...uploaded]);
       pendingKey.current = null;
-      const firstUploadSeconds = ((firstUploadStartedAt ?? uploadStartedAt) - uploadStartedAt) / 1_000;
-      const totalSeconds = (performance.now() - uploadStartedAt) / 1_000;
-      setMessage(`${nextIds.length} 份 QC 附件已就绪（首份 ${firstUploadSeconds.toFixed(1)} 秒开始上传，本次 ${totalSeconds.toFixed(1)} 秒），请保存草稿`);
+      setMessage(`${nextIds.length} 份 QC 附件已上传，请保存草稿`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "附件上传失败");
     } finally {
@@ -597,11 +592,11 @@ export function ReworkInitiationForm() {
             {attachmentIds.length} 份
           </StatusBadge>
         </div>
-        <p>支持 JPG、PNG、WebP 与 PDF；每张返工单最多 {MAX_REWORK_ATTACHMENTS} 张。图片会先在本机压缩，保留清晰度后再上传。</p>
+        <p>支持 JPG、PNG、WebP 与 PDF；每张返工单最多 {MAX_REWORK_ATTACHMENTS} 份。</p>
         {!formDisabled && (
           <>
             <label className="qc-file-button">
-              <span>{uploading ? "正在优化并上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? `已达到 ${MAX_REWORK_ATTACHMENTS} 张上限` : "选择 QC 图片 / PDF"}</span>
+              <span>{uploading ? "正在上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? `已达到 ${MAX_REWORK_ATTACHMENTS} 份上限` : "选择 QC 图片 / PDF"}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
