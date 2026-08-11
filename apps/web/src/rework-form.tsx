@@ -473,6 +473,7 @@ export function ReworkInitiationForm() {
             disabled={formDisabled}
             onChange={(event) => setForm({ ...form, styleNo: event.target.value })}
           />
+          <small className="rework-initiation-style-hint">一张返工单一个款号</small>
           <label className="dx-field">
             <span>订单跟单（必填）</span>
             <span className="dx-field__control search-select-control">
