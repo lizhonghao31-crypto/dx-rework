@@ -1,3 +1,4 @@
+import { businessCellValue, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
 import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
@@ -106,12 +107,15 @@ export class WageExportService {
       [period.status === "locked" ? "正式月结文件" : "未锁定预览"],
       ["工资月份","工人稳定ID","工人姓名快照","正式工/临时工","返工单号","款号","工序","数量/工时","单位","单价","个人/集体","集体成员人数","成员快照","组总额","高精度个人份额","正式个人金额","调整金额","最终金额","尾部初核","行政复核","月结状态","锁定人","锁定时间"],
       ...lines.rows.map((line) => [
-        line.period_month.slice(0, 7),line.person_id,line.person_name,line.person_type,
-        line.rework_no,line.style_no,line.process_name,line.quantity,line.unit,
-        line.unit_price,line.assignment_mode,line.member_count,JSON.stringify(line.member_snapshot),
+        line.period_month.slice(0, 7),line.person_id,line.person_name,
+        businessCellValue("personType", line.person_type),
+        line.rework_no,line.style_no,line.process_name,line.quantity,
+        businessCellValue("unit", line.unit),line.unit_price,
+        businessCellValue("assignmentMode", line.assignment_mode),line.member_count,
+        JSON.stringify(translateTechnicalDetails(line.member_snapshot)),
         line.group_amount,line.exact_share,line.original_amount,line.adjustment_amount,
-        line.final_amount,tail,admin,period.status,period.locked_by,
-        period.locked_at?.toISOString() ?? "",
+        line.final_amount,tail,admin,businessCellValue("periodStatus", period.status),
+        period.locked_by,businessCellValue("lockedAt", period.locked_at?.toISOString() ?? ""),
       ]),
     ];
     const summaries = new Map<string, { name: string; type: string; original: bigint; adjustment: bigint; final: bigint }>();
@@ -127,7 +131,7 @@ export class WageExportService {
     if (money(total) !== period.final_total) fail("工资导出明细合计与期间总额不一致");
     const summaryRows: Cell[][] = [
       ["工资月份","工人稳定ID","工人姓名快照","人员类型","原始金额","调整金额","最终金额"],
-      ...[...summaries.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([id, value]) => [period.period_month.slice(0, 7),id,value.name,value.type,money(value.original),money(value.adjustment),money(value.final)]),
+      ...[...summaries.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([id, value]) => [period.period_month.slice(0, 7),id,value.name,businessCellValue("personType", value.type),money(value.original),money(value.adjustment),money(value.final)]),
       ["合计","","","",money([...summaries.values()].reduce((sum, value) => sum + value.original, 0n)),money([...summaries.values()].reduce((sum, value) => sum + value.adjustment, 0n)),money(total)],
     ];
     const month = period.period_month.slice(0, 7);
