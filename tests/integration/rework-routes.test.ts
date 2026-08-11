@@ -48,6 +48,7 @@ const create = (
   const service = {
     createDraft: vi.fn(async () => ({ value: response, reused: false })),
     updateDraft: vi.fn(async () => ({ value: { ...response, version: 2 }, reused: false })),
+    supplementOrderImages: vi.fn(async () => ({ value: { ...response, attachmentIds: ["00000000-0000-4000-8000-000000000011"], version: 2 }, reused: false })),
     submit: vi.fn(async () => ({
       value: { ...response, reworkNo: "RW-2026-0802-001", status: "pending_process_configuration", version: 2 },
       reused: false,
@@ -167,6 +168,43 @@ describe("rework initiation routes", () => {
       "00000000-0000-4000-8000-000000000010",
       { expectedVersion: 1, orderNo: null, reworkQuantity: 281 },
       "update-1",
+    );
+  });
+
+  it("binds only non-empty supplemental image batches through the controlled route", async () => {
+    const { app, service } = create();
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/supplemental-images",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "supplement-invalid-1",
+      },
+      payload: { expectedVersion: 1, attachmentIds: [] },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const updated = await app.inject({
+      method: "POST",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/supplemental-images",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "supplement-1",
+      },
+      payload: {
+        expectedVersion: 1,
+        attachmentIds: ["00000000-0000-4000-8000-000000000011"],
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(service.supplementOrderImages).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "rework:initiate" }),
+      "00000000-0000-4000-8000-000000000010",
+      {
+        expectedVersion: 1,
+        attachmentIds: ["00000000-0000-4000-8000-000000000011"],
+      },
+      "supplement-1",
     );
   });
 
