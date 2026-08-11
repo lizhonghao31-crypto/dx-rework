@@ -44,6 +44,7 @@ type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkStatus;
+  version: number;
   styleNo: string | null;
   customerSupplyCode: string | null;
   factoryStyleNo: string | null;
