@@ -117,22 +117,29 @@ describe("PR-05 web behavior", () => {
   });
 
   it("keeps QC uploads compact, capped and previewable throughout the order detail", async () => {
-    const [form, detail, helper] = await Promise.all([
+    const [form, detail, helper, supplement] = await Promise.all([
       readFile("apps/web/src/rework-form.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/attachment-upload.ts", "utf8"),
+      readFile("apps/web/src/order-image-supplement-uploader.tsx", "utf8"),
     ]);
 
     expect(form).toContain("MAX_REWORK_ATTACHMENTS");
     expect(form).toContain("const uploadConcurrency = currentQcUploadConcurrency();");
     expect(form).toContain("prepareAndUploadWithConcurrency(selected, uploadConcurrency");
     expect(form).not.toContain("mapWithConcurrency(selected, 2, prepareAttachmentForUpload)");
-    expect(form).toContain("firstUploadStartedAt");
+    expect(form).not.toContain("firstUploadStartedAt");
+    expect(form).not.toContain("秒开始上传");
     expect(form).toContain("qc-upload-preview-list");
     expect(form).toContain("URL.createObjectURL(file)");
     expect(detail).toContain("订单图片");
     expect(detail).toContain("rework-detail-image-grid");
     expect(detail).toContain("rework-image-modal");
+    expect(detail).toContain("OrderImageSupplementUploader");
+    expect(detail).toContain("rework.attachments.supplement");
+    expect(supplement).toContain("supplemental-images");
+    expect(supplement).toContain("MAX_REWORK_ATTACHMENTS");
+    expect(supplement).toContain("isImageAttachment");
     expect(helper).toContain("const MAX_IMAGE_EDGE = 2048");
     expect(helper).toContain('canvas.toBlob(resolve, "image/webp", WEBP_QUALITY)');
   });
