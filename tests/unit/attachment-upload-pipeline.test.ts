@@ -50,4 +50,15 @@ describe("attachment upload pipeline", () => {
 
     expect(maximumActiveUploads).toBe(2);
   });
+
+  it("forwards an upload failure instead of resolving a partial batch", async () => {
+    await expect(prepareAndUploadWithConcurrency(
+      [1],
+      2,
+      async (item) => item,
+      async () => {
+        throw new Error("上传失败");
+      },
+    )).rejects.toThrow("上传失败");
+  });
 });
