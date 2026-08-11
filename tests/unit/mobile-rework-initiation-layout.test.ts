@@ -37,6 +37,7 @@ describe("mobile rework initiation layout", () => {
     expect(source).toContain('className="mobile-actions rework-initiation-actions"');
     expect(source).toContain("disabled={mutationDisabled || !complete}");
     expect(css).toContain(".rework-initiation-actions");
+    expect(css).toContain(".rework-initiation-optional details[open] summary > small");
     expect(css).toContain("env(safe-area-inset-bottom, 0px)");
   });
 });
