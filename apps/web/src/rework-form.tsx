@@ -22,7 +22,7 @@ import {
 import {
   isImageAttachment,
   isSupportedAttachment,
-  mapWithConcurrency,
+  prepareAndUploadWithConcurrency,
   prepareAttachmentForUpload,
   sha256Hex,
 } from "./attachment-upload.js";
@@ -347,15 +347,19 @@ export function ReworkInitiationForm() {
     }
     if (attachmentIds.length + selected.length > MAX_REWORK_ATTACHMENTS) {
       setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张附件；请先移除现有图片后再选择。`);
-      return;
-    }
-
-    setUploading(true);
+      re    setUploading(true);
     setMessage(`正在优化并上传 ${selected.length} 份 QC 附件…`);
+    const uploadStartedAt = performance.now();
+    let firstUploadStartedAt: number | null = null;
+    let completedUploadCount = 0;
     try {
-      const prepared = await mapWithConcurrency(selected, 2, prepareAttachmentForUpload);
-      const uploaded = await mapWithConcurrency(prepared, 2, async (file): Promise<UploadedAttachment> => {
-        const sha256 = await sha256Hex(file);
+      const uploaded = await prepareAndUploadWithConcurrency(selected, 2, async (file, index) => {
+        setMessage(`正在准备第 ${index + 1}/${selected.length} 份 QC 附件…`);
+        const prepared = await prepareAttachmentForUpload(file);
+        return { file: prepared, sha256: await sha256Hex(prepared) };
+      }, async ({ file, sha256 }, _sourceFile, index): Promise<UploadedAttachment> => {
+        if (firstUploadStartedAt === null) firstUploadStartedAt = performance.now();
+        setMessage(`正在上传第 ${index + 1}/${selected.length} 份 QC 附件…`);
         const intent = await request(
           "tools/attachments/upload-intents",
           UploadIntentResponseSchema,
@@ -381,6 +385,8 @@ export function ReworkInitiationForm() {
         );
         const previewUrl = isImageAttachment(file) ? URL.createObjectURL(file) : null;
         if (previewUrl) previewUrls.current.push(previewUrl);
+        completedUploadCount += 1;
+        setMessage(`已完成 ${completedUploadCount}/${selected.length} 份 QC 附件上传…`);
         return {
           attachmentId: finalized.attachmentId,
           filename: finalized.filename,
@@ -392,7 +398,10 @@ export function ReworkInitiationForm() {
       setAttachmentIds(nextIds);
       setUploadedAttachments((current) => [...current, ...uploaded]);
       pendingKey.current = null;
-      setMessage(`${nextIds.length} 份 QC 附件已就绪，请保存草稿`);
+      const firstUploadSeconds = ((firstUploadStartedAt ?? uploadStartedAt) - uploadStartedAt) / 1_000;
+      const totalSeconds = (performance.now() - uploadStartedAt) / 1_000;
+      setMessage(`${nextIds.length} 份 QC 附件已就绪（首份 ${firstUploadSeconds.toFixed(1)} 秒开始上传，本次 ${totalSeconds.toFixed(1)} 秒），请保存草稿`);
+已就绪，请保存草稿`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "附件上传失败");
     } finally {
