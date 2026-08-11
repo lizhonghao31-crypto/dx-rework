@@ -176,6 +176,23 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       [draft.value.reworkOrderId],
     )).rows.map((row) => row.action)).toContain("rework.attachments.supplement");
 
+    const nonImageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'not-an-image.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [nonImageId, `private/${nonImageId}.pdf`, "d".repeat(64), qcId],
+    );
+    await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+      expectedVersion: supplemented.value.version,
+      attachmentIds: [nonImageId],
+    }, randomUUID())).rejects.toMatchObject({ code: "ATTACHMENT_NOT_READY", statusCode: 409 });
+    await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+      expectedVersion: supplemented.value.version,
+      attachmentIds: Array.from({ length: 4 }, () => randomUUID()),
+    }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+
     const sameStyle = await service.createDraft(qcActor(), {
       styleNo: "PD20529725",
     }, randomUUID());
