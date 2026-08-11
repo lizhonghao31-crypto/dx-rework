@@ -31,7 +31,6 @@ CREATE TABLE rework_responsibility_rounding_adjustments (
   ),
   reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 500),
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (adjustment_id),
   UNIQUE (determination_id, configuration_item_id),
   FOREIGN KEY (determination_id, configuration_item_id)
     REFERENCES rework_responsibility_processes (
