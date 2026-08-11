@@ -1,5 +1,6 @@
 import {
   AttachmentResponseSchema,
+  MAX_REWORK_ATTACHMENTS,
   ReworkInitiationOptionsResponseSchema,
   ReworkOrderResponseSchema,
   UploadIntentResponseSchema,
@@ -18,6 +19,13 @@ import {
   isReworkFormMutationAllowed,
   type PendingSubmitAttempt,
 } from "./rework-submission.js";
+import {
+  isImageAttachment,
+  isSupportedAttachment,
+  mapWithConcurrency,
+  prepareAttachmentForUpload,
+  sha256Hex,
+} from "./attachment-upload.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -37,6 +45,12 @@ type FormState = {
 };
 type PendingKey = { action: string; fingerprint: string; key: string };
 type ApiSchema<T> = { parse(value: unknown): T };
+type UploadedAttachment = Readonly<{
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  previewUrl: string | null;
+}>;
 
 const emptyForm: FormState = {
   styleNo: "",
@@ -119,12 +133,13 @@ export function ReworkInitiationForm() {
   });
   const [order, setOrder] = useState<ReworkOrderResponse | null>(null);
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
-  const [uploadedNames, setUploadedNames] = useState<string[]>([]);
+  const [uploadedAttachments, setUploadedAttachments] = useState<UploadedAttachment[]>([]);
   const [message, setMessage] = useState(initialDraftId ? "草稿加载中…" : "填写中，尚未保存");
   const [busy, setBusy] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(Boolean(initialDraftId));
   const [uploading, setUploading] = useState(false);
   const pendingKey = useRef<PendingKey | null>(null);
+  const previewUrls = useRef<string[]>([]);
   const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
 
   useEffect(() => {
@@ -174,6 +189,10 @@ export function ReworkInitiationForm() {
       window.removeEventListener("focus", loadOptions);
       document.removeEventListener("visibilitychange", onVisibility);
     };
+  }, []);
+
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
   const mutationKey = (action: string, payload: unknown): string => {
@@ -320,16 +339,23 @@ export function ReworkInitiationForm() {
 
   const uploadFiles = async (files: FileList | null) => {
     if (!files?.length || !isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
+    const selected = Array.from(files);
+    const firstUnsupported = selected.find((file) => !isSupportedAttachment(file));
+    if (firstUnsupported) {
+      setMessage(`${firstUnsupported.name} 不是支持的图片或 PDF`);
+      return;
+    }
+    if (attachmentIds.length + selected.length > MAX_REWORK_ATTACHMENTS) {
+      setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张附件；请先移除现有图片后再选择。`);
+      return;
+    }
+
     setUploading(true);
+    setMessage(`正在优化并上传 ${selected.length} 份 QC 附件…`);
     try {
-      const nextIds = [...attachmentIds];
-      const nextNames = [...uploadedNames];
-      for (const file of Array.from(files)) {
-        if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)) {
-          throw new Error(`${file.name} 不是支持的图片或PDF`);
-        }
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
-        const sha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const prepared = await mapWithConcurrency(selected, 2, prepareAttachmentForUpload);
+      const uploaded = await mapWithConcurrency(prepared, 2, async (file): Promise<UploadedAttachment> => {
+        const sha256 = await sha256Hex(file);
         const intent = await request(
           "tools/attachments/upload-intents",
           UploadIntentResponseSchema,
@@ -346,25 +372,52 @@ export function ReworkInitiationForm() {
         const upload = new FormData();
         for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
         upload.append("file", file);
-        const uploaded = await fetch(intent.uploadUrl, { method: "POST", body: upload });
-        if (!uploaded.ok) throw new Error(`${file.name} 上传失败`);
+        const response = await fetch(intent.uploadUrl, { method: "POST", body: upload });
+        if (!response.ok) throw new Error(`${file.name} 上传失败`);
         const finalized = await request(
           `tools/attachments/${intent.attachmentId}/finalize`,
           AttachmentResponseSchema,
           { method: "POST" },
         );
-        nextIds.push(finalized.attachmentId);
-        nextNames.push(file.name);
-      }
+        const previewUrl = isImageAttachment(file) ? URL.createObjectURL(file) : null;
+        if (previewUrl) previewUrls.current.push(previewUrl);
+        return {
+          attachmentId: finalized.attachmentId,
+          filename: finalized.filename,
+          mimeType: finalized.mimeType,
+          previewUrl,
+        };
+      });
+      const nextIds = [...attachmentIds, ...uploaded.map((attachment) => attachment.attachmentId)];
       setAttachmentIds(nextIds);
-      setUploadedNames(nextNames);
+      setUploadedAttachments((current) => [...current, ...uploaded]);
       pendingKey.current = null;
-      setMessage(`${nextIds.length} 份QC附件已就绪，请保存草稿`);
+      setMessage(`${nextIds.length} 份 QC 附件已就绪，请保存草稿`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "附件上传失败");
     } finally {
       setUploading(false);
     }
+  };
+
+  const removeAttachment = (attachment: UploadedAttachment): void => {
+    setAttachmentIds((current) => current.filter((id) => id !== attachment.attachmentId));
+    setUploadedAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId));
+    if (attachment.previewUrl) {
+      URL.revokeObjectURL(attachment.previewUrl);
+      previewUrls.current = previewUrls.current.filter((url) => url !== attachment.previewUrl);
+    }
+    pendingKey.current = null;
+    setMessage("附件已从当前表单移除，请保存草稿确认");
+  };
+
+  const clearAttachments = (): void => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+    setAttachmentIds([]);
+    setUploadedAttachments([]);
+    pendingKey.current = null;
+    setMessage("附件已从当前表单移除，请保存草稿确认");
   };
 
   const locked = order?.status === "pending_process_configuration"
@@ -531,39 +584,50 @@ export function ReworkInitiationForm() {
             {attachmentIds.length} 份
           </StatusBadge>
         </div>
-        <p>支持 JPG、PNG、WebP 与 PDF。</p>
+        <p>支持 JPG、PNG、WebP 与 PDF；每张返工单最多 ${MAX_REWORK_ATTACHMENTS} 张。图片会先在本机压缩，保留清晰度后再上传。</p>
         {!formDisabled && (
           <>
             <label className="qc-file-button">
-              <span>{uploading ? "附件上传中…" : "选择QC图片 / PDF"}</span>
+              <span>{uploading ? "正在优化并上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? `已达到 ${MAX_REWORK_ATTACHMENTS} 张上限` : "选择 QC 图片 / PDF"}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
                 multiple
-                disabled={mutationDisabled}
-                onChange={(event) => void uploadFiles(event.target.files)}
+                disabled={mutationDisabled || attachmentIds.length >= MAX_REWORK_ATTACHMENTS}
+                onChange={(event) => {
+                  void uploadFiles(event.target.files);
+                  event.target.value = "";
+                }}
               />
             </label>
             {attachmentIds.length > 0 && (
               <Button
                 className="qc-clear-attachments"
                 disabled={mutationDisabled}
-                onClick={() => {
-                  setAttachmentIds([]);
-                  setUploadedNames([]);
-                  pendingKey.current = null;
-                  setMessage("附件已从当前表单移除，请保存草稿确认");
-                }}
+                onClick={clearAttachments}
               >
                 移除全部附件
               </Button>
             )}
           </>
         )}
-        {uploadedNames.length > 0 && (
-          <ul className="qc-upload-list">
-            {uploadedNames.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}
-          </ul>
+        {uploadedAttachments.length > 0 && (
+          <div className="qc-upload-preview-list" aria-label="已选择的 QC 附件">
+            {uploadedAttachments.map((attachment) => (
+              <article className="qc-upload-preview" key={attachment.attachmentId}>
+                {attachment.previewUrl
+                  ? <img src={attachment.previewUrl} alt={attachment.filename} />
+                  : <span className="qc-upload-preview__pdf">PDF</span>}
+                <div>
+                  <strong title={attachment.filename}>{attachment.filename}</strong>
+                  <small>{attachment.mimeType.startsWith("image/") ? "图片可在订单详情继续查看" : "PDF 附件"}</small>
+                </div>
+                {!formDisabled && (
+                  <Button disabled={mutationDisabled} onClick={() => removeAttachment(attachment)}>移除</Button>
+                )}
+              </article>
+            ))}
+          </div>
         )}
       </Surface>
 
