@@ -195,6 +195,10 @@
     {
       "version": "0049_post_creation_order_image_binding",
       "checksum": "52d86a97415a332413e372c9efa7b06a937f9577507ad85784ff037bca4ef3af"
+    },
+    {
+      "version": "0050_root_self_system_admin",
+      "checksum": "395b8021cabdff349c6454239c6b76e3937b87a68a5ddb8fb6936f2cca4fefc0"
     }
   ]
 }
