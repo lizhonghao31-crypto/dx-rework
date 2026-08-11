@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { prepareAndUploadWithConcurrency } from "../../apps/web/src/attachment-upload.js";
+import {
+  prepareAndUploadWithConcurrency,
+  qcUploadConcurrency,
+} from "../../apps/web/src/attachment-upload.js";
 
 describe("attachment upload pipeline", () => {
+  it("opens three upload lanes on ordinary networks while preserving weak-network backpressure", () => {
+    expect(qcUploadConcurrency()).toBe(3);
+    expect(qcUploadConcurrency({ effectiveType: "4g" })).toBe(3);
+    expect(qcUploadConcurrency({ effectiveType: "3g" })).toBe(2);
+    expect(qcUploadConcurrency({ effectiveType: "2g" })).toBe(1);
+  });
+
   it("starts an upload before a different file has finished preparing", async () => {
     const events: string[] = [];
     let releaseSecondPreparation: () => void = () => undefined;
