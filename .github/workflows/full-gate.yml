@@ -120,12 +120,22 @@ jobs:
             -e POSTGRES_PASSWORD=dx_rework_ci \
             -e POSTGRES_DB=dx_rework_ci \
             -p 5432:5432 postgres:16-alpine
-          for _ in $(seq 1 30); do
+          ready_streak=0
+          for _ in $(seq 1 60); do
             if docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then
-              break
+              ready_streak=$((ready_streak + 1))
+              if [[ "$ready_streak" -ge 3 ]]; then
+                break
+              fi
+            else
+              ready_streak=0
             fi
             sleep 1
           done
+          if [[ "$ready_streak" -lt 3 ]]; then
+            docker logs dx-rework-full-gate-postgres
+            exit 1
+          fi
           docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci
           {
             echo 'DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
