@@ -91,7 +91,7 @@ runWithPostgres("Root self system administrator assignment", () => {
         id: rootUserId,
         displayName: "唯一超级用户",
         capabilities: [],
-        businessRoles: ["owner_group"],
+        businessRoles: [],
       };
       const rootActor = await businessActor(root, rootUser, randomUUID(), "access:admin");
 
@@ -133,7 +133,7 @@ runWithPostgres("Root self system administrator assignment", () => {
       );
       expect(audit.rows[0]).toEqual({
         actor_id: rootUserId,
-        actor_roles: expect.arrayContaining(["owner_group", "root_superuser"]),
+        actor_roles: expect.arrayContaining(["root_superuser"]),
         authorization_capability: "access:admin",
       });
 
