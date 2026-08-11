@@ -102,14 +102,17 @@ describe("UAT interface closure", () => {
   });
 
   it("uses the shared Chinese vocabulary in report and wage workbooks", async () => {
-    const [reportExport, wageExport] = await Promise.all([
+    const [reportExport, wageExport, reportingShared] = await Promise.all([
       read("apps/api/src/reporting/report-export-service.ts"),
       read("apps/api/src/wages/wage-export-service.ts"),
+      read("apps/api/src/reporting/management-reporting-shared.ts"),
     ]);
     expect(reportExport).toContain("businessCellValue(column.key");
     expect(reportExport).toContain("businessFieldLabel(key)");
     expect(reportExport).toContain("BUSINESS_TIME_ZONE");
     expect(reportExport).not.toContain("Asia/Singapore");
+    expect(reportingShared).toContain("BUSINESS_TIME_ZONE");
+    expect(reportingShared).not.toContain("Asia/Singapore");
     expect(wageExport).toContain('businessCellValue("personType"');
     expect(wageExport).toContain('businessCellValue("assignmentMode"');
     expect(wageExport).toContain("translateTechnicalDetails(line.member_snapshot)");
