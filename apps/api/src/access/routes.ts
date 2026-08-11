@@ -24,6 +24,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import { ROOT_ACTOR_ROLE } from "./business-authority.js";
 import type { RootAuthority } from "./root-authority.js";
 import type { AccessMasterDataService } from "./service.js";
 
@@ -80,9 +81,11 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     if (!isRoot && !user.capabilities.includes("access:admin")) {
       throw new ApplicationError("FORBIDDEN", "无权执行该操作", 403);
     }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
     return {
       actorId: user.id,
-      actorRoles: user.businessRoles ?? [],
+      actorRoles,
       authorizationCapability: "access:admin",
       requestId: request.id,
     };

@@ -86,12 +86,19 @@ describe("PR-31 employee access contracts", () => {
     expect(employeeRoutes).toContain("assertTargetAccessMutation");
     expect(employeePage).toContain('new Set(["owner_group", "system_admin"])');
     expect(employeePage).toContain("const assignableRoles = roles.filter");
+    expect(employeePage).toContain("const canSelfGrantSystemAdmin = isSelf");
+    expect(employeePage).toContain('selected === "system_admin"');
+    expect(employeePage).toContain("(isSelf && !canSelfGrantSystemAdmin)");
+    expect(employeePage).toContain("其他自授角色仍禁止");
     expect(employeePage).toContain("所有可授予角色均已生效。");
     expect(deployLib).toContain("ROOT_DINGTALK_USER_ID");
   });
 
   it("enforces the confirmed role-management policy at the database boundary", async () => {
-    const migration = await readFile("apps/api/migrations/0035_role_management_policy_closure.sql", "utf8");
+    const [migration, rootSelfAdminMigration] = await Promise.all([
+      readFile("apps/api/migrations/0035_role_management_policy_closure.sql", "utf8"),
+      readFile("apps/api/migrations/0050_root_self_system_admin.sql", "utf8"),
+    ]);
     expect(migration).toContain("access_is_root_actor");
     expect(migration).toContain("access_role_manager_roles");
     expect(migration).toContain("business roles can only be maintained by an active owner or root");
@@ -100,6 +107,10 @@ describe("PR-31 employee access contracts", () => {
     expect(migration).toContain("DELETE FROM role_capabilities");
     expect(migration).toContain("role_code='system_admin' AND capability='access:admin'");
     expect(migration).toContain("('owner_group', 'access:admin')");
+    expect(rootSelfAdminMigration).toContain("NEW.role_code='system_admin'");
+    expect(rootSelfAdminMigration).toContain("access_is_root_actor(NEW.granted_by)");
+    expect(rootSelfAdminMigration).toContain("except root assigning system_admin");
+    expect(rootSelfAdminMigration).not.toContain("NEW.role_code='owner_group'\n       AND access_is_root_actor");
   });
 
   it("keeps owner bootstrap one-time at the database boundary", async () => {

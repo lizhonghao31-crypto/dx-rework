@@ -14,6 +14,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import { OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
+import { isRootActor } from "./business-authority.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
 type PersonAliasRow = Readonly<{ alias_id: string; person_id: string; alias: string; normalized_alias: string }>;
@@ -316,8 +317,15 @@ export class AccessMasterDataService {
 
   async assignRole(actor: TrustedActorContext, input: AssignRole): Promise<{ assignmentId: string }> {
     ensureProtectedRoleAuthority(actor, input.roleCode);
-    if (input.userId === actor.actorId) {
-      throw new ApplicationError("FORBIDDEN", "不能给自己授予业务角色", 403);
+    const rootSelfSystemAdmin = input.userId === actor.actorId
+      && input.roleCode === "system_admin"
+      && isRootActor(actor);
+    if (input.userId === actor.actorId && !rootSelfSystemAdmin) {
+      throw new ApplicationError(
+        "FORBIDDEN",
+        "不能给自己授予业务角色；唯一超级用户仅可自授系统管理员",
+        403,
+      );
     }
     return this.transaction(async (client) => {
       if (input.roleCode === "owner_group") {

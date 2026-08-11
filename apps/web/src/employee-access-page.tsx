@@ -216,6 +216,9 @@ export function EmployeeAccessPage() {
                   !activeAssignments.some((history) => history.roleCode === role.roleCode));
                 const selected = selectedRole(employee.userId, assignableRoles);
                 const isSelf = me?.userId === employee.userId;
+                const canSelfGrantSystemAdmin = isSelf
+                  && me?.isRoot === true
+                  && selected === "system_admin";
                 const protectedTarget = employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
                 const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
                 const wouldDisableLastOwner =
@@ -263,7 +266,12 @@ export function EmployeeAccessPage() {
                         {assignableRoles.map((role) => <option key={role.roleCode} value={role.roleCode}>{role.displayName}</option>)}
                       </select>
                       <Button
-                        disabled={Boolean(busy) || !selected || isSelf || !employee.active || !employee.employed || !employee.enabled}
+                        disabled={Boolean(busy)
+                          || !selected
+                          || (isSelf && !canSelfGrantSystemAdmin)
+                          || !employee.active
+                          || !employee.employed
+                          || !employee.enabled}
                         onClick={() => grant(employee, selected)}
                       >
                         授予角色
@@ -308,7 +316,11 @@ export function EmployeeAccessPage() {
                       ))}
                     </details>
 
-                    {isSelf ? <p className="employee-access-note">当前账号不能给自己授予新角色。</p> : null}
+                    {isSelf ? (
+                      <p className="employee-access-note">
+                        当前账号仅允许唯一超级用户为自己授予系统管理员；其他自授角色仍禁止。
+                      </p>
+                    ) : null}
                     {protectedTargetLocked ? <p className="employee-access-note">老板和系统管理员账号仅可由超级用户维护。</p> : null}
                     {wouldDisableLastOwner ? <p className="employee-access-note">最后一名有效老板不可撤销老板角色或停用访问。</p> : null}
                     {activeAssignments.length === 0 ? <p className="employee-access-note">当前没有业务角色。</p> : null}
