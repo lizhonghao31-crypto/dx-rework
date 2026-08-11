@@ -153,6 +153,29 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       [draft.value.reworkOrderId],
     )).rowCount).toBe(1);
 
+    const supplementalImageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'supplemental.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [supplementalImageId, `private/${supplementalImageId}.webp`, "c".repeat(64), qcId],
+    );
+    const supplemented = await service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+      expectedVersion: submitted.value.version,
+      attachmentIds: [supplementalImageId],
+    }, randomUUID());
+    expect(supplemented.value.version).toBe(submitted.value.version + 1);
+    expect(supplemented.value.attachmentIds).toEqual([attachmentId, supplementalImageId]);
+    expect((await database.query(
+      "SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1",
+      [supplementalImageId],
+    )).rows[0]).toEqual({ entity_type: "rework_order", entity_id: draft.value.reworkOrderId });
+    expect((await database.query<{ action: string }>(
+      "SELECT action FROM operation_events WHERE entity_type='rework_order' AND entity_id=$1 ORDER BY created_at,event_id",
+      [draft.value.reworkOrderId],
+    )).rows.map((row) => row.action)).toContain("rework.attachments.supplement");
+
     const sameStyle = await service.createDraft(qcActor(), {
       styleNo: "PD20529725",
     }, randomUUID());
