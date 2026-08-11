@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
 import type {
   CreateReworkDraft,
-  MAX_REWORK_ATTACHMENTS,
   ReworkInitiationOptionsResponse,
   ReworkOrderResponse,
   ReworkOrderStatus,
