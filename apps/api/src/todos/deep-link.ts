@@ -54,3 +54,29 @@ export function buildTodoDeepLink(
   }
   return `${base}${path}?${query.toString()}`;
 }
+
+/** Builds the absolute HTTPS URL required by DingTalk clients. */
+export function buildTodoExternalDeepLink(
+  publicBaseUrl: string,
+  descriptor: TodoRouteDescriptor,
+): string {
+  let base: URL;
+  try {
+    base = new URL(publicBaseUrl);
+  } catch {
+    throw new ApplicationError("VALIDATION_ERROR", "Todo public base URL is invalid", 500);
+  }
+  if (
+    base.protocol !== "https:"
+    || base.username
+    || base.password
+    || base.search
+    || base.hash
+  ) {
+    throw new ApplicationError("VALIDATION_ERROR", "Todo public base URL must be a clean HTTPS URL", 500);
+  }
+  const basePath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
+  const internalPath = buildTodoDeepLink(basePath, descriptor);
+  return new URL(internalPath, base.origin).toString();
+}
+

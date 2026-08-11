@@ -27,6 +27,7 @@ const EnvironmentSchema = z
     DINGTALK_CORP_ID: z.string().min(1),
     DINGTALK_H5_APP_KEY: z.string().min(1),
     DINGTALK_H5_APP_SECRET: z.string().min(1),
+    DINGTALK_H5_AGENT_ID: z.string().trim().regex(/^\d+$/).optional(),
     DINGTALK_WEB_CLIENT_ID: z.string().min(1),
     DINGTALK_WEB_CLIENT_SECRET: z.string().min(1),
     DINGTALK_QR_REDIRECT_URI: z.string().url(),
@@ -37,6 +38,9 @@ const EnvironmentSchema = z
     OWNER_BOOTSTRAP_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_SECRET: z.string().min(32).max(1024).optional(),
     TODO_RUNTIME_ENABLED: BooleanTextSchema,
+    TODO_DELIVERY_ENABLED: z.enum(["true", "false"]).optional(),
+    TODO_TIMING_ENABLED: z.enum(["true", "false"]).optional(),
+    TODO_PUBLIC_BASE_URL: z.string().url().optional(),
     TODO_RUNTIME_ACTOR_ID: z.string().uuid().optional(),
     TODO_DELIVERY_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(30_000),
     TODO_TIMING_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
@@ -65,13 +69,24 @@ const EnvironmentSchema = z
       });
     }
 
-    if (environment.TODO_RUNTIME_ENABLED === "true" && !environment.TODO_RUNTIME_ACTOR_ID) {
-      context.addIssue({ code: "custom", path: ["TODO_RUNTIME_ACTOR_ID"], message: "todo runtime requires an authorized actor ID" });
+    const deliveryEnabled = (environment.TODO_DELIVERY_ENABLED ?? environment.TODO_RUNTIME_ENABLED) === "true";
+    const timingEnabled = (environment.TODO_TIMING_ENABLED ?? environment.TODO_RUNTIME_ENABLED) === "true";
+    if (deliveryEnabled && !environment.DINGTALK_H5_AGENT_ID) {
+      context.addIssue({ code: "custom", path: ["DINGTALK_H5_AGENT_ID"], message: "todo delivery requires the DingTalk H5 agent ID" });
     }
-    if (environment.NODE_ENV === "test" && environment.TODO_RUNTIME_ENABLED === "true") {
+    if (deliveryEnabled && !environment.TODO_PUBLIC_BASE_URL) {
+      context.addIssue({ code: "custom", path: ["TODO_PUBLIC_BASE_URL"], message: "todo delivery requires an absolute public base URL" });
+    }
+    if (timingEnabled && !environment.TODO_RUNTIME_ACTOR_ID) {
+      context.addIssue({ code: "custom", path: ["TODO_RUNTIME_ACTOR_ID"], message: "todo timing requires an authorized actor ID" });
+    }
+    if (environment.NODE_ENV === "test" && (deliveryEnabled || timingEnabled)) {
       context.addIssue({ code: "custom", path: ["TODO_RUNTIME_ENABLED"], message: "test environment cannot enable the real todo runtime" });
     }
     if (environment.NODE_ENV !== "production") return;
+    if (deliveryEnabled && new URL(environment.TODO_PUBLIC_BASE_URL!).protocol !== "https:") {
+      context.addIssue({ code: "custom", path: ["TODO_PUBLIC_BASE_URL"], message: "production todo delivery requires HTTPS" });
+    }
     if (environment.OSS_ENDPOINT && new URL(environment.OSS_ENDPOINT).protocol !== "https:") {
       context.addIssue({ code: "custom", path: ["OSS_ENDPOINT"], message: "production requires an HTTPS OSS endpoint" });
     }
@@ -115,7 +130,7 @@ export type AppConfig = Readonly<{
   gitSha: string;
   buildTime: string;
   serviceName: string;
-  dingtalk: Readonly<{ corpId: string; h5AppKey: string; h5AppSecret: string; webClientId: string; webClientSecret: string; qrRedirectUri: string }>;
+  dingtalk: Readonly<{ corpId: string; h5AppKey: string; h5AppSecret: string; h5AgentId: string | undefined; webClientId: string; webClientSecret: string; qrRedirectUri: string }>;
   appBasePath: string;
   sessionSecret: string;
   sessionTtlSeconds: number;
@@ -127,6 +142,9 @@ export type AppConfig = Readonly<{
   }>;
   todoRuntime: Readonly<{
     enabled: boolean;
+    deliveryEnabled: boolean;
+    timingEnabled: boolean;
+    publicBaseUrl: string | undefined;
     actorId: string | undefined;
     deliveryIntervalMs: number;
     timingIntervalMs: number;
@@ -150,7 +168,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     gitSha: result.data.GIT_SHA,
     buildTime: result.data.BUILD_TIME,
     serviceName: result.data.SERVICE_NAME,
-    dingtalk: { corpId: result.data.DINGTALK_CORP_ID, h5AppKey: result.data.DINGTALK_H5_APP_KEY, h5AppSecret: result.data.DINGTALK_H5_APP_SECRET, webClientId: result.data.DINGTALK_WEB_CLIENT_ID, webClientSecret: result.data.DINGTALK_WEB_CLIENT_SECRET, qrRedirectUri: result.data.DINGTALK_QR_REDIRECT_URI },
+    dingtalk: { corpId: result.data.DINGTALK_CORP_ID, h5AppKey: result.data.DINGTALK_H5_APP_KEY, h5AppSecret: result.data.DINGTALK_H5_APP_SECRET, h5AgentId: result.data.DINGTALK_H5_AGENT_ID, webClientId: result.data.DINGTALK_WEB_CLIENT_ID, webClientSecret: result.data.DINGTALK_WEB_CLIENT_SECRET, qrRedirectUri: result.data.DINGTALK_QR_REDIRECT_URI },
     appBasePath: result.data.APP_BASE_PATH.endsWith("/") ? result.data.APP_BASE_PATH : `${result.data.APP_BASE_PATH}/`,
     sessionSecret: result.data.SESSION_SECRET,
     sessionTtlSeconds: result.data.SESSION_TTL_SECONDS,
@@ -161,7 +179,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       secret: result.data.OWNER_BOOTSTRAP_SECRET,
     },
     todoRuntime: {
-      enabled: result.data.TODO_RUNTIME_ENABLED === "true",
+      enabled: (result.data.TODO_DELIVERY_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true"
+        || (result.data.TODO_TIMING_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true",
+      deliveryEnabled: (result.data.TODO_DELIVERY_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true",
+      timingEnabled: (result.data.TODO_TIMING_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true",
+      publicBaseUrl: result.data.TODO_PUBLIC_BASE_URL,
       actorId: result.data.TODO_RUNTIME_ACTOR_ID,
       deliveryIntervalMs: result.data.TODO_DELIVERY_INTERVAL_MS,
       timingIntervalMs: result.data.TODO_TIMING_INTERVAL_MS,
@@ -169,3 +191,4 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     objectStorage: { enabled: Boolean(result.data.OSS_BUCKET), region: result.data.OSS_REGION, endpoint: result.data.OSS_ENDPOINT, bucket: result.data.OSS_BUCKET, accessKeyId: result.data.OSS_ACCESS_KEY_ID, accessKeySecret: result.data.OSS_ACCESS_KEY_SECRET, privatePrefix: result.data.OSS_PRIVATE_PREFIX.replace(/\/$/, ""), signedUrlTtlSeconds: result.data.OSS_SIGNED_URL_TTL_SECONDS, maxUploadBytes: result.data.OSS_MAX_UPLOAD_BYTES },
   });
 }
+

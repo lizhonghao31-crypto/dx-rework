@@ -36,10 +36,12 @@ const tick = async (): Promise<void> => {
 describe("TodoRuntimeLifecycle", () => {
   it("stays disabled without a provider and never starts network work in tests", async () => {
     const delivery = { runOnce: vi.fn(async () => result) };
-    const timing = { runOnce: vi.fn(async () => timingResult) };
+    const timing = { runOnce: vi.fn(async (actor: unknown) => {
+      void actor;
+      return timingResult;
+    }) };
     const lifecycle = new TodoRuntimeLifecycle(database, {
       enabled: false,
-      appBasePath: "/",
       deliveryRunner: delivery,
       timingRunner: timing,
       logger,
@@ -54,10 +56,9 @@ describe("TodoRuntimeLifecycle", () => {
   it("requires explicit production authority and prevents overlapping ticks", async () => {
     expect(() => new TodoRuntimeLifecycle(database, {
       enabled: true,
-      appBasePath: "/",
       runtimeActorId: "00000000-0000-4000-8000-000000000001",
       logger,
-    })).toThrow("explicit DingTalk todo provider");
+    })).toThrow("Todo delivery requires an explicit DingTalk todo provider");
 
     let releaseDelivery: (() => void) | undefined;
     const delivery = {
@@ -65,10 +66,12 @@ describe("TodoRuntimeLifecycle", () => {
         releaseDelivery = () => resolve(result);
       })),
     };
-    const timing = { runOnce: vi.fn(async () => timingResult) };
+    const timing = { runOnce: vi.fn(async (actor: unknown) => {
+      void actor;
+      return timingResult;
+    }) };
     const lifecycle = new TodoRuntimeLifecycle(database, {
       enabled: true,
-      appBasePath: "/",
       runtimeActorId: "00000000-0000-4000-8000-000000000001",
       deliveryIntervalMs: 1_000,
       timingIntervalMs: 1_000,
@@ -92,6 +95,26 @@ describe("TodoRuntimeLifecycle", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it("runs immediate delivery without enabling reminders, escalation or a runtime actor", async () => {
+    const delivery = { runOnce: vi.fn(async () => result) };
+    const timing = { runOnce: vi.fn(async () => timingResult) };
+    const lifecycle = new TodoRuntimeLifecycle(database, {
+      enabled: true,
+      deliveryEnabled: true,
+      timingEnabled: false,
+      deliveryIntervalMs: 1_000,
+      timingIntervalMs: 1_000,
+      deliveryRunner: delivery,
+      timingRunner: timing,
+      logger,
+    });
+    lifecycle.start();
+    await tick();
+    expect(delivery.runOnce).toHaveBeenCalledTimes(1);
+    expect(timing.runOnce).not.toHaveBeenCalled();
+    await lifecycle.stop();
+  });
+
   it("fails closed when the configured runtime actor is no longer eligible", async () => {
     const unavailableDatabase = {
       query: vi.fn(async () => ({ rows: [] })),
@@ -101,7 +124,6 @@ describe("TodoRuntimeLifecycle", () => {
     const localLogger = { info: vi.fn(), warn: vi.fn() };
     const lifecycle = new TodoRuntimeLifecycle(unavailableDatabase, {
       enabled: true,
-      appBasePath: "/",
       runtimeActorId: "00000000-0000-4000-8000-000000000001",
       deliveryIntervalMs: 1_000,
       timingIntervalMs: 1_000,

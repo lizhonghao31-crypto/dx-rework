@@ -11,6 +11,7 @@ const createInput = {
   todoId: "00000000-0000-4000-8000-000000000013",
   recipientUserId: "00000000-0000-4000-8000-000000000014",
   recipientUnionId: "union-14",
+  recipientProviderUserId: "userid-14",
   category: "process_configuration",
   deliveryKind: "create" as const,
   sourceKey: "todo-source-13",
@@ -19,7 +20,7 @@ const createInput = {
     entityId: "00000000-0000-4000-8000-000000000015",
     todoId: "00000000-0000-4000-8000-000000000013",
   },
-  deepLink: "/ui/tasks/00000000-0000-4000-8000-000000000015",
+  deepLink: "https://staging.example/rework/ui/tasks/00000000-0000-4000-8000-000000000015",
 };
 
 const json = (value: unknown, status = 200): Response => new Response(
@@ -29,13 +30,14 @@ const json = (value: unknown, status = 200): Response => new Response(
 
 describe("DingTalk todo provider boundary", () => {
   it("fails closed while disabled and in test environments", async () => {
-    await expect(new DisabledDingTalkTodoProvider().createTodo(createInput)).rejects.toMatchObject({
+    await expect(new DisabledDingTalkTodoProvider().createTodo()).rejects.toMatchObject({
       code: "DINGTALK_TODO_NOT_CONFIGURED",
       retryable: false,
     });
     const provider = new OfficialDingTalkTodoProvider({
       appKey: "app-key",
       appSecret: "app-secret",
+      agentId: "123456",
       nodeEnv: "test",
     }, async () => { throw new Error("test must not call the network"); });
     await expect(provider.createTodo(createInput)).rejects.toMatchObject({
@@ -69,6 +71,9 @@ describe("DingTalk todo provider boundary", () => {
       if (url.endsWith("/tasks") && init.method === "POST") {
         return json({ taskId: "task-1", requestId: "request-create" });
       }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 987654 });
+      }
       if (url.endsWith("/tasks/task-1") && init.method === "PUT") {
         return json({ requestId: "request-update" });
       }
@@ -80,6 +85,7 @@ describe("DingTalk todo provider boundary", () => {
     const provider = new OfficialDingTalkTodoProvider({
       appKey: "app-key",
       appSecret: "app-secret",
+      agentId: "123456",
       nodeEnv: "production",
     }, http, () => 1_000);
 
@@ -108,6 +114,21 @@ describe("DingTalk todo provider boundary", () => {
       executorIds: ["union-14"],
       operatorId: "union-14",
     });
+    const notification = calls.find((call) =>
+      call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
+    );
+    expect(JSON.parse(String(notification?.init.body))).toMatchObject({
+      agent_id: 123456,
+      userid_list: "userid-14",
+      msg: {
+        msgtype: "link",
+        link: {
+          messageUrl: createInput.deepLink,
+          title: "待处理：process_configuration",
+          text: expect.stringContaining("todo-source-13"),
+        },
+      },
+    });
     const completion = calls.find((call) => call.url.endsWith("/executorStatus"));
     expect(JSON.parse(String(completion?.init.body))).toEqual({
       executorStatusList: [{ id: "union-14", isDone: true }],
@@ -115,10 +136,39 @@ describe("DingTalk todo provider boundary", () => {
     });
   });
 
+  it("treats DingTalk's identical-work-notification response as an idempotent retry", async () => {
+    const http: typeof fetch = async (input, init = {}) => {
+      const url = String(input);
+      if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
+        return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.endsWith("/tasks/sources/todo-source-13")) {
+        return json({ taskId: "task-existing", requestId: "lookup-existing" });
+      }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2") && init.method === "POST") {
+        return json({ errcode: 143106, errmsg: "duplicate" });
+      }
+      throw new Error(`unexpected request ${url}`);
+    };
+    const provider = new OfficialDingTalkTodoProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      agentId: "123456",
+      nodeEnv: "production",
+    }, http, () => 1_000);
+
+    await expect(provider.createTodo(createInput)).resolves.toMatchObject({
+      providerTodoId: "task-existing",
+      providerMessageId: "dingtalk-duplicate-todo-source-13",
+      reconciled: true,
+    });
+  });
+
   it("classifies retryable and permanent HTTP failures without leaking credentials", async () => {
     const makeProvider = (status: number) => new OfficialDingTalkTodoProvider({
       appKey: "sensitive-app-key",
       appSecret: "sensitive-app-secret",
+      agentId: "123456",
       nodeEnv: "production",
     }, async (input) => {
       const url = String(input);

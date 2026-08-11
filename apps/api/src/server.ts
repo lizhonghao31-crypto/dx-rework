@@ -284,16 +284,21 @@ const app = buildApp({
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
-const todoProvider = config.todoRuntime.enabled
+const todoProvider = config.todoRuntime.deliveryEnabled
   ? new OfficialDingTalkTodoProvider({
       appKey: config.dingtalk.h5AppKey,
       appSecret: config.dingtalk.h5AppSecret,
+      agentId: config.dingtalk.h5AgentId!,
       nodeEnv: config.nodeEnv,
     })
   : undefined;
 const todoRuntime = new TodoRuntimeLifecycle(database, {
   enabled: config.todoRuntime.enabled,
-  appBasePath: config.appBasePath,
+  deliveryEnabled: config.todoRuntime.deliveryEnabled,
+  timingEnabled: config.todoRuntime.timingEnabled,
+  ...(config.todoRuntime.publicBaseUrl
+    ? { todoPublicBaseUrl: config.todoRuntime.publicBaseUrl }
+    : {}),
   ...(config.todoRuntime.actorId ? { runtimeActorId: config.todoRuntime.actorId } : {}),
   deliveryIntervalMs: config.todoRuntime.deliveryIntervalMs,
   timingIntervalMs: config.todoRuntime.timingIntervalMs,
@@ -323,3 +328,4 @@ try {
   await database.end();
   process.exitCode = 1;
 }
+

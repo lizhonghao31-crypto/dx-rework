@@ -15,7 +15,6 @@ type QueueRow = {
   handler_user_id: string | null;
   determination_version: number | null;
   determination_stage: "draft" | "finalized" | null;
-  leaf_created_by: string | null;
   determine_eligible: boolean;
   direct_takeover: boolean;
   direct_confirm: boolean;
@@ -55,7 +54,6 @@ export class ResponsibilityDeterminationQueueService {
                 handler_user_id,
               leaf.determination_version,
               leaf.stage determination_stage,
-              leaf.created_by leaf_created_by,
               responsibility_can_determine($1,order_record.rework_order_id)
                 determine_eligible,
               responsibility_actor_has_direct_role(
@@ -139,14 +137,13 @@ export class ResponsibilityDeterminationQueueService {
           (root || row.handler_user_id === null || row.handler_user_id === actor.actorId),
         canTakeover:
           hasTakeover &&
-          row.direct_takeover &&
+          (root || row.direct_takeover) &&
           row.handler_user_id !== actor.actorId,
         canConfirmHighMultiplier:
           hasConfirm &&
-          row.direct_confirm &&
+          (root || row.direct_confirm) &&
           row.determination_stage === "draft" &&
-          row.high_multiplier_pending &&
-          (root || row.leaf_created_by !== actor.actorId),
+          row.high_multiplier_pending,
         highMultiplierPending: row.high_multiplier_pending,
       })),
     };

@@ -314,8 +314,7 @@ export class AuthorizedResponsibilityDeterminationService {
       if (order.status !== "pending_responsibility_determination") fail("返工单不在待判责状态");
       if (current.stage !== "draft" || current.determination_version !== input.expectedCurrentDeterminationVersion) fail("判责版本冲突");
       const permission = await this.permissions(client, actor, order);
-      if (!permission.directConfirm) fail("只有直接有效的老板权限组可以确认高倍率", 403, "FORBIDDEN");
-      if (!isRootActor(actor) && current.created_by === actor.actorId) fail("提交人与确认人必须是不同老板", 403, "FORBIDDEN");
+      if (!permission.directConfirm) fail("只有直接有效的老板权限组或 Root 可以确认高倍率", 403, "FORBIDDEN");
       const rows = await client.query<HighMultiplierRow>(
         `SELECT configuration_item_id,multiplier::text,high_multiplier_reason
          FROM rework_responsibility_processes
@@ -351,7 +350,7 @@ export class AuthorizedResponsibilityDeterminationService {
         client,
         actor,
         `high-multiplier:${determinationId}:${current.determination_version}:`,
-        "Independent high-multiplier confirmation completed",
+        "Owner high-multiplier confirmation completed",
       );
       await this.advance(client, order.rework_order_id, actor.actorId, order.status);
       return this.get(actor, order.rework_order_id, client);
@@ -402,8 +401,7 @@ export class AuthorizedResponsibilityDeterminationService {
         (root || (row.direct_takeover && caps.includes("responsibility:takeover"))),
       canConfirmHighMultiplier: pending &&
         (root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"))) &&
-        row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed &&
-        (root || row.leaf_created_by !== actor.actorId),
+        row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed,
       directTakeover: root || (row.direct_takeover && caps.includes("responsibility:takeover")),
       directConfirm: root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")),
       handlerUserId: row.handler_user_id,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTodoDeepLink } from "../../apps/api/src/todos/deep-link.js";
+import {
+  buildTodoDeepLink,
+  buildTodoExternalDeepLink,
+} from "../../apps/api/src/todos/deep-link.js";
 
 const todoId = "00000000-0000-4000-8000-000000000013";
 const entityId = "00000000-0000-4000-8000-000000000014";
@@ -35,6 +38,21 @@ describe("todo deep links", () => {
     })).toBe(`/ui/work-reporting?todo=${todoId}&rework=00000000-0000-4000-8000-000000000017`);
   });
 
+  it("builds the complete HTTPS address required by DingTalk clients", () => {
+    expect(buildTodoExternalDeepLink("https://staging.example/rework/", {
+      routeName: "rework_detail",
+      entityId,
+      todoId,
+    })).toBe(
+      `https://staging.example/rework/ui/tasks/${entityId}?todo=${todoId}`,
+    );
+    expect(() => buildTodoExternalDeepLink("http://staging.example/rework/", {
+      routeName: "rework_detail",
+      entityId,
+      todoId,
+    })).toThrow("must be a clean HTTPS URL");
+  });
+
   it("rejects an unsafe deployment base path instead of accepting an arbitrary URL", () => {
     expect(() => buildTodoDeepLink("https://example.test/", {
       routeName: "rework_detail",
@@ -43,3 +61,4 @@ describe("todo deep links", () => {
     })).toThrow("Application base path is invalid");
   });
 });
+

@@ -359,7 +359,7 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
       dedupeKey: `transferable:${transferEntityId}`,
     });
     const provider = new FakeDingTalkTodoProvider();
-    const worker = new TodoDeliveryWorker(database, provider, "/");
+    const worker = new TodoDeliveryWorker(database, provider, "https://staging.example/rework/");
     expect((await worker.runOnce()).sent).toBe(1);
 
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [original.userId]);
@@ -434,7 +434,7 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
       dedupeKey: `reminder:${entityId}`,
     });
     const provider = new FakeDingTalkTodoProvider();
-    const worker = new TodoDeliveryWorker(database, provider, "/");
+    const worker = new TodoDeliveryWorker(database, provider, "https://staging.example/rework/");
     expect((await worker.runOnce()).sent).toBe(1);
     await database.query("SELECT pg_sleep(1.1)");
     const timing = await new TodoTimingService(database).runOnce({
@@ -450,3 +450,4 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
   });
 });
+

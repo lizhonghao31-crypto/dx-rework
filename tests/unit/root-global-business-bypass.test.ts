@@ -40,7 +40,7 @@ describe("root global business bypass policy", () => {
     expect(source).toContain("!isRootActor(actor) && adjustment.requested_by === actor.actorId");
   });
 
-  it("bypasses root handler and independent-review separation in responsibility", async () => {
+  it("keeps Root global and allows a direct owner to confirm their own high multiplier", async () => {
     const authorized = await readFile(
       new URL("../../apps/api/src/rework/responsibility-determination-authorized-service.ts", import.meta.url),
       "utf8",
@@ -57,23 +57,34 @@ describe("root global business bypass policy", () => {
       new URL("../../apps/api/migrations/0040_root_identity_separation_bypass.sql", import.meta.url),
       "utf8",
     );
+    const ownerSelfConfirmationMigration = await readFile(
+      new URL("../../apps/api/migrations/0051_owner_self_confirmation_root_todo.sql", import.meta.url),
+      "utf8",
+    );
     expect(authorized).toContain("!isRootActor(actor) && permission.handlerUserId !== actor.actorId");
-    expect(authorized).toContain("!isRootActor(actor) && current.created_by === actor.actorId");
-    expect(authorized).toContain("root || row.leaf_created_by !== actor.actorId");
+    expect(authorized).not.toContain("!isRootActor(actor) && current.created_by === actor.actorId");
+    expect(authorized).toContain("directConfirm: root || (row.direct_confirm && caps.includes");
     expect(authorized).toContain("canView = root ||");
     expect(application).toContain("!isRootActor(actor) && permission.handler_user_id !== actor.actorId");
     expect(queue).toContain("const hasTakeover = root || actorCapabilities.includes");
     expect(queue).toContain("const hasConfirm = root || actorCapabilities.includes");
+    expect(queue).not.toContain("root || row.leaf_created_by !== actor.actorId");
 
     expect(migration).toContain("event_actor IS DISTINCT FROM effective_handler");
     expect(migration).toContain("NOT access_is_root_actor(event_actor)");
     expect(migration).toContain("NEW.acted_by IS DISTINCT FROM current_handler");
     expect(migration).toContain("NOT access_is_root_actor(NEW.acted_by)");
-    expect(migration).toContain("NEW.confirmed_by = determination.created_by");
     expect(migration).toContain("NOT access_is_root_actor(NEW.confirmed_by)");
     expect(migration).toContain("determination.stage <> 'draft'");
     expect(migration).toContain("process.multiplier > 2");
     expect(migration).toContain("confirmation snapshot does not match the draft");
+    expect(ownerSelfConfirmationMigration).toContain("SELECT access_is_root_actor(candidate)");
+    expect(ownerSelfConfirmationMigration).not.toContain(
+      "high multiplier submitter cannot confirm the same version",
+    );
+    expect(ownerSelfConfirmationMigration).toContain(
+      "high multiplier confirmation requires a direct active owner or root",
+    );
   });
 
   it("bypasses root wage adjustment actor separation without bypassing wage state rules", async () => {

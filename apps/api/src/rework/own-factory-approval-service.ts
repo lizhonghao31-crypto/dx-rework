@@ -11,7 +11,6 @@ import { ApplicationError } from "../platform/errors.js";
 import { maybeCompleteResponsibilityAction } from "./external-responsibility-service.js";
 import {
   IdempotencyService,
-  MessageOutboxRepository,
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
@@ -98,7 +97,6 @@ const fail = (message: string, status = 409, code = "CONFLICT"): never => {
 export class OwnFactoryApprovalService {
   private readonly idempotency = new IdempotencyService();
   private readonly events = new OperationEventRepository();
-  private readonly outbox = new MessageOutboxRepository();
 
   constructor(
     private readonly database: Pool,
@@ -169,8 +167,7 @@ export class OwnFactoryApprovalService {
       ],
     );
     if (createPendingAction) {
-      await this.enqueuePendingNotices(client, approvalId, order, actor.requestId);
-      await this.todos?.actionableForParallelDirectRole(client, actor, {
+      await this.todos?.actionableForAllDirectRole(client, actor, {
         category: "own_factory_approval",
         sourceEventId: eventId,
         sourceAction: "rework.own_factory_approval.create",
@@ -181,7 +178,6 @@ export class OwnFactoryApprovalService {
         route: { routeName: "own_factory_approval", entityId: order.rework_order_id },
         policyKey: "general",
         dedupeKey: `own-factory-approval:${approvalId}`,
-        expectedRecipientCount: 2,
       });
     }
     return approvalId;
@@ -448,30 +444,6 @@ export class OwnFactoryApprovalService {
       `own-factory-approval:${approvalId}:`,
       "A direct owner completed the parallel own-factory approval",
     );
-    for (const ownerId of await this.activeOwners(client)) {
-      if (ownerId === actor.actorId) continue;
-      await this.todos?.information(client, actor, {
-        category: "own_factory_approval_result",
-        sourceEventId: eventId,
-        sourceAction: action,
-        entityType: "rework_order",
-        entityId: order.rework_order_id,
-        recipientUserId: ownerId,
-        route: {
-          routeName: "own_factory_approval",
-          entityId: order.rework_order_id,
-        },
-        dedupeKey: `own-factory-result:${approvalId}:${ownerId}`,
-      });
-    }
-    await this.enqueueResultNotices(
-      client,
-      approvalId,
-      order,
-      actor.actorId,
-      decision,
-      actor.requestId,
-    );
     return this.get(actor, order.rework_order_id, client);
   }
 
@@ -617,67 +589,4 @@ export class OwnFactoryApprovalService {
     return eventId;
   }
 
-  private async activeOwners(client: Queryable): Promise<string[]> {
-    const result = await client.query<{ user_id: string }>(
-      `SELECT DISTINCT assignment.user_id
-       FROM user_role_assignments assignment
-       WHERE assignment.revoked_at IS NULL
-         AND responsibility_actor_has_direct_role(
-           assignment.user_id,'own_factory:approve',ARRAY['owner_group']
-         )
-       ORDER BY assignment.user_id`,
-    );
-    return result.rows.map((row) => row.user_id);
-  }
-
-  private async enqueuePendingNotices(
-    client: PoolClient,
-    approvalId: string,
-    order: OrderRow,
-    requestId: string,
-  ): Promise<void> {
-    for (const ownerId of await this.activeOwners(client)) {
-      await this.outbox.enqueue(client, {
-        topic: "rework.own_factory_approval.pending",
-        aggregateType: "own_factory_approval",
-        aggregateId: approvalId,
-        recipientKey: ownerId,
-        idempotencyKey: `own-factory-approval:pending:${approvalId}:${ownerId}`,
-        payload: {
-          approvalId,
-          reworkOrderId: order.rework_order_id,
-          requestId,
-          kind: "pending",
-        },
-      });
-    }
-  }
-
-  private async enqueueResultNotices(
-    client: PoolClient,
-    approvalId: string,
-    order: OrderRow,
-    actorId: string,
-    decision: "approved" | "rejected",
-    requestId: string,
-  ): Promise<void> {
-    for (const ownerId of await this.activeOwners(client)) {
-      if (ownerId === actorId) continue;
-      await this.outbox.enqueue(client, {
-        topic: "rework.own_factory_approval.result",
-        aggregateType: "own_factory_approval",
-        aggregateId: approvalId,
-        recipientKey: ownerId,
-        idempotencyKey: `own-factory-approval:result:${approvalId}:${ownerId}`,
-        payload: {
-          approvalId,
-          reworkOrderId: order.rework_order_id,
-          requestId,
-          decision,
-          actedBy: actorId,
-          kind: "result_notice",
-        },
-      });
-    }
-  }
 }

@@ -305,7 +305,7 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
         state: "updated",
       }),
     };
-    expect(await new TodoDeliveryWorker(database, provider, "/").runOnce()).toEqual({
+    expect(await new TodoDeliveryWorker(database, provider, "https://staging.example/rework/").runOnce()).toEqual({
       claimed: 1,
       sent: 1,
       failed: 0,
@@ -642,3 +642,4 @@ runWithPostgres("PR-13 todo notification foundation migration", () => {
     ] });
   });
 });
+
