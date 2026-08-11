@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import {
   CreateReworkDraftSchema,
+  MAX_REWORK_ATTACHMENTS,
   CreateWorkReportSchema,
   CreateWorkTaskSchema,
   ReviewProcessConfigurationSchema,
@@ -49,6 +50,16 @@ describe("rework initiation contracts", () => {
         supplierId: "00000000-0000-4000-8000-000000000002",
       },
     }).success).toBe(false);
+  });
+
+  it("caps one rework order at five evidence attachments", () => {
+    const attachmentIds = Array.from({ length: MAX_REWORK_ATTACHMENTS + 1 }, (_value, index) =>
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    );
+    expect(CreateReworkDraftSchema.safeParse({
+      attachmentIds: attachmentIds.slice(0, MAX_REWORK_ATTACHMENTS),
+    }).success).toBe(true);
+    expect(CreateReworkDraftSchema.safeParse({ attachmentIds }).success).toBe(false);
   });
 
   it("permits the PR-05/06 state transitions without unlocking later nodes", () => {
