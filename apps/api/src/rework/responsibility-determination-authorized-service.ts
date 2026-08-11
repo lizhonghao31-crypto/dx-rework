@@ -314,7 +314,7 @@ export class AuthorizedResponsibilityDeterminationService {
       if (order.status !== "pending_responsibility_determination") fail("返工单不在待判责状态");
       if (current.stage !== "draft" || current.determination_version !== input.expectedCurrentDeterminationVersion) fail("判责版本冲突");
       const permission = await this.permissions(client, actor, order);
-      if (!permission.directConfirm) fail("只有直接有效的老板权限组可以确认高倍率", 403, "FORBIDDEN");
+      if (!permission.directConfirm) fail("只有直接有效的老板权限组或 Root 可以确认高倍率", 403, "FORBIDDEN");
       const rows = await client.query<HighMultiplierRow>(
         `SELECT configuration_item_id,multiplier::text,high_multiplier_reason
          FROM rework_responsibility_processes
@@ -400,10 +400,10 @@ export class AuthorizedResponsibilityDeterminationService {
       canTakeover: pending && row.handler_user_id !== actor.actorId &&
         (root || (row.direct_takeover && caps.includes("responsibility:takeover"))),
       canConfirmHighMultiplier: pending &&
-        row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier") &&
+        (root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"))) &&
         row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed,
       directTakeover: root || (row.direct_takeover && caps.includes("responsibility:takeover")),
-      directConfirm: row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"),
+      directConfirm: root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")),
       handlerUserId: row.handler_user_id,
     };
   }

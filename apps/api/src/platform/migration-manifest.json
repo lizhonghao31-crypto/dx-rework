@@ -199,6 +199,10 @@
     {
       "version": "0050_root_self_system_admin",
       "checksum": "395b8021cabdff349c6454239c6b76e3937b87a68a5ddb8fb6936f2cca4fefc0"
+    },
+    {
+      "version": "0051_owner_self_confirmation_root_todo",
+      "checksum": "fabcf86eadf4e828943d62fd693b8c89f0de44f61ec1441f5f31546e9748bcfa"
     }
   ]
 }

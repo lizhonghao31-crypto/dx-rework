@@ -526,7 +526,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       .toMatchObject({
         determinationVersion: 2,
         highMultiplierConfirmation: {
-          confirmedBy: ids.ownerTwo,
+          confirmedBy: ids.ownerOne,
           reason: "老板本人最终确认",
         },
       });

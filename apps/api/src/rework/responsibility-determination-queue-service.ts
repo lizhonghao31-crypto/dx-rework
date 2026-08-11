@@ -34,7 +34,7 @@ export class ResponsibilityDeterminationQueueService {
     const root = isRootActor(actor);
     const hasDetermine = root || actorCapabilities.includes("responsibility:determine");
     const hasTakeover = root || actorCapabilities.includes("responsibility:takeover");
-    const hasConfirm = actorCapabilities.includes(
+    const hasConfirm = root || actorCapabilities.includes(
       "responsibility:confirm_high_multiplier",
     );
 
@@ -137,11 +137,11 @@ export class ResponsibilityDeterminationQueueService {
           (root || row.handler_user_id === null || row.handler_user_id === actor.actorId),
         canTakeover:
           hasTakeover &&
-          row.direct_takeover &&
+          (root || row.direct_takeover) &&
           row.handler_user_id !== actor.actorId,
         canConfirmHighMultiplier:
           hasConfirm &&
-          row.direct_confirm &&
+          (root || row.direct_confirm) &&
           row.determination_stage === "draft" &&
           row.high_multiplier_pending,
         highMultiplierPending: row.high_multiplier_pending,

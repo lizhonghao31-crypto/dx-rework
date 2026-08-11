@@ -56,6 +56,8 @@ describe("shared owner-group todo routing", () => {
 
     expect(String((client.query as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]))
       .not.toContain("LIMIT");
+    expect(String((client.query as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]))
+      .toContain("owner_bootstrap_consumptions");
     expect(createInTransaction).toHaveBeenCalledTimes(3);
     const createCalls = createInTransaction.mock.calls as unknown as Array<[
       PoolClient,

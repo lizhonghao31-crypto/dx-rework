@@ -207,11 +207,18 @@ export class TodoProjectionService {
     projection: ActionableProjection,
   ): Promise<string[]> {
     const recipients = await client.query<{ user_id: string }>(
-      `SELECT DISTINCT assignment.user_id
-       FROM user_role_assignments assignment
-       WHERE assignment.role_code=$1 AND assignment.revoked_at IS NULL
-         AND todo_user_has_direct_role(assignment.user_id,$1,$2)
-       ORDER BY assignment.user_id`,
+      `SELECT DISTINCT recipient.user_id
+       FROM (
+         SELECT assignment.user_id
+         FROM user_role_assignments assignment
+         WHERE assignment.role_code=$1 AND assignment.revoked_at IS NULL
+         UNION
+         SELECT root.user_id
+         FROM owner_bootstrap_consumptions root
+         WHERE root.singleton=true
+       ) recipient
+       WHERE todo_user_has_direct_role(recipient.user_id,$1,$2)
+       ORDER BY recipient.user_id`,
       [projection.requiredRole, projection.requiredCapability],
     );
     if (recipients.rows.length === 0) {
@@ -633,4 +640,3 @@ export class TodoProjectionService {
     });
   }
 }
-
