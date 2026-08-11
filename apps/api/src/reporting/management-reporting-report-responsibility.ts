@@ -12,19 +12,10 @@ export async function responsibilityReport(source: Queryable, query: ReportQuery
      )
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,leaf.determination_version,
        process.process_name_snapshot,process.multiplier::text,allocation.responsibility_type,allocation.share_bps,
-       (
-         allocation.rounded_amount +
-         CASE
-           WHEN allocation.responsibility_type=adjustment.responsibility_type
-           THEN COALESCE(adjustment.adjustment_amount,0)
-           ELSE 0
-         END
-       )::text rounded_amount
+       allocation.effective_rounded_amount::text rounded_amount
      FROM leaf JOIN rework_orders order_record USING(rework_order_id)
-     JOIN rework_responsibility_allocations allocation USING(determination_id)
+     JOIN rework_effective_responsibility_allocations allocation USING(determination_id)
      JOIN rework_responsibility_processes process USING(determination_id,configuration_item_id)
-     LEFT JOIN rework_responsibility_rounding_adjustments adjustment
-       USING(determination_id,configuration_item_id)
      WHERE (leaf.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4 OR process.process_name_snapshot ILIKE $4)
        AND ($5::text IS NULL OR allocation.responsibility_type=$5)
@@ -38,7 +29,13 @@ export async function ownFactoryReport(source: Queryable, query: ReportQuery, ra
   const result=await source.query<QueryResultRow>(
     `WITH leaf AS (SELECT determination.* FROM rework_responsibility_determinations determination WHERE determination.stage='finalized' AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations successor WHERE successor.replaces_determination_id=determination.determination_id))
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,approval.approval_id,
-       approval.finalized_determination_version,approval.status,approval.own_factory_total_amount::text,
+       approval.finalized_determination_version,approval.status,
+       COALESCE((
+         SELECT sum(allocation.effective_rounded_amount)
+         FROM rework_effective_responsibility_allocations allocation
+         WHERE allocation.determination_id=approval.finalized_determination_id
+           AND allocation.responsibility_type='own_factory'
+       ),0)::text own_factory_total_amount,
        decision.decision,decision.acted_by,decision.decided_at
      FROM leaf JOIN rework_own_factory_approvals approval ON approval.finalized_determination_id=leaf.determination_id
      JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
