@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { prepareAndUploadWithConcurrency } from "../../apps/web/src/attachment-upload.js";
 
 describe("attachment upload pipeline", () => {
-  it("starts the next preparation while an earlier upload is still in flight", async () => {
+  it("starts an upload before a different file has finished preparing", async () => {
     const events: string[] = [];
-    let releaseFirstUpload: () => void = () => undefined;
-    const firstUpload = new Promise<void>((resolve) => {
-      releaseFirstUpload = resolve;
+    let releaseSecondPreparation: () => void = () => undefined;
+    const secondPreparation = new Promise<number>((resolve) => {
+      releaseSecondPreparation = resolve;
     });
 
     const run = prepareAndUploadWithConcurrency(
@@ -15,19 +15,19 @@ describe("attachment upload pipeline", () => {
       2,
       async (item) => {
         events.push(`prepare:${item}`);
-        return item;
+        return item === 2 ? secondPreparation : item;
       },
       async (item) => {
         events.push(`upload:${item}`);
-        if (item === 1) await firstUpload;
         return `uploaded:${item}`;
       },
     );
 
-    await vi.waitFor(() => expect(events).toContain("prepare:2"));
-    expect(events.indexOf("prepare:2")).toBeGreaterThan(events.indexOf("upload:1"));
+    await vi.waitFor(() => expect(events).toContain("upload:1"));
+    expect(events).toContain("prepare:2");
+    expect(events).not.toContain("upload:2");
 
-    releaseFirstUpload();
+    releaseSecondPreparation(2);
     await expect(run).resolves.toEqual(["uploaded:1", "uploaded:2"]);
   });
 
