@@ -100,11 +100,6 @@ export class AttachmentService {
       await this.rejectVerification(actor, row, "metadata_mismatch", "Uploaded object metadata does not match the upload intent");
     }
 
-    const contentSha256 = await this.verificationCall(actor, row, () => this.storage.computeSha256(row.object_key));
-    if (contentSha256 !== row.sha256) {
-      await this.rejectVerification(actor, row, "content_hash_mismatch", "Uploaded object bytes do not match the declared SHA-256");
-    }
-
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");

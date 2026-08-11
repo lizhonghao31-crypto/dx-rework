@@ -116,6 +116,24 @@ describe("PR-05 web behavior", () => {
     })).toBe(true);
   });
 
+  it("keeps QC uploads compact, capped and previewable throughout the order detail", async () => {
+    const [form, detail, helper] = await Promise.all([
+      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/web/src/attachment-upload.ts", "utf8"),
+    ]);
+
+    expect(form).toContain("MAX_REWORK_ATTACHMENTS");
+    expect(form).toContain("mapWithConcurrency(prepared, 2");
+    expect(form).toContain("qc-upload-preview-list");
+    expect(form).toContain("URL.createObjectURL(file)");
+    expect(detail).toContain("订单图片");
+    expect(detail).toContain("rework-detail-image-grid");
+    expect(detail).toContain("rework-image-modal");
+    expect(helper).toContain("const MAX_IMAGE_EDGE = 2048");
+    expect(helper).toContain('canvas.toBlob(resolve, "image/webp", WEBP_QUALITY)');
+  });
+
   it("requires both the QC role and initiation capability only on the QC page", () => {
     const requirement = {
       requiredRole: "quality_control",

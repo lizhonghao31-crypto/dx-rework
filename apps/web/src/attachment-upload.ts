@@ -1,0 +1,88 @@
+export const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
+
+const IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const MAX_IMAGE_EDGE = 2048;
+const WEBP_QUALITY = 0.85;
+
+export const isSupportedAttachment = (file: Pick<File, "type">): boolean =>
+  SUPPORTED_ATTACHMENT_MIME_TYPES.has(file.type);
+
+export const isImageAttachment = (file: Pick<File, "type">): boolean =>
+  IMAGE_MIME_TYPES.has(file.type);
+
+export const sha256Hex = async (file: Blob): Promise<string> => {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const webpFilename = (filename: string): string => {
+  const stem = filename.replace(/\.[^.]+$/, "").trim() || "evidence";
+  return `${stem}.webp`;
+};
+
+const canvasBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
+  new Promise((resolve) => canvas.toBlob(resolve, "image/webp", WEBP_QUALITY));
+
+/**
+ * QC photos are reduced before hashing/uploading. This preserves the original
+ * whenever the browser cannot safely encode WebP or no material byte saving is
+ * achieved, so evidence clarity never regresses merely for conversion's sake.
+ */
+export const prepareAttachmentForUpload = async (file: File): Promise<File> => {
+  if (!isImageAttachment(file) || typeof createImageBitmap !== "function") return file;
+
+  let bitmap: ImageBitmap | undefined;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const longestEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = Math.min(1, MAX_IMAGE_EDGE / longestEdge);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    const compressed = await canvasBlob(canvas);
+    if (!compressed || compressed.type !== "image/webp" || compressed.size >= file.size * 0.95) {
+      return file;
+    }
+    return new File([compressed], webpFilename(file.name), {
+      type: "image/webp",
+      lastModified: file.lastModified,
+    });
+  } catch {
+    return file;
+  } finally {
+    bitmap?.close();
+  }
+};
+
+export const mapWithConcurrency = async <T, Result>(
+  items: readonly T[],
+  limit: number,
+  operation: (item: T, index: number) => Promise<Result>,
+): Promise<Result[]> => {
+  const results = new Array<Result>(items.length);
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await operation(items[index]!, index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  return results;
+};
