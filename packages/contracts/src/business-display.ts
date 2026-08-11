@@ -308,6 +308,15 @@ export const formatBusinessDecimal = (
   });
 };
 
+export const formatBusinessMoney = (value: string | number): string => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value);
+  return numeric.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
 export const translateTechnicalDetails = (value: unknown, key = ""): unknown => {
   if (Array.isArray(value)) return value.map((item) => translateTechnicalDetails(item, key));
   if (value && typeof value === "object") {
