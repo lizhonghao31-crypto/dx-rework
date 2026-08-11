@@ -124,7 +124,8 @@ describe("PR-05 web behavior", () => {
     ]);
 
     expect(form).toContain("MAX_REWORK_ATTACHMENTS");
-    expect(form).toContain("prepareAndUploadWithConcurrency(selected, 2");
+    expect(form).toContain("const uploadConcurrency = currentQcUploadConcurrency();");
+    expect(form).toContain("prepareAndUploadWithConcurrency(selected, uploadConcurrency");
     expect(form).not.toContain("mapWithConcurrency(selected, 2, prepareAttachmentForUpload)");
     expect(form).toContain("firstUploadStartedAt");
     expect(form).toContain("qc-upload-preview-list");
