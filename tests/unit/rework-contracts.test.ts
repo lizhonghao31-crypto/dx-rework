@@ -7,6 +7,7 @@ import {
   CreateWorkTaskSchema,
   ReviewProcessConfigurationSchema,
   SaveProcessConfigurationSchema,
+  SupplementReworkOrderImagesSchema,
   UpdateReworkDraftSchema,
 } from "@dx-rework/contracts";
 import { transitionReworkOrder } from "@dx-rework/domain";
@@ -60,6 +61,29 @@ describe("rework initiation contracts", () => {
       attachmentIds: attachmentIds.slice(0, MAX_REWORK_ATTACHMENTS),
     }).success).toBe(true);
     expect(CreateReworkDraftSchema.safeParse({ attachmentIds }).success).toBe(false);
+  });
+
+  it("requires a non-empty, unique, capped image supplement batch", () => {
+    const attachmentId = "00000000-0000-4000-8000-000000000001";
+    const attachmentIds = Array.from({ length: MAX_REWORK_ATTACHMENTS + 1 }, (_value, index) =>
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    );
+    expect(SupplementReworkOrderImagesSchema.safeParse({
+      expectedVersion: 1,
+      attachmentIds: [attachmentId],
+    }).success).toBe(true);
+    expect(SupplementReworkOrderImagesSchema.safeParse({
+      expectedVersion: 1,
+      attachmentIds: [],
+    }).success).toBe(false);
+    expect(SupplementReworkOrderImagesSchema.safeParse({
+      expectedVersion: 1,
+      attachmentIds: [attachmentId, attachmentId],
+    }).success).toBe(false);
+    expect(SupplementReworkOrderImagesSchema.safeParse({
+      expectedVersion: 1,
+      attachmentIds,
+    }).success).toBe(false);
   });
 
   it("permits the PR-05/06 state transitions without unlocking later nodes", () => {
