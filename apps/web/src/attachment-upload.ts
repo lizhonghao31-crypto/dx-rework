@@ -86,3 +86,41 @@ export const mapWithConcurrency = async <T, Result>(
   await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
   return results;
 };
+
+/**
+ * Starts each upload as soon as its own preparation finishes. While the network
+ * uploads that file, the next file continues preparing; active uploads remain
+ * capped so weaker mobile networks are not saturated.
+ */
+export const prepareAndUploadWithConcurrency = async <T, Prepared, Result>(
+  items: readonly T[],
+  limit: number,
+  prepare: (item: T, index: number) => Promise<Prepared>,
+  upload: (prepared: Prepared, item: T, index: number) => Promise<Result>,
+): Promise<Result[]> => {
+  const results = new Array<Result>(items.length);
+  const concurrency = Math.max(1, Math.min(Math.max(1, limit), items.length));
+  const inFlight = new Set<Promise<void>>();
+
+  try {
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index]!;
+      const prepared = await prepare(item, index);
+      const task = upload(prepared, item, index).then((result) => {
+        results[index] = result;
+      });
+      inFlight.add(task);
+      task.then(
+        () => inFlight.delete(task),
+        () => inFlight.delete(task),
+      );
+      if (inFlight.size >= concurrency) await Promise.race(inFlight);
+    }
+    await Promise.all(inFlight);
+  } catch (error) {
+    await Promise.allSettled(inFlight);
+    throw error;
+  }
+
+  return results;
+};
