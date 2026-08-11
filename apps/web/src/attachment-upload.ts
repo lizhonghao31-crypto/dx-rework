@@ -13,6 +13,29 @@ const IMAGE_MIME_TYPES = new Set([
 const MAX_IMAGE_EDGE = 2048;
 const WEBP_QUALITY = 0.85;
 
+type NetworkInformationLike = Readonly<{ effectiveType?: string }>;
+
+/**
+ * A third lane eliminates the second upload wave for ordinary 3–5-photo QC
+ * batches. Deliberately retain backpressure for slow mobile networks.
+ */
+export const qcUploadConcurrency = (connection?: NetworkInformationLike): number => {
+  switch (connection?.effectiveType) {
+    case "slow-2g":
+    case "2g":
+      return 1;
+    case "3g":
+      return 2;
+    default:
+      return 3;
+  }
+};
+
+export const currentQcUploadConcurrency = (): number => {
+  if (typeof navigator === "undefined") return 3;
+  return qcUploadConcurrency((navigator as Navigator & { connection?: NetworkInformationLike }).connection);
+};
+
 export const isSupportedAttachment = (file: Pick<File, "type">): boolean =>
   SUPPORTED_ATTACHMENT_MIME_TYPES.has(file.type);
 
