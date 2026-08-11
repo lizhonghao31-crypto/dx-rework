@@ -22,4 +22,25 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain("节点停留");
     expect(page).toContain("您当前的任务已全部完成，谢谢");
   });
+
+  it("keeps the mobile task list aligned to the product hierarchy without changing the action path", async () => {
+    const [page, css] = await Promise.all([
+      readFile("apps/web/src/my-todos-page.tsx", "utf8"),
+      readFile("apps/web/src/my-todos.css", "utf8"),
+    ]);
+
+    expect(page).toContain('className="my-todos-page"');
+    expect(page).toContain('className="my-todos-hero"');
+    expect(page).toContain('className="my-todos-hero__title"');
+    expect(page).toContain('apiUrl("todos/mine")');
+    expect(page).toContain("taskHref(todo)");
+    expect(page).toContain("my-todo-metrics");
+
+    expect(css).toContain("@media (max-width: 800px)");
+    expect(css).toContain(".my-todos-hero");
+    expect(css).toContain(".my-todo-index {");
+    expect(css).toContain("display: none;");
+    expect(css).toContain(".my-todo-metrics span:nth-child(2)");
+    expect(css).toContain("env(safe-area-inset-bottom, 0px)");
+  });
 });
