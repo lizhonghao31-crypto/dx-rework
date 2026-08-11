@@ -80,6 +80,8 @@ type ReworkBusinessDetail = Readonly<{
   }>[];
 }>;
 
+type ReworkAttachment = ReworkBusinessDetail["attachments"][number];
+
 type LoadState =
   | { kind: "loading" }
   | { kind: "ready"; value: ReworkBusinessDetail }
@@ -339,6 +341,7 @@ export function ReworkDetailPage({
   const reworkOrderId = providedReworkOrderId ?? orderIdFromLocation();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
+  const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
     if (!reworkOrderId) {
@@ -364,6 +367,15 @@ export function ReworkDetailPage({
       .catch(() => undefined);
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!selectedImage) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedImage(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedImage]);
 
   useEffect(() => {
     if (!reworkOrderId) {
@@ -397,6 +409,8 @@ export function ReworkDetailPage({
   }
 
   const detail = state.value;
+  const imageAttachments = detail.attachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
+  const otherAttachments = detail.attachments.filter((attachment) => !attachment.mimeType.startsWith("image/"));
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const currentNode = stages.flatMap((stage) => stage.nodes).find((node) => node.state === "current")?.key;
@@ -485,17 +499,37 @@ export function ReworkDetailPage({
             <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
             <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
             <div className="rework-detail-wide"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
-            <div className="rework-detail-wide"><dt>订单关联附件（含外部责任凭证）</dt><dd>{detail.attachments.length
-              ? detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
-                {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
-                <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
-                <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
-              </span>)
-              : "无"}</dd></div>
+            {otherAttachments.length > 0 && <div className="rework-detail-wide"><dt>其他附件（含外部责任凭证）</dt><dd>{otherAttachments.map((attachment) => <span key={attachment.attachmentId}>
+              {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
+              <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
+              <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
+            </span>)}</dd></div>}
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
             {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
           </dl>
+          {imageAttachments.length > 0 && (
+            <section className="rework-detail-images" aria-label="订单图片">
+              <div className="section-title">
+                <div><h2>订单图片</h2><p>点击缩略图可放大查看；图片保存在私有 OSS，仅有订单查看权限的人员可访问。</p></div>
+                <StatusBadge tone="info">{imageAttachments.length} 张</StatusBadge>
+              </div>
+              <div className="rework-detail-image-grid">
+                {imageAttachments.map((attachment) => (
+                  <button
+                    className="rework-detail-image-card"
+                    type="button"
+                    key={attachment.attachmentId}
+                    onClick={() => setSelectedImage(attachment)}
+                    aria-label={`放大查看 ${attachment.filename}`}
+                  >
+                    <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
+                    <span>{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </Surface>
 
         <section className="rework-workflow" key={detail.status} aria-label="订单流程">
@@ -525,6 +559,24 @@ export function ReworkDetailPage({
           {renderSelectedTask()}
         </section>
       </div>
+      {selectedImage && (
+        <div className="rework-image-modal" role="presentation" onMouseDown={() => setSelectedImage(null)}>
+          <section
+            className="rework-image-modal__content"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`订单图片：${selectedImage.filename}`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="rework-image-modal__heading">
+              <strong>{selectedImage.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{selectedImage.filename}</strong>
+              <button type="button" onClick={() => setSelectedImage(null)}>关闭</button>
+            </div>
+            <img src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
+            <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
+          </section>
+        </div>
+      )}
     </Shell>
   );
 }
