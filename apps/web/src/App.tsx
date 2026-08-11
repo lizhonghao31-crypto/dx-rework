@@ -184,12 +184,12 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
-  else if (path === "/ui/qc/new") page = <Shell active="发起返工"><ReworkInitiationWorkbench /></Shell>;
+  else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationWorkbench /></Shell>;
   else if (path === "/ui/process-configuration") page = hasReworkContext
-    ? <Shell active="全部订单"><ProcessConfigurationForm /></Shell>
+    ? <Shell active="全部订单" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
     : <WorkflowQueuePage active="全部订单" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
   else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
-    ? <Shell active="全部订单"><WorkReportingForm /></Shell>
+    ? <Shell active="全部订单" mobileNavigation="transaction"><WorkReportingForm /></Shell>
     : <WorkflowQueuePage active="全部订单" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
