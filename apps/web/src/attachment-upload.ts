@@ -88,9 +88,9 @@ export const mapWithConcurrency = async <T, Result>(
 };
 
 /**
- * Starts each upload as soon as its own preparation finishes. While the network
- * uploads that file, the next file continues preparing; active uploads remain
- * capped so weaker mobile networks are not saturated.
+ * Keeps the existing two-way preparation capacity while starting each upload
+ * as soon as its own preparation finishes. Uploads are independently capped,
+ * so lower-performance phones and weaker networks are not saturated.
  */
 export const prepareAndUploadWithConcurrency = async <T, Prepared, Result>(
   items: readonly T[],
@@ -101,23 +101,49 @@ export const prepareAndUploadWithConcurrency = async <T, Prepared, Result>(
   const results = new Array<Result>(items.length);
   const concurrency = Math.max(1, Math.min(Math.max(1, limit), items.length));
   const inFlight = new Set<Promise<void>>();
+  let nextIndex = 0;
+  let stopped = false;
+  let firstError: unknown;
 
-  try {
-    for (let index = 0; index < items.length; index += 1) {
+  const worker = async (): Promise<void> => {
+    while (!stopped && nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
       const item = items[index]!;
       const prepared = await prepare(item, index);
+      if (firstError !== undefined) throw firstError;
+      while (!stopped && inFlight.size >= concurrency) {
+        await Promise.race(inFlight);
+      }
+      if (stopped || firstError !== undefined) {
+        if (firstError !== undefined) throw firstError;
+        return;
+      }
+
       const task = upload(prepared, item, index).then((result) => {
         results[index] = result;
       });
       inFlight.add(task);
       task.then(
         () => inFlight.delete(task),
-        () => inFlight.delete(task),
+        (error: unknown) => {
+          if (firstError === undefined) firstError = error;
+          stopped = true;
+          inFlight.delete(task);
+        },
       );
-      if (inFlight.size >= concurrency) await Promise.race(inFlight);
     }
+  };
+
+  const workers = Array.from({ length: concurrency }, worker);
+  try {
+    await Promise.all(workers);
+    if (firstError !== undefined) throw firstError;
     await Promise.all(inFlight);
+    if (firstError !== undefined) throw firstError;
   } catch (error) {
+    stopped = true;
+    await Promise.allSettled(workers);
     await Promise.allSettled(inFlight);
     throw error;
   }
