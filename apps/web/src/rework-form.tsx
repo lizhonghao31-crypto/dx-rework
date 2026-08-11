@@ -347,7 +347,10 @@ export function ReworkInitiationForm() {
     }
     if (attachmentIds.length + selected.length > MAX_REWORK_ATTACHMENTS) {
       setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张附件；请先移除现有图片后再选择。`);
-      re    setUploading(true);
+      return;
+    }
+
+    setUploading(true);
     setMessage(`正在优化并上传 ${selected.length} 份 QC 附件…`);
     const uploadStartedAt = performance.now();
     let firstUploadStartedAt: number | null = null;
@@ -401,7 +404,6 @@ export function ReworkInitiationForm() {
       const firstUploadSeconds = ((firstUploadStartedAt ?? uploadStartedAt) - uploadStartedAt) / 1_000;
       const totalSeconds = (performance.now() - uploadStartedAt) / 1_000;
       setMessage(`${nextIds.length} 份 QC 附件已就绪（首份 ${firstUploadSeconds.toFixed(1)} 秒开始上传，本次 ${totalSeconds.toFixed(1)} 秒），请保存草稿`);
-已就绪，请保存草稿`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "附件上传失败");
     } finally {
