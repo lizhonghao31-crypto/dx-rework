@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { BUSINESS_TIME_ZONE } from "./business-display.js";
+
 const IdSchema = z.string().uuid();
 const MoneySchema = z.string().regex(/^-?\d+\.\d{2}$/);
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -121,7 +123,7 @@ export const ManagementReworkRowSchema = z.object({
 export const ManagementDashboardResponseSchema = z.object({
   mode: z.literal("management"),
   asOf: DateTimeSchema,
-  range: z.object({ from: DateSchema, to: DateSchema, timezone: z.literal("Asia/Singapore") }).strict(),
+  range: z.object({ from: DateSchema, to: DateSchema, timezone: z.literal(BUSINESS_TIME_ZONE) }).strict(),
   kpis: z.object({
     openOrders: z.number().int().nonnegative(),
     completedOrders: z.number().int().nonnegative(),
@@ -145,7 +147,7 @@ export const ManagementDashboardResponseSchema = z.object({
 export const SiteDashboardResponseSchema = z.object({
   mode: z.literal("site"),
   asOf: DateTimeSchema,
-  range: z.object({ from: DateSchema, to: DateSchema, timezone: z.literal("Asia/Singapore") }).strict(),
+  range: z.object({ from: DateSchema, to: DateSchema, timezone: z.literal(BUSINESS_TIME_ZONE) }).strict(),
   kpis: z.object({
     pendingConfiguration: z.number().int().nonnegative(),
     pendingAssignment: z.number().int().nonnegative(),
@@ -176,7 +178,7 @@ const ReportCellSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]
 export const ReportPreviewResponseSchema = z.object({
   reportType: ReportTypeSchema,
   asOf: DateTimeSchema,
-  range: z.object({ from: DateSchema, to: DateSchema, timezone: z.literal("Asia/Singapore") }).strict(),
+  range: z.object({ from: DateSchema, to: DateSchema, timezone: z.literal(BUSINESS_TIME_ZONE) }).strict(),
   rowCount: z.number().int().nonnegative(),
   truncated: z.boolean(),
   canExport: z.boolean(),
