@@ -22,7 +22,7 @@ type UploadStage = "preparing" | "uploading" | "verifying";
 const stageLabel: Record<UploadStage, string> = {
   preparing: "正在准备文件",
   uploading: "正在上传文件",
-  verifying: "正在进行服务端校验",
+  verifying: "正在确认文件已入库",
 };
 
 type UploadedEvidence = {
