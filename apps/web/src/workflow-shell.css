@@ -103,7 +103,7 @@
   white-space: nowrap;
 }
 
-.mobile-primary-navigation {
+.app-shell > .mobile-primary-navigation {
   display: none;
 }
 
@@ -185,7 +185,7 @@
     display: none;
   }
 
-  .mobile-primary-navigation {
+  .app-shell > .mobile-primary-navigation {
     position: fixed;
     right: 0;
     bottom: 0;
@@ -193,6 +193,7 @@
     z-index: 30;
     display: flex;
     align-items: stretch;
+    margin-top: 0;
     justify-content: space-between;
     gap: 8px;
     min-height: 72px;
@@ -304,6 +305,10 @@
 
   .mobile-primary-navigation__more[open] .mobile-primary-navigation__drawer {
     display: block;
+  }
+
+  .mobile-primary-navigation__drawer .primary-navigation {
+    margin-top: 0;
   }
 
   .app-shell > main {
