@@ -12,10 +12,19 @@ export async function responsibilityReport(source: Queryable, query: ReportQuery
      )
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,leaf.determination_version,
        process.process_name_snapshot,process.multiplier::text,allocation.responsibility_type,allocation.share_bps,
-       allocation.rounded_amount::text
+       (
+         allocation.rounded_amount +
+         CASE
+           WHEN allocation.responsibility_type=adjustment.responsibility_type
+           THEN COALESCE(adjustment.adjustment_amount,0)
+           ELSE 0
+         END
+       )::text rounded_amount
      FROM leaf JOIN rework_orders order_record USING(rework_order_id)
      JOIN rework_responsibility_allocations allocation USING(determination_id)
      JOIN rework_responsibility_processes process USING(determination_id,configuration_item_id)
+     LEFT JOIN rework_responsibility_rounding_adjustments adjustment
+       USING(determination_id,configuration_item_id)
      WHERE (leaf.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4 OR process.process_name_snapshot ILIKE $4)
        AND ($5::text IS NULL OR allocation.responsibility_type=$5)
