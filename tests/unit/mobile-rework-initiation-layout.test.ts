@@ -11,6 +11,7 @@ describe("mobile rework initiation layout", () => {
     expect(source).toContain("const requiredCompletionCount = requiredFieldsComplete.filter(Boolean).length;");
     expect(source).toContain("必填项 {requiredCompletionCount}/6");
     expect(source).toContain("先填这 6 项");
+    expect(source).not.toMatch(/\n}\n\n}$/);
 
     const requiredLabels = [
       "款号（必填）",
