@@ -193,7 +193,9 @@ export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("own_factory") }).strict(),
   z.object({ type: z.literal("supplier"), supplierId: IdSchema }).strict(),
 ]);
-const ReworkAttachmentIdsSchema = z.array(IdSchema).superRefine((ids, context) => {
+export const MAX_REWORK_ATTACHMENTS = 5;
+
+const ReworkAttachmentIdsSchema = z.array(IdSchema).max(MAX_REWORK_ATTACHMENTS).superRefine((ids, context) => {
   if (new Set(ids).size !== ids.length) {
     context.addIssue({ code: "custom", message: "attachmentIds cannot contain duplicates" });
   }
