@@ -21,6 +21,7 @@ import {
 } from "./rework-submission.js";
 import {
   isImageAttachment,
+  currentQcUploadConcurrency,
   isSupportedAttachment,
   prepareAndUploadWithConcurrency,
   prepareAttachmentForUpload,
@@ -352,11 +353,12 @@ export function ReworkInitiationForm() {
 
     setUploading(true);
     setMessage(`正在优化并上传 ${selected.length} 份 QC 附件…`);
+    const uploadConcurrency = currentQcUploadConcurrency();
     const uploadStartedAt = performance.now();
     let firstUploadStartedAt: number | null = null;
     let completedUploadCount = 0;
     try {
-      const uploaded = await prepareAndUploadWithConcurrency(selected, 2, async (file, index) => {
+      const uploaded = await prepareAndUploadWithConcurrency(selected, uploadConcurrency, async (file, index) => {
         setMessage(`正在准备第 ${index + 1}/${selected.length} 份 QC 附件…`);
         const prepared = await prepareAttachmentForUpload(file);
         return { file: prepared, sha256: await sha256Hex(prepared) };
