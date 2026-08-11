@@ -3,7 +3,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { Header, Shell } from "./components.js";
+import { Shell } from "./components.js";
 import "./my-todos.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -113,7 +113,14 @@ export function MyTodosPage() {
 
   return (
     <Shell active="我的待办">
-      <Header title="我的待办" subtitle="这里只显示现在轮到你处理的事项。" badge="个人任务" />
+      <div className="my-todos-page">
+        <div className="my-todos-hero">
+          <div className="my-todos-hero__title">
+            <h1>我的待办</h1>
+            <StatusBadge tone="info">个人任务</StatusBadge>
+          </div>
+          <p>这里只显示现在轮到你处理的事项。</p>
+        </div>
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
         <Surface className="my-todos-state">
@@ -173,6 +180,7 @@ export function MyTodosPage() {
           })}
         </div>
       )}
+      </div>
     </Shell>
   );
 }
