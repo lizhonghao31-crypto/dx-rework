@@ -68,13 +68,36 @@ export async function fetchFacts(source: Queryable, options: {
     `WITH current_determinations AS (
        SELECT determination.* FROM rework_responsibility_determinations determination
        WHERE NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations successor WHERE successor.replaces_determination_id=determination.determination_id)
+     ), responsibility_allocations AS (
+       SELECT allocation.determination_id,
+         COALESCE(sum(allocation.rounded_amount),0) responsibility_amount,
+         COALESCE(sum(allocation.rounded_amount)
+           FILTER(WHERE allocation.responsibility_type='own_factory'),0)
+           own_factory_amount
+       FROM rework_responsibility_allocations allocation
+       GROUP BY allocation.determination_id
+     ), responsibility_adjustments AS (
+       SELECT adjustment.determination_id,
+         COALESCE(sum(adjustment.adjustment_amount),0) responsibility_amount,
+         COALESCE(sum(adjustment.adjustment_amount)
+           FILTER(WHERE adjustment.responsibility_type='own_factory'),0)
+           own_factory_amount
+       FROM rework_responsibility_rounding_adjustments adjustment
+       GROUP BY adjustment.determination_id
      ), responsibility AS (
        SELECT determination.rework_order_id,
-         COALESCE(sum(allocation.rounded_amount),0)::text responsibility_amount,
-         COALESCE(sum(allocation.rounded_amount) FILTER(WHERE allocation.responsibility_type='own_factory'),0)::text own_factory_amount
+         (
+           COALESCE(allocation.responsibility_amount,0) +
+           COALESCE(adjustment.responsibility_amount,0)
+         )::text responsibility_amount,
+         (
+           COALESCE(allocation.own_factory_amount,0) +
+           COALESCE(adjustment.own_factory_amount,0)
+         )::text own_factory_amount
        FROM current_determinations determination
-       LEFT JOIN rework_responsibility_allocations allocation USING(determination_id)
-       WHERE determination.stage='finalized' GROUP BY determination.rework_order_id
+       LEFT JOIN responsibility_allocations allocation USING(determination_id)
+       LEFT JOIN responsibility_adjustments adjustment USING(determination_id)
+       WHERE determination.stage='finalized'
      ), responsibility_types AS (
        SELECT DISTINCT determination.rework_order_id,allocation.responsibility_type
        FROM current_determinations determination JOIN rework_responsibility_allocations allocation USING(determination_id)
