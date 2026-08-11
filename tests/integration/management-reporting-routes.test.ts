@@ -48,6 +48,7 @@ const order = {
   externalRemainingAmount: "0.00",
   overdue: false,
   exceptionCount: 0,
+  attachmentCount: 0,
   deepLink: `/ui/tasks/${orderId}`,
   updatedAt: now,
 };

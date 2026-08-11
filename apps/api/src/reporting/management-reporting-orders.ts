@@ -175,6 +175,22 @@ export async function fetchFacts(source: Queryable, options: {
          ELSE COALESCE(todo_stats.overdue,false) OR COALESCE(followup_stats.overdue,false) END overdue,
        CASE WHEN order_record.status='cancelled' THEN 0
          ELSE COALESCE(todo_stats.exception_count,0)+COALESCE(followup_stats.exception_count,0) END exception_count,
+       (
+         SELECT count(*)::int
+         FROM attachments attachment
+         WHERE attachment.status='ready'
+           AND (
+             (attachment.entity_type='rework_order' AND attachment.entity_id=order_record.rework_order_id::text)
+             OR (
+               attachment.entity_type='external_responsibility_case'
+               AND EXISTS (
+                 SELECT 1 FROM rework_external_responsibility_cases attachment_case
+                 WHERE attachment_case.case_id::text=attachment.entity_id
+                   AND attachment_case.rework_order_id=order_record.rework_order_id
+               )
+             )
+           )
+       ) attachment_count,
        order_record.updated_at
      FROM rework_orders order_record
      LEFT JOIN current_determinations current_determination ON current_determination.rework_order_id=order_record.rework_order_id

@@ -24,6 +24,7 @@ export function factDto(row: FactRow): ManagementReworkRow {
     externalRemainingAmount: money(row.external_remaining_amount),
     overdue: row.overdue,
     exceptionCount: row.exception_count,
+    attachmentCount: row.attachment_count,
     deepLink: `/ui/tasks/${row.rework_order_id}`,
     updatedAt: iso(row.updated_at),
   };
