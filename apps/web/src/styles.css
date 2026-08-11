@@ -171,6 +171,11 @@ dd { margin: 8px 0 0; overflow-wrap: anywhere; font-size: 18px; font-weight: 700
   background: var(--dx-v2-color-inset);
 }
 
+.qc-upload-preview a {
+  display: block;
+  line-height: 0;
+}
+
 .qc-upload-preview img,
 .qc-upload-preview__pdf {
   width: 56px;
