@@ -153,6 +153,25 @@ describe("access routes", () => {
     });
     expect(allowed.statusCode).toBe(201);
     expect(rootOwner.service.assignRole).toHaveBeenCalledOnce();
+
+    const selfSystemAdmin = await rootOwner.app.inject({
+      method: "POST",
+      url: "/access/role-assignments",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "root-self-admin" },
+      payload: {
+        userId: "00000000-0000-4000-8000-000000000001",
+        roleCode: "system_admin",
+        reason: "Root 作为待办运行身份",
+      },
+    });
+    expect(selfSystemAdmin.statusCode).toBe(201);
+    expect(rootOwner.service.assignRole).toHaveBeenCalledTimes(2);
+    expect(rootOwner.service.assignRole.mock.calls[1]?.[0]).toEqual({
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorRoles: ["root_superuser"],
+      authorizationCapability: "access:admin",
+      requestId: "root-self-admin",
+    });
   });
 
   it("does not let a technical administrator manage business roles", async () => {
