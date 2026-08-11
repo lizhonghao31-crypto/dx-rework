@@ -187,6 +187,10 @@
     {
       "version": "0047_responsibility_rounding_reconciliation",
       "checksum": "262f566e631ddc96205454ba9feece52fc2c755a3ece48413719e32fc77f1ba3"
+    },
+    {
+      "version": "0048_uat_systemic_closure",
+      "checksum": "8362165fdf2f04cf88ee3120a014449cd98f5174eb89fd98c675e9a8e9aa4b28"
     }
   ]
 }
