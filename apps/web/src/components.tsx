@@ -88,12 +88,85 @@ function PrimaryNavigation({
   );
 }
 
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "发起返工", "全部订单"] as const;
+
+const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
+  "我的待办": { label: "待办", glyph: "待" },
+  "发起返工": { label: "发起", glyph: "发" },
+  "全部订单": { label: "订单", glyph: "单" },
+};
+
+function isMobilePrimaryNavigation(entry: NavigationEntry): boolean {
+  return MOBILE_PRIMARY_NAVIGATION_NAMES.includes(
+    entry.name as (typeof MOBILE_PRIMARY_NAVIGATION_NAMES)[number],
+  );
+}
+
+function MobileNavigationLink({
+  entry,
+  active,
+  basePath,
+}: {
+  entry: NavigationEntry;
+  active: string;
+  basePath: string;
+}) {
+  const meta = MOBILE_NAVIGATION_META[entry.name] ?? { label: entry.name, glyph: "目" };
+  const isActive = active === entry.name;
+  return (
+    <a href={basePath + entry.href} aria-current={isActive ? "page" : undefined}>
+      <NavigationItem icon={meta.glyph} active={isActive}>
+        <span className="mobile-primary-navigation__label">{meta.label}</span>
+      </NavigationItem>
+    </a>
+  );
+}
+
+function MobilePrimaryNavigation({
+  navigation,
+  active,
+  basePath,
+}: {
+  navigation: readonly NavigationEntry[];
+  active: string;
+  basePath: string;
+}) {
+  const primaryNavigation = navigation.filter(isMobilePrimaryNavigation);
+  const moreNavigation = navigation.filter((entry) => !isMobilePrimaryNavigation(entry));
+  const moreIsActive = moreNavigation.some((entry) => entry.name === active);
+
+  return (
+    <nav className="mobile-primary-navigation" aria-label="移动端主导航">
+      {primaryNavigation.map((entry) => (
+        <div className="mobile-primary-navigation__entry" key={entry.name}>
+          <MobileNavigationLink entry={entry} active={active} basePath={basePath} />
+        </div>
+      ))}
+      {moreNavigation.length ? (
+        <details className="mobile-primary-navigation__more">
+          <summary aria-label="更多导航">
+            <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
+              <b aria-hidden="true">更</b>
+              <strong>更多</strong>
+            </span>
+          </summary>
+          <div className="mobile-primary-navigation__drawer">
+            <PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />
+          </div>
+        </details>
+      ) : null}
+    </nav>
+  );
+}
+
 export function Shell({
   active,
   children,
+  mobileNavigation = "primary",
 }: {
   active: string;
   children: ReactNode;
+  mobileNavigation?: "primary" | "transaction";
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
@@ -190,13 +263,9 @@ export function Shell({
         </div>
       </aside>
 
-      <details className="mobile-flow-navigation">
-        <summary>
-          <span>主导航</span>
-          <b>{activeEntry?.name ?? active}</b>
-        </summary>
-        <PrimaryNavigation navigation={navigation} active={active} basePath={basePath} />
-      </details>
+      {mobileNavigation === "primary" ? (
+        <MobilePrimaryNavigation navigation={navigation} active={activeEntry?.name ?? active} basePath={basePath} />
+      ) : null}
 
       <main>{children}</main>
     </div>
