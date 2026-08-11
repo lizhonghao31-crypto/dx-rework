@@ -69,20 +69,66 @@ export const prepareAttachmentForUpload = async (file: File): Promise<File> => {
   }
 };
 
-export const mapWithConcurrency = async <T, Result>(
+/**
+ * Keeps the existing two-way preparation capacity while starting each upload
+ * as soon as its own preparation finishes. Uploads are independently capped,
+ * so lower-performance phones and weaker networks are not saturated.
+ */
+export const prepareAndUploadWithConcurrency = async <T, Prepared, Result>(
   items: readonly T[],
   limit: number,
-  operation: (item: T, index: number) => Promise<Result>,
+  prepare: (item: T, index: number) => Promise<Prepared>,
+  upload: (prepared: Prepared, item: T, index: number) => Promise<Result>,
 ): Promise<Result[]> => {
   const results = new Array<Result>(items.length);
+  const concurrency = Math.max(1, Math.min(Math.max(1, limit), items.length));
+  const inFlight = new Set<Promise<void>>();
   let nextIndex = 0;
+  let stopped = false;
+  let firstError: unknown;
+
   const worker = async (): Promise<void> => {
-    while (nextIndex < items.length) {
+    while (!stopped && nextIndex < items.length) {
       const index = nextIndex;
       nextIndex += 1;
-      results[index] = await operation(items[index]!, index);
+      const item = items[index]!;
+      const prepared = await prepare(item, index);
+      if (firstError !== undefined) throw firstError;
+      while (!stopped && inFlight.size >= concurrency) {
+        await Promise.race(inFlight);
+      }
+      if (stopped || firstError !== undefined) {
+        if (firstError !== undefined) throw firstError;
+        return;
+      }
+
+      const task = upload(prepared, item, index).then((result) => {
+        results[index] = result;
+      });
+      inFlight.add(task);
+      task.then(
+        () => inFlight.delete(task),
+        (error: unknown) => {
+          if (firstError === undefined) firstError = error;
+          stopped = true;
+          inFlight.delete(task);
+        },
+      );
     }
   };
-  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+
+  const workers = Array.from({ length: concurrency }, worker);
+  try {
+    await Promise.all(workers);
+    if (firstError !== undefined) throw firstError;
+    await Promise.all(inFlight);
+    if (firstError !== undefined) throw firstError;
+  } catch (error) {
+    stopped = true;
+    await Promise.allSettled(workers);
+    await Promise.allSettled(inFlight);
+    throw error;
+  }
+
   return results;
 };
