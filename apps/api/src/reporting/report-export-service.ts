@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { BUSINESS_TIME_ZONE, businessCellValue, businessFieldLabel } from "@dx-rework/contracts/business-display";
 import type { ReportQuery, ReportType } from "@dx-rework/contracts/reporting";
 
 import { OperationEventRepository, type SqlClient, type TrustedActorContext } from "../tools/repositories.js";
@@ -20,7 +21,8 @@ const sheetRows = (
   rows: readonly Record<string, string | number | boolean | null>[],
 ): WorkbookCell[][] => [
   columns.map((column) => column.label),
-  ...rows.map((row) => columns.map((column) => row[column.key] ?? null)),
+  ...rows.map((row) => columns.map((column) =>
+    businessCellValue(column.key, row[column.key] ?? null))),
 ];
 
 export class ReportExportService {
@@ -39,20 +41,20 @@ export class ReportExportService {
     const filename = `${reportNames[reportType]}-${range.from}-${range.to}.xlsx`;
     const filterRows: WorkbookCell[][] = [
       ["报表类型", reportNames[reportType]],
-      ["数据快照时间", range.asOf.toISOString()],
-      ["业务时区", "Asia/Singapore"],
+      ["数据快照时间", businessCellValue("createdAt", range.asOf.toISOString())],
+      ["业务时区", BUSINESS_TIME_ZONE],
       ["开始日期", range.from],
       ["结束日期", range.to],
       ["关键词", query.q ?? ""],
-      ["状态", query.status ?? ""],
+      ["状态", businessCellValue("status", query.status ?? "")],
       ["明细行数", data.rows.length],
       ["Git SHA", this.gitSha],
-      ...Object.entries(data.totals).map(([key, value]) => [`合计 ${key}`, value]),
+      ...Object.entries(data.totals).map(([key, value]) => [`合计 ${businessFieldLabel(key)}`, value]),
     ];
     const summaryRows: WorkbookCell[][] = [
       ["指标", "值"],
       ["明细行数", data.rows.length],
-      ...Object.entries(data.totals).map(([key, value]) => [key, value]),
+      ...Object.entries(data.totals).map(([key, value]) => [businessFieldLabel(key), value]),
     ];
     const content = buildWorkbook([
       { name: "导出说明", rows: filterRows },

@@ -39,6 +39,10 @@
     "./employee-access": {
       "types": "./src/employee-access.ts",
       "import": "./dist/employee-access.js"
+    },
+    "./business-display": {
+      "types": "./src/business-display.ts",
+      "import": "./dist/business-display.js"
     }
   },
   "scripts": {

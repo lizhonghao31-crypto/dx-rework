@@ -5,6 +5,7 @@ import {
   type WagePeriod,
   type WagePeriodDetail,
 } from "@dx-rework/contracts/wages";
+import { formatBusinessDecimal, formatBusinessMoney } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
@@ -51,6 +52,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   const [periods, setPeriods] = useState<WagePeriod[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adjustmentItemId, setAdjustmentItemId] = useState<string | null>(null);
   const refreshing = useRef(false);
   const mounted = useRef(true);
   const pendingMutationKeys = useRef<Record<string, string>>({});
@@ -234,11 +236,13 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
             >月结锁定</Button>
           )}
           {period.canExport && (
-            <Button
-              onClick={() => window.location.assign(
-                apiUrl(`wage-periods/${period.periodId}/export.xlsx`),
-              )}
-            >导出 Excel</Button>
+            <a
+              href={apiUrl(`wage-periods/${period.periodId}/export.xlsx`)}
+              download
+              className="wage-export-link"
+            >
+              <Button>导出 Excel</Button>
+            </a>
           )}
         </div>
       </Surface>
@@ -248,22 +252,37 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       <section className="wage-grid">
         {items.map((item) => (
           <Surface key={item.wageItemId} className="wage-item-card">
-            <h2>{item.personNameSnapshot} · ¥{item.payableAmount}</h2>
+            <h2>{item.personNameSnapshot} · ¥{formatBusinessMoney(item.payableAmount)}</h2>
             <p>{item.reworkNoSnapshot} · {item.styleNoSnapshot}</p>
-            <p>{item.processNameSnapshot} · {item.actualQuantitySnapshot} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 单价 ¥{item.unitPriceSnapshot}</p>
-            <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 ¥{item.groupAmount}</p>
-            <p>个人分摊原值 {item.exactPersonShare} · 尾差顺序 {item.remainderRank}/{item.memberCount}</p>
+            <p>{item.processNameSnapshot} · {formatBusinessDecimal(item.actualQuantitySnapshot)} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 单价 ¥{formatBusinessDecimal(item.unitPriceSnapshot)}</p>
+            <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 ¥{formatBusinessMoney(item.groupAmount)}</p>
+            <details className="wage-calculation-detail">
+              <summary>查看分摊计算</summary>
+              <p>个人分摊原值 {formatBusinessDecimal(item.exactPersonShare, 4)} · 尾差顺序 {item.remainderRank}/{item.memberCount}</p>
+            </details>
             {period.canRequestAdjustment && (
-              <WageAdjustmentForm
-                item={item}
-                sourcePeriod={period}
-                periods={periods}
-                disabled={busy}
-                onCompleted={async (success) => {
-                  await load();
-                  setMessage(success);
-                }}
-              />
+              <>
+                <Button
+                  disabled={busy}
+                  onClick={() => setAdjustmentItemId((current) =>
+                    current === item.wageItemId ? null : item.wageItemId)}
+                >
+                  {adjustmentItemId === item.wageItemId ? "收起工资调整" : "发起工资调整"}
+                </Button>
+                {adjustmentItemId === item.wageItemId ? (
+                  <WageAdjustmentForm
+                    item={item}
+                    sourcePeriod={period}
+                    periods={periods}
+                    disabled={busy}
+                    onCompleted={async (success) => {
+                      setAdjustmentItemId(null);
+                      await load();
+                      setMessage(success);
+                    }}
+                  />
+                ) : null}
+              </>
             )}
           </Surface>
         ))}
@@ -274,7 +293,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
         {adjustments.length === 0 && <p>暂无调整记录。</p>}
         {adjustments.map((adjustment) => (
           <div key={adjustment.adjustmentId} className="wage-history-row">
-            <span>{adjustment.adjustmentAmount} 元 · {adjustment.reason}</span>
+            <span>{formatBusinessMoney(adjustment.adjustmentAmount)} 元 · {adjustment.reason}</span>
             <StatusBadge tone={adjustment.status === "approved" ? "success" : adjustment.status === "rejected" ? "danger" : "warning"}>
               {adjustmentStatusLabel(adjustment.status)}
             </StatusBadge>

@@ -12,45 +12,20 @@ export async function financial(db: Pool, range: Range): Promise<ManagementDashb
          SELECT 1 FROM rework_responsibility_determinations successor
          WHERE successor.replaces_determination_id=determination.determination_id)
      ), responsibility AS (
-       SELECT (
-         COALESCE((
-           SELECT sum(allocation.rounded_amount)
-           FROM current_determinations determination
-           JOIN rework_responsibility_allocations allocation
-             USING(determination_id)
-           WHERE (determination.created_at AT TIME ZONE $3)::date
-             BETWEEN $1::date AND $2::date
-         ),0) +
-         COALESCE((
-           SELECT sum(adjustment.adjustment_amount)
-           FROM current_determinations determination
-           JOIN rework_responsibility_rounding_adjustments adjustment
-             USING(determination_id)
-           WHERE (determination.created_at AT TIME ZONE $3)::date
-             BETWEEN $1::date AND $2::date
-         ),0)
-       )::text total
+       SELECT COALESCE(sum(allocation.effective_rounded_amount),0)::text total
+       FROM current_determinations determination
+       JOIN rework_effective_responsibility_allocations allocation
+         USING(determination_id)
+       WHERE (determination.created_at AT TIME ZONE $3)::date
+         BETWEEN $1::date AND $2::date
      ), own_factory AS (
-       SELECT (
-         COALESCE((
-           SELECT sum(allocation.rounded_amount)
-           FROM current_determinations determination
-           JOIN rework_responsibility_allocations allocation
-             USING(determination_id)
-           WHERE allocation.responsibility_type='own_factory'
-             AND (determination.created_at AT TIME ZONE $3)::date
-               BETWEEN $1::date AND $2::date
-         ),0) +
-         COALESCE((
-           SELECT sum(adjustment.adjustment_amount)
-           FROM current_determinations determination
-           JOIN rework_responsibility_rounding_adjustments adjustment
-             USING(determination_id)
-           WHERE adjustment.responsibility_type='own_factory'
-             AND (determination.created_at AT TIME ZONE $3)::date
-               BETWEEN $1::date AND $2::date
-         ),0)
-       )::text total
+       SELECT COALESCE(sum(allocation.effective_rounded_amount),0)::text total
+       FROM current_determinations determination
+       JOIN rework_effective_responsibility_allocations allocation
+         USING(determination_id)
+       WHERE allocation.responsibility_type='own_factory'
+         AND (determination.created_at AT TIME ZONE $3)::date
+           BETWEEN $1::date AND $2::date
      ), active_cases AS (
        SELECT case_record.* FROM current_determinations determination
        JOIN rework_external_responsibility_batches batch

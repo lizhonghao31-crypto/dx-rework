@@ -47,16 +47,18 @@ describe("responsibility rounding reconciliation", () => {
       ),
     ]);
 
-    for (const source of [service, orders, financial, report]) {
-      expect(source).toContain(
-        "rework_responsibility_rounding_adjustments",
-      );
-    }
+    expect(service).toContain("rework_responsibility_rounding_adjustments");
     expect(service).toContain("roundingAdjustmentsAvailable");
-    expect(orders).toContain("responsibility_adjustments");
-    expect(financial).toContain("adjustment.adjustment_amount");
+    for (const source of [orders, financial, report]) {
+      expect(source).toContain("rework_effective_responsibility_allocations");
+    }
+    expect(orders).not.toContain("responsibility_adjustments AS");
+    expect(financial).not.toContain("adjustment.adjustment_amount");
     expect(report).toContain(
-      "allocation.rounded_amount +",
+      "allocation.determination_id=approval.finalized_determination_id",
+    );
+    expect(report).not.toContain(
+      "approval.status,approval.own_factory_total_amount::text",
     );
   });
 });

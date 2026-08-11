@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
+import { businessFieldLabel, businessValue, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
 
 const read = (path: string) => readFile(path, "utf8");
 
@@ -38,8 +39,8 @@ describe("UAT interface closure", () => {
     expect(source).toContain('reportExportUrl("wages", filters)');
   });
 
-  it("renders reports and system records in business Chinese", async () => {
-    const [report, admin, display] = await Promise.all([
+  it("renders reports, nested audit details and totals in business Chinese", async () => {
+    const [report, admin, webDisplay] = await Promise.all([
       read("apps/web/src/reporting/report-center-page.tsx"),
       read("apps/web/src/admin-console-page.tsx"),
       read("apps/web/src/business-display.ts"),
@@ -48,9 +49,19 @@ describe("UAT interface closure", () => {
     expect(report).toContain("businessFieldLabel(key)");
     expect(admin).toContain("businessActionLabel(event.action)");
     expect(admin).toContain("businessEntityLabel(event.entityType)");
-    expect(admin).toContain("businessFieldLabel(key)");
-    expect(display).toContain('cancelled: "已取消"');
-    expect(display).toContain('attachment_upload_not_completed: "附件上传未完成"');
+    expect(webDisplay).toContain('@dx-rework/contracts/business-display');
+    expect(businessFieldLabel("amount")).toBe("金额");
+    expect(businessFieldLabel("exceptionCount")).toBe("异常数量");
+    expect(businessValue("proposedAmount", "24.25")).toBe("¥24.25");
+    expect(translateTechnicalDetails({
+      expiresAt: "2026-08-11T00:00:00.000Z",
+      boundEntityType: "rework_order",
+      boundEntityId: "stable-id",
+    })).toEqual({
+      到期时间: expect.any(String),
+      绑定业务对象: "返工单",
+      绑定业务对象编号: "stable-id",
+    });
   });
 
   it("shows ready attachment counts on every order card", async () => {
@@ -68,9 +79,49 @@ describe("UAT interface closure", () => {
     expect(card).toContain("点击订单查阅");
   });
 
-  it("pins sidebar identity to the visible viewport", async () => {
-    const styles = await read("apps/web/src/styles.css");
+  it("pins sidebar identity in the final loaded CSS layer", async () => {
+    const [styles, workflow, main] = await Promise.all([
+      read("apps/web/src/styles.css"),
+      read("apps/web/src/workflow-shell.css"),
+      read("apps/web/src/main.tsx"),
+    ]);
     expect(styles).toContain("box-sizing: border-box; height: 100vh; height: 100dvh;");
     expect(styles).toContain(".app-shell__identity { margin-top: auto;");
+    expect(workflow).toMatch(/\.app-shell \.org \{[\s\S]*?margin-top: auto;/);
+    expect(workflow).not.toMatch(/\.app-shell \.org \{[\s\S]*?margin-top: 10px;/);
+    expect(main.indexOf('"./workflow-shell.css"')).toBeGreaterThan(main.indexOf('"./styles.css"'));
+  });
+
+  it("keeps one wage adjustment form open and downloads without page navigation", async () => {
+    const detail = await read("apps/web/src/wages/wage-period-detail.tsx");
+    expect(detail).toContain("adjustmentItemId === item.wageItemId");
+    expect(detail).toContain("查看分摊计算");
+    expect(detail).toContain("formatBusinessMoney(item.payableAmount)");
+    expect(detail).toContain("download");
+    expect(detail).not.toContain("window.location.assign");
+  });
+
+  it("uses the shared Chinese vocabulary in report and wage workbooks", async () => {
+    const [reportExport, wageExport, reportingShared] = await Promise.all([
+      read("apps/api/src/reporting/report-export-service.ts"),
+      read("apps/api/src/wages/wage-export-service.ts"),
+      read("apps/api/src/reporting/management-reporting-shared.ts"),
+    ]);
+    expect(reportExport).toContain("businessCellValue(column.key");
+    expect(reportExport).toContain("businessFieldLabel(key)");
+    expect(reportExport).toContain("BUSINESS_TIME_ZONE");
+    expect(reportExport).not.toContain("Asia/Singapore");
+    expect(reportingShared).toContain("BUSINESS_TIME_ZONE");
+    expect(reportingShared).not.toContain("Asia/Singapore");
+    expect(wageExport).toContain('businessCellValue("personType"');
+    expect(wageExport).toContain('businessCellValue("assignmentMode"');
+    expect(wageExport).toContain("translateTechnicalDetails(line.member_snapshot)");
+  });
+
+  it("retires superseded payroll roles without deleting assignment history", async () => {
+    const migration = await read("apps/api/migrations/0048_uat_systemic_closure.sql");
+    expect(migration).toContain("role_code IN ('payroll_review', 'payroll_close')");
+    expect(migration).toContain("SET enabled = false");
+    expect(migration).not.toContain("DELETE FROM user_role_assignments");
   });
 });
