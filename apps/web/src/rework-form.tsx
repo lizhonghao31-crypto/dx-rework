@@ -584,7 +584,7 @@ export function ReworkInitiationForm() {
             {attachmentIds.length} 份
           </StatusBadge>
         </div>
-        <p>支持 JPG、PNG、WebP 与 PDF；每张返工单最多 ${MAX_REWORK_ATTACHMENTS} 张。图片会先在本机压缩，保留清晰度后再上传。</p>
+        <p>支持 JPG、PNG、WebP 与 PDF；每张返工单最多 {MAX_REWORK_ATTACHMENTS} 张。图片会先在本机压缩，保留清晰度后再上传。</p>
         {!formDisabled && (
           <>
             <label className="qc-file-button">
