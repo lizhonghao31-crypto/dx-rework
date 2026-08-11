@@ -22,7 +22,9 @@ type TimingRunner = Readonly<{
 
 export type TodoRuntimeLifecycleOptions = Readonly<{
   enabled: boolean;
-  appBasePath: string;
+  deliveryEnabled?: boolean;
+  timingEnabled?: boolean;
+  todoPublicBaseUrl?: string;
   runtimeActorId?: string;
   deliveryIntervalMs?: number;
   timingIntervalMs?: number;
@@ -42,32 +44,45 @@ export class TodoRuntimeLifecycle {
   private readonly timingService: TimingRunner;
   private readonly deliveryIntervalMs: number;
   private readonly timingIntervalMs: number;
+  private readonly deliveryEnabled: boolean;
+  private readonly timingEnabled: boolean;
 
   constructor(
     private readonly database: Pool,
     private readonly options: TodoRuntimeLifecycleOptions,
   ) {
-    if (options.enabled && !options.deliveryRunner && !options.provider) {
-      throw new Error("Todo runtime requires an explicit DingTalk todo provider");
+    this.deliveryEnabled = options.deliveryEnabled ?? options.enabled;
+    this.timingEnabled = options.timingEnabled ?? options.enabled;
+    if (this.deliveryEnabled && !options.deliveryRunner && !options.provider) {
+      throw new Error("Todo delivery requires an explicit DingTalk todo provider");
     }
-    if (options.enabled && !options.runtimeActorId) {
-      throw new Error("Todo runtime requires TODO_RUNTIME_ACTOR_ID");
+    if (this.deliveryEnabled && !options.deliveryRunner && !options.todoPublicBaseUrl) {
+      throw new Error("Todo delivery requires TODO_PUBLIC_BASE_URL");
+    }
+    if (this.timingEnabled && !options.runtimeActorId) {
+      throw new Error("Todo timing requires TODO_RUNTIME_ACTOR_ID");
     }
     this.deliveryWorker = options.deliveryRunner
-      ?? new TodoDeliveryWorker(database, options.provider!, options.appBasePath);
+      ?? new TodoDeliveryWorker(database, options.provider!, options.todoPublicBaseUrl!);
     this.timingService = options.timingRunner ?? new TodoTimingService(database);
     this.deliveryIntervalMs = this.interval(options.deliveryIntervalMs ?? 30_000, "delivery");
     this.timingIntervalMs = this.interval(options.timingIntervalMs ?? 60_000, "timing");
   }
 
   start(): void {
-    if (!this.options.enabled || !this.stopped) return;
+    if ((!this.deliveryEnabled && !this.timingEnabled) || !this.stopped) return;
     this.stopped = false;
-    this.deliveryTimer = setInterval(() => this.kickDelivery(), this.deliveryIntervalMs);
-    this.timingTimer = setInterval(() => this.kickTiming(), this.timingIntervalMs);
-    this.kickDelivery();
-    this.kickTiming();
+    if (this.deliveryEnabled) {
+      this.deliveryTimer = setInterval(() => this.kickDelivery(), this.deliveryIntervalMs);
+      this.kickDelivery();
+    }
+    if (this.timingEnabled) {
+      this.timingTimer = setInterval(() => this.kickTiming(), this.timingIntervalMs);
+      this.kickTiming();
+    }
     this.options.logger.info({
+      deliveryEnabled: this.deliveryEnabled,
+      timingEnabled: this.timingEnabled,
       deliveryIntervalMs: this.deliveryIntervalMs,
       timingIntervalMs: this.timingIntervalMs,
     }, "todo runtime lifecycle started");
@@ -166,3 +181,4 @@ export class TodoRuntimeLifecycle {
     return { name: "UnknownError", message: "Unknown todo runtime failure" };
   }
 }
+

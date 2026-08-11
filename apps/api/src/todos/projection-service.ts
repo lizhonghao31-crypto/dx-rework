@@ -196,6 +196,41 @@ export class TodoProjectionService {
     return recipients.rows.map((recipient) => recipient.user_id);
   }
 
+  /**
+   * Use only for a business node intentionally shared by every currently
+   * eligible direct role holder. Each person receives an independent todo;
+   * the business service closes the entire dedupe prefix after any one acts.
+   */
+  async actionableForAllDirectRole(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    projection: ActionableProjection,
+  ): Promise<string[]> {
+    const recipients = await client.query<{ user_id: string }>(
+      `SELECT DISTINCT assignment.user_id
+       FROM user_role_assignments assignment
+       WHERE assignment.role_code=$1 AND assignment.revoked_at IS NULL
+         AND todo_user_has_direct_role(assignment.user_id,$1,$2)
+       ORDER BY assignment.user_id`,
+      [projection.requiredRole, projection.requiredCapability],
+    );
+    if (recipients.rows.length === 0) {
+      throw new ApplicationError(
+        "CONFLICT",
+        "Shared role todo has no currently eligible direct recipient",
+        409,
+      );
+    }
+    for (const recipient of recipients.rows) {
+      await this.actionableForRecipient(client, actor, {
+        ...projection,
+        recipientUserId: recipient.user_id,
+        dedupeKey: `${projection.dedupeKey}:${recipient.user_id}`,
+      });
+    }
+    return recipients.rows.map((recipient) => recipient.user_id);
+  }
+
   async actionableForRecipient(
     client: PoolClient,
     actor: TrustedActorContext,
@@ -598,3 +633,4 @@ export class TodoProjectionService {
     });
   }
 }
+

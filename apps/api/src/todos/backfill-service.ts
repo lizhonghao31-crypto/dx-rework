@@ -356,24 +356,8 @@ export class TodoBackfillService {
         });
         return;
       case "high_multiplier_confirmation":
-        if (candidate.highMultiplierAuthorIsOwner) {
-          await this.projections.actionableForIndependentOwner(client, actor, {
-            ...projection,
-            dedupeKey: `${candidate.dedupeKey}:${candidate.excludeUserId!}`,
-            excludeUserId: candidate.excludeUserId!,
-          });
-        } else {
-          await this.projections.actionableForParallelDirectRole(client, actor, {
-            ...projection,
-            expectedRecipientCount: candidate.expectedRecipientCount ?? 2,
-          });
-        }
-        return;
       case "own_factory_approval":
-        await this.projections.actionableForParallelDirectRole(client, actor, {
-          ...projection,
-          expectedRecipientCount: candidate.expectedRecipientCount ?? 2,
-        });
+        await this.projections.actionableForAllDirectRole(client, actor, projection);
         return;
       case "external_payables_confirmation":
       case "external_deduction_follow_up":
@@ -627,8 +611,6 @@ export class TodoBackfillService {
           sourceAction: "rework.responsibility.draft", entityType: "rework_order", entityId: row.rework_order_id,
           category: "high_multiplier_confirmation", route: { routeName: "responsibility_detail", entityId: row.rework_order_id },
           policyKey: "general", requiredRole: "owner_group", requiredCapability: "responsibility:confirm_high_multiplier",
-          highMultiplierAuthorIsOwner: row.actor_roles?.includes("owner_group") ?? false,
-          excludeUserId: row.created_by, expectedRecipientCount: 2,
           dedupeKey: `high-multiplier:${row.determination_id}:${row.determination_version}`,
         }),
       ];
@@ -656,7 +638,7 @@ export class TodoBackfillService {
       sourceAction: "rework.own_factory_approval.create", entityType: "rework_order", entityId: row.rework_order_id,
       category: "own_factory_approval", route: { routeName: "own_factory_approval", entityId: row.rework_order_id },
       policyKey: "general", requiredRole: "owner_group", requiredCapability: "own_factory:approve",
-      expectedRecipientCount: 2, dedupeKey: `own-factory-approval:${row.approval_id}`,
+      dedupeKey: `own-factory-approval:${row.approval_id}`,
     }));
   }
 
@@ -1033,3 +1015,4 @@ export class TodoBackfillService {
     );
   }
 }
+

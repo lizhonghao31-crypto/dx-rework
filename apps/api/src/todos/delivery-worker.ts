@@ -4,7 +4,7 @@ import { TodoRouteDescriptorSchema, type TodoRouteDescriptor } from "@dx-rework/
 import { sanitizeOperationalError } from "@dx-rework/domain";
 import type { Pool, PoolClient } from "pg";
 
-import { buildTodoDeepLink } from "./deep-link.js";
+import { buildTodoExternalDeepLink } from "./deep-link.js";
 import {
   DingTalkTodoDeliveryError,
   type DingTalkTodoDeliveryKind,
@@ -109,7 +109,7 @@ export class TodoDeliveryWorker {
   constructor(
     private readonly database: Pool,
     private readonly provider: DingTalkTodoProvider,
-    private readonly appBasePath: string,
+    private readonly todoPublicBaseUrl: string,
     private readonly outbox = new MessageOutboxRepository(),
     private readonly retryDelaySeconds = 300,
     private readonly todos = new TodoService(database),
@@ -196,8 +196,8 @@ export class TodoDeliveryWorker {
       await this.markSuppressed(claimed);
       return "suppressed";
     }
-    const recipientUnionId = await this.recipientUnionId(input.recipientUserId);
-    if (!recipientUnionId) {
+    const recipientIdentity = await this.recipientIdentity(input.recipientUserId);
+    if (!recipientIdentity) {
       await this.failWithoutBinding(
         claimed,
         new DingTalkTodoDeliveryError(
@@ -209,7 +209,12 @@ export class TodoDeliveryWorker {
       return "failed";
     }
     const sourceKey = claimed.idempotencyKey;
-    const binding = await this.ensureBinding(claimed, input, recipientUnionId, sourceKey);
+    const binding = await this.ensureBinding(
+      claimed,
+      input,
+      recipientIdentity.unionId,
+      sourceKey,
+    );
     try {
       const createKind: "create" | "information" = input.deliveryKind === "information"
         ? "information"
@@ -217,12 +222,13 @@ export class TodoDeliveryWorker {
       const receipt = await this.provider.createTodo({
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
-        recipientUnionId,
+        recipientUnionId: recipientIdentity.unionId,
+        recipientProviderUserId: recipientIdentity.providerUserId,
         category: todo.category,
         deliveryKind: createKind,
         sourceKey,
         route: input.route,
-        deepLink: buildTodoDeepLink(this.appBasePath, input.route),
+        deepLink: buildTodoExternalDeepLink(this.todoPublicBaseUrl, input.route),
       });
       await this.recordSuccess(claimed, input, binding, receipt.providerTodoId, receipt.providerMessageId, "active");
       return "sent";
@@ -324,7 +330,7 @@ export class TodoDeliveryWorker {
         deliveryKind: updateKind,
         sourceKey: binding.source_key,
         route: input.route,
-        deepLink: buildTodoDeepLink(this.appBasePath, input.route),
+        deepLink: buildTodoExternalDeepLink(this.todoPublicBaseUrl, input.route),
       });
       await this.recordSuccess(
         claimed,
@@ -624,9 +630,14 @@ export class TodoDeliveryWorker {
     }
   }
 
-  private async recipientUnionId(userId: string): Promise<string | null> {
-    const result = await this.database.query<{ union_id: string }>(
-      `SELECT identity.union_id
+  private async recipientIdentity(
+    userId: string,
+  ): Promise<{ unionId: string; providerUserId: string } | null> {
+    const result = await this.database.query<{
+      union_id: string;
+      provider_user_id: string;
+    }>(
+      `SELECT identity.union_id,identity.provider_user_id
        FROM app_users user_record
        JOIN identity_mappings identity
          ON identity.user_id=user_record.id AND identity.provider='dingtalk'
@@ -636,7 +647,10 @@ export class TodoDeliveryWorker {
        WHERE user_record.id=$1 AND user_record.enabled=true`,
       [userId],
     );
-    return result.rows[0]?.union_id ?? null;
+    const identity = result.rows[0];
+    return identity
+      ? { unionId: identity.union_id, providerUserId: identity.provider_user_id }
+      : null;
   }
 
   private async revalidateRecipient(
@@ -698,3 +712,4 @@ export class TodoDeliveryWorker {
     );
   }
 }
+

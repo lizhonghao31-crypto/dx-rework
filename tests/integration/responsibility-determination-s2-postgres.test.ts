@@ -426,7 +426,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     });
   });
 
-  it("requires a different direct owner and exact snapshot for high multipliers", async () => {
+  it("allows a direct owner to self-confirm while preserving the exact snapshot", async () => {
     const order = await createReviewedOrder("high");
     const submitter = actor(
       ids.ownerOne,
@@ -443,29 +443,28 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     );
     const determinationId = draft.value.determination!.determinationId;
     await expect(responsibility.confirmHighMultiplier(
+      actor(
+        ids.admin,
+        ["root_superuser"],
+        "responsibility:confirm_high_multiplier",
+      ),
+      determinationId,
+      {
+        expectedOrderVersion: draft.value.orderVersion,
+        expectedCurrentDeterminationVersion: 1,
+        reason: "非老板不能绕过直接角色确认",
+      },
+      "s2-non-owner-confirm",
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    const confirmed = await responsibility.confirmHighMultiplier(
       submitter,
       determinationId,
       {
         expectedOrderVersion: draft.value.orderVersion,
         expectedCurrentDeterminationVersion: 1,
-        reason: "本人确认",
+        reason: "老板本人最终确认",
       },
       "s2-self-confirm",
-    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
-    const confirmer = actor(
-      ids.ownerTwo,
-      ["owner_group"],
-      "responsibility:confirm_high_multiplier",
-    );
-    const confirmed = await responsibility.confirmHighMultiplier(
-      confirmer,
-      determinationId,
-      {
-        expectedOrderVersion: draft.value.orderVersion,
-        expectedCurrentDeterminationVersion: 1,
-        reason: "第二位老板复核",
-      },
-      "s2-owner-confirm",
     );
     expect(confirmed.value).toMatchObject({
       orderVersion: draft.value.orderVersion + 1,
@@ -492,7 +491,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       [determinationId],
     );
     expect(stored.rows[0]).toEqual({
-      confirmed_by: ids.ownerTwo,
+      confirmed_by: ids.ownerOne,
       confirmation_snapshot: {
         determinationId,
         determinationVersion: 1,
@@ -528,7 +527,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
         determinationVersion: 2,
         highMultiplierConfirmation: {
           confirmedBy: ids.ownerTwo,
-          reason: "第二位老板复核",
+          reason: "老板本人最终确认",
         },
       });
     expect(approvalSnapshot.approval!.sourceSnapshot).toMatchObject({
@@ -628,6 +627,19 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       },
       "s2-own-factory-forged-admin",
     )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    const sharedTodos = await database.query<{
+      recipient_user_id: string;
+      status: string;
+    }>(
+      `SELECT recipient_user_id,status FROM rework_todos
+       WHERE category='own_factory_approval' AND entity_id=$1
+       ORDER BY recipient_user_id`,
+      [order.orderId],
+    );
+    expect(sharedTodos.rows).toEqual([
+      { recipient_user_id: ids.ownerOne, status: "pending" },
+      { recipient_user_id: ids.ownerTwo, status: "pending" },
+    ]);
     const approved = await ownFactoryApproval.approve(
       ownerOne,
       view.approval!.approvalId,
@@ -646,6 +658,16 @@ runWithPostgres("responsibility authorization and handler closure", () => {
         decision: { actedBy: ids.ownerOne, decision: "approved", otherOwnersNotified: true },
       },
     });
+    const closedSharedTodos = await database.query<{ status: string }>(
+      `SELECT status FROM rework_todos
+       WHERE category='own_factory_approval' AND entity_id=$1
+       ORDER BY recipient_user_id`,
+      [order.orderId],
+    );
+    expect(closedSharedTodos.rows).toEqual([
+      { status: "completed" },
+      { status: "completed" },
+    ]);
     await expect(ownFactoryApproval.approve(
       ownerTwo,
       view.approval!.approvalId,
@@ -657,10 +679,14 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
     const notices = await database.query<{ recipient_key: string }>(
       `SELECT recipient_key FROM message_outbox
-       WHERE aggregate_id=$1 AND topic='rework.own_factory_approval.result'`,
+       WHERE aggregate_id=$1
+         AND topic IN (
+           'rework.own_factory_approval.pending',
+           'rework.own_factory_approval.result'
+         )`,
       [view.approval!.approvalId],
     );
-    expect(notices.rows).toEqual([{ recipient_key: ids.ownerTwo }]);
+    expect(notices.rows).toEqual([]);
     await expect(database.query(
       `UPDATE rework_own_factory_approval_decisions
        SET decision='rejected' WHERE approval_id=$1`,
