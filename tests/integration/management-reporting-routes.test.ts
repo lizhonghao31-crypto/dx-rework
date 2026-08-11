@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { loadConfig } from "@dx-rework/config";
+import { BUSINESS_TIME_ZONE } from "@dx-rework/contracts/business-display";
 import type {
   ManagementDashboardResponse,
   ManagementReworkPage,
@@ -55,7 +56,7 @@ const order = {
 const management: ManagementDashboardResponse = {
   mode: "management",
   asOf: now,
-  range: { from: "2026-08-01", to: "2026-08-31", timezone: "Asia/Singapore" },
+  range: { from: "2026-08-01", to: "2026-08-31", timezone: BUSINESS_TIME_ZONE },
   kpis: { openOrders: 1, completedOrders: 0, overdueTodos: 0, exceptionCount: 0 },
   nodeCounts: [{ node: "N05", label: "返工上数中", count: 1 }],
   financial: { wageTotal: "5.00", responsibilityTotal: "0.00", ownFactoryTotal: "0.00", externalProposed: "0.00", externalDeducted: "0.00", externalRemaining: "0.00" },
@@ -123,6 +124,7 @@ describe("management reporting routes", () => {
     ]);
     expect(managementResponse.statusCode).toBe(200);
     expect(managementResponse.json()).toEqual(management);
+    expect(managementResponse.json().range.timezone).toBe(BUSINESS_TIME_ZONE);
     expect(siteResponse.json()).toEqual(site);
     expect(ordersResponse.json()).toEqual(page);
     expect(reportResponse.json()).toEqual(preview);
