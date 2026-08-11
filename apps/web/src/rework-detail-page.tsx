@@ -6,6 +6,7 @@ import type { AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
+import { OrderImageSupplementUploader } from "./order-image-supplement-uploader.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
@@ -297,6 +298,7 @@ const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.ever
 const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
 
 const historyNode = (action: string): WorkflowNodeKey | null => {
+  if (action === "rework.attachments.supplement") return "initiation";
   if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
   // IE approval is recorded by the configuration service, so distinguish the
   // terminal review action before the broader process-configuration match.
@@ -313,6 +315,7 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
 };
 
 const historyActionLabel = (action: string): string => {
+  if (action === "rework.attachments.supplement") return "补充订单图片";
   if (action === "rework.submit") return "提交返工单";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
   if (action.includes("process_configuration")) return "工序配置处理";
@@ -409,6 +412,7 @@ export function ReworkDetailPage({
   }
 
   const detail = state.value;
+  const orderAttachments = detail.attachments.filter((attachment) => attachment.entityType === "rework_order");
   const imageAttachments = detail.attachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
   const otherAttachments = detail.attachments.filter((attachment) => !attachment.mimeType.startsWith("image/"));
   const meta = statusMeta[detail.status];
@@ -423,6 +427,12 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:confirm_high_multiplier");
   const canSeeOwnFactory = elevated(currentUser) || hasCapability(currentUser, "own_factory:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
+  const canSupplementOrderImages = detail.status !== "completed"
+    && detail.status !== "cancelled"
+    && (elevated(currentUser) || (
+      hasRole(currentUser, "quality_control")
+      && hasCapability(currentUser, "rework:initiate")
+    ));
 
   const renderSelectedTask = () => {
     if (!selected) return null;
@@ -508,12 +518,20 @@ export function ReworkDetailPage({
             <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
             {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
           </dl>
-          {imageAttachments.length > 0 && (
-            <section className="rework-detail-images" aria-label="订单图片">
-              <div className="section-title">
-                <div><h2>订单图片</h2><p>点击缩略图可放大查看；图片保存在私有 OSS，仅有订单查看权限的人员可访问。</p></div>
-                <StatusBadge tone="info">{imageAttachments.length} 张</StatusBadge>
-              </div>
+          <section className="rework-detail-images" aria-label="订单图片">
+            <div className="section-title">
+              <div><h2>订单图片</h2><p>点击缩略图可放大查看；图片保存在私有 OSS，仅有订单查看权限的人员可访问。</p></div>
+              <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge>
+            </div>
+            {canSupplementOrderImages && (
+              <OrderImageSupplementUploader
+                reworkOrderId={detail.reworkOrderId}
+                expectedVersion={detail.version}
+                currentAttachmentCount={orderAttachments.length}
+                onUploaded={load}
+              />
+            )}
+            {imageAttachments.length > 0 ? (
               <div className="rework-detail-image-grid">
                 {imageAttachments.map((attachment) => (
                   <button
@@ -528,8 +546,8 @@ export function ReworkDetailPage({
                   </button>
                 ))}
               </div>
-            </section>
-          )}
+            ) : <p className="rework-detail-images__empty">暂未上传订单图片。</p>}
+          </section>
         </Surface>
 
         <section className="rework-workflow" key={detail.status} aria-label="订单流程">
