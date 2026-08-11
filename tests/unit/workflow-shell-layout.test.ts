@@ -13,4 +13,17 @@ describe("workflow shell layout", () => {
     expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain("width: 100%;");
   });
+
+  it("keeps the desktop sidebar out of the mobile shell in the final CSS layer", async () => {
+    const css = await read("apps/web/src/workflow-shell.css");
+    const desktopSidebar = css.indexOf(".app-shell > aside {");
+    const mobileBreakpoint = css.indexOf("@media (max-width: 800px)");
+    const mobileSidebar = css.indexOf(".app-shell > aside {", mobileBreakpoint);
+
+    expect(desktopSidebar).toBeGreaterThanOrEqual(0);
+    expect(mobileBreakpoint).toBeGreaterThan(desktopSidebar);
+    expect(mobileSidebar).toBeGreaterThan(mobileBreakpoint);
+    expect(css.slice(mobileSidebar, css.indexOf("}", mobileSidebar) + 1))
+      .toContain("display: none;");
+  });
 });

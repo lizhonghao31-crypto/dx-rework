@@ -178,6 +178,13 @@
     display: block;
   }
 
+  /* This is deliberately in the last loaded shell stylesheet. The base
+     stylesheet also hides the desktop sidebar at this breakpoint, but the
+     desktop flex rule above is loaded later and would otherwise override it. */
+  .app-shell > aside {
+    display: none;
+  }
+
   .mobile-flow-navigation {
     position: sticky;
     top: 0;
