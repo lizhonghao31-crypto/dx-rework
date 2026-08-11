@@ -191,7 +191,7 @@ describe("Aliyun OSS V4 REST client", () => {
     const signedFieldsAt = uploader.indexOf(
       "for (const [name, value] of Object.entries(intent.uploadFields))",
     );
-    const fileAt = uploader.indexOf('form.append("file", file)');
+    const fileAt = uploader.indexOf('form.append("file",');
     expect(signedFieldsAt).toBeGreaterThanOrEqual(0);
     expect(fileAt).toBeGreaterThan(signedFieldsAt);
     expect(gate).toContain("business acceptance runtime must configure OSS");
