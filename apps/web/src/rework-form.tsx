@@ -616,7 +616,9 @@ export function ReworkInitiationForm() {
             {uploadedAttachments.map((attachment) => (
               <article className="qc-upload-preview" key={attachment.attachmentId}>
                 {attachment.previewUrl
-                  ? <img src={attachment.previewUrl} alt={attachment.filename} />
+                  ? <a href={attachment.previewUrl} rel="noreferrer" target="_blank" aria-label={`预览 ${attachment.filename}`}>
+                    <img src={attachment.previewUrl} alt={attachment.filename} />
+                  </a>
                   : <span className="qc-upload-preview__pdf">PDF</span>}
                 <div>
                   <strong title={attachment.filename}>{attachment.filename}</strong>
