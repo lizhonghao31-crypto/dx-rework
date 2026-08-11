@@ -2,10 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type {
   CreateReworkDraft,
+  MAX_REWORK_ATTACHMENTS,
   ReworkInitiationOptionsResponse,
   ReworkOrderResponse,
   ReworkOrderStatus,
   SubmitReworkOrder,
+  SupplementReworkOrderImages,
   TransitionReworkOrder,
   UpdateReworkDraft,
 } from "@dx-rework/contracts";
@@ -289,6 +291,47 @@ export class ReworkInitiationService {
         await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
       }
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
+    });
+  }
+
+  async supplementOrderImages(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: SupplementReworkOrderImages,
+    idempotencyKey: string,
+  ): Promise<MutationResult<ReworkOrderResponse>> {
+    return this.mutate(actor, "rework.attachments.supplement", idempotencyKey, { reworkOrderId, ...input }, 200, async (client) => {
+      const current = await this.lockForSupplementalImages(client, reworkOrderId);
+      this.ensureVersion(current, input.expectedVersion);
+      const existingAttachmentIds = await this.attachmentIds(client, reworkOrderId);
+      const nextAttachmentIds = [...existingAttachmentIds, ...input.attachmentIds];
+      if (nextAttachmentIds.length > MAX_REWORK_ATTACHMENTS) {
+        throw new ApplicationError(
+          "VALIDATION_ERROR",
+          `每张返工单最多保留 ${MAX_REWORK_ATTACHMENTS} 份 QC 附件`,
+          400,
+        );
+      }
+      await this.ensureReadySupplementalImages(client, actor.actorId, input.attachmentIds);
+      const nextVersion = current.version + 1;
+      const before = await this.auditState(client, current);
+      const after = { ...before, attachmentIds: nextAttachmentIds, version: nextVersion };
+      const eventId = await this.events.append(client, actor, {
+        action: "rework.attachments.supplement",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        before,
+        after,
+      });
+      await this.setAuditContext(client, eventId, actor.requestId);
+      await client.query(
+        `UPDATE rework_orders
+         SET updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP
+         WHERE rework_order_id=$1`,
+        [reworkOrderId, actor.actorId, nextVersion],
+      );
+      await this.bindSupplementalImages(client, reworkOrderId, input.attachmentIds);
+      return this.getAccessibleWithClient(client, reworkOrderId);
     });
   }
 
@@ -666,6 +709,24 @@ export class ReworkInitiationService {
     }
   }
 
+  private async lockForSupplementalImages(
+    client: PoolClient,
+    reworkOrderId: string,
+  ): Promise<ReworkOrderRow> {
+    const result = await client.query<ReworkOrderRow>(
+      `${ORDER_SELECT}
+       WHERE orders.rework_order_id=$1
+       FOR UPDATE OF orders`,
+      [reworkOrderId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
+    if (row.status === "completed" || row.status === "cancelled") {
+      throw new ApplicationError("INVALID_STATE_TRANSITION", "已归档或已取消的返工单不能补充图片", 409);
+    }
+    return row;
+  }
+
   private async lockOwned(
     client: PoolClient,
     actorId: string,
@@ -719,6 +780,19 @@ export class ReworkInitiationService {
     return this.dto(client, row);
   }
 
+  private async getAccessibleWithClient(
+    client: Pick<PoolClient, "query">,
+    reworkOrderId: string,
+  ): Promise<ReworkOrderResponse> {
+    const result = await client.query<ReworkOrderRow>(
+      `${ORDER_SELECT} WHERE orders.rework_order_id=$1`,
+      [reworkOrderId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
+    return this.dto(client, row);
+  }
+
   private async attachmentIds(
     client: Pick<PoolClient, "query">,
     reworkOrderId: string,
@@ -753,6 +827,48 @@ export class ReworkInitiationService {
     );
     if (result.rowCount !== attachmentIds.length) {
       throw new ApplicationError("ATTACHMENT_NOT_READY", "QC附件未完成上传、归属不符或已被替换", 409);
+    }
+  }
+
+  private async ensureReadySupplementalImages(
+    client: PoolClient,
+    actorId: string,
+    attachmentIds: readonly string[],
+  ): Promise<void> {
+    const candidates = await client.query(
+      `SELECT attachment_id
+       FROM attachments
+       WHERE attachment_id=ANY($1::uuid[])
+         AND uploaded_by=$2
+         AND status='ready'
+         AND mime_type IN ('image/jpeg','image/png','image/webp')
+         AND entity_type IS NULL AND entity_id IS NULL
+       FOR UPDATE`,
+      [attachmentIds, actorId],
+    );
+    if (candidates.rowCount !== attachmentIds.length) {
+      throw new ApplicationError(
+        "ATTACHMENT_NOT_READY",
+        "补充图片未完成上传、并非本人上传、格式不支持或已绑定其他业务",
+        409,
+      );
+    }
+  }
+
+  private async bindSupplementalImages(
+    client: PoolClient,
+    reworkOrderId: string,
+    attachmentIds: readonly string[],
+  ): Promise<void> {
+    const result = await client.query(
+      `UPDATE attachments
+       SET entity_type='rework_order',entity_id=$2,updated_at=CURRENT_TIMESTAMP
+       WHERE attachment_id=ANY($1::uuid[])
+         AND entity_type IS NULL AND entity_id IS NULL`,
+      [attachmentIds, reworkOrderId],
+    );
+    if (result.rowCount !== attachmentIds.length) {
+      throw new ApplicationError("CONFLICT", "补充图片状态已变化，请刷新后重试", 409);
     }
   }
 
