@@ -232,3 +232,83 @@ dd { margin: 8px 0 0; overflow-wrap: anywhere; font-size: 18px; font-weight: 700
     height: 42px;
   }
 }
+
+
+@media (max-width: 800px) {
+  .rework-initiation-page {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .rework-initiation-hero {
+    display: grid;
+    gap: var(--dx-v2-space-3);
+  }
+
+  .rework-initiation-hero__progress {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.76);
+  }
+
+  .rework-initiation-required .section-title {
+    align-items: center;
+  }
+
+  .rework-initiation-optional details {
+    display: grid;
+    gap: var(--dx-v2-space-3);
+  }
+
+  .rework-initiation-optional summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dx-v2-space-3);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .rework-initiation-optional summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rework-initiation-optional summary > span {
+    color: var(--dx-v2-color-text);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 26px;
+  }
+
+  .rework-initiation-optional summary > small {
+    color: var(--dx-v2-color-primary);
+    font-weight: 700;
+  }
+
+  .rework-initiation-optional details[open] summary > small {
+    font-size: 0;
+  }
+
+  .rework-initiation-optional details[open] summary > small::after {
+    content: "收起";
+    font-size: 12px;
+  }
+
+  .rework-initiation-optional details > p {
+    margin: 0;
+  }
+
+  .rework-initiation-actions {
+    z-index: 20;
+    min-height: 72px;
+    margin: 0 -12px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid rgba(195, 206, 216, 0.92);
+    border-radius: var(--dx-v2-radius-md);
+    background: var(--dx-v2-color-surface);
+    box-shadow: var(--dx-v2-shadow-raised);
+  }
+
+  .rework-initiation-actions .dx-button {
+    min-height: 50px;
+    border-radius: var(--dx-v2-radius-md);
+  }
+}
