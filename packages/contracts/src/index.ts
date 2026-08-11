@@ -195,11 +195,14 @@ export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
 ]);
 export const MAX_REWORK_ATTACHMENTS = 5;
 
-const ReworkAttachmentIdsSchema = z.array(IdSchema).max(MAX_REWORK_ATTACHMENTS).superRefine((ids, context) => {
-  if (new Set(ids).size !== ids.length) {
-    context.addIssue({ code: "custom", message: "attachmentIds cannot contain duplicates" });
-  }
-});
+const ReworkAttachmentIdsSchema = (minimum = 0) => z.array(IdSchema)
+  .min(minimum)
+  .max(MAX_REWORK_ATTACHMENTS)
+  .superRefine((ids, context) => {
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: "custom", message: "attachmentIds cannot contain duplicates" });
+    }
+  });
 const ReworkDraftFieldsSchema = z.object({
   styleNo: DraftTextSchema(100),
   customerSupplyCode: DraftTextSchema(100),
@@ -213,12 +216,16 @@ const ReworkDraftFieldsSchema = z.object({
   problemPart: DraftTextSchema(200),
   problemDescription: DraftTextSchema(2000),
   reworkQuantity: z.number().int().positive().nullable().optional(),
-  attachmentIds: ReworkAttachmentIdsSchema.optional(),
+  attachmentIds: ReworkAttachmentIdsSchema().optional(),
 });
 
 export const CreateReworkDraftSchema = ReworkDraftFieldsSchema.strict();
 export const UpdateReworkDraftSchema = ReworkDraftFieldsSchema.extend({
   expectedVersion: z.number().int().positive(),
+}).strict();
+export const SupplementReworkOrderImagesSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  attachmentIds: ReworkAttachmentIdsSchema(1),
 }).strict();
 export const SubmitReworkOrderSchema = z.object({
   expectedVersion: z.number().int().positive(),
@@ -279,6 +286,7 @@ export type ReworkOrderStatus = z.infer<typeof ReworkOrderStatusSchema>;
 export type ReworkProcessingFactory = z.infer<typeof ReworkProcessingFactorySchema>;
 export type CreateReworkDraft = z.infer<typeof CreateReworkDraftSchema>;
 export type UpdateReworkDraft = z.infer<typeof UpdateReworkDraftSchema>;
+export type SupplementReworkOrderImages = z.infer<typeof SupplementReworkOrderImagesSchema>;
 export type SubmitReworkOrder = z.infer<typeof SubmitReworkOrderSchema>;
 export type TransitionReworkOrder = z.infer<typeof TransitionReworkOrderSchema>;
 export type ReworkOrderResponse = z.infer<typeof ReworkOrderResponseSchema>;

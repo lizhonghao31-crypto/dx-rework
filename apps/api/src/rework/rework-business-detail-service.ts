@@ -8,6 +8,7 @@ export type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkOrderStatus;
+  version: number;
   styleNo: string | null;
   customerSupplyCode: string | null;
   factoryStyleNo: string | null;
@@ -67,6 +68,7 @@ type DetailRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
   status: ReworkOrderStatus;
+  version: number;
   style_no: string | null;
   customer_supply_code: string | null;
   factory_style_no: string | null;
@@ -110,7 +112,7 @@ export class ReworkBusinessDetailService {
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkBusinessDetail> {
     const result = await this.database.query<DetailRow>(
       `SELECT
-         orders.rework_order_id,orders.rework_no,orders.status,orders.style_no,
+         orders.rework_order_id,orders.rework_no,orders.status,orders.version,orders.style_no,
          to_jsonb(orders)->>'customer_supply_code' customer_supply_code,
          to_jsonb(orders)->>'factory_style_no' factory_style_no,
          orders.order_no,
@@ -186,6 +188,7 @@ export class ReworkBusinessDetailService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      version: row.version,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
