@@ -6,14 +6,13 @@ import { Button, StatusBadge } from "@dx-rework/ui";
 import { useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import {
+  isSupportedAttachment,
+  prepareAttachmentForUpload,
+  sha256Hex,
+} from "./attachment-upload.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const supportedTypes = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "application/pdf",
-]);
 const prepareTimeoutMilliseconds = 30_000;
 const apiTimeoutMilliseconds = 15_000;
 const uploadTimeoutMilliseconds = 45_000;
@@ -112,27 +111,28 @@ export function ExternalEvidenceUploader({
       for (const file of Array.from(files)) {
         activeFileName = file.name;
         setStage("preparing");
-        if (!supportedTypes.has(file.type)) {
+        if (!isSupportedAttachment(file)) {
           throw new Error(`${file.name} 不是支持的图片或 PDF`);
         }
-        const digest = new Uint8Array(await withTimeout(
-          async () => crypto.subtle.digest("SHA-256", await file.arrayBuffer()),
+        const prepared = await withTimeout(
+          async () => prepareAttachmentForUpload(file),
           prepareTimeoutMilliseconds,
           `${file.name} 文件准备超时`,
-        ));
-        const sha256 = Array.from(
-          digest,
-          (byte) => byte.toString(16).padStart(2, "0"),
-        ).join("");
+        );
+        const sha256 = await withTimeout(
+          async () => sha256Hex(prepared),
+          prepareTimeoutMilliseconds,
+          `${file.name} 文件准备超时`,
+        );
         const intent = await request(
           "tools/attachments/upload-intents",
           UploadIntentResponseSchema,
           {
             method: "POST",
             body: JSON.stringify({
-              filename: file.name,
-              mimeType: file.type,
-              sizeBytes: file.size,
+              filename: prepared.name,
+              mimeType: prepared.type,
+              sizeBytes: prepared.size,
               sha256,
             }),
           },
@@ -142,7 +142,7 @@ export function ExternalEvidenceUploader({
         for (const [name, value] of Object.entries(intent.uploadFields)) {
           form.append(name, value);
         }
-        form.append("file", file);
+        form.append("file", prepared);
         const upload = await withTimeout(
           (signal) => fetch(intent.uploadUrl, {
             method: "POST",
@@ -162,7 +162,7 @@ export function ExternalEvidenceUploader({
         nextIds.push(finalized.attachmentId);
         nextUploaded.push({
           attachmentId: finalized.attachmentId,
-          filename: file.name,
+          filename: finalized.filename,
         });
       }
       onChange([...new Set(nextIds)]);
