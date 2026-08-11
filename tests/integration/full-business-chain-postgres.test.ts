@@ -320,10 +320,47 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       reworkNo: expect.stringMatching(/^RW-/),
     });
 
+    // Post-creation order evidence must pass the same current-schema guards
+    // used in production, while preserving the active workflow state.
+    const supplementalImageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'full-chain-supplement.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [
+        supplementalImageId,
+        `private/${supplementalImageId}.webp`,
+        "e".repeat(64),
+        ids.qc,
+      ],
+    );
+    const supplemented = await initiation.supplementOrderImages(
+      qc(),
+      submitted.value.reworkOrderId,
+      {
+        expectedVersion: submitted.value.version,
+        attachmentIds: [supplementalImageId],
+      },
+      randomUUID(),
+    );
+    expect(supplemented.value).toMatchObject({
+      status: "pending_process_configuration",
+      version: submitted.value.version + 1,
+      attachmentIds: [supplementalImageId],
+    });
+    expect((await database.query(
+      "SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1",
+      [supplementalImageId],
+    )).rows[0]).toEqual({
+      entity_type: "rework_order",
+      entity_id: submitted.value.reworkOrderId,
+    });
+
     // N02 - planned quantity is fed from the N01 quantity instead of a second
     // unrelated fixture value. The business can still change it per process.
     const n02Input = SaveProcessConfigurationSchema.parse({
-      expectedOrderVersion: submitted.value.version,
+      expectedOrderVersion: supplemented.value.version,
       items: [{
         source: "catalog",
         processId: publicProcessId,
