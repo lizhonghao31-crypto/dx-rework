@@ -69,24 +69,6 @@ export const prepareAttachmentForUpload = async (file: File): Promise<File> => {
   }
 };
 
-export const mapWithConcurrency = async <T, Result>(
-  items: readonly T[],
-  limit: number,
-  operation: (item: T, index: number) => Promise<Result>,
-): Promise<Result[]> => {
-  const results = new Array<Result>(items.length);
-  let nextIndex = 0;
-  const worker = async (): Promise<void> => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await operation(items[index]!, index);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
-  return results;
-};
-
 /**
  * Keeps the existing two-way preparation capacity while starting each upload
  * as soon as its own preparation finishes. Uploads are independently capped,
