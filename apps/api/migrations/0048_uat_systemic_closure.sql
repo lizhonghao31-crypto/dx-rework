@@ -7,7 +7,6 @@ SELECT
   allocation.configuration_item_id,
   allocation.responsibility_type,
   allocation.share_bps,
-  allocation.unrounded_amount,
   allocation.rounded_amount original_rounded_amount,
   (
     allocation.rounded_amount
