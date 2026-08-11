@@ -22,6 +22,8 @@ describe("mobile primary navigation", () => {
       read("apps/web/src/App.tsx"),
     ]);
 
+    expect(css).toContain(".app-shell > .mobile-primary-navigation");
+    expect(css).toContain("margin-top: 0;");
     expect(css).toContain("position: fixed;");
     expect(css).toContain("env(safe-area-inset-bottom, 0px)");
     expect(css).toContain(".mobile-primary-navigation__more[open] .mobile-primary-navigation__drawer");
