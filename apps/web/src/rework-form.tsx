@@ -432,15 +432,16 @@ export function ReworkInitiationForm() {
     || order?.status === "cancelled";
   const formDisabled = locked || restoringDraft;
   const mutationDisabled = !isReworkFormMutationAllowed({ busy, uploading, restoringDraft });
-  const complete = Boolean(
-    form.styleNo.trim()
-    && form.merchandiserUserId
-    && form.factory
-    && form.problemPart.trim()
-    && form.problemDescription.trim()
-    && Number.isInteger(Number(form.reworkQuantity))
-    && Number(form.reworkQuantity) > 0,
-  );
+  const requiredFieldsComplete = [
+    Boolean(form.styleNo.trim()),
+    Boolean(form.merchandiserUserId),
+    Boolean(form.factory),
+    Boolean(form.problemPart.trim()),
+    Boolean(form.problemDescription.trim()),
+    Number.isInteger(Number(form.reworkQuantity)) && Number(form.reworkQuantity) > 0,
+  ];
+  const requiredCompletionCount = requiredFieldsComplete.filter(Boolean).length;
+  const complete = requiredCompletionCount === requiredFieldsComplete.length;
   const badgeTone = order?.status === "cancelled"
     ? "danger"
     : order?.status === "pending_process_configuration"
@@ -449,58 +450,28 @@ export function ReworkInitiationForm() {
   const showStatus = Boolean(order) || message !== "填写中，尚未保存";
 
   return (
-    <div className="mobile-page">
-      <div className="mobile-hero">
+    <div className="mobile-page rework-initiation-page">
+      <div className="mobile-hero rework-initiation-hero">
         <div className="mobile-title">
           <h1>发起返工</h1>
-          {order?.reworkNo && <StatusBadge tone="info">{order.reworkNo}</StatusBadge>}
+          <StatusBadge tone={badgeTone}>{order?.reworkNo ?? "草稿未保存"}</StatusBadge>
         </div>
-        <StatusBadge tone={badgeTone}>{statusText(order?.status ?? "draft")}</StatusBadge>
+        <p className="rework-initiation-hero__progress">
+          必填项 {requiredCompletionCount}/6 · {complete ? "可以提交" : "填完即可提交"}
+        </p>
       </div>
 
-      <Surface>
+      <Surface className="rework-initiation-required">
         <div className="section-title">
-          <h2>返工基本信息</h2>
-          <StatusBadge tone={locked ? "warning" : "info"}>
-            一张返工单一个款号
-          </StatusBadge>
+          <h2>先填这 6 项</h2>
+          <StatusBadge tone={locked ? "warning" : "info"}>必填</StatusBadge>
         </div>
         <div className="qc-form-grid">
-          <InsetField
-            label="客供代号（可补充）"
-            value={form.customerSupplyCode}
-            disabled={formDisabled}
-            onChange={(event) => setForm({ ...form, customerSupplyCode: event.target.value })}
-          />
-          <InsetField
-            label="工厂货号（可补充）"
-            value={form.factoryStyleNo}
-            disabled={formDisabled}
-            onChange={(event) => setForm({ ...form, factoryStyleNo: event.target.value })}
-          />
           <InsetField
             label="款号（必填）"
             value={form.styleNo}
             disabled={formDisabled}
             onChange={(event) => setForm({ ...form, styleNo: event.target.value })}
-          />
-          <InsetField
-            label="订单数量（可补充）"
-            type="number"
-            min="1"
-            step="1"
-            value={form.orderQuantity}
-            disabled={formDisabled}
-            suffix="件"
-            onChange={(event) => setForm({ ...form, orderQuantity: event.target.value })}
-          />
-          <InsetField
-            label="订单号（可填多个，知道时填写）"
-            maxLength={100}
-            value={form.orderNo}
-            disabled={formDisabled}
-            placeholder="多个订单号用逗号分隔，例如：PO001，PO002"
-            onChange={(event) => setForm({ ...form, orderNo: event.target.value })}
           />
           <label className="dx-field">
             <span>订单跟单（必填）</span>
@@ -532,28 +503,6 @@ export function ReworkInitiationForm() {
               <small>除本厂外暂无加工厂；可在“基础资料”维护。</small>
             ) : null}
           </label>
-        </div>
-        {order?.hasOtherOpenStyleOrder && (
-          <p className="qc-warning">同款号存在其他未完结单；系统仅提示，不会自动合并。</p>
-        )}
-      </Surface>
-
-      <Surface>
-        <h2>返工问题与数量</h2>
-        <div className="qc-form-grid">
-          <InsetField
-            label="返工原因（可补充）"
-            value={form.reworkReason}
-            disabled={formDisabled}
-            onChange={(event) => setForm({ ...form, reworkReason: event.target.value })}
-          />
-          <InsetField
-            label="返工工序（可补充）"
-            value={form.reworkProcess}
-            disabled={formDisabled}
-            placeholder="例如：车缝、锁眼、后整；多项用逗号分隔"
-            onChange={(event) => setForm({ ...form, reworkProcess: event.target.value })}
-          />
           <InsetField
             label="问题部位（必填）"
             value={form.problemPart}
@@ -578,25 +527,84 @@ export function ReworkInitiationForm() {
                 rows={4}
                 value={form.problemDescription}
                 disabled={formDisabled}
+                placeholder="描述问题现象、影响范围与处理要求"
                 onChange={(event) => setForm({ ...form, problemDescription: event.target.value })}
               />
             </span>
           </label>
         </div>
+        {order?.hasOtherOpenStyleOrder && (
+          <p className="qc-warning">同款号存在其他未完结单；系统仅提示，不会自动合并。</p>
+        )}
       </Surface>
 
-      <Surface className="share-preview">
+      <Surface className="rework-initiation-optional">
+        <details>
+          <summary>
+            <span>更多订单资料（可补充）</span>
+            <small>展开</small>
+          </summary>
+          <p>客供代号、工厂货号、订单数量、订单号、返工原因与工序不影响先保存草稿。</p>
+          <div className="qc-form-grid">
+            <InsetField
+              label="客供代号（可补充）"
+              value={form.customerSupplyCode}
+              disabled={formDisabled}
+              onChange={(event) => setForm({ ...form, customerSupplyCode: event.target.value })}
+            />
+            <InsetField
+              label="工厂货号（可补充）"
+              value={form.factoryStyleNo}
+              disabled={formDisabled}
+              onChange={(event) => setForm({ ...form, factoryStyleNo: event.target.value })}
+            />
+            <InsetField
+              label="订单数量（可补充）"
+              type="number"
+              min="1"
+              step="1"
+              value={form.orderQuantity}
+              disabled={formDisabled}
+              suffix="件"
+              onChange={(event) => setForm({ ...form, orderQuantity: event.target.value })}
+            />
+            <InsetField
+              label="订单号（可填多个，知道时填写）"
+              maxLength={100}
+              value={form.orderNo}
+              disabled={formDisabled}
+              placeholder="多个订单号用逗号分隔，例如：PO001，PO002"
+              onChange={(event) => setForm({ ...form, orderNo: event.target.value })}
+            />
+            <InsetField
+              label="返工原因（可补充）"
+              value={form.reworkReason}
+              disabled={formDisabled}
+              onChange={(event) => setForm({ ...form, reworkReason: event.target.value })}
+            />
+            <InsetField
+              label="返工工序（可补充）"
+              value={form.reworkProcess}
+              disabled={formDisabled}
+              placeholder="例如：车缝、锁眼、后整；多项用逗号分隔"
+              onChange={(event) => setForm({ ...form, reworkProcess: event.target.value })}
+            />
+          </div>
+        </details>
+      </Surface>
+
+      <Surface className="share-preview rework-initiation-evidence">
         <div className="section-title">
           <h2>QC 证据</h2>
           <StatusBadge tone={attachmentIds.length > 0 ? "success" : "info"}>
             {attachmentIds.length} 份
           </StatusBadge>
         </div>
-        <p>支持 JPG、PNG、WebP 与 PDF；每张返工单最多 {MAX_REWORK_ATTACHMENTS} 份。</p>
+        <p>支持 JPG、PNG、WebP 与 PDF；上传后请保存草稿。</p>
         {!formDisabled && (
           <>
             <label className="qc-file-button">
-              <span>{uploading ? "正在上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? `已达到 ${MAX_REWORK_ATTACHMENTS} 份上限` : "选择 QC 图片 / PDF"}</span>
+              <span>{uploading ? "正在上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? "已达到 " + MAX_REWORK_ATTACHMENTS + " 份上限" : "选择 QC 图片 / PDF"}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -624,7 +632,7 @@ export function ReworkInitiationForm() {
             {uploadedAttachments.map((attachment) => (
               <article className="qc-upload-preview" key={attachment.attachmentId}>
                 {attachment.previewUrl
-                  ? <a href={attachment.previewUrl} rel="noreferrer" target="_blank" aria-label={`预览 ${attachment.filename}`}>
+                  ? <a href={attachment.previewUrl} rel="noreferrer" target="_blank" aria-label={"预览 " + attachment.filename}>
                     <img src={attachment.previewUrl} alt={attachment.filename} />
                   </a>
                   : <span className="qc-upload-preview__pdf">PDF</span>}
@@ -648,7 +656,7 @@ export function ReworkInitiationForm() {
       )}
 
       {!locked && (
-        <div className="mobile-actions">
+        <div className="mobile-actions rework-initiation-actions">
           <Button disabled={mutationDisabled} onClick={() => void save()}>
             {busy ? "处理中…" : restoringDraft ? "草稿加载中…" : "保存草稿"}
           </Button>
@@ -675,4 +683,6 @@ export function ReworkInitiationForm() {
       )}
     </div>
   );
+}
+
 }
