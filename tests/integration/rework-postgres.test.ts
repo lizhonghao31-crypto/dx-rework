@@ -45,6 +45,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       "0005_access_master_data.sql",
       "0006_rework_initiation.sql",
       "0007_process_configuration_ie_review.sql",
+      "0049_post_creation_order_image_binding.sql",
     ]) {
       const sql = await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),

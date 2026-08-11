@@ -71,9 +71,10 @@ describe("PR-11 external responsibility contracts and mobile UI", () => {
   });
 
   it("uses real uploads, server money, stable idempotency, UUID routes, refresh, and review-closure guards", async () => {
-    const [panel, uploader, queue, app, css, migration17, migration18, migration19] = await Promise.all([
+    const [panel, uploader, uploadHelper, queue, app, css, migration17, migration18, migration19] = await Promise.all([
       readFile(new URL("../../apps/web/src/external-responsibility-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/external-evidence-uploader.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/attachment-upload.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/external-responsibility-queue-page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/external-responsibility.css", import.meta.url), "utf8"),
@@ -95,7 +96,8 @@ describe("PR-11 external responsibility contracts and mobile UI", () => {
     expect(panel).not.toMatch(/proposedDeductionAmount\s*[/+*-]/);
 
     expect(uploader).toContain("tools/attachments/upload-intents");
-    expect(uploader).toContain("crypto.subtle.digest");
+    expect(uploader).toContain("sha256Hex");
+    expect(uploadHelper).toContain("crypto.subtle.digest");
     expect(uploader).toContain("UploadIntentResponseSchema");
     expect(uploader).toContain("AttachmentResponseSchema");
     expect(uploader).toContain('accept="image/jpeg,image/png,image/webp,application/pdf"');

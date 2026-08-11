@@ -307,6 +307,35 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       { expectedVersion: draft.version },
     );
 
+    const supplementalImageId = randomUUID();
+    await fixture.database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,$3,'image/webp',10,$4,$5,'ready',CURRENT_TIMESTAMP)`,
+      [
+        supplementalImageId,
+        `private/${supplementalImageId}.webp`,
+        `root-pass-${pass}-supplement.webp`,
+        "f".repeat(64),
+        fixture.rootUserId,
+      ],
+    );
+    const supplemented = await http<ReworkOrderResponse>(
+      fixture.app,
+      "POST",
+      `/rework-orders/${draft.reworkOrderId}/supplemental-images`,
+      {
+        expectedVersion: submitted.version,
+        attachmentIds: [supplementalImageId],
+      },
+    );
+    expect(supplemented).toMatchObject({
+      status: "pending_process_configuration",
+      version: submitted.version + 1,
+      attachmentIds: [supplementalImageId],
+    });
+
     const directDetail = await fixture.businessDetail.get({
       actorId: fixture.rootUserId,
       actorRoles: ["root_superuser"],
@@ -349,7 +378,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           }],
         },
       );
-    let saved = await save(submitted.version);
+    let saved = await save(supplemented.version);
     let queued = await http<ProcessConfigurationResponse>(
       fixture.app,
       "POST",

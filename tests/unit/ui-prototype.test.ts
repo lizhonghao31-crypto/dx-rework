@@ -13,6 +13,7 @@ const components = read("../../packages/ui/src/components.css");
 const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
 const reworkForm = read("../../apps/web/src/rework-form.tsx");
+const attachmentUpload = read("../../apps/web/src/attachment-upload.ts");
 const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
 const landingTarget = read("../../apps/web/src/landing-target.ts");
 
@@ -83,7 +84,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkForm).toContain('"rework-orders/initiation-options"');
     expect(reworkForm).toContain('"idempotency-key"');
     expect(reworkForm).toContain("executeReworkSubmit");
-    expect(reworkForm).toContain("crypto.subtle.digest");
+    expect(reworkForm).toContain("sha256Hex");
+    expect(attachmentUpload).toContain("crypto.subtle.digest");
     expect(reworkForm).toContain('upload.append("file", file)');
     expect(reworkForm).toContain("一张返工单一个款号");
     expect(reworkForm).toContain("订单号（可填多个，知道时填写）");
