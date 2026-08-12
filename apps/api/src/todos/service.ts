@@ -184,6 +184,7 @@ export class TodoService {
            CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
          )
        WHERE todos.recipient_user_id=$1
+         AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')
        ORDER BY CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END,
                 due_at NULLS LAST,todos.created_at DESC,todos.todo_id DESC`,
       [actor.actorId],
@@ -452,6 +453,46 @@ export class TodoService {
       "cancelled",
       reason,
     );
+  }
+
+  /**
+   * Closes every open task routed to an order without deleting the task fact.
+   * This preserves audit history and emits terminal delivery for DingTalk.
+   */
+  async cancelOpenForReworkOrder(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    reason: string,
+  ): Promise<number> {
+    const result = await client.query<{ dedupe_key: string }>(
+      `SELECT todo.dedupe_key
+       FROM rework_todos todo
+       LEFT JOIN rework_own_factory_approvals approval
+         ON todo.entity_type='own_factory_approval' AND approval.approval_id::text=todo.entity_id
+       LEFT JOIN rework_external_responsibility_cases external_case
+         ON todo.entity_type='external_responsibility_case' AND external_case.case_id::text=todo.entity_id
+       LEFT JOIN rework_responsibility_determinations determination
+         ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
+       WHERE todo.status IN ('pending','blocked_recipient')
+         AND (
+           todo.route_descriptor->>'reworkOrderId'=$1
+           OR (todo.entity_type='rework_order' AND todo.entity_id=$1)
+           OR approval.rework_order_id=$1::uuid
+           OR external_case.rework_order_id=$1::uuid
+           OR determination.rework_order_id=$1::uuid
+         )
+       ORDER BY todo.created_at,todo.todo_id
+       FOR UPDATE OF todo`,
+      [reworkOrderId],
+    );
+    let cancelled = 0;
+    for (const row of result.rows) {
+      if (await this.closeOpenByDedupeKey(client, actor, row.dedupe_key, "cancelled", reason)) {
+        cancelled += 1;
+      }
+    }
+    return cancelled;
   }
 
   /**
@@ -814,10 +855,11 @@ export class TodoService {
        FOR UPDATE`,
       [dedupeKey],
     );
-    const todo = result.rows[0];
-    if (!todo || (todo.status !== "pending" && todo.status !== "blocked_recipient")) {
+    const candidate = result.rows[0];
+    if (!candidate || (candidate.status !== "pending" && candidate.status !== "blocked_recipient")) {
       return false;
     }
+    const todo = await this.todoById(client, candidate.todo_id, true);
     const action = status === "completed" ? "todo.complete" : "todo.cancel";
     const eventId = await this.events.append(client, actor, {
       action,
@@ -851,6 +893,9 @@ export class TodoService {
         await this.cancelPendingRoutingExceptionForTodo(client, actor, todo.todo_id, reason);
       }
     }
+    if (status === "cancelled") {
+      await this.enqueueDelivery(client, todo, eventId, actor.requestId, "complete");
+    }
     return true;
   }
 
@@ -877,6 +922,7 @@ export class TodoService {
        WHERE todo_id=$1`,
       [todo.todo_id, reason, eventId],
     );
+    await this.enqueueDelivery(client, todo, eventId, actor.requestId, "complete");
   }
 
   private async cancelPendingRoutingExceptionForTodo(
@@ -925,6 +971,7 @@ export class TodoService {
        WHERE routing_exception_id=$1`,
       [exception.routing_exception_id, reason, eventId],
     );
+    await this.enqueueDelivery(client, routingTodo, eventId, actor.requestId, "complete");
   }
 
   private async rerouteInvalidRoutingManagerInTransaction(
@@ -974,7 +1021,7 @@ export class TodoService {
     todo: TodoRow,
     operationEventId: string,
     operationRequestId: string,
-    deliveryKind: "create" | "reminder" | "escalation" | "information",
+    deliveryKind: "create" | "complete" | "reminder" | "escalation" | "information",
   ): Promise<void> {
     const outboxEventId = await this.outbox.enqueue(client, {
       topic: TODO_DELIVERY_TOPIC,
