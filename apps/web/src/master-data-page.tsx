@@ -3,6 +3,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
@@ -467,6 +468,7 @@ export function MasterDataPage() {
           <p>维护加工厂、供应商和公共工序资料。</p>
         </div>
       </header>
+      <Surface className="admin-card"><SystemManagementNavigation active="master-data" /></Surface>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
 
