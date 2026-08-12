@@ -166,12 +166,7 @@ export function ReworkInitiationForm({
         }
       });
     };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") loadOptions();
-    };
     loadOptions();
-    window.addEventListener("focus", loadOptions);
-    document.addEventListener("visibilitychange", onVisibility);
     setForm(emptyForm);
     setOrder(null);
     setAttachmentIds([]);
@@ -200,8 +195,6 @@ export function ReworkInitiationForm({
     return () => {
       active = false;
       controller.abort();
-      window.removeEventListener("focus", loadOptions);
-      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [reworkOrderId]);
 
