@@ -100,6 +100,7 @@ const reworkService = new ReworkInitiationService(
   undefined,
   undefined,
   todoProjection,
+  todoService,
 );
 const reworkBusinessDetailService = new ReworkBusinessDetailService(database);
 const erpIntegrationService = new ErpIntegrationService(
@@ -328,4 +329,3 @@ try {
   await database.end();
   process.exitCode = 1;
 }
-
