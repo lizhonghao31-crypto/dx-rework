@@ -24,7 +24,7 @@ describe("business-chain UI handoff contracts", () => {
       readFile("apps/api/src/rework/service.ts", "utf8"),
       readFile("apps/web/src/rework-form.tsx", "utf8"),
     ]);
-    expect(service).toContain("other.status NOT IN ('completed','cancelled')");
+    expect(service).toContain("other.status NOT IN ('completed','cancelled','deleted')");
     expect(form).toContain("同款号存在其他未完结单；系统仅提示，不会自动合并");
   });
 
