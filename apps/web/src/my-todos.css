@@ -131,23 +131,18 @@
 }
 
 .my-todos-hero {
-  display: grid;
   gap: var(--dx-v2-space-3);
-  margin-bottom: 28px;
 }
 
 .my-todos-hero__title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--dx-v2-space-3);
+  min-width: 0;
 }
 
 .my-todos-hero__title h1 {
   min-width: 0;
 }
 
-.my-todos-hero > p {
+.my-todos-hero__title > p {
   margin: 0;
 }
 
@@ -157,7 +152,6 @@
   }
 
   .my-todos-hero {
-    gap: var(--dx-v2-space-3);
     margin: -20px -20px var(--dx-v2-space-3);
     padding: var(--dx-v2-space-4);
     background: var(--dx-v2-color-control);
@@ -167,7 +161,7 @@
     color: #fff;
   }
 
-  .my-todos-hero > p {
+  .my-todos-hero__title > p {
     color: rgba(255, 255, 255, 0.76);
     font-size: 13px;
     line-height: 20px;

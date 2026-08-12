@@ -461,10 +461,13 @@ export function MasterDataPage() {
 
   return (
     <Shell active="基础资料">
-      <div className="master-data-shell">
-        <div className="master-data-heading">
+      <header className="page-heading">
+        <div>
           <h1>基础资料</h1>
+          <p>维护加工厂、供应商和公共工序资料。</p>
         </div>
+      </header>
+      <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
 
         <div className="master-data-grid">

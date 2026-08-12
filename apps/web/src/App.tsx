@@ -12,7 +12,7 @@ import {
   type AuthorizedUser,
 } from "./auth.js";
 import { Shell } from "./components.js";
-import { ReworkInitiationWorkbench } from "./rework-initiation-workbench.js";
+import { ReworkInitiationForm } from "./rework-form.js";
 import { ReworkDetailPage } from "./rework-detail-page.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
@@ -184,7 +184,7 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
-  else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationWorkbench /></Shell>;
+  else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationForm /></Shell>;
   else if (path === "/ui/process-configuration") page = hasReworkContext
     ? <Shell active="全部订单" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
     : <WorkflowQueuePage active="全部订单" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;

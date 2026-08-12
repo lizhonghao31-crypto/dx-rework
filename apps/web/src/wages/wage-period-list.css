@@ -3,6 +3,10 @@
   gap: 20px;
 }
 
+.wage-management > .page-heading {
+  margin-bottom: 0;
+}
+
 .wage-query-card,
 .wage-person-summary,
 .wage-detail-table {

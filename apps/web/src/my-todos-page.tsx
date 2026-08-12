@@ -119,13 +119,13 @@ export function MyTodosPage() {
   return (
     <Shell active="我的待办">
       <div className="my-todos-page">
-        <div className="my-todos-hero">
+        <header className="page-heading my-todos-hero">
           <div className="my-todos-hero__title">
             <h1>我的待办</h1>
-            <StatusBadge tone="info">个人任务</StatusBadge>
+            <p>这里只显示现在轮到你处理的事项。</p>
           </div>
-          <p>这里只显示现在轮到你处理的事项。</p>
-        </div>
+          <StatusBadge tone="info">个人任务</StatusBadge>
+        </header>
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
         <Surface className="my-todos-state">
