@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
   KpiInstrument,
@@ -12,6 +12,8 @@ import type { Task } from "./types.js";
 import "./shell-navigation.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const MOBILE_PULL_REFRESH_THRESHOLD = 56;
+const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
 
 type ShellMe = Readonly<{
   status?: string;
@@ -171,6 +173,9 @@ export function Shell({
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullStartY = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
@@ -181,6 +186,48 @@ export function Shell({
     });
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 800px)");
+    const resetPull = () => {
+      pullStartY.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    };
+    const touchStart = (event: TouchEvent) => {
+      if (!mobile.matches || window.scrollY > 0 || event.touches.length !== 1) return;
+      pullStartY.current = event.touches[0]?.clientY ?? null;
+    };
+    const touchMove = (event: TouchEvent) => {
+      if (pullStartY.current === null || window.scrollY > 0) {
+        resetPull();
+        return;
+      }
+      const currentY = event.touches[0]?.clientY;
+      if (currentY === undefined) return;
+      const distance = Math.min(
+        MOBILE_PULL_REFRESH_MAX_DISTANCE,
+        Math.max(0, (currentY - pullStartY.current) * 0.45),
+      );
+      pullDistanceRef.current = distance;
+      setPullDistance(distance);
+    };
+    const touchEnd = () => {
+      const shouldRefresh = pullDistanceRef.current >= MOBILE_PULL_REFRESH_THRESHOLD;
+      resetPull();
+      if (shouldRefresh) window.location.reload();
+    };
+    window.addEventListener("touchstart", touchStart, { passive: true });
+    window.addEventListener("touchmove", touchMove, { passive: true });
+    window.addEventListener("touchend", touchEnd, { passive: true });
+    window.addEventListener("touchcancel", resetPull, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", touchStart);
+      window.removeEventListener("touchmove", touchMove);
+      window.removeEventListener("touchend", touchEnd);
+      window.removeEventListener("touchcancel", resetPull);
     };
   }, []);
 
@@ -249,6 +296,15 @@ export function Shell({
 
   return (
     <div className="app-shell">
+      {pullDistance > 0 ? (
+        <div
+          className="mobile-pull-refresh"
+          style={{ transform: `translate(-50%, ${pullDistance}px)` }}
+          role="status"
+        >
+          {pullDistance >= MOBILE_PULL_REFRESH_THRESHOLD ? "松开刷新" : "下拉刷新"}
+        </div>
+      ) : null}
       <aside>
         <h2>达兴 · 质检返工</h2>
         <PrimaryNavigation navigation={navigation} active={active} basePath={basePath} />
