@@ -37,4 +37,11 @@ describe("root logical deletion review regressions", () => {
 
     expect(navigation).toContain("const visibleTabs = access.technical ? technicalTabs : [];");
   });
+
+  it("keeps the deleted-order external responsibility join unambiguous", async () => {
+    const source = await readFile("apps/api/src/rework/fixed-external-responsibility-service.ts", "utf8");
+
+    expect(source).toContain("ORDER BY batch.created_at DESC");
+    expect(source).not.toContain("ORDER BY created_at DESC");
+  });
 });
