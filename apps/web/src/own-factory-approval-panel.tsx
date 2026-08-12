@@ -9,8 +9,6 @@ import { createWebUrls } from "../url-contract.js";
 import "./own-factory-approval.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const approvalRefreshMilliseconds = 15_000;
-
 type PanelState =
   | { kind: "loading" }
   | { kind: "hidden" }
@@ -109,18 +107,7 @@ export function OwnFactoryApprovalPanel({
         requestInFlight = false;
       }
     };
-    const refreshVisible = (): void => {
-      if (document.visibilityState === "visible") void refresh();
-    };
     void refresh();
-    const intervalId = window.setInterval(refreshVisible, approvalRefreshMilliseconds);
-    window.addEventListener("focus", refreshVisible);
-    document.addEventListener("visibilitychange", refreshVisible);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshVisible);
-      document.removeEventListener("visibilitychange", refreshVisible);
-    };
   }, [reworkOrderId]);
 
   const decide = async (decision: "approved" | "rejected"): Promise<void> => {
