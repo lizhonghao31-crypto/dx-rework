@@ -85,13 +85,8 @@ export function WagePeriodList() {
   useEffect(() => {
     mounted.current = true;
     void loadPeriods();
-    const timer = window.setInterval(() => void loadPeriods(), 15_000);
-    const focus = () => void loadPeriods();
-    window.addEventListener("focus", focus);
     return () => {
       mounted.current = false;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", focus);
     };
   }, [loadPeriods]);
 
