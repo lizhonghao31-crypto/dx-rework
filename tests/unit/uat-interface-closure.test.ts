@@ -16,15 +16,24 @@ describe("UAT interface closure", () => {
     expect(app).toContain('<WorkflowQueuePage active="全部订单"');
   });
 
-  it("exposes employee access from system management", async () => {
-    const [admin, employee] = await Promise.all([
+  it("keeps system management links in the expected sequence", async () => {
+    const [admin, employee, masterData] = await Promise.all([
       read("apps/web/src/admin-console-page.tsx"),
       read("apps/web/src/employee-access-page.tsx"),
+      read("apps/web/src/master-data-page.tsx"),
     ]);
     expect(admin).toContain('pageUrl("ui/employee-access")');
     expect(admin).toContain("员工权限管理");
+    expect(admin).toContain("工厂管理");
+    expect(admin).toContain("工序管理");
+    const navigation = admin.slice(admin.indexOf('<nav className="admin-navigation"'));
+    expect(navigation.indexOf("员工权限管理")).toBeLessThan(navigation.indexOf("工厂管理"));
+    expect(navigation.indexOf("工厂管理")).toBeLessThan(navigation.indexOf("工序管理"));
+    expect(navigation.indexOf("工序管理")).toBeLessThan(navigation.indexOf("visibleTabs.map"));
     expect(employee).toContain('<Shell active="系统管理">');
     expect(employee).toContain("assignableRoles");
+    expect(masterData).toContain('id="factories"');
+    expect(masterData).toContain('id="processes"');
   });
 
   it("provides real wage search, period shortcuts, summaries, detail and export", async () => {
@@ -37,11 +46,13 @@ describe("UAT interface closure", () => {
     expect(source).toContain("按工人汇总");
     expect(source).toContain("逐单逐人工资明细");
     expect(source).toContain('reportExportUrl("wages", filters)');
+    expect(source).not.toContain("15 秒自动刷新月结状态");
   });
 
   it("renders reports, nested audit details and totals in business Chinese", async () => {
-    const [report, admin, webDisplay] = await Promise.all([
+    const [report, reportingStyles, admin, webDisplay] = await Promise.all([
       read("apps/web/src/reporting/report-center-page.tsx"),
+      read("apps/web/src/reporting/reporting.css"),
       read("apps/web/src/admin-console-page.tsx"),
       read("apps/web/src/business-display.ts"),
     ]);
@@ -50,6 +61,9 @@ describe("UAT interface closure", () => {
     expect(report).toContain("snapshotBusinessValue(key, total)");
     expect(report).toContain("Math.round(numeric)");
     expect(report).not.toContain('action="返回全部订单"');
+    expect(report).not.toContain("数据快照：");
+    expect(reportingStyles).toContain(".reporting-summary>div:last-child{justify-content:flex-start}");
+    expect(reportingStyles).toContain(".reporting-filters,.report-center-filters,.workflow-queue-filters{grid-template-columns:minmax(0,1fr)}");
     expect(admin).toContain("businessActionLabel(event.action)");
     expect(admin).toContain("businessEntityLabel(event.entityType)");
     expect(webDisplay).toContain('@dx-rework/contracts/business-display');

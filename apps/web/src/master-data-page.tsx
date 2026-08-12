@@ -472,7 +472,7 @@ export function MasterDataPage() {
 
         <div className="master-data-grid">
           <Surface className="master-data-panel">
-            <div className="master-data-section-heading">
+            <div className="master-data-section-heading" id="factories">
               <h2>加工厂与供应商</h2>
               <div className="master-data-batch-actions">
                 <Button disabled={Boolean(busy)} onClick={downloadSupplierTemplate}>下载导入模板</Button>
@@ -529,7 +529,7 @@ export function MasterDataPage() {
           </Surface>
 
           <Surface className="master-data-panel">
-            <div className="master-data-section-heading">
+            <div className="master-data-section-heading" id="processes">
               <h2>工序</h2>
               <div className="master-data-batch-actions">
                 <Button disabled={Boolean(busy)} onClick={downloadProcessTemplate}>下载导入模板</Button>
