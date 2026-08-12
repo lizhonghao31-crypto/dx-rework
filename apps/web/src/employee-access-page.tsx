@@ -3,6 +3,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts/employee-access";
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import { SystemManagementNavigation } from "./system-management-navigation.js";
 import "./employee-access.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -192,6 +193,7 @@ export function EmployeeAccessPage() {
             <Button disabled={Boolean(busy)} onClick={sync}>{busy === "sync" ? "同步中…" : "同步钉钉通讯录"}</Button>
           </div>
         </header>
+        <Surface className="admin-card"><SystemManagementNavigation active="employee-access" /></Surface>
         <Surface className="employee-access-card">
           <div className="employee-access-toolbar">
             <input
