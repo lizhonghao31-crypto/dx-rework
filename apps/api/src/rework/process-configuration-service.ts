@@ -406,6 +406,12 @@ export class ProcessConfigurationService {
         "UPDATE rework_orders SET status=$2,updated_by=$3,version=$4,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
         [reworkOrderId, nextStatus, actor.actorId, nextOrderVersion],
       );
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `ie-review:${reworkOrderId}:${configuration.configuration_version}`,
+        approved ? "IE process review was approved" : "IE process review was rejected",
+      );
       await this.outbox.enqueue(client, {
         topic: approved ? "rework.process_configuration.approved" : "rework.process_configuration.rejected",
         aggregateType: "rework_order",
