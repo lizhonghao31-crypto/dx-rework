@@ -154,12 +154,6 @@ export function WorkflowQueuePage({
     };
   }, [baseFilters, refresh, statuses]);
 
-  useEffect(() => {
-    const focus = () => setRefresh((value) => value + 1);
-    window.addEventListener("focus", focus);
-    return () => window.removeEventListener("focus", focus);
-  }, []);
-
   const selectStatus = (status: WorkflowStatus) => {
     setSelected(status);
     const url = new URL(window.location.href);
