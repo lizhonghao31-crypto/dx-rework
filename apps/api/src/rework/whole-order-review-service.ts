@@ -130,10 +130,10 @@ export class WholeOrderReviewService {
       const todoFoundationAvailable = this.todos
         && await this.todoFoundationAvailable(client);
       if (todoFoundationAvailable) {
-        await this.todos!.completeOpenByDedupeKey(
+        await this.todos!.completeOpenByDedupePrefix(
           client,
           actor,
-          `whole-order-review:${reworkOrderId}:${order.version}`,
+          `whole-order-review:${reworkOrderId}:`,
           "Whole-order review was approved",
         );
         const wagePeriods = await client.query<{
@@ -239,10 +239,10 @@ export class WholeOrderReviewService {
         "UPDATE rework_orders SET status='in_progress',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
         [order.rework_order_id, actor.actorId],
       );
-      await this.todos?.cancelOpenByDedupeKey(
+      await this.todos?.cancelOpenByDedupePrefix(
         client,
         actor,
-        `whole-order-review:${order.rework_order_id}:${order.version}`,
+        `whole-order-review:${order.rework_order_id}:`,
         "A work report was returned for correction",
       );
       const originalSubmission = await client.query<{ event_id: string }>(

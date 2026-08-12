@@ -203,10 +203,10 @@ export class AuthorizedResponsibilityDeterminationService {
       } else {
         await maybeCompleteResponsibilityAction(client, actor, actionOrder);
       }
-      await this.todos?.completeOpenByDedupeKey(
+      await this.todos?.completeOpenByDedupePrefix(
         client,
         actor,
-        `responsibility:${orderId}:${current.determination_version}`,
+        `responsibility:${orderId}:`,
         "Responsibility determination was finalized",
       );
       return this.get(actor, orderId, client);
