@@ -41,6 +41,7 @@ export function AdminConsolePage() {
   const [tab, setTab] = useState<Tab>("audit");
   const [technicalAccess, setTechnicalAccess] = useState<boolean | null>(null);
   const [employeeAccess, setEmployeeAccess] = useState(false);
+  const [masterDataAccess, setMasterDataAccess] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -57,6 +58,9 @@ export function AdminConsolePage() {
         setEmployeeAccess(user?.isRoot === true
           || user?.businessRoles?.includes("owner_group") === true
           || user?.capabilities.includes("access:admin") === true);
+        setMasterDataAccess(user?.isRoot === true
+          || user?.businessRoles?.includes("owner_group") === true
+          || user?.capabilities.includes("master_data:manage") === true);
         if (!allowed) setTab("audit");
       })
       .catch(() => {
@@ -75,21 +79,16 @@ export function AdminConsolePage() {
         </div>
       </header>
       <Surface className="admin-card">
-        {employeeAccess ? (
-          <nav className="admin-business-links" aria-label="人员与权限管理">
-            <a href={pageUrl("ui/employee-access")}>
-              <strong>员工权限管理</strong>
-              <span>查询员工、授予或撤销角色、停用或恢复访问</span>
-            </a>
-          </nav>
-        ) : null}
+        <nav className="admin-navigation" aria-label="系统管理模块">
+          {employeeAccess ? <a href={pageUrl("ui/employee-access")}>员工权限管理</a> : null}
+          {masterDataAccess ? <a href={`${pageUrl("ui/master-data")}#factories`}>工厂管理</a> : null}
+          {masterDataAccess ? <a href={`${pageUrl("ui/master-data")}#processes`}>工序管理</a> : null}
+          {technicalAccess === null ? <span>正在加载管理权限…</span> : visibleTabs.map(([value, label]) => (
+            <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>
+          ))}
+        </nav>
         {technicalAccess === null ? <p>正在加载管理权限…</p> : (
           <>
-            <nav className="admin-tabs" aria-label="系统管理页签">
-              {visibleTabs.map(([value, label]) => (
-                <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>
-              ))}
-            </nav>
             {tab === "audit" ? <AuditTab /> : tab === "attachments" ? <AttachmentsTab /> : tab === "delegations" ? <DelegationsTab /> : <ExceptionsTab />}
           </>
         )}
