@@ -164,6 +164,69 @@ describe("DingTalk todo provider boundary", () => {
     });
   });
 
+  it("compacts production outbox keys into a stable DingTalk sourceId", async () => {
+    const productionInput = {
+      ...createInput,
+      sourceKey:
+        "todo:00000000-0000-4000-8000-000000000013:delivery:00000000-0000-4000-8000-000000000016",
+    };
+    expect(Buffer.byteLength(productionInput.sourceKey, "utf8")).toBeGreaterThan(64);
+
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    let lookupCount = 0;
+    const http: typeof fetch = async (input, init = {}) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
+        return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.includes("/tasks/sources/")) {
+        lookupCount += 1;
+        return lookupCount === 1
+          ? json({}, 404)
+          : json({ taskId: "task-compact", requestId: "lookup-existing" });
+      }
+      if (url.endsWith("/tasks") && init.method === "POST") {
+        return json({ taskId: "task-compact", requestId: "request-create" });
+      }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: lookupCount });
+      }
+      throw new Error(`unexpected request ${url}`);
+    };
+    const provider = new OfficialDingTalkTodoProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      agentId: "123456",
+      nodeEnv: "production",
+    }, http, () => 1_000);
+
+    await expect(provider.createTodo(productionInput)).resolves.toMatchObject({
+      providerTodoId: "task-compact",
+    });
+    await expect(provider.createTodo(productionInput)).resolves.toMatchObject({
+      providerTodoId: "task-compact",
+      reconciled: true,
+    });
+
+    const lookupCalls = calls.filter((call) => call.url.includes("/tasks/sources/"));
+    expect(lookupCalls).toHaveLength(2);
+    const sourceIds = lookupCalls.map((call) =>
+      decodeURIComponent(call.url.slice(call.url.lastIndexOf("/") + 1))
+    );
+    expect(new Set(sourceIds).size).toBe(1);
+    expect(Buffer.byteLength(sourceIds[0] ?? "", "utf8")).toBeLessThanOrEqual(64);
+    expect(sourceIds[0]).not.toBe(productionInput.sourceKey);
+
+    const createCalls = calls.filter((call) =>
+      call.url.endsWith("/tasks") && call.init.method === "POST"
+    );
+    expect(createCalls).toHaveLength(1);
+    expect(JSON.parse(String(createCalls[0]?.init.body))).toMatchObject({
+      sourceId: sourceIds[0],
+    });
+  });
+
   it("classifies retryable and permanent HTTP failures without leaking credentials", async () => {
     const makeProvider = (status: number) => new OfficialDingTalkTodoProvider({
       appKey: "sensitive-app-key",
