@@ -164,7 +164,7 @@ export function ResponsibilityTaskPage() {
   }
   return (
     <Shell active="我的待办">
-      <Header title="核对本期返工工资" subtitle={todo.category} badge="当前由你处理" action="返回我的待办" actionHref="/ui/my-tasks" />
+      <Header title="核对本期返工工资" subtitle="返工工资核对任务" badge="当前由你处理" action="返回我的待办" actionHref="/ui/my-tasks" />
       <Surface className="task-guidance">
         <p><b>你现在要做：</b>核对本期返工工资</p>
         <p><b>完成后：</b>进入下一位工资核对或月结处理人。</p>
