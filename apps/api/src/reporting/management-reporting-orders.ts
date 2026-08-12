@@ -18,7 +18,7 @@ export async function fetchFacts(source: Queryable, options: {
 }) {
   const values: unknown[] = [];
   const bind = (value: unknown): string => { values.push(value); return `$${values.length}`; };
-  const where = ["1=1"];
+  const where = ["order_record.status<>'deleted'"];
   if (options.q) {
     const p = bind(`%${options.q}%`);
     where.push(`(order_record.rework_no ILIKE ${p} OR order_record.style_no ILIKE ${p} OR order_record.order_no ILIKE ${p}
