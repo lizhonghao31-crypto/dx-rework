@@ -119,3 +119,115 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM operation_events event WHERE event.event_id=audit_event_id::uuid AND event.request_id=audit_request_id AND event.actor_id=audit_actor_id AND event.entity_type='rework_order' AND event.entity_id=NEW.rework_order_id::text AND ((event.action=expected_action AND (event.authorization_capability=expected_capability OR (expected_action='rework.work_report.submit' AND event.authorization_capability IN ('work:report','work:report_for_worker')))) OR (alternative_action IS NOT NULL AND event.action=alternative_action AND event.authorization_capability=alternative_capability) OR (alternative_action_two IS NOT NULL AND event.action=alternative_action_two AND event.authorization_capability=alternative_capability_two) OR (alternative_action_three IS NOT NULL AND event.action=alternative_action_three AND event.authorization_capability=alternative_capability_three)) AND event.after_state @> jsonb_build_object('reworkOrderId',NEW.rework_order_id,'reworkNo',NEW.rework_no,'status',NEW.status,'styleNo',NEW.style_no,'orderNo',NEW.order_no,'merchandiserUserId',NEW.merchandiser_user_id,'processingFactory',CASE WHEN NEW.processing_factory_type IS NULL THEN NULL WHEN NEW.processing_factory_type='own_factory' THEN jsonb_build_object('type','own_factory') ELSE jsonb_build_object('type','supplier','supplierId',NEW.processing_factory_supplier_id,'supplierVersion',NEW.processing_factory_supplier_version) END,'problemPart',NEW.problem_part,'problemDescription',NEW.problem_description,'reworkQuantity',NEW.rework_quantity,'version',NEW.version) AND (NEW.status<>'cancelled' OR (event.after_state->>'cancelReason'=NEW.cancel_reason AND NEW.cancelled_by=audit_actor_id)) AND (NEW.status<>'deleted' OR (event.after_state->>'deletedBy'=NEW.deleted_by::text AND NEW.deleted_by=audit_actor_id))) THEN RAISE EXCEPTION 'rework order audit event does not match the write' USING ERRCODE='55000'; END IF;
   RETURN NEW;
 END $$;
+
+-- A deleted order is terminal for attachment bindings too.  Re-declare the
+-- existing binding guard here so the deletion rule is enforced inside the
+-- same database trust boundary as the root deletion write.
+CREATE OR REPLACE FUNCTION guard_rework_attachment_binding() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.rework_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.rework_request_id', true), '');
+  order_id uuid;
+  order_creator uuid;
+  order_status text;
+  order_updated_by uuid;
+  order_version integer;
+BEGIN
+  IF OLD.entity_type='rework_order'
+     AND (OLD.entity_type,OLD.entity_id) IS NOT DISTINCT FROM (NEW.entity_type,NEW.entity_id)
+  THEN
+    IF NEW IS DISTINCT FROM OLD THEN
+      RAISE EXCEPTION 'bound rework evidence is immutable'
+        USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF (OLD.entity_type,OLD.entity_id) IS NOT DISTINCT FROM (NEW.entity_type,NEW.entity_id)
+     OR (OLD.entity_type IS DISTINCT FROM 'rework_order'
+         AND NEW.entity_type IS DISTINCT FROM 'rework_order')
+  THEN
+    RETURN NEW;
+  END IF;
+
+  IF audit_event_id IS NULL OR audit_request_id IS NULL THEN
+    RAISE EXCEPTION 'rework attachment binding requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  IF NOT (
+    (OLD.entity_type IS NULL AND OLD.entity_id IS NULL
+      AND NEW.entity_type='rework_order' AND NEW.entity_id IS NOT NULL)
+    OR
+    (OLD.entity_type='rework_order' AND OLD.entity_id IS NOT NULL
+      AND NEW.entity_type IS NULL AND NEW.entity_id IS NULL)
+  ) THEN
+    RAISE EXCEPTION 'rework attachments cannot be moved directly between entities'
+      USING ERRCODE = '23514';
+  END IF;
+
+  order_id := COALESCE(NEW.entity_id,OLD.entity_id)::uuid;
+  SELECT created_by,status,updated_by,version
+  INTO order_creator,order_status,order_updated_by,order_version
+  FROM rework_orders
+  WHERE rework_order_id=order_id;
+  IF order_creator IS NULL THEN
+    RAISE EXCEPTION 'rework order does not exist for attachment binding'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF OLD.entity_type IS NULL
+     AND NEW.entity_type='rework_order'
+     AND NEW.status='ready'
+     AND order_status NOT IN ('completed','cancelled','deleted')
+     AND NEW.uploaded_by=order_updated_by
+     AND EXISTS (
+       SELECT 1
+       FROM operation_events event
+       WHERE event.event_id=audit_event_id::uuid
+         AND event.request_id=audit_request_id
+         AND event.actor_id=order_updated_by
+         AND event.authorization_capability='rework:initiate'
+         AND event.action='rework.attachments.supplement'
+         AND event.entity_type='rework_order'
+         AND event.entity_id=order_id::text
+         AND event.after_state->>'status'=order_status
+         AND event.after_state->>'version'=order_version::text
+         AND event.after_state->'attachmentIds' ? NEW.attachment_id::text
+     )
+  THEN
+    RETURN NEW;
+  END IF;
+
+  IF order_status<>'draft' THEN
+    RAISE EXCEPTION 'attachments can only be changed on an owned draft or through audited supplement'
+      USING ERRCODE = '23514';
+  END IF;
+  IF NEW.status<>'ready' OR NEW.uploaded_by<>order_creator THEN
+    RAISE EXCEPTION 'only the creator ready attachment can be bound to a draft'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM operation_events event
+    WHERE event.event_id=audit_event_id::uuid
+      AND event.request_id=audit_request_id
+      AND event.actor_id=order_creator
+      AND event.authorization_capability='rework:initiate'
+      AND event.action IN ('rework.draft.create','rework.draft.update')
+      AND event.entity_type='rework_order'
+      AND event.entity_id=order_id::text
+      AND event.after_state->>'status'='draft'
+      AND (
+        (NEW.entity_type='rework_order'
+          AND event.after_state->'attachmentIds' ? NEW.attachment_id::text)
+        OR
+        (OLD.entity_type='rework_order'
+          AND NOT (event.after_state->'attachmentIds' ? OLD.attachment_id::text))
+      )
+  ) THEN
+    RAISE EXCEPTION 'rework attachment audit event does not match the binding'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
