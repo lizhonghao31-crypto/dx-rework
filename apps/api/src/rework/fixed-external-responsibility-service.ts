@@ -63,11 +63,14 @@ export class FixedExternalResponsibilityService
       status: "active" | "superseded";
       source_snapshot: Record<string, unknown>;
     }>(
-      `SELECT batch_id,rework_order_id,finalized_determination_id,
-              finalized_determination_version,batch_version,status,
-              source_snapshot
-       FROM rework_external_responsibility_batches
-       WHERE rework_order_id=$1 AND status='active'
+      `SELECT batch.batch_id,batch.rework_order_id,batch.finalized_determination_id,
+              batch.finalized_determination_version,batch.batch_version,batch.status,
+              batch.source_snapshot
+       FROM rework_external_responsibility_batches batch
+       JOIN rework_orders order_record
+         ON order_record.rework_order_id=batch.rework_order_id
+       WHERE batch.rework_order_id=$1 AND batch.status='active'
+         AND order_record.status<>'deleted'
        ORDER BY created_at DESC
        LIMIT 1`,
       [orderId],
