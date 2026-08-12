@@ -29,7 +29,7 @@ export class ManagementReportingService {
     const [counts, financial, exceptions, exceptionCount, recent] = await Promise.all([
       this.db.query<CountRow>(
         `SELECT status,count(*)::text count FROM rework_orders
-         WHERE status<>'cancelled' GROUP BY status`,
+         WHERE status NOT IN ('cancelled','deleted') GROUP BY status`,
       ),
       loadFinancial(this.db, range),
       loadExceptions(20, this.db),
@@ -41,7 +41,7 @@ export class ManagementReportingService {
       ...meta,
       count: countMap.get(status) ?? 0,
     })).filter((item) => item.count > 0 || !["N00", "N-C"].includes(item.node));
-    const openOrders = [...countMap.entries()].filter(([status]) => !["completed", "cancelled"].includes(status)).reduce((sum, [, value]) => sum + value, 0);
+    const openOrders = [...countMap.entries()].filter(([status]) => !["completed", "cancelled", "deleted"].includes(status)).reduce((sum, [, value]) => sum + value, 0);
     const completedResult = await this.db.query<{ count: string }>(
       `SELECT count(*)::text count FROM rework_orders
        WHERE status='completed' AND (updated_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date`,
@@ -81,7 +81,7 @@ export class ManagementReportingService {
     await this.require(actor, "dashboard:site:read");
     const range = await this.range(query);
     const [counts, recent, wageReview, exceptions] = await Promise.all([
-      this.db.query<CountRow>(`SELECT status,count(*)::text count FROM rework_orders WHERE status NOT IN ('completed','cancelled') GROUP BY status`),
+      this.db.query<CountRow>(`SELECT status,count(*)::text count FROM rework_orders WHERE status NOT IN ('completed','cancelled','deleted') GROUP BY status`),
       fetchFacts(this.db, { limit: 12, siteOnly: true }),
       this.db.query<{ count: string }>(`SELECT count(*)::text count FROM rework_wage_periods WHERE status='pending_tail_review'`),
       this.db.query<{ count: string }>(
