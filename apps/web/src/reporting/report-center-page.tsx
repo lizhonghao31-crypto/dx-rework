@@ -17,6 +17,13 @@ const statuses:Record<ReportType,readonly (readonly [string,string])[]>={
   exceptions:[["","全部异常"],["overdue_todo","待办逾期"],["blocked_recipient","接收人失效"],["todo_delivery_failed","投递失败"],["deduction_follow_up_overdue","扣款跟进逾期"]],
 };
 type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse}|{kind:"unavailable";message:string};
+const snapshotBusinessValue=(key:string,value:string):string=>{
+  const formatted=businessValue(key,value);
+  const numeric=Number(value);
+  return formatted.startsWith("¥")&&Number.isFinite(numeric)
+    ? `¥${Math.round(numeric).toLocaleString("zh-CN")}`
+    : formatted;
+};
 
 export function ReportCenterPage(){
   const initial=useMemo(()=>new URLSearchParams(window.location.search),[]);
@@ -30,7 +37,7 @@ export function ReportCenterPage(){
   const filters=useMemo(()=>({from,to,q:q.trim()||undefined,status:status||undefined,limit:"100"}),[from,to,q,status]);
   useEffect(()=>{const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters]);
   const value=state.kind==="ready"?state.value:null;
-  return <Shell active="财务报表"><Header title="财务报表" subtitle="页面预览与 Excel 使用同一服务端查询口径；金额不在浏览器重新计算" badge={value?`${value.rowCount} 行 · ${value.range.from} 至 ${value.range.to}`:"真实数据"} action="返回全部订单" actionHref="/ui/tasks" />
+  return <Shell active="财务报表"><Header title="财务报表" subtitle="页面预览与 Excel 使用同一服务端查询口径；金额不在浏览器重新计算" badge={value?`${value.rowCount} 行 · ${value.range.from} 至 ${value.range.to}`:"真实数据"} />
     <Surface className="reporting-filters report-center-filters">
       <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
       <label>开始日期<input type="date" value={from} onChange={event=>setFrom(event.target.value)} /></label>
@@ -42,7 +49,7 @@ export function ReportCenterPage(){
     {state.kind==="loading"&&<Surface className="reporting-state">正在生成服务端预览…</Surface>}
     {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
     {value&&<>
-      <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>数据快照：{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{businessValue(key, total)}</StatusBadge>)}</div></Surface>
+      <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>数据快照：{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{snapshotBusinessValue(key, total)}</StatusBadge>)}</div></Surface>
       <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{value.rows.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{businessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}</Surface>
     </>}
   </Shell>;
