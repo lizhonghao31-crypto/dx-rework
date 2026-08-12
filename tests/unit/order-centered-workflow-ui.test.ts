@@ -25,6 +25,9 @@ describe("order-centered workflow UI", () => {
     ]);
     expect(detail).toContain("rework-workflow__stage");
     expect(detail).toContain("<details");
+    expect(detail).toContain("const [collapsedStages, setCollapsedStages]");
+    expect(detail).toContain('open={isOpen}');
+    expect(detail).toContain('{isOpen ? "−" : "+"}');
     expect(detail).toContain('"01", "发起返工"');
     expect(detail).toContain('"09", "订单归档"');
     expect(detail).toContain("待判定后生成后续责任结算路径");

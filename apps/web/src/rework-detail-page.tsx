@@ -347,6 +347,7 @@ export function ReworkDetailPage({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
+  const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() => new Set());
 
   const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
     if (!reworkOrderId) {
@@ -519,7 +520,7 @@ export function ReworkDetailPage({
 
   return (
     <Shell active="全部订单">
-      <Header title={detail.reworkNo ?? "未提交返工草稿"} subtitle={`${detail.styleNo ?? "款号未填写"} · ${meta.label}`} badge="返工单详情" {...backAction} />
+      <Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} {...backAction} />
       <div className="rework-detail-layout">
         <Surface className="rework-detail-summary">
           <div className="section-title">
@@ -527,7 +528,7 @@ export function ReworkDetailPage({
             <StatusBadge tone={detail.status === "cancelled" ? "danger" : detail.status === "completed" ? "success" : "info"}>{meta.label}</StatusBadge>
           </div>
           <dl className="rework-detail-facts">
-            <div><dt>款号</dt><dd>{detail.styleNo ?? "—"}</dd></div><div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
+            <div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
             <div><dt>工厂货号</dt><dd>{detail.factoryStyleNo ?? "—"}</dd></div><div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
             <div><dt>订单数量</dt><dd>{detail.orderQuantity === null ? "—" : `${detail.orderQuantity} 件`}</dd></div><div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
             <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div><div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
@@ -545,7 +546,7 @@ export function ReworkDetailPage({
           </dl>
           <section className="rework-detail-images" aria-label="订单图片">
             <div className="section-title">
-              <div><h2>订单图片</h2><p>点击缩略图可放大查看；图片保存在私有 OSS，仅有订单查看权限的人员可访问。</p></div>
+              <div><h2>订单图片</h2></div>
               <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge>
             </div>
             {canSupplementOrderImages && (
@@ -571,7 +572,7 @@ export function ReworkDetailPage({
                   </button>
                 ))}
               </div>
-            ) : <p className="rework-detail-images__empty">暂未上传订单图片。</p>}
+            ) : null}
           </section>
         </Surface>
 
@@ -580,11 +581,24 @@ export function ReworkDetailPage({
           <div className="rework-workflow__stages">
             {stages.map((stage) => {
               const state = stageState(stage);
-              const isCurrent = state === "current";
-              return <details className={`rework-workflow__stage is-${state}`} key={stage.key} open={isCurrent}>
+              const isOpen = !collapsedStages.has(stage.key);
+              return <details
+                className={`rework-workflow__stage is-${state}`}
+                key={stage.key}
+                open={isOpen}
+                onToggle={(event) => {
+                  const nextOpen = event.currentTarget.open;
+                  setCollapsedStages((current) => {
+                    const next = new Set(current);
+                    if (nextOpen) next.delete(stage.key);
+                    else next.add(stage.key);
+                    return next;
+                  });
+                }}
+              >
                 <summary>
-                  <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : isCurrent ? "当前阶段" : "待前序完成"}</small></span>
-                  <strong>{stage.nodes.filter((node) => node.state === "completed").length}/{stage.nodes.length}</strong>
+                  <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : "待前序完成"}</small></span>
+                  <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
                 </summary>
                 <div className="rework-workflow__nodes">
                   {stage.nodes.map((node) => <a className={`rework-workflow__node is-${node.state}${selectedNode === node.key ? " is-selected" : ""}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>

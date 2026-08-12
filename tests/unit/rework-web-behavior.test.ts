@@ -137,9 +137,12 @@ describe("PR-05 web behavior", () => {
     expect(detail).toContain("rework-image-modal");
     expect(detail).toContain("OrderImageSupplementUploader");
     expect(detail).toContain("rework.attachments.supplement");
+    expect(detail).not.toContain("点击缩略图可放大查看");
+    expect(detail).not.toContain("暂未上传订单图片");
     expect(supplement).toContain("supplemental-images");
     expect(supplement).toContain("MAX_REWORK_ATTACHMENTS");
     expect(supplement).toContain("isImageAttachment");
+    expect(supplement).toContain('"上传图片"');
     expect(helper).toContain("const MAX_IMAGE_EDGE = 2048");
     expect(helper).toContain('canvas.toBlob(resolve, "image/webp", WEBP_QUALITY)');
   });

@@ -3,7 +3,6 @@ import {
   MAX_REWORK_ATTACHMENTS,
   UploadIntentResponseSchema,
 } from "@dx-rework/contracts";
-import { StatusBadge } from "@dx-rework/ui";
 import { useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -136,15 +135,9 @@ export function OrderImageSupplementUploader({
 
   return (
     <div className="rework-detail-image-upload">
-      <div>
-        <strong>补充订单图片</strong>
-        <small>创建后可继续补传；QC 附件总量最多 {MAX_REWORK_ATTACHMENTS} 份。</small>
-      </div>
-      <StatusBadge tone={remaining > 0 ? "info" : "warning"}>
-        {remaining > 0 ? `还可补充 ${remaining} 张` : `已达到 ${MAX_REWORK_ATTACHMENTS} 份上限`}
-      </StatusBadge>
+      {message && <p role="status">{message}</p>}
       <label className="qc-file-button rework-detail-image-upload__button">
-        <span>{uploading ? "正在上传…" : remaining > 0 ? "补充订单图片" : `已达到 ${MAX_REWORK_ATTACHMENTS} 份上限`}</span>
+        <span>{uploading ? "正在上传…" : remaining > 0 ? "上传图片" : `已达 ${MAX_REWORK_ATTACHMENTS} 张上限`}</span>
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp"
@@ -156,7 +149,6 @@ export function OrderImageSupplementUploader({
           }}
         />
       </label>
-      {message && <p role="status">{message}</p>}
     </div>
   );
 }
