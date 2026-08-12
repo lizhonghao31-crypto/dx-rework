@@ -20,7 +20,7 @@ runWithPostgres("PR-15 admin audit query PostgreSQL integration", () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
     const directory = new URL("../../apps/api/migrations/", import.meta.url);
     const migrations = (await readdir(directory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-    expect(migrations.at(-1)).toBe("0033_employee_access_management.sql");
+    expect(migrations.at(-1)).toBe("0053_root_rework_order_logical_deletion.sql");
     for (const migration of migrations) await database.query(await readFile(new URL(migration, directory), "utf8"));
     for (const [id, name, role] of [
       [ids.admin, "Audit Admin", "system_admin"],
