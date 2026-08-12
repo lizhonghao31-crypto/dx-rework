@@ -261,7 +261,8 @@ export async function loadErpReworkResult(
        CROSS JOIN deduction_summary deduction
        CROSS JOIN attachment_summary attachments
        LEFT JOIN approval_summary approval ON true
-       WHERE orders.rework_order_id=$1`,
+       WHERE orders.rework_order_id=$1
+         AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
     const row = result.rows[0];
