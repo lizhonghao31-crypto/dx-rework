@@ -18,9 +18,9 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const PeriodListSchema = z.array(WagePeriodSchema);
 
 const statusLabel: Record<WagePeriod["status"], string> = {
-  pending_tail_review: "待李同生初核",
-  pending_admin_review: "待梁少萍复核",
-  ready_to_lock: "待欧阳俊珺月结",
+  pending_tail_review: "待当前有效尾部主管初核",
+  pending_admin_review: "待当前有效行政复核角色复核",
+  ready_to_lock: "待当前有效月结角色处理",
   locked: "已锁定",
 };
 

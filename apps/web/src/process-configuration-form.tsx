@@ -113,8 +113,8 @@ const toItem = (
 });
 
 const statusLabel = (response: ProcessConfigurationResponse): string => {
-  if (response.reworkStatus === "pending_process_configuration") return "待李同生配置";
-  if (response.reworkStatus === "pending_ie_review") return "待郎飞 IE 审核";
+  if (response.reworkStatus === "pending_process_configuration") return "待当前有效尾部主管配置";
+  if (response.reworkStatus === "pending_ie_review") return "待当前有效 IE 审核";
   if (response.reworkStatus === "pending_task_assignment") return "工序已生效 · 待分工";
   return "当前状态不在工序配置节点";
 };

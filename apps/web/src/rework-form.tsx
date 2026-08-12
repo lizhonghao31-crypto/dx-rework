@@ -74,7 +74,7 @@ const optionalText = (value: string): string | null => {
 };
 
 const statusText = (status: ReworkOrderResponse["status"]): string => {
-  if (status === "pending_process_configuration") return "已提交 · 待李同生配置工序";
+  if (status === "pending_process_configuration") return "已提交 · 待当前有效尾部主管配置工序";
   if (status === "cancelled") return "已取消 · 资料保留";
   return "可保存草稿";
 };
@@ -304,7 +304,7 @@ export function ReworkInitiationForm() {
       pendingSubmit.current = null;
       pendingKey.current = null;
       setOrder(submitted);
-      setMessage(`${submitted.reworkNo ?? ""} 已提交，待李同生配置工序`);
+      setMessage(`${submitted.reworkNo ?? ""} 已提交，待当前有效尾部主管配置工序`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "返工单提交失败");
     } finally {
