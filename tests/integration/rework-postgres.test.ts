@@ -34,6 +34,13 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     authorizationCapability: "rework:initiate",
     requestId: randomUUID(),
   });
+  const rootActor = (): TrustedActorContext => ({
+    actorId: qcId,
+    actorRoles: ["root_superuser"],
+    authorizationCapability: "rework:delete",
+    authorizationCapabilities: ["rework:delete"],
+    requestId: randomUUID(),
+  });
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -46,6 +53,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       "0006_rework_initiation.sql",
       "0007_process_configuration_ie_review.sql",
       "0049_post_creation_order_image_binding.sql",
+      "0053_root_rework_order_logical_deletion.sql",
     ]) {
       const sql = await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -268,6 +276,31 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       "rework.submit",
       "rework.cancel",
     ]);
+  });
+
+  it("allows only root to logically delete once while retaining immutable order evidence", async () => {
+    const draft = await service.createDraft(qcActor(), { styleNo: "DELETE-ONE" }, randomUUID());
+    await expect(service.deleteByRoot(qcActor(), draft.value.reworkOrderId, randomUUID()))
+      .rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+    const key = randomUUID();
+    const deleted = await service.deleteByRoot(rootActor(), draft.value.reworkOrderId, key);
+    const replay = await service.deleteByRoot(rootActor(), draft.value.reworkOrderId, key);
+    expect(deleted).toEqual({ value: { reworkOrderId: draft.value.reworkOrderId, deleted: true }, reused: false });
+    expect(replay).toEqual({ value: { reworkOrderId: draft.value.reworkOrderId, deleted: true }, reused: true });
+    await expect(service.getOwn(qcActor(), draft.value.reworkOrderId)).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    await expect(database.query(
+      "UPDATE rework_orders SET style_no='tampered' WHERE rework_order_id=$1",
+      [draft.value.reworkOrderId],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      "SELECT status,deleted_at,deleted_by FROM rework_orders WHERE rework_order_id=$1",
+      [draft.value.reworkOrderId],
+    )).resolves.toMatchObject({ rows: [{ status: "deleted", deleted_at: expect.any(Date), deleted_by: qcId }] });
+    await expect(database.query(
+      "SELECT action,authorization_capability FROM operation_events WHERE entity_type='rework_order' AND entity_id=$1 ORDER BY created_at DESC,event_id DESC LIMIT 1",
+      [draft.value.reworkOrderId],
+    )).resolves.toMatchObject({ rows: [{ action: "rework.delete", authorization_capability: "rework:delete" }] });
   });
 
   it("rejects stale versions, foreign drafts and foreign or pending attachments", async () => {
