@@ -156,11 +156,12 @@ export class ExternalResponsibilityService {
     client: PoolClient, actor: TrustedActorContext, order: OrderRow, determinationId: string,
   ): Promise<string | null> {
     const source = await client.query<{
-      determination_id: string; determination_version: number; operation_event_id: string; request_id: string; created_by: string; source_snapshot: Record<string, unknown>;
+      determination_id: string; determination_version: number; operation_event_id: string; source_action: string; request_id: string; created_by: string; source_snapshot: Record<string, unknown>;
     }>(
-      `SELECT d.determination_id,d.determination_version,d.operation_event_id,d.request_id,d.created_by,
+      `SELECT d.determination_id,d.determination_version,d.operation_event_id,event.action source_action,d.request_id,d.created_by,
         jsonb_build_object('finalizedDetermination',jsonb_build_object('determinationId',d.determination_id,'determinationVersion',d.determination_version,'sourceOrderReviewId',d.source_order_review_id,'calculationTotal',d.calculation_total::text),'order',jsonb_build_object('reworkOrderId',o.rework_order_id,'reworkNo',o.rework_no,'styleNo',o.style_no,'orderNo',o.order_no,'problemPart',o.problem_part,'problemDescription',o.problem_description),'qualityControl',jsonb_build_object('initiatedBy',o.created_by,'initiatedAt',to_char(o.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),'wholeOrderReview',jsonb_build_object('orderReviewId',review.order_review_id,'reviewedBy',review.reviewed_by,'reviewedAt',to_char(review.reviewed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'reviewSnapshot',review.review_snapshot)) source_snapshot
        FROM rework_responsibility_determinations d
+       JOIN operation_events event ON event.event_id=d.operation_event_id
        JOIN rework_orders o ON o.rework_order_id=d.rework_order_id
        JOIN rework_order_reviews review ON review.order_review_id=d.source_order_review_id
        WHERE d.determination_id=$1 AND d.rework_order_id=$2 AND d.stage='finalized'
@@ -217,7 +218,79 @@ export class ExternalResponsibilityService {
       batchId,
       createdItems,
     );
+    await this.createSupplierSelectionTodos(
+      client,
+      actor,
+      order,
+      batchId,
+      finalized.operation_event_id,
+      finalized.source_action,
+    );
     return batchId;
+  }
+
+  private async createSupplierSelectionTodos(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    order: OrderRow,
+    batchId: string,
+    sourceEventId: string,
+    sourceAction: string,
+  ): Promise<void> {
+    const unassigned = await client.query<{ responsibility_type: ResponsibilityType }>(
+      `SELECT DISTINCT item.responsibility_type
+       FROM rework_external_responsibility_items item
+       WHERE item.batch_id=$1
+         AND NOT EXISTS(
+           SELECT 1
+           FROM rework_external_responsibility_case_items mapping
+           WHERE mapping.external_item_id=item.external_item_id
+         )
+       ORDER BY item.responsibility_type`,
+      [batchId],
+    );
+    const types = new Set(unassigned.rows.map((item) => item.responsibility_type));
+    const route = {
+      routeName: "external_responsibility_detail",
+      entityId: batchId,
+      reworkOrderId: order.rework_order_id,
+      tab: "external_responsibility",
+    } as const;
+
+    if (
+      order.merchandiser_user_id
+      && (types.has("processing_factory") || types.has("fabric_supplier"))
+    ) {
+      await this.todos?.actionableForNamedRoleOrOrderDelegate(client, actor, {
+        category: "external_supplier_selection",
+        sourceEventId,
+        sourceAction,
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        recipientUserId: order.merchandiser_user_id,
+        requiredRole: "order_merchandiser",
+        requiredCapability: "external_responsibility:sign",
+        delegationScopeId: order.rework_order_id,
+        route,
+        policyKey: "general",
+        dedupeKey: `external-supplier-selection:${batchId}:order-merchandiser`,
+      });
+    }
+    if (types.has("embroidery_factory") || types.has("washing_factory")) {
+      await this.todos?.actionableForUniqueRoleOrOrderDelegate(client, actor, {
+        category: "external_supplier_selection",
+        sourceEventId,
+        sourceAction,
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        requiredRole: "embroidery_washing_merchandiser",
+        requiredCapability: "external_responsibility:sign",
+        delegationScopeId: order.rework_order_id,
+        route,
+        policyKey: "general",
+        dedupeKey: `external-supplier-selection:${batchId}:embroidery-washing-merchandiser`,
+      });
+    }
   }
 
   private async autoRouteOriginalProcessingFactory(
@@ -363,6 +436,12 @@ export class ExternalResponsibilityService {
       [orderId, successorDeterminationId],
     );
     for (const batch of stale.rows) {
+      await this.todos?.cancelOpenByDedupePrefix(
+        client,
+        actor,
+        `external-supplier-selection:${batch.batch_id}:`,
+        "A successor responsibility determination superseded the supplier selection task",
+      );
       const cases = await client.query<{ case_id: string }>(
         `SELECT case_id
          FROM rework_external_responsibility_cases

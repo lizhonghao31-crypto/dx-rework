@@ -352,6 +352,50 @@ export class ExternalResponsibilityAllocationService {
       });
     }
 
+    const remaining = await client.query<{
+      order_merchandiser: boolean;
+      embroidery_merchandiser: boolean;
+    }>(
+      `SELECT
+         EXISTS(
+           SELECT 1
+           FROM rework_external_responsibility_items item
+           WHERE item.batch_id=$1
+             AND item.responsibility_type IN ('processing_factory','fabric_supplier')
+             AND NOT EXISTS(
+               SELECT 1 FROM rework_external_responsibility_case_items mapping
+               WHERE mapping.external_item_id=item.external_item_id
+             )
+         ) order_merchandiser,
+         EXISTS(
+           SELECT 1
+           FROM rework_external_responsibility_items item
+           WHERE item.batch_id=$1
+             AND item.responsibility_type IN ('embroidery_factory','washing_factory')
+             AND NOT EXISTS(
+               SELECT 1 FROM rework_external_responsibility_case_items mapping
+               WHERE mapping.external_item_id=item.external_item_id
+             )
+         ) embroidery_merchandiser`,
+      [batchId],
+    );
+    if (!remaining.rows[0]?.order_merchandiser) {
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `external-supplier-selection:${batchId}:order-merchandiser`,
+        "All order-merchandiser supplier selections were completed",
+      );
+    }
+    if (!remaining.rows[0]?.embroidery_merchandiser) {
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `external-supplier-selection:${batchId}:embroidery-washing-merchandiser`,
+        "All embroidery and washing supplier selections were completed",
+      );
+    }
+
     await client.query(
       `UPDATE rework_external_responsibility_batches
        SET batch_version=batch_version+1

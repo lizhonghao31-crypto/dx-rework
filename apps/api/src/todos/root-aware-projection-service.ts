@@ -22,6 +22,7 @@ const isAcceptanceRoutingConflict = (error: unknown): boolean =>
     || error.message.includes("Responsibility handler is not uniquely routable from an active direct role or order delegation")
     || error.message.includes("The original actionable actor cannot be verified from the source operation event")
     || error.message.includes("The source operation event does not identify one actionable business role")
+    || error.message.includes("Named business handler has multiple active order delegates")
   );
 
 /**
@@ -89,6 +90,17 @@ export class RootAwareTodoProjectionService extends TodoProjectionService {
   ): Promise<void> {
     try {
       await super.actionableForNamedRecipient(...args);
+    } catch (error: unknown) {
+      if (this.suppress(args[1], error)) return;
+      throw error;
+    }
+  }
+
+  override async actionableForNamedRoleOrOrderDelegate(
+    ...args: Parameters<TodoProjectionService["actionableForNamedRoleOrOrderDelegate"]>
+  ): Promise<void> {
+    try {
+      await super.actionableForNamedRoleOrOrderDelegate(...args);
     } catch (error: unknown) {
       if (this.suppress(args[1], error)) return;
       throw error;

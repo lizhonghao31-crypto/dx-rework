@@ -59,6 +59,10 @@ type NamedSourceActorProjection = Readonly<{
   dedupeKey: string;
 }>;
 
+type NamedRoleOrOrderDelegateProjection = ActionableProjection & Readonly<{
+  recipientUserId: string;
+}>;
+
 /**
  * PR-13's only business-event projection seam. It is intentionally invoked
  * from the existing service transaction after the source operation event is
@@ -311,6 +315,85 @@ export class TodoProjectionService {
         assignedToUserId: managers.rows[0]!.user_id,
       },
     });
+  }
+
+  /**
+   * Use when the business object names its primary handler, but the approved
+   * policy also permits that exact handler to delegate the action for this
+   * order. A current direct handler remains the primary recipient. If that
+   * handler is unavailable, exactly one verified order delegate may receive
+   * the todo; otherwise the original named recipient is preserved as a
+   * blocked todo and routed for management resolution.
+   */
+  async actionableForNamedRoleOrOrderDelegate(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    projection: NamedRoleOrOrderDelegateProjection,
+  ): Promise<void> {
+    const direct = await client.query<{ eligible: boolean }>(
+      "SELECT todo_user_has_direct_role($1::uuid,$2::text,$3::text) AS eligible",
+      [
+        projection.recipientUserId,
+        projection.requiredRole,
+        projection.requiredCapability,
+      ],
+    );
+    if (direct.rows[0]?.eligible) {
+      await this.actionableForRecipient(client, actor, projection);
+      return;
+    }
+
+    const delegated = await client.query<{
+      grantee_user_id: string;
+      delegation_id: string;
+    }>(
+      `SELECT delegation.grantee_user_id,delegation.delegation_id
+       FROM delegated_authorizations delegation
+       JOIN app_users grantee
+         ON grantee.id=delegation.grantee_user_id AND grantee.enabled=true
+       JOIN identity_mappings grantee_identity
+         ON grantee_identity.user_id=grantee.id
+        AND grantee_identity.provider='dingtalk'
+        AND grantee_identity.active=true
+        AND grantee_identity.employed=true
+       JOIN access_security_policy grantee_policy
+         ON grantee_policy.policy_key='primary'
+        AND grantee_policy.dingtalk_corp_id=grantee_identity.corp_id
+       WHERE delegation.grantor_user_id=$1
+         AND delegation.capability=$2
+         AND delegation.scope_type='rework_order'
+         AND delegation.scope_id=$3
+         AND delegation.revoked_at IS NULL
+         AND CURRENT_TIMESTAMP BETWEEN delegation.valid_from AND delegation.valid_until
+         AND todo_user_has_direct_role(
+           delegation.grantor_user_id,$4,$2
+         )
+       ORDER BY delegation.delegation_id
+       LIMIT 2`,
+      [
+        projection.recipientUserId,
+        projection.requiredCapability,
+        projection.delegationScopeId ?? projection.entityId,
+        projection.requiredRole,
+      ],
+    );
+    if (delegated.rows.length > 1) {
+      throw new ApplicationError(
+        "CONFLICT",
+        "Named business handler has multiple active order delegates",
+        409,
+      );
+    }
+    if (delegated.rows.length === 1) {
+      await this.actionableForRecipient(client, actor, {
+        ...projection,
+        recipientUserId: delegated.rows[0]!.grantee_user_id,
+        delegationId: delegated.rows[0]!.delegation_id,
+        delegationScopeId: projection.delegationScopeId ?? projection.entityId,
+      });
+      return;
+    }
+    await this.actionableForNamedRecipient(client, actor, projection);
   }
 
   async information(
