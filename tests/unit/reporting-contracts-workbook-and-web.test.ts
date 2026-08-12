@@ -75,8 +75,8 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
     expect(app).toContain("<ReportCenterPage");
     expect(app).not.toContain("<Dashboard");
     expect(app).not.toContain("<Tasks");
-    expect(dashboard).toContain("15_000");
-    expect(dashboard).toContain('window.addEventListener("focus"');
+    expect(dashboard).not.toContain("window.setInterval");
+    expect(dashboard).not.toContain('window.addEventListener("focus"');
     expect(query).toContain("AbortController");
     expect(report).toContain("reportExportUrl");
     expect(client).toContain("ManagementDashboardResponseSchema");
