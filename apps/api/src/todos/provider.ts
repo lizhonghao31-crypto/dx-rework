@@ -262,9 +262,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         if (!task) throw error;
       }
     }
-    const notificationId = await this.sendWorkNotification(input);
     return {
-      providerMessageId: notificationId,
+      providerMessageId: this.requestId(task),
       providerTodoId: this.taskId(task),
       state: "created",
       ...(reconciled ? { reconciled: true } : {}),
@@ -316,91 +315,6 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
       providerTodoId,
       state: "updated",
     };
-  }
-
-  private async sendWorkNotification(input: DingTalkTodoCreateInput): Promise<string> {
-    const token = await this.getAppToken();
-    const url = new URL(`${OAPI}/topapi/message/corpconversation/asyncsend_v2`);
-    url.searchParams.set("access_token", token);
-    let response: Response;
-    try {
-      response = await this.http(url.toString(), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          agent_id: Number(this.config.agentId),
-          userid_list: input.recipientProviderUserId,
-          msg: {
-            msgtype: "link",
-            link: {
-              messageUrl: input.deepLink,
-              picUrl: "",
-              title: `待处理：${input.category}`,
-              text: `请进入返工系统处理。任务编号：${input.sourceKey}`,
-            },
-          },
-        }),
-        signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 5_000),
-      });
-    } catch {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_TIMEOUT",
-        "DingTalk work notification request failed or timed out",
-        true,
-        true,
-      );
-    }
-    if (response.status === 429 || response.status >= 500) {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_RETRYABLE",
-        `DingTalk work notification returned HTTP ${response.status}`,
-        true,
-        response.status >= 500,
-      );
-    }
-    if (!response.ok) {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_REJECTED",
-        `DingTalk work notification was rejected with HTTP ${response.status}`,
-        false,
-      );
-    }
-    let value: unknown;
-    try { value = await response.json(); } catch {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_INVALID_RESPONSE",
-        "DingTalk work notification returned invalid JSON",
-        true,
-        true,
-      );
-    }
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_INVALID_RESPONSE",
-        "DingTalk work notification returned an invalid response",
-        false,
-      );
-    }
-    const record = value as JsonRecord;
-    if (record.errcode === 143106) return `dingtalk-duplicate-${input.sourceKey}`;
-    if (record.errcode !== 0) {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_REJECTED",
-        `DingTalk work notification was rejected (${String(record.errcode)})`,
-        false,
-      );
-    }
-    const taskId = typeof record.task_id === "number" || typeof record.task_id === "string"
-      ? String(record.task_id)
-      : "";
-    if (!taskId) {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_WORK_NOTIFICATION_INVALID_RESPONSE",
-        "DingTalk work notification did not return a task ID",
-        false,
-      );
-    }
-    return taskId;
   }
 
   private assertEnabled(): void {
@@ -639,4 +553,3 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
       : `dingtalk-${this.now()}`;
   }
 }
-
