@@ -78,12 +78,7 @@ export function ReworkInitiationWorkbench() {
   useEffect(() => {
     const controller = new AbortController();
     void loadOrders(controller.signal);
-    const refresh = () => void loadOrders();
-    window.addEventListener("focus", refresh);
-    return () => {
-      controller.abort();
-      window.removeEventListener("focus", refresh);
-    };
+    return () => controller.abort();
   }, [loadOrders]);
 
   const setDraftQuery = (orderId: string | null) => {
