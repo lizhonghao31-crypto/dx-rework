@@ -48,8 +48,32 @@ export class ManagementReportingService {
       [range.from, range.to, TIMEZONE],
     );
     const overdueTodos = await this.db.query<{ count: string }>(
-      `SELECT count(*)::text count FROM rework_todos
-       WHERE status='pending' AND due_at IS NOT NULL AND due_at<CURRENT_TIMESTAMP`,
+      `WITH todo_order AS (
+         SELECT todo.todo_id,
+           COALESCE(
+             CASE WHEN NULLIF(todo.route_descriptor->>'reworkOrderId','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+               THEN NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid END,
+             CASE todo.entity_type
+               WHEN 'rework_order' THEN CASE WHEN todo.entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN todo.entity_id::uuid END
+               WHEN 'own_factory_approval' THEN approval.rework_order_id
+               WHEN 'external_responsibility_case' THEN external_case.rework_order_id
+               WHEN 'responsibility_determination' THEN determination.rework_order_id
+               ELSE NULL
+             END
+           ) rework_order_id
+         FROM rework_todos todo
+         LEFT JOIN rework_own_factory_approvals approval
+           ON todo.entity_type='own_factory_approval' AND approval.approval_id::text=todo.entity_id
+         LEFT JOIN rework_external_responsibility_cases external_case
+           ON todo.entity_type='external_responsibility_case' AND external_case.case_id::text=todo.entity_id
+         LEFT JOIN rework_responsibility_determinations determination
+           ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
+       )
+       SELECT count(*)::text count FROM rework_todos todo
+       JOIN todo_order mapped USING(todo_id)
+       LEFT JOIN rework_orders order_record ON order_record.rework_order_id=mapped.rework_order_id
+       WHERE todo.status='pending' AND todo.due_at IS NOT NULL AND todo.due_at<CURRENT_TIMESTAMP
+         AND order_record.status IS DISTINCT FROM 'deleted'`,
     );
     const currentCapabilities = capabilities(actor);
     return {
