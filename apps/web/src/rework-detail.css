@@ -171,10 +171,6 @@
   box-shadow: inset 0 2px 0 var(--dx-v2-color-primary-hover);
 }
 
-.rework-workflow__stage.is-future {
-  border-color: color-mix(in srgb, var(--dx-v2-color-primary-hover) 42%, var(--dx-v2-color-border));
-}
-
 .rework-workflow__nodes {
   display: grid;
   gap: 5px;
@@ -196,7 +192,7 @@
 }
 
 .rework-workflow__node > b {
-  color: var(--dx-v2-color-primary-hover);
+  color: inherit;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
@@ -235,8 +231,20 @@
   border-color: var(--dx-v2-color-primary-hover);
 }
 
-.rework-workflow__node.is-selected {
-  box-shadow: inset 3px 0 0 var(--dx-v2-color-primary-hover);
+.rework-workflow__node.is-future {
+  color: #fff;
+  border-color: var(--dx-v2-color-primary-hover);
+  background: var(--dx-v2-color-primary-hover);
+}
+
+.rework-workflow__node.is-future > b,
+.rework-workflow__node.is-future > span strong {
+  color: #fff;
+}
+
+.rework-workflow__node.is-future > span small,
+.rework-workflow__node.is-future > em {
+  color: rgb(255 255 255 / 80%);
 }
 
 .rework-workflow__pending-path {

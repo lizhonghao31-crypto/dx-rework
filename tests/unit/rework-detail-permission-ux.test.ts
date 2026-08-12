@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 describe("rework detail permission UX", () => {
   it("does not render cross-node action panels solely from order status", async () => {
     const source = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
-    expect(source).toContain("canUseOrderIndex(currentUser)");
+    expect(source).not.toContain("canUseOrderIndex");
+    expect(source).not.toContain('action: "返回全部订单"');
     expect(source).toContain("const canSeeResponsibility = elevated(currentUser)");
     expect(source).toContain("selected.key === \"responsibility\"");
     expect(source).toContain("selected.key === \"responsibility_settlement\"");
