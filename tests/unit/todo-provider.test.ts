@@ -71,9 +71,6 @@ describe("DingTalk todo provider boundary", () => {
       if (url.endsWith("/tasks") && init.method === "POST") {
         return json({ taskId: "task-1", requestId: "request-create" });
       }
-      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
-        return json({ errcode: 0, task_id: 987654 });
-      }
       if (url.endsWith("/tasks/task-1") && init.method === "PUT") {
         return json({ requestId: "request-update" });
       }
@@ -90,6 +87,7 @@ describe("DingTalk todo provider boundary", () => {
     }, http, () => 1_000);
 
     await expect(provider.createTodo(createInput)).resolves.toMatchObject({
+      providerMessageId: "request-create",
       providerTodoId: "task-1",
       state: "created",
     });
@@ -114,21 +112,9 @@ describe("DingTalk todo provider boundary", () => {
       executorIds: ["union-14"],
       operatorId: "union-14",
     });
-    const notification = calls.find((call) =>
+    expect(calls.some((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
-    );
-    expect(JSON.parse(String(notification?.init.body))).toMatchObject({
-      agent_id: 123456,
-      userid_list: "userid-14",
-      msg: {
-        msgtype: "link",
-        link: {
-          messageUrl: createInput.deepLink,
-          title: "待处理：process_configuration",
-          text: expect.stringContaining("todo-source-13"),
-        },
-      },
-    });
+    )).toBe(false);
     const completion = calls.find((call) => call.url.endsWith("/executorStatus"));
     expect(JSON.parse(String(completion?.init.body))).toEqual({
       executorStatusList: [{ id: "union-14", isDone: true }],
@@ -136,17 +122,14 @@ describe("DingTalk todo provider boundary", () => {
     });
   });
 
-  it("treats DingTalk's identical-work-notification response as an idempotent retry", async () => {
-    const http: typeof fetch = async (input, init = {}) => {
+  it("reconciles an existing native todo without sending a duplicate work notification", async () => {
+    const http: typeof fetch = async (input) => {
       const url = String(input);
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
       }
       if (url.endsWith("/tasks/sources/todo-source-13")) {
         return json({ taskId: "task-existing", requestId: "lookup-existing" });
-      }
-      if (url.includes("/topapi/message/corpconversation/asyncsend_v2") && init.method === "POST") {
-        return json({ errcode: 143106, errmsg: "duplicate" });
       }
       throw new Error(`unexpected request ${url}`);
     };
@@ -159,7 +142,7 @@ describe("DingTalk todo provider boundary", () => {
 
     await expect(provider.createTodo(createInput)).resolves.toMatchObject({
       providerTodoId: "task-existing",
-      providerMessageId: "dingtalk-duplicate-todo-source-13",
+      providerMessageId: "lookup-existing",
       reconciled: true,
     });
   });
@@ -188,9 +171,6 @@ describe("DingTalk todo provider boundary", () => {
       }
       if (url.endsWith("/tasks") && init.method === "POST") {
         return json({ taskId: "task-compact", requestId: "request-create" });
-      }
-      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
-        return json({ errcode: 0, task_id: lookupCount });
       }
       throw new Error(`unexpected request ${url}`);
     };
@@ -225,6 +205,9 @@ describe("DingTalk todo provider boundary", () => {
     expect(JSON.parse(String(createCalls[0]?.init.body))).toMatchObject({
       sourceId: sourceIds[0],
     });
+    expect(calls.some((call) =>
+      call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
+    )).toBe(false);
   });
 
   it("classifies retryable and permanent HTTP failures without leaking credentials", async () => {
