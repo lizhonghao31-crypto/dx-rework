@@ -12,19 +12,19 @@
 
 .rework-detail-summary,
 .rework-detail-current-node {
-  padding: var(--dx-v2-space-5);
+  padding: var(--dx-v2-space-4);
 }
 
 .rework-detail-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--dx-v2-space-3);
-  margin: var(--dx-v2-space-4) 0 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: var(--dx-v2-space-3) 0 0;
 }
 
 .rework-detail-facts > div {
   min-width: 0;
-  padding: var(--dx-v2-space-3);
+  padding: 8px 10px;
   border-radius: var(--dx-v2-radius-md);
   background: var(--dx-v2-color-inset);
 }
@@ -35,10 +35,10 @@
 }
 
 .rework-detail-facts dd {
-  margin-top: 6px;
+  margin-top: 3px;
   overflow-wrap: anywhere;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .rework-detail-wide {
@@ -306,8 +306,8 @@
 .rework-detail-images {
   display: grid;
   gap: var(--dx-v2-space-3);
-  margin-top: var(--dx-v2-space-5);
-  padding-top: var(--dx-v2-space-4);
+  margin-top: var(--dx-v2-space-3);
+  padding-top: var(--dx-v2-space-3);
   border-top: 1px solid var(--dx-v2-color-border);
 }
 
@@ -324,8 +324,8 @@
 
 .rework-detail-image-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--dx-v2-space-3);
+  grid-template-columns: repeat(auto-fill, minmax(88px, 112px));
+  gap: 8px;
 }
 
 .rework-detail-image-card {
@@ -351,14 +351,14 @@
 
 .rework-detail-image-card img {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   background: var(--dx-v2-color-surface);
 }
 
 .rework-detail-image-card span {
   min-width: 0;
-  padding: 0 var(--dx-v2-space-2) var(--dx-v2-space-2);
+  padding: 0 6px 6px;
   overflow: hidden;
   font-size: 11px;
   line-height: 1.35;
@@ -477,7 +477,7 @@
 }
 
 .rework-detail-images__empty {
-  margin: var(--dx-v2-space-3) 0 0;
+  margin: 0;
   color: var(--dx-v2-color-text-muted);
 }
 
@@ -488,5 +488,11 @@
 
   .rework-detail-image-upload__button {
     justify-self: stretch;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 760px) {
+  .rework-detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
