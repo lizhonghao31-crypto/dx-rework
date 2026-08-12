@@ -44,8 +44,6 @@ export function ReworkQueryPage() {
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [filters, refresh]);
-  useEffect(()=>{const focus=()=>setRefresh(value=>value+1);window.addEventListener("focus",focus);return()=>window.removeEventListener("focus",focus);},[]);
-
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="全部订单">
     <Header title="全部订单" subtitle="查看权限范围内订单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} />
