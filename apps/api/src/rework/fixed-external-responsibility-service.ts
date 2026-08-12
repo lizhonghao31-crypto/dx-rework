@@ -71,7 +71,7 @@ export class FixedExternalResponsibilityService
          ON order_record.rework_order_id=batch.rework_order_id
        WHERE batch.rework_order_id=$1 AND batch.status='active'
          AND order_record.status<>'deleted'
-       ORDER BY created_at DESC
+       ORDER BY batch.created_at DESC
        LIMIT 1`,
       [orderId],
     );
