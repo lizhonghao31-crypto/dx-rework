@@ -132,7 +132,7 @@ export class ErpIntegrationService {
           `SELECT intake.intake_mode,orders.source_system
            FROM erp_rework_intakes intake
            JOIN rework_orders orders USING(rework_order_id)
-           WHERE intake.rework_order_id=$1
+           WHERE intake.rework_order_id=$1 AND orders.status<>'deleted'
            FOR UPDATE OF intake`,
           [reworkOrderId],
         );

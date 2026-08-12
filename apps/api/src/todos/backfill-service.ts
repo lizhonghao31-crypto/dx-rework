@@ -523,6 +523,7 @@ export class TodoBackfillService {
               submission_event.event_id submission_event_id
        FROM rework_work_report_rejections rejection
        JOIN rework_work_reports report ON report.work_report_id=rejection.work_report_id
+       JOIN rework_orders order_record ON order_record.rework_order_id=rejection.rework_order_id
        LEFT JOIN LATERAL (
          SELECT event_id FROM operation_events event
          WHERE event.action='rework.work_report.reject' AND event.entity_type='rework_order'
@@ -542,6 +543,7 @@ export class TodoBackfillService {
          SELECT 1 FROM rework_work_reports resubmission
          WHERE resubmission.resubmits_work_report_id=rejection.work_report_id
        )
+         AND order_record.status<>'deleted'
        ORDER BY rejection.work_report_id`,
       [watermark.createdAt, watermark.eventId],
     );
@@ -623,13 +625,14 @@ export class TodoBackfillService {
     }>(
       `SELECT approval.approval_id,approval.rework_order_id,source.event_id source_event_id
        FROM rework_own_factory_approvals approval
+       JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
        LEFT JOIN LATERAL (
          SELECT event_id FROM operation_events event
          WHERE event.event_id=approval.created_operation_event_id
            AND event.action='rework.own_factory_approval.create'
            AND ${watermarkPredicate("event", 1, 2)}
        ) source ON true
-       WHERE approval.status='pending'
+       WHERE approval.status='pending' AND order_record.status<>'deleted'
        ORDER BY approval.approval_id`,
       [watermark.createdAt, watermark.eventId],
     );
@@ -658,6 +661,8 @@ export class TodoBackfillService {
        FROM rework_external_responsibility_cases target_case
        JOIN rework_external_responsibility_batches batch
          ON batch.batch_id=target_case.batch_id AND batch.status='active'
+       JOIN rework_orders order_record
+         ON order_record.rework_order_id=target_case.rework_order_id
        LEFT JOIN LATERAL (
          SELECT event_id,actor_id FROM operation_events event
          WHERE event.event_id=target_case.operation_event_id
@@ -690,6 +695,7 @@ export class TodoBackfillService {
          WHERE follow.case_id=target_case.case_id AND ${watermarkPredicate("event", 1, 2)}
          ORDER BY follow.created_at DESC,follow.follow_up_id DESC LIMIT 1
        ) follow_up ON true
+       WHERE order_record.status<>'deleted'
        ORDER BY target_case.case_id`,
       [watermark.createdAt, watermark.eventId],
     );
@@ -1015,4 +1021,3 @@ export class TodoBackfillService {
     );
   }
 }
-

@@ -27,6 +27,7 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
   pending_responsibility_action: "责任处理中",
   completed: "已完成",
   cancelled: "已取消",
+  deleted: "已删除",
 })[status] ?? status;
 
 const adjustmentStatusLabel = (status: WholeOrderReviewResponse["adjustments"][number]["status"]): string => ({

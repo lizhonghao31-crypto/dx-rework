@@ -17,8 +17,9 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
          wage.payable_amount+COALESCE(approved.adjustment,0) final_amount,period.status,
          wage.wage_item_id sort_id
        FROM rework_wage_items wage JOIN rework_wage_periods period USING(period_id)
+       JOIN rework_orders order_record ON order_record.rework_order_id=wage.rework_order_id
        LEFT JOIN approved ON approved.original_wage_item_id=wage.wage_item_id
-       WHERE period.status<>'locked'
+       WHERE period.status<>'locked' AND order_record.status<>'deleted'
      ), locked_lines AS (
        SELECT period.period_month,line.person_id,line.person_name_snapshot,line.person_type_snapshot,
          source_item.rework_order_id,line.rework_no_snapshot,line.style_no_snapshot,line.process_name_snapshot,
@@ -32,7 +33,8 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
          line.wage_item_id,(SELECT adjustment.original_wage_item_id
            FROM rework_wage_adjustments adjustment WHERE adjustment.adjustment_id=line.adjustment_id)
        )
-       WHERE period.status='locked'
+       LEFT JOIN rework_orders order_record ON order_record.rework_order_id=source_item.rework_order_id
+       WHERE period.status='locked' AND (source_item.rework_order_id IS NULL OR order_record.status<>'deleted')
      ), lines AS (
        SELECT * FROM unlocked_lines UNION ALL SELECT * FROM locked_lines
      )
@@ -61,4 +63,3 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
     {key:"adjustmentAmount",label:"调整金额"},{key:"finalAmount",label:"最终金额"},{key:"periodStatus",label:"月结状态"},
   ], rows, totals:totals(rows,["originalAmount","adjustmentAmount","finalAmount"]) };
 }
-

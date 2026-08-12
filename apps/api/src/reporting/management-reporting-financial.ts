@@ -16,14 +16,18 @@ export async function financial(db: Pool, range: Range): Promise<ManagementDashb
        FROM current_determinations determination
        JOIN rework_effective_responsibility_allocations allocation
          USING(determination_id)
-       WHERE (determination.created_at AT TIME ZONE $3)::date
+       JOIN rework_orders order_record ON order_record.rework_order_id=determination.rework_order_id
+       WHERE order_record.status<>'deleted'
+         AND (determination.created_at AT TIME ZONE $3)::date
          BETWEEN $1::date AND $2::date
      ), own_factory AS (
        SELECT COALESCE(sum(allocation.effective_rounded_amount),0)::text total
        FROM current_determinations determination
        JOIN rework_effective_responsibility_allocations allocation
          USING(determination_id)
-       WHERE allocation.responsibility_type='own_factory'
+       JOIN rework_orders order_record ON order_record.rework_order_id=determination.rework_order_id
+       WHERE order_record.status<>'deleted'
+         AND allocation.responsibility_type='own_factory'
          AND (determination.created_at AT TIME ZONE $3)::date
            BETWEEN $1::date AND $2::date
      ), active_cases AS (
@@ -31,7 +35,8 @@ export async function financial(db: Pool, range: Range): Promise<ManagementDashb
        JOIN rework_external_responsibility_batches batch
          ON batch.finalized_determination_id=determination.determination_id AND batch.status='active'
        JOIN rework_external_responsibility_cases case_record USING(batch_id)
-       WHERE case_record.status<>'superseded'
+       JOIN rework_orders order_record ON order_record.rework_order_id=case_record.rework_order_id
+       WHERE order_record.status<>'deleted' AND case_record.status<>'superseded'
          AND (case_record.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
      ), entry_totals AS (
        SELECT case_id,COALESCE(sum(amount),0) actual FROM rework_external_deduction_entries GROUP BY case_id
@@ -42,9 +47,27 @@ export async function financial(db: Pool, range: Range): Promise<ManagementDashb
        FROM active_cases case_record
        LEFT JOIN entry_totals entry USING(case_id)
        LEFT JOIN rework_external_deduction_closures closure USING(case_id)
+     ), wage_items_in_range AS (
+       SELECT wage.payable_amount
+       FROM rework_wage_items wage
+       JOIN rework_wage_periods period USING(period_id)
+       JOIN rework_orders order_record ON order_record.rework_order_id=wage.rework_order_id
+       WHERE order_record.status<>'deleted'
+         AND period.period_month BETWEEN date_trunc('month',$1::date)::date AND date_trunc('month',$2::date)::date
+     ), approved_adjustments_in_range AS (
+       SELECT adjustment.adjustment_amount
+       FROM rework_wage_adjustments adjustment
+       JOIN rework_wage_items original_wage ON original_wage.wage_item_id=adjustment.original_wage_item_id
+       JOIN rework_wage_periods target_period ON target_period.period_id=adjustment.target_period_id
+       JOIN rework_orders order_record ON order_record.rework_order_id=original_wage.rework_order_id
+       WHERE adjustment.status='approved'
+         AND order_record.status<>'deleted'
+         AND target_period.period_month BETWEEN date_trunc('month',$1::date)::date AND date_trunc('month',$2::date)::date
      ), wages AS (
-       SELECT COALESCE(sum(final_total),0)::text total FROM rework_wage_periods
-       WHERE period_month BETWEEN date_trunc('month',$1::date)::date AND date_trunc('month',$2::date)::date
+       SELECT (
+         COALESCE((SELECT sum(payable_amount) FROM wage_items_in_range),0)
+         + COALESCE((SELECT sum(adjustment_amount) FROM approved_adjustments_in_range),0)
+       )::text total
      )
      SELECT wages.total wage_total,responsibility.total responsibility_total,
        own_factory.total own_factory_total,external.proposed external_proposed,
@@ -66,23 +89,54 @@ export async function financial(db: Pool, range: Range): Promise<ManagementDashb
 
 export async function currentExceptionCount(db: Pool): Promise<number> {
   const result = await db.query<{ count: string }>(
-    `WITH latest_follow_up AS (
+    `WITH todo_order AS (
+       SELECT todo.todo_id,
+         COALESCE(
+           CASE WHEN NULLIF(todo.route_descriptor->>'reworkOrderId','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+             THEN NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid END,
+           CASE todo.entity_type
+             WHEN 'rework_order' THEN CASE WHEN todo.entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN todo.entity_id::uuid END
+             WHEN 'own_factory_approval' THEN approval.rework_order_id
+             WHEN 'external_responsibility_case' THEN external_case.rework_order_id
+             WHEN 'responsibility_determination' THEN determination.rework_order_id
+             ELSE NULL
+           END
+         ) rework_order_id
+       FROM rework_todos todo
+       LEFT JOIN rework_own_factory_approvals approval
+         ON todo.entity_type='own_factory_approval' AND approval.approval_id::text=todo.entity_id
+       LEFT JOIN rework_external_responsibility_cases external_case
+         ON todo.entity_type='external_responsibility_case' AND external_case.case_id::text=todo.entity_id
+       LEFT JOIN rework_responsibility_determinations determination
+         ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
+     ), latest_follow_up AS (
        SELECT DISTINCT ON (follow_up.case_id) follow_up.case_id,follow_up.next_follow_up_at
        FROM rework_external_deduction_follow_ups follow_up
        ORDER BY follow_up.case_id,follow_up.created_at DESC,follow_up.follow_up_id DESC
      )
      SELECT (
        (SELECT count(*) FROM rework_todos todo
-         WHERE todo.status='pending' AND todo.due_at<CURRENT_TIMESTAMP)
-       + (SELECT count(*) FROM rework_todos todo WHERE todo.status='blocked_recipient')
+         JOIN todo_order mapped USING(todo_id)
+         LEFT JOIN rework_orders order_record ON order_record.rework_order_id=mapped.rework_order_id
+         WHERE todo.status='pending' AND todo.due_at<CURRENT_TIMESTAMP
+           AND order_record.status IS DISTINCT FROM 'deleted')
+       + (SELECT count(*) FROM rework_todos todo
+         JOIN todo_order mapped USING(todo_id)
+         LEFT JOIN rework_orders order_record ON order_record.rework_order_id=mapped.rework_order_id
+         WHERE todo.status='blocked_recipient'
+           AND order_record.status IS DISTINCT FROM 'deleted')
        + (SELECT count(*) FROM dingtalk_todo_external_bindings binding
-         WHERE binding.provider_state='permanent_failed')
+         JOIN rework_todos todo USING(todo_id)
+         JOIN todo_order mapped USING(todo_id)
+         LEFT JOIN rework_orders order_record ON order_record.rework_order_id=mapped.rework_order_id
+         WHERE binding.provider_state='permanent_failed'
+           AND order_record.status IS DISTINCT FROM 'deleted')
        + (SELECT count(*) FROM latest_follow_up follow_up
-         JOIN rework_external_responsibility_cases case_record USING(case_id)
-         WHERE follow_up.next_follow_up_at<CURRENT_TIMESTAMP
-           AND case_record.status='deduction_follow_up')
+       JOIN rework_external_responsibility_cases case_record USING(case_id)
+       JOIN rework_orders order_record ON order_record.rework_order_id=case_record.rework_order_id
+       WHERE follow_up.next_follow_up_at<CURRENT_TIMESTAMP
+           AND case_record.status='deduction_follow_up' AND order_record.status<>'deleted')
      )::text count`,
   );
   return number(result.rows[0]?.count ?? "0");
 }
-

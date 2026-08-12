@@ -29,7 +29,7 @@ export class ManagementReportingService {
     const [counts, financial, exceptions, exceptionCount, recent] = await Promise.all([
       this.db.query<CountRow>(
         `SELECT status,count(*)::text count FROM rework_orders
-         WHERE status<>'cancelled' GROUP BY status`,
+         WHERE status NOT IN ('cancelled','deleted') GROUP BY status`,
       ),
       loadFinancial(this.db, range),
       loadExceptions(20, this.db),
@@ -41,15 +41,39 @@ export class ManagementReportingService {
       ...meta,
       count: countMap.get(status) ?? 0,
     })).filter((item) => item.count > 0 || !["N00", "N-C"].includes(item.node));
-    const openOrders = [...countMap.entries()].filter(([status]) => !["completed", "cancelled"].includes(status)).reduce((sum, [, value]) => sum + value, 0);
+    const openOrders = [...countMap.entries()].filter(([status]) => !["completed", "cancelled", "deleted"].includes(status)).reduce((sum, [, value]) => sum + value, 0);
     const completedResult = await this.db.query<{ count: string }>(
       `SELECT count(*)::text count FROM rework_orders
        WHERE status='completed' AND (updated_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date`,
       [range.from, range.to, TIMEZONE],
     );
     const overdueTodos = await this.db.query<{ count: string }>(
-      `SELECT count(*)::text count FROM rework_todos
-       WHERE status='pending' AND due_at IS NOT NULL AND due_at<CURRENT_TIMESTAMP`,
+      `WITH todo_order AS (
+         SELECT todo.todo_id,
+           COALESCE(
+             CASE WHEN NULLIF(todo.route_descriptor->>'reworkOrderId','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+               THEN NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid END,
+             CASE todo.entity_type
+               WHEN 'rework_order' THEN CASE WHEN todo.entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN todo.entity_id::uuid END
+               WHEN 'own_factory_approval' THEN approval.rework_order_id
+               WHEN 'external_responsibility_case' THEN external_case.rework_order_id
+               WHEN 'responsibility_determination' THEN determination.rework_order_id
+               ELSE NULL
+             END
+           ) rework_order_id
+         FROM rework_todos todo
+         LEFT JOIN rework_own_factory_approvals approval
+           ON todo.entity_type='own_factory_approval' AND approval.approval_id::text=todo.entity_id
+         LEFT JOIN rework_external_responsibility_cases external_case
+           ON todo.entity_type='external_responsibility_case' AND external_case.case_id::text=todo.entity_id
+         LEFT JOIN rework_responsibility_determinations determination
+           ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
+       )
+       SELECT count(*)::text count FROM rework_todos todo
+       JOIN todo_order mapped USING(todo_id)
+       LEFT JOIN rework_orders order_record ON order_record.rework_order_id=mapped.rework_order_id
+       WHERE todo.status='pending' AND todo.due_at IS NOT NULL AND todo.due_at<CURRENT_TIMESTAMP
+         AND order_record.status IS DISTINCT FROM 'deleted'`,
     );
     const currentCapabilities = capabilities(actor);
     return {
@@ -81,7 +105,7 @@ export class ManagementReportingService {
     await this.require(actor, "dashboard:site:read");
     const range = await this.range(query);
     const [counts, recent, wageReview, exceptions] = await Promise.all([
-      this.db.query<CountRow>(`SELECT status,count(*)::text count FROM rework_orders WHERE status NOT IN ('completed','cancelled') GROUP BY status`),
+      this.db.query<CountRow>(`SELECT status,count(*)::text count FROM rework_orders WHERE status NOT IN ('completed','cancelled','deleted') GROUP BY status`),
       fetchFacts(this.db, { limit: 12, siteOnly: true }),
       this.db.query<{ count: string }>(`SELECT count(*)::text count FROM rework_wage_periods WHERE status='pending_tail_review'`),
       this.db.query<{ count: string }>(

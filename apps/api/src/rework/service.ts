@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
 import type {
   CreateReworkDraft,
+  DeleteReworkOrderResponse,
   ReworkInitiationOptionsResponse,
   ReworkOrderResponse,
   ReworkOrderStatus,
@@ -22,6 +23,7 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
+import type { TodoService } from "../todos/service.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
 type FactoryState = Readonly<{
@@ -55,6 +57,8 @@ type ReworkOrderRow = Readonly<{
   submitted_at: Date | null;
   cancelled_at: Date | null;
   cancel_reason: string | null;
+  deleted_at: Date | null;
+  deleted_by: string | null;
   has_other_open_style_order: boolean;
 }>;
 type MutationResult<T> = Readonly<{ value: T; reused: boolean }>;
@@ -65,7 +69,7 @@ const ORDER_SELECT = `SELECT orders.*,
     FROM rework_orders other
     WHERE other.rework_order_id<>orders.rework_order_id
       AND other.style_no=orders.style_no
-      AND other.status NOT IN ('completed','cancelled')
+      AND other.status NOT IN ('completed','cancelled','deleted')
   ) AS has_other_open_style_order
 FROM rework_orders orders`;
 
@@ -120,6 +124,7 @@ export class ReworkInitiationService {
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
     private readonly todos?: TodoProjectionService,
+    private readonly todoService?: TodoService,
   ) {}
 
   async createDraft(
@@ -510,6 +515,56 @@ export class ReworkInitiationService {
     });
   }
 
+  async deleteByRoot(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    idempotencyKey: string,
+  ): Promise<MutationResult<DeleteReworkOrderResponse>> {
+    return this.mutateRootDeletion(actor, idempotencyKey, { reworkOrderId }, async (client) => {
+      const current = await this.lockForRootDeletion(client, reworkOrderId);
+      if (current.status === "deleted") return { reworkOrderId, deleted: true };
+      const nextVersion = current.version + 1;
+      const before = await this.auditState(client, current);
+      const after = {
+        ...before,
+        status: "deleted" as const,
+        deletedBy: actor.actorId,
+        version: nextVersion,
+      };
+      const eventId = await this.events.append(client, actor, {
+        action: "rework.delete",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        before,
+        after,
+        reason: "Root confirmed logical deletion",
+      });
+      await this.setAuditContext(client, eventId, actor.requestId);
+      await this.todoService?.cancelOpenForReworkOrder(
+        client,
+        actor,
+        reworkOrderId,
+        "The rework order was deleted by root",
+      );
+      await client.query(
+        `UPDATE rework_orders
+         SET status='deleted',deleted_at=CURRENT_TIMESTAMP,deleted_by=$2,
+             updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP
+         WHERE rework_order_id=$1`,
+        [reworkOrderId, actor.actorId, nextVersion],
+      );
+      await this.outbox.enqueue(client, {
+        topic: "rework.deleted",
+        aggregateType: "rework_order",
+        aggregateId: reworkOrderId,
+        payload: { reworkOrderId, reworkNo: current.rework_no },
+        recipientKey: "system:rework",
+        idempotencyKey: `${reworkOrderId}:deleted:${nextVersion}`,
+      });
+      return { reworkOrderId, deleted: true };
+    });
+  }
+
   async getOwn(
     actor: TrustedActorContext,
     reworkOrderId: string,
@@ -527,7 +582,7 @@ export class ReworkInitiationService {
     const statusFilter = status ? " AND orders.status=$2" : "";
     if (status) values.push(status);
     const result = await this.database.query<ReworkOrderRow>(
-      `${ORDER_SELECT} WHERE orders.created_by=$1${statusFilter}
+      `${ORDER_SELECT} WHERE orders.created_by=$1 AND orders.status<>'deleted'${statusFilter}
        ORDER BY orders.updated_at DESC,orders.rework_order_id`,
       values,
     );
@@ -593,7 +648,7 @@ export class ReworkInitiationService {
       [binding.entityId],
     );
     const order = result.rows[0];
-    if (!order) return false;
+    if (!order || order.status === "deleted") return false;
     const isOwnQcEvidence = actor.actorRoles.includes("quality_control")
       && actor.capabilities.includes("rework:initiate")
       && order.created_by === actor.actorId;
@@ -636,12 +691,49 @@ export class ReworkInitiationService {
     }
   }
 
+  private async mutateRootDeletion<T>(
+    actor: TrustedActorContext,
+    idempotencyKey: string,
+    payload: unknown,
+    work: (client: PoolClient) => Promise<T>,
+  ): Promise<MutationResult<T>> {
+    this.ensureRootDeleteActor(actor);
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await this.idempotency.execute<T>(client, {
+        scope: "rework.delete",
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: requestHash("rework.delete", payload),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      }, async () => ({ statusCode: 200, response: await work(client) }));
+      await client.query("COMMIT");
+      return { value: result.response, reused: result.reused };
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      return translateDatabaseError(error);
+    } finally {
+      client.release();
+    }
+  }
+
   private ensureInitiator(actor: TrustedActorContext): void {
     if (
       actor.authorizationCapability !== "rework:initiate"
       || !actor.actorRoles.includes("quality_control")
     ) {
       throw new ApplicationError("FORBIDDEN", "只有品控人员可以发起和维护返工单", 403);
+    }
+  }
+
+  private ensureRootDeleteActor(actor: TrustedActorContext): void {
+    if (
+      actor.authorizationCapability !== "rework:delete"
+      || !actor.actorRoles.includes("root_superuser")
+      || !actor.authorizationCapabilities?.includes("rework:delete")
+    ) {
+      throw new ApplicationError("FORBIDDEN", "只有超级用户可以删除返工单", 403);
     }
   }
 
@@ -727,7 +819,7 @@ export class ReworkInitiationService {
   ): Promise<ReworkOrderRow> {
     const result = await client.query<ReworkOrderRow>(
       `${ORDER_SELECT}
-       WHERE orders.rework_order_id=$1
+       WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'
        FOR UPDATE OF orders`,
       [reworkOrderId],
     );
@@ -746,7 +838,7 @@ export class ReworkInitiationService {
   ): Promise<ReworkOrderRow> {
     const result = await client.query<ReworkOrderRow>(
       `${ORDER_SELECT}
-       WHERE orders.rework_order_id=$1
+       WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'
        FOR UPDATE OF orders`,
       [reworkOrderId],
     );
@@ -755,6 +847,21 @@ export class ReworkInitiationService {
     if (row.created_by !== actorId) {
       throw new ApplicationError("FORBIDDEN", "只能查看和维护本人发起的返工单", 403);
     }
+    return row;
+  }
+
+  private async lockForRootDeletion(
+    client: PoolClient,
+    reworkOrderId: string,
+  ): Promise<ReworkOrderRow> {
+    const result = await client.query<ReworkOrderRow>(
+      `${ORDER_SELECT}
+       WHERE orders.rework_order_id=$1
+       FOR UPDATE OF orders`,
+      [reworkOrderId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
     return row;
   }
 
@@ -781,7 +888,7 @@ export class ReworkInitiationService {
     reworkOrderId: string,
   ): Promise<ReworkOrderResponse> {
     const result = await client.query<ReworkOrderRow>(
-      `${ORDER_SELECT} WHERE orders.rework_order_id=$1`,
+      `${ORDER_SELECT} WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
     const row = result.rows[0];
@@ -797,7 +904,7 @@ export class ReworkInitiationService {
     reworkOrderId: string,
   ): Promise<ReworkOrderResponse> {
     const result = await client.query<ReworkOrderRow>(
-      `${ORDER_SELECT} WHERE orders.rework_order_id=$1`,
+      `${ORDER_SELECT} WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
     const row = result.rows[0];

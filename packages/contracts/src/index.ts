@@ -183,6 +183,7 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_responsibility_action",
   "completed",
   "cancelled",
+  "deleted",
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
   .regex(/^[A-Za-z0-9._:-]+$/);
@@ -235,6 +236,10 @@ export const TransitionReworkOrderSchema = z.object({
   reason: ReasonSchema,
 }).strict();
 export const ReworkOrderParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const DeleteReworkOrderResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  deleted: z.literal(true),
+}).strict();
 export const ReworkOrdersQuerySchema = z.object({
   status: ReworkOrderStatusSchema.optional(),
 }).strict();
@@ -290,6 +295,7 @@ export type SupplementReworkOrderImages = z.infer<typeof SupplementReworkOrderIm
 export type SubmitReworkOrder = z.infer<typeof SubmitReworkOrderSchema>;
 export type TransitionReworkOrder = z.infer<typeof TransitionReworkOrderSchema>;
 export type ReworkOrderResponse = z.infer<typeof ReworkOrderResponseSchema>;
+export type DeleteReworkOrderResponse = z.infer<typeof DeleteReworkOrderResponseSchema>;
 export type ReworkInitiationOptionsResponse = z.infer<typeof ReworkInitiationOptionsResponseSchema>;
 
 export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);

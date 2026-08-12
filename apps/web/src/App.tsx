@@ -169,7 +169,13 @@ export function App() {
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
-  if (path === "/ui/admin" || path === "/ui/audit") page = <Shell active="系统管理"><AdminConsolePage /></Shell>;
+  if (path === "/ui/admin" || path === "/ui/audit") {
+    const requestedTab = new URLSearchParams(search).get("tab");
+    const adminTab = requestedTab === "attachments" || requestedTab === "delegations" || requestedTab === "exceptions"
+      ? requestedTab
+      : "audit";
+    page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
+  }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/master-data") page = <MasterDataPage />;
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;

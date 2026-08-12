@@ -184,7 +184,7 @@ export class ResponsibilityDeterminationService {
     const orderResult = await executor.query<{
       status: ReworkStatus;
       version: number;
-    }>("SELECT status,version FROM rework_orders WHERE rework_order_id=$1", [
+    }>("SELECT status,version FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'", [
       orderId,
     ]);
     const order =
@@ -894,7 +894,7 @@ export class ResponsibilityDeterminationService {
               processing_factory_supplier_version,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
-       WHERE rework_order_id=$1
+       WHERE rework_order_id=$1 AND status<>'deleted'
        FOR UPDATE`,
       [orderId],
     );

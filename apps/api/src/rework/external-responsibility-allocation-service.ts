@@ -175,7 +175,7 @@ export class ExternalResponsibilityAllocationService {
               processing_factory_supplier_version,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
-       WHERE rework_order_id=$1
+       WHERE rework_order_id=$1 AND status<>'deleted'
        FOR UPDATE`,
       [batch.rework_order_id],
     );

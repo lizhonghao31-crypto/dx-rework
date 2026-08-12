@@ -434,7 +434,7 @@ export class AuthorizedResponsibilityDeterminationService {
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,
               processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,
               problem_part,problem_description,rework_quantity
-       FROM rework_orders WHERE rework_order_id=$1 ${locked ? "FOR UPDATE" : ""}`,
+       FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted' ${locked ? "FOR UPDATE" : ""}`,
       [orderId],
     );
     return result.rows[0] ?? fail("返工单不存在", 404, "NOT_FOUND");

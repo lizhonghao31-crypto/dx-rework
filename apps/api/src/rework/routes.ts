@@ -1,5 +1,6 @@
 import {
   CreateReworkDraftSchema,
+  DeleteReworkOrderResponseSchema,
   IdempotencyKeySchema,
   ReworkOrderParamsSchema,
   ReworkOrdersQuerySchema,
@@ -89,6 +90,19 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  const rootDeleteActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    if (!isRoot) throw new ApplicationError("FORBIDDEN", "只有超级用户可以删除返工单", 403);
+    return {
+      actorId: user.id,
+      actorRoles: [...(user.businessRoles ?? []), "root_superuser"],
+      authorizationCapability: "rework:delete",
+      authorizationCapabilities: [...user.capabilities, "rework:delete"],
+      requestId: request.id,
+    };
+  };
+
   app.post("/rework-orders/drafts", async (request, reply) => {
     const result = await dependencies.service.createDraft(await actor(request), parse(CreateReworkDraftSchema, request.body), idempotencyKey(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
@@ -132,6 +146,12 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     const result = await dependencies.service.cancel(await actor(request), params.reworkOrderId, parse(TransitionReworkOrderSchema, request.body), idempotencyKey(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return result.value;
+  });
+  app.delete<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    const result = await dependencies.service.deleteByRoot(await rootDeleteActor(request), params.reworkOrderId, idempotencyKey(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return DeleteReworkOrderResponseSchema.parse(result.value);
   });
   app.get("/rework-orders/initiation-options", async (request) => {
     const accessActor = await actor(request);

@@ -44,7 +44,13 @@ export class TodoTimingService {
       `SELECT todo.todo_id
        FROM rework_todos todo
        JOIN todo_policies policy ON policy.policy_key=todo.policy_key AND policy.enabled=true
+       LEFT JOIN rework_orders order_record
+         ON order_record.rework_order_id=COALESCE(
+           NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid,
+           CASE WHEN todo.entity_type='rework_order' THEN todo.entity_id::uuid END
+         )
        WHERE todo.status='pending' AND todo.due_at IS NOT NULL
+         AND (order_record.rework_order_id IS NULL OR order_record.status<>'deleted')
          AND (
            (todo.reminder_count<policy.max_reminders AND (
              (todo.reminder_count=0
@@ -76,6 +82,7 @@ export class TodoTimingService {
                 case_record.payables_handler_role_snapshot,follow.next_follow_up_at,
                 follow.operation_event_id
          FROM rework_external_responsibility_cases case_record
+         JOIN rework_orders order_record ON order_record.rework_order_id=case_record.rework_order_id
          JOIN LATERAL (
            SELECT next_follow_up_at,operation_event_id
            FROM rework_external_deduction_follow_ups
@@ -84,6 +91,7 @@ export class TodoTimingService {
            LIMIT 1
          ) follow ON true
          WHERE case_record.status='deduction_follow_up'
+           AND order_record.status<>'deleted'
            AND follow.next_follow_up_at<=CURRENT_TIMESTAMP
          ORDER BY follow.next_follow_up_at,case_record.case_id
          LIMIT $1`,

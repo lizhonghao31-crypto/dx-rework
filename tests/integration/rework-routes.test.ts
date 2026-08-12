@@ -44,6 +44,7 @@ const response: ReworkOrderResponse = {
 const create = (
   businessRoles: readonly string[] = ["quality_control"],
   capabilities: readonly string[] = ["rework:initiate"],
+  isRoot = false,
 ) => {
   const service = {
     createDraft: vi.fn(async () => ({ value: response, reused: false })),
@@ -55,6 +56,7 @@ const create = (
     })),
     withdraw: vi.fn(async () => ({ value: response, reused: false })),
     cancel: vi.fn(async () => ({ value: { ...response, status: "cancelled" }, reused: false })),
+    deleteByRoot: vi.fn(async () => ({ value: { reworkOrderId: response.reworkOrderId, deleted: true }, reused: false })),
     getOwn: vi.fn(async () => response),
     listOwn: vi.fn(async () => [response]),
     listInitiationOptions: vi.fn(async () => ({ merchandisers: [], factories: [] })),
@@ -74,6 +76,7 @@ const create = (
         };
       },
       service: service as never,
+      root: { isRootUser: vi.fn(async () => isRoot) },
     },
   });
   apps.push(app);
@@ -206,6 +209,37 @@ describe("rework initiation routes", () => {
       },
       "supplement-1",
     );
+  });
+
+  it("allows only Root to logically delete an order after a normal confirmation request", async () => {
+    const root = create([], [], true);
+    const deleted = await root.app.inject({
+      method: "DELETE",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "root-delete-1",
+        "x-request-id": "root-delete-request-1",
+      },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({ reworkOrderId: response.reworkOrderId, deleted: true });
+    expect(root.service.deleteByRoot).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorRoles: ["root_superuser"],
+      authorizationCapability: "rework:delete",
+      authorizationCapabilities: ["rework:delete"],
+      requestId: "root-delete-request-1",
+    }), response.reworkOrderId, "root-delete-1");
+
+    const ordinary = create();
+    const rejected = await ordinary.app.inject({
+      method: "DELETE",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010",
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "ordinary-delete-1" },
+    });
+    expect(rejected.statusCode).toBe(403);
+    expect(ordinary.service.deleteByRoot).not.toHaveBeenCalled();
   });
 
   it("exposes the authenticated initiator's detail, filtered list and initiation options", async () => {
