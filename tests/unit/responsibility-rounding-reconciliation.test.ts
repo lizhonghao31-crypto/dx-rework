@@ -53,7 +53,7 @@ describe("responsibility rounding reconciliation", () => {
       expect(source).toContain("rework_effective_responsibility_allocations");
     }
     expect(orders).not.toContain("responsibility_adjustments AS");
-    expect(financial).not.toContain("adjustment.adjustment_amount");
+    expect(financial).not.toContain("rework_responsibility_rounding_adjustments");
     expect(report).toContain(
       "allocation.determination_id=approval.finalized_determination_id",
     );
