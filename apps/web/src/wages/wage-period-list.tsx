@@ -148,7 +148,6 @@ export function WagePeriodList() {
     <div className="wage-page wage-management">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">工资查询、核对与月结</p>
           <h1>工资管理</h1>
           <p>按工人、返工单、款号和期间交叉查询；金额直接读取服务端工资事实。</p>
         </div>

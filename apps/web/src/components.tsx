@@ -288,12 +288,12 @@ export function Header({
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const resolvedActionHref = actionHref?.startsWith("/") ? `${basePath}${actionHref}` : actionHref;
   return (
-    <header>
-      <div>
+    <header className="page-heading">
+      <div className="page-heading__copy">
         <h1>{title}</h1>
-        {subtitle ? <p>{subtitle}</p> : null}
+        {subtitle ? <p className="page-heading__subtitle">{subtitle}</p> : null}
       </div>
-      <div className="header-actions">
+      <div className="page-heading__actions header-actions">
         <StatusBadge tone="info">{badge}</StatusBadge>
         {action ? (
           resolvedActionHref

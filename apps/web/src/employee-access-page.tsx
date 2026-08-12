@@ -182,17 +182,17 @@ export function EmployeeAccessPage() {
   return (
     <Shell active="系统管理">
       <div className="employee-access-shell">
-        <Surface className="employee-access-card">
-          <div className="employee-access-heading">
-            <div>
-              <h1>员工权限管理</h1>
-            </div>
-            <div className="employee-access-sync">
-              <span>最近同步：{directory?.lastDirectorySyncedAt ? new Date(directory.lastDirectorySyncedAt).toLocaleString("zh-CN") : "尚未同步"}</span>
-              <Button disabled={Boolean(busy)} onClick={sync}>{busy === "sync" ? "同步中…" : "同步钉钉通讯录"}</Button>
-            </div>
+        <header className="page-heading employee-access-heading">
+          <div>
+            <h1>员工权限管理</h1>
+            <p>同步、查询和维护员工的系统访问与业务角色。</p>
           </div>
-
+          <div className="employee-access-sync">
+            <span>最近同步：{directory?.lastDirectorySyncedAt ? new Date(directory.lastDirectorySyncedAt).toLocaleString("zh-CN") : "尚未同步"}</span>
+            <Button disabled={Boolean(busy)} onClick={sync}>{busy === "sync" ? "同步中…" : "同步钉钉通讯录"}</Button>
+          </div>
+        </header>
+        <Surface className="employee-access-card">
           <div className="employee-access-toolbar">
             <input
               type="search"

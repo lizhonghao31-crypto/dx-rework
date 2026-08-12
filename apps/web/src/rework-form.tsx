@@ -125,8 +125,15 @@ const toForm = (order: ReworkOrderResponse): FormState => ({
   reworkQuantity: order.reworkQuantity?.toString() ?? "",
 });
 
-export function ReworkInitiationForm() {
-  const initialDraftId = new URLSearchParams(window.location.search).get("draft");
+export function ReworkInitiationForm({
+  reworkOrderId,
+  onOrderChanged,
+  embedded = false,
+}: {
+  reworkOrderId?: string;
+  onOrderChanged?: (order: ReworkOrderResponse) => void;
+  embedded?: boolean;
+} = {}) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({
     merchandisers: [],
@@ -135,9 +142,9 @@ export function ReworkInitiationForm() {
   const [order, setOrder] = useState<ReworkOrderResponse | null>(null);
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [uploadedAttachments, setUploadedAttachments] = useState<UploadedAttachment[]>([]);
-  const [message, setMessage] = useState(initialDraftId ? "草稿加载中…" : "填写中，尚未保存");
+  const [message, setMessage] = useState(reworkOrderId ? "草稿加载中…" : "填写中，尚未保存");
   const [busy, setBusy] = useState(false);
-  const [restoringDraft, setRestoringDraft] = useState(Boolean(initialDraftId));
+  const [restoringDraft, setRestoringDraft] = useState(Boolean(reworkOrderId));
   const [uploading, setUploading] = useState(false);
   const pendingKey = useRef<PendingKey | null>(null);
   const previewUrls = useRef<string[]>([]);
@@ -165,9 +172,15 @@ export function ReworkInitiationForm() {
     loadOptions();
     window.addEventListener("focus", loadOptions);
     document.addEventListener("visibilitychange", onVisibility);
-    if (initialDraftId) {
+    setForm(emptyForm);
+    setOrder(null);
+    setAttachmentIds([]);
+    setUploadedAttachments([]);
+    setMessage(reworkOrderId ? "草稿加载中…" : "填写中，尚未保存");
+    setRestoringDraft(Boolean(reworkOrderId));
+    if (reworkOrderId) {
       void request(
-        `rework-orders/${initialDraftId}`,
+        `rework-orders/${reworkOrderId}`,
         ReworkOrderResponseSchema,
         { signal: controller.signal },
       ).then((loaded) => {
@@ -190,7 +203,7 @@ export function ReworkInitiationForm() {
       window.removeEventListener("focus", loadOptions);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, []);
+  }, [reworkOrderId]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -253,12 +266,20 @@ export function ReworkInitiationForm() {
     setOrder(saved);
     setAttachmentIds(saved.attachmentIds);
     setMessage(saved.reworkNo ? `${saved.reworkNo} · 草稿已保存` : "草稿已安全保存");
-    if (!order) {
-      const url = new URL(window.location.href);
-      url.searchParams.set("draft", saved.reworkOrderId);
-      window.history.replaceState({}, "", url);
-    }
+    onOrderChanged?.(saved);
     return saved;
+  };
+
+  const resetSubmittedForm = (submitted: ReworkOrderResponse): void => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+    pendingSubmit.current = null;
+    pendingKey.current = null;
+    setForm(emptyForm);
+    setOrder(null);
+    setAttachmentIds([]);
+    setUploadedAttachments([]);
+    setMessage(`${submitted.reworkNo ?? "返工单"} 已提交，可以直接填写下一张返工单`);
   };
 
   const save = async () => {
@@ -303,8 +324,13 @@ export function ReworkInitiationForm() {
       );
       pendingSubmit.current = null;
       pendingKey.current = null;
-      setOrder(submitted);
-      setMessage(`${submitted.reworkNo ?? ""} 已提交，待当前有效尾部主管配置工序`);
+      if (embedded) {
+        setOrder(submitted);
+        setMessage(`${submitted.reworkNo ?? ""} 已提交，待当前有效尾部主管配置工序`);
+        onOrderChanged?.(submitted);
+      } else {
+        resetSubmittedForm(submitted);
+      }
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "返工单提交失败");
     } finally {
@@ -331,6 +357,7 @@ export function ReworkInitiationForm() {
       pendingKey.current = null;
       setOrder(updated);
       setMessage(statusText(updated.status));
+      onOrderChanged?.(updated);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "状态变更失败");
     } finally {
@@ -450,16 +477,26 @@ export function ReworkInitiationForm() {
   const showStatus = Boolean(order) || message !== "填写中，尚未保存";
 
   return (
-    <div className="mobile-page rework-initiation-page">
-      <div className="mobile-hero rework-initiation-hero">
-        <div className="mobile-title">
-          <h1>发起返工</h1>
-          <StatusBadge tone={badgeTone}>{order?.reworkNo ?? "草稿未保存"}</StatusBadge>
+    <div className={`mobile-page rework-initiation-page${embedded ? " rework-initiation-page--embedded" : ""}`}>
+      {embedded ? (
+        <div className="rework-initiation-embedded-heading">
+          <div>
+            <h2>编辑返工草稿</h2>
+            <p>保存后可继续填写；正式提交后将进入下一处理节点。</p>
+          </div>
+          <StatusBadge tone={badgeTone}>{order?.reworkNo ?? "草稿"}</StatusBadge>
         </div>
-        <p className="rework-initiation-hero__progress">
-          必填项 {requiredCompletionCount}/6 · {complete ? "可以提交" : "填完即可提交"}
-        </p>
-      </div>
+      ) : (
+        <div className="mobile-hero rework-initiation-hero">
+          <div className="mobile-title">
+            <h1>发起返工</h1>
+            <StatusBadge tone={badgeTone}>{order?.reworkNo ?? "草稿未保存"}</StatusBadge>
+          </div>
+          <p className="rework-initiation-hero__progress">
+            必填项 {requiredCompletionCount}/6 · {complete ? "可以提交" : "填完即可提交"}
+          </p>
+        </div>
+      )}
 
       <Surface className="rework-initiation-required">
         <div className="section-title">

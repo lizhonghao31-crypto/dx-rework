@@ -152,7 +152,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   if (!detail) {
     return (
       <div className="wage-page">
-        <h1>工资详情</h1>
+        <header className="page-heading"><div><h1>工资详情</h1><p>正在读取工资期间与对应返工工资明细。</p></div></header>
         <Surface><p>{message || "正在加载工资期间…"}</p></Surface>
       </div>
     );
@@ -170,8 +170,8 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
     <div className="wage-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">N10-A · {period.periodMonth.slice(0, 7)}</p>
           <h1>返工工资核对</h1>
+          <p>工资期间：{period.periodMonth.slice(0, 7)} · N10-A</p>
         </div>
         <StatusBadge tone={period.status === "locked" ? "success" : "info"}>
           {statusLabel}

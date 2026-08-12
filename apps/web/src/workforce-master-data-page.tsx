@@ -156,7 +156,7 @@ export function WorkforceMasterDataPage() {
   return (
     <Shell active="人员资料">
       <div className="workforce-page">
-        <header className="workforce-heading">
+        <header className="page-heading workforce-heading">
           <div>
             <h1>作业人员与临时工</h1>
             <p>内部工人来自权限管理的“工人”角色；临时工在这里单独建档，不提供登录账号。</p>

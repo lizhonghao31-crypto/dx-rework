@@ -30,7 +30,7 @@ describe("my todos first-entry navigation", () => {
     ]);
 
     expect(page).toContain('className="my-todos-page"');
-    expect(page).toContain('className="my-todos-hero"');
+    expect(page).toContain('className="page-heading my-todos-hero"');
     expect(page).toContain('className="my-todos-hero__title"');
     expect(page).toContain('apiUrl("todos/mine")');
     expect(page).toContain("taskHref(todo)");

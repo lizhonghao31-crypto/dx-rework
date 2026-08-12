@@ -68,8 +68,13 @@ export function AdminConsolePage() {
   const visibleTabs = technicalAccess ? technicalTabs : technicalTabs.slice(0, 1);
   return (
     <div className="admin-shell">
+      <header className="page-heading">
+        <div>
+          <h1>系统管理</h1>
+          <p>维护人员访问、系统资料与可追溯的运行记录。</p>
+        </div>
+      </header>
       <Surface className="admin-card">
-        <h1>系统管理</h1>
         {employeeAccess ? (
           <nav className="admin-business-links" aria-label="人员与权限管理">
             <a href={pageUrl("ui/employee-access")}>
