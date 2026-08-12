@@ -17,21 +17,21 @@ describe("UAT interface closure", () => {
   });
 
   it("keeps system management links in the expected sequence", async () => {
-    const [admin, employee, masterData] = await Promise.all([
-      read("apps/web/src/admin-console-page.tsx"),
+    const [navigation, employee, masterData] = await Promise.all([
+      read("apps/web/src/system-management-navigation.tsx"),
       read("apps/web/src/employee-access-page.tsx"),
       read("apps/web/src/master-data-page.tsx"),
     ]);
-    expect(admin).toContain('pageUrl("ui/employee-access")');
-    expect(admin).toContain("员工权限管理");
-    expect(admin).toContain("工厂管理");
-    expect(admin).toContain("工序管理");
-    const navigation = admin.slice(admin.indexOf('<nav className="admin-navigation"'));
-    expect(navigation.indexOf("员工权限管理")).toBeLessThan(navigation.indexOf("工厂管理"));
-    expect(navigation.indexOf("工厂管理")).toBeLessThan(navigation.indexOf("工序管理"));
-    expect(navigation.indexOf("工序管理")).toBeLessThan(navigation.indexOf("visibleTabs.map"));
+    expect(navigation).toContain('pageUrl("ui/employee-access")');
+    expect(navigation).toContain("员工权限管理");
+    expect(navigation).toContain("工厂&amp;工序管理");
+    expect(navigation).toContain('pageUrl("ui/master-data")');
+    expect(navigation.indexOf("员工权限管理")).toBeLessThan(navigation.indexOf("工厂&amp;工序管理"));
+    expect(navigation).toContain("visibleTabs.map");
     expect(employee).toContain('<Shell active="系统管理">');
+    expect(employee).toContain('<SystemManagementNavigation active="employee-access" />');
     expect(employee).toContain("assignableRoles");
+    expect(masterData).toContain('<SystemManagementNavigation active="master-data" />');
     expect(masterData).toContain('id="factories"');
     expect(masterData).toContain('id="processes"');
   });
