@@ -4,6 +4,11 @@
   padding-bottom: 0;
 }
 
+.work-reporting-page .work-reporting-feedback {
+  margin: 0 0 var(--dx-v2-space-3);
+  color: var(--dx-v2-color-text-secondary);
+}
+
 .work-reporting-page .whole-order-row {
   flex-wrap: wrap;
   align-items: flex-start;

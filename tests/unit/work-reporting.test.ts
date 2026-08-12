@@ -32,9 +32,9 @@ describe("work reporting monetary snapshots", () => {
     expect(canAssignWork({ businessRoles: ["worker"], capabilities: ["work:report"] })).toBe(false);
     expect(canAssignWork({ businessRoles: ["tail_supervisor"], capabilities: ["work:assign"] })).toBe(true);
     const form = await readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8");
-    expect(form).toContain("if (!assignable) {");
+    expect(form).toContain("if (!assignable || !assignmentView) {");
     expect(form).toContain("request(\"work-task-options\"");
-    expect(form).toContain('data && canAssign && data.reworkStatus === "pending_task_assignment" && <Surface>');
+    expect(form).toContain('effectiveTaskMode === "task_assignment" && data && canAssign && ["pending_task_assignment", "in_progress"].includes(data.reworkStatus) && <Surface>');
     expect(form).toContain("你的本次计件金额 ¥");
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportDrafts");

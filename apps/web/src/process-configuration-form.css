@@ -7,3 +7,8 @@
 .process-configuration-page .process-line .dx-field:last-child {
   margin-bottom: var(--dx-v2-space-2);
 }
+
+.process-configuration-page .process-feedback {
+  margin: 0 0 var(--dx-v2-space-3);
+  color: var(--dx-v2-color-text-secondary);
+}

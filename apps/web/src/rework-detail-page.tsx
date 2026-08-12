@@ -342,10 +342,10 @@ export function ReworkDetailPage({
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() => new Set());
 
-  const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
+  const load = useCallback(async (signal?: AbortSignal): Promise<ReworkBusinessDetail | null> => {
     if (!reworkOrderId) {
       setState({ kind: "error", message: "返工单链接无效" });
-      return;
+      return null;
     }
     const response = await fetch(apiUrl(`rework-orders/${reworkOrderId}/business-detail`), {
       credentials: "include", headers: { accept: "application/json" }, ...(signal ? { signal } : {}),
@@ -354,8 +354,25 @@ export function ReworkDetailPage({
       const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
       throw new Error(body?.error?.message ?? `返工单加载失败（${response.status}）`);
     }
-    setState({ kind: "ready", value: await response.json() as ReworkBusinessDetail });
+    const latest = await response.json() as ReworkBusinessDetail;
+    setState({ kind: "ready", value: latest });
+    return latest;
   }, [reworkOrderId]);
+
+  const syncAfterNodeAction = useCallback(async (): Promise<void> => {
+    try {
+      const latest = await load();
+      if (!latest) return;
+      const nextNode = currentNodeByStatus[latest.status];
+      if (!nextNode) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set("node", nextNode);
+      window.history.replaceState({}, "", url);
+    } catch {
+      // The business mutation already succeeded. Keep its success feedback and
+      // let the user retry a manual page refresh instead of reporting a false failure.
+    }
+  }, [load]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -488,11 +505,19 @@ export function ReworkDetailPage({
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
-      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} />;
+      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm
+        reworkOrderId={detail.reworkOrderId}
+        taskMode={selected.key}
+        onOrderChanged={syncAfterNodeAction}
+      />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "quantity_adjustment")) {
-      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" />;
+      if (canSeeWholeOrderReview) return <WorkReportingForm
+        reworkOrderId={detail.reworkOrderId}
+        taskMode="whole_order_review"
+        onOrderChanged={syncAfterNodeAction}
+      />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && selected.key === "responsibility") {
@@ -545,7 +570,7 @@ export function ReworkDetailPage({
                 reworkOrderId={detail.reworkOrderId}
                 expectedVersion={detail.version}
                 currentAttachmentCount={orderAttachments.length}
-                onUploaded={load}
+                onUploaded={async () => { await load(); }}
               />
             )}
             {imageAttachments.length > 0 ? (

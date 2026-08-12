@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
@@ -94,9 +94,9 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain('max={String(task.remainingQuantity)}');
     expect(source).toContain('label={`本次完成数量（${unit}）`}');
     expect(source).toContain('label="实际完成时间"');
-    expect(source).toContain("全部完成剩余 {task.remainingQuantity}");
+    expect(source).not.toContain("全部完成剩余 {task.remainingQuantity}");
     expect(source).toContain("task.remainingQuantity <= 0");
-    expect(source).toContain('["pending_task_assignment", "in_progress"].includes(data.reworkStatus)');
+    expect(source).toContain('data.reworkStatus !== "in_progress"');
     expect(source).toContain("订单已自动流转到 N06 · 待整单审核");
     expect(source).toContain("canReviewOrder(me.user)");
     expect(source).not.toContain('label="本次上数（${unit}）"');
@@ -104,6 +104,37 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain('data?.reworkOrderId ?? reworkOrderId ?? "返工任务"');
     expect(source).not.toContain("share.toFixed(8)");
     expect(source).not.toContain("result.groupAmount.toFixed(8)");
+  });
+
+  it("keeps N04, N05 and N06 on isolated pages with server-backed state boundaries", async () => {
+    const [detail, reporting, reportingService, reviewService, processConfiguration] = await Promise.all([
+      read("apps/web/src/rework-detail-page.tsx"),
+      read("apps/web/src/work-reporting-form.tsx"),
+      read("apps/api/src/rework/work-reporting-service.ts"),
+      read("apps/api/src/rework/whole-order-review-service.ts"),
+      read("apps/web/src/process-configuration-form.tsx"),
+    ]);
+
+    expect(detail).toContain("taskMode={selected.key}");
+    expect(detail).toContain("onOrderChanged={syncAfterNodeAction}");
+    expect(detail).toContain('url.searchParams.set("node", nextNode)');
+    expect(reporting).toContain('effectiveTaskMode === "task_assignment"');
+    expect(reporting).toContain('effectiveTaskMode === "work_reporting"');
+    expect(reporting).toContain('effectiveTaskMode === "whole_order_review"');
+    expect(reporting).not.toContain("N04–N06");
+    expect(reporting).not.toContain("当前处理说明");
+    expect(reporting).not.toContain("全部完成剩余");
+    expect(processConfiguration).not.toContain("当前处理说明");
+    expect(reportingService).toContain('order.status !== "in_progress"');
+    expect(reportingService).toContain('order.status !== "pending_task_assignment" && order.status !== "in_progress"');
+    expect(reviewService).toContain('order.status !== "pending_order_review"');
+  });
+
+  it("removes the duplicated current-processing explanation card from every web node", async () => {
+    const paths = (await readdir("apps/web/src", { recursive: true }))
+      .filter((path) => typeof path === "string" && /\.(?:ts|tsx)$/.test(path));
+    const source = (await Promise.all(paths.map((path) => read(`apps/web/src/${path}`)))).join("\n");
+    expect(source).not.toContain("当前处理说明");
   });
 
   it("separates normal whole-order confirmation from quantity exceptions", async () => {

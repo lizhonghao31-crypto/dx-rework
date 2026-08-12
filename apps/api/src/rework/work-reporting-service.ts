@@ -205,7 +205,7 @@ export class WorkReportingService {
     return this.mutate(actor, "rework.work_report.submit", key, { workTaskId, ...input }, 201, async (client) => {
       const task = await this.task(client, workTaskId, true);
       const order = await this.order(client, task.rework_order_id, true);
-      if (order.status !== "pending_task_assignment" && order.status !== "in_progress") error("当前返工单不允许上数", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "in_progress") error("当前返工单不在完成数量登记节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
       if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
       const members = await this.members(client, task.work_task_id);

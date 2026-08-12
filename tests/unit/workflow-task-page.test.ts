@@ -20,7 +20,7 @@ describe("workflow task page", () => {
     expect(detail).toContain('taskMode="whole_order_review"');
     expect(task).toContain("<WagePeriodDetailPage periodId={route.entityId} />");
     expect(configuration).toContain("reworkOrderId: providedReworkOrderId");
-    expect(reporting).toContain('taskMode?: "workspace" | "whole_order_review"');
-    expect(reporting).toContain('if (taskMode === "whole_order_review")');
+    expect(reporting).toContain('taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review"');
+    expect(reporting).toContain('if (effectiveTaskMode === "whole_order_review")');
   });
 });
