@@ -647,7 +647,7 @@ export class ProcessConfigurationService {
 
   private async lockOrder(client: PoolClient, reworkOrderId: string): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
-      "SELECT * FROM rework_orders WHERE rework_order_id=$1 FOR UPDATE",
+      "SELECT * FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted' FOR UPDATE",
       [reworkOrderId],
     );
     const row = result.rows[0];
@@ -657,7 +657,7 @@ export class ProcessConfigurationService {
 
   private async order(client: Pick<PoolClient, "query">, reworkOrderId: string): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
-      "SELECT * FROM rework_orders WHERE rework_order_id=$1",
+      "SELECT * FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'",
       [reworkOrderId],
     );
     const row = result.rows[0];
