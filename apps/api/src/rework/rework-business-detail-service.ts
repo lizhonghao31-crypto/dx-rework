@@ -142,7 +142,7 @@ export class ReworkBusinessDetailService {
        ) latest_configuration ON true
        LEFT JOIN app_users configuration_creator
          ON configuration_creator.id=latest_configuration.created_by
-       WHERE orders.rework_order_id=$1`,
+       WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
     const row = result.rows[0];
