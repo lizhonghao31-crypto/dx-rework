@@ -3,8 +3,10 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
-import { loadReworkOrders, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
+import { deleteReworkOrder, loadReworkOrders, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
 import { ManagementOrderCard } from "./management-order-card.js";
+import type { AuthorizedUser } from "../auth.js";
+import { createWebUrls } from "../../url-contract.js";
 import "./reporting.css";
 
 const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
@@ -14,6 +16,7 @@ const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
   ["pending_responsibility_action","责任处理中"],["completed","已完成"],["cancelled","已取消"],
 ];
 const responsibilityTypes = [["","全部责任"],["own_factory","本厂承担"],["processing_factory","加工厂"],["embroidery_factory","印绣花厂"],["washing_factory","洗水厂"],["fabric_supplier","面料商"]] as const;
+const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type LoadState = { kind: "loading" } | { kind: "ready"; value: ManagementReworkPage } | { kind: "unavailable"; message: string };
 
@@ -29,6 +32,9 @@ export function ReworkQueryPage() {
   const [cursor,setCursor]=useState("");
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refresh, setRefresh] = useState(0);
+  const [isRoot, setIsRoot] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const resetPage=()=>setCursor("");
   const filters = useMemo(() => ({ q: q.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,cursor:cursor||undefined, limit: "40" }), [q,status,responsibilityType,from,to,overdue,exception,cursor]);
 
@@ -44,6 +50,24 @@ export function ReworkQueryPage() {
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [filters, refresh]);
+  useEffect(() => {
+    let mounted = true;
+    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
+      .then(async (response) => response.ok ? await response.json() as { status: string; user?: AuthorizedUser } : null)
+      .then((body) => { if (mounted) setIsRoot(body?.status === "authorized" && body.user?.isRoot === true); })
+      .catch(() => { if (mounted) setIsRoot(false); });
+    return () => { mounted = false; };
+  }, []);
+  const remove = (order: ManagementReworkRow) => {
+    const name = order.reworkNo ?? order.reworkOrderId;
+    if (!window.confirm(`确认删除 ${name} 吗？删除后将从业务与报表入口隐藏，并关闭相关待办。`)) return;
+    setDeletingOrderId(order.reworkOrderId);
+    setDeleteError("");
+    void deleteReworkOrder(order.reworkOrderId)
+      .then(() => setRefresh((value) => value + 1))
+      .catch((error: unknown) => setDeleteError(error instanceof Error ? error.message : "删除失败"))
+      .finally(() => setDeletingOrderId(""));
+  };
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="全部订单">
     <Header title="全部订单" subtitle="查看权限范围内订单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} />
@@ -59,8 +83,9 @@ export function ReworkQueryPage() {
     </Surface>
     {state.kind === "loading" && <Surface className="reporting-state">正在查询…</Surface>}
     {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
+    {deleteError && <Surface className="reporting-state reporting-delete-error"><p role="alert">{deleteError}</p></Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="reporting-state">没有符合筛选条件的返工单。</Surface>}
-    <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} />)}</div>
+    <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} canDelete={isRoot} deleting={deletingOrderId === order.reworkOrderId} onDelete={remove} />)}</div>
     {state.kind === "ready" && (cursor || state.value.nextCursor) && <Surface className="reporting-pagination">
       {cursor && <Button onClick={()=>setCursor("")}>返回第一页</Button>}
       {state.value.nextCursor && <Button variant="primary" onClick={()=>setCursor(state.value.nextCursor??"")}>下一页</Button>}
