@@ -32,7 +32,8 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain('"01", "发起返工"');
     expect(detail).toContain('"09", "订单归档"');
     expect(detail).toContain("待判定后生成后续责任结算路径");
-    expect(detail).toContain("selected.state !== \"current\"");
+    expect(detail).toContain('selected.state !== "future"');
+    expect(detail).toContain("return renderNodePreview()");
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
     expect(detail).toContain("<WorkReportingForm reworkOrderId={detail.reworkOrderId}");
     expect(detail).not.toContain('action: "返回全部订单"');

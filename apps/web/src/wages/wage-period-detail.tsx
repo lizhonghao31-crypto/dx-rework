@@ -91,13 +91,8 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   useEffect(() => {
     mounted.current = true;
     void load();
-    const timer = window.setInterval(() => void load(), 15_000);
-    const focus = () => void load();
-    window.addEventListener("focus", focus);
     return () => {
       mounted.current = false;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", focus);
     };
   }, [load]);
 

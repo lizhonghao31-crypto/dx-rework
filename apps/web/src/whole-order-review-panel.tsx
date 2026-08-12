@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const reviewRefreshMilliseconds = 15_000;
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), { credentials: "include", ...init, headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers } });
   if (!response.ok) { const body = await response.json().catch(() => null) as { error?: { message?: string } } | null; throw new Error(body?.error?.message ?? "请求未完成，请稍后重试"); }
@@ -74,18 +73,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
         requestInFlight = false;
       }
     };
-    const refreshVisible = (): void => {
-      if (document.visibilityState === "visible") void refresh();
-    };
     void refresh();
-    const intervalId = window.setInterval(refreshVisible, reviewRefreshMilliseconds);
-    window.addEventListener("focus", refreshVisible);
-    document.addEventListener("visibilitychange", refreshVisible);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshVisible);
-      document.removeEventListener("visibilitychange", refreshVisible);
-    };
   }, [reworkOrderId]);
 
   const call = async <T,>(path: string, parse: (value: unknown) => T, body: unknown, method = "POST") => {

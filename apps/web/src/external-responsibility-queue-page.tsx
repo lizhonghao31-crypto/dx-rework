@@ -10,7 +10,6 @@ import { Header, Shell, TaskCard } from "./components.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const queueRefreshMilliseconds = 15_000;
 type State = { kind: "loading" } | { kind: "ready"; value: ExternalResponsibilityQueueResponse } | { kind: "unavailable"; message: string };
 const statusLabel: Record<ExternalResponsibilityQueueResponse["items"][number]["status"], string> = {
   pending_business_signoff: "待补充资料", pending_payables_confirmation: "待记录扣款", deduction_follow_up: "扣款跟进中", returned: "资料已退回", pending_responsibility_revision: "待责任变更", closed: "已关闭", superseded: "已替代",
@@ -32,9 +31,8 @@ export function ExternalResponsibilityQueuePage() {
         if (!(error instanceof DOMException && error.name === "AbortError") && initial) setState({ kind: "unavailable", message: error instanceof Error ? error.message : "外部责任队列加载失败" });
       } finally { requestInFlight = false; }
     };
-    const refresh = (): void => { void load(false); };
-    void load(true); const intervalId = window.setInterval(refresh, queueRefreshMilliseconds); window.addEventListener("focus", refresh);
-    return () => { controller.abort(); window.clearInterval(intervalId); window.removeEventListener("focus", refresh); };
+    void load(true);
+    return () => controller.abort();
   }, []);
   const allItems = state.kind === "ready" ? state.value.items : [];
   const items = useMemo(() => {

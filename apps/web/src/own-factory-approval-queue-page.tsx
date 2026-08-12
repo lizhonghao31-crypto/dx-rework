@@ -10,8 +10,6 @@ import { Header, Shell, TaskCard } from "./components.js";
 import "./responsibility-queue.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const queueRefreshMilliseconds = 15_000;
-
 type QueueState =
   | { kind: "loading" }
   | { kind: "ready"; value: OwnFactoryApprovalQueueResponse }
@@ -51,15 +49,8 @@ export function OwnFactoryApprovalQueuePage() {
       }
     };
 
-    const refresh = (): void => { void load(false); };
     void load(true);
-    const intervalId = window.setInterval(refresh, queueRefreshMilliseconds);
-    window.addEventListener("focus", refresh);
-    return () => {
-      controller.abort();
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refresh);
-    };
+    return () => controller.abort();
   }, []);
 
   const allItems = state.kind === "ready" ? state.value.items : [];

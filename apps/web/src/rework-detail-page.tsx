@@ -14,8 +14,6 @@ import { WorkReportingForm } from "./work-reporting-form.js";
 import "./rework-detail.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
-const detailRefreshMilliseconds = 2_000;
-
 type ReworkStatus =
   | "draft"
   | "pending_process_configuration"
@@ -389,12 +387,7 @@ export function ReworkDetailPage({
         setState({ kind: "error", message: error instanceof Error ? error.message : "返工单加载失败" });
       }
     });
-    const refresh = () => { void load().catch(() => undefined); };
-    const intervalId = window.setInterval(refresh, detailRefreshMilliseconds);
-    window.addEventListener("focus", refresh);
-    return () => {
-      controller.abort(); window.clearInterval(intervalId); window.removeEventListener("focus", refresh);
-    };
+    return () => controller.abort();
   }, [load, reworkOrderId]);
 
   const backAction = returnToTodos
@@ -427,6 +420,12 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:confirm_high_multiplier");
   const canSeeOwnFactory = elevated(currentUser) || hasCapability(currentUser, "own_factory:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
+  const canSeeWholeOrderReview = elevated(currentUser) || [
+    "submission:audit",
+    "quantity:adjust",
+    "quantity:confirm",
+    "process:review",
+  ].some((capability) => hasCapability(currentUser, capability));
   const canSupplementOrderImages = detail.status !== "completed"
     && detail.status !== "cancelled"
     && (elevated(currentUser) || (
@@ -437,6 +436,34 @@ export function ReworkDetailPage({
     hasRole(currentUser, "quality_control")
     && hasCapability(currentUser, "rework:initiate")
   );
+
+  const renderNodePreview = () => {
+    if (!selected) return null;
+    const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
+    return <Surface className="rework-detail-node-preview">
+      <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : "未开始 · 可预览"}</StatusBadge>
+      <h2>{selected.number} · {selected.label}</h2>
+      <p>{selected.preview}</p>
+      <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
+      {selected.state === "completed" && (
+        <div className="rework-detail-node-history">
+          <h3>处理历史</h3>
+          {nodeHistory.length ? nodeHistory.map((event, index) => (
+            <div key={`${event.action}-${event.handledAt}-${index}`}>
+              <b>{historyActionLabel(event.action)}</b>
+              <span>处理人：{event.handledBy} · 处理时间：{formatTime(event.handledAt)}</span>
+              <span>处理意见：{event.remark ?? "未填写备注"}</span>
+            </div>
+          )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
+          {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
+            {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}{" "}
+            <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
+            <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
+          </span>)}</p>}
+        </div>
+      )}
+    </Surface>;
+  };
 
   const renderSelectedTask = () => {
     if (!selected) return null;
@@ -456,60 +483,31 @@ export function ReworkDetailPage({
         onChanged={() => { void load(); }}
       />;
     }
-    if (selected.state !== "current") {
-      const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
-      return <Surface className="rework-detail-node-preview">
-        <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : "未开始 · 可预览"}</StatusBadge>
-        <h2>{selected.number} · {selected.label}</h2>
-        <p>{selected.preview}</p>
-        <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
-        {selected.state === "completed" && (
-          <div className="rework-detail-node-history">
-            <h3>处理历史</h3>
-            {nodeHistory.length ? nodeHistory.map((event, index) => (
-              <div key={`${event.action}-${event.handledAt}-${index}`}>
-                <b>{historyActionLabel(event.action)}</b>
-                <span>处理人：{event.handledBy} · 处理时间：{formatTime(event.handledAt)}</span>
-                <span>处理意见：{event.remark ?? "未填写备注"}</span>
-              </div>
-            )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
-            {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
-              {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}{" "}
-              <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
-              <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
-            </span>)}</p>}
-          </div>
-        )}
-      </Surface>;
+    if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} />;
+      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.key === "process_configuration" || selected.key === "ie_review") {
-      return canUseProcessWorkspace(currentUser)
-        ? <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} />
-        : <NodePermissionNotice node={selected} />;
+    if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
+      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} />;
+      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.key === "task_assignment" || selected.key === "work_reporting") {
-      return canUseWorkWorkspace(currentUser)
-        ? <WorkReportingForm reworkOrderId={detail.reworkOrderId} />
-        : <NodePermissionNotice node={selected} />;
+    if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "quantity_adjustment")) {
+      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" />;
+      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.key === "whole_order_review" || selected.key === "quantity_adjustment") {
-      return canUseWorkWorkspace(currentUser)
-        ? <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" />
-        : <NodePermissionNotice node={selected} />;
+    if (selected.state !== "future" && selected.key === "responsibility") {
+      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} />;
+      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.key === "responsibility") {
-      return canSeeResponsibility
-        ? <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} />
-        : <NodePermissionNotice node={selected} />;
-    }
-    if (selected.key === "responsibility_settlement") {
+    if (selected.state !== "future" && selected.key === "responsibility_settlement") {
       const panels = [
         canSeeOwnFactory ? <OwnFactoryApprovalPanel key="own-factory" reworkOrderId={detail.reworkOrderId} /> : null,
         canSeeExternal ? <ExternalResponsibilityPanel key="external" reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null,
       ].filter(Boolean);
-      return panels.length ? <div className="rework-detail-responsibility">{panels}</div> : <NodePermissionNotice node={selected} />;
+      if (panels.length) return <div className="rework-detail-responsibility">{panels}</div>;
+      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    return <NodePermissionNotice node={selected} />;
+    return renderNodePreview();
   };
 
   return (

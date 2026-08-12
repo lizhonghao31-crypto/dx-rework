@@ -63,13 +63,8 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
   useEffect(() => {
     mounted.current = true;
     void load(true);
-    const timer = window.setInterval(() => void load(), 15_000);
-    const focus = () => void load();
-    window.addEventListener("focus", focus);
     return () => {
       mounted.current = false;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", focus);
     };
   }, [load]);
 

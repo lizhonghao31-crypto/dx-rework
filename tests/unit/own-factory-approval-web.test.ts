@@ -49,10 +49,9 @@ describe("own-factory approval web integration", () => {
     ]);
     expect(queue).toContain('apiUrl("own-factory-approvals/queue")');
     expect(queue).toContain("item.reworkOrderId");
-    expect(queue).toContain("window.setInterval");
-    expect(queue).toContain("queueRefreshMilliseconds");
-    expect(queue).toContain('window.addEventListener("focus", refresh)');
-    expect(queue).toContain('window.removeEventListener("focus", refresh)');
+    expect(queue).not.toContain("window.setInterval");
+    expect(queue).not.toContain("queueRefreshMilliseconds");
+    expect(queue).not.toContain('window.addEventListener("focus"');
     expect(app).toContain('path === "/ui/own-factory-approvals"');
     expect(pages).toContain("<OwnFactoryApprovalPanel reworkOrderId={reworkOrderId} />");
   });

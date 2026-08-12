@@ -8,8 +8,6 @@ import { ReworkDetailPage, type WorkflowNodeKey } from "./rework-detail-page.js"
 import { WagePeriodDetailPage } from "./wages/wage-period-detail.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const refreshMilliseconds = 1_500;
-
 type TaskRouteName =
   | "process_configuration"
   | "whole_order_review"
@@ -104,14 +102,7 @@ export function ResponsibilityTaskPage() {
         setState({ kind: "error", message: error instanceof Error ? error.message : "任务加载失败" });
       }
     });
-    const interval = window.setInterval(() => void load().catch(() => undefined), refreshMilliseconds);
-    const refresh = () => void load().catch(() => undefined);
-    window.addEventListener("focus", refresh);
-    return () => {
-      controller.abort();
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refresh);
-    };
+    return () => controller.abort();
   }, [load]);
 
   if (state.kind === "loading") {

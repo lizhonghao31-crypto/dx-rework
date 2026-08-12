@@ -12,6 +12,9 @@ describe("rework detail permission UX", () => {
     expect(source).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId}");
     expect(source).toContain("<OwnFactoryApprovalPanel key=\"own-factory\"");
     expect(source).toContain("<ExternalResponsibilityPanel key=\"external\"");
+    expect(source).toContain('selected.state !== "future"');
+    expect(source).toContain('if (selected.state === "current") return <NodePermissionNotice');
+    expect(source).toContain("return renderNodePreview()");
     expect(source).not.toContain("const nextAction =");
   });
 });

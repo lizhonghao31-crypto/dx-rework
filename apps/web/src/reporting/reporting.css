@@ -11,3 +11,11 @@
 .reporting-order-grid{grid-template-columns:1fr;gap:8px}.reporting-order-card{display:grid;grid-template-columns:minmax(330px,1.9fr) repeat(5,minmax(82px,.7fr)) minmax(140px,.9fr);gap:12px;align-items:center;min-height:72px;padding:10px 14px}.reporting-order-card dl{display:contents;margin:0}.reporting-order-card dl>div{display:flex;flex-direction:column;min-width:0}.reporting-order-card dd{margin:1px 0 0;font-size:.86rem;line-height:1.25;overflow-wrap:anywhere}.reporting-order-card__heading{align-items:center}.reporting-order-card__heading .dx-badge{flex:0 0 auto;min-height:20px;padding:1px 7px;font-size:11px;line-height:18px;white-space:nowrap}.reporting-order-card__activity{font-size:.74rem;line-height:1.3;color:var(--color-text-muted,#62727d)}.reporting-filters{grid-template-columns:minmax(190px,1.5fr) repeat(3,minmax(130px,.7fr)) auto;gap:10px;margin-bottom:14px}.reporting-filters label{gap:5px}.reporting-filters select,.reporting-filters input{min-height:40px;border-radius:10px;padding:0 10px}.reporting-state{padding:20px}.reporting-table-wrap th,.reporting-table-wrap td{padding:9px 10px}
 @media(max-width:1320px){.reporting-order-card{grid-template-columns:minmax(290px,1.4fr) repeat(3,minmax(76px,.7fr));align-items:start}.reporting-order-card__activity{grid-column:1/-1}.reporting-order-card dl>div:nth-child(n+4){margin-top:4px}}
 @media(max-width:520px){.reporting-order-card{grid-template-columns:1fr 1fr;gap:10px;padding:12px}.reporting-order-card__heading,.reporting-order-card__activity{grid-column:1/-1}.reporting-order-card dl>div:nth-child(n+4){margin-top:0}}
+
+/* Keep the financial snapshot compact; overflowing totals scroll instead of wrapping. */
+.reporting-summary{gap:12px;margin-bottom:12px;padding:12px 14px;overflow:hidden}
+.reporting-summary>div:first-child{display:flex;flex:0 0 auto;align-items:baseline;gap:10px;white-space:nowrap}
+.reporting-summary>div:first-child h2,.reporting-summary>div:first-child p{margin:0}
+.reporting-summary>div:last-child{min-width:0;gap:7px;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}
+.reporting-summary>div:last-child>*{flex:0 0 auto;white-space:nowrap}
+@media(max-width:980px){.reporting-summary{align-items:flex-start;flex-direction:row}.reporting-summary>div:last-child{justify-content:flex-start}}

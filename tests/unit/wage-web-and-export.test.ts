@@ -25,8 +25,8 @@ describe("wage web and xlsx delivery", () => {
     ]);
     expect(app).toContain('path === "/ui/wages" || path.startsWith("/ui/wages/")');
     expect(app).toContain('{ requiredCapability: "wage:view" }');
-    expect(list).toContain("15_000");
-    expect(list).toContain('window.addEventListener("focus"');
+    expect(list).not.toContain("window.setInterval");
+    expect(list).not.toContain('window.addEventListener("focus"');
     expect(detail).toContain("administrative-approve");
     expect(detail).toContain("administrative-return");
     expect(detail).toContain("export.xlsx");

@@ -104,8 +104,8 @@ describe("PR-11 external responsibility contracts and mobile UI", () => {
 
     expect(queue).toContain('apiUrl("external-responsibilities/queue")');
     expect(queue).toContain("item.reworkOrderId");
-    expect(queue).toContain("window.setInterval");
-    expect(queue).toContain('window.addEventListener("focus", refresh)');
+    expect(queue).not.toContain("window.setInterval");
+    expect(queue).not.toContain('window.addEventListener("focus"');
     expect(app).toContain('path === "/ui/external-responsibilities"');
     expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain("@media (max-width: 480px)");
