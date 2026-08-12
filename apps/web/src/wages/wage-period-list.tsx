@@ -146,7 +146,6 @@ export function WagePeriodList() {
           <h1>工资管理</h1>
           <p>按工人、返工单、款号和期间交叉查询；金额直接读取服务端工资事实。</p>
         </div>
-        <StatusBadge tone="info">15 秒自动刷新月结状态</StatusBadge>
       </header>
 
       <Surface className="wage-query-card">
