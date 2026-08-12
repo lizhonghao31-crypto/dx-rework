@@ -16,7 +16,8 @@ export async function responsibilityReport(source: Queryable, query: ReportQuery
      FROM leaf JOIN rework_orders order_record USING(rework_order_id)
      JOIN rework_effective_responsibility_allocations allocation USING(determination_id)
      JOIN rework_responsibility_processes process USING(determination_id,configuration_item_id)
-     WHERE (leaf.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
+     WHERE order_record.status<>'deleted'
+       AND (leaf.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4 OR process.process_name_snapshot ILIKE $4)
        AND ($5::text IS NULL OR allocation.responsibility_type=$5)
      ORDER BY leaf.created_at DESC,order_record.rework_order_id,process.configuration_item_id,allocation.responsibility_type LIMIT $6`,
@@ -40,7 +41,8 @@ export async function ownFactoryReport(source: Queryable, query: ReportQuery, ra
      FROM leaf JOIN rework_own_factory_approvals approval ON approval.finalized_determination_id=leaf.determination_id
      JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
      LEFT JOIN rework_own_factory_approval_decisions decision USING(approval_id)
-     WHERE (approval.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
+     WHERE order_record.status<>'deleted'
+       AND (approval.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4)
        AND ($5::text IS NULL OR approval.status=$5)
      ORDER BY approval.created_at DESC,approval.approval_id LIMIT $6`,[range.from,range.to,TIMEZONE,query.q?`%${query.q}%`:null,query.status??null,limit]);
@@ -61,7 +63,7 @@ export async function externalReport(source: Queryable, query: ReportQuery, rang
      JOIN rework_external_responsibility_cases case_record USING(batch_id)
      JOIN rework_orders order_record ON order_record.rework_order_id=case_record.rework_order_id
      LEFT JOIN entries USING(case_id) LEFT JOIN rework_external_deduction_closures closure USING(case_id)
-     WHERE case_record.status<>'superseded' AND (case_record.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
+     WHERE order_record.status<>'deleted' AND case_record.status<>'superseded' AND (case_record.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
        AND ($4::text IS NULL OR order_record.rework_no ILIKE $4 OR order_record.style_no ILIKE $4 OR case_record.supplier_name_snapshot ILIKE $4)
        AND ($5::text IS NULL OR case_record.status=$5 OR closure.result=$5)
      ORDER BY case_record.created_at DESC,case_record.case_id LIMIT $6`,[range.from,range.to,TIMEZONE,query.q?`%${query.q}%`:null,query.status??null,limit]);
