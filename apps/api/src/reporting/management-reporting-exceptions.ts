@@ -65,8 +65,11 @@ export async function exceptions(
            WHERE newer.case_id=follow_up.case_id AND (newer.created_at,newer.follow_up_id)>(follow_up.created_at,follow_up.follow_up_id)
          )
      )
-     SELECT exception_type,entity_id,rework_order_id,label,occurred_at,deep_link
-     FROM exceptions WHERE ${where.join(" AND ")} ORDER BY occurred_at,entity_id LIMIT ${limitParameter}`,
+     SELECT exception_type,entity_id,exceptions.rework_order_id,label,occurred_at,deep_link
+     FROM exceptions
+     LEFT JOIN rework_orders order_record ON order_record.rework_order_id=exceptions.rework_order_id
+     WHERE (exceptions.rework_order_id IS NULL OR order_record.status<>'deleted')
+       AND ${where.join(" AND ")} ORDER BY occurred_at,entity_id LIMIT ${limitParameter}`,
     values,
   );
   return result.rows.map((row) => ({
@@ -78,4 +81,3 @@ export async function exceptions(
     deepLink: row.deep_link,
   }));
 }
-
