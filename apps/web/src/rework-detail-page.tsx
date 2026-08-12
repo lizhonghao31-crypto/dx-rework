@@ -421,7 +421,10 @@ export function ReworkDetailPage({
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const currentNode = stages.flatMap((stage) => stage.nodes).find((node) => node.state === "current")?.key;
   const selectedFromUrl = workflowNodeFromSearch();
-  const selectedNode = selectedFromUrl ?? (focusedNode === currentNode ? focusedNode : currentNode ?? "archive");
+  const defaultSelectedNode = detail.status === "pending_process_configuration"
+    ? "initiation"
+    : currentNode ?? "archive";
+  const selectedNode = selectedFromUrl ?? (focusedNode === currentNode ? focusedNode : defaultSelectedNode);
   const selected = stages.flatMap((stage) => stage.nodes).find((node) => node.key === selectedNode);
   const canSeeResponsibility = elevated(currentUser)
     || hasCapability(currentUser, "responsibility:determine")
