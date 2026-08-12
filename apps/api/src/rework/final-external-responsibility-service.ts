@@ -14,6 +14,7 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
+import type { TodoRouteTemplate } from "../todos/service.js";
 import { FixedExternalResponsibilityService } from "./fixed-external-responsibility-service.js";
 
 type Result<T> = { value: T; reused: boolean };
@@ -314,6 +315,14 @@ export class FinalExternalResponsibilityService
            set_config('dx_rework.rework_request_id',$2,true)`,
         [externalEventId, actor.requestId],
       );
+      const supersededCases = await client.query<{ case_id: string }>(
+        `SELECT case_id
+         FROM rework_external_responsibility_cases
+         WHERE batch_id=$1 AND status<>'closed'
+         ORDER BY case_id
+         FOR UPDATE`,
+        [targetCase.batch_id],
+      );
       await client.query(
         `UPDATE rework_external_responsibility_cases
          SET status='superseded',case_version=case_version+1
@@ -326,6 +335,22 @@ export class FinalExternalResponsibilityService
          WHERE batch_id=$1`,
         [targetCase.batch_id],
       );
+      for (const supersededCase of supersededCases.rows) {
+        for (const prefix of [
+          `external-signoff:${supersededCase.case_id}:`,
+          `external-payables:${supersededCase.case_id}:`,
+          `external-return:${supersededCase.case_id}:`,
+          `deduction-follow-up:${supersededCase.case_id}:`,
+          `deduction-overdue:${supersededCase.case_id}:`,
+        ]) {
+          await this.finalTodos?.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            prefix,
+            "External responsibility revision superseded the active case",
+          );
+        }
+      }
       await client.query(
         `UPDATE rework_orders
          SET status='pending_responsibility_determination',
@@ -350,6 +375,71 @@ export class FinalExternalResponsibilityService
          WHERE case_id=$1`,
         [targetCase.case_id, revision.source_case_status],
       );
+      const pausedTodos = await client.query<{
+        category: string;
+        recipient_user_id: string;
+        required_role: string;
+        required_capability: string;
+        delegation_id: string | null;
+        delegation_scope_id: string | null;
+        route_descriptor: TodoRouteTemplate;
+        policy_key: "general" | "finance_return_or_wage_review" | "deduction_follow_up";
+        due_at: Date | null;
+        dedupe_key: string;
+      }>(
+        `SELECT category,recipient_user_id,required_role,required_capability,
+                delegation_id,delegation_scope_id,route_descriptor,policy_key,
+                due_at,dedupe_key
+         FROM rework_todos
+         WHERE todo_type='business_action'
+           AND status='cancelled'
+           AND cancelled_reason=$1
+         ORDER BY todo_id`,
+        [`External responsibility revision ${requestId} paused the prior action`],
+      );
+      const routingManagers = await client.query<{ user_id: string }>(
+        `SELECT DISTINCT assignment.user_id
+         FROM user_role_assignments assignment
+         WHERE assignment.role_code='production_management'
+           AND assignment.revoked_at IS NULL
+           AND todo_user_has_direct_role(
+             assignment.user_id,'production_management','todo:routing_exception_manage'
+           )
+         ORDER BY assignment.user_id
+         LIMIT 2`,
+      );
+      const routingManager = routingManagers.rows.length === 1
+        ? routingManagers.rows[0]!.user_id
+        : null;
+      for (const paused of pausedTodos.rows) {
+        await this.finalTodos?.actionableForRecipient(client, actor, {
+          category: paused.category,
+          sourceEventId: externalEventId,
+          sourceAction: action,
+          entityType: "rework_order",
+          entityId: order.rework_order_id,
+          recipientUserId: paused.recipient_user_id,
+          requiredRole: paused.required_role,
+          requiredCapability: paused.required_capability,
+          ...(paused.delegation_id ? { delegationId: paused.delegation_id } : {}),
+          ...(paused.delegation_scope_id
+            ? { delegationScopeId: paused.delegation_scope_id }
+            : {}),
+          route: paused.route_descriptor,
+          policyKey: paused.policy_key,
+          ...(paused.policy_key === "deduction_follow_up" && paused.due_at
+            ? { authoritativeDueAt: paused.due_at }
+            : {}),
+          dedupeKey:
+            `${paused.dedupe_key}:revision-rejected:${requestId}:${revision.revision_version + 1}`,
+          ...(routingManager ? {
+            invalidRecipientRouting: {
+              reason: "recipient_no_longer_directly_eligible",
+              assignedToUserId: routingManager,
+            },
+          } : {}),
+        });
+      }
     }
 
     await client.query(

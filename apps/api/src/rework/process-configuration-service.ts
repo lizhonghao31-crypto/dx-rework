@@ -314,6 +314,27 @@ export class ProcessConfigurationService {
         "UPDATE rework_orders SET status='pending_ie_review',updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
         [reworkOrderId, actor.actorId, nextOrderVersion],
       );
+      await this.todos?.completeOpenByDedupePrefix(
+        client,
+        actor,
+        `process-config:${reworkOrderId}:`,
+        "Process configuration was submitted for IE review",
+      );
+      const returnedConfigurations = await client.query<{ configuration_id: string }>(
+        `SELECT configuration_id
+         FROM rework_process_configurations
+         WHERE rework_order_id=$1 AND status='rejected'
+         ORDER BY configuration_version`,
+        [reworkOrderId],
+      );
+      for (const returned of returnedConfigurations.rows) {
+        await this.todos?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `process-config-return:${returned.configuration_id}:`,
+          "Returned process configuration was corrected and resubmitted",
+        );
+      }
       await this.outbox.enqueue(client, {
         topic: "rework.process_configuration.pending_ie_review",
         aggregateType: "rework_order",

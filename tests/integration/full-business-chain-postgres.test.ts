@@ -5,6 +5,7 @@ import {
   CreateResponsibilityDraftSchema,
   CreateWorkReportSchema,
   CreateWorkTaskSchema,
+  RejectWorkReportSchema,
   ReviewProcessConfigurationSchema,
   ReviewWholeOrderSchema,
   SaveProcessConfigurationSchema,
@@ -55,9 +56,16 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
   });
 
   const access = new AccessMasterDataService(database, "corp");
-  const initiation = new ReworkInitiationService(database, "corp");
   const todoService = new TodoService(database);
   const todoProjection = new TodoProjectionService(todoService);
+  const initiation = new ReworkInitiationService(
+    database,
+    "corp",
+    undefined,
+    undefined,
+    undefined,
+    todoProjection,
+  );
   const configuration = new ProcessConfigurationService(
     database,
     undefined,
@@ -72,12 +80,15 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     undefined,
     new LegacyIeReviewTodoProjectionService(todoService),
   );
-  const work = new WorkReportingService(database);
-  const wholeOrder = new BusinessAwareWholeOrderReviewService(database);
-  const responsibility = new ResponsibilityDeterminationApplicationService(database);
-  const ownFactory = new OwnFactoryApprovalApplicationService(database);
-  const external = new ExternalResponsibilityApplicationService(database);
-  const wages = new WageService(database);
+  const work = new WorkReportingService(database, undefined, undefined, todoProjection);
+  const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
+  const responsibility = new ResponsibilityDeterminationApplicationService(
+    database,
+    todoProjection,
+  );
+  const ownFactory = new OwnFactoryApprovalApplicationService(database, todoProjection);
+  const external = new ExternalResponsibilityApplicationService(database, todoProjection);
+  const wages = new WageService(database, undefined, undefined, todoProjection);
 
   const ids = {
     ownerOne: randomUUID(),
@@ -419,6 +430,12 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       randomUUID(),
     );
     expect(n02Queued.value.reworkStatus).toBe("pending_ie_review");
+    await expect(database.query(
+      `SELECT count(*)::int open_count
+       FROM rework_todos
+       WHERE dedupe_key LIKE $1 AND status IN ('pending','blocked_recipient')`,
+      [`process-config:${submitted.value.reworkOrderId}:%`],
+    )).resolves.toMatchObject({ rows: [{ open_count: 0 }] });
 
     // N03 - deliberately reject once, return to N02, then resubmit and approve.
     const rejected = await legacyConfiguration.review(
@@ -479,6 +496,14 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       }),
       randomUUID(),
     );
+    await expect(database.query(
+      `SELECT count(*)::int open_count
+       FROM rework_todos
+       WHERE category='process_configuration_return'
+         AND entity_id=$1
+         AND status IN ('pending','blocked_recipient')`,
+      [submitted.value.reworkOrderId],
+    )).resolves.toMatchObject({ rows: [{ open_count: 0 }] });
     const approved = await configuration.review(
       ie(),
       submitted.value.reworkOrderId,
@@ -579,6 +604,40 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       remainingQuantity: 0,
     });
 
+    const returnedReport = await wholeOrder.rejectReport(
+      tailAudit(),
+      firstReport.value.workReportId,
+      RejectWorkReportSchema.parse({
+        expectedOrderVersion: workView.orderVersion,
+        rejectedPersonId: workerPersonId,
+        reason: "全链测试：退回后重新上数",
+      }),
+      randomUUID(),
+    );
+    expect(returnedReport.value.reworkStatus).toBe("in_progress");
+    await expect(database.query(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [`work-report-return:${firstReport.value.workReportId}`],
+    )).resolves.toMatchObject({ rows: [{ status: "pending" }] });
+    const correctedReport = await work.submitReport(
+      worker(),
+      task.value.workTaskId,
+      CreateWorkReportSchema.parse({
+        expectedOrderVersion: returnedReport.value.orderVersion,
+        actualQuantity: 120,
+        completedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+        resubmitsWorkReportId: firstReport.value.workReportId,
+      }),
+      randomUUID(),
+    );
+    expect(correctedReport.value.actualQuantity).toBe(120);
+    await expect(database.query(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [`work-report-return:${firstReport.value.workReportId}`],
+    )).resolves.toMatchObject({ rows: [{ status: "completed" }] });
+    workView = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    expect(workView.reworkStatus).toBe("pending_order_review");
+
     // N06 - the whole-order snapshot must reconcile to N02's plan exactly.
     const n06View = await wholeOrder.get(
       tailAudit(),
@@ -592,7 +651,7 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
         complete: true,
       }),
     ]);
-    expect(n06View.reports).toHaveLength(2);
+    expect(n06View.reports).toHaveLength(3);
     const n06Approved = await wholeOrder.approve(
       tailAudit(),
       submitted.value.reworkOrderId,
@@ -863,7 +922,12 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     }>(
       `SELECT
          (SELECT sum(group_amount)::numeric(18,2)::text
-          FROM rework_work_reports WHERE rework_order_id=$1) report_total,
+          FROM rework_work_reports report
+          WHERE rework_order_id=$1
+            AND NOT EXISTS (
+              SELECT 1 FROM rework_work_report_rejections rejection
+              WHERE rejection.work_report_id=report.work_report_id
+            )) report_total,
          (SELECT calculation_total::numeric(18,2)::text
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
@@ -884,5 +948,15 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       external_total: "82.50",
       wage_total: "110.00",
     });
+    const openBusinessTodos = await database.query<{ category: string }>(
+      `SELECT category
+       FROM rework_todos
+       WHERE todo_type='business_action'
+         AND status IN ('pending','blocked_recipient')
+       ORDER BY category,todo_id`,
+    );
+    expect(openBusinessTodos.rows).toEqual([
+      { category: "wage_month_close" },
+    ]);
   });
 });

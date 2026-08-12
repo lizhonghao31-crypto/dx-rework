@@ -173,7 +173,7 @@ export class ExternalResponsibilityService {
       "SELECT batch_id FROM rework_external_responsibility_batches WHERE finalized_determination_id=$1", [determinationId],
     );
     if (existing.rows[0]) return existing.rows[0].batch_id;
-    await this.supersedeReplacedBatches(client, order.rework_order_id, determinationId);
+    await this.supersedeReplacedBatches(client, actor, order.rework_order_id, determinationId);
     const external = await client.query<{ configuration_item_id: string; responsibility_type: ResponsibilityType; process_snapshot: Record<string, unknown>; multiplier: string; share_bps: number; proposed_amount: string; amount_line_snapshot: Record<string, unknown> }>(
       `SELECT allocation.configuration_item_id,allocation.responsibility_type,
               jsonb_build_object('configurationItemId',process.configuration_item_id,'processName',process.process_name_snapshot,'pricingUnit',process.pricing_unit_snapshot,'baseAmount',process.base_amount::text,'responsibilityAmount',process.responsibility_amount::text) process_snapshot,
@@ -346,7 +346,12 @@ export class ExternalResponsibilityService {
   }
 
   /** A successor responsibility leaf makes every directly replaced N08-B batch historical. */
-  private async supersedeReplacedBatches(client: PoolClient, orderId: string, successorDeterminationId: string): Promise<void> {
+  private async supersedeReplacedBatches(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    orderId: string,
+    successorDeterminationId: string,
+  ): Promise<void> {
     const stale = await client.query<{ batch_id: string }>(
       `SELECT batch.batch_id
        FROM rework_external_responsibility_batches batch
@@ -358,6 +363,30 @@ export class ExternalResponsibilityService {
       [orderId, successorDeterminationId],
     );
     for (const batch of stale.rows) {
+      const cases = await client.query<{ case_id: string }>(
+        `SELECT case_id
+         FROM rework_external_responsibility_cases
+         WHERE batch_id=$1 AND status NOT IN ('closed','superseded')
+         ORDER BY case_id
+         FOR UPDATE`,
+        [batch.batch_id],
+      );
+      for (const targetCase of cases.rows) {
+        for (const prefix of [
+          `external-signoff:${targetCase.case_id}:`,
+          `external-payables:${targetCase.case_id}:`,
+          `external-return:${targetCase.case_id}:`,
+          `deduction-follow-up:${targetCase.case_id}:`,
+          `deduction-overdue:${targetCase.case_id}:`,
+        ]) {
+          await this.todos?.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            prefix,
+            "A successor responsibility determination superseded the external case",
+          );
+        }
+      }
       await client.query(
         `UPDATE rework_external_responsibility_cases
          SET status='superseded',case_version=case_version+1
@@ -518,7 +547,7 @@ export class ExternalResponsibilityService {
       await client.query(`INSERT INTO rework_external_business_signoffs(signoff_id,case_id,action,submitted_by,actor_role_snapshot,remark,attachment_ids,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),caseId,current.status==="returned"?"resubmitted":"submitted",actor.actorId,this.roles(actor),input.remark??null,input.attachmentIds,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='pending_payables_confirmation',case_version=case_version+1,submitted_at=CURRENT_TIMESTAMP WHERE case_id=$1",[caseId]);
       await this.outbox.enqueue(client,{topic:"rework.external_responsibility.pending_payables",aggregateType:"external_responsibility_case",aggregateId:caseId,recipientKey:payablesRole(current.responsibility_type),idempotencyKey:`external-case:pending-payables:${caseId}:${current.case_version+1}`,payload:{caseId,reworkOrderId:order.rework_order_id,delivery:"intent_only"}});
-      await this.todos?.completeOpenByDedupeKey(client,actor,`external-signoff:${caseId}:${current.case_version}`,"External business signoff was submitted");
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`external-signoff:${caseId}:`,"External business signoff was submitted");
       if(current.status==="returned") {
         await this.todos?.completeOpenByDedupePrefix(client,actor,`external-return:${caseId}:`,"Returned external responsibility was resubmitted");
       }
@@ -565,6 +594,7 @@ export class ExternalResponsibilityService {
         const acceptEventId=await this.event(client,actor,"rework.external_responsibility.payables_accept","external_responsibility:payables_confirm",order);
         await client.query(`INSERT INTO rework_external_payables_actions(payables_action_id,case_id,action,acted_by,actor_role_snapshot,reason,attachment_ids,operation_event_id,request_id) VALUES($1,$2,'accepted',$3,$4,NULL,'{}',$5,$6)`,[randomUUID(),caseId,actor.actorId,this.roles(actor),acceptEventId,actor.requestId]);
         await client.query("UPDATE rework_external_responsibility_cases SET status='deduction_follow_up',case_version=case_version+1,payables_confirmed_at=CURRENT_TIMESTAMP WHERE case_id=$1",[caseId]);
+        await this.todos?.completeOpenByDedupePrefix(client,actor,`external-payables:${caseId}:`,"Payables confirmation was completed by recording the actual deduction");
         await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-follow-up:${caseId}:`,"Payables started recording the actual deduction");
         await maybeCompleteResponsibilityAction(client,actor,order);
         current={...current,status:"deduction_follow_up",case_version:current.case_version+1,payables_confirmed_at:new Date()};
@@ -610,8 +640,23 @@ export class ExternalResponsibilityService {
       if(current.status==="closed") { const closure=await client.query<{result:"full"|"partial"|"not_deducted";remaining_amount:string}>("SELECT result,remaining_amount::text FROM rework_external_deduction_closures WHERE case_id=$1",[caseId]); const closed=closure.rows[0]; if(!closed || closed.result==="full" || toCents(closed.remaining_amount)<=0n) fail("仅存在未扣差额的已关闭台账可以申请责任变更",409,"INVALID_STATE_TRANSITION"); }
       const finalized=await client.query<{finalized_determination_id:string;finalized_determination_version:number}>("SELECT finalized_determination_id,finalized_determination_version FROM rework_external_responsibility_batches WHERE batch_id=$1",[current.batch_id]); const source=finalized.rows[0]??fail("外部责任批次不存在");
       const eventId=await this.event(client,actor,"rework.external_responsibility.revision.request","external_responsibility:request_revision",order); await this.bindAttachments(client,actor,caseId,input.attachmentIds);
-      await client.query(`INSERT INTO rework_external_responsibility_revision_requests(revision_request_id,case_id,source_case_status,finalized_determination_id,finalized_determination_version,requested_change,reason,attachment_ids,requested_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[randomUUID(),caseId,current.status,source.finalized_determination_id,source.finalized_determination_version,input.requestedChange,input.reason,input.attachmentIds,actor.actorId,eventId,actor.requestId]);
+      const revisionRequestId=randomUUID();
+      await client.query(`INSERT INTO rework_external_responsibility_revision_requests(revision_request_id,case_id,source_case_status,finalized_determination_id,finalized_determination_version,requested_change,reason,attachment_ids,requested_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[revisionRequestId,caseId,current.status,source.finalized_determination_id,source.finalized_determination_version,input.requestedChange,input.reason,input.attachmentIds,actor.actorId,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='pending_responsibility_revision',case_version=case_version+1 WHERE case_id=$1",[caseId]);
+      for (const prefix of [
+        `external-signoff:${caseId}:`,
+        `external-payables:${caseId}:`,
+        `external-return:${caseId}:`,
+        `deduction-follow-up:${caseId}:`,
+        `deduction-overdue:${caseId}:`,
+      ]) {
+        await this.todos?.cancelOpenByDedupePrefix(
+          client,
+          actor,
+          prefix,
+          `External responsibility revision ${revisionRequestId} paused the prior action`,
+        );
+      }
       return this.getCase(actor,caseId,client);
     });
   }
@@ -635,8 +680,9 @@ export class ExternalResponsibilityService {
       const eventAction=decision==="accepted"?"rework.external_responsibility.payables_accept":"rework.external_responsibility.payables_return"; const eventId=await this.event(client,actor,eventAction,"external_responsibility:payables_confirm",order); await this.bindAttachments(client,actor,caseId,attachmentIds);
       await client.query(`INSERT INTO rework_external_payables_actions(payables_action_id,case_id,action,acted_by,actor_role_snapshot,reason,attachment_ids,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),caseId,decision,actor.actorId,this.roles(actor),reason,attachmentIds,eventId,actor.requestId]);
       const next=decision==="accepted"?"deduction_follow_up":"returned"; await client.query("UPDATE rework_external_responsibility_cases SET status=$2,case_version=case_version+1,payables_confirmed_at=CASE WHEN $2='deduction_follow_up' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE case_id=$1",[caseId,next]);
-      await this.todos?.completeOpenByDedupeKey(client,actor,`external-payables:${caseId}:${current.case_version}`,decision==="accepted"?"External payables confirmation accepted":"External payables confirmation returned");
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`external-payables:${caseId}:`,decision==="accepted"?"External payables confirmation accepted":"External payables confirmation returned");
       if(decision==="accepted") {
+        await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-follow-up:${caseId}:`,"Payables confirmation was accepted");
         await maybeCompleteResponsibilityAction(client,actor,order);
         await this.outbox.enqueue(client,{topic:"rework.external_responsibility.deduction_follow_up",aggregateType:"external_responsibility_case",aggregateId:caseId,recipientKey:actor.actorId,idempotencyKey:`external-case:follow-up:${caseId}`,payload:{caseId,reworkOrderId:order.rework_order_id,delivery:"intent_only"}});
         await this.todos?.actionableForUniqueRoleOrOrderDelegate(client,actor,{
@@ -653,6 +699,7 @@ export class ExternalResponsibilityService {
           dedupeKey:`external-payables-accepted:${caseId}:${current.case_version+1}:${current.business_handler_user_id}`,
         });
       } else {
+        await this.todos?.cancelOpenByDedupePrefix(client,actor,`deduction-follow-up:${caseId}:`,"Payables returned the external responsibility case");
         const sourceSignoff=await client.query<{operation_event_id:string}>("SELECT operation_event_id FROM rework_external_business_signoffs WHERE case_id=$1 ORDER BY created_at DESC,signoff_id DESC LIMIT 1 FOR KEY SHARE",[caseId]);
         const sourceSignoffEventId=sourceSignoff.rows[0]?.operation_event_id??fail("外部业务签收原始事件不存在，不能创建可追溯的退回待办",409,"CONFLICT");
         await this.todos?.actionableForNamedSourceActor(client,actor,{

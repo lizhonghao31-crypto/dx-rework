@@ -434,6 +434,12 @@ export class ReworkInitiationService {
          WHERE rework_order_id=$1`,
         [reworkOrderId, actor.actorId, nextVersion],
       );
+      await this.todos?.cancelOpenByDedupePrefix(
+        client,
+        actor,
+        `process-config:${reworkOrderId}:`,
+        "The rework order was withdrawn before process configuration started",
+      );
       await this.outbox.enqueue(client, {
         topic: "rework.withdrawn",
         aggregateType: "rework_order",
@@ -485,6 +491,12 @@ export class ReworkInitiationService {
              cancel_reason=$3,updated_by=$2,version=$4,updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [reworkOrderId, actor.actorId, input.reason, nextVersion],
+      );
+      await this.todos?.cancelOpenByDedupePrefix(
+        client,
+        actor,
+        `process-config:${reworkOrderId}:`,
+        "The rework order was cancelled before process configuration started",
       );
       await this.outbox.enqueue(client, {
         topic: "rework.cancelled",

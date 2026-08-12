@@ -278,6 +278,14 @@ export class WorkReportingService {
         "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
         [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, completedAt, input.remark ?? null, groupAmount, actor.actorId, input.resubmitsWorkReportId ?? null],
       );
+      if (input.resubmitsWorkReportId) {
+        await this.todos?.completeOpenByDedupeKey(
+          client,
+          reportingActor,
+          `work-report-return:${input.resubmitsWorkReportId}`,
+          "Returned work report was corrected and resubmitted",
+        );
+      }
       for (const [index, member] of members.entries()) await client.query("INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)", [reportId, member.person_id, shares[index]]);
       if (completedOrder) await client.query(
         "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
