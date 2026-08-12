@@ -130,6 +130,100 @@ describe("DingTalk todo provider boundary", () => {
     });
   });
 
+  it("treats DingTalk's requestId-only source lookup as missing and creates the todo", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const http: typeof fetch = async (input, init = {}) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
+        return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.endsWith("/tasks/sources/todo-source-13")) {
+        return json({ requestId: "lookup-empty" });
+      }
+      if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
+        return json({ id: "task-created", requestId: "request-create" });
+      }
+      throw new Error(`unexpected request ${url}`);
+    };
+    const provider = new OfficialDingTalkTodoProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      agentId: "123456",
+      nodeEnv: "production",
+    }, http, () => 1_000);
+
+    await expect(provider.createTodo(createInput)).resolves.toMatchObject({
+      providerTodoId: "task-created",
+      providerMessageId: "request-create",
+      state: "created",
+    });
+    expect(calls.filter((call) =>
+      new URL(call.url).pathname.endsWith("/tasks") && call.init.method === "POST"
+    )).toHaveLength(1);
+  });
+
+  it("reconciles a requestId-only create response by the stable sourceId", async () => {
+    let lookupCount = 0;
+    const http: typeof fetch = async (input, init = {}) => {
+      const url = String(input);
+      if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
+        return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.endsWith("/tasks/sources/todo-source-13")) {
+        lookupCount += 1;
+        return lookupCount === 1
+          ? json({ requestId: "lookup-empty" })
+          : json({ id: "task-reconciled", requestId: "lookup-created" });
+      }
+      if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
+        return json({ requestId: "request-create" });
+      }
+      throw new Error(`unexpected request ${url}`);
+    };
+    const provider = new OfficialDingTalkTodoProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      agentId: "123456",
+      nodeEnv: "production",
+    }, http, () => 1_000);
+
+    await expect(provider.createTodo(createInput)).resolves.toMatchObject({
+      providerTodoId: "task-reconciled",
+      providerMessageId: "lookup-created",
+      state: "created",
+      reconciled: true,
+    });
+  });
+
+  it("keeps an unconfirmed requestId-only create response retryable", async () => {
+    const http: typeof fetch = async (input, init = {}) => {
+      const url = String(input);
+      if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
+        return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.endsWith("/tasks/sources/todo-source-13")) {
+        return json({ requestId: "lookup-empty" });
+      }
+      if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
+        return json({ requestId: "request-create" });
+      }
+      throw new Error(`unexpected request ${url}`);
+    };
+    const provider = new OfficialDingTalkTodoProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      agentId: "123456",
+      nodeEnv: "production",
+    }, http, () => 1_000);
+
+    await expect(provider.createTodo(createInput)).rejects.toMatchObject({
+      code: "DINGTALK_TODO_CREATE_UNCONFIRMED",
+      retryable: true,
+      unknownResponse: true,
+    });
+  });
+
   it("reconciles an existing native todo without sending a duplicate work notification", async () => {
     const http: typeof fetch = async (input) => {
       const url = String(input);

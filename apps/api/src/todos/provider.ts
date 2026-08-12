@@ -236,7 +236,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
     this.assertEnabled();
     const sourceId = dingTalkTodoSourceId(input.sourceKey);
     let task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
-    const reconciled = task !== null;
+    let reconciled = task !== null;
     if (!task) {
       const body = {
         subject: input.category,
@@ -254,14 +254,29 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         },
       };
       try {
-        task = await this.request(
+        const created = await this.request(
           `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks?operatorId=${encodeURIComponent(input.recipientUnionId)}`,
           { method: "POST", body: JSON.stringify(body) },
           "create",
         );
+        if (this.optionalTaskId(created)) {
+          task = created;
+        } else {
+          task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
+          reconciled = task !== null;
+          if (!task) {
+            throw new DingTalkTodoDeliveryError(
+              "DINGTALK_TODO_CREATE_UNCONFIRMED",
+              "DingTalk accepted the todo create request but did not return or expose a task ID yet",
+              true,
+              true,
+            );
+          }
+        }
       } catch (error: unknown) {
         if (error instanceof DingTalkTodoDeliveryError && error.unknownResponse) {
           task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
+          reconciled = task !== null;
         }
         if (!task) throw error;
       }
@@ -358,10 +373,17 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
     missingIsNull: boolean,
   ): Promise<JsonRecord | null> {
     try {
-      return await this.request(
+      const task = await this.request(
         `/v1.0/todo/users/${encodeURIComponent(unionId)}/tasks/sources/${encodeURIComponent(sourceKey)}`,
         { method: "GET" },
         "lookup",
+      );
+      if (this.optionalTaskId(task)) return task;
+      if (missingIsNull) return null;
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_TODO_NOT_FOUND",
+        "DingTalk todo task was not found",
+        false,
       );
     } catch (error: unknown) {
       if (
@@ -535,6 +557,18 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   }
 
   private taskId(value: JsonRecord | null): string {
+    const taskId = this.optionalTaskId(value);
+    if (!taskId) {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_TODO_INVALID_RESPONSE",
+        "DingTalk todo response did not include a task ID",
+        false,
+      );
+    }
+    return taskId;
+  }
+
+  private optionalTaskId(value: JsonRecord | null): string | null {
     const nested = value && typeof value.result === "object" && value.result !== null
       && !Array.isArray(value.result)
       ? value.result as JsonRecord
@@ -548,14 +582,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
           : nested && typeof nested.taskId === "string"
             ? nested.taskId
             : "";
-    if (!taskId) {
-      throw new DingTalkTodoDeliveryError(
-        "DINGTALK_TODO_INVALID_RESPONSE",
-        "DingTalk todo response did not include a task ID",
-        false,
-      );
-    }
-    return taskId;
+    return taskId || null;
   }
 
   private requestId(value: JsonRecord): string {

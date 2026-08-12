@@ -73,7 +73,7 @@ describe("PR-01A UI prototype contract", () => {
   });
   it("retains accessible status, meter, audit and touch contracts", () => {
     expect(ui).toContain('aria-hidden="true" className={`dx-meter');
-    expect(pages).toContain("张文豪无本厂承担最终审批权");
+    expect(pages).toContain("操作权限与审批人始终按 root 的最新有效授权确定");
     expect(components).toContain("min-height: 44px");
     expect(pages).not.toContain('href="#"');
   });
