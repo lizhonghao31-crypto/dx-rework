@@ -27,6 +27,8 @@ import { ResponsibilityDeterminationApplicationService } from "../../apps/api/sr
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
+import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
 
 const { Pool } = pg;
@@ -34,6 +36,15 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
+
+class LegacyIeReviewTodoProjectionService extends TodoProjectionService {
+  override async completeOpenByDedupeKey(
+    ..._args: Parameters<TodoProjectionService["completeOpenByDedupeKey"]>
+  ): Promise<boolean> {
+    void _args;
+    return false;
+  }
+}
 
 runWithPostgres("current-schema N01-N10 business chain", () => {
   const schema = `full_chain_${randomUUID().replaceAll("-", "")}`;
@@ -45,7 +56,22 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
 
   const access = new AccessMasterDataService(database, "corp");
   const initiation = new ReworkInitiationService(database, "corp");
-  const configuration = new ProcessConfigurationService(database);
+  const todoService = new TodoService(database);
+  const todoProjection = new TodoProjectionService(todoService);
+  const configuration = new ProcessConfigurationService(
+    database,
+    undefined,
+    undefined,
+    undefined,
+    todoProjection,
+  );
+  const legacyConfiguration = new ProcessConfigurationService(
+    database,
+    undefined,
+    undefined,
+    undefined,
+    new LegacyIeReviewTodoProjectionService(todoService),
+  );
   const work = new WorkReportingService(database);
   const wholeOrder = new BusinessAwareWholeOrderReviewService(database);
   const responsibility = new ResponsibilityDeterminationApplicationService(database);
@@ -395,7 +421,7 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     expect(n02Queued.value.reworkStatus).toBe("pending_ie_review");
 
     // N03 - deliberately reject once, return to N02, then resubmit and approve.
-    const rejected = await configuration.review(
+    const rejected = await legacyConfiguration.review(
       ie(),
       submitted.value.reworkOrderId,
       ReviewProcessConfigurationSchema.parse({
@@ -408,6 +434,26 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       randomUUID(),
     );
     expect(rejected.value.reworkStatus).toBe("pending_process_configuration");
+    const firstIeDedupeKey = `ie-review:${submitted.value.reworkOrderId}:${n02Queued.value.configuration!.configurationVersion}`;
+    await expect(database.query(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [firstIeDedupeKey],
+    )).resolves.toMatchObject({ rows: [{ status: "pending" }] });
+    await database.query(await readFile(
+      new URL("../../apps/api/migrations/0052_ie_review_todo_completion_repair.sql", import.meta.url),
+      "utf8",
+    ));
+    await expect(database.query(
+      `SELECT todo.status,event.action,event.actor_id
+       FROM rework_todos todo
+       JOIN operation_events event ON event.event_id=todo.completed_operation_event_id
+       WHERE todo.dedupe_key=$1`,
+      [firstIeDedupeKey],
+    )).resolves.toMatchObject({ rows: [{
+      status: "completed",
+      action: "todo.complete",
+      actor_id: ids.ie,
+    }] });
     const n02Resaved = await configuration.saveDraft(
       tailConfigure(),
       submitted.value.reworkOrderId,
@@ -445,6 +491,17 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       randomUUID(),
     );
     expect(approved.value.reworkStatus).toBe("pending_task_assignment");
+    await expect(database.query(
+      `SELECT todo.status,event.action,event.actor_id
+       FROM rework_todos todo
+       JOIN operation_events event ON event.event_id=todo.completed_operation_event_id
+       WHERE todo.dedupe_key=$1`,
+      [`ie-review:${submitted.value.reworkOrderId}:${n02Requeued.value.configuration!.configurationVersion}`],
+    )).resolves.toMatchObject({ rows: [{
+      status: "completed",
+      action: "todo.complete",
+      actor_id: ids.ie,
+    }] });
     const approvedItem = approved.value.configuration!.items[0]!;
     expect(approvedItem).toMatchObject({
       processId: publicProcessId,

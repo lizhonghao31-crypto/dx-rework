@@ -74,7 +74,7 @@ describe("DingTalk todo provider boundary", () => {
       if (url.endsWith("/tasks/task-1") && init.method === "PUT") {
         return json({ requestId: "request-update" });
       }
-      if (url.endsWith("/tasks/task-1/executorStatus") && init.method === "PUT") {
+      if (new URL(url).pathname.endsWith("/tasks/task-1/executorStatus") && init.method === "PUT") {
         return json({ result: true, requestId: "request-complete" });
       }
       throw new Error(`unexpected request ${url}`);
@@ -123,10 +123,12 @@ describe("DingTalk todo provider boundary", () => {
     expect(calls.some((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
     )).toBe(false);
-    const completion = calls.find((call) => call.url.endsWith("/executorStatus"));
+    const completion = calls.find((call) =>
+      new URL(call.url).pathname.endsWith("/executorStatus")
+    );
+    expect(new URL(completion!.url).searchParams.get("operatorId")).toBe("union-14");
     expect(JSON.parse(String(completion?.init.body))).toEqual({
       executorStatusList: [{ id: "union-14", isDone: true }],
-      operatorId: "union-14",
     });
   });
 

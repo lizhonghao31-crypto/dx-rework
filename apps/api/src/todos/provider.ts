@@ -294,12 +294,11 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
     const providerTodoId = input.providerTodoId
       ?? await this.resolveTaskId(input.recipientUnionId, input.sourceKey);
     const result = await this.request(
-      `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks/${encodeURIComponent(providerTodoId)}/executorStatus`,
+      `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks/${encodeURIComponent(providerTodoId)}/executorStatus?operatorId=${encodeURIComponent(input.recipientUnionId)}`,
       {
         method: "PUT",
         body: JSON.stringify({
           executorStatusList: [{ id: input.recipientUnionId, isDone: true }],
-          operatorId: input.recipientUnionId,
         }),
       },
       "complete",

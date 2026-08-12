@@ -203,6 +203,10 @@
     {
       "version": "0051_owner_self_confirmation_root_todo",
       "checksum": "fabcf86eadf4e828943d62fd693b8c89f0de44f61ec1441f5f31546e9748bcfa"
+    },
+    {
+      "version": "0052_ie_review_todo_completion_repair",
+      "checksum": "6396f8ccc88719dabb7e1cea9c8d9ea5d39f9115582a479ff018f1a0e118ae52"
     }
   ]
 }
