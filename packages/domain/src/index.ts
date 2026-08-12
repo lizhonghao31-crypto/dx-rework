@@ -115,7 +115,8 @@ export type ReworkOrderStatus =
   | "pending_responsibility_determination"
   | "pending_responsibility_action"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "deleted";
 
 export const transitionReworkOrder = (
   from: ReworkOrderStatus,
@@ -133,6 +134,7 @@ export const transitionReworkOrder = (
     pending_responsibility_action: ["pending_responsibility_determination", "completed"],
     completed: ["pending_responsibility_determination"],
     cancelled: [],
+    deleted: [],
   }, from, to);
 
 export function sanitizeOperationalError(error: unknown): string {
