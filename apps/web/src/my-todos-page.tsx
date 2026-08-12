@@ -23,6 +23,11 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   wage_period_detail: "核对返工工资",
 };
 
+const taskTitle = (todo: TodoResponse): string =>
+  todo.category === "external_supplier_selection"
+    ? "选择实际拟扣供应商"
+    : taskLabel[todo.route.routeName];
+
 const todoHref = (todo: TodoResponse): string => {
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
@@ -153,7 +158,7 @@ export function MyTodosPage() {
                     <b className="my-todo-index">{String(index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <StatusBadge tone="danger">需要转交</StatusBadge>
-                      <h2>{taskLabel[todo.route.routeName]}</h2>
+                      <h2>{taskTitle(todo)}</h2>
                       <p>{todo.blockedReason ?? "当前任务需要由管理人员转交。"}</p>
                     </div>
                   </div>
@@ -162,7 +167,7 @@ export function MyTodosPage() {
                     <b className="my-todo-index">{String(index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
-                        <h2>{taskLabel[todo.route.routeName]}</h2>
+                        <h2>{taskTitle(todo)}</h2>
                         <StatusBadge tone="warning">待处理</StatusBadge>
                       </div>
                       <p>{orderSummary}</p>

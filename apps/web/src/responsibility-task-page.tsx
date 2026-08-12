@@ -55,6 +55,12 @@ const isActionTodo = (todo: TodoResponse): todo is ActionTodo => [
   "wage_period_detail",
 ].includes(todo.route.routeName);
 
+const focusedExternalCaseId = (todo: ActionTodo): string | undefined =>
+  todo.route.routeName === "external_responsibility_detail"
+  && todo.category !== "external_supplier_selection"
+    ? todo.route.entityId
+    : undefined;
+
 export function ResponsibilityTaskPage() {
   const todoId = todoIdFromLocation();
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -123,10 +129,11 @@ export function ResponsibilityTaskPage() {
     if (state.todo.route.routeName !== "wage_period_detail") {
       const route = state.todo.route;
       const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
+      const externalCaseId = focusedExternalCaseId(state.todo);
       return <ReworkDetailPage
         reworkOrderId={route.reworkOrderId ?? route.entityId}
         focusedNode={node}
-        {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
+        {...(externalCaseId ? { focusedExternalCaseId: externalCaseId } : {})}
         returnToTodos
       />;
     }
@@ -147,10 +154,11 @@ export function ResponsibilityTaskPage() {
   const orderId = route.reworkOrderId ?? route.entityId;
   if (route.routeName !== "wage_period_detail") {
     const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
+    const externalCaseId = focusedExternalCaseId(todo);
     return <ReworkDetailPage
       reworkOrderId={orderId}
       focusedNode={node}
-      {...(route.routeName === "external_responsibility_detail" ? { focusedExternalCaseId: route.entityId } : {})}
+      {...(externalCaseId ? { focusedExternalCaseId: externalCaseId } : {})}
       returnToTodos
     />;
   }
