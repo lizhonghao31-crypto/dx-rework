@@ -9,6 +9,7 @@ import {
   type ReportType,
   type SiteDashboardResponse,
 } from "@dx-rework/contracts/reporting";
+import { DeleteReworkOrderResponseSchema } from "@dx-rework/contracts";
 
 import { createWebUrls } from "../../url-contract.js";
 import { shanghaiBusinessDate } from "../business-date.js";
@@ -54,6 +55,22 @@ export const loadReworkOrders = (
   ManagementReworkPageSchema,
   signal,
 );
+
+export const deleteReworkOrder = async (reworkOrderId: string): Promise<void> => {
+  const response = await fetch(apiUrl(`rework-orders/${reworkOrderId}`), {
+    method: "DELETE",
+    credentials: "include",
+    headers: {
+      accept: "application/json",
+      "idempotency-key": `root-delete-${crypto.randomUUID()}`,
+    },
+  });
+  if (!response.ok) {
+    const value = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(value?.error?.message ?? `删除失败（${response.status}）`);
+  }
+  DeleteReworkOrderResponseSchema.parse(await response.json());
+};
 
 export const loadReport = (
   reportType: ReportType,
