@@ -215,11 +215,6 @@ const canUseWorkWorkspace = (user: AuthorizedUser | null): boolean => elevated(u
   || hasCapability(user, "work:report_for_worker")
   || (hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm"))
   || (hasRole(user, "ie_reviewer") && hasCapability(user, "process:review"));
-const canUseOrderIndex = (user: AuthorizedUser | null): boolean => elevated(user)
-  || hasCapability(user, "dashboard:management:read")
-  || hasCapability(user, "dashboard:site:read")
-  || hasCapability(user, "report:view");
-
 const workflowState = (status: ReworkStatus, key: WorkflowNodeKey): WorkflowNodeState => {
   if (status === "cancelled") return "future";
   // `completed` is the terminal business fact: all numbered nodes, including
@@ -402,10 +397,9 @@ export function ReworkDetailPage({
     };
   }, [load, reworkOrderId]);
 
-  const canReturnToOrders = canUseOrderIndex(currentUser);
   const backAction = returnToTodos
     ? { action: "返回我的待办", actionHref: "/ui/my-tasks" }
-    : canReturnToOrders ? { action: "返回全部订单", actionHref: "/ui/tasks" } : {};
+    : {};
 
   if (state.kind === "loading") {
     return <Shell active="全部订单"><Header title="返工单详情" badge="实时读取" {...backAction} /><Surface>正在加载返工单…</Surface></Shell>;
@@ -525,7 +519,6 @@ export function ReworkDetailPage({
         <Surface className="rework-detail-summary">
           <div className="section-title">
             <div><h2>返工单信息</h2><p>订单是唯一的流程与执行载体；处理动作始终在对应节点下方完成。</p></div>
-            <StatusBadge tone={detail.status === "cancelled" ? "danger" : detail.status === "completed" ? "success" : "info"}>{meta.label}</StatusBadge>
           </div>
           <dl className="rework-detail-facts">
             <div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
@@ -577,7 +570,7 @@ export function ReworkDetailPage({
         </Surface>
 
         <section className="rework-workflow" key={detail.status} aria-label="订单流程">
-          <div className="rework-workflow__heading"><div><h2>订单流程</h2><p>阶段可收起；点击任务节点查看规则、历史或当前处理页。</p></div><StatusBadge tone="info">{meta.label}</StatusBadge></div>
+          <div className="rework-workflow__heading"><div><h2>订单流程</h2><p>阶段可收起；点击任务节点查看规则、历史或当前处理页。</p></div></div>
           <div className="rework-workflow__stages">
             {stages.map((stage) => {
               const state = stageState(stage);
@@ -601,7 +594,7 @@ export function ReworkDetailPage({
                   <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
                 </summary>
                 <div className="rework-workflow__nodes">
-                  {stage.nodes.map((node) => <a className={`rework-workflow__node is-${node.state}${selectedNode === node.key ? " is-selected" : ""}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
+                  {stage.nodes.map((node) => <a className={`rework-workflow__node is-${node.state}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
                     <b>{node.number}</b><span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span><em>{node.state === "completed" ? "已完成" : node.state === "current" ? "处理中" : "未开始"}</em>
                   </a>)}
                 </div>
