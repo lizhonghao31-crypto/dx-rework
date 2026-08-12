@@ -9,7 +9,17 @@ const age = (seconds: number): string => {
   return `${(seconds / 86400).toFixed(1)} 天`;
 };
 
-export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
+export function ManagementOrderCard({
+  order,
+  canDelete = false,
+  deleting = false,
+  onDelete,
+}: {
+  order: ManagementReworkRow;
+  canDelete?: boolean;
+  deleting?: boolean;
+  onDelete?: (order: ManagementReworkRow) => void;
+}) {
   const tone = order.status === "cancelled"
     ? "danger"
     : order.exceptionCount > 0
@@ -29,9 +39,8 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
         : order.status === "completed"
           ? "生产返工流程已结束；独立的外部扣款后续仍按实际状态统计"
           : "无当前异常";
-  return (
-    <a className="reporting-order-link" href={reportingPageUrl(order.deepLink)}>
-      <Surface className="reporting-order-card">
+  return <Surface className="reporting-order-card">
+    <a className="reporting-order-card__main" href={reportingPageUrl(order.deepLink)}>
         <div className="reporting-order-card__heading">
           <div>
             <strong>{order.styleNo ?? "款号未填写"}</strong>
@@ -47,7 +56,16 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
           <div><dt>附件</dt><dd>{order.attachmentCount > 0 ? `${order.attachmentCount} 份 · 点击订单查阅` : "无附件"}</dd></div>
         </dl>
         <small className="reporting-order-card__activity">{activityMessage}</small>
-      </Surface>
     </a>
-  );
+    {canDelete && onDelete ? <button
+      type="button"
+      className="reporting-order-delete"
+      aria-label={`删除返工单 ${order.reworkNo ?? order.styleNo ?? "此订单"}`}
+      title="删除返工单"
+      disabled={deleting}
+      onClick={() => onDelete(order)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M9 7l1-2h4l1 2m-9 0 1 13h10l1-13" /></svg>
+    </button> : null}
+  </Surface>;
 }
