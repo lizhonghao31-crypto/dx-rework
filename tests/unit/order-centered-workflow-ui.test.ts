@@ -19,8 +19,9 @@ describe("order-centered workflow UI", () => {
   });
 
   it("groups the order flow into collapsible stages and renders one current node workspace", async () => {
-    const [detail, task] = await Promise.all([
+    const [detail, styles, task] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
       readFile("apps/web/src/responsibility-task-page.tsx", "utf8"),
     ]);
     expect(detail).toContain("rework-workflow__stage");
@@ -34,6 +35,12 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain("selected.state !== \"current\"");
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
     expect(detail).toContain("<WorkReportingForm reworkOrderId={detail.reworkOrderId}");
+    expect(detail).not.toContain('action: "返回全部订单"');
+    expect(detail.match(/badge=\{meta\.label\}/g)).toHaveLength(1);
+    expect(styles).toMatch(/\.rework-workflow__node\.is-future \{[\s\S]*?color: #fff;[\s\S]*?background: var\(--dx-v2-color-primary-hover\);/);
+    expect(styles).toContain("color: rgb(255 255 255 / 80%);");
+    expect(styles).not.toContain(".rework-workflow__node.is-selected");
+    expect(detail).not.toContain('" is-selected"');
     expect(task).toContain("<ReworkDetailPage");
     expect(task).toContain("returnToTodos");
   });
