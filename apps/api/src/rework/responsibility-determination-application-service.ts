@@ -104,7 +104,7 @@ export class ResponsibilityDeterminationApplicationService {
               responsibility_effective_handler(o.rework_order_id) handler_user_id,
               responsibility_can_determine($1,o.rework_order_id) permitted
        FROM rework_orders o
-       WHERE o.rework_order_id=$2`,
+       WHERE o.rework_order_id=$2 AND o.status<>'deleted'`,
       [actor.actorId, orderId],
     );
     const permission = permissionResult.rows[0];
