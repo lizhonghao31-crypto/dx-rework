@@ -79,7 +79,7 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
   return (
     <Shell active={mode === "management" ? "总览" : "现场工作台"}>
       <Header
-        title={mode === "management" ? "管理层共享座舱" : "李同生 · 现场返工工作台"}
+        title={mode === "management" ? "管理层共享座舱" : "现场返工工作台"}
         badge={ready ? `数据截至 ${new Date(ready.asOf).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Singapore" })}` : "实时读取"}
         action={ready?.availableActions.includes("export_reports") ? "报表中心" : "统一查询"}
         actionHref={ready?.availableActions.includes("export_reports") ? "/ui/reports" : "/ui/tasks"}

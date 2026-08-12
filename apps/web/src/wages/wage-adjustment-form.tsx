@@ -81,7 +81,7 @@ export function WageAdjustmentForm({
       setAmount("");
       setReason("");
       setAttachmentIds([]);
-      await onCompleted("工资调整已提交，等待梁少萍复核。");
+      await onCompleted("工资调整已提交，等待当前有效行政复核角色处理。");
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "工资调整提交失败");
     } finally {

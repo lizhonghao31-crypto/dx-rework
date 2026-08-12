@@ -243,15 +243,19 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         description: `返工待办：${input.category}`,
         executorIds: [input.recipientUnionId],
         participantIds: [],
-        operatorId: input.recipientUnionId,
         sourceId,
         detailUrl: { appUrl: input.deepLink, pcUrl: input.deepLink },
         isOnlyShowExecutor: true,
         priority: 20,
+        notifyConfigs: {
+          dingNotify: "1",
+          sendTodoApn: "true",
+          sendAssistantChat: "true",
+        },
       };
       try {
         task = await this.request(
-          `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks`,
+          `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks?operatorId=${encodeURIComponent(input.recipientUnionId)}`,
           { method: "POST", body: JSON.stringify(body) },
           "create",
         );
@@ -531,12 +535,19 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   }
 
   private taskId(value: JsonRecord | null): string {
-    const taskId = value && typeof value.taskId === "string"
-      ? value.taskId
-      : value && typeof value.result === "object" && value.result !== null
-        && !Array.isArray(value.result) && typeof (value.result as JsonRecord).taskId === "string"
-        ? String((value.result as JsonRecord).taskId)
-        : "";
+    const nested = value && typeof value.result === "object" && value.result !== null
+      && !Array.isArray(value.result)
+      ? value.result as JsonRecord
+      : null;
+    const taskId = value && typeof value.id === "string"
+      ? value.id
+      : value && typeof value.taskId === "string"
+        ? value.taskId
+        : nested && typeof nested.id === "string"
+          ? nested.id
+          : nested && typeof nested.taskId === "string"
+            ? nested.taskId
+            : "";
     if (!taskId) {
       throw new DingTalkTodoDeliveryError(
         "DINGTALK_TODO_INVALID_RESPONSE",

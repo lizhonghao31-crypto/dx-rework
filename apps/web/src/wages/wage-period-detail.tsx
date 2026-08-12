@@ -42,7 +42,7 @@ const adjustmentStatusLabel = (status: WageAdjustment["status"]): string =>
   status === "pending" ? "待审批" : status === "approved" ? "已批准" : "已拒绝";
 
 const reviewStageLabel = (stage: WagePeriodDetail["reviewActions"][number]["stage"]): string =>
-  stage === "tail" ? "李同生初核" : "梁少萍复核";
+  stage === "tail" ? "尾部主管初核" : "行政复核";
 
 const reviewDecisionLabel = (decision: WagePeriodDetail["reviewActions"][number]["decision"]): string =>
   decision === "approved" ? "通过" : "退回";
@@ -145,7 +145,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
     await command(
       `wage-adjustments/${adjustment.adjustmentId}/${approved ? "approve" : "reject"}`,
       { expectedVersion: adjustment.version, reason },
-      approved ? "工资调整已批准，月份已重新进入李同生初核。" : "工资调整已拒绝。",
+      approved ? "工资调整已批准，月份已重新进入尾部主管初核。" : "工资调整已拒绝。",
     );
   };
 
@@ -159,11 +159,11 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   }
   const { period, items, adjustments, reviewActions } = detail;
   const statusLabel = period.status === "pending_tail_review"
-    ? "待李同生初核"
+    ? "待当前有效尾部主管初核"
     : period.status === "pending_admin_review"
-      ? "待梁少萍复核"
+      ? "待当前有效行政复核角色复核"
       : period.status === "ready_to_lock"
-        ? "待欧阳俊珺月结"
+        ? "待当前有效月结角色处理"
         : "已锁定";
 
   return (
@@ -193,7 +193,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
               onClick={() => void command(
                 `wage-periods/${period.periodId}/tail-approve`,
                 { expectedVersion: period.periodVersion },
-                "李同生初核已完成，现进入梁少萍复核。",
+                "尾部主管初核已完成，现进入行政复核。",
               )}
             >初核通过</Button>
           )}
@@ -205,17 +205,17 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
                 onClick={() => void command(
                   `wage-periods/${period.periodId}/administrative-approve`,
                   { expectedVersion: period.periodVersion },
-                  "梁少萍复核已完成，月份已具备月结条件。",
+                  "行政复核已完成，月份已具备月结条件。",
                 )}
               >复核通过</Button>
               <Button
                 disabled={busy}
                 onClick={() => {
-                  const reason = window.prompt("请输入退回李同生的原因")?.trim();
+                  const reason = window.prompt("请输入退回尾部主管的原因")?.trim();
                   if (reason) void command(
                     `wage-periods/${period.periodId}/administrative-return`,
                     { expectedVersion: period.periodVersion, reason },
-                    "工资月份已退回李同生重新初核。",
+                    "工资月份已退回尾部主管重新初核。",
                   );
                 }}
               >退回</Button>

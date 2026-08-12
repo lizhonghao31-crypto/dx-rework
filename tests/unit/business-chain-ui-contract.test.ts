@@ -15,6 +15,8 @@ describe("business-chain UI handoff contracts", () => {
     expect(source).toContain(
       "expectedConfigurationVersion: savedConfiguration.configurationVersion",
     );
+    expect(source).toContain("待当前有效 IE 审核");
+    expect(source).not.toContain("待郎飞 IE 审核");
   });
 
   it("warns about another same-style order only while that order is unfinished", async () => {

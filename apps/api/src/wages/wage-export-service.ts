@@ -100,9 +100,9 @@ export class WageExportService {
          LEFT JOIN approved ON approved.original_wage_item_id=item.wage_item_id
          WHERE item.period_id=$1 ORDER BY item.person_name_snapshot,item.created_at,item.wage_item_id`, [periodId],
       );
-    const tail = period.status === "pending_tail_review" ? "待李同生初核" : "已完成";
+    const tail = period.status === "pending_tail_review" ? "待当前有效尾部主管初核" : "已完成";
     const admin = ["pending_tail_review", "pending_admin_review"].includes(period.status)
-      ? "待梁少萍复核" : "已完成";
+      ? "待当前有效行政复核角色复核" : "已完成";
     const detailRows: Cell[][] = [
       [period.status === "locked" ? "正式月结文件" : "未锁定预览"],
       ["工资月份","工人稳定ID","工人姓名快照","正式工/临时工","返工单号","款号","工序","数量/工时","单位","单价","个人/集体","集体成员人数","成员快照","组总额","高精度个人份额","正式个人金额","调整金额","最终金额","尾部初核","行政复核","月结状态","锁定人","锁定时间"],

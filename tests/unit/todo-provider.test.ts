@@ -68,8 +68,8 @@ describe("DingTalk todo provider boundary", () => {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
       }
       if (url.endsWith("/tasks/sources/todo-source-13")) return json({}, 404);
-      if (url.endsWith("/tasks") && init.method === "POST") {
-        return json({ taskId: "task-1", requestId: "request-create" });
+      if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
+        return json({ id: "task-1", requestId: "request-create" });
       }
       if (url.endsWith("/tasks/task-1") && init.method === "PUT") {
         return json({ requestId: "request-update" });
@@ -104,14 +104,22 @@ describe("DingTalk todo provider boundary", () => {
       reason: "completed",
     })).resolves.toMatchObject({ providerTodoId: "task-1", state: "completed" });
 
-    const createCall = calls.find((call) => call.url.endsWith("/tasks") && call.init.method === "POST");
+    const createCall = calls.find((call) =>
+      new URL(call.url).pathname.endsWith("/tasks") && call.init.method === "POST"
+    );
     expect(createCall?.url).toContain("/v1.0/todo/users/union-14/tasks");
+    expect(new URL(createCall!.url).searchParams.get("operatorId")).toBe("union-14");
     expect(new Headers(createCall?.init.headers).get("x-acs-dingtalk-access-token")).toBe("token-value");
     expect(JSON.parse(String(createCall?.init.body))).toMatchObject({
       sourceId: "todo-source-13",
       executorIds: ["union-14"],
-      operatorId: "union-14",
+      notifyConfigs: {
+        dingNotify: "1",
+        sendTodoApn: "true",
+        sendAssistantChat: "true",
+      },
     });
+    expect(JSON.parse(String(createCall?.init.body))).not.toHaveProperty("operatorId");
     expect(calls.some((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
     )).toBe(false);
@@ -129,7 +137,7 @@ describe("DingTalk todo provider boundary", () => {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
       }
       if (url.endsWith("/tasks/sources/todo-source-13")) {
-        return json({ taskId: "task-existing", requestId: "lookup-existing" });
+        return json({ id: "task-existing", requestId: "lookup-existing" });
       }
       throw new Error(`unexpected request ${url}`);
     };
@@ -167,10 +175,10 @@ describe("DingTalk todo provider boundary", () => {
         lookupCount += 1;
         return lookupCount === 1
           ? json({}, 404)
-          : json({ taskId: "task-compact", requestId: "lookup-existing" });
+          : json({ id: "task-compact", requestId: "lookup-existing" });
       }
-      if (url.endsWith("/tasks") && init.method === "POST") {
-        return json({ taskId: "task-compact", requestId: "request-create" });
+      if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
+        return json({ id: "task-compact", requestId: "request-create" });
       }
       throw new Error(`unexpected request ${url}`);
     };
@@ -199,7 +207,7 @@ describe("DingTalk todo provider boundary", () => {
     expect(sourceIds[0]).not.toBe(productionInput.sourceKey);
 
     const createCalls = calls.filter((call) =>
-      call.url.endsWith("/tasks") && call.init.method === "POST"
+      new URL(call.url).pathname.endsWith("/tasks") && call.init.method === "POST"
     );
     expect(createCalls).toHaveLength(1);
     expect(JSON.parse(String(createCalls[0]?.init.body))).toMatchObject({
