@@ -207,6 +207,10 @@
     {
       "version": "0052_ie_review_todo_completion_repair",
       "checksum": "6396f8ccc88719dabb7e1cea9c8d9ea5d39f9115582a479ff018f1a0e118ae52"
+    },
+    {
+      "version": "0053_root_rework_order_logical_deletion",
+      "checksum": "5da007702bf23343f384d09cb241982ce130452e342cdd3cf6f8db797b59853a"
     }
   ]
 }
