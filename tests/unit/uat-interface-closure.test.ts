@@ -47,6 +47,9 @@ describe("UAT interface closure", () => {
     ]);
     expect(report).toContain("businessValue(column.key, row[column.key])");
     expect(report).toContain("businessFieldLabel(key)");
+    expect(report).toContain("snapshotBusinessValue(key, total)");
+    expect(report).toContain("Math.round(numeric)");
+    expect(report).not.toContain('action="返回全部订单"');
     expect(admin).toContain("businessActionLabel(event.action)");
     expect(admin).toContain("businessEntityLabel(event.entityType)");
     expect(webDisplay).toContain('@dx-rework/contracts/business-display');
