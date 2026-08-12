@@ -28,6 +28,25 @@ const taskTitle = (todo: TodoResponse): string =>
     ? "选择实际拟扣供应商"
     : taskLabel[todo.route.routeName];
 
+const categoryLabel = (todo: TodoResponse): string => {
+  const labels: Record<string, string> = {
+    process_configuration: "配置返工工序",
+    process_configuration_return: "退回重新配置工序",
+    process_configuration_rejection_notice: "工序审核退回通知",
+    ie_review: "IE 审核",
+    task_assignment: "分配返工人员",
+    work_reporting: "登记返工完成",
+    whole_order_review: "整单审核",
+    quantity_adjustment: "数量调整审核",
+    responsibility_determination: "责任判定",
+    own_factory_approval: "本厂金额审批",
+    external_supplier_selection: "选择实际拟扣供应商",
+    external_responsibility: "供应商扣款处理",
+    wage_review: "返工工资核对",
+  };
+  return labels[todo.category] ?? taskTitle(todo);
+};
+
 const todoHref = (todo: TodoResponse): string => {
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
@@ -173,7 +192,7 @@ export function MyTodosPage() {
                       <p>{orderSummary}</p>
                     </div>
                     <div className="my-todo-metrics" aria-label="待办业务信息">
-                      <span><small>当前节点</small>{todo.category}</span>
+                      <span><small>当前节点</small>{categoryLabel(todo)}</span>
                       <span><small>节点停留</small>{formatNodeDuration(todo.createdAt)}</span>
                       <span><small>相关金额</small>待核定</span>
                       <span><small>截止</small>{formatDueAt(todo.dueAt)}</span>
