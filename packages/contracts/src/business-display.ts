@@ -12,6 +12,7 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   pending_responsibility_action: "责任处理中",
   completed: "已完成",
   cancelled: "已取消",
+  deleted: "已删除",
   pending_tail_review: "待尾部初核",
   pending_admin_review: "待行政复核",
   ready_to_lock: "待月结",
