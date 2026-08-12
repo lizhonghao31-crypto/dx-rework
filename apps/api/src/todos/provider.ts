@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { TodoRouteDescriptor } from "@dx-rework/contracts";
 
 export type DingTalkTodoDeliveryKind =
@@ -213,6 +215,12 @@ type Fetch = typeof fetch;
 type JsonRecord = Record<string, unknown>;
 const API = "https://api.dingtalk.com";
 const OAPI = "https://oapi.dingtalk.com";
+const DINGTALK_TODO_SOURCE_ID_MAX_BYTES = 64;
+
+const dingTalkTodoSourceId = (sourceKey: string): string =>
+  Buffer.byteLength(sourceKey, "utf8") <= DINGTALK_TODO_SOURCE_ID_MAX_BYTES
+    ? sourceKey
+    : createHash("sha256").update(sourceKey, "utf8").digest("base64url");
 
 export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   private cachedToken?: { token: string; refreshAt: number };
@@ -226,7 +234,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
 
   async createTodo(input: DingTalkTodoCreateInput): Promise<DingTalkTodoDeliveryReceipt> {
     this.assertEnabled();
-    let task = await this.getBySourceId(input.recipientUnionId, input.sourceKey, true);
+    const sourceId = dingTalkTodoSourceId(input.sourceKey);
+    let task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
     const reconciled = task !== null;
     if (!task) {
       const body = {
@@ -235,7 +244,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         executorIds: [input.recipientUnionId],
         participantIds: [],
         operatorId: input.recipientUnionId,
-        sourceId: input.sourceKey,
+        sourceId,
         detailUrl: { appUrl: input.deepLink, pcUrl: input.deepLink },
         isOnlyShowExecutor: true,
         priority: 20,
@@ -248,7 +257,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         );
       } catch (error: unknown) {
         if (error instanceof DingTalkTodoDeliveryError && error.unknownResponse) {
-          task = await this.getBySourceId(input.recipientUnionId, input.sourceKey, true);
+          task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
         }
         if (!task) throw error;
       }
@@ -405,7 +414,11 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
 
   private async resolveTaskId(unionId: string, sourceKey: string): Promise<string> {
     try {
-      return this.taskId(await this.getBySourceId(unionId, sourceKey, false));
+      return this.taskId(await this.getBySourceId(
+        unionId,
+        dingTalkTodoSourceId(sourceKey),
+        false,
+      ));
     } catch (error: unknown) {
       if (
         error instanceof DingTalkTodoDeliveryError
