@@ -1,6 +1,6 @@
 .dx-button {
-  min-height: 44px;
-  padding: 0 28px;
+  min-height: 40px;
+  padding: 0 20px;
   border: 1px solid #fff;
   border-radius: var(--dx-v2-radius-md);
   font: inherit;
@@ -17,7 +17,7 @@
 .dx-button--primary:active:not(:disabled) { background: var(--dx-v2-color-primary-pressed); transform: translateY(1px); }
 .dx-button:focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
 .dx-button:disabled { cursor: not-allowed; opacity: 0.48; box-shadow: none; }
-.dx-badge { display: inline-flex; align-items: center; min-height: 30px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.dx-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
 .dx-badge--neutral { background: #e0e5ea; }
 .dx-badge--info { background: #dbe6ff; color: #245fe9; }
 .dx-badge--success { background: #dcf7ed; color: #087f61; }
@@ -33,8 +33,8 @@
 .dx-kpi small { color: var(--dx-v2-color-text-secondary); }
 .dx-meter { height: 8px; border-radius: var(--dx-v2-radius-sm); background: var(--dx-v2-color-primary); }
 .dx-meter--warning { background: var(--dx-v2-color-warning); }
-.dx-surface { padding: var(--dx-v2-space-6); }
+.dx-surface { padding: var(--dx-v2-space-4); }
 .dx-field { display: grid; gap: 6px; min-width: 250px; }
-.dx-field__control { display: flex; align-items: center; min-height: 52px; padding: 0 16px; background: var(--dx-v2-color-inset); border: 1px solid #b9c8d6; border-radius: var(--dx-v2-radius-md); box-shadow: inset 2px 2px 5px rgba(75, 90, 105, 0.12); }
+.dx-field__control { display: flex; align-items: center; min-height: 44px; padding: 0 12px; background: var(--dx-v2-color-inset); border: 1px solid #b9c8d6; border-radius: var(--dx-v2-radius-md); box-shadow: inset 2px 2px 5px rgba(75, 90, 105, 0.12); }
 .dx-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--dx-v2-color-text); font: inherit; }
 .dx-field em { font-style: normal; color: var(--dx-v2-color-text-secondary); }

@@ -46,7 +46,7 @@ export function ManagementOrderCard({ order }: { order: ManagementReworkRow }) {
           <div><dt>外部差额</dt><dd>¥{order.externalRemainingAmount}</dd></div>
           <div><dt>附件</dt><dd>{order.attachmentCount > 0 ? `${order.attachmentCount} 份 · 点击订单查阅` : "无附件"}</dd></div>
         </dl>
-        <small>{activityMessage}</small>
+        <small className="reporting-order-card__activity">{activityMessage}</small>
       </Surface>
     </a>
   );
