@@ -276,6 +276,7 @@ export class OwnFactoryApprovalService {
        FROM rework_own_factory_approvals approval
        JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
        WHERE approval.status='pending'
+         AND order_record.status<>'deleted'
          AND own_factory_approval_can_view($1,approval.rework_order_id)
        ORDER BY approval.created_at ASC
        LIMIT 200`,
@@ -370,7 +371,7 @@ export class OwnFactoryApprovalService {
               order_record.problem_description,order_record.rework_quantity
        FROM rework_own_factory_approvals approval
        JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
-       WHERE approval.approval_id=$1
+       WHERE approval.approval_id=$1 AND order_record.status<>'deleted'
        FOR UPDATE OF approval,order_record`,
       [approvalId],
     );
@@ -457,7 +458,7 @@ export class OwnFactoryApprovalService {
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,processing_factory_supplier_version,
               problem_part,problem_description,rework_quantity
-       FROM rework_orders WHERE rework_order_id=$1 ${locked ? "FOR UPDATE" : ""}`,
+       FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted' ${locked ? "FOR UPDATE" : ""}`,
       [orderId],
     );
     return result.rows[0] ?? fail("返工单不存在", 404, "NOT_FOUND");
