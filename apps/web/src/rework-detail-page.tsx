@@ -551,9 +551,12 @@ export function ReworkDetailPage({
       return <SettlementLedgerNotice detail={detail} />;
     }
     if (selected.state !== "future" && selected.key === "settlement_followup") {
-      if (canSeeExternal) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} />;
-      if (canSeeWages && detail.unsettledWagePeriods.length > 0) {
-        return <WageSettlementFollowUp periods={detail.unsettledWagePeriods} />;
+      const hasWageFollowUp = canSeeWages && detail.unsettledWagePeriods.length > 0;
+      if (canSeeExternal || hasWageFollowUp) {
+        return <>
+          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
+          {hasWageFollowUp ? <WageSettlementFollowUp periods={detail.unsettledWagePeriods} /> : null}
+        </>;
       }
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
