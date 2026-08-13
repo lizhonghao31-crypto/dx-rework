@@ -242,6 +242,7 @@ export function App() {
       { requiredCapability: "responsibility:determine" },
       { requiredCapability: "responsibility:takeover" },
       { requiredCapability: "responsibility:confirm_high_multiplier" },
+      { requiredCapability: "responsibility:owner_sign" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/own-factory-approvals") {
