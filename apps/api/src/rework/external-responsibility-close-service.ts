@@ -317,6 +317,12 @@ export class ExternalResponsibilityCloseService {
       `deduction-overdue:${caseId}:`,
       "External deduction case was closed",
     );
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `external-deduction:${caseId}:`,
+      "External deduction case was closed",
+    );
     return this.reader.getCase(actor, caseId, client);
   }
 }

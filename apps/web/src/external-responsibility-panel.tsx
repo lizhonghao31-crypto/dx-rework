@@ -107,9 +107,11 @@ const requestError = async (response: Response): Promise<string> => {
 export function ExternalResponsibilityPanel({
   reworkOrderId,
   focusCaseId,
+  readOnly = false,
 }: {
   reworkOrderId: string | null;
   focusCaseId?: string;
+  readOnly?: boolean;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -160,6 +162,7 @@ export function ExternalResponsibilityPanel({
     }
     const controller = new AbortController();
     void load().then(async (batch) => {
+      if (readOnly) return [] as Supplier[];
       const hasUnassigned = batch?.items.some(
         (item) => !batch.cases.some((entry) =>
           entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
@@ -190,7 +193,7 @@ export function ExternalResponsibilityPanel({
       }
     });
     return () => controller.abort();
-  }, [reworkOrderId]);
+  }, [readOnly, reworkOrderId]);
 
   const unassigned = useMemo(
     () =>
@@ -599,7 +602,7 @@ export function ExternalResponsibilityPanel({
   const visibleCases = focusCaseId
     ? batch.cases.filter((caseItem) => caseItem.caseId === focusCaseId)
     : batch.cases;
-  const visibleUnassigned = focusCaseId ? [] : unassigned;
+  const visibleUnassigned = readOnly || focusCaseId ? [] : unassigned;
   if (focusCaseId && visibleCases.length === 0) {
     return <Surface className="external-state">该供应商扣款任务不在当前有效台账中。</Surface>;
   }
@@ -607,8 +610,10 @@ export function ExternalResponsibilityPanel({
     <Surface className="external-responsibility-panel">
       <div className="section-title">
         <div>
-          <h2>供应商扣款处理</h2>
-          <p>正式责任版本 V{batch.finalizedDeterminationVersion} · 供应商确定后直接由应付记录扣款；资料有误可退回经办人修正。</p>
+          <h2>{readOnly ? "责任结算台账" : "供应商扣款处理"}</h2>
+          <p>{readOnly
+            ? `责任版本 V${batch.finalizedDeterminationVersion} 已由系统自动生成；供应商与倍率已在 N07 核验、N08 签字，台账不可改写。`
+            : `责任版本 V${batch.finalizedDeterminationVersion} · 每个责任方独立记录实际扣款；资料有误可申请责任变更返回 N07。`}</p>
         </div>
         <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>
           {batch.status === "active" ? "当前责任版本" : "已替代历史"}
@@ -683,22 +688,29 @@ export function ExternalResponsibilityPanel({
         {visibleCases.map((caseItem) => {
           const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
           const evidence = attachments[caseItem.caseId] ?? [];
-          const canEditRemark = caseItem.canSign
-            || caseItem.canPayablesConfirm
-            || caseItem.canFollowUp
-            || caseItem.canClose
-            || caseItem.canRequestRevision
-            || caseItem.canApproveRevision;
-          const canEditDisposition = caseItem.canClose || caseItem.canRequestRevision;
-          const canAttachEvidence = caseItem.canSign
-            || caseItem.canPayablesConfirm
-            || caseItem.canFollowUp
-            || caseItem.canRecordDeduction
-            || caseItem.canClose
-            || caseItem.canRequestRevision;
+          const canSign = !readOnly && caseItem.canSign;
+          const canPayablesConfirm = !readOnly && caseItem.canPayablesConfirm;
+          const canFollowUp = !readOnly && caseItem.canFollowUp;
+          const canRecordDeduction = !readOnly && caseItem.canRecordDeduction;
+          const canClose = !readOnly && caseItem.canClose;
+          const canRequestRevision = !readOnly && caseItem.canRequestRevision;
+          const canApproveRevision = !readOnly && caseItem.canApproveRevision;
+          const canEditRemark = canSign
+            || canPayablesConfirm
+            || canFollowUp
+            || canClose
+            || canRequestRevision
+            || canApproveRevision;
+          const canEditDisposition = canClose || canRequestRevision;
+          const canAttachEvidence = canSign
+            || canPayablesConfirm
+            || canFollowUp
+            || canRecordDeduction
+            || canClose
+            || canRequestRevision;
           const hasEditableFields = canEditRemark
             || canEditDisposition
-            || caseItem.canRecordDeduction
+            || canRecordDeduction
             || canAttachEvidence;
           return (
             <article className="external-case" key={caseItem.caseId}>
@@ -720,28 +732,28 @@ export function ExternalResponsibilityPanel({
                 </div>
               </div>
 
-              <div className="external-case-actions">
-                {caseItem.canSign && (
+              {!readOnly && <div className="external-case-actions">
+                {canSign && (
                   <Button disabled={busy} onClick={() => void operation(caseItem, "submit")}>
                     {caseItem.status === "returned" ? "资料已修正，重新交应付" : "补充资料并交应付"}
                   </Button>
                 )}
-                {caseItem.canPayablesConfirm && (
+                {canPayablesConfirm && (
                   <Button disabled={busy} onClick={() => void operation(caseItem, "return")}>退回资料问题</Button>
                 )}
-                {caseItem.canFollowUp && <Button disabled={busy} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
-                {caseItem.canRecordDeduction && <Button variant="primary" disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
-                {caseItem.canClose && <>
+                {canFollowUp && <Button disabled={busy} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
+                {canRecordDeduction && <Button variant="primary" disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
+                {canClose && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-full")}>按全额关闭</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-partial")}>按部分关闭</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-none")}>登记未扣成功</Button>
                 </>}
-                {caseItem.canRequestRevision && <Button disabled={busy} onClick={() => void operation(caseItem, "revision")}>申请责任变更</Button>}
-                {caseItem.canApproveRevision && pendingRevision && <>
+                {canRequestRevision && <Button disabled={busy} onClick={() => void operation(caseItem, "revision")}>申请责任变更</Button>}
+                {canApproveRevision && pendingRevision && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "revision-approve")}>通过责任变更</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "revision-reject")}>驳回责任变更</Button>
                 </>}
-              </div>
+              </div>}
 
               {hasEditableFields && <div className="external-operation">
                 {canEditRemark && <InsetField
@@ -750,7 +762,7 @@ export function ExternalResponsibilityPanel({
                   onChange={(event) => setRemark((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="退回资料、跟进、部分/未扣或责任变更时填写"
                 />}
-                {caseItem.canFollowUp && <>
+                {canFollowUp && <>
                   <InsetField
                     label="供应商反馈（选填）"
                     value={supplierFeedback[caseItem.caseId] ?? ""}
@@ -771,7 +783,7 @@ export function ExternalResponsibilityPanel({
                   onChange={(event) => setDifferenceDisposition((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="部分/未扣关闭时必填，例如：申请转本厂承担并进入责任重判"
                 />}
-                {caseItem.canRequestRevision && caseItem.closure && caseItem.closure.remainingAmount !== "0.00" && (
+                {canRequestRevision && caseItem.closure && caseItem.closure.remainingAmount !== "0.00" && (
                   <label className="external-revision-choice">
                     <input
                       type="checkbox"
@@ -785,7 +797,7 @@ export function ExternalResponsibilityPanel({
                     <span>将未扣差额转为本厂承担，并进入 N07 重新判责</span>
                   </label>
                 )}
-                {caseItem.canRecordDeduction && <>
+                {canRecordDeduction && <>
                   <InsetField
                     label="实际扣款金额"
                     inputMode="decimal"

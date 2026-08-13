@@ -105,6 +105,7 @@ type DeterminationRow = Readonly<{
   reason: string | null;
   calculation_total: string;
   confirmed: boolean;
+  settlement_schema_version: 1 | 2;
 }>;
 
 type ProcessViewRow = Readonly<{
@@ -259,7 +260,16 @@ export class ResponsibilityDeterminationService {
                               THEN COALESCE(adjustment.adjustment_amount,0)
                               ELSE 0
                             END
-                          )::text
+                          )::text,
+                          'multiplier',COALESCE(allocation.multiplier,process.multiplier)::text,
+                          'supplier',CASE WHEN allocation.supplier_id IS NULL THEN NULL ELSE
+                            json_build_object(
+                              'supplierId',allocation.supplier_id,
+                              'version',allocation.supplier_version,
+                              'code',allocation.supplier_code_snapshot,
+                              'name',allocation.supplier_name_snapshot,
+                              'type',allocation.supplier_type_snapshot
+                            ) END
                         )
                         ORDER BY allocation.responsibility_type
                       ) FILTER (WHERE allocation.responsibility_type IS NOT NULL),
@@ -282,7 +292,16 @@ export class ResponsibilityDeterminationService {
                         json_build_object(
                           'responsibilityType',allocation.responsibility_type,
                           'shareBps',allocation.share_bps,
-                          'roundedAmount',allocation.rounded_amount::text
+                          'roundedAmount',allocation.rounded_amount::text,
+                          'multiplier',COALESCE(allocation.multiplier,process.multiplier)::text,
+                          'supplier',CASE WHEN allocation.supplier_id IS NULL THEN NULL ELSE
+                            json_build_object(
+                              'supplierId',allocation.supplier_id,
+                              'version',allocation.supplier_version,
+                              'code',allocation.supplier_code_snapshot,
+                              'name',allocation.supplier_name_snapshot,
+                              'type',allocation.supplier_type_snapshot
+                            ) END
                         )
                         ORDER BY allocation.responsibility_type
                       ) FILTER (WHERE allocation.responsibility_type IS NOT NULL),
@@ -346,6 +365,8 @@ export class ResponsibilityDeterminationService {
       canConfirmHighMultiplier: actorCapabilities.includes(
         "responsibility:confirm_high_multiplier",
       ),
+      canOwnerSign: actorCapabilities.includes("responsibility:owner_sign"),
+      ownerSignature: null,
       sourceProcesses: sourceRows.rows.map((row) => ({
         configurationItemId: row.configuration_item_id,
         processName: row.process_name,
@@ -456,19 +477,24 @@ export class ResponsibilityDeterminationService {
            LIMIT 1`,
           [draft.determination_id],
         );
-        if (highMultiplier.rowCount && !confirmation.rows[0]) {
+        if (draft.settlement_schema_version === 1 && highMultiplier.rowCount && !confirmation.rows[0]) {
           fail("高倍率尚未完成独立确认");
         }
 
         const finalizedId = randomUUID();
+        const nextStatus: ReworkStatus = draft.settlement_schema_version === 2
+          ? "pending_owner_signature"
+          : "pending_responsibility_action";
         const eventId = await this.appendEvent(
           client,
           actor,
-          "rework.responsibility.finalize",
+          draft.settlement_schema_version === 2
+            ? "rework.responsibility.submit_owner_signature"
+            : "rework.responsibility.finalize",
           orderId,
           undefined,
           order,
-          "pending_responsibility_action",
+          nextStatus,
         );
         await client.query(
           `INSERT INTO rework_responsibility_determinations(
@@ -476,11 +502,11 @@ export class ResponsibilityDeterminationService {
              replaces_determination_id,source_order_review_id,stage,
              handler_user_id,created_by,reason,
              source_high_multiplier_confirmation_id,input_snapshot,
-             calculation_total,operation_event_id,request_id
+             calculation_total,operation_event_id,request_id,settlement_schema_version
            )
            SELECT $1,rework_order_id,determination_version+1,determination_id,
                   source_order_review_id,'finalized',handler_user_id,$2,reason,
-                  $3,input_snapshot,calculation_total,$4,$5
+                  $3,input_snapshot,calculation_total,$4,$5,settlement_schema_version
            FROM rework_responsibility_determinations
            WHERE determination_id=$6`,
           [
@@ -502,9 +528,15 @@ export class ResponsibilityDeterminationService {
           [finalizedId, eventId, actor.requestId, draft.determination_id],
         );
         await client.query(
-          `INSERT INTO rework_responsibility_allocations
+          `INSERT INTO rework_responsibility_allocations(
+             determination_id,configuration_item_id,responsibility_type,share_bps,
+             rounded_amount,operation_event_id,request_id,multiplier,supplier_id,
+             supplier_version,supplier_code_snapshot,supplier_name_snapshot,
+             supplier_type_snapshot
+           )
            SELECT $1,configuration_item_id,responsibility_type,share_bps,
-                  rounded_amount,$2,$3
+                  rounded_amount,$2,$3,multiplier,supplier_id,supplier_version,
+                  supplier_code_snapshot,supplier_name_snapshot,supplier_type_snapshot
            FROM rework_responsibility_allocations
            WHERE determination_id=$4`,
           [finalizedId, eventId, actor.requestId, draft.determination_id],
@@ -522,10 +554,10 @@ export class ResponsibilityDeterminationService {
         );
         await client.query(
           `UPDATE rework_orders
-           SET status='pending_responsibility_action',version=version+1,
+           SET status=$3,version=version+1,
                updated_by=$2,updated_at=CURRENT_TIMESTAMP
            WHERE rework_order_id=$1`,
-          [orderId, actor.actorId],
+          [orderId, actor.actorId, nextStatus],
         );
         return this.get(actor, orderId, client);
       },
@@ -592,9 +624,9 @@ export class ResponsibilityDeterminationService {
     ) {
       fail("判责版本冲突");
     }
-    if (previous?.stage === "finalized" && !input.reason) {
-      fail("变更正式判责必须填写原因", 400, "VALIDATION_ERROR");
-    }
+    // A boss rejection is itself an immutable audit fact.  Do not force the
+    // production handler to invent a second reason merely to make the revised
+    // N07 draft writable again.
 
     const approvedResult = await client.query<ApprovedProcessRow>(
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit
@@ -618,6 +650,11 @@ export class ResponsibilityDeterminationService {
       fail("必须提交全部 approved 工序", 400, "VALIDATION_ERROR");
     }
     input.processes.forEach((row) => validateBps(row.allocations));
+    // Every determination created after migration 0054 is N07–N11 V2.  The
+    // client must never be able to opt back into the retired V1 settlement
+    // path by omitting optional wire fields; those fields remain optional only
+    // so immutable historical snapshots can still be read.
+    const settlementSchemaVersion = 2 as const;
 
     const reviewResult = await client.query<{ order_review_id: string }>(
       `SELECT order_review_id
@@ -678,12 +715,16 @@ export class ResponsibilityDeterminationService {
                AND rejection.work_report_id IS NULL`,
         [orderId, processInput.configurationItemId],
       );
-      const multiplier = decimalToScaled(processInput.multiplier, 3);
       let processTotal = 0n;
       const lines: ResponsibilityAmountLine[] = [];
 
       for (const share of shareResult.rows) {
         for (const allocation of processInput.allocations) {
+          const multiplier = decimalToScaled(
+            allocation.multiplier
+              ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"),
+            3,
+          );
           const base = decimalToScaled(share.amount, 8);
           const unroundedScaled =
             base * multiplier * BigInt(allocation.shareBps);
@@ -717,8 +758,8 @@ export class ResponsibilityDeterminationService {
          replaces_determination_id,source_order_review_id,stage,
          handler_user_id,created_by,reason,
          source_high_multiplier_confirmation_id,input_snapshot,
-         calculation_total,operation_event_id,request_id
-       ) VALUES($1,$2,$3,$4,$5,'draft',$6,$7,$8,NULL,$9,$10,$11,$12)`,
+         calculation_total,operation_event_id,request_id,settlement_schema_version
+       ) VALUES($1,$2,$3,$4,$5,'draft',$6,$7,$8,NULL,$9,$10,$11,$12,$13)`,
       [
         determinationId,
         orderId,
@@ -732,6 +773,7 @@ export class ResponsibilityDeterminationService {
         cents(total),
         eventId,
         actor.requestId,
+        settlementSchemaVersion,
       ],
     );
 
@@ -763,6 +805,58 @@ export class ResponsibilityDeterminationService {
       );
 
       for (const allocation of calculation.input.allocations) {
+        const partyMultiplier = allocation.multiplier
+          ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200");
+        if (decimalToScaled(partyMultiplier, 3) < 1_000n) {
+          fail("责任方倍率不能低于 1", 400, "VALIDATION_ERROR");
+        }
+        let supplier: {
+          supplierId: string;
+          version: number;
+          code: string;
+          name: string;
+          type: "factory" | "embroidery_washing" | "fabric";
+        } | null = null;
+        if (settlementSchemaVersion === 2 && allocation.responsibilityType !== "own_factory") {
+          if (!allocation.supplierId) {
+            fail("外部责任方必须填写实际供应商", 400, "VALIDATION_ERROR");
+          }
+          if (decimalToScaled(partyMultiplier, 3) < 1_200n) {
+            fail("外部供应商倍率不能低于 1.2", 400, "VALIDATION_ERROR");
+          }
+          const expectedType = allocation.responsibilityType === "processing_factory"
+            ? "factory"
+            : allocation.responsibilityType === "fabric_supplier"
+              ? "fabric"
+              : "embroidery_washing";
+          const selected = await client.query<{
+            supplier_id: string;
+            version: number;
+            supplier_code: string;
+            supplier_name: string;
+            supplier_type: "factory" | "embroidery_washing" | "fabric";
+          }>(
+            `SELECT supplier_id,version,supplier_code,supplier_name,supplier_type
+             FROM current_supplier_catalog
+             WHERE supplier_id=$1 AND active=true`,
+            [allocation.supplierId],
+          );
+          const verified = selected.rows[0] ?? fail(
+            "供应商不存在、已停用或与责任类型不匹配",
+            400,
+            "VALIDATION_ERROR",
+          );
+          if (verified.supplier_type !== expectedType) {
+            fail("供应商不存在、已停用或与责任类型不匹配", 400, "VALIDATION_ERROR");
+          }
+          supplier = {
+            supplierId: verified.supplier_id,
+            version: verified.version,
+            code: verified.supplier_code,
+            name: verified.supplier_name,
+            type: verified.supplier_type,
+          };
+        }
         const allocationAmount = calculation.lines
           .filter(
             (line) =>
@@ -773,8 +867,10 @@ export class ResponsibilityDeterminationService {
         await client.query(
           `INSERT INTO rework_responsibility_allocations(
              determination_id,configuration_item_id,responsibility_type,
-             share_bps,rounded_amount,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+             share_bps,rounded_amount,operation_event_id,request_id,multiplier,
+             supplier_id,supplier_version,supplier_code_snapshot,
+             supplier_name_snapshot,supplier_type_snapshot
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [
             determinationId,
             calculation.input.configurationItemId,
@@ -783,6 +879,12 @@ export class ResponsibilityDeterminationService {
             cents(allocationAmount),
             eventId,
             actor.requestId,
+            partyMultiplier,
+            supplier?.supplierId ?? null,
+            supplier?.version ?? null,
+            supplier?.code ?? null,
+            supplier?.name ?? null,
+            supplier?.type ?? null,
           ],
         );
       }
@@ -803,7 +905,8 @@ export class ResponsibilityDeterminationService {
             line.share.person_id,
             line.allocation.responsibilityType,
             line.share.amount,
-            calculation.input.multiplier,
+            line.allocation.multiplier
+              ?? (line.allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"),
             line.allocation.shareBps,
             line.unrounded,
             cents(line.rounded),

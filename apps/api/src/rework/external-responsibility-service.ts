@@ -156,9 +156,9 @@ export class ExternalResponsibilityService {
     client: PoolClient, actor: TrustedActorContext, order: OrderRow, determinationId: string,
   ): Promise<string | null> {
     const source = await client.query<{
-      determination_id: string; determination_version: number; operation_event_id: string; source_action: string; request_id: string; created_by: string; source_snapshot: Record<string, unknown>;
+      determination_id: string; determination_version: number; operation_event_id: string; source_action: string; request_id: string; created_by: string; settlement_schema_version: 1 | 2; source_snapshot: Record<string, unknown>;
     }>(
-      `SELECT d.determination_id,d.determination_version,d.operation_event_id,event.action source_action,d.request_id,d.created_by,
+      `SELECT d.determination_id,d.determination_version,d.operation_event_id,event.action source_action,d.request_id,d.created_by,d.settlement_schema_version,
         jsonb_build_object('finalizedDetermination',jsonb_build_object('determinationId',d.determination_id,'determinationVersion',d.determination_version,'sourceOrderReviewId',d.source_order_review_id,'calculationTotal',d.calculation_total::text),'order',jsonb_build_object('reworkOrderId',o.rework_order_id,'reworkNo',o.rework_no,'styleNo',o.style_no,'orderNo',o.order_no,'problemPart',o.problem_part,'problemDescription',o.problem_description),'qualityControl',jsonb_build_object('initiatedBy',o.created_by,'initiatedAt',to_char(o.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),'wholeOrderReview',jsonb_build_object('orderReviewId',review.order_review_id,'reviewedBy',review.reviewed_by,'reviewedAt',to_char(review.reviewed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'reviewSnapshot',review.review_snapshot)) source_snapshot
        FROM rework_responsibility_determinations d
        JOIN operation_events event ON event.event_id=d.operation_event_id
@@ -170,15 +170,26 @@ export class ExternalResponsibilityService {
     );
     const finalized = source.rows[0];
     if (!finalized) return null;
+    // N09 is created from the immutable N07 submission event, even though the
+    // call itself is made while handling the N08 owner decision.  The database
+    // guards use this trusted context to prove that no browser request created
+    // or re-routed a supplier ledger.
+    await client.query(
+      `SELECT set_config('dx_rework.external_responsibility_event_id',$1,true),
+              set_config('dx_rework.external_responsibility_request_id',$2,true)`,
+      [finalized.operation_event_id, finalized.request_id],
+    );
     const existing = await client.query<{ batch_id: string }>(
       "SELECT batch_id FROM rework_external_responsibility_batches WHERE finalized_determination_id=$1", [determinationId],
     );
     if (existing.rows[0]) return existing.rows[0].batch_id;
     await this.supersedeReplacedBatches(client, actor, order.rework_order_id, determinationId);
-    const external = await client.query<{ configuration_item_id: string; responsibility_type: ResponsibilityType; process_snapshot: Record<string, unknown>; multiplier: string; share_bps: number; proposed_amount: string; amount_line_snapshot: Record<string, unknown> }>(
+    const external = await client.query<{ configuration_item_id: string; responsibility_type: ResponsibilityType; process_snapshot: Record<string, unknown>; multiplier: string; share_bps: number; proposed_amount: string; amount_line_snapshot: Record<string, unknown>; supplier_id: string | null; supplier_version: number | null; supplier_code_snapshot: string | null; supplier_name_snapshot: string | null; supplier_type_snapshot: "factory" | "embroidery_washing" | "fabric" | null }>(
       `SELECT allocation.configuration_item_id,allocation.responsibility_type,
               jsonb_build_object('configurationItemId',process.configuration_item_id,'processName',process.process_name_snapshot,'pricingUnit',process.pricing_unit_snapshot,'baseAmount',process.base_amount::text,'responsibilityAmount',process.responsibility_amount::text) process_snapshot,
-              process.multiplier::text multiplier,allocation.share_bps,allocation.rounded_amount::text proposed_amount,
+              COALESCE(allocation.multiplier,process.multiplier)::text multiplier,allocation.share_bps,allocation.rounded_amount::text proposed_amount,
+              allocation.supplier_id,allocation.supplier_version,allocation.supplier_code_snapshot,
+              allocation.supplier_name_snapshot,allocation.supplier_type_snapshot,
               COALESCE((SELECT jsonb_agg(jsonb_build_object('workReportId',line.work_report_id,'personId',line.person_id,'baseMemberShareAmount',line.base_member_share_amount::text,'multiplier',line.multiplier::text,'shareBps',line.share_bps,'roundedAmount',line.rounded_amount::text,'memberSnapshot',line.member_snapshot,'reportSnapshot',line.report_snapshot) ORDER BY line.work_report_id,line.person_id) FROM rework_responsibility_amount_lines line WHERE line.determination_id=allocation.determination_id AND line.configuration_item_id=allocation.configuration_item_id AND line.responsibility_type=allocation.responsibility_type),'[]'::jsonb) amount_line_snapshot
        FROM rework_responsibility_allocations allocation
        JOIN rework_responsibility_processes process USING(determination_id,configuration_item_id)
@@ -195,6 +206,7 @@ export class ExternalResponsibilityService {
     );
     const createdItems: Array<{
       externalItemId: string;
+      configurationItemId: string;
       responsibilityType: ResponsibilityType;
       proposedAmount: string;
     }> = [];
@@ -207,26 +219,129 @@ export class ExternalResponsibilityService {
       );
       createdItems.push({
         externalItemId,
+        configurationItemId: item.configuration_item_id,
         responsibilityType: item.responsibility_type,
         proposedAmount: item.proposed_amount,
       });
     }
-    await this.autoRouteOriginalProcessingFactory(
-      client,
-      actor,
-      order,
-      batchId,
-      createdItems,
-    );
-    await this.createSupplierSelectionTodos(
-      client,
-      actor,
-      order,
-      batchId,
-      finalized.operation_event_id,
-      finalized.source_action,
-    );
+    if (finalized.settlement_schema_version === 2) {
+      await this.materializeV2SupplierLedgers(
+        client,
+        actor,
+        order,
+        batchId,
+        createdItems,
+        external.rows,
+        finalized,
+      );
+      return batchId;
+    }
+    await this.autoRouteOriginalProcessingFactory(client, actor, order, batchId, createdItems);
+    await this.createSupplierSelectionTodos(client, actor, order, batchId, finalized.operation_event_id, finalized.source_action);
     return batchId;
+  }
+
+  /** N09: data was verified in N07 and signed in N08, so create all supplier
+   * ledgers directly.  There is no third supplier approval and no payables
+   * "accept" step; payables receives the N11 record-deduction work item. */
+  private async materializeV2SupplierLedgers(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    order: OrderRow,
+    batchId: string,
+    items: ReadonlyArray<{ externalItemId: string; configurationItemId: string; responsibilityType: ResponsibilityType; proposedAmount: string }>,
+    sourceRows: ReadonlyArray<{
+      configuration_item_id: string;
+      responsibility_type: ResponsibilityType;
+      supplier_id: string | null;
+      supplier_version: number | null;
+      supplier_code_snapshot: string | null;
+      supplier_name_snapshot: string | null;
+      supplier_type_snapshot: "factory" | "embroidery_washing" | "fabric" | null;
+    }>,
+    finalized: Readonly<{ operation_event_id: string; source_action: string; request_id: string; created_by: string }>,
+  ): Promise<void> {
+    const itemByKey = new Map(
+      items.map((item) => [`${item.responsibilityType}:${item.configurationItemId}`, item]),
+    );
+    type SupplierLedgerGroup = {
+      responsibilityType: ResponsibilityType;
+      supplierId: string;
+      supplierVersion: number;
+      supplierCode: string;
+      supplierName: string;
+      supplierType: "factory" | "embroidery_washing" | "fabric";
+      itemIds: string[];
+      proposedAmount: bigint;
+    };
+    const grouped = new Map<string, SupplierLedgerGroup>();
+    for (const row of sourceRows) {
+      const supplierId = row.supplier_id ?? fail("正式责任版本缺少外部供应商快照", 409, "INVALID_STATE_TRANSITION");
+      const supplierVersion = row.supplier_version ?? fail("正式责任版本缺少外部供应商快照", 409, "INVALID_STATE_TRANSITION");
+      const supplierCode = row.supplier_code_snapshot ?? fail("正式责任版本缺少外部供应商快照", 409, "INVALID_STATE_TRANSITION");
+      const supplierName = row.supplier_name_snapshot ?? fail("正式责任版本缺少外部供应商快照", 409, "INVALID_STATE_TRANSITION");
+      const supplierType = row.supplier_type_snapshot ?? fail("正式责任版本缺少外部供应商快照", 409, "INVALID_STATE_TRANSITION");
+      const externalItem = itemByKey.get(
+        `${row.responsibility_type}:${row.configuration_item_id}`,
+      ) ?? fail("自动台账项目不存在", 409, "INVALID_STATE_TRANSITION");
+      const key = `${row.responsibility_type}:${supplierId}:${supplierVersion}`;
+      const current: SupplierLedgerGroup = grouped.get(key) ?? {
+        responsibilityType: row.responsibility_type,
+        supplierId,
+        supplierVersion,
+        supplierCode,
+        supplierName,
+        supplierType,
+        itemIds: [],
+        proposedAmount: 0n,
+      };
+      if (!current.itemIds.includes(externalItem.externalItemId)) {
+        current.itemIds.push(externalItem.externalItemId);
+        current.proposedAmount += toCents(externalItem.proposedAmount);
+      }
+      grouped.set(key, current);
+    }
+    for (const entry of grouped.values()) {
+      const caseId = randomUUID();
+      await client.query(
+        `INSERT INTO rework_external_responsibility_cases(
+           case_id,batch_id,rework_order_id,responsibility_type,supplier_id,
+           supplier_version,supplier_code_snapshot,supplier_name_snapshot,
+           supplier_type_snapshot,business_handler_user_id,payables_handler_role_snapshot,
+           proposed_deduction_amount,status,submitted_at,payables_confirmed_at,
+           created_by,operation_event_id,request_id)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+           'deduction_follow_up',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$10,$13,$14)`,
+        [
+          caseId, batchId, order.rework_order_id, entry.responsibilityType,
+          entry.supplierId, entry.supplierVersion, entry.supplierCode,
+          entry.supplierName, entry.supplierType, finalized.created_by,
+          payablesRole(entry.responsibilityType), money(entry.proposedAmount),
+          finalized.operation_event_id, finalized.request_id,
+        ],
+      );
+      for (const itemId of entry.itemIds) {
+        await client.query(
+          `INSERT INTO rework_external_responsibility_case_items(
+             case_id,external_item_id,operation_event_id,request_id)
+           VALUES($1,$2,$3,$4)`,
+          [caseId, itemId, finalized.operation_event_id, finalized.request_id],
+        );
+      }
+      await this.todos?.actionableForUniqueRoleOrOrderDelegate(client, actor, {
+        category: "external_deduction_follow_up",
+        sourceEventId: finalized.operation_event_id,
+        sourceAction: finalized.source_action,
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        requiredRole: payablesRole(entry.responsibilityType),
+        requiredCapability: "external_deduction:record",
+        delegationScopeId: order.rework_order_id,
+        route: { routeName: "external_responsibility_detail", entityId: caseId, reworkOrderId: order.rework_order_id },
+        policyKey: "general",
+        dedupeKey: `external-deduction:${caseId}:v1`,
+      });
+    }
   }
 
   private async createSupplierSelectionTodos(
@@ -457,6 +572,7 @@ export class ExternalResponsibilityService {
           `external-return:${targetCase.case_id}:`,
           `deduction-follow-up:${targetCase.case_id}:`,
           `deduction-overdue:${targetCase.case_id}:`,
+          `external-deduction:${targetCase.case_id}:`,
         ]) {
           await this.todos?.cancelOpenByDedupePrefix(
             client,
@@ -710,6 +826,7 @@ export class ExternalResponsibilityService {
       await client.query(`INSERT INTO rework_external_deduction_closures(closure_id,case_id,result,proposed_amount,actual_deducted_amount,remaining_amount,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$4-$5,$6,$7,$8,$9,$10,$11)`,[randomUUID(),caseId,input.result,proposed,actual,input.reason??null,input.evidenceAttachmentIds,input.remainingDifferenceDisposition??null,actor.actorId,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='closed',case_version=case_version+1 WHERE case_id=$1",[caseId]);
       await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-overdue:${caseId}:`,"The deduction case was closed");
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`external-deduction:${caseId}:`,"The deduction case was closed");
       return this.getCase(actor,caseId,client);
     });
   }
@@ -730,6 +847,7 @@ export class ExternalResponsibilityService {
         `external-return:${caseId}:`,
         `deduction-follow-up:${caseId}:`,
         `deduction-overdue:${caseId}:`,
+        `external-deduction:${caseId}:`,
       ]) {
         await this.todos?.cancelOpenByDedupePrefix(
           client,

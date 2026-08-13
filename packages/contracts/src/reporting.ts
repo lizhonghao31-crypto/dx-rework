@@ -27,6 +27,7 @@ export const ReportingReworkStatusSchema = z.enum([
   "pending_order_review",
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
+  "pending_owner_signature",
   "pending_responsibility_action",
   "completed",
   "cancelled",

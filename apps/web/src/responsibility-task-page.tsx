@@ -32,8 +32,15 @@ const workflowNodeByRoute: Record<OrderTaskRouteName, WorkflowNodeKey> = {
   process_configuration: "process_configuration",
   whole_order_review: "whole_order_review",
   responsibility_detail: "responsibility",
-  own_factory_approval: "responsibility_settlement",
-  external_responsibility_detail: "responsibility_settlement",
+  // Kept only so historic, completed todo links remain readable.  New orders
+  // never create these approval steps; N08 is the owner signature node.
+  own_factory_approval: "settlement_ledger",
+  external_responsibility_detail: "settlement_followup",
+};
+
+const workflowNodeForTodo = (todo: ActionTodo): WorkflowNodeKey => {
+  if (todo.category === "owner_signature") return "owner_signature";
+  return workflowNodeByRoute[todo.route.routeName as OrderTaskRouteName];
 };
 
 const todoIdFromLocation = (): string | null => {
@@ -119,7 +126,7 @@ export function ResponsibilityTaskPage() {
   if (state.kind === "completed") {
     if (state.todo.route.routeName !== "wage_period_detail") {
       const route = state.todo.route;
-      const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
+      const node = workflowNodeForTodo(state.todo);
       const externalCaseId = focusedExternalCaseId(state.todo);
       return <ReworkDetailPage
         reworkOrderId={route.reworkOrderId ?? route.entityId}
@@ -144,7 +151,7 @@ export function ResponsibilityTaskPage() {
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
   if (route.routeName !== "wage_period_detail") {
-    const node = workflowNodeByRoute[route.routeName as OrderTaskRouteName];
+    const node = workflowNodeForTodo(todo);
     const externalCaseId = focusedExternalCaseId(todo);
     return <ReworkDetailPage
       reworkOrderId={orderId}

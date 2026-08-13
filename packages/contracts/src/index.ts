@@ -180,6 +180,7 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_order_review",
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
+  "pending_owner_signature",
   "pending_responsibility_action",
   "completed",
   "cancelled",
@@ -588,9 +589,21 @@ const ResponsibilityMultiplierSchema = z.string()
 export const ResponsibilityOrderParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
 export const ResponsibilityDeterminationParamsSchema = z.object({ determinationId: IdSchema }).strict();
 export const ResponsibilityTypeSchema = z.enum(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]);
+export const ResponsibilitySupplierOptionsResponseSchema = z.object({
+  items: z.array(z.object({
+    supplierId: IdSchema,
+    supplierType: z.enum(["factory", "embroidery_washing", "fabric"]),
+    supplierName: z.string(),
+  }).strict()),
+}).strict();
 export const ResponsibilityAllocationInputSchema = z.object({
   responsibilityType: ResponsibilityTypeSchema,
   shareBps: z.number().int().min(0).max(10_000),
+  // V2 keeps the commercial rule on the responsible party rather than on the
+  // process.  The two fields stay optional at the wire level so old, immutable
+  // snapshots can still be read; a V2 submission is validated by the service.
+  multiplier: ResponsibilityMultiplierSchema.optional(),
+  supplierId: IdSchema.nullable().optional(),
 }).strict();
 export const ResponsibilityProcessInputSchema = z.object({
   configurationItemId: IdSchema,
@@ -617,15 +630,27 @@ export const ConfirmHighMultiplierSchema = z.object({ expectedOrderVersion: z.nu
 export const ResponsibilityDeterminationResponseSchema = z.object({
   reworkOrderId: IdSchema, reworkStatus: ReworkOrderStatusSchema, orderVersion: z.number().int().positive(),
   handlerUserId: IdSchema.nullable(), canDetermine: z.boolean(), canTakeover: z.boolean(), canConfirmHighMultiplier: z.boolean(),
+  canOwnerSign: z.boolean().default(false),
+  ownerSignature: z.object({
+    determinationId: IdSchema,
+    decision: z.enum(["approved", "rejected"]),
+    signedBy: IdSchema,
+    signedAt: z.string().datetime(),
+  }).strict().nullable().default(null),
   sourceProcesses: z.array(z.object({ configurationItemId: IdSchema, processName: z.string().min(1), pricingUnit: ProcessPricingUnitSchema, baseAmount: z.string() }).strict()),
-  determination: z.object({ determinationId: IdSchema, version: z.number().int().positive(), stage: z.enum(["draft", "finalized"]), reason: z.string().nullable(), calculationTotal: z.string(), highMultiplierConfirmed: z.boolean(), processes: z.array(z.object({ configurationItemId: IdSchema, processName: z.string(), pricingUnit: ProcessPricingUnitSchema, multiplier: z.string(), highMultiplierReason: z.string().nullable(), baseAmount: z.string(), responsibilityAmount: z.string(), allocations: z.array(z.object({ responsibilityType: ResponsibilityTypeSchema, shareBps: z.number().int(), roundedAmount: z.string() })) })) }).nullable(),
+  determination: z.object({ determinationId: IdSchema, version: z.number().int().positive(), stage: z.enum(["draft", "finalized"]), reason: z.string().nullable(), calculationTotal: z.string(), highMultiplierConfirmed: z.boolean(), processes: z.array(z.object({ configurationItemId: IdSchema, processName: z.string(), pricingUnit: ProcessPricingUnitSchema, multiplier: z.string(), highMultiplierReason: z.string().nullable(), baseAmount: z.string(), responsibilityAmount: z.string(), allocations: z.array(z.object({ responsibilityType: ResponsibilityTypeSchema, shareBps: z.number().int(), roundedAmount: z.string(), multiplier: z.string().default("1.000"), supplier: z.object({ supplierId: IdSchema, version: z.number().int().positive(), code: z.string(), name: z.string(), type: z.enum(["factory", "embroidery_washing", "fabric"]) }).strict().nullable().default(null) })) })) }).nullable(),
 });
+export const OwnerSignatureCommandSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+}).strict();
 export type ResponsibilityType = z.infer<typeof ResponsibilityTypeSchema>;
+export type ResponsibilitySupplierOptionsResponse = z.infer<typeof ResponsibilitySupplierOptionsResponseSchema>;
 export type CreateResponsibilityDraft = z.infer<typeof CreateResponsibilityDraftSchema>;
 export type FinalizeResponsibility = z.infer<typeof FinalizeResponsibilitySchema>;
 export type TransferResponsibility = z.infer<typeof TransferResponsibilitySchema>;
 export type TakeoverResponsibility = z.infer<typeof TakeoverResponsibilitySchema>;
 export type ConfirmHighMultiplier = z.infer<typeof ConfirmHighMultiplierSchema>;
+export type OwnerSignatureCommand = z.infer<typeof OwnerSignatureCommandSchema>;
 export type ResponsibilityDeterminationResponse = z.infer<typeof ResponsibilityDeterminationResponseSchema>;
 
 export const OwnFactoryApprovalParamsSchema = z.object({ approvalId: IdSchema }).strict();

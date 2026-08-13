@@ -43,6 +43,7 @@ type LeafRow = {
   stage: "draft" | "finalized";
   handler_user_id: string;
   created_by: string;
+  settlement_schema_version: 1 | 2;
 };
 type PermissionRow = {
   determine_eligible: boolean;
@@ -53,6 +54,7 @@ type PermissionRow = {
   leaf_stage: "draft" | "finalized" | null;
   has_high_multiplier: boolean;
   high_multiplier_confirmed: boolean;
+  owner_sign: boolean;
 };
 type HighMultiplierRow = {
   configuration_item_id: string;
@@ -93,10 +95,17 @@ export class AuthorizedResponsibilityDeterminationService {
     const response = await this.base.get(actor, orderId, executor);
     return {
       ...response,
-      handlerUserId: permission.handlerUserId,
+      // A non-Root actor is always the first handler. Root deliberately gets
+      // no implicit handler here: the UI must select an eligible initial
+      // handler before persisting N07.
+      handlerUserId: permission.handlerUserId ?? (
+        permission.canDetermine && !isRootActor(actor) ? actor.actorId : null
+      ),
       canDetermine: permission.canDetermine,
       canTakeover: permission.canTakeover,
       canConfirmHighMultiplier: permission.canConfirmHighMultiplier,
+      canOwnerSign: permission.canOwnerSign,
+      ownerSignature: await this.ownerSignature(executor, orderId),
     };
   }
 
@@ -136,18 +145,49 @@ export class AuthorizedResponsibilityDeterminationService {
         "SELECT 1 FROM rework_responsibility_processes WHERE determination_id=$1 AND multiplier>2 LIMIT 1",
         [current.determination_id],
       );
-      if (high.rowCount && !confirmation.rows[0]) fail("高倍率尚未完成独立确认");
-      const eventId = await this.event(client, actor, "rework.responsibility.finalize", "responsibility:determine", order, "pending_responsibility_action");
+      if (current.settlement_schema_version === 1 && high.rowCount && !confirmation.rows[0]) fail("高倍率尚未完成独立确认");
+      if (current.settlement_schema_version === 2) {
+        const incomplete = await client.query(
+          `SELECT 1
+           FROM rework_responsibility_allocations
+           WHERE determination_id=$1
+             AND (
+               multiplier IS NULL
+               OR multiplier<1
+               OR (responsibility_type<>'own_factory' AND (
+                 supplier_id IS NULL OR multiplier<1.2
+               ))
+             )
+           LIMIT 1`,
+          [current.determination_id],
+        );
+        if (incomplete.rowCount) {
+          fail("提交老板签字前必须填写全部责任方、外部供应商及合规倍率", 400, "VALIDATION_ERROR");
+        }
+      }
+      const nextStatus = current.settlement_schema_version === 2
+        ? "pending_owner_signature" as const
+        : "pending_responsibility_action" as const;
+      const eventId = await this.event(
+        client,
+        actor,
+        current.settlement_schema_version === 2
+          ? "rework.responsibility.submit_owner_signature"
+          : "rework.responsibility.finalize",
+        "responsibility:determine",
+        order,
+        nextStatus,
+      );
       const id = randomUUID();
       await client.query(
         `INSERT INTO rework_responsibility_determinations(
            determination_id,rework_order_id,determination_version,replaces_determination_id,
            source_order_review_id,stage,handler_user_id,created_by,reason,
            source_high_multiplier_confirmation_id,input_snapshot,calculation_total,
-           operation_event_id,request_id)
+           operation_event_id,request_id,settlement_schema_version)
          SELECT $1,rework_order_id,determination_version+1,determination_id,
                 source_order_review_id,'finalized',$2,$3,reason,$4,input_snapshot,
-                calculation_total,$5,$6
+                calculation_total,$5,$6,settlement_schema_version
          FROM rework_responsibility_determinations WHERE determination_id=$7`,
         [id, permission.handlerUserId, actor.actorId, confirmation.rows[0]?.confirmation_id ?? null, eventId, actor.requestId, current.determination_id],
       );
@@ -159,8 +199,14 @@ export class AuthorizedResponsibilityDeterminationService {
         [id, eventId, actor.requestId, current.determination_id],
       );
       await client.query(
-        `INSERT INTO rework_responsibility_allocations
-         SELECT $1,configuration_item_id,responsibility_type,share_bps,rounded_amount,$2,$3
+        `INSERT INTO rework_responsibility_allocations(
+           determination_id,configuration_item_id,responsibility_type,share_bps,
+           rounded_amount,operation_event_id,request_id,multiplier,supplier_id,
+           supplier_version,supplier_code_snapshot,supplier_name_snapshot,
+           supplier_type_snapshot)
+         SELECT $1,configuration_item_id,responsibility_type,share_bps,rounded_amount,$2,$3,
+                multiplier,supplier_id,supplier_version,supplier_code_snapshot,
+                supplier_name_snapshot,supplier_type_snapshot
          FROM rework_responsibility_allocations WHERE determination_id=$4`,
         [id, eventId, actor.requestId, current.determination_id],
       );
@@ -179,6 +225,28 @@ export class AuthorizedResponsibilityDeterminationService {
          ) permitted`,
         [actor.actorId],
       )).rows[0]?.permitted === true;
+      if (current.settlement_schema_version === 2) {
+        await this.advance(client, orderId, actor.actorId, nextStatus);
+        await this.todos?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `responsibility:${orderId}:`,
+          "Responsibility determination was submitted for owner signature",
+        );
+        await this.todos?.actionableForAllDirectRole(client, actor, {
+          category: "owner_signature",
+          sourceEventId: eventId,
+          sourceAction: "rework.responsibility.submit_owner_signature",
+          entityType: "rework_order",
+          entityId: orderId,
+          requiredRole: "owner_group",
+          requiredCapability: "responsibility:owner_sign",
+          route: { routeName: "responsibility_detail", entityId: orderId },
+          policyKey: "general",
+          dedupeKey: `owner-signature:${orderId}:${current.determination_version + 1}`,
+        });
+        return this.get(actor, orderId, client);
+      }
       const ownFactoryApprovalId = await this.ownFactoryApprovals.ensureForFinalized(
         client,
         actor,
@@ -362,6 +430,7 @@ export class AuthorizedResponsibilityDeterminationService {
       `SELECT responsibility_can_determine($1,$2) determine_eligible,
               responsibility_actor_has_direct_role($1,'responsibility:takeover',ARRAY['owner_group']) direct_takeover,
               responsibility_actor_has_direct_role($1,'responsibility:confirm_high_multiplier',ARRAY['owner_group']) direct_confirm,
+              responsibility_actor_has_direct_role($1,'responsibility:owner_sign',ARRAY['owner_group']) owner_sign,
               responsibility_effective_handler($2) handler_user_id,
               (SELECT created_by FROM rework_responsibility_determinations leaf
                WHERE leaf.rework_order_id=$2 AND NOT EXISTS(
@@ -386,11 +455,13 @@ export class AuthorizedResponsibilityDeterminationService {
     const row = result.rows[0]!;
     const caps = capabilities(actor);
     const pending = order.status === "pending_responsibility_determination";
+    const pendingOwnerSignature = order.status === "pending_owner_signature";
     const root = isRootActor(actor);
     const canView = root ||
       (row.determine_eligible && caps.includes("responsibility:determine")) ||
       (row.direct_takeover && caps.includes("responsibility:takeover")) ||
-      (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier"));
+      (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")) ||
+      (row.owner_sign && caps.includes("responsibility:owner_sign"));
     return {
       canView,
       canDetermine: pending && (root || (
@@ -404,8 +475,37 @@ export class AuthorizedResponsibilityDeterminationService {
         row.leaf_stage === "draft" && row.has_high_multiplier && !row.high_multiplier_confirmed,
       directTakeover: root || (row.direct_takeover && caps.includes("responsibility:takeover")),
       directConfirm: root || (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")),
+      canOwnerSign: pendingOwnerSignature && (
+        root || (row.owner_sign && caps.includes("responsibility:owner_sign"))
+      ),
       handlerUserId: row.handler_user_id,
     };
+  }
+
+  private async ownerSignature(
+    client: Queryable,
+    orderId: string,
+  ): Promise<ResponsibilityDeterminationResponse["ownerSignature"]> {
+    const result = await client.query<{
+      determination_id: string;
+      decision: "approved" | "rejected";
+      signed_by: string;
+      signed_at: Date;
+    }>(
+      `SELECT determination_id,decision,signed_by,signed_at
+       FROM rework_responsibility_owner_signatures
+       WHERE rework_order_id=$1
+       ORDER BY signed_at DESC,owner_signature_id DESC
+       LIMIT 1`,
+      [orderId],
+    );
+    const row = result.rows[0];
+    return row ? {
+      determinationId: row.determination_id,
+      decision: row.decision,
+      signedBy: row.signed_by,
+      signedAt: row.signed_at.toISOString(),
+    } : null;
   }
 
   private async canDetermine(client: Queryable, actorId: string, orderId: string): Promise<boolean> {
@@ -418,7 +518,7 @@ export class AuthorizedResponsibilityDeterminationService {
 
   private async leaf(client: Queryable, orderId: string, locked: boolean): Promise<LeafRow | null> {
     const result = await client.query<LeafRow>(
-      `SELECT determination_id,determination_version,stage,handler_user_id,created_by
+      `SELECT determination_id,determination_version,stage,handler_user_id,created_by,settlement_schema_version
        FROM rework_responsibility_determinations leaf
        WHERE leaf.rework_order_id=$1 AND NOT EXISTS(
          SELECT 1 FROM rework_responsibility_determinations successor

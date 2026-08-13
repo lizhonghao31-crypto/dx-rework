@@ -24,6 +24,7 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
   pending_order_review: "待整单审核",
   pending_quantity_adjustment_ie_review: "数量调整待 IE",
   pending_responsibility_determination: "待责任判定",
+  pending_owner_signature: "待老板确认签字",
   pending_responsibility_action: "责任处理中",
   completed: "已完成",
   cancelled: "已取消",

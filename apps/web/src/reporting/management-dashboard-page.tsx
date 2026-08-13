@@ -19,9 +19,9 @@ const nodeTarget = (node: string): string => ({
   N05: "ui/work-reporting?queue=in_progress",
   N06: "ui/work-reporting?queue=pending_order_review",
   "N06-A": "ui/work-reporting?queue=pending_quantity_adjustment_ie_review",
-  N07: "ui/responsibility",
-  N08: "ui/tasks?status=pending_responsibility_action",
-  N09: "ui/tasks?status=completed",
+  N07: "ui/tasks?status=pending_responsibility_determination",
+  N08: "ui/tasks?status=pending_owner_signature",
+  N10: "ui/tasks?status=completed",
   "N10-A": "ui/wages",
 })[node] ?? "ui/tasks";
 

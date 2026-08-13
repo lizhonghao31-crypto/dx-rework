@@ -11,7 +11,6 @@ const queueUrl = new URL(
   import.meta.url,
 );
 const appUrl = new URL("../../apps/web/src/App.tsx", import.meta.url);
-const pagesUrl = new URL("../../apps/web/src/pages.tsx", import.meta.url);
 const styleUrl = new URL(
   "../../apps/web/src/own-factory-approval.css",
   import.meta.url,
@@ -41,11 +40,11 @@ describe("own-factory approval web integration", () => {
     expect(source).not.toContain("已收到一次结果通知");
   });
 
-  it("keeps the live N08-A queue synchronized and uses real order routes", async () => {
-    const [queue, app, pages] = await Promise.all([
+  it("keeps the historical N08-A queue isolated from the new N07–N11 order path", async () => {
+    const [queue, app, detail] = await Promise.all([
       readFile(queueUrl, "utf8"),
       readFile(appUrl, "utf8"),
-      readFile(pagesUrl, "utf8"),
+      readFile(new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url), "utf8"),
     ]);
     expect(queue).toContain('apiUrl("own-factory-approvals/queue")');
     expect(queue).toContain("item.reworkOrderId");
@@ -53,7 +52,7 @@ describe("own-factory approval web integration", () => {
     expect(queue).not.toContain("queueRefreshMilliseconds");
     expect(queue).not.toContain('window.addEventListener("focus"');
     expect(app).toContain('path === "/ui/own-factory-approvals"');
-    expect(pages).toContain("<OwnFactoryApprovalPanel reworkOrderId={reworkOrderId} />");
+    expect(detail).not.toContain("<OwnFactoryApprovalPanel");
   });
 
   it("keeps the approval detail usable on 390 and 360 width mobile screens", async () => {

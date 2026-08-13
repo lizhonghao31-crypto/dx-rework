@@ -19,6 +19,7 @@ type CandidateKind =
   | "whole_order_review"
   | "work_report_return"
   | "responsibility_determination"
+  | "owner_signature"
   | "high_multiplier_confirmation"
   | "own_factory_approval"
   | "external_business_signoff"
@@ -355,6 +356,7 @@ export class TodoBackfillService {
           dedupeKey: candidate.dedupeKey,
         });
         return;
+      case "owner_signature":
       case "high_multiplier_confirmation":
       case "own_factory_approval":
         await this.projections.actionableForAllDirectRole(client, actor, projection);
@@ -381,6 +383,7 @@ export class TodoBackfillService {
       this.pendingWholeOrderReview(watermark),
       this.pendingWorkReportReturns(watermark),
       this.pendingResponsibility(watermark),
+      this.pendingOwnerSignatures(watermark),
       this.pendingOwnFactoryApprovals(watermark),
       this.pendingExternalCases(watermark),
       this.pendingWages(watermark),
@@ -619,6 +622,47 @@ export class TodoBackfillService {
     });
   }
 
+  /** N08 has no external ledger until its owner action succeeds, so its missing
+   * todo must be projected from the finalized N07 determination itself. */
+  private async pendingOwnerSignatures(watermark: Watermark): Promise<Candidate[]> {
+    const result = await this.database.query<{
+      rework_order_id: string;
+      determination_version: number;
+      source_event_id: string | null;
+    }>(
+      `SELECT order_record.rework_order_id,determination.determination_version,
+              source.event_id source_event_id
+       FROM rework_orders order_record
+       JOIN rework_responsibility_determinations determination
+         ON determination.rework_order_id=order_record.rework_order_id
+        AND determination.stage='finalized'
+       LEFT JOIN LATERAL (
+         SELECT event_id FROM operation_events event
+         WHERE event.event_id=determination.operation_event_id
+           AND event.action='rework.responsibility.submit_owner_signature'
+           AND ${watermarkPredicate("event", 1, 2)}
+       ) source ON true
+       WHERE order_record.status='pending_owner_signature'
+         AND NOT EXISTS (
+           SELECT 1 FROM rework_responsibility_determinations successor
+           WHERE successor.replaces_determination_id=determination.determination_id
+         )
+       ORDER BY order_record.rework_order_id`,
+      [watermark.createdAt, watermark.eventId],
+    );
+    return result.rows.map((row) => this.candidate({
+      kind: "owner_signature", id: row.rework_order_id,
+      sourceEventId: row.source_event_id,
+      sourceAction: "rework.responsibility.submit_owner_signature",
+      entityType: "rework_order", entityId: row.rework_order_id,
+      category: "owner_signature",
+      route: { routeName: "responsibility_detail", entityId: row.rework_order_id },
+      policyKey: "general", requiredRole: "owner_group",
+      requiredCapability: "responsibility:owner_sign",
+      dedupeKey: `owner-signature:${row.rework_order_id}:${row.determination_version}`,
+    }));
+  }
+
   private async pendingOwnFactoryApprovals(watermark: Watermark): Promise<Candidate[]> {
     const result = await this.database.query<{
       approval_id: string; rework_order_id: string; source_event_id: string | null;
@@ -649,13 +693,14 @@ export class TodoBackfillService {
     const result = await this.database.query<{
       case_id: string; rework_order_id: string; status: string; case_version: number; business_handler_user_id: string;
       payables_handler_role_snapshot: string; allocation_event_id: string | null; allocation_actor_id: string | null;
-      source_event_id: string | null; signoff_event_id: string | null; return_event_id: string | null;
+      source_event_id: string | null; source_action: string | null; signoff_event_id: string | null; return_event_id: string | null;
       accept_event_id: string | null; follow_up_event_id: string | null; next_follow_up_at: Date | null;
     }>(
       `SELECT target_case.case_id,target_case.rework_order_id,target_case.status,target_case.case_version,
               target_case.business_handler_user_id,target_case.payables_handler_role_snapshot,
               allocation_event.event_id allocation_event_id,allocation_event.actor_id allocation_actor_id,
-              allocation_event.event_id source_event_id,signoff.operation_event_id signoff_event_id,
+              allocation_event.event_id source_event_id,allocation_event.action source_action,
+              signoff.operation_event_id signoff_event_id,
               payables_return.operation_event_id return_event_id,payables_accept.operation_event_id accept_event_id,
               follow_up.operation_event_id follow_up_event_id,follow_up.next_follow_up_at
        FROM rework_external_responsibility_cases target_case
@@ -664,9 +709,12 @@ export class TodoBackfillService {
        JOIN rework_orders order_record
          ON order_record.rework_order_id=target_case.rework_order_id
        LEFT JOIN LATERAL (
-         SELECT event_id,actor_id FROM operation_events event
+         SELECT event_id,actor_id,action FROM operation_events event
          WHERE event.event_id=target_case.operation_event_id
-           AND event.action='rework.external_responsibility.allocate'
+           AND event.action IN (
+             'rework.external_responsibility.allocate',
+             'rework.responsibility.submit_owner_signature'
+           )
            AND ${watermarkPredicate("event", 1, 2)}
        ) allocation_event ON true
        LEFT JOIN LATERAL (
@@ -705,7 +753,7 @@ export class TodoBackfillService {
   private externalCandidates(row: {
     case_id: string; rework_order_id: string; status: string; case_version: number; business_handler_user_id: string;
     payables_handler_role_snapshot: string; allocation_event_id: string | null; allocation_actor_id: string | null;
-    source_event_id: string | null; signoff_event_id: string | null; return_event_id: string | null;
+    source_event_id: string | null; source_action: string | null; signoff_event_id: string | null; return_event_id: string | null;
     accept_event_id: string | null; follow_up_event_id: string | null; next_follow_up_at: Date | null;
   }): Candidate[] {
     const route = {
@@ -746,11 +794,20 @@ export class TodoBackfillService {
       })];
     }
     if (row.status !== "deduction_follow_up") return [];
+    const isV2Ledger = row.source_action === "rework.responsibility.submit_owner_signature";
     const followUp = this.candidate({
-      kind: "external_deduction_follow_up", id: row.case_id, sourceEventId: row.accept_event_id,
-      sourceAction: "rework.external_responsibility.payables_accept", category: "external_deduction_follow_up",
-      requiredRole: row.payables_handler_role_snapshot, requiredCapability: "external_deduction:follow_up",
-      dedupeKey: `deduction-follow-up:${row.case_id}:${row.case_version}`, policyKey: "general", ...base,
+      kind: "external_deduction_follow_up", id: row.case_id,
+      sourceEventId: isV2Ledger ? row.source_event_id : row.accept_event_id,
+      sourceAction: isV2Ledger
+        ? "rework.responsibility.submit_owner_signature"
+        : "rework.external_responsibility.payables_accept",
+      category: "external_deduction_follow_up",
+      requiredRole: row.payables_handler_role_snapshot,
+      requiredCapability: isV2Ledger ? "external_deduction:record" : "external_deduction:follow_up",
+      dedupeKey: isV2Ledger
+        ? `external-deduction:${row.case_id}:v1`
+        : `deduction-follow-up:${row.case_id}:${row.case_version}`,
+      policyKey: "general", ...base,
     });
     if (!row.next_follow_up_at || row.next_follow_up_at.getTime() > Date.now()) return [followUp];
     return [

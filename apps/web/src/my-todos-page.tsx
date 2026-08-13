@@ -17,16 +17,18 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   rework_detail: "查看返工单",
   process_configuration: "配置或审核返工工序",
   whole_order_review: "审核整张返工单",
-  responsibility_detail: "确认责任分配",
-  own_factory_approval: "审批本厂承担金额",
-  external_responsibility_detail: "处理供应商扣款",
+  responsibility_detail: "处理责任判定",
+  own_factory_approval: "查看历史本厂审批",
+  external_responsibility_detail: "记录供应商实际扣款",
   wage_period_detail: "核对返工工资",
 };
 
 const taskTitle = (todo: TodoResponse): string =>
-  todo.category === "external_supplier_selection"
-    ? "选择实际拟扣供应商"
-    : taskLabel[todo.route.routeName];
+  todo.category === "owner_signature"
+    ? "老板确认签字"
+    : todo.category === "external_supplier_selection"
+      ? "历史供应商选择"
+      : taskLabel[todo.route.routeName];
 
 const categoryLabel = (todo: TodoResponse): string => {
   const labels: Record<string, string> = {
@@ -38,10 +40,11 @@ const categoryLabel = (todo: TodoResponse): string => {
     work_reporting: "登记返工完成",
     whole_order_review: "整单审核",
     quantity_adjustment: "数量调整审核",
-    responsibility_determination: "责任判定",
-    own_factory_approval: "本厂金额审批",
-    external_supplier_selection: "选择实际拟扣供应商",
-    external_responsibility: "供应商扣款处理",
+    responsibility_determination: "责任判定与资料核验",
+    owner_signature: "老板确认签字",
+    own_factory_approval: "历史本厂金额审批",
+    external_supplier_selection: "历史供应商选择",
+    external_responsibility: "供应商实际扣款",
     wage_review: "返工工资核对",
   };
   return labels[todo.category] ?? taskTitle(todo);

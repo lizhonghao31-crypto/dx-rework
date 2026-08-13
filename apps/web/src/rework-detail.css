@@ -68,6 +68,17 @@
   margin-top: var(--dx-v2-space-2);
 }
 
+.rework-detail-wage-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dx-v2-space-2);
+}
+
+.rework-detail-wage-links a {
+  display: inline-flex;
+  margin-top: var(--dx-v2-space-2);
+}
+
 .rework-workflow,
 .rework-detail-task {
   display: grid;

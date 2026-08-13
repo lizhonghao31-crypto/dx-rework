@@ -35,6 +35,11 @@ export type ReworkBusinessDetail = Readonly<{
   submittedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  settlementStatus: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+  unsettledWagePeriods: readonly Readonly<{
+    periodId: string;
+    periodMonth: string;
+  }>[];
   attachments: readonly Readonly<{
     attachmentId: string;
     filename: string;
@@ -105,6 +110,10 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
 
 const actorCapabilities = (actor: TrustedActorContext): readonly string[] =>
   actor.authorizationCapabilities ?? [actor.authorizationCapability];
+
+const canViewWagePeriods = (actor: TrustedActorContext): boolean =>
+  actor.actorRoles.some((role) => ["root_superuser", "owner_group"].includes(role))
+  || actorCapabilities(actor).includes("wage:view");
 
 export class ReworkBusinessDetailService {
   constructor(private readonly database: Pool) {}
@@ -183,6 +192,44 @@ export class ReworkBusinessDetailService {
        LIMIT 200`,
       [reworkOrderId],
     );
+    const settlement = await this.database.query<{
+      status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+    }>(
+      `WITH v2_cases AS (
+         SELECT target_case.status
+         FROM rework_external_responsibility_cases target_case
+         JOIN rework_external_responsibility_batches batch ON batch.batch_id=target_case.batch_id
+         JOIN rework_responsibility_determinations determination
+           ON determination.determination_id=batch.finalized_determination_id
+         WHERE target_case.rework_order_id=$1
+           AND determination.settlement_schema_version=2
+           AND target_case.status<>'superseded'
+       ), wage_periods AS (
+         SELECT DISTINCT period.status
+         FROM rework_wage_items wage
+         JOIN rework_wage_periods period ON period.period_id=wage.period_id
+         WHERE wage.rework_order_id=$1
+       )
+       SELECT CASE
+         WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status='pending_responsibility_revision') THEN 'revision_in_progress'
+         WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status<>'closed')
+           OR EXISTS(SELECT 1 FROM wage_periods WHERE status<>'locked') THEN 'in_progress'
+         WHEN NOT EXISTS(SELECT 1 FROM v2_cases)
+           AND NOT EXISTS(SELECT 1 FROM wage_periods) THEN 'not_required'
+         ELSE 'closed'
+       END status`,
+      [reworkOrderId],
+    );
+    const unsettledWagePeriods = canViewWagePeriods(actor)
+      ? await this.database.query<{ period_id: string; period_month: string }>(
+        `SELECT DISTINCT period.period_id,period.period_month::text
+         FROM rework_wage_items wage
+         JOIN rework_wage_periods period ON period.period_id=wage.period_id
+         WHERE wage.rework_order_id=$1 AND period.status<>'locked'
+         ORDER BY period.period_month,period.period_id`,
+        [reworkOrderId],
+      )
+      : { rows: [] as { period_id: string; period_month: string }[] };
 
     return {
       reworkOrderId: row.rework_order_id,
@@ -223,6 +270,11 @@ export class ReworkBusinessDetailService {
       submittedAt: row.submitted_at?.toISOString() ?? null,
       cancelledAt: row.cancelled_at?.toISOString() ?? null,
       cancelReason: row.cancel_reason,
+      settlementStatus: settlement.rows[0]?.status ?? "not_required",
+      unsettledWagePeriods: unsettledWagePeriods.rows.map((period) => ({
+        periodId: period.period_id,
+        periodMonth: period.period_month,
+      })),
       attachments: attachments.rows.map((attachment) => ({
         attachmentId: attachment.attachment_id,
         filename: attachment.original_filename,

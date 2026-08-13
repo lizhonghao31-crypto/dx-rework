@@ -13,7 +13,7 @@ const styleUrl = new URL(
 );
 
 describe("responsibility determination web integration", () => {
-  it("loads the live response schema and all six responsibility endpoints", async () => {
+  it("loads the live N07/N08 schemas and supplier plus owner-signature endpoints", async () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).toContain("ResponsibilityDeterminationResponseSchema");
     expect(source).toContain(
@@ -23,7 +23,8 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("responsibility-determinations/finalize");
     expect(source).toContain("responsibility-determinations/transfer");
     expect(source).toContain("responsibility-determinations/takeover");
-    expect(source).toContain("high-multiplier-confirm");
+    expect(source).toContain("responsibility-determinations/supplier-options");
+    expect(source).toContain("responsibility-owner-signature/${decision}");
     expect(source).toContain(
       "pendingMutationKeys.current[signature] ?? crypto.randomUUID()",
     );
@@ -34,9 +35,9 @@ describe("responsibility determination web integration", () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).toContain('if (value === "") return 0n;');
     expect(source).toContain("const shareTotalBps = (");
-    expect(source).toContain("return shareTotalBps(process.allocations) === 10000n;");
-    expect(source).toContain("const shareTotal = shareTotalBps(process.allocations);");
-    expect(source).toContain('shareTotal === null ? "输入有误"');
+    expect(source).toContain("if (shareTotalBps(process.allocations) !== 10000n) return false;");
+    expect(source).toContain("const total = shareTotalBps(process.allocations);");
+    expect(source).toContain('total === null ? "输入有误"');
     expect(source).toContain(
       '?.shareBps ?? (current ? 0 : value === "own_factory" ? 10000 : 0)',
     );
@@ -51,8 +52,8 @@ describe("responsibility determination web integration", () => {
     expect(source).not.toContain("parseFloat(");
     expect(source).not.toContain("Number(process.multiplier");
     expect(source).not.toMatch(/responsibilityAmount\s*[/+*-]/);
-    expect(source).toContain("current.responsibilityAmount");
-    expect(source).toContain("determination.calculationTotal");
+    expect(source).toContain("persisted.responsibilityAmount");
+    expect(source).toContain("persistedAllocation.roundedAmount");
   });
 
   it("uses the real task URL UUID and permission fields for actions", async () => {
@@ -64,9 +65,9 @@ describe("responsibility determination web integration", () => {
     expect(pages).toContain(
       "<ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} />",
     );
-    expect(panel).toContain("response?.canDetermine");
+    expect(panel).toContain("response.canDetermine");
     expect(panel).toContain("response?.canTakeover");
-    expect(panel).toContain("response?.canConfirmHighMultiplier");
+    expect(panel).toContain("response?.canOwnerSign");
   });
 
   it("keeps the responsibility workspace usable on narrow screens", async () => {

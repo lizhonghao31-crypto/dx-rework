@@ -59,14 +59,16 @@ describe("business-chain UI handoff contracts", () => {
     expect(panel).toContain("待 IE 复核");
   });
 
-  it("keeps N07 responsibility rows valid and transfer targets human-readable", async () => {
+  it("keeps N07 party facts valid, supplier-owned and transfer targets human-readable", async () => {
     const [panel, service, routes] = await Promise.all([
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/src/rework/responsibility-determination-application-service.ts", "utf8"),
       readFile("apps/api/src/rework/responsibility-determination-routes.ts", "utf8"),
     ]);
     expect(panel).toContain("allocation.shareBps > 0n");
-    expect(panel).toContain("shareTotalBps(process.allocations) === 10000n");
+    expect(panel).toContain("if (shareTotalBps(process.allocations) !== 10000n) return false;");
+    expect(panel).toContain('multiplier >= 1200n && allocation.supplierId.length > 0');
+    expect(panel).toContain('supplierId: allocation.supplierId || undefined');
     expect(panel).toContain("输入姓名搜索");
     expect(panel).toContain("ResponsibilityTransferOptionsResponseSchema");
     expect(panel).not.toContain('label="目标用户 UUID"');
@@ -75,7 +77,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
-  it("keeps process, execution and wage work reachable from their permitted primary entries", async () => {
+  it("keeps process, execution, wage work and the N07–N11 workflow reachable from permitted primary entries", async () => {
     const [app, shell, detail] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
@@ -91,9 +93,13 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).not.toContain("flow-navigation__arrow");
     expect(detail).toContain('title: "发起与方案"');
     expect(detail).toContain('title: "返工执行"');
-    expect(detail).toContain('title: "责任与归档"');
+    expect(detail).toContain('title: "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
-    expect(detail).toContain('node("responsibility_settlement", "08"');
+    expect(detail).toContain('node("responsibility", "07", "责任判定与资料核验"');
+    expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
+    expect(detail).toContain('node("settlement_ledger", "09", "责任结算台账"');
+    expect(detail).toContain('node("archive", "10", "订单完成"');
+    expect(detail).toContain('node("settlement_followup", "11", "后续结算"');
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
@@ -140,7 +146,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).toContain('href: "/ui/admin"');
   });
 
-  it("prevalidates N10-B deduction and unresolved-difference closure inputs", async () => {
+  it("prevalidates N11 supplier deduction and unresolved-difference closure inputs", async () => {
     const source = await readFile(
       "apps/web/src/external-responsibility-panel.tsx",
       "utf8",
@@ -150,7 +156,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(source).toContain("部分扣款或未扣成功关闭必须填写剩余差额最终处理方式");
   });
 
-  it("keeps N07-N08 queue navigation real without exposing dead or unauthorized header links", async () => {
+  it("keeps responsibility and external-settlement queues linked to the actual order detail", async () => {
     const [responsibilityQueue, ownFactoryQueue, externalQueue] = await Promise.all([
       readFile("apps/web/src/responsibility-queue-page.tsx", "utf8"),
       readFile("apps/web/src/own-factory-approval-queue-page.tsx", "utf8"),
@@ -164,14 +170,12 @@ describe("business-chain UI handoff contracts", () => {
     expect(externalQueue).not.toContain('actionHref="/ui/responsibility"');
   });
 
-  it("keeps N08-A approval retry-safe and visually prioritizes the safe forward action", async () => {
-    const source = await readFile(
-      "apps/web/src/own-factory-approval-panel.tsx",
-      "utf8",
-    );
-    expect(source).toContain("pendingDecisionKeys");
-    expect(source).toContain('"idempotency-key": idempotencyKey');
-    expect(source).toContain('variant="primary" disabled={Boolean(busy)} onClick={() => void decide("approved")}');
-    expect(source).toContain('<Button disabled={Boolean(busy)} onClick={() => void decide("rejected")}>驳回并退回 N07</Button>');
+  it("keeps N08 owner signature retry-safe, with only agree and direct reject actions", async () => {
+    const source = await readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8");
+    expect(source).toContain("pendingMutationKeys");
+    expect(source).toContain("responsibility-owner-signature/${decision}");
+    expect(source).toContain("确认同意");
+    expect(source).toContain("驳回");
+    expect(source).not.toContain("驳回原因");
   });
 });

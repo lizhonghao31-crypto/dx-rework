@@ -5,7 +5,6 @@ import { createWebUrls } from "../url-contract.js";
 import type { AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
-import { OwnFactoryApprovalPanel } from "./own-factory-approval-panel.js";
 import { OrderImageSupplementUploader } from "./order-image-supplement-uploader.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
@@ -23,6 +22,7 @@ type ReworkStatus =
   | "pending_order_review"
   | "pending_quantity_adjustment_ie_review"
   | "pending_responsibility_determination"
+  | "pending_owner_signature"
   | "pending_responsibility_action"
   | "completed"
   | "cancelled";
@@ -36,8 +36,10 @@ export type WorkflowNodeKey =
   | "whole_order_review"
   | "quantity_adjustment"
   | "responsibility"
-  | "responsibility_settlement"
-  | "archive";
+  | "owner_signature"
+  | "settlement_ledger"
+  | "archive"
+  | "settlement_followup";
 
 type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
@@ -67,6 +69,11 @@ type ReworkBusinessDetail = Readonly<{
   submittedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  settlementStatus: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+  unsettledWagePeriods: readonly Readonly<{
+    periodId: string;
+    periodMonth: string;
+  }>[];
   attachments: readonly Readonly<{
     attachmentId: string;
     filename: string;
@@ -118,6 +125,7 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_order_review: { label: "待整单审核", next: "下一步由尾部主管确认整张返工单已完成" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成审核，正在判定责任、倍率和承担比例" },
+  pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任结算" },
   completed: { label: "已完成", next: "返工生产链已归档；工资与扣款按各自独立周期继续核对" },
   cancelled: { label: "已取消", next: "返工单已取消，历史资料和操作记录继续保留" },
@@ -132,8 +140,9 @@ const statusRank: Record<Exclude<ReworkStatus, "cancelled">, number> = {
   pending_order_review: 5,
   pending_quantity_adjustment_ie_review: 5,
   pending_responsibility_determination: 6,
-  pending_responsibility_action: 7,
-  completed: 8,
+  pending_owner_signature: 7,
+  pending_responsibility_action: 8,
+  completed: 10,
 };
 
 const currentNodeByStatus: Partial<Record<ReworkStatus, WorkflowNodeKey>> = {
@@ -145,7 +154,8 @@ const currentNodeByStatus: Partial<Record<ReworkStatus, WorkflowNodeKey>> = {
   pending_order_review: "whole_order_review",
   pending_quantity_adjustment_ie_review: "quantity_adjustment",
   pending_responsibility_determination: "responsibility",
-  pending_responsibility_action: "responsibility_settlement",
+  pending_owner_signature: "owner_signature",
+  pending_responsibility_action: "settlement_ledger",
   completed: "archive",
 };
 
@@ -158,13 +168,15 @@ const nodeRank: Record<WorkflowNodeKey, number> = {
   whole_order_review: 5,
   quantity_adjustment: 5,
   responsibility: 6,
-  responsibility_settlement: 7,
-  archive: 8,
+  owner_signature: 7,
+  settlement_ledger: 8,
+  archive: 9,
+  settlement_followup: 10,
 };
 
 const nodeKeys = new Set<WorkflowNodeKey>([
   "initiation", "process_configuration", "ie_review", "task_assignment", "work_reporting",
-  "whole_order_review", "quantity_adjustment", "responsibility", "responsibility_settlement", "archive",
+  "whole_order_review", "quantity_adjustment", "responsibility", "owner_signature", "settlement_ledger", "archive", "settlement_followup",
 ]);
 
 const orderIdFromLocation = (): string | null => {
@@ -213,13 +225,17 @@ const canUseWorkWorkspace = (user: AuthorizedUser | null): boolean => elevated(u
   || hasCapability(user, "work:report_for_worker")
   || (hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm"))
   || (hasRole(user, "ie_reviewer") && hasCapability(user, "process:review"));
-const workflowState = (status: ReworkStatus, key: WorkflowNodeKey): WorkflowNodeState => {
-  if (status === "cancelled") return "future";
-  // `completed` is the terminal business fact: all numbered nodes, including
-  // 09 订单归档, must render as completed rather than leaving a false current node.
-  if (status === "completed") return "completed";
-  if (currentNodeByStatus[status] === key) return "current";
-  return statusRank[status] > nodeRank[key] ? "completed" : "future";
+const workflowState = (detail: ReworkBusinessDetail, key: WorkflowNodeKey): WorkflowNodeState => {
+  if (detail.status === "cancelled") return "future";
+  // N10 is the end of the main order, while N11 keeps later wage/supplier
+  // settlement visible without falsely reopening the order itself.
+  if (detail.status === "completed") {
+    return key === "settlement_followup" && ["in_progress", "revision_in_progress"].includes(detail.settlementStatus)
+      ? "current"
+      : "completed";
+  }
+  if (currentNodeByStatus[detail.status] === key) return "current";
+  return statusRank[detail.status] > nodeRank[key] ? "completed" : "future";
 };
 
 const currentOwner = (
@@ -242,7 +258,7 @@ const buildWorkflow = (
     fallbackOwner: string,
     preview: string,
   ): WorkflowNode => {
-    const state = workflowState(detail.status, key);
+    const state = workflowState(detail, key);
     return {
       key,
       number,
@@ -276,11 +292,13 @@ const buildWorkflow = (
     { key: "execution", title: "返工执行", nodes: executionNodes },
     {
       key: "responsibility",
-      title: "责任与归档",
+      title: "责任与结算",
       nodes: [
-        node("responsibility", "07", "责任判定", "生产管理 / 老板", "待整单审核后分配", "判定责任方、倍率及承担比例。"),
-        node("responsibility_settlement", "08", "责任结算", "责任方 / 财务", "待责任判定后生成", "按该订单实际责任路径进行本厂审批或外部扣款处理。"),
-        node("archive", "09", "订单归档", "系统", "待责任结算完成", "保留完整业务事实、附件和操作记录。"),
+        node("responsibility", "07", "责任判定与资料核验", "生产管理", "待整单审核后分配", "确认责任方、比例、供应商与各责任方倍率。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板只确认整套责任事实；可确认同意或直接驳回。"),
+        node("settlement_ledger", "09", "责任结算台账", "系统", "N08 同意后自动生成", "自动生成只读责任台账，不等待会计再次确认。"),
+        node("archive", "10", "订单完成", "系统", "N09 生成后自动完成", "返工生产与责任判定已结束，完整业务事实继续保留。"),
+        node("settlement_followup", "11", "后续结算", "工资 / 供应商扣款", "订单完成后独立进行", "工资结算与供应商实际扣款不阻塞订单完成。"),
       ],
     },
   ];
@@ -303,8 +321,9 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action.includes("work_report")) return "work_reporting";
   if (action.includes("whole_order")) return "whole_order_review";
   if (action.includes("quantity.")) return "quantity_adjustment";
-  if (action.includes("external") || action.includes("own_factory")) return "responsibility_settlement";
-  if (action.includes("responsibility")) return "responsibility";
+  if (action.includes("owner_approve") || action.includes("owner_reject")) return "owner_signature";
+  if (action.includes("external") || action.includes("own_factory")) return "settlement_followup";
+  if (action.includes("submit_owner_signature") || action.includes("responsibility")) return "responsibility";
   if (action.includes(".complete") || action.includes(".archive")) return "archive";
   return null;
 };
@@ -318,10 +337,12 @@ const historyActionLabel = (action: string): string => {
   if (action.includes("work_report")) return "完成数量登记";
   if (action.includes("whole_order")) return "整单审核";
   if (action.includes("quantity.")) return "数量调整";
-  if (action.includes("external")) return "外部责任结算";
-  if (action.includes("own_factory")) return "本厂承担审批";
+  if (action.includes("owner_approve")) return "老板确认同意";
+  if (action.includes("owner_reject")) return "老板驳回";
+  if (action.includes("external")) return "供应商扣款处理";
+  if (action.includes("own_factory")) return "本厂责任处理";
   if (action.includes("responsibility")) return "责任判定";
-  if (action.includes(".complete") || action.includes(".archive")) return "订单归档";
+  if (action.includes(".complete") || action.includes(".archive")) return "订单完成";
   return "流程处理";
 };
 
@@ -434,9 +455,10 @@ export function ReworkDetailPage({
   const canSeeResponsibility = elevated(currentUser)
     || hasCapability(currentUser, "responsibility:determine")
     || hasCapability(currentUser, "responsibility:takeover")
-    || hasCapability(currentUser, "responsibility:confirm_high_multiplier");
-  const canSeeOwnFactory = elevated(currentUser) || hasCapability(currentUser, "own_factory:view");
+    || hasCapability(currentUser, "responsibility:confirm_high_multiplier")
+    || hasCapability(currentUser, "responsibility:owner_sign");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
+  const canSeeWages = elevated(currentUser) || hasCapability(currentUser, "wage:view");
   const canSeeWholeOrderReview = elevated(currentUser) || [
     "submission:audit",
     "quantity:adjust",
@@ -520,16 +542,22 @@ export function ReworkDetailPage({
       />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.state !== "future" && selected.key === "responsibility") {
-      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} />;
+    if (selected.state !== "future" && (selected.key === "responsibility" || selected.key === "owner_signature")) {
+      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.state !== "future" && selected.key === "responsibility_settlement") {
-      const panels = [
-        canSeeOwnFactory ? <OwnFactoryApprovalPanel key="own-factory" reworkOrderId={detail.reworkOrderId} /> : null,
-        canSeeExternal ? <ExternalResponsibilityPanel key="external" reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null,
-      ].filter(Boolean);
-      if (panels.length) return <div className="rework-detail-responsibility">{panels}</div>;
+    if (selected.state !== "future" && selected.key === "settlement_ledger") {
+      if (canSeeExternal || elevated(currentUser)) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly />;
+      return <SettlementLedgerNotice detail={detail} />;
+    }
+    if (selected.state !== "future" && selected.key === "settlement_followup") {
+      const hasWageFollowUp = canSeeWages && detail.unsettledWagePeriods.length > 0;
+      if (canSeeExternal || hasWageFollowUp) {
+        return <>
+          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
+          {hasWageFollowUp ? <WageSettlementFollowUp periods={detail.unsettledWagePeriods} /> : null}
+        </>;
+      }
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     return renderNodePreview();
@@ -623,7 +651,7 @@ export function ReworkDetailPage({
                 </div>
               </details>;
             })}
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">待判定后生成后续责任结算路径</div> : null}
+            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 完成资料核验后，提交老板签字；N09 台账由系统自动生成。</div> : null}
           </div>
         </section>
 
@@ -715,4 +743,30 @@ function InitiationFollowUpActions({
 
 function NodePermissionNotice({ node }: { node: WorkflowNode }) {
   return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">仅可查看</StatusBadge><h2>{node.number} · {node.label}</h2><p>{node.preview}</p><p>当前账号没有该节点的处理权限；如需处理，请从本人待办进入或联系节点负责人。</p></Surface>;
+}
+
+function SettlementLedgerNotice({ detail }: { detail: ReworkBusinessDetail }) {
+  const text = detail.settlementStatus === "not_required"
+    ? "本单没有外部责任方；老板签字后系统已完成责任结算台账，无需供应商扣款。"
+    : detail.settlementStatus === "closed"
+      ? "所有供应商扣款台账已终结。"
+      : detail.settlementStatus === "revision_in_progress"
+        ? "存在责任调整，待重新确认后自动生成新的责任结算台账。"
+        : "责任结算台账已自动生成；供应商实际扣款在 N11 独立跟进，不阻塞订单完成。";
+  return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">系统自动生成 · 只读</StatusBadge><h2>09 · 责任结算台账</h2><p>{text}</p></Surface>;
+}
+
+function WageSettlementFollowUp({ periods }: {
+  periods: ReworkBusinessDetail["unsettledWagePeriods"];
+}) {
+  return <Surface className="rework-detail-node-preview">
+    <StatusBadge tone="info">工资结算待处理</StatusBadge>
+    <h2>11 · 后续结算</h2>
+    <p>本单主流程已完成；以下工资月份尚未锁定，请在工资管理中继续处理。</p>
+    <div className="rework-detail-wage-links">
+      {periods.map((period) => <a key={period.periodId} href={pageUrl(`ui/wages/${period.periodId}`)}>
+        进入 {period.periodMonth.slice(0, 7)} 工资结算
+      </a>)}
+    </div>
+  </Surface>;
 }
