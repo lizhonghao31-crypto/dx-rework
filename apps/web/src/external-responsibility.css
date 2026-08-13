@@ -37,7 +37,7 @@
 .external-history-list > div,
 .external-evidence-list > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   align-items: start;
   border: 1px solid var(--color-border);
@@ -58,10 +58,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
 }
 
 .external-case-actions > * {
-  min-width: 0;
+  flex: 0 1 auto;
+  min-width: 9rem;
 }
 
 .external-amount {
