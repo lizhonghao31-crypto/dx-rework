@@ -44,13 +44,15 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("formatBusinessTime(approval.decision.decidedAt)");
   });
 
-  it("lets N07 users work in percentages while preserving bps at the API boundary", async () => {
+  it("lets N07 users work by responsibility party in percentages while preserving bps at the API boundary", async () => {
     const source = await read("apps/web/src/responsibility-determination-panel.tsx");
-    expect(source).toContain('label="比例（%）"');
+    expect(source).toContain('label="承担比例（%）"');
     expect(source).toContain("parsePercentToBps(allocation.sharePercent)");
     expect(source).toContain("shareBps: Number(allocation.shareBps)");
     expect(source).toContain('" · 必须严格等于 100%"');
-    expect(source).not.toContain('label="比例（bps）"');
+    expect(source).toContain("扣款倍率（外部最低 1.2）");
+    expect(source).toContain("实际扣款供应商");
+    expect(source).not.toContain('label="承担比例（bps）"');
     expect(source).not.toContain("返工单：{response?.reworkOrderId");
   });
 
