@@ -95,7 +95,11 @@ export class AuthorizedResponsibilityDeterminationService {
     const response = await this.base.get(actor, orderId, executor);
     return {
       ...response,
-      handlerUserId: permission.handlerUserId,
+      // Returning the initial server-side assignment avoids exposing a null
+      // handler to callers before the first N07 draft is persisted.
+      handlerUserId: permission.handlerUserId ?? (
+        permission.canDetermine ? actor.actorId : null
+      ),
       canDetermine: permission.canDetermine,
       canTakeover: permission.canTakeover,
       canConfirmHighMultiplier: permission.canConfirmHighMultiplier,
