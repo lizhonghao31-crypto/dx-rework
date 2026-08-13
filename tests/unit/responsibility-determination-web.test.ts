@@ -65,7 +65,7 @@ describe("responsibility determination web integration", () => {
     expect(pages).toContain(
       "<ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} />",
     );
-    expect(panel).toContain("response?.canDetermine");
+    expect(panel).toContain("response.canDetermine");
     expect(panel).toContain("response?.canTakeover");
     expect(panel).toContain("response?.canOwnerSign");
   });
