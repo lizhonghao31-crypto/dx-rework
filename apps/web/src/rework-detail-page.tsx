@@ -339,7 +339,7 @@ const followUpStatusLabel = (detail: ReworkBusinessDetail): string => {
 };
 
 const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): string =>
-  node.key === "settlement_followup"
+  node.key === "settlement_followup" && node.state !== "future"
     ? followUpStatusLabel(detail)
     : node.state === "completed"
       ? "已完成"

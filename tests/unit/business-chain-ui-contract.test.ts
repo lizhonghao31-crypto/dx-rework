@@ -100,6 +100,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('node("settlement_ledger", "09", "责任结算台账"');
     expect(detail).toContain('node("archive", "10", "订单完成"');
     expect(detail).toContain('node("settlement_followup", "11", "后续结算"');
+    expect(detail).toContain('node.key === "settlement_followup" && node.state !== "future"');
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
