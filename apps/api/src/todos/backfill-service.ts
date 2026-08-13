@@ -19,6 +19,7 @@ type CandidateKind =
   | "whole_order_review"
   | "work_report_return"
   | "responsibility_determination"
+  | "owner_signature"
   | "high_multiplier_confirmation"
   | "own_factory_approval"
   | "external_business_signoff"
@@ -355,6 +356,7 @@ export class TodoBackfillService {
           dedupeKey: candidate.dedupeKey,
         });
         return;
+      case "owner_signature":
       case "high_multiplier_confirmation":
       case "own_factory_approval":
         await this.projections.actionableForAllDirectRole(client, actor, projection);
@@ -381,6 +383,7 @@ export class TodoBackfillService {
       this.pendingWholeOrderReview(watermark),
       this.pendingWorkReportReturns(watermark),
       this.pendingResponsibility(watermark),
+      this.pendingOwnerSignatures(watermark),
       this.pendingOwnFactoryApprovals(watermark),
       this.pendingExternalCases(watermark),
       this.pendingWages(watermark),
@@ -617,6 +620,47 @@ export class TodoBackfillService {
         }),
       ];
     });
+  }
+
+  /** N08 has no external ledger until its owner action succeeds, so its missing
+   * todo must be projected from the finalized N07 determination itself. */
+  private async pendingOwnerSignatures(watermark: Watermark): Promise<Candidate[]> {
+    const result = await this.database.query<{
+      rework_order_id: string;
+      determination_version: number;
+      source_event_id: string | null;
+    }>(
+      `SELECT order_record.rework_order_id,determination.determination_version,
+              source.event_id source_event_id
+       FROM rework_orders order_record
+       JOIN rework_responsibility_determinations determination
+         ON determination.rework_order_id=order_record.rework_order_id
+        AND determination.stage='finalized'
+       LEFT JOIN LATERAL (
+         SELECT event_id FROM operation_events event
+         WHERE event.event_id=determination.operation_event_id
+           AND event.action='rework.responsibility.submit_owner_signature'
+           AND ${watermarkPredicate("event", 1, 2)}
+       ) source ON true
+       WHERE order_record.status='pending_owner_signature'
+         AND NOT EXISTS (
+           SELECT 1 FROM rework_responsibility_determinations successor
+           WHERE successor.replaces_determination_id=determination.determination_id
+         )
+       ORDER BY order_record.rework_order_id`,
+      [watermark.createdAt, watermark.eventId],
+    );
+    return result.rows.map((row) => this.candidate({
+      kind: "owner_signature", id: row.rework_order_id,
+      sourceEventId: row.source_event_id,
+      sourceAction: "rework.responsibility.submit_owner_signature",
+      entityType: "rework_order", entityId: row.rework_order_id,
+      category: "owner_signature",
+      route: { routeName: "responsibility_detail", entityId: row.rework_order_id },
+      policyKey: "general", requiredRole: "owner_group",
+      requiredCapability: "responsibility:owner_sign",
+      dedupeKey: `owner-signature:${row.rework_order_id}:${row.determination_version}`,
+    }));
   }
 
   private async pendingOwnFactoryApprovals(watermark: Watermark): Promise<Candidate[]> {
