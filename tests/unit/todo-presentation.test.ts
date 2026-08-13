@@ -44,6 +44,26 @@ describe("todo business presentation", () => {
     });
   });
 
+  it("keeps emitted external result notifications specific and Chinese", () => {
+    expect(todoPresentationForCategory("external_business_signoff_submitted").title)
+      .toBe("外部责任资料已提交");
+    expect(todoPresentationForCategory("external_payables_accepted").title)
+      .toBe("外部责任资料已接收");
+    expect(todoPresentationForCategory("external_payables_returned").title)
+      .toBe("外部责任资料退回结果");
+  });
+
+  it("marks semantic overdue notifications even when timing creates information todos", () => {
+    expect(buildTodoPresentation({
+      category: "external_deduction_overdue",
+      deliveryKind: "create",
+    }).subject).toBe("逾期：供应商扣款跟进逾期");
+    expect(buildTodoPresentation({
+      category: "todo_escalation",
+      deliveryKind: "information",
+    }).subject).toBe("逾期：返工待办升级提醒");
+  });
+
   it("gives every current and retained todo category a Chinese business title", () => {
     const categories = [
       "process_configuration", "process_configuration_return",
@@ -51,7 +71,9 @@ describe("todo business presentation", () => {
       "task_assignment", "work_reporting", "whole_order_review", "work_report_return",
       "quantity_adjustment", "responsibility_determination", "high_multiplier_confirmation",
       "owner_signature", "own_factory_approval", "external_supplier_selection",
-      "external_business_signoff", "external_payables_confirmation", "external_payables_return",
+      "external_business_signoff", "external_business_signoff_submitted",
+      "external_payables_confirmation", "external_payables_accepted",
+      "external_payables_return", "external_payables_returned",
       "external_deduction_follow_up", "external_deduction_overdue", "external_responsibility",
       "wage_tail_review", "wage_administrative_review", "wage_month_close",
       "wage_adjustment_approval", "wage_tail_review_submitted",

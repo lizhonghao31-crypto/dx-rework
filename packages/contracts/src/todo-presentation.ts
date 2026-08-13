@@ -33,8 +33,11 @@ const catalog: Readonly<Record<string, TodoPresentation>> = {
   own_factory_approval: { title: "查看历史本厂审批", action: "请查看历史本厂责任审批记录。" },
   external_supplier_selection: { title: "补充历史供应商资料", action: "请为历史责任台账补充实际供应商。" },
   external_business_signoff: { title: "核对历史外部责任资料", action: "请核对历史外部责任资料。" },
+  external_business_signoff_submitted: { title: "外部责任资料已提交", action: "资料已提交应付处理，请查看最新状态。" },
   external_payables_confirmation: { title: "确认历史应付资料", action: "请核对历史应付资料。" },
+  external_payables_accepted: { title: "外部责任资料已接收", action: "应付已接收资料并进入供应商扣款跟进。" },
   external_payables_return: { title: "外部责任资料已退回", action: "请修正历史外部责任资料。" },
+  external_payables_returned: { title: "外部责任资料退回结果", action: "应付已退回资料，请查看退回结果。" },
   external_deduction_follow_up: { title: "跟进供应商实际扣款", action: "请记录本次实际扣款或最新跟进结果。" },
   external_deduction_overdue: { title: "供应商扣款跟进逾期", action: "请尽快更新供应商扣款进展。" },
   external_responsibility: { title: "记录供应商实际扣款", action: "请记录供应商实际扣款或最新跟进结果。" },
@@ -57,8 +60,17 @@ const fallback: TodoPresentation = {
 export const todoPresentationForCategory = (category: string): TodoPresentation =>
   catalog[category] ?? fallback;
 
-const deliveryPrefix = (kind: TodoPresentationDeliveryKind): string =>
-  kind === "reminder" ? "提醒：" : kind === "escalation" ? "逾期：" : "";
+const overdueCategories = new Set([
+  "external_deduction_overdue",
+  "todo_escalation",
+]);
+
+const deliveryPrefix = (kind: TodoPresentationDeliveryKind, category: string): string =>
+  kind === "escalation" || overdueCategories.has(category)
+    ? "逾期："
+    : kind === "reminder"
+      ? "提醒："
+      : "";
 
 const value = (input: string | null): string => input?.trim() || "未填写";
 
@@ -79,7 +91,7 @@ export const buildTodoPresentation = (input: Readonly<{
       ? [`工资月份：${input.wagePeriodMonth.slice(0, 7)}`]
       : [];
   return {
-    subject: `${deliveryPrefix(input.deliveryKind)}${presentation.title}`,
+    subject: `${deliveryPrefix(input.deliveryKind, input.category)}${presentation.title}`,
     description: [...contextLines, `事项：${presentation.action}`].join("\n"),
   };
 };
