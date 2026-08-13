@@ -115,6 +115,168 @@ CREATE TRIGGER capability_catalog_no_insert BEFORE INSERT ON capability_catalog
 CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities
   FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 
+-- N07 has a distinct "submit to owner" audit action.  Keep the responsibility
+-- event allowlist and the finalized-version guard in sync: the database, not
+-- the caller, is the authority that admits this transition.
+CREATE OR REPLACE FUNCTION responsibility_expected_capability(action_name text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE action_name
+    WHEN 'rework.responsibility.draft' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.reopen' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.finalize' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.submit_owner_signature' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.transfer' THEN 'responsibility:determine'
+    WHEN 'rework.responsibility.takeover' THEN 'responsibility:takeover'
+    WHEN 'rework.responsibility.high_multiplier.confirm' THEN 'responsibility:confirm_high_multiplier'
+  END
+$$;
+
+CREATE OR REPLACE FUNCTION guard_determination_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  order_status text;
+  event_actor uuid;
+  event_action text;
+  effective_handler uuid;
+  predecessor rework_responsibility_determinations%ROWTYPE;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('responsibility:' || NEW.rework_order_id::text));
+
+  SELECT status INTO order_status
+  FROM rework_orders
+  WHERE rework_order_id = NEW.rework_order_id
+  FOR SHARE;
+
+  IF order_status IS NULL THEN
+    RAISE EXCEPTION 'rework order does not exist' USING ERRCODE = '23503';
+  END IF;
+  IF order_status <> 'pending_responsibility_determination' THEN
+    RAISE EXCEPTION 'responsibility versions require pending_responsibility_determination'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM rework_order_reviews review
+    WHERE review.order_review_id = NEW.source_order_review_id
+      AND review.rework_order_id = NEW.rework_order_id
+  ) THEN
+    RAISE EXCEPTION 'source review must belong to order' USING ERRCODE = '23514';
+  END IF;
+
+  IF (NEW.replaces_determination_id IS NULL AND NEW.determination_version <> 1)
+     OR (
+       NEW.replaces_determination_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1
+         FROM rework_responsibility_determinations previous
+         WHERE previous.determination_id = NEW.replaces_determination_id
+           AND previous.rework_order_id = NEW.rework_order_id
+           AND previous.determination_version + 1 = NEW.determination_version
+       )
+     ) THEN
+    RAISE EXCEPTION 'invalid determination version chain' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT actor_id, action
+  INTO event_actor, event_action
+  FROM operation_events
+  WHERE event_id = NEW.operation_event_id
+    AND request_id = NEW.request_id;
+
+  PERFORM require_responsibility_event(
+    NEW.operation_event_id,
+    NEW.request_id,
+    NEW.rework_order_id,
+    NEW.created_by
+  );
+
+  IF event_actor IS DISTINCT FROM NEW.created_by THEN
+    RAISE EXCEPTION 'determination creator must match operation actor'
+      USING ERRCODE = '55000';
+  END IF;
+
+  effective_handler := responsibility_effective_handler(NEW.rework_order_id);
+
+  IF NEW.stage = 'draft' THEN
+    IF event_action NOT IN ('rework.responsibility.draft', 'rework.responsibility.reopen') THEN
+      RAISE EXCEPTION 'draft determination requires draft or reopen event'
+        USING ERRCODE = '55000';
+    END IF;
+    IF NOT responsibility_can_determine(event_actor, NEW.rework_order_id) THEN
+      RAISE EXCEPTION 'actor is not authorized to determine responsibility'
+        USING ERRCODE = '42501';
+    END IF;
+    IF effective_handler IS NULL THEN
+      IF access_is_root_actor(event_actor) THEN
+        IF NOT responsibility_can_determine(NEW.handler_user_id, NEW.rework_order_id) THEN
+          RAISE EXCEPTION 'first draft handler must be eligible to determine responsibility'
+            USING ERRCODE = '42501';
+        END IF;
+      ELSIF NEW.handler_user_id IS DISTINCT FROM event_actor THEN
+        RAISE EXCEPTION 'first draft handler must be the authorized actor'
+          USING ERRCODE = '42501';
+      END IF;
+    ELSIF NEW.handler_user_id IS DISTINCT FROM effective_handler
+       OR (
+         event_actor IS DISTINCT FROM effective_handler
+         AND NOT access_is_root_actor(event_actor)
+       ) THEN
+      RAISE EXCEPTION 'only the effective handler may create the next draft'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM rework_responsibility_determinations current_draft
+      WHERE current_draft.rework_order_id = NEW.rework_order_id
+        AND current_draft.stage = 'draft'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM rework_responsibility_determinations successor
+          WHERE successor.replaces_determination_id = current_draft.determination_id
+        )
+        AND current_draft.determination_id IS DISTINCT FROM NEW.replaces_determination_id
+    ) THEN
+      RAISE EXCEPTION 'order already has a current draft' USING ERRCODE = '23505';
+    END IF;
+  ELSE
+    IF event_action NOT IN (
+      'rework.responsibility.finalize',
+      'rework.responsibility.submit_owner_signature'
+    ) THEN
+      RAISE EXCEPTION 'finalized determination requires finalize or owner-signature submission event'
+        USING ERRCODE = '55000';
+    END IF;
+    SELECT *
+    INTO predecessor
+    FROM rework_responsibility_determinations
+    WHERE determination_id = NEW.replaces_determination_id;
+
+    IF predecessor.determination_id IS NULL
+       OR predecessor.stage <> 'draft'
+       OR predecessor.rework_order_id <> NEW.rework_order_id THEN
+      RAISE EXCEPTION 'finalized version must directly replace the current draft'
+        USING ERRCODE = '23514';
+    END IF;
+    IF effective_handler IS NULL
+       OR NEW.handler_user_id IS DISTINCT FROM effective_handler
+       OR (
+         event_actor IS DISTINCT FROM effective_handler
+         AND NOT access_is_root_actor(event_actor)
+       )
+       OR NOT responsibility_can_determine(event_actor, NEW.rework_order_id) THEN
+      RAISE EXCEPTION 'only the effective handler may finalize responsibility'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END
+$$;
+
 -- Preserve every pre-existing transition and add only the N07 → N08 → N10
 -- V2 path.  The audit event remains the database trust boundary.
 CREATE OR REPLACE FUNCTION guard_rework_order_write()
