@@ -211,6 +211,10 @@
     {
       "version": "0053_root_rework_order_logical_deletion",
       "checksum": "6c672c1b7c3a29bc34e842045656d050bd56096cd47fb28d10735e08cf07460f"
+    },
+    {
+      "version": "0054_n07_n11_responsibility_settlement",
+      "checksum": "ad0fca0d02f5ade395ef9b67a914c6ced11d432f282ad9c9eb3cedfb0e0f4656"
     }
   ]
 }
