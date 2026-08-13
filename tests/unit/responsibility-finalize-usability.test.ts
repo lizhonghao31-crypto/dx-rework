@@ -9,27 +9,26 @@ describe("N07 responsibility edit lifecycle", () => {
 
     expect(panel).toContain("const hasUnsavedChanges = useMemo(");
     expect(panel).toContain("&& !hasUnsavedChanges");
-    expect(panel).toContain('setMessage("当前页面有未保存修改，请先保存草稿，再正式判定。")');
-    expect(panel).toContain('hasUnsavedChanges\n              ? "请先保存草稿"');
+    expect(panel).toContain("disabled={!finalizable || Boolean(busyAction)}");
+    expect(panel).toContain('hasUnsavedChanges ? "请先保存草稿"');
   });
 
   it("does not create no-op draft versions or discard edits during transfer", async () => {
     const panel = await read("apps/web/src/responsibility-determination-panel.tsx");
 
     expect(panel).toContain("const saveNeeded = determination === null || hasUnsavedChanges");
-    expect(panel).toContain("!saveNeeded || Boolean(busyAction)");
-    expect(panel).toContain('determination && !hasUnsavedChanges ? "草稿已保存" : "保存草稿"');
-    expect(panel).toContain('setMessage("当前页面有未保存修改，请先保存草稿，再转交处理人。")');
+    expect(panel).toContain("disabled={!allProcessesValid || !saveNeeded || Boolean(busyAction)}");
+    expect(panel).toContain('saveNeeded ? "保存草稿" : "草稿已保存"');
+    expect(panel).toContain("!transferReason.trim() || hasUnsavedChanges");
     expect(panel).toContain("hasUnsavedChanges || !transferUserId");
   });
 
-  it("keeps independent confirmation as a prerequisite for a saved high-multiplier draft", async () => {
+  it("keeps the N07 external supplier and multiplier prerequisites before the owner-signature handoff", async () => {
     const panel = await read("apps/web/src/responsibility-determination-panel.tsx");
-    const migration = await read("apps/api/migrations/0011_responsibility_authorization_handler_closure.sql");
+    const migration = await read("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql");
 
-    expect(panel).toContain("const highMultiplierPending = Boolean(");
-    expect(panel).toContain("&& !highMultiplierPending");
-    expect(panel).toContain('highMultiplierPending\n                ? "等待高倍率复核"');
-    expect(migration).toContain("high multiplier submitter cannot confirm the same version");
+    expect(panel).toContain("multiplier >= 1200n && allocation.supplierId.length > 0");
+    expect(panel).toContain("提交老板签字");
+    expect(migration).toContain("'pending_responsibility_determination' AND NEW.status='pending_owner_signature'");
   });
 });
