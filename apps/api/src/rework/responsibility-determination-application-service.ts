@@ -128,10 +128,10 @@ export class ResponsibilityDeterminationApplicationService {
     const candidates = await this.database.query<TransferCandidateRow>(
       `SELECT u.id user_id,u.display_name
        FROM app_users u
-       WHERE u.id<>$1
+       WHERE (u.id<>$1 OR $3::boolean)
          AND responsibility_can_determine(u.id,$2)
        ORDER BY u.display_name,u.id`,
-      [actor.actorId, orderId],
+      [actor.actorId, orderId, isRootActor(actor) && permission.handler_user_id === null],
     );
     return {
       items: candidates.rows.map((row) => ({
@@ -215,6 +215,19 @@ export class ResponsibilityDeterminationApplicationService {
       && !isRootActor(actor)
       ? { ...input, handlerUserId: actor.actorId }
       : input;
+    if (input.expectedCurrentDeterminationVersion === null && isRootActor(actor)) {
+      const candidate = await this.database.query<{ permitted: boolean }>(
+        "SELECT responsibility_can_determine($1,$2) permitted",
+        [normalizedInput.handlerUserId, orderId],
+      );
+      if (candidate.rows[0]?.permitted !== true) {
+        throw new ApplicationError(
+          "VALIDATION_ERROR",
+          "请为初始责任判定选择有权限的处理人",
+          400,
+        );
+      }
+    }
     const result = await this.draftEngine.saveDraft(actor, orderId, normalizedInput, key);
     return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
