@@ -88,6 +88,15 @@ const formsFromResponse = (response: ResponsibilityDeterminationResponse): Proce
     };
   });
 };
+const canEditDetermination = (response: ResponsibilityDeterminationResponse): boolean => {
+  const determination = response.determination;
+  const rejectedCurrentVersion = determination?.stage === "finalized"
+    && response.ownerSignature?.decision === "rejected"
+    && response.ownerSignature.determinationId === determination.determinationId;
+  return response.canDetermine
+    && response.reworkStatus === "pending_responsibility_determination"
+    && (determination === null || determination.stage === "draft" || rejectedCurrentVersion);
+};
 const processValid = (process: ProcessForm): boolean => {
   if (shareTotalBps(process.allocations) !== 10000n) return false;
   return process.allocations.every((allocation) => {
@@ -114,9 +123,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
 
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next); setProcesses(formsFromResponse(next));
-    const canEdit = next.canDetermine
-      && next.reworkStatus === "pending_responsibility_determination"
-      && (next.determination === null || next.determination.stage === "draft");
+    const canEdit = canEditDetermination(next);
     if (canEdit) void Promise.all([requestTransferOptions(next.reworkOrderId).catch(() => []), requestSuppliers(next.reworkOrderId).catch(() => [])]).then(([handlers, catalog]) => { setTransferOptions(handlers); setSuppliers(catalog); });
     else { setTransferOptions([]); setSuppliers([]); setTransferUserId(""); }
   };
@@ -128,15 +135,11 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   useEffect(() => { if (!reworkOrderId) { setMessage("缺少有效的返工单编号，请从返工单详情进入责任处理。"); return; } void reload().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "责任判定加载失败")); }, [reworkOrderId]);
 
   const determination = response?.determination ?? null;
-  const editable = Boolean(
-    response?.canDetermine
-    && response.reworkStatus === "pending_responsibility_determination"
-    && (determination === null || determination.stage === "draft"),
-  );
+  const editable = response !== null && canEditDetermination(response);
   const allProcessesValid = processes.length > 0 && processes.every(processValid);
   const hasUnsavedChanges = useMemo(() => response !== null && JSON.stringify(processes) !== JSON.stringify(formsFromResponse(response)), [processes, response]);
-  const saveNeeded = determination === null || hasUnsavedChanges;
-  const finalizable = editable && !hasUnsavedChanges && allProcessesValid;
+  const saveNeeded = determination === null || determination.stage === "finalized" || hasUnsavedChanges;
+  const finalizable = editable && determination?.stage === "draft" && !hasUnsavedChanges && allProcessesValid;
   const setAllocation = (configurationItemId: string, responsibilityType: ResponsibilityType, update: Partial<AllocationForm>): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : { ...process, allocations: process.allocations.map((allocation) => allocation.responsibilityType === responsibilityType ? { ...allocation, ...update } : allocation) }));
   const runWrite = async (action: string, path: string, payload: unknown, successMessage: string): Promise<void> => {
     if (!response || busyAction) return;
