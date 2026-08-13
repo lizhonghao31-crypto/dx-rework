@@ -38,14 +38,19 @@ describe("N07–N11 responsibility settlement contract", () => {
       .toBe("pending_owner_signature");
   });
 
-  it("enforces party-level supplier and multiplier facts before server-only N09 materialization", async () => {
-    const [service, migration] = await Promise.all([
+  it("makes every new draft V2 and enforces party facts before server-only N09 materialization", async () => {
+    const [service, panel, migration] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
+      readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql", "utf8"),
     ]);
+    expect(service).toContain("const settlementSchemaVersion = 2 as const");
     expect(service).toContain("外部责任方必须填写实际供应商");
     expect(service).toContain("外部供应商倍率不能低于 1.2");
+    expect(panel).toContain("next.determination === null || next.determination.stage === \"draft\"");
     expect(migration).toContain("V2 supplier ledger must be server-created from N07 facts");
+    expect(migration).toContain("owner signature requires a direct active owner or root");
+    expect(migration).toContain("V2 supplier ledger snapshot is invalid");
     expect(migration).toContain("'rework.responsibility.submit_owner_signature','responsibility:determine'");
     expect(migration).toContain("'pending_owner_signature' AND NEW.status='completed'");
   });
