@@ -39,10 +39,11 @@ describe("N07–N11 responsibility settlement contract", () => {
   });
 
   it("makes every new draft V2 and enforces party facts before server-only N09 materialization", async () => {
-    const [service, panel, migration, detail, backfill, externalPanel, application, authorized, finalExternal, external, close] = await Promise.all([
+    const [service, panel, migration, multiplierGuard, detail, backfill, externalPanel, application, authorized, finalExternal, external, close] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql", "utf8"),
+      readFile("apps/api/migrations/0055_responsibility_party_multiplier_guard.sql", "utf8"),
       readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
       readFile("apps/api/src/todos/backfill-service.ts", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
@@ -60,6 +61,8 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(panel).toContain("determination?.stage === \"finalized\"");
     expect(panel).toContain("determination?.stage === \"draft\"");
     expect(migration).toContain("V2 supplier ledger must be server-created from N07 facts");
+    expect(multiplierGuard).toContain("COALESCE(allocation.multiplier, process.multiplier)");
+    expect(multiplierGuard).toContain("NEW.multiplier IS DISTINCT FROM parent_multiplier");
     expect(migration).toContain("owner signature requires a direct active owner or root");
     expect(migration).toContain("access_is_root_actor(NEW.signed_by)");
     expect(migration).toContain("owner signature must persist the trusted audit context");
