@@ -30,8 +30,9 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain('open={isOpen}');
     expect(detail).toContain('{isOpen ? "−" : "+"}');
     expect(detail).toContain('"01", "发起返工"');
-    expect(detail).toContain('"09", "订单归档"');
-    expect(detail).toContain("待判定后生成后续责任结算路径");
+    expect(detail).toContain('"09", "责任结算台账"');
+    expect(detail).toContain('"10", "订单完成"');
+    expect(detail).toContain("N07 完成资料核验后，提交老板签字；N09 台账由系统自动生成。");
     expect(detail).toContain('selected.state !== "future"');
     expect(detail).toContain("return renderNodePreview()");
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
@@ -47,9 +48,10 @@ describe("order-centered workflow UI", () => {
     expect(task).toContain("returnToTodos");
   });
 
-  it("treats the terminal completed status as completion of node 09 archive", async () => {
+  it("treats the terminal completed status as completion of N10 while N11 remains independent", async () => {
     const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
-    expect(detail).toContain('if (status === "completed") return "completed";');
-    expect(detail).toContain("09 订单归档");
+    expect(detail).toContain('if (detail.status === "completed")');
+    expect(detail).toContain('node("archive", "10", "订单完成"');
+    expect(detail).toContain('node("settlement_followup", "11", "后续结算"');
   });
 });
