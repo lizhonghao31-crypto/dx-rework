@@ -517,7 +517,7 @@ export function ReworkDetailPage({
     if (!selected) return null;
     const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
     return <Surface className="rework-detail-node-preview">
-      <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : "未开始 · 可预览"}</StatusBadge>
+      <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : selected.state === "followup" ? `${nodeStatusLabel(selected, detail)} · 只读` : "未开始 · 可预览"}</StatusBadge>
       <h2>{selected.number} · {selected.label}</h2>
       <p>{selected.preview}</p>
       <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
@@ -561,7 +561,7 @@ export function ReworkDetailPage({
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
       if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} />;
-      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
+      if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
       if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm

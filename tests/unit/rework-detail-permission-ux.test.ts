@@ -20,6 +20,7 @@ describe("rework detail permission UX", () => {
     expect(source).not.toContain("<OwnFactoryApprovalPanel");
     expect(source).toContain('selected.state !== "future"');
     expect(source).toContain('if (selected.state === "current") return <NodePermissionNotice');
+    expect(source).toContain('selected.state === "current" || selected.state === "followup"');
     expect(source).toContain("return renderNodePreview()");
     expect(source).not.toContain("const nextAction =");
   });
