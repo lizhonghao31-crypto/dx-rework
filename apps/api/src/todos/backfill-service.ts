@@ -649,13 +649,14 @@ export class TodoBackfillService {
     const result = await this.database.query<{
       case_id: string; rework_order_id: string; status: string; case_version: number; business_handler_user_id: string;
       payables_handler_role_snapshot: string; allocation_event_id: string | null; allocation_actor_id: string | null;
-      source_event_id: string | null; signoff_event_id: string | null; return_event_id: string | null;
+      source_event_id: string | null; source_action: string | null; signoff_event_id: string | null; return_event_id: string | null;
       accept_event_id: string | null; follow_up_event_id: string | null; next_follow_up_at: Date | null;
     }>(
       `SELECT target_case.case_id,target_case.rework_order_id,target_case.status,target_case.case_version,
               target_case.business_handler_user_id,target_case.payables_handler_role_snapshot,
               allocation_event.event_id allocation_event_id,allocation_event.actor_id allocation_actor_id,
-              allocation_event.event_id source_event_id,signoff.operation_event_id signoff_event_id,
+              allocation_event.event_id source_event_id,allocation_event.action source_action,
+              signoff.operation_event_id signoff_event_id,
               payables_return.operation_event_id return_event_id,payables_accept.operation_event_id accept_event_id,
               follow_up.operation_event_id follow_up_event_id,follow_up.next_follow_up_at
        FROM rework_external_responsibility_cases target_case
@@ -664,9 +665,12 @@ export class TodoBackfillService {
        JOIN rework_orders order_record
          ON order_record.rework_order_id=target_case.rework_order_id
        LEFT JOIN LATERAL (
-         SELECT event_id,actor_id FROM operation_events event
+         SELECT event_id,actor_id,action FROM operation_events event
          WHERE event.event_id=target_case.operation_event_id
-           AND event.action='rework.external_responsibility.allocate'
+           AND event.action IN (
+             'rework.external_responsibility.allocate',
+             'rework.responsibility.submit_owner_signature'
+           )
            AND ${watermarkPredicate("event", 1, 2)}
        ) allocation_event ON true
        LEFT JOIN LATERAL (
@@ -705,7 +709,7 @@ export class TodoBackfillService {
   private externalCandidates(row: {
     case_id: string; rework_order_id: string; status: string; case_version: number; business_handler_user_id: string;
     payables_handler_role_snapshot: string; allocation_event_id: string | null; allocation_actor_id: string | null;
-    source_event_id: string | null; signoff_event_id: string | null; return_event_id: string | null;
+    source_event_id: string | null; source_action: string | null; signoff_event_id: string | null; return_event_id: string | null;
     accept_event_id: string | null; follow_up_event_id: string | null; next_follow_up_at: Date | null;
   }): Candidate[] {
     const route = {
@@ -746,11 +750,20 @@ export class TodoBackfillService {
       })];
     }
     if (row.status !== "deduction_follow_up") return [];
+    const isV2Ledger = row.source_action === "rework.responsibility.submit_owner_signature";
     const followUp = this.candidate({
-      kind: "external_deduction_follow_up", id: row.case_id, sourceEventId: row.accept_event_id,
-      sourceAction: "rework.external_responsibility.payables_accept", category: "external_deduction_follow_up",
-      requiredRole: row.payables_handler_role_snapshot, requiredCapability: "external_deduction:follow_up",
-      dedupeKey: `deduction-follow-up:${row.case_id}:${row.case_version}`, policyKey: "general", ...base,
+      kind: "external_deduction_follow_up", id: row.case_id,
+      sourceEventId: isV2Ledger ? row.source_event_id : row.accept_event_id,
+      sourceAction: isV2Ledger
+        ? "rework.responsibility.submit_owner_signature"
+        : "rework.external_responsibility.payables_accept",
+      category: "external_deduction_follow_up",
+      requiredRole: row.payables_handler_role_snapshot,
+      requiredCapability: isV2Ledger ? "external_deduction:record" : "external_deduction:follow_up",
+      dedupeKey: isV2Ledger
+        ? `external-deduction:${row.case_id}:v1`
+        : `deduction-follow-up:${row.case_id}:${row.case_version}`,
+      policyKey: "general", ...base,
     });
     if (!row.next_follow_up_at || row.next_follow_up_at.getTime() > Date.now()) return [followUp];
     return [
