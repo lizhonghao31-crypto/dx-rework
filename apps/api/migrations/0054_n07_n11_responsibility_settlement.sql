@@ -60,6 +60,10 @@ BEGIN
   IF audit_event_id IS NULL OR audit_request_id IS NULL THEN
     RAISE EXCEPTION 'owner signature requires trusted audit context' USING ERRCODE='55000';
   END IF;
+  IF NEW.operation_event_id IS DISTINCT FROM audit_event_id::uuid
+     OR NEW.request_id IS DISTINCT FROM audit_request_id THEN
+    RAISE EXCEPTION 'owner signature must persist the trusted audit context' USING ERRCODE='55000';
+  END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM rework_orders order_record
@@ -85,8 +89,11 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'owner signature audit event does not match the write' USING ERRCODE='55000';
   END IF;
-  IF NOT responsibility_actor_has_direct_role(
-    NEW.signed_by,'responsibility:owner_sign',ARRAY['owner_group']
+  IF NOT (
+    access_is_root_actor(NEW.signed_by)
+    OR responsibility_actor_has_direct_role(
+      NEW.signed_by,'responsibility:owner_sign',ARRAY['owner_group']
+    )
   ) THEN
     RAISE EXCEPTION 'owner signature requires a direct active owner or root' USING ERRCODE='42501';
   END IF;
