@@ -208,7 +208,14 @@ export class ResponsibilityDeterminationApplicationService {
         400,
       );
     }
-    const result = await this.draftEngine.saveDraft(actor, orderId, input, key);
+    // There is no persisted handler for the first N07 draft. Bind that first
+    // draft to the eligible actor on the server, rather than relying on a
+    // nullable UI field or allowing a browser to nominate another user.
+    const normalizedInput = input.expectedCurrentDeterminationVersion === null
+      && !isRootActor(actor)
+      ? { ...input, handlerUserId: actor.actorId }
+      : input;
+    const result = await this.draftEngine.saveDraft(actor, orderId, normalizedInput, key);
     return { ...result, value: normalizeResponsibilityAmountView(result.value) };
   }
 
