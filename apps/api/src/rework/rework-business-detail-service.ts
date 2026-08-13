@@ -222,11 +222,14 @@ export class ReworkBusinessDetailService {
     );
     const unsettledWagePeriods = canViewWagePeriods(actor)
       ? await this.database.query<{ period_id: string; period_month: string }>(
-        `SELECT DISTINCT period.period_id,period.period_month::text
-         FROM rework_wage_items wage
-         JOIN rework_wage_periods period ON period.period_id=wage.period_id
-         WHERE wage.rework_order_id=$1 AND period.status<>'locked'
-         ORDER BY period.period_month,period.period_id`,
+        `SELECT unsettled.period_id,unsettled.period_month::text period_month
+         FROM (
+           SELECT DISTINCT period.period_id,period.period_month
+           FROM rework_wage_items wage
+           JOIN rework_wage_periods period ON period.period_id=wage.period_id
+           WHERE wage.rework_order_id=$1 AND period.status<>'locked'
+         ) unsettled
+         ORDER BY unsettled.period_month,unsettled.period_id`,
         [reworkOrderId],
       )
       : { rows: [] as { period_id: string; period_month: string }[] };

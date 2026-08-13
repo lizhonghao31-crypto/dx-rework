@@ -215,6 +215,10 @@
     {
       "version": "0054_n07_n11_responsibility_settlement",
       "checksum": "f90e0f08f3a919bc6bb14f0d0b95972da8016470988f6e4774570af8817e8892"
+    },
+    {
+      "version": "0055_responsibility_party_multiplier_guard",
+      "checksum": "6b4370595352269b946384140f95fdb6da47ffee035b04f4a94d8144b370a8c9"
     }
   ]
 }

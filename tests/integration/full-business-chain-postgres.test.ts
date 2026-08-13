@@ -12,7 +12,6 @@ import {
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
 import {
-  AllocateExternalSuppliersSchema,
   CloseExternalDeductionCaseSchema,
   CreateExternalDeductionEntrySchema,
 } from "@dx-rework/contracts/external-responsibility";
@@ -22,7 +21,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
 import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
-import { OwnFactoryApprovalApplicationService } from "../../apps/api/src/rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
@@ -47,7 +45,7 @@ class LegacyIeReviewTodoProjectionService extends TodoProjectionService {
   }
 }
 
-runWithPostgres("current-schema N01-N10 business chain", () => {
+runWithPostgres("current-schema N01-N11 business chain", () => {
   const schema = `full_chain_${randomUUID().replaceAll("-", "")}`;
   const adminPool = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
@@ -86,7 +84,6 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     database,
     todoProjection,
   );
-  const ownFactory = new OwnFactoryApprovalApplicationService(database, todoProjection);
   const external = new ExternalResponsibilityApplicationService(database, todoProjection);
   const wages = new WageService(database, undefined, undefined, todoProjection);
 
@@ -163,8 +160,7 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
   const ownerApproval = () => actor(
     ids.ownerOne,
     ["owner_group"],
-    "own_factory:view",
-    "own_factory:approve",
+    "responsibility:owner_sign",
   );
   const merchandiser = () => actor(
     ids.merchandiser,
@@ -350,7 +346,7 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     await adminPool.end();
   });
 
-  it("carries one real order from N01 through N10 without losing cross-node facts", async () => {
+  it("carries one real order from N01 through N11 without losing cross-node facts", async () => {
     // N01 - QC initiates one order with the business total quantity.
     const draft = await initiation.createDraft(qc(), {
       styleNo: "UAT-FULL-CHAIN",
@@ -696,10 +692,29 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
           configurationItemId: approvedItem.configurationItemId,
           multiplier: "1.000",
           allocations: [
-            { responsibilityType: "own_factory", shareBps: 2500 },
-            { responsibilityType: "processing_factory", shareBps: 5000 },
-            { responsibilityType: "embroidery_factory", shareBps: 1250 },
-            { responsibilityType: "fabric_supplier", shareBps: 1250 },
+            {
+              responsibilityType: "own_factory",
+              shareBps: 2500,
+              multiplier: "1.000",
+            },
+            {
+              responsibilityType: "processing_factory",
+              shareBps: 5000,
+              multiplier: "1.200",
+              supplierId: factorySupplierId,
+            },
+            {
+              responsibilityType: "embroidery_factory",
+              shareBps: 1250,
+              multiplier: "1.200",
+              supplierId: embroiderySupplierId,
+            },
+            {
+              responsibilityType: "fabric_supplier",
+              shareBps: 1250,
+              multiplier: "1.200",
+              supplierId: fabricSupplierId,
+            },
           ],
         }],
       }),
@@ -707,10 +722,10 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     );
     expect(n07Draft.value.determination).toMatchObject({
       stage: "draft",
-      calculationTotal: "110.00",
+      calculationTotal: "126.50",
       processes: [{
         baseAmount: "110.00",
-        responsibilityAmount: "110.00",
+        responsibilityAmount: "126.50",
         allocations: expect.arrayContaining([
           expect.objectContaining({
             responsibilityType: "own_factory",
@@ -718,15 +733,15 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
           }),
           expect.objectContaining({
             responsibilityType: "processing_factory",
-            roundedAmount: "55.00",
+            roundedAmount: "66.00",
           }),
           expect.objectContaining({
             responsibilityType: "embroidery_factory",
-            roundedAmount: "13.75",
+            roundedAmount: "16.50",
           }),
           expect.objectContaining({
             responsibilityType: "fabric_supplier",
-            roundedAmount: "13.75",
+            roundedAmount: "16.50",
           }),
         ]),
       }],
@@ -741,87 +756,52 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       },
       randomUUID(),
     );
-    expect(n07Final.value.reworkStatus).toBe("pending_responsibility_action");
+    expect(n07Final.value.reworkStatus).toBe("pending_owner_signature");
+    expect(n07Final.value.canOwnerSign).toBe(false);
 
-    const ownView = await ownFactory.get(
+    // N08 - the owner signs the immutable N07 facts once. N09 ledger cards
+    // are generated atomically, and the main order is then complete.
+    const ownerSigned = await responsibility.approveOwnerSignature(
       ownerApproval(),
       submitted.value.reworkOrderId,
+      { expectedOrderVersion: n07Final.value.orderVersion },
+      randomUUID(),
     );
-    expect(ownView.approval).toMatchObject({
-      status: "pending",
-      ownFactoryTotalAmount: "27.50",
+    expect(ownerSigned.value).toMatchObject({
+      reworkStatus: "completed",
+      ownerSignature: { decision: "approved", signedBy: ids.ownerOne },
     });
+
     const externalBatch = await external.get(
       merchandiser(),
       submitted.value.reworkOrderId,
     );
     expect(externalBatch).not.toBeNull();
-    expect(externalBatch!.items).toEqual(expect.arrayContaining([
+    expect(externalBatch!.cases).toEqual(expect.arrayContaining([
       expect.objectContaining({
         responsibilityType: "processing_factory",
-        proposedAmount: "55.00",
+        supplier: expect.objectContaining({ supplierId: factorySupplierId }),
+        proposedDeductionAmount: "66.00",
+        actualDeductedAmount: "0.00",
+        status: "deduction_follow_up",
+        caseVersion: 1,
       }),
       expect.objectContaining({
         responsibilityType: "fabric_supplier",
-        proposedAmount: "13.75",
+        supplier: expect.objectContaining({ supplierId: fabricSupplierId }),
+        proposedDeductionAmount: "16.50",
       }),
     ]));
-    await expect(database.query(
-      `SELECT recipient_user_id,required_role,status,route_descriptor->>'entityId' route_entity_id
-       FROM rework_todos
-       WHERE dedupe_key=$1`,
-      [`external-supplier-selection:${externalBatch!.batchId}:order-merchandiser`],
-    )).resolves.toMatchObject({ rows: [{
-      recipient_user_id: ids.merchandiser,
-      required_role: "order_merchandiser",
-      status: "pending",
-      route_entity_id: externalBatch!.batchId,
-    }] });
-    await expect(database.query(
-      `SELECT recipient_user_id,required_role,status
-       FROM rework_todos
-       WHERE dedupe_key=$1`,
-      [`external-supplier-selection:${externalBatch!.batchId}:embroidery-washing-merchandiser`],
-    )).resolves.toMatchObject({ rows: [{
-      recipient_user_id: ids.embroideryMerchandiser,
-      required_role: "embroidery_washing_merchandiser",
-      status: "pending",
-    }] });
-
-    // N08-A - own-factory approval alone must not finish an order that still
-    // has an unresolved N08-B branch.
-    const ownApproved = await ownFactory.approve(
-      ownerApproval(),
-      ownView.approval!.approvalId,
-      {
-        expectedOrderVersion: ownView.orderVersion,
-        expectedApprovalVersion: ownView.approval!.approvalVersion,
-        opinion: "全链测试：同意本厂承担",
-      },
-      randomUUID(),
-    );
-    expect(ownApproved.value.reworkStatus).toBe("pending_responsibility_action");
-
-    // N08-B - the original processing factory's 50% share is automatically
-    // routed from N07 to factory payables. The embroidery factory remains an
-    // independent, manually selected supplier ledger with its own N07 amount.
-    expect(externalBatch!.cases).toEqual([
-      expect.objectContaining({
-        responsibilityType: "processing_factory",
-        proposedDeductionAmount: "55.00",
-        actualDeductedAmount: "0.00",
-        status: "pending_payables_confirmation",
-        caseVersion: 1,
-      }),
-    ]);
-    const externalCase = externalBatch!.cases[0]!;
+    const externalCase = externalBatch!.cases.find(
+      (item) => item.responsibilityType === "processing_factory",
+    )!;
     const deduction = await external.recordDeduction(
       payables(),
       externalCase.caseId,
       CreateExternalDeductionEntrySchema.parse({
         expectedCaseVersion: externalCase.caseVersion,
         entryType: "deduction",
-        amount: "55.00",
+        amount: "66.00",
         deductedOn: new Date().toISOString().slice(0, 10),
         attachmentIds: [],
       }),
@@ -829,42 +809,10 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     );
     expect(deduction.value).toMatchObject({
       status: "deduction_follow_up",
-      actualDeductedAmount: "55.00",
+      actualDeductedAmount: "66.00",
       remainingAmount: "0.00",
     });
-    expect((await database.query<{ status: string }>(
-      "SELECT status FROM rework_orders WHERE rework_order_id=$1",
-      [submitted.value.reworkOrderId],
-    )).rows[0]).toEqual({ status: "pending_responsibility_action" });
-
-    const fabricItem = externalBatch!.items.find(
-      (item) => item.responsibilityType === "fabric_supplier",
-    )!;
-    const fabricAllocated = await external.allocateSuppliers(
-      merchandiser(),
-      externalBatch!.batchId,
-      AllocateExternalSuppliersSchema.parse({
-        expectedBatchVersion: externalBatch!.batchVersion,
-        allocations: [{
-          responsibilityType: "fabric_supplier",
-          supplierId: fabricSupplierId,
-          externalItemIds: [fabricItem.externalItemId],
-        }],
-      }),
-      randomUUID(),
-    );
-    await expect(database.query(
-      `SELECT todo.status,event.action,event.actor_id
-       FROM rework_todos todo
-       JOIN operation_events event ON event.event_id=todo.completed_operation_event_id
-       WHERE todo.dedupe_key=$1`,
-      [`external-supplier-selection:${externalBatch!.batchId}:order-merchandiser`],
-    )).resolves.toMatchObject({ rows: [{
-      status: "completed",
-      action: "todo.complete",
-      actor_id: ids.merchandiser,
-    }] });
-    const fabricCase = fabricAllocated.value!.cases.find(
+    const fabricCase = externalBatch!.cases.find(
       (item) => item.responsibilityType === "fabric_supplier",
     )!;
     const fabricDeduction = await external.recordDeduction(
@@ -873,7 +821,7 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       CreateExternalDeductionEntrySchema.parse({
         expectedCaseVersion: fabricCase.caseVersion,
         entryType: "deduction",
-        amount: "13.75",
+        amount: "16.50",
         deductedOn: new Date().toISOString().slice(0, 10),
         attachmentIds: [],
       }),
@@ -881,58 +829,28 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     );
     expect(fabricDeduction.value).toMatchObject({
       status: "deduction_follow_up",
-      actualDeductedAmount: "13.75",
+      actualDeductedAmount: "16.50",
       remainingAmount: "0.00",
     });
-
     const embroideryBatch = await external.get(
       embroideryMerchandiser(),
       submitted.value.reworkOrderId,
     );
-    expect(embroideryBatch).toMatchObject({
-      items: [expect.objectContaining({
-        responsibilityType: "embroidery_factory",
-        proposedAmount: "13.75",
-      })],
-      cases: [],
-    });
-    const embroideryAllocated = await external.allocateSuppliers(
-      embroideryMerchandiser(),
-      embroideryBatch!.batchId,
-      AllocateExternalSuppliersSchema.parse({
-        expectedBatchVersion: embroideryBatch!.batchVersion,
-        allocations: [{
-          responsibilityType: "embroidery_factory",
-          supplierId: embroiderySupplierId,
-          externalItemIds: [embroideryBatch!.items[0]!.externalItemId],
-        }],
-      }),
-      randomUUID(),
-    );
-    const embroideryCase = embroideryAllocated.value!.cases[0]!;
+    expect(embroideryBatch).not.toBeNull();
+    const embroideryCase = embroideryBatch!.cases[0]!;
     expect(embroideryCase).toMatchObject({
       responsibilityType: "embroidery_factory",
-      proposedDeductionAmount: "13.75",
-      status: "pending_payables_confirmation",
+      supplier: { supplierId: embroiderySupplierId },
+      proposedDeductionAmount: "16.50",
+      status: "deduction_follow_up",
     });
-    await expect(database.query(
-      `SELECT todo.status,event.action,event.actor_id
-       FROM rework_todos todo
-       JOIN operation_events event ON event.event_id=todo.completed_operation_event_id
-       WHERE todo.dedupe_key=$1`,
-      [`external-supplier-selection:${embroideryBatch!.batchId}:embroidery-washing-merchandiser`],
-    )).resolves.toMatchObject({ rows: [{
-      status: "completed",
-      action: "todo.complete",
-      actor_id: ids.embroideryMerchandiser,
-    }] });
     const embroideryDeduction = await external.recordDeduction(
       embroideryPayables(),
       embroideryCase.caseId,
       CreateExternalDeductionEntrySchema.parse({
         expectedCaseVersion: embroideryCase.caseVersion,
         entryType: "deduction",
-        amount: "13.75",
+        amount: "16.50",
         deductedOn: new Date().toISOString().slice(0, 10),
         attachmentIds: [],
       }),
@@ -940,7 +858,7 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     );
     expect(embroideryDeduction.value).toMatchObject({
       status: "deduction_follow_up",
-      actualDeductedAmount: "13.75",
+      actualDeductedAmount: "16.50",
       remainingAmount: "0.00",
     });
     expect((await database.query<{ status: string }>(
@@ -963,11 +881,31 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
       status: "closed",
       closure: {
         result: "full",
-        proposedAmount: "55.00",
-        actualDeductedAmount: "55.00",
+        proposedAmount: "66.00",
+        actualDeductedAmount: "66.00",
         remainingAmount: "0.00",
       },
     });
+    await external.close(
+      fabricPayables(),
+      fabricCase.caseId,
+      CloseExternalDeductionCaseSchema.parse({
+        expectedCaseVersion: fabricDeduction.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    await external.close(
+      embroideryPayables(),
+      embroideryCase.caseId,
+      CloseExternalDeductionCaseSchema.parse({
+        expectedCaseVersion: embroideryDeduction.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      }),
+      randomUUID(),
+    );
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
@@ -1043,9 +981,17 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
           ORDER BY determination_version DESC LIMIT 1) responsibility_total,
-         (SELECT own_factory_total_amount::numeric(18,2)::text
-          FROM rework_own_factory_approvals
-          WHERE rework_order_id=$1 ORDER BY created_at DESC LIMIT 1) own_factory_total,
+         (SELECT COALESCE(sum(allocation.rounded_amount),0)::numeric(18,2)::text
+          FROM rework_responsibility_allocations allocation
+          JOIN rework_responsibility_determinations determination
+            ON determination.determination_id=allocation.determination_id
+          WHERE determination.rework_order_id=$1
+            AND determination.stage='finalized'
+            AND allocation.responsibility_type='own_factory'
+            AND NOT EXISTS(
+              SELECT 1 FROM rework_responsibility_determinations successor
+              WHERE successor.replaces_determination_id=determination.determination_id
+            )) own_factory_total,
          (SELECT sum(proposed_deduction_amount)::numeric(18,2)::text
           FROM rework_external_responsibility_cases WHERE rework_order_id=$1) external_total,
          (SELECT sum(payable_amount)::numeric(18,2)::text
@@ -1054,9 +1000,9 @@ runWithPostgres("current-schema N01-N10 business chain", () => {
     );
     expect(totals.rows[0]).toEqual({
       report_total: "110.00",
-      responsibility_total: "110.00",
+      responsibility_total: "126.50",
       own_factory_total: "27.50",
-      external_total: "82.50",
+      external_total: "99.00",
       wage_total: "110.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(

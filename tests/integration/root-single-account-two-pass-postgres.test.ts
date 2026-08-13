@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 
 import { loadConfig } from "@dx-rework/config";
 import type {
-  OwnFactoryApprovalResponse,
   ProcessConfigurationResponse,
   QuantityAdjustmentResponse,
   ResponsibilityDeterminationResponse,
@@ -455,8 +454,17 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
             ? { highMultiplierReason: "Root 第二遍：高倍率同账号确认" }
             : {}),
           allocations: [
-            { responsibilityType: "own_factory", shareBps: 5000 },
-            { responsibilityType: "processing_factory", shareBps: 5000 },
+            {
+              responsibilityType: "own_factory",
+              shareBps: 5000,
+              multiplier,
+            },
+            {
+              responsibilityType: "processing_factory",
+              shareBps: 5000,
+              multiplier: pass === 1 ? "1.200" : multiplier,
+              supplierId: fixture.supplierId,
+            },
           ],
         }],
       },
@@ -488,26 +496,20 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedCurrentDeterminationVersion: determination.determination!.version,
       },
     );
-    expect(finalized.reworkStatus).toBe("pending_responsibility_action");
+    expect(finalized.reworkStatus).toBe("pending_owner_signature");
+    expect(finalized.canOwnerSign).toBe(true);
 
-    const ownView = await http<OwnFactoryApprovalResponse>(
+    const signed = await http<ResponsibilityDeterminationResponse>(
       fixture.app,
-      "GET",
-      `/rework-orders/${reworkOrderId}/own-factory-approval`,
+      "POST",
+      `/rework-orders/${reworkOrderId}/responsibility-owner-signature/approve`,
+      { expectedOrderVersion: finalized.orderVersion },
     );
-    // Root is the direct owner finalizer in this single-account gate. Its
-    // N07 finalization already creates the immutable N08-A snapshot and
-    // approves it in the same transaction, so a second approval must not be
-    // actionable.
-    expect(ownView).toMatchObject({
-      reworkStatus: "pending_responsibility_action",
-      canDecide: false,
-      approval: {
-        status: "approved",
-        decision: {
-          actedBy: fixture.rootUserId,
-          decision: "approved",
-        },
+    expect(signed).toMatchObject({
+      reworkStatus: "completed",
+      ownerSignature: {
+        decision: "approved",
+        signedBy: fixture.rootUserId,
       },
     });
 
@@ -534,20 +536,19 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     expect(externalCase).toMatchObject({
       responsibilityType: "processing_factory",
       supplier: { supplierId: fixture.supplierId },
-      businessHandlerUserId: fixture.merchandiserUserId,
+      businessHandlerUserId: fixture.rootUserId,
       proposedDeductionAmount: n07ProcessingFactoryAmount,
       actualDeductedAmount: "0.00",
       remainingAmount: n07ProcessingFactoryAmount,
-      status: "pending_payables_confirmation",
+      status: "deduction_follow_up",
       caseVersion: 1,
     });
     expect(externalCase.items.map((item) => item.externalItemId)).toEqual(
       externalItems.map((item) => item.externalItemId),
     );
     expect(externalCase.canSign).toBe(false);
-    // A supplier already resolved at N07 enters the payables queue directly.
-    // The current normal path records the deduction; it does not add a
-    // separate "accept" click before the ledger entry.
+    // N08 approval materializes the N09 ledger directly. N11 records the
+    // deduction without a separate supplier or payables acceptance click.
     expect(externalCase.canRecordDeduction).toBe(true);
     externalCase = await http<ExternalResponsibilityCaseResponse>(
       fixture.app,
@@ -678,9 +679,17 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
           ORDER BY determination_version DESC LIMIT 1) responsibility_total,
-         (SELECT own_factory_total_amount::numeric(18,2)::text
-          FROM rework_own_factory_approvals
-          WHERE rework_order_id=$1 ORDER BY created_at DESC LIMIT 1) own_factory_total,
+         (SELECT COALESCE(sum(allocation.rounded_amount),0)::numeric(18,2)::text
+          FROM rework_responsibility_allocations allocation
+          JOIN rework_responsibility_determinations determination
+            ON determination.determination_id=allocation.determination_id
+          WHERE determination.rework_order_id=$1
+            AND determination.stage='finalized'
+            AND allocation.responsibility_type='own_factory'
+            AND NOT EXISTS(
+              SELECT 1 FROM rework_responsibility_determinations successor
+              WHERE successor.replaces_determination_id=determination.determination_id
+            )) own_factory_total,
          (SELECT COALESCE(sum(proposed_deduction_amount),0)::numeric(18,2)::text
           FROM rework_external_responsibility_cases
           WHERE rework_order_id=$1 AND status<>'superseded') external_total,
@@ -691,7 +700,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const totals = result.rows[0]!;
     expect(totals.report_total).toBe(totals.wage_original_total);
     const expectedResponsibility = pass === 1
-      ? Number(totals.report_total)
+      ? Number(totals.report_total) * 1.1
       : Number(totals.report_total) * 2.5;
     expect(Number(totals.responsibility_total)).toBeCloseTo(expectedResponsibility, 2);
     expect(
