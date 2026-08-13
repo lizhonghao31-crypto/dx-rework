@@ -70,6 +70,10 @@ type ReworkBusinessDetail = Readonly<{
   cancelledAt: string | null;
   cancelReason: string | null;
   settlementStatus: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+  unsettledWagePeriods: readonly Readonly<{
+    periodId: string;
+    periodMonth: string;
+  }>[];
   attachments: readonly Readonly<{
     attachmentId: string;
     filename: string;
@@ -454,6 +458,7 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:confirm_high_multiplier")
     || hasCapability(currentUser, "responsibility:owner_sign");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
+  const canSeeWages = elevated(currentUser) || hasCapability(currentUser, "wage:view");
   const canSeeWholeOrderReview = elevated(currentUser) || [
     "submission:audit",
     "quantity:adjust",
@@ -547,6 +552,9 @@ export function ReworkDetailPage({
     }
     if (selected.state !== "future" && selected.key === "settlement_followup") {
       if (canSeeExternal) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} />;
+      if (canSeeWages && detail.unsettledWagePeriods.length > 0) {
+        return <WageSettlementFollowUp periods={detail.unsettledWagePeriods} />;
+      }
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     return renderNodePreview();
@@ -743,4 +751,19 @@ function SettlementLedgerNotice({ detail }: { detail: ReworkBusinessDetail }) {
         ? "存在责任调整，待重新确认后自动生成新的责任结算台账。"
         : "责任结算台账已自动生成；供应商实际扣款在 N11 独立跟进，不阻塞订单完成。";
   return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">系统自动生成 · 只读</StatusBadge><h2>09 · 责任结算台账</h2><p>{text}</p></Surface>;
+}
+
+function WageSettlementFollowUp({ periods }: {
+  periods: ReworkBusinessDetail["unsettledWagePeriods"];
+}) {
+  return <Surface className="rework-detail-node-preview">
+    <StatusBadge tone="info">工资结算待处理</StatusBadge>
+    <h2>11 · 后续结算</h2>
+    <p>本单主流程已完成；以下工资月份尚未锁定，请在工资管理中继续处理。</p>
+    <div className="rework-detail-wage-links">
+      {periods.map((period) => <a key={period.periodId} href={pageUrl(`ui/wages/${period.periodId}`)}>
+        进入 {period.periodMonth.slice(0, 7)} 工资结算
+      </a>)}
+    </div>
+  </Surface>;
 }
