@@ -78,7 +78,7 @@ describe("todo business presentation", () => {
       "wage_tail_review", "wage_administrative_review", "wage_month_close",
       "wage_adjustment_approval", "wage_tail_review_submitted",
       "wage_administrative_review_submitted", "wage_adjustment_requested", "wage_review",
-      "todo_escalation",
+      "todo_escalation", "recipient_routing_exception",
     ];
     for (const category of categories) {
       const presentation = todoPresentationForCategory(category);

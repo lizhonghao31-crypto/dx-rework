@@ -78,6 +78,7 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
     expect(dashboard).not.toContain("window.setInterval");
     expect(dashboard).not.toContain('window.addEventListener("focus"');
     expect(query).toContain("AbortController");
+    expect(query).toContain('["draft","草稿"]');
     expect(report).toContain("reportExportUrl");
     expect(client).toContain("ManagementDashboardResponseSchema");
     expect(client).toContain("createWebUrls");

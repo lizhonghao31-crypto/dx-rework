@@ -50,6 +50,7 @@ const catalog: Readonly<Record<string, TodoPresentation>> = {
   wage_adjustment_requested: { title: "工资调整已提交", action: "请查看工资调整申请状态。" },
   wage_review: { title: "返工工资核对", action: "请进入工资月份完成当前核对事项。" },
   todo_escalation: { title: "返工待办升级提醒", action: "请查看逾期事项并协调处理。" },
+  recipient_routing_exception: { title: "处理待办分配异常", action: "请为无法自动分配的待办选择处理人。" },
 };
 
 const fallback: TodoPresentation = {
