@@ -62,7 +62,8 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("bpsToPercent(item.shareBpsSnapshot)");
     expect(source).toContain("deductionEntryLabel[entry.entryType]");
     expect(source).toContain("closureResultLabel[caseItem.closure.result]");
-    expect(source).toContain("caseItem.canRecordDeduction && <>");
+    expect(source).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
+    expect(source).toContain("canRecordDeduction && <>");
     expect(source).toContain("hasEditableFields && <div className=\"external-operation\"");
     expect(source).not.toContain("item.configurationItemId)} · {item.responsibilityType}");
     expect(source).not.toContain("{caseItem.responsibilityType}");
