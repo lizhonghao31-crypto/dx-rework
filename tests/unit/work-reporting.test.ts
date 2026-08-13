@@ -45,6 +45,13 @@ describe("work reporting monetary snapshots", () => {
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
 
+  it("versions every task assignment so concurrent N05 personnel edits cannot silently overwrite each other", async () => {
+    const service = await readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8");
+    expect(service).toContain("const nextOrderVersion = order.version + 1;");
+    expect(service).toContain("UPDATE rework_orders SET status=$2,updated_by=$3,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$4");
+    expect(service).not.toContain("if (transitionToInProgress) await client.query");
+  });
+
   it("reuses the idempotency key only while a report payload remains unresolved", () => {
     const payload = { expectedOrderVersion: 2, actualQuantity: 1, completedAt: "2026-08-02T12:00:00.000Z" };
     const first = reportAttempt(undefined, payload, () => "first-key");

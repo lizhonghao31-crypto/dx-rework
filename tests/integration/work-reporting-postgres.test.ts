@@ -203,6 +203,13 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
       configurationItemId: approved.value.configuration!.items[0]!.configurationItemId,
       mode: "individual", members: [{ personId: temporaryPersonId }],
     }, randomUUID());
+    const reassigned = await reporting.list(tailAssign(), submitted.value.reworkOrderId);
+    expect(reassigned.orderVersion).toBe(inProgress.orderVersion + 1);
+    await expect(reporting.createTask(tailAssign(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: inProgress.orderVersion,
+      configurationItemId: approved.value.configuration!.items[0]!.configurationItemId,
+      mode: "individual", members: [{ personId: workerPersonIds[0]! }],
+    }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
     const proxy: TrustedActorContext = {
       ...actor(ids.proxy, ["order_merchandiser"], "work:report"),
       authorizationCapabilities: ["work:report", "work:report_for_worker"],
