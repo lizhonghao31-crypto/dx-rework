@@ -572,6 +572,7 @@ export class ExternalResponsibilityService {
           `external-return:${targetCase.case_id}:`,
           `deduction-follow-up:${targetCase.case_id}:`,
           `deduction-overdue:${targetCase.case_id}:`,
+          `external-deduction:${targetCase.case_id}:`,
         ]) {
           await this.todos?.cancelOpenByDedupePrefix(
             client,
@@ -825,6 +826,7 @@ export class ExternalResponsibilityService {
       await client.query(`INSERT INTO rework_external_deduction_closures(closure_id,case_id,result,proposed_amount,actual_deducted_amount,remaining_amount,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$4-$5,$6,$7,$8,$9,$10,$11)`,[randomUUID(),caseId,input.result,proposed,actual,input.reason??null,input.evidenceAttachmentIds,input.remainingDifferenceDisposition??null,actor.actorId,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='closed',case_version=case_version+1 WHERE case_id=$1",[caseId]);
       await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-overdue:${caseId}:`,"The deduction case was closed");
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`external-deduction:${caseId}:`,"The deduction case was closed");
       return this.getCase(actor,caseId,client);
     });
   }
@@ -845,6 +847,7 @@ export class ExternalResponsibilityService {
         `external-return:${caseId}:`,
         `deduction-follow-up:${caseId}:`,
         `deduction-overdue:${caseId}:`,
+        `external-deduction:${caseId}:`,
       ]) {
         await this.todos?.cancelOpenByDedupePrefix(
           client,
