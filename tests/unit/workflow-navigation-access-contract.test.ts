@@ -17,8 +17,9 @@ describe("workflow navigation access contract", () => {
     expect(detail).toContain('hasCapability(currentUser, "responsibility:determine")');
     expect(detail).toContain('hasCapability(currentUser, "responsibility:takeover")');
     expect(detail).toContain('hasCapability(currentUser, "responsibility:confirm_high_multiplier")');
+    expect(detail).toContain('hasCapability(currentUser, "responsibility:owner_sign")');
     expect(detail).toContain("<ResponsibilityDeterminationPanel");
-    expect(detail).toContain("<OwnFactoryApprovalPanel");
     expect(detail).toContain("<ExternalResponsibilityPanel");
+    expect(detail).not.toContain("<OwnFactoryApprovalPanel");
   });
 });
