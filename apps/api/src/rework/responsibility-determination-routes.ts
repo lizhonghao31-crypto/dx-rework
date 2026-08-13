@@ -61,7 +61,7 @@ export function registerResponsibilityDeterminationRoutes(app: FastifyInstance, 
   app.get("/rework-orders/:reworkOrderId/responsibility-determination", async (request) => {
     const currentActor = await actor(request, "responsibility:determine");
     const result = await dependencies.service.get(currentActor, parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId);
-    return ResponsibilityDeterminationResponseSchema.parse({ ...result, handlerUserId: result.handlerUserId ?? (result.canDetermine ? currentActor.actorId : null) });
+    return ResponsibilityDeterminationResponseSchema.parse(result);
   });
   app.get("/rework-orders/:reworkOrderId/responsibility-determinations/transfer-options", async (request) => {
     const result = await dependencies.service.listTransferCandidates(
