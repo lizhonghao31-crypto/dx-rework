@@ -122,6 +122,23 @@ CREATE TRIGGER capability_catalog_no_insert BEFORE INSERT ON capability_catalog
 CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities
   FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 
+-- Root is a globally authorized actor, including when it is the only account
+-- in a fresh environment. Treat it as an eligible N07 handler consistently
+-- with the service/UI bypass, while ordinary accounts still require a direct
+-- production/owner role or an in-scope delegation.
+CREATE OR REPLACE FUNCTION responsibility_can_determine(candidate uuid, order_id uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT access_is_root_actor(candidate)
+  OR responsibility_actor_has_direct_role(candidate,'responsibility:determine',ARRAY['production_management','owner_group'])
+  OR (responsibility_actor_is_active(candidate) AND EXISTS (
+    SELECT 1 FROM delegated_authorizations d
+    WHERE d.grantee_user_id=candidate AND d.capability='responsibility:determine'
+      AND d.scope_type='rework_order' AND d.scope_id=order_id::text
+      AND d.revoked_at IS NULL AND CURRENT_TIMESTAMP BETWEEN d.valid_from AND d.valid_until
+      AND responsibility_actor_has_direct_role(d.grantor_user_id,'responsibility:determine',ARRAY['production_management','owner_group'])
+  ))
+$$;
+
 -- N07 has a distinct "submit to owner" audit action.  Keep the responsibility
 -- event allowlist and the finalized-version guard in sync: the database, not
 -- the caller, is the authority that admits this transition.
