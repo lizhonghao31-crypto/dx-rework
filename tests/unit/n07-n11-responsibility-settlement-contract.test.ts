@@ -81,8 +81,11 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(backfill).toContain('requiredCapability: "responsibility:owner_sign"');
     expect(application).toContain("input.expectedCurrentDeterminationVersion === null");
     expect(application).toContain("handlerUserId: actor.actorId");
+    expect(application).toContain("请为初始责任判定选择有权限的处理人");
     expect(authorized).toContain("permission.handlerUserId ?? (");
-    expect(authorized).toContain("permission.canDetermine ? actor.actorId : null");
+    expect(authorized).toContain("permission.canDetermine && !isRootActor(actor) ? actor.actorId : null");
+    expect(migration).toContain("SELECT access_is_root_actor(candidate)");
+    expect(migration).toContain("Root is a globally authorized actor");
     expect(externalPanel).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
     expect(externalPanel).toContain("|| canRecordDeduction");
     expect(finalExternal).toContain("settlement_schema_version");
