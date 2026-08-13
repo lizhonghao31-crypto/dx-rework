@@ -196,11 +196,18 @@ export class ReworkBusinessDetailService {
          WHERE target_case.rework_order_id=$1
            AND determination.settlement_schema_version=2
            AND target_case.status<>'superseded'
+       ), wage_periods AS (
+         SELECT DISTINCT period.status
+         FROM rework_wage_items wage
+         JOIN rework_wage_periods period ON period.period_id=wage.period_id
+         WHERE wage.rework_order_id=$1
        )
        SELECT CASE
-         WHEN NOT EXISTS(SELECT 1 FROM v2_cases) THEN 'not_required'
          WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status='pending_responsibility_revision') THEN 'revision_in_progress'
-         WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status<>'closed') THEN 'in_progress'
+         WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status<>'closed')
+           OR EXISTS(SELECT 1 FROM wage_periods WHERE status<>'locked') THEN 'in_progress'
+         WHEN NOT EXISTS(SELECT 1 FROM v2_cases)
+           AND NOT EXISTS(SELECT 1 FROM wage_periods) THEN 'not_required'
          ELSE 'closed'
        END status`,
       [reworkOrderId],
