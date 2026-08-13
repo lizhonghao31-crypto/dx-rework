@@ -1,0 +1,52 @@
+import { readFile } from "node:fs/promises";
+
+import {
+  OwnerSignatureCommandSchema,
+  ReworkOrderStatusSchema,
+} from "@dx-rework/contracts";
+import {
+  DomainRuleError,
+  transitionReworkOrder,
+} from "@dx-rework/domain";
+import { describe, expect, it } from "vitest";
+
+describe("N07–N11 responsibility settlement contract", () => {
+  it("allows the main-order N07 → N08 → N10 path and rejects a skipped owner signature", () => {
+    expect(transitionReworkOrder(
+      "pending_responsibility_determination",
+      "pending_owner_signature",
+    )).toBe("pending_owner_signature");
+    expect(transitionReworkOrder(
+      "pending_owner_signature",
+      "completed",
+    )).toBe("completed");
+
+    expect(() => transitionReworkOrder(
+      "pending_responsibility_determination",
+      "completed",
+    )).toThrow(DomainRuleError);
+  });
+
+  it("keeps the owner action limited to optimistic-version agree or direct reject", () => {
+    expect(OwnerSignatureCommandSchema.parse({ expectedOrderVersion: 8 }))
+      .toEqual({ expectedOrderVersion: 8 });
+    expect(OwnerSignatureCommandSchema.safeParse({
+      expectedOrderVersion: 8,
+      reason: "不应要求老板填写理由",
+    }).success).toBe(false);
+    expect(ReworkOrderStatusSchema.parse("pending_owner_signature"))
+      .toBe("pending_owner_signature");
+  });
+
+  it("enforces party-level supplier and multiplier facts before server-only N09 materialization", async () => {
+    const [service, migration] = await Promise.all([
+      readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
+      readFile("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql", "utf8"),
+    ]);
+    expect(service).toContain("外部责任方必须填写实际供应商");
+    expect(service).toContain("外部供应商倍率不能低于 1.2");
+    expect(migration).toContain("V2 supplier ledger must be server-created from N07 facts");
+    expect(migration).toContain("'rework.responsibility.submit_owner_signature','responsibility:determine'");
+    expect(migration).toContain("'pending_owner_signature' AND NEW.status='completed'");
+  });
+});
