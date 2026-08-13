@@ -36,6 +36,10 @@ export type ReworkBusinessDetail = Readonly<{
   cancelledAt: string | null;
   cancelReason: string | null;
   settlementStatus: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+  unsettledWagePeriods: readonly Readonly<{
+    periodId: string;
+    periodMonth: string;
+  }>[];
   attachments: readonly Readonly<{
     attachmentId: string;
     filename: string;
@@ -106,6 +110,10 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
 
 const actorCapabilities = (actor: TrustedActorContext): readonly string[] =>
   actor.authorizationCapabilities ?? [actor.authorizationCapability];
+
+const canViewWagePeriods = (actor: TrustedActorContext): boolean =>
+  actor.actorRoles.some((role) => ["root_superuser", "owner_group"].includes(role))
+  || actorCapabilities(actor).includes("wage:view");
 
 export class ReworkBusinessDetailService {
   constructor(private readonly database: Pool) {}
@@ -212,6 +220,16 @@ export class ReworkBusinessDetailService {
        END status`,
       [reworkOrderId],
     );
+    const unsettledWagePeriods = canViewWagePeriods(actor)
+      ? await this.database.query<{ period_id: string; period_month: string }>(
+        `SELECT DISTINCT period.period_id,period.period_month::text
+         FROM rework_wage_items wage
+         JOIN rework_wage_periods period ON period.period_id=wage.period_id
+         WHERE wage.rework_order_id=$1 AND period.status<>'locked'
+         ORDER BY period.period_month,period.period_id`,
+        [reworkOrderId],
+      )
+      : { rows: [] as { period_id: string; period_month: string }[] };
 
     return {
       reworkOrderId: row.rework_order_id,
@@ -253,6 +271,10 @@ export class ReworkBusinessDetailService {
       cancelledAt: row.cancelled_at?.toISOString() ?? null,
       cancelReason: row.cancel_reason,
       settlementStatus: settlement.rows[0]?.status ?? "not_required",
+      unsettledWagePeriods: unsettledWagePeriods.rows.map((period) => ({
+        periodId: period.period_id,
+        periodMonth: period.period_month,
+      })),
       attachments: attachments.rows.map((attachment) => ({
         attachmentId: attachment.attachment_id,
         filename: attachment.original_filename,
