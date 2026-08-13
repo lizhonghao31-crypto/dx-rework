@@ -866,6 +866,19 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       )).rows[0]?.status).toBe("completed");
 
       await runWages(pass, fixture);
+      const settlementDetail = await fixture.businessDetail.get({
+        actorId: fixture.rootUserId,
+        actorRoles: ["root_superuser"],
+        authorizationCapability: "business:detail:read",
+        authorizationCapabilities: ["business:read_all", "wage:view", "external_responsibility:view"],
+        requestId: randomUUID(),
+      }, draft.reworkOrderId);
+      expect(settlementDetail).toMatchObject({
+        status: "completed",
+        settlementStatus: "closed",
+        wageSettlementStatus: "in_progress",
+        unsettledWagePeriods: [expect.objectContaining({ status: "ready_to_lock" })],
+      });
       await assertReconciliation(pass, fixture, draft.reworkOrderId);
 
       // Root itself must still have zero ordinary role assignments; otherwise

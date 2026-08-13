@@ -16,6 +16,8 @@ export type DingTalkTodoCreateInput = Readonly<{
   recipientUnionId: string;
   recipientProviderUserId: string;
   category: string;
+  subject: string;
+  description: string;
   deliveryKind: "create" | "information";
   sourceKey: string;
   route: TodoRouteDescriptor;
@@ -36,6 +38,8 @@ export type DingTalkTodoUpdateInput = Readonly<{
   recipientUnionId: string;
   providerTodoId?: string;
   category: string;
+  subject: string;
+  description: string;
   deliveryKind: "update" | "reminder" | "escalation";
   sourceKey: string;
   route: TodoRouteDescriptor;
@@ -239,8 +243,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
     let reconciled = task !== null;
     if (!task) {
       const body = {
-        subject: input.category,
-        description: `返工待办：${input.category}`,
+        subject: input.subject,
+        description: input.description,
         executorIds: [input.recipientUnionId],
         participantIds: [],
         sourceId,
@@ -319,8 +323,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
       {
         method: "PUT",
         body: JSON.stringify({
-          subject: input.category,
-          description: `返工待办更新：${input.category}`,
+          subject: input.subject,
+          description: input.description,
           executorIds: [input.recipientUnionId],
           operatorId: input.recipientUnionId,
           detailUrl: { appUrl: input.deepLink, pcUrl: input.deepLink },

@@ -74,6 +74,7 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(detail).toContain("FROM rework_wage_items wage");
     expect(detail).toContain("FROM wage_periods WHERE status<>'locked'");
     expect(detail).toContain("const canViewWagePeriods");
+    expect(detail).toContain("wageSettlementStatus");
     expect(detail).toContain("unsettledWagePeriods");
     expect(backfill).toContain("'rework.responsibility.submit_owner_signature'");
     expect(backfill).toContain("external-deduction:${row.case_id}:v1");

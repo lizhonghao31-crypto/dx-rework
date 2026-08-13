@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
 
-describe("N10-A wage UI retry safety", () => {
+describe("N11 wage UI retry safety", () => {
   it("reuses command keys when a wage review or lock result is uncertain", async () => {
     const source = await read("apps/web/src/wages/wage-period-detail.tsx");
 

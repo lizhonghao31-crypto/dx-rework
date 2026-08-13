@@ -595,7 +595,7 @@ export function ExternalResponsibilityPanel({
     return <Surface className="external-state">{state.message}</Surface>;
   }
   if (!state.value) {
-    return <Surface className="external-state">当前正式责任版本不存在外部责任金额，因此不创建 N08-B 台账。</Surface>;
+    return <Surface className="external-state">本单没有供应商责任金额，无需供应商扣款。</Surface>;
   }
 
   const batch = state.value;

@@ -911,7 +911,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
 
-    // N10-A - the two N05 reports materialize into one worker's wage facts.
+    // N11 - the two N05 reports materialize into one worker's wage facts after
+    // the main order has already completed at N10.
     // The current natural month is intentionally not force-locked: the service
     // must reach ready_to_lock and then enforce the month-end barrier. The
     // historical-month lock itself remains covered by wage-workflow-postgres.

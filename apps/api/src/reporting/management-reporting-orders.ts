@@ -152,7 +152,7 @@ export async function fetchFacts(source: Queryable, options: {
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
        order_record.status,
        CASE order_record.status
-         WHEN 'draft' THEN 'N00' WHEN 'pending_process_configuration' THEN 'N02'
+         WHEN 'draft' THEN 'N01' WHEN 'pending_process_configuration' THEN 'N02'
          WHEN 'pending_ie_review' THEN 'N03' WHEN 'pending_task_assignment' THEN 'N04'
          WHEN 'in_progress' THEN 'N05' WHEN 'pending_order_review' THEN 'N06'
          WHEN 'pending_quantity_adjustment_ie_review' THEN 'N06-A'
@@ -161,7 +161,7 @@ export async function fetchFacts(source: Queryable, options: {
          WHEN 'pending_responsibility_action' THEN 'N-LEGACY'
          WHEN 'completed' THEN 'N10' ELSE 'N-C' END node,
        CASE order_record.status
-         WHEN 'draft' THEN '草稿' WHEN 'pending_process_configuration' THEN '待配置工序'
+         WHEN 'draft' THEN '发起返工 / 草稿' WHEN 'pending_process_configuration' THEN '待配置工序'
          WHEN 'pending_ie_review' THEN '待 IE 审核' WHEN 'pending_task_assignment' THEN '待分配人员'
          WHEN 'in_progress' THEN '返工执行中' WHEN 'pending_order_review' THEN '待整单审核'
          WHEN 'pending_quantity_adjustment_ie_review' THEN '数量调整待 IE'

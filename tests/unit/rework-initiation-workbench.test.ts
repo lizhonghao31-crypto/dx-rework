@@ -22,7 +22,8 @@ describe("rework initiation information architecture", () => {
     expect(detail).toContain('reworkOrderId={detail.reworkOrderId}');
     expect(detail).toContain('detail.status === "pending_process_configuration"');
     expect(detail).toContain('? "initiation"');
-    expect(detail).toContain("selectedFromUrl ?? (focusedNode === currentNode ? focusedNode : defaultSelectedNode)");
+    expect(detail).toContain('node.state === "current" || node.state === "followup"');
+    expect(detail).toContain("selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode)");
     expect(shell).toContain(".app-shell > aside .primary-navigation");
   });
 

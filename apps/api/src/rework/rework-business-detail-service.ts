@@ -36,9 +36,11 @@ export type ReworkBusinessDetail = Readonly<{
   cancelledAt: string | null;
   cancelReason: string | null;
   settlementStatus: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+  wageSettlementStatus: "not_required" | "in_progress" | "closed";
   unsettledWagePeriods: readonly Readonly<{
     periodId: string;
     periodMonth: string;
+    status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
   }>[];
   attachments: readonly Readonly<{
     attachmentId: string;
@@ -193,7 +195,8 @@ export class ReworkBusinessDetailService {
       [reworkOrderId],
     );
     const settlement = await this.database.query<{
-      status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+      external_status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+      wage_status: "not_required" | "in_progress" | "closed";
     }>(
       `WITH v2_cases AS (
          SELECT target_case.status
@@ -212,19 +215,26 @@ export class ReworkBusinessDetailService {
        )
        SELECT CASE
          WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status='pending_responsibility_revision') THEN 'revision_in_progress'
-         WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status<>'closed')
-           OR EXISTS(SELECT 1 FROM wage_periods WHERE status<>'locked') THEN 'in_progress'
-         WHEN NOT EXISTS(SELECT 1 FROM v2_cases)
-           AND NOT EXISTS(SELECT 1 FROM wage_periods) THEN 'not_required'
+         WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status<>'closed') THEN 'in_progress'
+         WHEN NOT EXISTS(SELECT 1 FROM v2_cases) THEN 'not_required'
          ELSE 'closed'
-       END status`,
+       END external_status,
+       CASE
+         WHEN EXISTS(SELECT 1 FROM wage_periods WHERE status<>'locked') THEN 'in_progress'
+         WHEN NOT EXISTS(SELECT 1 FROM wage_periods) THEN 'not_required'
+         ELSE 'closed'
+       END wage_status`,
       [reworkOrderId],
     );
     const unsettledWagePeriods = canViewWagePeriods(actor)
-      ? await this.database.query<{ period_id: string; period_month: string }>(
-        `SELECT unsettled.period_id,unsettled.period_month::text period_month
+      ? await this.database.query<{
+          period_id: string;
+          period_month: string;
+          status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
+        }>(
+        `SELECT unsettled.period_id,unsettled.period_month::text period_month,unsettled.status
          FROM (
-           SELECT DISTINCT period.period_id,period.period_month
+           SELECT DISTINCT period.period_id,period.period_month,period.status
            FROM rework_wage_items wage
            JOIN rework_wage_periods period ON period.period_id=wage.period_id
            WHERE wage.rework_order_id=$1 AND period.status<>'locked'
@@ -232,7 +242,11 @@ export class ReworkBusinessDetailService {
          ORDER BY unsettled.period_month,unsettled.period_id`,
         [reworkOrderId],
       )
-      : { rows: [] as { period_id: string; period_month: string }[] };
+      : { rows: [] as {
+          period_id: string;
+          period_month: string;
+          status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
+        }[] };
 
     return {
       reworkOrderId: row.rework_order_id,
@@ -273,10 +287,12 @@ export class ReworkBusinessDetailService {
       submittedAt: row.submitted_at?.toISOString() ?? null,
       cancelledAt: row.cancelled_at?.toISOString() ?? null,
       cancelReason: row.cancel_reason,
-      settlementStatus: settlement.rows[0]?.status ?? "not_required",
+      settlementStatus: settlement.rows[0]?.external_status ?? "not_required",
+      wageSettlementStatus: settlement.rows[0]?.wage_status ?? "not_required",
       unsettledWagePeriods: unsettledWagePeriods.rows.map((period) => ({
         periodId: period.period_id,
         periodMonth: period.period_month,
+        status: period.status,
       })),
       attachments: attachments.rows.map((attachment) => ({
         attachmentId: attachment.attachment_id,

@@ -10,7 +10,7 @@ import { createWebUrls } from "../../url-contract.js";
 import "./reporting.css";
 
 const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
-  ["", "全部状态"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],
+  ["", "全部状态"],["draft","草稿"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],
   ["pending_task_assignment","待分工"],["in_progress","返工执行中"],["pending_order_review","待整单审核"],
   ["pending_quantity_adjustment_ie_review","数量调整待 IE"],["pending_responsibility_determination","责任判定与资料核验"],
   ["pending_owner_signature","待老板确认签字"],["pending_responsibility_action","旧责任处理"],["completed","订单已完成"],["cancelled","已取消"],

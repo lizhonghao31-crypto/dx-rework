@@ -53,5 +53,9 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain('if (detail.status === "completed")');
     expect(detail).toContain('node("archive", "10", "订单完成"');
     expect(detail).toContain('node("settlement_followup", "11", "后续结算"');
+    expect(detail).toContain('key: "followup"');
+    expect(detail).toContain('title: "后续结算"');
+    expect(detail).toContain('wageSettlementStatus: "not_required" | "in_progress" | "closed"');
+    expect(detail).toContain('state === "followup"');
   });
 });
