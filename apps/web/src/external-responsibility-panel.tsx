@@ -688,22 +688,29 @@ export function ExternalResponsibilityPanel({
         {visibleCases.map((caseItem) => {
           const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
           const evidence = attachments[caseItem.caseId] ?? [];
-          const canEditRemark = !readOnly && (caseItem.canSign
-            || caseItem.canPayablesConfirm
-            || caseItem.canFollowUp
-            || caseItem.canClose
-            || caseItem.canRequestRevision
-            || caseItem.canApproveRevision);
-          const canEditDisposition = !readOnly && (caseItem.canClose || caseItem.canRequestRevision);
-          const canAttachEvidence = !readOnly && (caseItem.canSign
-            || caseItem.canPayablesConfirm
-            || caseItem.canFollowUp
-            || caseItem.canRecordDeduction
-            || caseItem.canClose
-            || caseItem.canRequestRevision);
+          const canSign = !readOnly && caseItem.canSign;
+          const canPayablesConfirm = !readOnly && caseItem.canPayablesConfirm;
+          const canFollowUp = !readOnly && caseItem.canFollowUp;
+          const canRecordDeduction = !readOnly && caseItem.canRecordDeduction;
+          const canClose = !readOnly && caseItem.canClose;
+          const canRequestRevision = !readOnly && caseItem.canRequestRevision;
+          const canApproveRevision = !readOnly && caseItem.canApproveRevision;
+          const canEditRemark = canSign
+            || canPayablesConfirm
+            || canFollowUp
+            || canClose
+            || canRequestRevision
+            || canApproveRevision;
+          const canEditDisposition = canClose || canRequestRevision;
+          const canAttachEvidence = canSign
+            || canPayablesConfirm
+            || canFollowUp
+            || canRecordDeduction
+            || canClose
+            || canRequestRevision;
           const hasEditableFields = canEditRemark
             || canEditDisposition
-            || caseItem.canRecordDeduction
+            || canRecordDeduction
             || canAttachEvidence;
           return (
             <article className="external-case" key={caseItem.caseId}>
@@ -726,23 +733,23 @@ export function ExternalResponsibilityPanel({
               </div>
 
               {!readOnly && <div className="external-case-actions">
-                {!readOnly && caseItem.canSign && (
+                {canSign && (
                   <Button disabled={busy} onClick={() => void operation(caseItem, "submit")}>
                     {caseItem.status === "returned" ? "资料已修正，重新交应付" : "补充资料并交应付"}
                   </Button>
                 )}
-                {!readOnly && caseItem.canPayablesConfirm && (
+                {canPayablesConfirm && (
                   <Button disabled={busy} onClick={() => void operation(caseItem, "return")}>退回资料问题</Button>
                 )}
-                {!readOnly && caseItem.canFollowUp && <Button disabled={busy} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
-                {!readOnly && caseItem.canRecordDeduction && <Button variant="primary" disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
-                {!readOnly && caseItem.canClose && <>
+                {canFollowUp && <Button disabled={busy} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
+                {canRecordDeduction && <Button variant="primary" disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
+                {canClose && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-full")}>按全额关闭</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-partial")}>按部分关闭</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-none")}>登记未扣成功</Button>
                 </>}
-                {!readOnly && caseItem.canRequestRevision && <Button disabled={busy} onClick={() => void operation(caseItem, "revision")}>申请责任变更</Button>}
-                {!readOnly && caseItem.canApproveRevision && pendingRevision && <>
+                {canRequestRevision && <Button disabled={busy} onClick={() => void operation(caseItem, "revision")}>申请责任变更</Button>}
+                {canApproveRevision && pendingRevision && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "revision-approve")}>通过责任变更</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "revision-reject")}>驳回责任变更</Button>
                 </>}
@@ -755,7 +762,7 @@ export function ExternalResponsibilityPanel({
                   onChange={(event) => setRemark((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="退回资料、跟进、部分/未扣或责任变更时填写"
                 />}
-                {caseItem.canFollowUp && <>
+                {canFollowUp && <>
                   <InsetField
                     label="供应商反馈（选填）"
                     value={supplierFeedback[caseItem.caseId] ?? ""}
@@ -776,7 +783,7 @@ export function ExternalResponsibilityPanel({
                   onChange={(event) => setDifferenceDisposition((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   placeholder="部分/未扣关闭时必填，例如：申请转本厂承担并进入责任重判"
                 />}
-                {caseItem.canRequestRevision && caseItem.closure && caseItem.closure.remainingAmount !== "0.00" && (
+                {canRequestRevision && caseItem.closure && caseItem.closure.remainingAmount !== "0.00" && (
                   <label className="external-revision-choice">
                     <input
                       type="checkbox"
@@ -790,7 +797,7 @@ export function ExternalResponsibilityPanel({
                     <span>将未扣差额转为本厂承担，并进入 N07 重新判责</span>
                   </label>
                 )}
-                {caseItem.canRecordDeduction && <>
+                {canRecordDeduction && <>
                   <InsetField
                     label="实际扣款金额"
                     inputMode="decimal"
