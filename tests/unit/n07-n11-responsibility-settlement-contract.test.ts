@@ -61,6 +61,8 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(panel).toContain("determination?.stage === \"draft\"");
     expect(migration).toContain("V2 supplier ledger must be server-created from N07 facts");
     expect(migration).toContain("owner signature requires a direct active owner or root");
+    expect(migration).toContain("access_is_root_actor(NEW.signed_by)");
+    expect(migration).toContain("owner signature must persist the trusted audit context");
     expect(migration).toContain("V2 supplier ledger snapshot is invalid");
     expect(migration).toContain("'rework.responsibility.submit_owner_signature','responsibility:determine'");
     expect(migration).toContain("'pending_owner_signature' AND NEW.status='completed'");
@@ -68,6 +70,8 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(migration).toContain("'rework.responsibility.submit_owner_signature'\n    ) THEN");
     expect(detail).toContain("FROM rework_wage_items wage");
     expect(detail).toContain("FROM wage_periods WHERE status<>'locked'");
+    expect(detail).toContain("const canViewWagePeriods");
+    expect(detail).toContain("unsettledWagePeriods");
     expect(backfill).toContain("'rework.responsibility.submit_owner_signature'");
     expect(backfill).toContain("external-deduction:${row.case_id}:v1");
     expect(backfill).toContain('requiredCapability: isV2Ledger ? "external_deduction:record"');
