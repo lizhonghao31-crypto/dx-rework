@@ -16,7 +16,7 @@ describe("N07 responsibility edit lifecycle", () => {
   it("does not create no-op draft versions or discard edits during transfer", async () => {
     const panel = await read("apps/web/src/responsibility-determination-panel.tsx");
 
-    expect(panel).toContain("const saveNeeded = determination === null || hasUnsavedChanges");
+    expect(panel).toContain("const saveNeeded = determination === null || determination.stage === \"finalized\" || hasUnsavedChanges");
     expect(panel).toContain("disabled={!allProcessesValid || !saveNeeded || Boolean(busyAction)}");
     expect(panel).toContain('saveNeeded ? "保存草稿" : "草稿已保存"');
     expect(panel).toContain("!transferReason.trim() || hasUnsavedChanges");
