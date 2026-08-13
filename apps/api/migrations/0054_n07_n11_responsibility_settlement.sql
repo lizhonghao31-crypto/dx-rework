@@ -85,6 +85,11 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'owner signature audit event does not match the write' USING ERRCODE='55000';
   END IF;
+  IF NOT responsibility_actor_has_direct_role(
+    NEW.signed_by,'responsibility:owner_sign',ARRAY['owner_group']
+  ) THEN
+    RAISE EXCEPTION 'owner signature requires a direct active owner or root' USING ERRCODE='42501';
+  END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER rework_responsibility_owner_signature_insert
@@ -209,6 +214,8 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   batch rework_external_responsibility_batches%ROWTYPE;
   supplier current_supplier_catalog%ROWTYPE;
+  supplier_version supplier_catalog_versions%ROWTYPE;
+  supplier_item supplier_catalog_items%ROWTYPE;
   order_record rework_orders%ROWTYPE;
   determination rework_responsibility_determinations%ROWTYPE;
   event_action text;
@@ -221,19 +228,21 @@ BEGIN
   SELECT * INTO order_record FROM rework_orders WHERE rework_order_id=NEW.rework_order_id;
   SELECT action INTO event_action FROM operation_events WHERE event_id=NEW.operation_event_id;
 
-  IF batch.batch_id IS NULL OR determination.determination_id IS NULL
-     OR batch.rework_order_id<>NEW.rework_order_id OR batch.status<>'active'
-     OR supplier.supplier_id IS NULL OR supplier.active IS DISTINCT FROM true
-     OR supplier.version<>NEW.supplier_version
-     OR supplier.supplier_type<>external_responsibility_expected_supplier_type(NEW.responsibility_type)
-     OR NEW.supplier_code_snapshot<>supplier.supplier_code
-     OR NEW.supplier_name_snapshot<>supplier.supplier_name
-     OR NEW.supplier_type_snapshot<>supplier.supplier_type
-     OR NEW.case_version<>1 THEN
-    RAISE EXCEPTION 'external case supplier or snapshot is invalid' USING ERRCODE='23514';
-  END IF;
-
   IF determination.settlement_schema_version=2 THEN
+    SELECT * INTO supplier_version FROM supplier_catalog_versions
+      WHERE supplier_id=NEW.supplier_id AND version=NEW.supplier_version;
+    SELECT * INTO supplier_item FROM supplier_catalog_items
+      WHERE supplier_id=NEW.supplier_id;
+    IF batch.batch_id IS NULL OR batch.rework_order_id<>NEW.rework_order_id
+       OR batch.status<>'active' OR supplier_version.supplier_id IS NULL
+       OR supplier_item.supplier_id IS NULL
+       OR supplier_item.supplier_type<>external_responsibility_expected_supplier_type(NEW.responsibility_type)
+       OR NEW.supplier_code_snapshot<>supplier_item.supplier_code
+       OR NEW.supplier_name_snapshot<>supplier_version.supplier_name
+       OR NEW.supplier_type_snapshot<>supplier_item.supplier_type
+       OR NEW.case_version<>1 THEN
+      RAISE EXCEPTION 'V2 supplier ledger snapshot is invalid' USING ERRCODE='23514';
+    END IF;
     IF NEW.status<>'deduction_follow_up' OR NEW.submitted_at IS NULL
        OR NEW.payables_confirmed_at IS NULL
        OR NEW.business_handler_user_id<>determination.created_by
@@ -247,6 +256,18 @@ BEGIN
       NEW.rework_order_id,NEW.created_by
     );
     RETURN NEW;
+  END IF;
+
+  IF batch.batch_id IS NULL OR determination.determination_id IS NULL
+     OR batch.rework_order_id<>NEW.rework_order_id OR batch.status<>'active'
+     OR supplier.supplier_id IS NULL OR supplier.active IS DISTINCT FROM true
+     OR supplier.version<>NEW.supplier_version
+     OR supplier.supplier_type<>external_responsibility_expected_supplier_type(NEW.responsibility_type)
+     OR NEW.supplier_code_snapshot<>supplier.supplier_code
+     OR NEW.supplier_name_snapshot<>supplier.supplier_name
+     OR NEW.supplier_type_snapshot<>supplier.supplier_type
+     OR NEW.case_version<>1 THEN
+    RAISE EXCEPTION 'external case supplier or snapshot is invalid' USING ERRCODE='23514';
   END IF;
 
   IF NEW.status<>'pending_payables_confirmation'
