@@ -342,6 +342,7 @@ export class FinalExternalResponsibilityService
           `external-return:${supersededCase.case_id}:`,
           `deduction-follow-up:${supersededCase.case_id}:`,
           `deduction-overdue:${supersededCase.case_id}:`,
+          `external-deduction:${supersededCase.case_id}:`,
         ]) {
           await this.finalTodos?.cancelOpenByDedupePrefix(
             client,
@@ -500,11 +501,11 @@ export class FinalExternalResponsibilityService
          determination_id,rework_order_id,determination_version,
          replaces_determination_id,source_order_review_id,stage,
          handler_user_id,created_by,reason,input_snapshot,
-         calculation_total,operation_event_id,request_id
+         calculation_total,operation_event_id,request_id,settlement_schema_version
        )
        SELECT $1,rework_order_id,determination_version+1,
               determination_id,source_order_review_id,'draft',$2,$2,$3,
-              input_snapshot,calculation_total,$4,$5
+              input_snapshot,calculation_total,$4,$5,settlement_schema_version
        FROM rework_responsibility_determinations
        WHERE determination_id=$6 AND stage='finalized'`,
       [
@@ -526,9 +527,14 @@ export class FinalExternalResponsibilityService
       [draftId, draftEventId, actor.requestId, revision.finalized_determination_id],
     );
     await client.query(
-      `INSERT INTO rework_responsibility_allocations
+      `INSERT INTO rework_responsibility_allocations(
+         determination_id,configuration_item_id,responsibility_type,share_bps,
+         rounded_amount,operation_event_id,request_id,multiplier,supplier_id,
+         supplier_version,supplier_code_snapshot,supplier_name_snapshot,supplier_type_snapshot
+       )
        SELECT $1,configuration_item_id,responsibility_type,share_bps,
-              rounded_amount,$2,$3
+              rounded_amount,$2,$3,multiplier,supplier_id,supplier_version,
+              supplier_code_snapshot,supplier_name_snapshot,supplier_type_snapshot
        FROM rework_responsibility_allocations
        WHERE determination_id=$4`,
       [draftId, draftEventId, actor.requestId, revision.finalized_determination_id],
