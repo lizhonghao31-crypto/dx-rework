@@ -8,10 +8,12 @@ describe("rework detail permission UX", () => {
     expect(source).not.toContain('action: "返回全部订单"');
     expect(source).toContain("const canSeeResponsibility = elevated(currentUser)");
     expect(source).toContain("selected.key === \"responsibility\"");
-    expect(source).toContain("selected.key === \"responsibility_settlement\"");
+    expect(source).toContain("selected.key === \"owner_signature\"");
+    expect(source).toContain("selected.key === \"settlement_ledger\"");
+    expect(source).toContain("selected.key === \"settlement_followup\"");
     expect(source).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId}");
-    expect(source).toContain("<OwnFactoryApprovalPanel key=\"own-factory\"");
-    expect(source).toContain("<ExternalResponsibilityPanel key=\"external\"");
+    expect(source).toContain("<ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly");
+    expect(source).not.toContain("<OwnFactoryApprovalPanel");
     expect(source).toContain('selected.state !== "future"');
     expect(source).toContain('if (selected.state === "current") return <NodePermissionNotice');
     expect(source).toContain("return renderNodePreview()");
