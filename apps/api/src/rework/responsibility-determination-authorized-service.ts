@@ -95,10 +95,11 @@ export class AuthorizedResponsibilityDeterminationService {
     const response = await this.base.get(actor, orderId, executor);
     return {
       ...response,
-      // Returning the initial server-side assignment avoids exposing a null
-      // handler to callers before the first N07 draft is persisted.
+      // A non-Root actor is always the first handler. Root deliberately gets
+      // no implicit handler here: the UI must select an eligible initial
+      // handler before persisting N07.
       handlerUserId: permission.handlerUserId ?? (
-        permission.canDetermine ? actor.actorId : null
+        permission.canDetermine && !isRootActor(actor) ? actor.actorId : null
       ),
       canDetermine: permission.canDetermine,
       canTakeover: permission.canTakeover,
