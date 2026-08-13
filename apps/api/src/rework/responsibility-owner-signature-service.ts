@@ -70,7 +70,7 @@ export class ResponsibilityOwnerSignatureService {
   ): Promise<Result<ResponsibilityDeterminationResponse>> {
     return this.mutate(actor, "rework.responsibility.owner_approve", key, { orderId, input }, async (client) => {
       const order = await this.order(client, orderId, true);
-      this.requireOwner(actor);
+      await this.requireOwner(client, actor);
       this.requirePending(order, input.expectedOrderVersion);
       const determination = await this.finalized(client, orderId);
       const eventId = await this.event(
@@ -114,7 +114,7 @@ export class ResponsibilityOwnerSignatureService {
   ): Promise<Result<ResponsibilityDeterminationResponse>> {
     return this.mutate(actor, "rework.responsibility.owner_reject", key, { orderId, input }, async (client) => {
       const order = await this.order(client, orderId, true);
-      this.requireOwner(actor);
+      await this.requireOwner(client, actor);
       this.requirePending(order, input.expectedOrderVersion);
       const determination = await this.finalized(client, orderId);
       const eventId = await this.event(
@@ -158,9 +158,16 @@ export class ResponsibilityOwnerSignatureService {
     });
   }
 
-  private requireOwner(actor: TrustedActorContext): void {
+  private async requireOwner(client: PoolClient, actor: TrustedActorContext): Promise<void> {
     const granted = actor.authorizationCapabilities ?? [actor.authorizationCapability];
-    if (!isRootActor(actor) && !granted.includes("responsibility:owner_sign")) {
+    if (isRootActor(actor)) return;
+    const directOwner = (await client.query<{ permitted: boolean }>(
+      `SELECT responsibility_actor_has_direct_role(
+         $1,'responsibility:owner_sign',ARRAY['owner_group']
+       ) permitted`,
+      [actor.actorId],
+    )).rows[0]?.permitted === true;
+    if (!directOwner || !granted.includes("responsibility:owner_sign")) {
       fail("只有老板权限组可以确认或驳回责任签字", 403, "FORBIDDEN");
     }
   }
