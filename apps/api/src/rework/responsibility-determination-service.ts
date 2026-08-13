@@ -650,11 +650,11 @@ export class ResponsibilityDeterminationService {
       fail("必须提交全部 approved 工序", 400, "VALIDATION_ERROR");
     }
     input.processes.forEach((row) => validateBps(row.allocations));
-    const settlementSchemaVersion: 1 | 2 = input.processes.some((process) =>
-      process.allocations.some(
-        (allocation) => allocation.multiplier !== undefined || allocation.supplierId !== undefined,
-      ),
-    ) ? 2 : 1;
+    // Every determination created after migration 0054 is N07–N11 V2.  The
+    // client must never be able to opt back into the retired V1 settlement
+    // path by omitting optional wire fields; those fields remain optional only
+    // so immutable historical snapshots can still be read.
+    const settlementSchemaVersion = 2 as const;
 
     const reviewResult = await client.query<{ order_review_id: string }>(
       `SELECT order_review_id
@@ -721,7 +721,8 @@ export class ResponsibilityDeterminationService {
       for (const share of shareResult.rows) {
         for (const allocation of processInput.allocations) {
           const multiplier = decimalToScaled(
-            allocation.multiplier ?? processInput.multiplier,
+            allocation.multiplier
+              ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"),
             3,
           );
           const base = decimalToScaled(share.amount, 8);
@@ -804,7 +805,8 @@ export class ResponsibilityDeterminationService {
       );
 
       for (const allocation of calculation.input.allocations) {
-        const partyMultiplier = allocation.multiplier ?? calculation.input.multiplier;
+        const partyMultiplier = allocation.multiplier
+          ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200");
         if (decimalToScaled(partyMultiplier, 3) < 1_000n) {
           fail("责任方倍率不能低于 1", 400, "VALIDATION_ERROR");
         }
@@ -877,7 +879,7 @@ export class ResponsibilityDeterminationService {
             cents(allocationAmount),
             eventId,
             actor.requestId,
-            settlementSchemaVersion === 2 ? partyMultiplier : null,
+            partyMultiplier,
             supplier?.supplierId ?? null,
             supplier?.version ?? null,
             supplier?.code ?? null,
@@ -903,7 +905,8 @@ export class ResponsibilityDeterminationService {
             line.share.person_id,
             line.allocation.responsibilityType,
             line.share.amount,
-            line.allocation.multiplier ?? calculation.input.multiplier,
+            line.allocation.multiplier
+              ?? (line.allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"),
             line.allocation.shareBps,
             line.unrounded,
             cents(line.rounded),
