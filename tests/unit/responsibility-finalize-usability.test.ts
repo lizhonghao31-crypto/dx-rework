@@ -17,7 +17,8 @@ describe("N07 responsibility edit lifecycle", () => {
     const panel = await read("apps/web/src/responsibility-determination-panel.tsx");
 
     expect(panel).toContain("const saveNeeded = determination === null || determination.stage === \"finalized\" || hasUnsavedChanges");
-    expect(panel).toContain("disabled={!allProcessesValid || !saveNeeded || Boolean(busyAction)}");
+    expect(panel).toContain("disabled={!allProcessesValid || !saveNeeded || !selectedHandlerUserId || Boolean(busyAction)}");
+    expect(panel).toContain("const initialHandlerRequired = determination === null");
     expect(panel).toContain('saveNeeded ? "保存草稿" : "草稿已保存"');
     expect(panel).toContain("!transferReason.trim() || hasUnsavedChanges");
     expect(panel).toContain("hasUnsavedChanges || !transferUserId");
