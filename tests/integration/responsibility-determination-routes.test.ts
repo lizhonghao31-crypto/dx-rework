@@ -32,6 +32,8 @@ const response: ResponsibilityDeterminationResponse = {
   canDetermine: true,
   canTakeover: false,
   canConfirmHighMultiplier: false,
+  canOwnerSign: false,
+  ownerSignature: null,
   sourceProcesses: [
     {
       configurationItemId,
@@ -61,6 +63,8 @@ const response: ResponsibilityDeterminationResponse = {
             responsibilityType: "own_factory",
             shareBps: 10000,
             roundedAmount: "185.46",
+            multiplier: "1.000",
+            supplier: null,
           },
         ],
       },
@@ -96,6 +100,7 @@ const user = {
     "responsibility:determine",
     "responsibility:takeover",
     "responsibility:confirm_high_multiplier",
+    "responsibility:owner_sign",
   ],
 };
 
@@ -118,6 +123,7 @@ function buildService() {
   return {
     listQueue: vi.fn().mockResolvedValue(queueResponse),
     get: vi.fn().mockResolvedValue(response),
+    listSupplierOptions: vi.fn().mockResolvedValue({ items: [] }),
     saveDraft: vi.fn().mockResolvedValue({ value: response, reused: false }),
     finalize: vi.fn().mockResolvedValue({ value: response, reused: false }),
     transfer: vi.fn().mockResolvedValue({ value: response, reused: false }),
@@ -125,6 +131,8 @@ function buildService() {
     confirmHighMultiplier: vi
       .fn()
       .mockResolvedValue({ value: response, reused: false }),
+    approveOwnerSignature: vi.fn().mockResolvedValue({ value: response, reused: false }),
+    rejectOwnerSignature: vi.fn().mockResolvedValue({ value: response, reused: false }),
   };
 }
 
@@ -215,6 +223,42 @@ describe("responsibility routes", () => {
     await app.close();
   });
 
+  it("lists suppliers in N07 and sends N08 agree or direct reject with an optimistic version", async () => {
+    const { app, service } = buildTestApp();
+    const suppliers = await app.inject({
+      method: "GET",
+      url: `/rework-orders/${orderId}/responsibility-determinations/supplier-options`,
+    });
+    expect(suppliers.statusCode).toBe(200);
+    expect(service.listSupplierOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "responsibility:determine" }),
+      orderId,
+    );
+
+    for (const decision of ["approve", "reject"] as const) {
+      const result = await app.inject({
+        method: "POST",
+        url: `/rework-orders/${orderId}/responsibility-owner-signature/${decision}`,
+        headers: { "idempotency-key": `route-owner-${decision}` },
+        payload: { expectedOrderVersion: 8 },
+      });
+      expect(result.statusCode).toBe(200);
+    }
+    expect(service.approveOwnerSignature).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "responsibility:owner_sign" }),
+      orderId,
+      { expectedOrderVersion: 8 },
+      "route-owner-approve",
+    );
+    expect(service.rejectOwnerSignature).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "responsibility:owner_sign" }),
+      orderId,
+      { expectedOrderVersion: 8 },
+      "route-owner-reject",
+    );
+    await app.close();
+  });
+
   it("transfers to the requested eligible handler", async () => {
     const { app, service } = buildTestApp();
     const toUserId = randomUUID();
@@ -294,6 +338,8 @@ describe("responsibility routes", () => {
     `/rework-orders/${orderId}/responsibility-determinations/transfer`,
     `/rework-orders/${orderId}/responsibility-determinations/takeover`,
     `/responsibility-determinations/${determinationId}/high-multiplier-confirm`,
+    `/rework-orders/${orderId}/responsibility-owner-signature/approve`,
+    `/rework-orders/${orderId}/responsibility-owner-signature/reject`,
   ])("rejects writes without an idempotency key: %s", async (url) => {
     const { app } = buildTestApp();
     const result = await app.inject({ method: "POST", url, payload: {} });
