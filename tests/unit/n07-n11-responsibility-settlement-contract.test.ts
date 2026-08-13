@@ -39,11 +39,13 @@ describe("N07–N11 responsibility settlement contract", () => {
   });
 
   it("makes every new draft V2 and enforces party facts before server-only N09 materialization", async () => {
-    const [service, panel, migration, detail] = await Promise.all([
+    const [service, panel, migration, detail, backfill, externalPanel] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql", "utf8"),
       readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
+      readFile("apps/api/src/todos/backfill-service.ts", "utf8"),
+      readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
     ]);
     expect(service).toContain("const settlementSchemaVersion = 2 as const");
     expect(service).toContain("外部责任方必须填写实际供应商");
@@ -58,5 +60,10 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(migration).toContain("'rework.responsibility.submit_owner_signature'\n    ) THEN");
     expect(detail).toContain("FROM rework_wage_items wage");
     expect(detail).toContain("FROM wage_periods WHERE status<>'locked'");
+    expect(backfill).toContain("'rework.responsibility.submit_owner_signature'");
+    expect(backfill).toContain("external-deduction:${row.case_id}:v1");
+    expect(backfill).toContain('requiredCapability: isV2Ledger ? "external_deduction:record"');
+    expect(externalPanel).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
+    expect(externalPanel).toContain("|| canRecordDeduction");
   });
 });
