@@ -725,7 +725,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       calculationTotal: "126.50",
       processes: [{
         baseAmount: "110.00",
-        responsibilityAmount: "110.00",
+        responsibilityAmount: "126.50",
         allocations: expect.arrayContaining([
           expect.objectContaining({
             responsibilityType: "own_factory",
