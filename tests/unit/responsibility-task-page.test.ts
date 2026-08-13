@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 
 describe("responsibility task page", () => {
   it("opens one responsibility task and follows durable todo completion", async () => {
-    const [app, list, task, external] = await Promise.all([
+    const [app, list, task, external, detail] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/my-todos-page.tsx", "utf8"),
       readFile("apps/web/src/responsibility-task-page.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
     ]);
 
     expect(app).toContain('path.startsWith("/ui/my-tasks/")');
@@ -22,5 +23,7 @@ describe("responsibility task page", () => {
     expect(task).not.toContain("window.location.replace");
     expect(external).toContain("focusCaseId");
     expect(external).toContain('caseItem.caseId === focusCaseId');
+    expect(detail).toContain('node.state === "current" || node.state === "followup"');
+    expect(detail).toContain("focusedNode === activeNode");
   });
 });

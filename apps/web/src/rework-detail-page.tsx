@@ -482,12 +482,13 @@ export function ReworkDetailPage({
   const otherAttachments = detail.attachments.filter((attachment) => !attachment.mimeType.startsWith("image/"));
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
-  const currentNode = stages.flatMap((stage) => stage.nodes).find((node) => node.state === "current")?.key;
+  const activeNode = stages.flatMap((stage) => stage.nodes)
+    .find((node) => node.state === "current" || node.state === "followup")?.key;
   const selectedFromUrl = workflowNodeFromSearch();
   const defaultSelectedNode = detail.status === "pending_process_configuration"
     ? "initiation"
-    : currentNode ?? "archive";
-  const selectedNode = selectedFromUrl ?? (focusedNode === currentNode ? focusedNode : defaultSelectedNode);
+    : activeNode ?? "archive";
+  const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
   const selected = stages.flatMap((stage) => stage.nodes).find((node) => node.key === selectedNode);
   const canSeeResponsibility = elevated(currentUser)
     || hasCapability(currentUser, "responsibility:determine")
