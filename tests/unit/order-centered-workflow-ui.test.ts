@@ -35,7 +35,8 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain('selected.state !== "future"');
     expect(detail).toContain("return renderNodePreview()");
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
-    expect(detail).toContain("<WorkReportingForm reworkOrderId={detail.reworkOrderId}");
+    expect(detail).toContain("<WorkReportingForm");
+    expect(detail).toContain("taskMode={selected.key}");
     expect(detail).not.toContain('action: "返回全部订单"');
     expect(detail.match(/badge=\{meta\.label\}/g)).toHaveLength(1);
     expect(styles).toMatch(/\.rework-workflow__node\.is-future \{[\s\S]*?color: #fff;[\s\S]*?background: var\(--dx-v2-color-primary-hover\);/);

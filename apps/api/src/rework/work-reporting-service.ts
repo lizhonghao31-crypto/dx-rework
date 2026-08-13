@@ -181,10 +181,12 @@ export class WorkReportingService {
       const version = (latest.rows[0]?.task_version ?? 0) + 1;
       const taskId = randomUUID();
       const transitionToInProgress = order.status === "pending_task_assignment";
+      const nextOrderStatus = transitionToInProgress ? "in_progress" : order.status;
+      const nextOrderVersion = order.version + 1;
       const eventId = await this.events.append(client, actor, {
         action: "rework.work_task.assign", entityType: "rework_order", entityId: reworkOrderId,
         before: { orderVersion: order.version, activeTaskId: active.rows[0]?.work_task_id ?? null },
-        after: { ...this.orderAuditState(order, transitionToInProgress ? "in_progress" : order.status, transitionToInProgress ? order.version + 1 : order.version), workTaskId: taskId, configurationItemId: item.configuration_item_id, mode: input.mode, memberIds: people.rows.map((person) => person.person_id) },
+        after: { ...this.orderAuditState(order, nextOrderStatus, nextOrderVersion), workTaskId: taskId, configurationItemId: item.configuration_item_id, mode: input.mode, memberIds: people.rows.map((person) => person.person_id) },
       });
       await this.context(client, eventId, actor.requestId);
       if (active.rows[0]) await client.query("UPDATE rework_work_tasks SET status='superseded',superseded_at=CURRENT_TIMESTAMP WHERE work_task_id=$1", [active.rows[0].work_task_id]);
@@ -193,9 +195,9 @@ export class WorkReportingService {
         "INSERT INTO rework_work_task_members(work_task_id,person_id,display_name_snapshot,person_type_snapshot) VALUES($1,$2,$3,$4)",
         [taskId, person.person_id, person.display_name, person.person_type],
       );
-      if (transitionToInProgress) await client.query(
-        "UPDATE rework_orders SET status='in_progress',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
-        [reworkOrderId, actor.actorId],
+      await client.query(
+        "UPDATE rework_orders SET status=$2,updated_by=$3,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$4",
+        [reworkOrderId, nextOrderStatus, actor.actorId, order.version],
       );
       return this.taskDto(client, taskId, actor);
     });
@@ -205,7 +207,7 @@ export class WorkReportingService {
     return this.mutate(actor, "rework.work_report.submit", key, { workTaskId, ...input }, 201, async (client) => {
       const task = await this.task(client, workTaskId, true);
       const order = await this.order(client, task.rework_order_id, true);
-      if (order.status !== "pending_task_assignment" && order.status !== "in_progress") error("当前返工单不允许上数", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "in_progress") error("当前返工单不在完成数量登记节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
       if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
       const members = await this.members(client, task.work_task_id);

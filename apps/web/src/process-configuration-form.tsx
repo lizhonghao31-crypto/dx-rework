@@ -437,16 +437,13 @@ export function ProcessConfigurationForm({
       <StatusBadge tone="success">计划数量、单位、单价全程留痕</StatusBadge>
     </div>
 
-    <Surface className="process-status">
-      <h2>当前处理说明</h2>
-      <p>{message}</p>
-      {configuration?.status === "rejected" && configuration.reviewReason && (
-        <div className="qc-warning"><b>IE 驳回原因：</b>{configuration.reviewReason}</div>
-      )}
-      {configuration?.kind === "change" && (
-        <StatusBadge tone="warning">变更单 V{configuration.configurationVersion} · 已生效历史不会被覆盖</StatusBadge>
-      )}
-    </Surface>
+    {message && <p className="process-feedback" role="status">{message}</p>}
+    {configuration?.status === "rejected" && configuration.reviewReason && (
+      <div className="qc-warning"><b>IE 驳回原因：</b>{configuration.reviewReason}</div>
+    )}
+    {configuration?.kind === "change" && (
+      <StatusBadge tone="warning">变更单 V{configuration.configurationVersion} · 已生效历史不会被覆盖</StatusBadge>
+    )}
 
     {editable && <Surface>
       <div className="section-title">

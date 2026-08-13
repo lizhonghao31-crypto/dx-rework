@@ -113,7 +113,6 @@ small { font-size: 12px; }
 .qc-secondary-actions .dx-button, .qc-cancel-draft .dx-button { width: 100%; }
 .qc-cancel-draft { margin-top: var(--dx-v2-space-3); }
 .process-configuration-page .dx-surface { margin: var(--dx-v2-space-3) 0; padding: var(--dx-v2-space-4); }
-.process-status p { margin-bottom: 0; }
 .process-lines { display: grid; gap: var(--dx-v2-space-3); margin-top: var(--dx-v2-space-4); }
 .process-line { display: grid; gap: var(--dx-v2-space-3); padding: var(--dx-v2-space-3); border: 1px solid rgba(15, 35, 52, 0.14); border-radius: var(--dx-v2-radius-md); background: var(--dx-v2-color-inset); }
 .process-line__title { display: flex; align-items: center; justify-content: space-between; gap: var(--dx-v2-space-3); }

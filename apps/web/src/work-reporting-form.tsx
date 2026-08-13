@@ -44,9 +44,11 @@ const canReadWorkFacts = (user: WorkReportingUser): boolean =>
 export function WorkReportingForm({
   reworkOrderId: providedReworkOrderId,
   taskMode = "workspace",
+  onOrderChanged,
 }: {
   reworkOrderId?: string;
-  taskMode?: "workspace" | "whole_order_review";
+  taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review";
+  onOrderChanged?: () => Promise<void> | void;
 } = {}) {
   const reworkOrderId = providedReworkOrderId
     ?? new URLSearchParams(window.location.search).get("rework");
@@ -57,7 +59,7 @@ export function WorkReportingForm({
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [mode, setMode] = useState<"individual" | "collective">("individual");
   const [reportDrafts, setReportDrafts] = useState<Record<string, WorkReportDraft>>({});
-  const [message, setMessage] = useState("正在加载当前节点…");
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
   const [canReadTasks, setCanReadTasks] = useState(false);
@@ -79,13 +81,7 @@ export function WorkReportingForm({
     if (!reworkOrderId) return null;
     const loaded = await request("rework-orders/" + reworkOrderId + "/work-tasks", ReworkWorkTasksResponseSchema.parse);
     setData(loaded);
-    if (loaded.reworkStatus === "pending_order_review") {
-      setMessage("全部工序已经完成，订单已自动流转到 N06 · 待整单审核。工人无需继续填写。");
-    } else if (loaded.tasks.length) {
-      setMessage("计划数量是这道工序的目标；“本次完成数量”只登记这一次新完成的数量。例如计划 100 件，可分 40 + 60 两次登记。");
-    } else {
-      setMessage("当前尚未分配返工任务。");
-    }
+    setMessage(loaded.tasks.length === 0 ? "当前尚未分配返工任务。" : "");
     return loaded;
   };
 
@@ -102,8 +98,9 @@ export function WorkReportingForm({
       setCanAssign(assignable);
       setCanReadTasks(taskReadable);
       setReviewEligible(orderReviewable);
+      let loaded: ReworkWorkTasksResponse | null = null;
       if (taskReadable) {
-        await reload();
+        loaded = await reload();
       } else {
         setData(null);
         setPeople([]);
@@ -112,7 +109,9 @@ export function WorkReportingForm({
           ? "当前岗位只处理整单确认或数量异常，不展示工人的个人完成登记。"
           : "当前岗位没有这个节点的处理权限。");
       }
-      if (!assignable) {
+      const assignmentView = taskMode === "task_assignment"
+        || (taskMode === "workspace" && loaded?.reworkStatus === "pending_task_assignment");
+      if (!assignable || !assignmentView) {
         setPeople([]);
         setConfigItems([]);
         return;
@@ -128,7 +127,7 @@ export function WorkReportingForm({
       })) ?? []);
     };
     void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"));
-  }, [reworkOrderId]);
+  }, [reworkOrderId, taskMode]);
 
   const changeMode = (nextMode: "individual" | "collective") => {
     if (nextMode === mode) return;
@@ -170,6 +169,7 @@ export function WorkReportingForm({
       await reload();
       delete taskAttempts.current[configurationItemId];
       setMessage("人员已分配，订单已进入 N05 · 返工执行中。成员名单按本次版本留存，历史完成记录不会因后续换人重算。");
+      await onOrderChanged?.();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "任务分配失败");
     } finally {
@@ -179,16 +179,6 @@ export function WorkReportingForm({
 
   const personalShare = (result: ReturnType<typeof WorkReportResponseSchema.parse>) => result.memberShares[0]?.amount;
 
-  const fillRemaining = (taskId: string, remainingQuantity: number) => {
-    setReportDrafts((current) => ({
-      ...current,
-      [taskId]: {
-        ...workReportDraft(current, taskId),
-        quantity: String(remainingQuantity),
-      },
-    }));
-  };
-
   const report = async (taskId: string) => {
     if (!data || busy) return;
     const task = data.tasks.find((candidate) => candidate.workTaskId === taskId);
@@ -196,7 +186,7 @@ export function WorkReportingForm({
       setMessage("当前任务不存在或已刷新，请重新进入这张订单。");
       return;
     }
-    if (task.remainingQuantity <= 0 || !["pending_task_assignment", "in_progress"].includes(data.reworkStatus)) {
+    if (task.remainingQuantity <= 0 || data.reworkStatus !== "in_progress") {
       setMessage("该工序已经完成或订单已流转到下一节点，不能继续登记完成数量。");
       return;
     }
@@ -256,6 +246,7 @@ export function WorkReportingForm({
       });
       if (loaded?.reworkStatus === "pending_order_review") {
         setMessage("完成数量已登记；所有工序已经完成，订单已自动流转到 N06 · 待整单审核。");
+        await onOrderChanged?.();
         return;
       }
       const share = personalShare(result);
@@ -273,15 +264,25 @@ export function WorkReportingForm({
     }
   };
 
-  const orderReportingOpen = data && ["pending_task_assignment", "in_progress"].includes(data.reworkStatus);
+  const orderReportingOpen = data?.reworkStatus === "in_progress";
+  const effectiveTaskMode = taskMode === "workspace"
+    ? data?.reworkStatus === "pending_task_assignment"
+      ? "task_assignment"
+      : data?.reworkStatus === "pending_order_review"
+        ? "whole_order_review"
+        : "work_reporting"
+    : taskMode;
 
-  if (taskMode === "whole_order_review") {
+  if (effectiveTaskMode === "whole_order_review") {
     return <div className="mobile-page work-reporting-page">
       {!reviewEligible && <Surface>{message}</Surface>}
       {reworkOrderId && reviewEligible && (
         <WholeOrderReviewPanel
           reworkOrderId={reworkOrderId}
-          onChanged={() => canReadTasks ? reload().then(() => undefined) : Promise.resolve()}
+          onChanged={async () => {
+            if (canReadTasks) await reload();
+            await onOrderChanged?.();
+          }}
         />
       )}
     </div>;
@@ -290,22 +291,25 @@ export function WorkReportingForm({
   return <div className="mobile-page work-reporting-page">
     <div className="mobile-hero">
       <div className="mobile-title">
-        <h1>返工分工与完成登记</h1>
-        <StatusBadge tone="info">N04–N06</StatusBadge>
+        <h1>{effectiveTaskMode === "task_assignment" ? "分配返工人员" : "完成数量登记"}</h1>
+        <StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "N04" : "N05"}</StatusBadge>
       </div>
-      <p>订单按当前状态处理；工人只登记实际完成，主管只在对应节点做确认。</p>
-      <StatusBadge tone="success">计划是目标 · 完成数量可分批登记 · 达到计划后自动停止登记</StatusBadge>
+      <p>{effectiveTaskMode === "task_assignment"
+        ? "为每道工序分配实际返工人员；执行期间换人会生成新的成员快照。"
+        : "只登记本次实际完成数量；达到计划后系统自动关闭登记。"}</p>
     </div>
 
-    <Surface className="workflow-queue-guide">
-      <div><small>谁来处理</small><strong>{data?.reworkStatus === "pending_order_review" ? "尾部主管" : canAssign ? "尾部主管 / 工人" : "工人 / 已授权代录人"}</strong></div>
-      <div><small>当前要做什么</small><strong>{data?.reworkStatus === "pending_order_review" ? "确认本单所有返工已经完成" : canAssign ? "先分配人员，再按实际进度登记完成数量" : "登记自己这次实际完成的数量"}</strong></div>
-      <div><small>完成后去哪里</small><strong>{data?.reworkStatus === "pending_order_review" ? "确认后进入 N07 · 责任判定" : "全部工序完成后自动进入 N06 · 整单审核"}</strong></div>
-    </Surface>
+    {message && <p className="work-reporting-feedback" role="status">{message}</p>}
 
-    <Surface><h2>当前处理说明</h2><p>{message}</p></Surface>
+    {effectiveTaskMode === "task_assignment" && data && data.tasks.length > 0 && <Surface>
+      <h2>当前人员安排</h2>
+      {data.tasks.map((task) => <div className="section-title whole-order-row" key={task.workTaskId}>
+        <div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")} · 成员快照 V{task.version}</p></div>
+        <StatusBadge tone={task.remainingQuantity <= 0 ? "success" : "info"}>{task.remainingQuantity <= 0 ? "已完成" : "执行中"}</StatusBadge>
+      </div>)}
+    </Surface>}
 
-    {data?.tasks.map((task) => {
+    {effectiveTaskMode === "work_reporting" && data?.tasks.map((task) => {
       const unit = task.pricingUnit === "piece" ? "件" : "小时";
       const complete = task.remainingQuantity <= 0;
       const canEnterCompletion = Boolean(orderReportingOpen && task.canSubmitReport && !complete);
@@ -334,9 +338,6 @@ export function WorkReportingForm({
             }))}
             disabled={busy}
           />
-          <div className="mobile-actions work-reporting-actions">
-            <Button onClick={() => fillRemaining(task.workTaskId, task.remainingQuantity)} disabled={busy}>全部完成剩余 {task.remainingQuantity} {unit}</Button>
-          </div>
           <InsetField
             label="实际完成时间"
             type="datetime-local"
@@ -359,9 +360,11 @@ export function WorkReportingForm({
       </Surface>;
     })}
 
-    {data && canAssign && data.reworkStatus === "pending_task_assignment" && <Surface>
+    {effectiveTaskMode === "task_assignment" && data && canAssign && ["pending_task_assignment", "in_progress"].includes(data.reworkStatus) && <Surface>
       <h2>N04 · 分配返工人员</h2>
-      <p>这一步只负责把已生效工序分给实际返工人员。个人任务一次选择一人；集体任务按本次成员快照计算。</p>
+      <p>{data.reworkStatus === "in_progress"
+        ? "调整人员会生成新的成员快照；历史完成记录继续按原快照计算。"
+        : "个人任务一次选择一人；集体任务按本次成员快照计算。"}</p>
       <label className="process-source"><input type="radio" checked={mode === "individual"} onChange={() => changeMode("individual")} disabled={busy} /> 个人计件</label>
       <label className="process-source"><input type="radio" checked={mode === "collective"} onChange={() => changeMode("collective")} disabled={busy} /> 集体计件</label>
       <InsetField
@@ -390,8 +393,5 @@ export function WorkReportingForm({
       {configItems.length === 0 && <p>未发现可供分配的已生效工序。</p>}
     </Surface>}
 
-    {reworkOrderId && reviewEligible && (
-      <WholeOrderReviewPanel reworkOrderId={reworkOrderId} onChanged={() => canReadTasks ? reload().then(() => undefined) : Promise.resolve()} />
-    )}
   </div>;
 }
