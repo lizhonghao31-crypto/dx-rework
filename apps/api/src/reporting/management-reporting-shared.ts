@@ -83,7 +83,7 @@ export const decodeCursor = (cursor: string | undefined): { updatedAt: string; i
 };
 
 export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; label: string }> = {
-  draft: { node: "N00", label: "草稿" },
+  draft: { node: "N01", label: "发起返工 / 草稿" },
   pending_process_configuration: { node: "N02", label: "待配置工序" },
   pending_ie_review: { node: "N03", label: "待 IE 审核" },
   pending_task_assignment: { node: "N04", label: "待分配人员" },

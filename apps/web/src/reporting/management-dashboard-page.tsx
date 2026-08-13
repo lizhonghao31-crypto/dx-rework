@@ -13,6 +13,7 @@ type State =
   | { kind: "unavailable"; message: string };
 
 const nodeTarget = (node: string): string => ({
+  N01: "ui/tasks?status=draft",
   N02: "ui/process-configuration?queue=pending_process_configuration",
   N03: "ui/process-configuration?queue=pending_ie_review",
   N04: "ui/work-reporting?queue=pending_task_assignment",
@@ -22,7 +23,7 @@ const nodeTarget = (node: string): string => ({
   N07: "ui/tasks?status=pending_responsibility_determination",
   N08: "ui/tasks?status=pending_owner_signature",
   N10: "ui/tasks?status=completed",
-  "N10-A": "ui/wages",
+  N11: "ui/wages",
 })[node] ?? "ui/tasks";
 
 const NodeQueue = ({ items }: { items: ReadonlyArray<{ node: string; label: string; count: number }> }) => (

@@ -70,9 +70,11 @@ type ReworkBusinessDetail = Readonly<{
   cancelledAt: string | null;
   cancelReason: string | null;
   settlementStatus: "not_required" | "in_progress" | "closed" | "revision_in_progress";
+  wageSettlementStatus: "not_required" | "in_progress" | "closed";
   unsettledWagePeriods: readonly Readonly<{
     periodId: string;
     periodMonth: string;
+    status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
   }>[];
   attachments: readonly Readonly<{
     attachmentId: string;
@@ -100,7 +102,7 @@ type AuthMe = Readonly<{
   user: AuthorizedUser;
 }>;
 
-type WorkflowNodeState = "completed" | "current" | "future";
+type WorkflowNodeState = "completed" | "current" | "future" | "followup";
 type WorkflowNode = Readonly<{
   key: WorkflowNodeKey;
   number: string;
@@ -230,8 +232,10 @@ const workflowState = (detail: ReworkBusinessDetail, key: WorkflowNodeKey): Work
   // N10 is the end of the main order, while N11 keeps later wage/supplier
   // settlement visible without falsely reopening the order itself.
   if (detail.status === "completed") {
-    return key === "settlement_followup" && ["in_progress", "revision_in_progress"].includes(detail.settlementStatus)
-      ? "current"
+    if (key !== "settlement_followup") return "completed";
+    return ["in_progress", "revision_in_progress"].includes(detail.settlementStatus)
+      || detail.wageSettlementStatus === "in_progress"
+      ? "followup"
       : "completed";
   }
   if (currentNodeByStatus[detail.status] === key) return "current";
@@ -298,7 +302,13 @@ const buildWorkflow = (
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板只确认整套责任事实；可确认同意或直接驳回。"),
         node("settlement_ledger", "09", "责任结算台账", "系统", "N08 同意后自动生成", "自动生成只读责任台账，不等待会计再次确认。"),
         node("archive", "10", "订单完成", "系统", "N09 生成后自动完成", "返工生产与责任判定已结束，完整业务事实继续保留。"),
-        node("settlement_followup", "11", "后续结算", "工资 / 供应商扣款", "订单完成后独立进行", "工资结算与供应商实际扣款不阻塞订单完成。"),
+      ],
+    },
+    {
+      key: "followup",
+      title: "后续结算",
+      nodes: [
+        node("settlement_followup", "11", "后续结算", "工资月结 / 供应商扣款", "订单完成后独立进行", "工资结算与供应商实际扣款不阻塞订单完成。"),
       ],
     },
   ];
@@ -306,7 +316,34 @@ const buildWorkflow = (
 
 const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.every((node) => node.state === "completed")
   ? "completed"
-  : stage.nodes.some((node) => node.state === "current") ? "current" : "future";
+  : stage.nodes.some((node) => node.state === "current")
+    ? "current"
+    : stage.nodes.some((node) => node.state === "followup") ? "followup" : "future";
+
+const wageStatusLabel = (status: ReworkBusinessDetail["unsettledWagePeriods"][number]["status"]): string =>
+  status === "pending_tail_review"
+    ? "待尾部主管初核"
+    : status === "pending_admin_review"
+      ? "待行政复核"
+      : "待工资月结会计锁定";
+
+const followUpStatusLabel = (detail: ReworkBusinessDetail): string => {
+  const labels: string[] = [];
+  if (detail.settlementStatus === "revision_in_progress") labels.push("责任调整中");
+  else if (detail.settlementStatus === "in_progress") labels.push("供应商扣款跟进");
+  if (detail.wageSettlementStatus === "in_progress") {
+    const wageStatuses = [...new Set(detail.unsettledWagePeriods.map((period) => wageStatusLabel(period.status)))];
+    labels.push(wageStatuses.length === 1 ? wageStatuses[0]! : "工资待结算");
+  }
+  return labels.join(" / ") || "已结清";
+};
+
+const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): string =>
+  node.key === "settlement_followup"
+    ? followUpStatusLabel(detail)
+    : node.state === "completed"
+      ? "已完成"
+      : node.state === "current" ? "处理中" : "未开始";
 
 const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
 
@@ -641,12 +678,12 @@ export function ReworkDetailPage({
                 }}
               >
                 <summary>
-                  <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : "待前序完成"}</small></span>
+                  <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单完成后独立进行" : "待前序完成"}</small></span>
                   <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
                 </summary>
                 <div className="rework-workflow__nodes">
                   {stage.nodes.map((node) => <a className={`rework-workflow__node is-${node.state}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
-                    <b>{node.number}</b><span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span><em>{node.state === "completed" ? "已完成" : node.state === "current" ? "处理中" : "未开始"}</em>
+                    <b>{node.number}</b><span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span><em>{nodeStatusLabel(node, detail)}</em>
                   </a>)}
                 </div>
               </details>;
@@ -656,7 +693,7 @@ export function ReworkDetailPage({
         </section>
 
         <section className="rework-detail-task" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><div><p>当前查看节点</p><h2>{selected?.number} · {selected?.label}</h2></div><StatusBadge tone={selected?.state === "completed" ? "success" : selected?.state === "current" ? "warning" : "info"}>{selected?.state === "completed" ? "已完成" : selected?.state === "current" ? "待处理" : "预览"}</StatusBadge></div>
+          <div className="rework-detail-task__heading"><div><p>当前查看节点</p><h2>{selected?.number} · {selected?.label}</h2></div><StatusBadge tone={selected?.state === "completed" ? "success" : selected?.state === "current" ? "warning" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge></div>
           {renderSelectedTask()}
         </section>
       </div>
@@ -760,12 +797,12 @@ function WageSettlementFollowUp({ periods }: {
   periods: ReworkBusinessDetail["unsettledWagePeriods"];
 }) {
   return <Surface className="rework-detail-node-preview">
-    <StatusBadge tone="info">工资结算待处理</StatusBadge>
-    <h2>11 · 后续结算</h2>
-    <p>本单主流程已完成；以下工资月份尚未锁定，请在工资管理中继续处理。</p>
+    <StatusBadge tone="info">已计入工资批次</StatusBadge>
+    <h2>工资结算进度</h2>
+    <p>订单已经完成；工资按月份独立核对，不会重新打开订单主流程。</p>
     <div className="rework-detail-wage-links">
       {periods.map((period) => <a key={period.periodId} href={pageUrl(`ui/wages/${period.periodId}`)}>
-        进入 {period.periodMonth.slice(0, 7)} 工资结算
+        {period.periodMonth.slice(0, 7)} · {wageStatusLabel(period.status)} · 进入处理
       </a>)}
     </div>
   </Surface>;

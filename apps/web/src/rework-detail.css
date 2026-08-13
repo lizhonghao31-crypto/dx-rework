@@ -182,6 +182,10 @@
   box-shadow: inset 0 2px 0 var(--dx-v2-color-primary-hover);
 }
 
+.rework-workflow__stage.is-followup {
+  border-color: color-mix(in srgb, var(--dx-v2-color-primary-hover) 45%, var(--dx-v2-color-border));
+}
+
 .rework-workflow__nodes {
   display: grid;
   gap: 5px;
@@ -240,6 +244,11 @@
 .rework-workflow__node.is-current,
 .rework-workflow__node:hover {
   border-color: var(--dx-v2-color-primary-hover);
+}
+
+.rework-workflow__node.is-followup {
+  border-color: color-mix(in srgb, var(--dx-v2-color-primary-hover) 55%, var(--dx-v2-color-border));
+  background: var(--dx-v2-color-surface);
 }
 
 .rework-workflow__node.is-future {

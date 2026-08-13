@@ -13,6 +13,8 @@ const createInput = {
   recipientUnionId: "union-14",
   recipientProviderUserId: "userid-14",
   category: "process_configuration",
+  subject: "配置返工工序",
+  description: "款号：DX-1001\n返工单：RW-2026-0813-001\n订单号：PO-88\n事项：请配置工序、计划数量和单价。",
   deliveryKind: "create" as const,
   sourceKey: "todo-source-13",
   route: {
@@ -111,6 +113,8 @@ describe("DingTalk todo provider boundary", () => {
     expect(new URL(createCall!.url).searchParams.get("operatorId")).toBe("union-14");
     expect(new Headers(createCall?.init.headers).get("x-acs-dingtalk-access-token")).toBe("token-value");
     expect(JSON.parse(String(createCall?.init.body))).toMatchObject({
+      subject: "配置返工工序",
+      description: createInput.description,
       sourceId: "todo-source-13",
       executorIds: ["union-14"],
       notifyConfigs: {

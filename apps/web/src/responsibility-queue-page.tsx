@@ -74,7 +74,7 @@ export function ResponsibilityQueuePage() {
       <Surface className="responsibility-queue-summary">
         <div>
           <h2>责任处理工作台</h2>
-          <p>谁来处理：有判责、接管或独立确认权限的人；完成后流向 N08 对应责任分支。</p>
+          <p>谁来处理：有判责、接管或独立确认权限的人；资料核验完成后提交 N08 · 老板确认签字。</p>
         </div>
         <StatusBadge tone="info">N07 · 待判责</StatusBadge>
       </Surface>
