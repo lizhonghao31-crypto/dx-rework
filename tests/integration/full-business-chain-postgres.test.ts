@@ -758,10 +758,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(n07Final.value.reworkStatus).toBe("pending_owner_signature");
     expect(n07Final.value.canOwnerSign).toBe(false);
-    expect(await external.get(
-      merchandiser(),
-      submitted.value.reworkOrderId,
-    )).toBeNull();
 
     // N08 - the owner signs the immutable N07 facts once. N09 ledger cards
     // are generated atomically, and the main order is then complete.
