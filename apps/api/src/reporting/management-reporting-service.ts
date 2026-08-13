@@ -18,6 +18,8 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
   in_progress: ["work:assign", "work:report", "work:report_for_worker"],
   pending_order_review: ["submission:audit"],
   pending_quantity_adjustment_ie_review: ["quantity:adjust", "quantity:confirm", "process:review"],
+  pending_responsibility_determination: ["responsibility:determine", "responsibility:takeover"],
+  pending_owner_signature: ["responsibility:owner_sign"],
 };
 
 export class ManagementReportingService {
