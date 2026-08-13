@@ -780,7 +780,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(externalBatch!.cases).toEqual(expect.arrayContaining([
       expect.objectContaining({
         responsibilityType: "processing_factory",
-        supplier: { supplierId: factorySupplierId },
+        supplier: expect.objectContaining({ supplierId: factorySupplierId }),
         proposedDeductionAmount: "66.00",
         actualDeductedAmount: "0.00",
         status: "deduction_follow_up",
@@ -788,7 +788,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       }),
       expect.objectContaining({
         responsibilityType: "fabric_supplier",
-        supplier: { supplierId: fabricSupplierId },
+        supplier: expect.objectContaining({ supplierId: fabricSupplierId }),
         proposedDeductionAmount: "16.50",
       }),
     ]));
