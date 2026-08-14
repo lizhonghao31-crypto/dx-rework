@@ -62,4 +62,17 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain('state === "followup"');
     expect(detail).toContain('node.state === "completed" || node.state === "followup"');
   });
+
+  it("keeps mobile order facts in a compact three-column matrix without changing the desktop grid", async () => {
+    const [detail, styles] = await Promise.all([
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+    ]);
+    expect(styles).toContain("grid-template-columns: repeat(5, minmax(0, 1fr));");
+    expect(styles).toMatch(/@media \(max-width: 640px\) \{[\s\S]*?\.rework-detail-facts \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+    expect(styles).toMatch(/\.rework-detail-description \{\s*grid-column: span 2;/);
+    expect(styles).toMatch(/\.rework-detail-summary \.section-title p \{\s*display: none;/);
+    expect(detail).toContain('className="rework-detail-wide rework-detail-description"');
+    expect(detail).not.toContain("<dt>首次提交</dt>");
+  });
 });

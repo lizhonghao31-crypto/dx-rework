@@ -617,14 +617,14 @@ export function ReworkDetailPage({
             <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div><div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
             <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
             <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
-            <div className="rework-detail-wide"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
+            <div className="rework-detail-wide rework-detail-description"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
             {otherAttachments.length > 0 && <div className="rework-detail-wide"><dt>其他附件（含外部责任凭证）</dt><dd>{otherAttachments.map((attachment) => <span key={attachment.attachmentId}>
               {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
               <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
               <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
             </span>)}</dd></div>}
             <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
-            <div><dt>首次提交</dt><dd>{formatTime(detail.submittedAt)}</dd></div><div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
+            <div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
             {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
           </dl>
           <section className="rework-detail-images" aria-label="订单图片">

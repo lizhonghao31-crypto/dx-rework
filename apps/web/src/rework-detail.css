@@ -341,12 +341,30 @@
 }
 
 @media (max-width: 640px) {
+  .rework-detail-summary {
+    padding: 8px;
+  }
+
+  .rework-detail-summary .section-title p {
+    display: none;
+  }
+
   .rework-detail-facts {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
   }
 
   .rework-detail-wide {
-    grid-column: auto;
+    grid-column: 1 / -1;
+  }
+
+  .rework-detail-description {
+    grid-column: span 2;
+  }
+
+  .rework-detail-facts > div {
+    min-height: 54px;
+    padding: 6px;
   }
 
   .rework-workflow__heading,
