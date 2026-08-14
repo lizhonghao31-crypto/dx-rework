@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -51,6 +52,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
       "0006_rework_initiation.sql",
+      "0056_n01_digital_inspection_report.sql",
       "0007_process_configuration_ie_review.sql",
       "0049_post_creation_order_image_binding.sql",
       "0053_root_rework_order_logical_deletion.sql",
@@ -136,6 +138,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       problemPart: "后浪",
       problemDescription: "针孔，需要拆包返查",
       reworkQuantity: 281,
+      inspectionReport: completeInspectionReport(),
       attachmentIds: [attachmentId],
     }, randomUUID());
     expect((await database.query(
@@ -230,6 +233,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       problemPart: "袖口",
       problemDescription: "线头返修",
       reworkQuantity: 100,
+      inspectionReport: completeInspectionReport(),
     }, randomUUID());
     const submitted = await service.submit(qcActor(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,
