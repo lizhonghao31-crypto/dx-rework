@@ -1,4 +1,4 @@
-import type { ReworkOrderStatus } from "@dx-rework/contracts";
+import type { InspectionReportDraft, ReworkOrderStatus } from "@dx-rework/contracts";
 import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
@@ -25,6 +25,7 @@ export type ReworkBusinessDetail = Readonly<{
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
+  inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
   processConfigurationCreatedBy: Readonly<{
     userId: string;
@@ -91,6 +92,7 @@ type DetailRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: string | null;
+  inspection_report: InspectionReportDraft | null;
   created_by: string;
   creator_name: string;
   configuration_created_by: string | null;
@@ -134,6 +136,7 @@ export class ReworkBusinessDetailService {
          to_jsonb(orders)->>'rework_reason' rework_reason,
          to_jsonb(orders)->>'rework_process' rework_process,
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
+         orders.inspection_report,
          orders.created_by,creator.display_name creator_name,
          latest_configuration.created_by configuration_created_by,
          configuration_creator.display_name configuration_creator_name,
@@ -275,6 +278,7 @@ export class ReworkBusinessDetailService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
+      inspectionReport: row.inspection_report,
       createdBy: { userId: row.created_by, displayName: row.creator_name },
       processConfigurationCreatedBy: row.configuration_created_by && row.configuration_creator_name
         ? {
