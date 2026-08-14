@@ -13,6 +13,8 @@ import {
   type TrustedActorContext,
 } from "../../apps/api/src/tools/repositories.js";
 
+import { completeInspectionReport } from "../inspection-report-fixture.js";
+
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 const baseMigrations = [
@@ -22,6 +24,7 @@ const baseMigrations = [
   "0004_public_tools_foundation.sql",
   "0005_access_master_data.sql",
   "0006_rework_initiation.sql",
+  "0056_n01_digital_inspection_report.sql",
   "0007_process_configuration_ie_review.sql",
   "0008_worker_assignment_reporting.sql",
   "0009_whole_order_review_quantity_adjustment.sql",
@@ -170,6 +173,7 @@ runWithPostgres("wage completion-month backfill closure", () => {
       problemPart: "袖口",
       problemDescription: "历史工资补录",
       reworkQuantity: 1,
+      inspectionReport: completeInspectionReport(),
     }, randomUUID());
     const submitted = await initiation.submit(
       qc,

@@ -5,6 +5,7 @@ import {
   ReworkOrderResponseSchema,
   UploadIntentResponseSchema,
   type CreateReworkDraft,
+  type InspectionReportDraft,
   type ReworkInitiationOptionsResponse,
   type ReworkOrderResponse,
 } from "@dx-rework/contracts";
@@ -13,6 +14,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { FactorySearch } from "./factory-search.js";
+import {
+  createEmptyInspectionReport,
+  InspectionReportStepOne,
+  InspectionReportStepThree,
+  InspectionReportStepTwo,
+  inspectionStepComplete,
+} from "./inspection-report-form.js";
 import { SearchSelect } from "./search-select.js";
 import {
   executeReworkSubmit,
@@ -135,6 +143,8 @@ export function ReworkInitiationForm({
   embedded?: boolean;
 } = {}) {
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [inspectionReport, setInspectionReport] = useState<InspectionReportDraft>(createEmptyInspectionReport);
+  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({
     merchandisers: [],
     factories: [],
@@ -168,6 +178,8 @@ export function ReworkInitiationForm({
     };
     loadOptions();
     setForm(emptyForm);
+    setInspectionReport(createEmptyInspectionReport());
+    setFormStep(1);
     setOrder(null);
     setAttachmentIds([]);
     setUploadedAttachments([]);
@@ -182,6 +194,7 @@ export function ReworkInitiationForm({
         if (!active) return;
         setOrder(loaded);
         setForm(toForm(loaded));
+        setInspectionReport(loaded.inspectionReport ?? createEmptyInspectionReport());
         setAttachmentIds(loaded.attachmentIds);
         setMessage(statusText(loaded.status));
       }).catch((error: unknown) => {
@@ -215,7 +228,18 @@ export function ReworkInitiationForm({
     return key;
   };
 
-  const payload = (): CreateReworkDraft => ({
+  const payload = (): CreateReworkDraft => {
+    const derivedProblemPart = inspectionReport.issues
+      .map((issue) => issue.category?.trim())
+      .filter((value): value is string => Boolean(value))
+      .join("、")
+      .slice(0, 200);
+    const derivedProblemDescription = inspectionReport.issues
+      .map((issue) => issue.description?.trim())
+      .filter((value): value is string => Boolean(value))
+      .join("；")
+      .slice(0, 2000);
+    return ({
     styleNo: optionalText(form.styleNo),
     customerSupplyCode: optionalText(form.customerSupplyCode),
     factoryStyleNo: optionalText(form.factoryStyleNo),
@@ -229,13 +253,15 @@ export function ReworkInitiationForm({
         : null,
     reworkReason: optionalText(form.reworkReason),
     reworkProcess: optionalText(form.reworkProcess),
-    problemPart: optionalText(form.problemPart),
-    problemDescription: optionalText(form.problemDescription),
+    problemPart: optionalText(derivedProblemPart || form.problemPart),
+    problemDescription: optionalText(derivedProblemDescription || form.problemDescription),
     reworkQuantity: form.reworkQuantity === ""
       ? null
       : Number(form.reworkQuantity),
+    inspectionReport,
     attachmentIds,
-  });
+    });
+  };
 
   const persistDraft = async (clearPendingSubmit = true): Promise<ReworkOrderResponse> => {
     const draftPayload = payload();
@@ -269,6 +295,8 @@ export function ReworkInitiationForm({
     pendingSubmit.current = null;
     pendingKey.current = null;
     setForm(emptyForm);
+    setInspectionReport(createEmptyInspectionReport());
+    setFormStep(1);
     setOrder(null);
     setAttachmentIds([]);
     setUploadedAttachments([]);
@@ -456,9 +484,10 @@ export function ReworkInitiationForm({
     Boolean(form.styleNo.trim()),
     Boolean(form.merchandiserUserId),
     Boolean(form.factory),
-    Boolean(form.problemPart.trim()),
-    Boolean(form.problemDescription.trim()),
     Number.isInteger(Number(form.reworkQuantity)) && Number(form.reworkQuantity) > 0,
+    inspectionStepComplete(inspectionReport, 1),
+    inspectionStepComplete(inspectionReport, 2),
+    inspectionStepComplete(inspectionReport, 3),
   ];
   const requiredCompletionCount = requiredFieldsComplete.filter(Boolean).length;
   const complete = requiredCompletionCount === requiredFieldsComplete.length;
@@ -486,14 +515,14 @@ export function ReworkInitiationForm({
             <StatusBadge tone={badgeTone}>{order?.reworkNo ?? "草稿未保存"}</StatusBadge>
           </div>
           <p className="rework-initiation-hero__progress">
-            必填项 {requiredCompletionCount}/6 · {complete ? "可以提交" : "填完即可提交"}
+            第 {formStep}/3 步 · 完成度 {requiredCompletionCount}/{requiredFieldsComplete.length} · {complete ? "可以提交" : "可随时保存草稿"}
           </p>
         </div>
       )}
 
-      <Surface className="rework-initiation-required">
+      {formStep === 1 && <Surface className="rework-initiation-required">
         <div className="section-title">
-          <h2>先填这 6 项</h2>
+          <div><h2>订单与责任资料</h2><p>先确认款号、跟单和加工厂。</p></div>
           <StatusBadge tone={locked ? "warning" : "info"}>必填</StatusBadge>
         </div>
         <div className="qc-form-grid">
@@ -534,48 +563,19 @@ export function ReworkInitiationForm({
               <small>除本厂外暂无加工厂；可在“基础资料”维护。</small>
             ) : null}
           </label>
-          <InsetField
-            label="问题部位（必填）"
-            value={form.problemPart}
-            disabled={formDisabled}
-            onChange={(event) => setForm({ ...form, problemPart: event.target.value })}
-          />
-          <InsetField
-            label="返工数量（必填）"
-            type="number"
-            min="1"
-            step="1"
-            value={form.reworkQuantity}
-            disabled={formDisabled}
-            suffix="件"
-            onChange={(event) => setForm({ ...form, reworkQuantity: event.target.value })}
-          />
-          <label className="dx-field qc-wide">
-            <span>问题描述（必填）</span>
-            <span className="dx-field__control qc-textarea-control">
-              <textarea
-                aria-label="问题描述"
-                rows={4}
-                value={form.problemDescription}
-                disabled={formDisabled}
-                placeholder="描述问题现象、影响范围与处理要求"
-                onChange={(event) => setForm({ ...form, problemDescription: event.target.value })}
-              />
-            </span>
-          </label>
         </div>
         {order?.hasOtherOpenStyleOrder && (
           <p className="qc-warning">同款号存在其他未完结单；系统仅提示，不会自动合并。</p>
         )}
-      </Surface>
+      </Surface>}
 
-      <Surface className="rework-initiation-optional">
+      {formStep === 1 && <Surface className="rework-initiation-optional">
         <details>
           <summary>
             <span>更多订单资料（可补充）</span>
             <small>展开</small>
           </summary>
-          <p>客供代号、工厂货号、订单数量、订单号、返工原因与工序不影响先保存草稿。</p>
+          <p>客供代号、工厂货号、订单数量与订单号不影响先保存草稿。</p>
           <div className="qc-form-grid">
             <InsetField
               label="客供代号（可补充）"
@@ -607,24 +607,42 @@ export function ReworkInitiationForm({
               placeholder="多个订单号用逗号分隔，例如：PO001，PO002"
               onChange={(event) => setForm({ ...form, orderNo: event.target.value })}
             />
-            <InsetField
-              label="返工原因（可补充）"
-              value={form.reworkReason}
-              disabled={formDisabled}
-              onChange={(event) => setForm({ ...form, reworkReason: event.target.value })}
-            />
-            <InsetField
-              label="返工工序（可补充）"
-              value={form.reworkProcess}
-              disabled={formDisabled}
-              placeholder="例如：车缝、锁眼、后整；多项用逗号分隔"
-              onChange={(event) => setForm({ ...form, reworkProcess: event.target.value })}
-            />
           </div>
         </details>
-      </Surface>
+      </Surface>}
 
-      <Surface className="share-preview rework-initiation-evidence">
+      {formStep === 1 && (
+        <InspectionReportStepOne report={inspectionReport} disabled={formDisabled} onChange={setInspectionReport} />
+      )}
+
+      {formStep === 2 && (
+        <InspectionReportStepTwo report={inspectionReport} disabled={formDisabled} onChange={setInspectionReport} />
+      )}
+
+      {formStep === 3 && (
+        <>
+          <InspectionReportStepThree report={inspectionReport} disabled={formDisabled} onChange={setInspectionReport} />
+          <Surface className="inspection-section">
+            <div className="section-title"><div><h2>返工处理</h2><p>问题部位和描述由上方验货问题自动生成，继续补充返工数量与处理要求。</p></div></div>
+            <div className="qc-form-grid">
+              <InsetField
+                label="返工数量（必填）"
+                type="number"
+                min="1"
+                step="1"
+                value={form.reworkQuantity}
+                disabled={formDisabled}
+                suffix="件"
+                onChange={(event) => setForm({ ...form, reworkQuantity: event.target.value })}
+              />
+              <InsetField label="返工原因（可补充）" value={form.reworkReason} disabled={formDisabled} onChange={(event) => setForm({ ...form, reworkReason: event.target.value })} />
+              <InsetField label="返工工序（可补充）" value={form.reworkProcess} disabled={formDisabled} placeholder="例如：车缝、锁眼、后整" onChange={(event) => setForm({ ...form, reworkProcess: event.target.value })} />
+            </div>
+          </Surface>
+        </>
+      )}
+
+      {formStep === 3 && <Surface className="share-preview rework-initiation-evidence">
         <div className="section-title">
           <h2>QC 证据</h2>
           <StatusBadge tone={attachmentIds.length > 0 ? "success" : "info"}>
@@ -678,7 +696,23 @@ export function ReworkInitiationForm({
             ))}
           </div>
         )}
-      </Surface>
+      </Surface>}
+
+      <nav className="inspection-step-navigation" aria-label="验货报告步骤">
+        <Button disabled={formStep === 1} onClick={() => setFormStep((formStep - 1) as 1 | 2 | 3)}>← 上一步</Button>
+        <div>
+          {[1, 2, 3].map((step) => (
+            <button
+              key={step}
+              type="button"
+              className={formStep === step ? "is-active" : inspectionStepComplete(inspectionReport, step as 1 | 2 | 3) ? "is-complete" : ""}
+              aria-label={`第 ${step} 步`}
+              onClick={() => setFormStep(step as 1 | 2 | 3)}
+            >{step}</button>
+          ))}
+        </div>
+        <Button disabled={formStep === 3} onClick={() => setFormStep((formStep + 1) as 1 | 2 | 3)}>下一步 →</Button>
+      </nav>
 
       {showStatus && (
         <Surface className="qc-status">
@@ -693,10 +727,10 @@ export function ReworkInitiationForm({
           </Button>
           <Button
             variant="primary"
-            disabled={mutationDisabled || !complete}
-            onClick={() => void submit()}
+            disabled={mutationDisabled || (formStep === 3 && !complete)}
+            onClick={() => formStep < 3 ? setFormStep((formStep + 1) as 1 | 2 | 3) : void submit()}
           >
-            提交返工
+            {formStep < 3 ? "下一步" : "提交返工"}
           </Button>
         </div>
       )}

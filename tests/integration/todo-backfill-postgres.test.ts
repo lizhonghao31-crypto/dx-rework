@@ -8,6 +8,8 @@ import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { TodoBackfillService } from "../../apps/api/src/todos/backfill-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
+import { completeInspectionReport } from "../inspection-report-fixture.js";
+
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 const migrations = [
@@ -16,7 +18,8 @@ const migrations = [
   "0003_identity_union_continuity.sql",
   "0004_public_tools_foundation.sql",
   "0005_access_master_data.sql",
-  "0006_rework_initiation.sql",
+      "0006_rework_initiation.sql",
+      "0056_n01_digital_inspection_report.sql",
   "0007_process_configuration_ie_review.sql",
   "0008_worker_assignment_reporting.sql",
   "0009_whole_order_review_quantity_adjustment.sql",
@@ -68,6 +71,7 @@ runWithPostgres("PR-13 controlled todo backfill", () => {
       problemPart: "袖口",
       problemDescription: "历史返工补建测试",
       reworkQuantity: 10,
+      inspectionReport: completeInspectionReport(),
     }, randomUUID());
     return service.submit(qcActor(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,

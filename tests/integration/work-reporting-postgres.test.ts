@@ -11,6 +11,8 @@ import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-s
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const { Pool } = pg;
+import { completeInspectionReport } from "../inspection-report-fixture.js";
+
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
@@ -51,6 +53,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
     for (const migration of [
       "0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0006_rework_initiation.sql",
+      "0056_n01_digital_inspection_report.sql",
       "0007_process_configuration_ie_review.sql", "0008_worker_assignment_reporting.sql",
       "0009_whole_order_review_quantity_adjustment.sql", "0039_practical_quantity_amount_precision.sql",
     ]) {
@@ -102,7 +105,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
   it("only assigns report-eligible people, splits a realistic 40-person hourly amount, advances a completed order, and reserves ERP mappings", async () => {
     const draft = await initiation.createDraft(qc(), {
       styleNo: "PD20700001", merchandiserUserId: ids.merchandiser, processingFactory: { type: "own_factory" },
-      problemPart: "袖口", problemDescription: "全量返修", reworkQuantity: 1,
+      problemPart: "袖口", problemDescription: "全量返修", reworkQuantity: 1, inspectionReport: completeInspectionReport(),
     }, randomUUID());
     const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
     const saved = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {
@@ -176,7 +179,7 @@ runWithPostgres("work reporting PostgreSQL contracts", () => {
   it("allows a delegated non-supervisor to proxy report a temporary worker task", async () => {
     const draft = await initiation.createDraft(qc(), {
       styleNo: "PD20700002", merchandiserUserId: ids.merchandiser, processingFactory: { type: "own_factory" },
-      problemPart: "袖口", problemDescription: "临时工返修", reworkQuantity: 1,
+      problemPart: "袖口", problemDescription: "临时工返修", reworkQuantity: 1, inspectionReport: completeInspectionReport(),
     }, randomUUID());
     const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
     const saved = await configuration.saveDraft(tail(), submitted.value.reworkOrderId, {

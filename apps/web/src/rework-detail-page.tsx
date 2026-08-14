@@ -1,10 +1,12 @@
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
+import type { InspectionReportDraft } from "@dx-rework/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import type { AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
+import { InspectionReportReadonly } from "./inspection-report-readonly.js";
 import { OrderImageSupplementUploader } from "./order-image-supplement-uploader.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
@@ -62,6 +64,7 @@ type ReworkBusinessDetail = Readonly<{
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
+  inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
   processConfigurationCreatedBy: Readonly<{ userId: string; displayName: string }> | null;
   createdAt: string;
@@ -627,6 +630,7 @@ export function ReworkDetailPage({
             <div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
             {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
           </dl>
+          {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
           <section className="rework-detail-images" aria-label="订单图片">
             <div className="section-title">
               <div><h2>订单图片</h2></div>

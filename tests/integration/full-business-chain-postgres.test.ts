@@ -29,6 +29,7 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
+import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -356,6 +357,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       problemPart: "袖口",
       problemDescription: "全链自动验收",
       reworkQuantity: 200,
+      inspectionReport: completeInspectionReport(),
     }, randomUUID());
     expect(draft.value).toMatchObject({
       status: "draft",

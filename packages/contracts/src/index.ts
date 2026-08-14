@@ -206,6 +206,143 @@ const ReworkAttachmentIdsSchema = (minimum = 0) => z.array(IdSchema)
       context.addIssue({ code: "custom", message: "attachmentIds cannot contain duplicates" });
     }
   });
+
+export const InspectionStageSchema = z.enum(["midline", "final", "warehouse", "reinspection"]);
+export const InspectionCheckResultSchema = z.enum(["pass", "fail"]);
+
+const DateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const TenthCentimeterSchema = z.number().finite().refine(
+  (value) => Math.abs(value * 10 - Math.round(value * 10)) < 1e-8,
+  "Measurement must use 0.1 cm precision",
+);
+
+export const InspectionMeasurementSchema = z.object({
+  partName: z.string().trim().min(1).max(50),
+  actualCm: TenthCentimeterSchema.nonnegative().nullable(),
+  deviationCm: TenthCentimeterSchema.nullable(),
+  notApplicable: z.boolean(),
+}).strict();
+
+export const InspectionSizeSampleSchema = z.object({
+  sampleId: IdSchema,
+  sizeLabel: z.string().trim().min(1).max(20),
+  sampleLabel: z.string().trim().min(1).max(30),
+  measurements: z.array(InspectionMeasurementSchema).min(1).max(30),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.measurements.map((item) => item.partName)).size !== value.measurements.length) {
+    context.addIssue({ code: "custom", path: ["measurements"], message: "Measurement parts cannot contain duplicates" });
+  }
+});
+
+export const InspectionIssueSchema = z.object({
+  issueId: IdSchema,
+  category: z.string().trim().max(100).nullable(),
+  description: z.string().trim().max(500).nullable(),
+  majorCount: z.number().int().nonnegative(),
+  minorCount: z.number().int().nonnegative(),
+}).strict();
+
+export const InspectionReportDraftSchema = z.object({
+  schemaVersion: z.literal(1),
+  inspectionStage: InspectionStageSchema.nullable(),
+  inspectionLocation: z.string().trim().max(200).nullable(),
+  color: z.string().trim().max(100).nullable(),
+  sampleQuantity: z.number().int().positive().nullable(),
+  measurementUnit: z.literal("cm"),
+  measurementPrecision: z.literal(0.1),
+  sizeSamples: z.array(InspectionSizeSampleSchema).max(60),
+  documentChecks: z.object({
+    confirmationSample: z.boolean(),
+    approvalCard: z.boolean(),
+    supplierSelfInspection: z.boolean(),
+    bulkFabricInspection: z.boolean(),
+    exceptionReason: z.string().trim().max(500).nullable(),
+  }).strict(),
+  fabricMatch: z.enum(["match", "mismatch"]).nullable(),
+  fabricMismatchReason: z.string().trim().max(500).nullable(),
+  fitDecision: z.enum(["accepted", "recheck_after_rework", "rejected"]).nullable(),
+  factoryPreparation: z.enum(["strict", "not_done", "perfunctory"]).nullable(),
+  materialChecks: z.object({
+    physicalPerformance: InspectionCheckResultSchema.nullable(),
+    washTest: InspectionCheckResultSchema.nullable(),
+    productMarking: InspectionCheckResultSchema.nullable(),
+  }).strict(),
+  issues: z.array(InspectionIssueSchema).max(20),
+  nonconformanceCause: z.string().trim().max(1000).nullable(),
+  approvalOpinion: z.string().trim().max(1000).nullable(),
+  supplierSignatoryName: z.string().trim().max(100).nullable(),
+  supplierSignedOn: DateOnlySchema.nullable(),
+  inspectionDate: DateOnlySchema.nullable(),
+  disposition: z.literal("rework"),
+}).strict();
+
+export const InspectionReportSchema = InspectionReportDraftSchema.superRefine((value, context) => {
+  const requiredText: Array<[string, string | null]> = [
+    ["inspectionLocation", value.inspectionLocation],
+    ["color", value.color],
+    ["nonconformanceCause", value.nonconformanceCause],
+  ];
+  for (const [field, content] of requiredText) {
+    if (!content) context.addIssue({ code: "custom", path: [field], message: "Required" });
+  }
+  if (!value.inspectionStage) {
+    context.addIssue({ code: "custom", path: ["inspectionStage"], message: "Required" });
+  }
+  if (!value.sampleQuantity) {
+    context.addIssue({ code: "custom", path: ["sampleQuantity"], message: "Required" });
+  }
+  if (!value.inspectionDate) {
+    context.addIssue({ code: "custom", path: ["inspectionDate"], message: "Required" });
+  }
+  if (value.sizeSamples.length === 0) {
+    context.addIssue({ code: "custom", path: ["sizeSamples"], message: "At least one size sample is required" });
+  }
+  value.sizeSamples.forEach((sample, sampleIndex) => {
+    sample.measurements.forEach((measurement, measurementIndex) => {
+      if (!measurement.notApplicable && (measurement.actualCm === null || measurement.deviationCm === null)) {
+        context.addIssue({
+          code: "custom",
+          path: ["sizeSamples", sampleIndex, "measurements", measurementIndex],
+          message: "Actual and deviation are required unless the part is not applicable",
+        });
+      }
+    });
+  });
+  const documents = value.documentChecks;
+  if (
+    (!documents.confirmationSample
+      || !documents.approvalCard
+      || !documents.supplierSelfInspection
+      || !documents.bulkFabricInspection)
+    && !documents.exceptionReason
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["documentChecks", "exceptionReason"],
+      message: "Reason is required when a document is missing",
+    });
+  }
+  if (!value.fabricMatch) context.addIssue({ code: "custom", path: ["fabricMatch"], message: "Required" });
+  if (value.fabricMatch === "mismatch" && !value.fabricMismatchReason) {
+    context.addIssue({ code: "custom", path: ["fabricMismatchReason"], message: "Required" });
+  }
+  if (!value.fitDecision) context.addIssue({ code: "custom", path: ["fitDecision"], message: "Required" });
+  if (!value.factoryPreparation) context.addIssue({ code: "custom", path: ["factoryPreparation"], message: "Required" });
+  Object.entries(value.materialChecks).forEach(([field, result]) => {
+    if (!result) context.addIssue({ code: "custom", path: ["materialChecks", field], message: "Required" });
+  });
+  if (value.issues.length === 0) {
+    context.addIssue({ code: "custom", path: ["issues"], message: "At least one issue is required" });
+  }
+  value.issues.forEach((issue, index) => {
+    if (!issue.category) context.addIssue({ code: "custom", path: ["issues", index, "category"], message: "Required" });
+    if (!issue.description) context.addIssue({ code: "custom", path: ["issues", index, "description"], message: "Required" });
+    if (issue.majorCount + issue.minorCount === 0) {
+      context.addIssue({ code: "custom", path: ["issues", index], message: "Issue count must be greater than zero" });
+    }
+  });
+});
+
 const ReworkDraftFieldsSchema = z.object({
   styleNo: DraftTextSchema(100),
   customerSupplyCode: DraftTextSchema(100),
@@ -219,6 +356,7 @@ const ReworkDraftFieldsSchema = z.object({
   problemPart: DraftTextSchema(200),
   problemDescription: DraftTextSchema(2000),
   reworkQuantity: z.number().int().positive().nullable().optional(),
+  inspectionReport: InspectionReportDraftSchema.nullable().optional(),
   attachmentIds: ReworkAttachmentIdsSchema().optional(),
 });
 
@@ -268,6 +406,7 @@ export const ReworkOrderResponseSchema = z.object({
   problemPart: z.string().nullable(),
   problemDescription: z.string().nullable(),
   reworkQuantity: z.number().int().positive().nullable(),
+  inspectionReport: InspectionReportDraftSchema.nullable(),
   attachmentIds: z.array(IdSchema),
   hasOtherOpenStyleOrder: z.boolean(),
   version: z.number().int().positive(),
@@ -291,6 +430,12 @@ export const ReworkInitiationOptionsResponseSchema = z.object({
 
 export type ReworkOrderStatus = z.infer<typeof ReworkOrderStatusSchema>;
 export type ReworkProcessingFactory = z.infer<typeof ReworkProcessingFactorySchema>;
+export type InspectionStage = z.infer<typeof InspectionStageSchema>;
+export type InspectionMeasurement = z.infer<typeof InspectionMeasurementSchema>;
+export type InspectionSizeSample = z.infer<typeof InspectionSizeSampleSchema>;
+export type InspectionIssue = z.infer<typeof InspectionIssueSchema>;
+export type InspectionReportDraft = z.infer<typeof InspectionReportDraftSchema>;
+export type InspectionReport = z.infer<typeof InspectionReportSchema>;
 export type CreateReworkDraft = z.infer<typeof CreateReworkDraftSchema>;
 export type UpdateReworkDraft = z.infer<typeof UpdateReworkDraftSchema>;
 export type SupplementReworkOrderImages = z.infer<typeof SupplementReworkOrderImagesSchema>;

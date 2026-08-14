@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
+import { InspectionReportSchema, MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
 import type {
   CreateReworkDraft,
   DeleteReworkOrderResponse,
+  InspectionReportDraft,
   ReworkInitiationOptionsResponse,
   ReworkOrderResponse,
   ReworkOrderStatus,
@@ -49,6 +50,7 @@ type ReworkOrderRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
+  inspection_report: InspectionReportDraft | null;
   created_by: string;
   updated_by: string;
   version: number;
@@ -155,6 +157,7 @@ export class ReworkInitiationService {
         problemPart: input.problemPart ?? null,
         problemDescription: input.problemDescription ?? null,
         reworkQuantity: input.reworkQuantity ?? null,
+        inspectionReport: input.inspectionReport ?? null,
         attachmentIds,
         version: 1,
       };
@@ -171,8 +174,8 @@ export class ReworkInitiationService {
            order_no,order_quantity,merchandiser_user_id,
            processing_factory_type,processing_factory_supplier_id,
            processing_factory_supplier_version,rework_reason,rework_process,
-           problem_part,problem_description,rework_quantity,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)`,
+           problem_part,problem_description,rework_quantity,inspection_report,created_by,updated_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)`,
         [
           reworkOrderId,
           next.styleNo,
@@ -189,6 +192,7 @@ export class ReworkInitiationService {
           next.problemPart,
           next.problemDescription,
           next.reworkQuantity,
+          next.inspectionReport,
           actor.actorId,
         ],
       );
@@ -251,6 +255,9 @@ export class ReworkInitiationService {
         reworkQuantity: input.reworkQuantity === undefined
           ? current.rework_quantity
           : input.reworkQuantity,
+        inspectionReport: input.inspectionReport === undefined
+          ? current.inspection_report
+          : input.inspectionReport,
         attachmentIds,
         version: nextVersion,
       };
@@ -269,7 +276,7 @@ export class ReworkInitiationService {
              processing_factory_type=$8,processing_factory_supplier_id=$9,
              processing_factory_supplier_version=$10,rework_reason=$11,
              rework_process=$12,problem_part=$13,problem_description=$14,
-             rework_quantity=$15,updated_by=$16,version=$17,
+             rework_quantity=$15,inspection_report=$16,updated_by=$17,version=$18,
              updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
@@ -288,6 +295,7 @@ export class ReworkInitiationService {
           next.problemPart,
           next.problemDescription,
           next.reworkQuantity,
+          next.inspectionReport,
           actor.actorId,
           nextVersion,
         ],
@@ -754,6 +762,10 @@ export class ReworkInitiationService {
     ) {
       throw new ApplicationError("VALIDATION_ERROR", "请完整填写款号、跟单、加工厂、问题和返工数量", 400);
     }
+    const report = InspectionReportSchema.safeParse(row.inspection_report);
+    if (!report.success) {
+      throw new ApplicationError("VALIDATION_ERROR", "请完成验货报告的基础尺寸、资料面料和问题总结三部分", 400);
+    }
   }
 
   private async ensureActiveMerchandiser(client: PoolClient, userId: string): Promise<void> {
@@ -1062,6 +1074,7 @@ export class ReworkInitiationService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
+      inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
     };
@@ -1109,6 +1122,7 @@ export class ReworkInitiationService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
+      inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
       version: row.version,

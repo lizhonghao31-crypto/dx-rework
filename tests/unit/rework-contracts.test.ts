@@ -2,6 +2,9 @@ import { readFile } from "node:fs/promises";
 
 import {
   CreateReworkDraftSchema,
+  InspectionReportDraftSchema,
+  InspectionReportSchema,
+  type InspectionReportDraft,
   MAX_REWORK_ATTACHMENTS,
   CreateWorkReportSchema,
   CreateWorkTaskSchema,
@@ -14,6 +17,47 @@ import { transitionReworkOrder } from "@dx-rework/domain";
 import { describe, expect, it } from "vitest";
 
 describe("rework initiation contracts", () => {
+  const completeInspectionReport = (): InspectionReportDraft => ({
+    schemaVersion: 1 as const,
+    inspectionStage: "final" as const,
+    inspectionLocation: "一厂验货区",
+    color: "藏青",
+    sampleQuantity: 1,
+    measurementUnit: "cm" as const,
+    measurementPrecision: 0.1 as const,
+    sizeSamples: [{
+      sampleId: "00000000-0000-4000-8000-000000000201",
+      sizeLabel: "M",
+      sampleLabel: "第 1 件",
+      measurements: [{ partName: "衣长", actualCm: 68.2, deviationCm: -0.3, notApplicable: false }],
+    }],
+    documentChecks: {
+      confirmationSample: true,
+      approvalCard: true,
+      supplierSelfInspection: true,
+      bulkFabricInspection: true,
+      exceptionReason: null,
+    },
+    fabricMatch: "match" as const,
+    fabricMismatchReason: null,
+    fitDecision: "recheck_after_rework" as const,
+    factoryPreparation: "strict" as const,
+    materialChecks: { physicalPerformance: "pass" as const, washTest: "pass" as const, productMarking: "pass" as const },
+    issues: [{
+      issueId: "00000000-0000-4000-8000-000000000202",
+      category: "袖口",
+      description: "尺寸偏小",
+      majorCount: 1,
+      minorCount: 0,
+    }],
+    nonconformanceCause: "车缝控制偏差",
+    approvalOpinion: null,
+    supplierSignatoryName: null,
+    supplierSignedOn: null,
+    inspectionDate: "2026-08-14",
+    disposition: "rework" as const,
+  });
+
   it("allows incomplete drafts while keeping one strict style field", () => {
     expect(CreateReworkDraftSchema.safeParse({}).success).toBe(true);
     expect(CreateReworkDraftSchema.safeParse({ styleNo: "PD20529725" }).success).toBe(true);
@@ -32,6 +76,23 @@ describe("rework initiation contracts", () => {
       reworkProcess: "车缝, 后整",
     }).success).toBe(true);
     expect(CreateReworkDraftSchema.safeParse({ orderQuantity: 1.5 }).success).toBe(false);
+  });
+
+  it("persists incomplete inspection drafts but validates a complete 0.1 cm report on submit", () => {
+    const draft = completeInspectionReport();
+    draft.inspectionStage = null;
+    expect(InspectionReportDraftSchema.safeParse(draft).success).toBe(true);
+    expect(InspectionReportSchema.safeParse(draft).success).toBe(false);
+
+    const complete = completeInspectionReport();
+    expect(InspectionReportSchema.safeParse(complete).success).toBe(true);
+    expect(InspectionReportSchema.safeParse({
+      ...complete,
+      sizeSamples: [{
+        ...complete.sizeSamples[0],
+        measurements: [{ partName: "衣长", actualCm: 68.25, deviationCm: -0.3, notApplicable: false }],
+      }],
+    }).success).toBe(false);
   });
 
   it("rejects invalid quantities, duplicate attachments and ambiguous factories", () => {
