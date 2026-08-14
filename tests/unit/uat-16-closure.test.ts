@@ -16,7 +16,7 @@ describe("UAT 1.6 closure regressions", () => {
       readFile("apps/api/src/rework/service.ts", "utf8"),
     ]);
     expect(detail).toContain('if (detail.status === "completed")');
-    expect(detail).toContain('node("archive", "10", "订单完成"');
+    expect(detail).toContain('node("settlement_followup", "10", "订单完成与后续结算"');
     expect(detail).toContain("处理人：");
     expect(detail).toContain("处理时间：");
     expect(detail).toContain("处理意见：");

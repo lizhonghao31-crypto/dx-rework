@@ -97,7 +97,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
     expect(management.kpis).toEqual({ openOrders: 0, completedOrders: 0, overdueTodos: 0, exceptionCount: 0 });
     expect(management.financial).toEqual({ wageTotal: "0.00", responsibilityTotal: "0.00", ownFactoryTotal: "0.00", externalProposed: "0.00", externalDeducted: "0.00", externalRemaining: "0.00" });
     expect(site.kpis.pendingWageReview).toBe(0);
-    expect(site.nodeCounts).toContainEqual({ node: "N11", label: "后续结算 · 待工资初核", count: 0 });
+    expect(site.nodeCounts).toContainEqual({ node: "N11", label: "订单完成与后续结算 · 待工资初核", count: 0 });
     expect(page).toMatchObject({ items: [], nextCursor: null, canViewReports: true });
 
     for (const reportType of ["rework_overview", "wages", "responsibilities", "own_factory", "external_deductions", "exceptions"] as const) {

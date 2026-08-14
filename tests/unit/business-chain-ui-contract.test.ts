@@ -77,7 +77,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
-  it("keeps process, execution, wage work and the N07–N11 workflow reachable from permitted primary entries", async () => {
+  it("keeps process, execution, wage work and the N07–N10 workflow reachable from permitted primary entries", async () => {
     const [app, shell, detail] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
@@ -98,8 +98,8 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('node("responsibility", "07", "责任判定与资料核验"');
     expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
     expect(detail).toContain('node("settlement_ledger", "09", "责任结算台账"');
-    expect(detail).toContain('node("archive", "10", "订单完成"');
-    expect(detail).toContain('node("settlement_followup", "11", "后续结算"');
+    expect(detail).toContain('node("settlement_followup", "10", "订单完成与后续结算"');
+    expect(detail).not.toContain('node("settlement_followup", "11", "后续结算"');
     expect(detail).toContain('node.key === "settlement_followup" && node.state !== "future"');
   });
 

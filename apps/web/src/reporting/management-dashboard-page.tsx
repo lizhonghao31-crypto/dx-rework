@@ -30,7 +30,7 @@ const NodeQueue = ({ items }: { items: ReadonlyArray<{ node: string; label: stri
   <div className="queue workflow-dashboard-queue">
     {items.map((item) => (
       <a className="workflow-dashboard-node" href={reportingPageUrl(nodeTarget(item.node))} key={item.node}>
-        <span>{item.node} · {item.label}</span>
+        <span>{item.node === "N11" ? "N10" : item.node} · {item.label}</span>
         <StatusBadge tone={item.count > 0 ? "info" : "success"}>{item.count} 单</StatusBadge>
         <small>进入节点工作台 →</small>
       </a>

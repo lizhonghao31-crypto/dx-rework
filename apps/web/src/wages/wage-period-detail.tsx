@@ -166,7 +166,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       <header className="page-heading">
         <div>
           <h1>返工工资核对</h1>
-          <p>工资期间：{period.periodMonth.slice(0, 7)} · N11 后续结算</p>
+          <p>工资期间：{period.periodMonth.slice(0, 7)} · N10 订单完成与后续结算</p>
         </div>
         <StatusBadge tone={period.status === "locked" ? "success" : "info"}>
           {statusLabel}
