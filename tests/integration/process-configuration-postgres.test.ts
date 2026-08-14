@@ -9,6 +9,8 @@ import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const { Pool } = pg;
+import { completeInspectionReport } from "../inspection-report-fixture.js";
+
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
@@ -50,6 +52,7 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
       "0006_rework_initiation.sql",
+      "0056_n01_digital_inspection_report.sql",
       "0007_process_configuration_ie_review.sql",
     ]) {
       const sql = await readFile(
@@ -98,6 +101,7 @@ runWithPostgres("process configuration and IE review PostgreSQL contracts", () =
       problemPart: "袖口",
       problemDescription: "特殊返修",
       reworkQuantity: 281,
+      inspectionReport: completeInspectionReport(),
     }, randomUUID());
     return initiation.submit(qc(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,
