@@ -219,6 +219,10 @@
     {
       "version": "0055_responsibility_party_multiplier_guard",
       "checksum": "6b4370595352269b946384140f95fdb6da47ffee035b04f4a94d8144b370a8c9"
+    },
+    {
+      "version": "0056_n01_digital_inspection_report",
+      "checksum": "c08c98555dab425a7a091f6f0274dc4530bb2872e5fd536a2c84c77abbff8b66"
     }
   ]
 }
