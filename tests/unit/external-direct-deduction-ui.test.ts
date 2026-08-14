@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-describe("N09 ledger and N11 external deduction UI", () => {
-  it("keeps N09 read-only while exposing the usable N11 deduction or data-return actions", async () => {
+describe("N09 ledger and merged N10 external deduction UI", () => {
+  it("keeps N09 read-only while exposing usable deduction or data-return actions in N10", async () => {
     const [panel, queue] = await Promise.all([
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-queue-page.tsx", "utf8"),

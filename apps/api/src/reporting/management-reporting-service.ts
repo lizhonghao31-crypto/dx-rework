@@ -125,7 +125,7 @@ export class ManagementReportingService {
     const pendingWageReview = number(wageReview.rows[0]?.count ?? "0");
     const nodeCounts = Object.entries(nodeMeta).map(([status, meta]) => ({ ...meta, count: map.get(status) ?? 0 }))
       .filter((item) => ["N02", "N03", "N04", "N05", "N06", "N06-A"].includes(item.node));
-    nodeCounts.push({ node: "N11", label: "后续结算 · 待工资初核", count: pendingWageReview });
+    nodeCounts.push({ node: "N11", label: "订单完成与后续结算 · 待工资初核", count: pendingWageReview });
     const currentCapabilities = capabilities(actor);
     return {
       mode: "site",

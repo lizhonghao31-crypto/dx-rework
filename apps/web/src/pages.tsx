@@ -32,7 +32,7 @@ const detailOrderId = (): string | null => {
 
 export function Detail() {
   const reworkOrderId = detailOrderId();
-  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 核验资料，N08 老板签字，N09 自动建台账，N10 完成订单；N11 独立跟进实扣" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成整单审核后进入 N07 责任判定与资料核验", "每个责任方独立维护比例、倍率和外部供应商", "N07 提交后由老板在 N08 确认同意或直接驳回", "N08 同意后系统自动生成 N09 责任结算台账", "N10 完成主订单；工资与供应商实际扣款在 N11 独立跟进"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /><ExternalResponsibilityPanel reworkOrderId={reworkOrderId} /></div></Shell>;
+  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 核验资料，N08 老板签字，N09 自动建台账，N10 统一展示订单完成与后续结算" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成整单审核后进入 N07 责任判定与资料核验", "每个责任方独立维护比例、倍率和外部供应商", "N07 提交后由老板在 N08 确认同意或直接驳回", "N08 同意后系统自动生成并完成 N09 责任结算台账", "N10 同时展示订单完成状态、工资月结与供应商实际扣款进度"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /><ExternalResponsibilityPanel reworkOrderId={reworkOrderId} /></div></Shell>;
 }
 
 export function MobileForm({ piecework = false }: { piecework?: boolean }) {
