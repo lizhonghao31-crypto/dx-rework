@@ -12,6 +12,8 @@ import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-s
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const { Pool } = pg;
+import { completeInspectionReport } from "../inspection-report-fixture.js";
+
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
@@ -44,6 +46,7 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     for (const migration of [
       "0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0006_rework_initiation.sql",
+      "0056_n01_digital_inspection_report.sql",
       "0007_process_configuration_ie_review.sql", "0008_worker_assignment_reporting.sql",
       "0009_whole_order_review_quantity_adjustment.sql", "0039_practical_quantity_amount_precision.sql",
     ]) {
@@ -66,7 +69,7 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
   afterAll(async () => { await database.end(); await admin.query("DROP SCHEMA IF EXISTS " + schema + " CASCADE"); await admin.end(); });
 
   const createOrder = async (plan: number, reports: readonly number[], pricingUnit: "piece" | "hour" = "piece") => {
-    const draft = await initiation.createDraft(qc(), { styleNo: "PD" + randomUUID().slice(0, 8), merchandiserUserId: ids.merch, processingFactory: { type: "own_factory" }, problemPart: "袖口", problemDescription: "PR-08", reworkQuantity: Math.ceil(plan) }, randomUUID());
+    const draft = await initiation.createDraft(qc(), { styleNo: "PD" + randomUUID().slice(0, 8), merchandiserUserId: ids.merch, processingFactory: { type: "own_factory" }, problemPart: "袖口", problemDescription: "PR-08", reworkQuantity: Math.ceil(plan), inspectionReport: completeInspectionReport() }, randomUUID());
     const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
     const saved = await configuration.saveDraft(tailConfigure(), draft.value.reworkOrderId, { expectedOrderVersion: submitted.value.version, items: [{ source: "custom", customProcessName: "审核工序" + randomUUID().slice(0, 4), pricingUnit, plannedQuantity: plan, unitPrice: 1 }] }, randomUUID());
     const queued = await configuration.submit(tailConfigure(), draft.value.reworkOrderId, { expectedOrderVersion: saved.value.orderVersion, expectedConfigurationVersion: saved.value.configuration!.configurationVersion }, randomUUID());
