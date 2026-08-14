@@ -42,6 +42,7 @@ import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aw
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageExportService } from "../../apps/api/src/wages/wage-export-service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
+import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -297,6 +298,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         problemPart: "袖口",
         problemDescription: `Root 单账号第 ${pass} 遍完整业务链`,
         reworkQuantity: 10,
+        inspectionReport: completeInspectionReport(),
       },
     );
     const submitted = await http<ReworkOrderResponse>(
