@@ -196,7 +196,7 @@ export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("own_factory") }).strict(),
   z.object({ type: z.literal("supplier"), supplierId: IdSchema }).strict(),
 ]);
-export const MAX_REWORK_ATTACHMENTS = 5;
+export const MAX_REWORK_ATTACHMENTS = 6;
 
 const ReworkAttachmentIdsSchema = (minimum = 0) => z.array(IdSchema)
   .min(minimum)
@@ -426,7 +426,16 @@ export const ReworkInitiationOptionsResponseSchema = z.object({
     supplierId: IdSchema,
     supplierVersion: z.number().int().positive(),
     supplierName: z.string().min(1),
+    personalUsageCount: z.number().int().nonnegative().optional(),
+    globalUsageCount: z.number().int().nonnegative().optional(),
+    lastUsedAt: z.string().datetime().nullable().optional(),
   }).strict()),
+  colorSuggestions: z.array(z.object({
+    value: z.string().trim().min(1).max(100),
+    personalUsageCount: z.number().int().nonnegative(),
+    globalUsageCount: z.number().int().nonnegative(),
+    lastUsedAt: z.string().datetime().nullable(),
+  }).strict()).optional(),
 });
 
 export const ExtractInspectionReportImageSchema = z.object({

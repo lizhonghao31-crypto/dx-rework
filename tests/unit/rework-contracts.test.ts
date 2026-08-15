@@ -115,7 +115,8 @@ describe("rework initiation contracts", () => {
     }).success).toBe(false);
   });
 
-  it("caps one rework order at five evidence attachments", () => {
+  it("caps one rework order at six unified attachments", () => {
+    expect(MAX_REWORK_ATTACHMENTS).toBe(6);
     const attachmentIds = Array.from({ length: MAX_REWORK_ATTACHMENTS + 1 }, (_value, index) =>
       `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     );
