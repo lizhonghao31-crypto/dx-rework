@@ -2,6 +2,7 @@ import type { InspectionReportDraft } from "@dx-rework/contracts";
 
 export const completeInspectionReport = (): InspectionReportDraft => ({
   schemaVersion: 1,
+  styleName: "测试款式",
   inspectionStage: "final",
   inspectionLocation: "测试验货区",
   color: "测试色",
