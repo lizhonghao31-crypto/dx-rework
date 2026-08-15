@@ -3,9 +3,30 @@ import { describe, expect, it, vi } from "vitest";
 import {
   prepareAndUploadWithConcurrency,
   qcUploadConcurrency,
+  SMALL_IMAGE_DIRECT_UPLOAD_BYTES,
+  shouldCompressImageBeforeUpload,
 } from "../../apps/web/src/attachment-upload.js";
 
 describe("attachment upload pipeline", () => {
+  it("uploads small images directly and only compresses larger supported images", () => {
+    expect(shouldCompressImageBeforeUpload({
+      type: "image/jpeg",
+      size: 840 * 1024,
+    })).toBe(false);
+    expect(shouldCompressImageBeforeUpload({
+      type: "image/jpeg",
+      size: SMALL_IMAGE_DIRECT_UPLOAD_BYTES,
+    })).toBe(false);
+    expect(shouldCompressImageBeforeUpload({
+      type: "image/jpeg",
+      size: SMALL_IMAGE_DIRECT_UPLOAD_BYTES + 1,
+    })).toBe(true);
+    expect(shouldCompressImageBeforeUpload({
+      type: "application/pdf",
+      size: SMALL_IMAGE_DIRECT_UPLOAD_BYTES + 1,
+    })).toBe(false);
+  });
+
   it("opens three upload lanes on ordinary networks while preserving weak-network backpressure", () => {
     expect(qcUploadConcurrency()).toBe(3);
     expect(qcUploadConcurrency({ effectiveType: "4g" })).toBe(3);

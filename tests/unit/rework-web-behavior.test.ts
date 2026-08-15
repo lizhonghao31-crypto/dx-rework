@@ -144,6 +144,8 @@ describe("PR-05 web behavior", () => {
     expect(supplement).toContain("isImageAttachment");
     expect(supplement).toContain('"上传图片"');
     expect(helper).toContain("const MAX_IMAGE_EDGE = 2048");
+    expect(helper).toContain("SMALL_IMAGE_DIRECT_UPLOAD_BYTES = 1024 * 1024");
+    expect(helper).toContain("shouldCompressImageBeforeUpload(file)");
     expect(helper).toContain('canvas.toBlob(resolve, "image/webp", WEBP_QUALITY)');
   });
 
