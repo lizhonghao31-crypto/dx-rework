@@ -12,6 +12,7 @@ const IMAGE_MIME_TYPES = new Set([
 ]);
 const MAX_IMAGE_EDGE = 2048;
 const WEBP_QUALITY = 0.85;
+export const SMALL_IMAGE_DIRECT_UPLOAD_BYTES = 1024 * 1024;
 
 type NetworkInformationLike = Readonly<{ effectiveType?: string }>;
 
@@ -42,6 +43,15 @@ export const isSupportedAttachment = (file: Pick<File, "type">): boolean =>
 export const isImageAttachment = (file: Pick<File, "type">): boolean =>
   IMAGE_MIME_TYPES.has(file.type);
 
+/**
+ * Small camera images already transfer quickly, while decoding and re-encoding
+ * them can take several seconds on lower-end phones. Keep compression for larger
+ * images where the saved transfer time can repay that CPU cost.
+ */
+export const shouldCompressImageBeforeUpload = (
+  file: Pick<File, "type" | "size">,
+): boolean => isImageAttachment(file) && file.size > SMALL_IMAGE_DIRECT_UPLOAD_BYTES;
+
 export const sha256Hex = async (file: Blob): Promise<string> => {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -61,7 +71,7 @@ const canvasBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
  * achieved, so evidence clarity never regresses merely for conversion's sake.
  */
 export const prepareAttachmentForUpload = async (file: File): Promise<File> => {
-  if (!isImageAttachment(file) || typeof createImageBitmap !== "function") return file;
+  if (!shouldCompressImageBeforeUpload(file) || typeof createImageBitmap !== "function") return file;
 
   let bitmap: ImageBitmap | undefined;
   try {
