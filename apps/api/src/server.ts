@@ -104,9 +104,18 @@ const reworkService = new ReworkInitiationService(
   todoService,
 );
 const reworkBusinessDetailService = new ReworkBusinessDetailService(database);
+const inspectionImageProvider = config.inspectionImage.provider;
 const inspectionImageExtractor = new InspectionImageExtractionService({
-  apiKey: config.openai.apiKey,
-  model: config.openai.visionModel,
+  provider: inspectionImageProvider,
+  apiKey: inspectionImageProvider === "dashscope"
+    ? config.dashscope.apiKey
+    : config.openai.apiKey,
+  model: inspectionImageProvider === "dashscope"
+    ? config.dashscope.visionModel
+    : config.openai.visionModel,
+  baseUrl: inspectionImageProvider === "dashscope"
+    ? config.dashscope.baseUrl
+    : "https://api.openai.com/v1",
 });
 const erpIntegrationService = new ErpIntegrationService(
   database,
