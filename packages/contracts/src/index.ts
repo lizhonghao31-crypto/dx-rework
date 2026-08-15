@@ -244,6 +244,7 @@ export const InspectionIssueSchema = z.object({
 
 export const InspectionReportDraftSchema = z.object({
   schemaVersion: z.literal(1),
+  styleName: z.string().trim().max(100).nullable().optional(),
   inspectionStage: InspectionStageSchema.nullable(),
   inspectionLocation: z.string().trim().max(200).nullable(),
   color: z.string().trim().max(100).nullable(),
@@ -428,6 +429,21 @@ export const ReworkInitiationOptionsResponseSchema = z.object({
   }).strict()),
 });
 
+export const ExtractInspectionReportImageSchema = z.object({
+  attachmentId: IdSchema,
+}).strict();
+
+export const InspectionReportImageExtractionSchema = z.object({
+  supplierName: z.string().trim().max(100).nullable(),
+  styleNo: z.string().trim().max(100).nullable(),
+  styleName: z.string().trim().max(100).nullable(),
+  color: z.string().trim().max(100).nullable(),
+  inspectionStage: InspectionStageSchema.nullable(),
+  inspectionLocation: z.string().trim().max(200).nullable(),
+  orderQuantity: z.number().int().positive().nullable(),
+  sampleQuantity: z.number().int().positive().nullable(),
+}).strict();
+
 export type ReworkOrderStatus = z.infer<typeof ReworkOrderStatusSchema>;
 export type ReworkProcessingFactory = z.infer<typeof ReworkProcessingFactorySchema>;
 export type InspectionStage = z.infer<typeof InspectionStageSchema>;
@@ -444,6 +460,8 @@ export type TransitionReworkOrder = z.infer<typeof TransitionReworkOrderSchema>;
 export type ReworkOrderResponse = z.infer<typeof ReworkOrderResponseSchema>;
 export type DeleteReworkOrderResponse = z.infer<typeof DeleteReworkOrderResponseSchema>;
 export type ReworkInitiationOptionsResponse = z.infer<typeof ReworkInitiationOptionsResponseSchema>;
+export type ExtractInspectionReportImage = z.infer<typeof ExtractInspectionReportImageSchema>;
+export type InspectionReportImageExtraction = z.infer<typeof InspectionReportImageExtractionSchema>;
 
 export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);
 export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [

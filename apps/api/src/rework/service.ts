@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { InspectionReportSchema, MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
+import { InspectionReportDraftSchema, MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
 import type {
   CreateReworkDraft,
   DeleteReworkOrderResponse,
@@ -754,17 +754,21 @@ export class ReworkInitiationService {
   private ensureComplete(row: ReworkOrderRow): void {
     if (
       !row.style_no
-      || !row.merchandiser_user_id
       || !row.processing_factory_type
-      || !row.problem_part
-      || !row.problem_description
-      || !row.rework_quantity
+      || !row.order_quantity
     ) {
-      throw new ApplicationError("VALIDATION_ERROR", "请完整填写款号、跟单、加工厂、问题和返工数量", 400);
+      throw new ApplicationError("VALIDATION_ERROR", "请完整填写供应商、款号和订单数量", 400);
     }
-    const report = InspectionReportSchema.safeParse(row.inspection_report);
-    if (!report.success) {
-      throw new ApplicationError("VALIDATION_ERROR", "请完成验货报告的基础尺寸、资料面料和问题总结三部分", 400);
+    const report = InspectionReportDraftSchema.safeParse(row.inspection_report);
+    if (
+      !report.success
+      || !report.data.styleName
+      || !report.data.inspectionStage
+      || !report.data.inspectionLocation
+      || !report.data.color
+      || !report.data.sampleQuantity
+    ) {
+      throw new ApplicationError("VALIDATION_ERROR", "请完整填写款式、颜色、验货阶段、验货地址和抽检数量", 400);
     }
   }
 

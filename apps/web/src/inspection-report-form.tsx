@@ -33,6 +33,7 @@ const newSample = (index: number): InspectionSizeSample => ({
 
 export const createEmptyInspectionReport = (): InspectionReportDraft => ({
   schemaVersion: 1,
+  styleName: null,
   inspectionStage: null,
   inspectionLocation: null,
   color: null,
@@ -121,10 +122,12 @@ export function InspectionReportStepOne({
   report,
   disabled,
   onChange,
+  hideBasicFields = false,
 }: {
   report: InspectionReportDraft;
   disabled: boolean;
   onChange: ReportChange;
+  hideBasicFields?: boolean;
 }) {
   const [selectedSampleId, setSelectedSampleId] = useState(report.sizeSamples[0]?.sampleId ?? "");
   useEffect(() => {
@@ -143,7 +146,7 @@ export function InspectionReportStepOne({
 
   return (
     <>
-      <Surface className="inspection-section">
+      {!hideBasicFields && <Surface className="inspection-section">
         <div className="section-title">
           <div><h2>验货基本资料</h2><p>本系统只登记需要返工的验货报告。</p></div>
           <StatusBadge tone="info">步骤 1/3</StatusBadge>
@@ -195,7 +198,7 @@ export function InspectionReportStepOne({
             onChange={(event) => onChange({ ...report, inspectionDate: event.target.value || null })}
           />
         </div>
-      </Surface>
+      </Surface>}
 
       <Surface className="inspection-section inspection-measurements">
         <div className="section-title">

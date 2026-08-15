@@ -1,5 +1,6 @@
 import {
   AttachmentResponseSchema,
+  InspectionReportImageExtractionSchema,
   MAX_REWORK_ATTACHMENTS,
   ReworkInitiationOptionsResponseSchema,
   ReworkOrderResponseSchema,
@@ -81,6 +82,8 @@ const optionalText = (value: string): string | null => {
   return normalized.length > 0 ? normalized : null;
 };
 
+const normalizedName = (value: string): string => value.trim().replace(/[\s（）()\-_.]/g, "").toLocaleLowerCase("zh-CN");
+
 const statusText = (status: ReworkOrderResponse["status"]): string => {
   if (status === "pending_process_configuration") return "已提交 · 待当前有效尾部主管配置工序";
   if (status === "cancelled") return "已取消 · 资料保留";
@@ -156,6 +159,7 @@ export function ReworkInitiationForm({
   const [busy, setBusy] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(Boolean(reworkOrderId));
   const [uploading, setUploading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const pendingKey = useRef<PendingKey | null>(null);
   const previewUrls = useRef<string[]>([]);
   const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
@@ -448,7 +452,12 @@ export function ReworkInitiationForm({
       setAttachmentIds(nextIds);
       setUploadedAttachments((current) => [...current, ...uploaded]);
       pendingKey.current = null;
-      setMessage(`${nextIds.length} 份 QC 附件已上传，请保存草稿`);
+      const reportImage = uploaded.find((attachment) => attachment.mimeType.startsWith("image/"));
+      if (reportImage) {
+        void extractFromReportImage(reportImage.attachmentId);
+      } else {
+        setMessage(`${nextIds.length} 份 QC 附件已上传，请保存草稿`);
+      }
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "附件上传失败");
     } finally {
@@ -476,18 +485,57 @@ export function ReworkInitiationForm({
     setMessage("附件已从当前表单移除，请保存草稿确认");
   };
 
+  const extractFromReportImage = async (attachmentId: string): Promise<void> => {
+    if (extracting || formDisabled) return;
+    setExtracting(true);
+    setMessage("正在识别纸质验货报告…");
+    try {
+      const extracted = await request(
+        "rework-orders/inspection-report-extractions",
+        InspectionReportImageExtractionSchema,
+        { method: "POST", body: JSON.stringify({ attachmentId }) },
+      );
+      const supplier = extracted.supplierName ? normalizedName(extracted.supplierName) : "";
+      const factory = supplier
+        ? options.factories.filter((item) => normalizedName(item.supplierName) === supplier)
+        : [];
+      setForm((current) => ({
+        ...current,
+        styleNo: current.styleNo || extracted.styleNo || "",
+        orderQuantity: current.orderQuantity || extracted.orderQuantity?.toString() || "",
+        factory: current.factory || (factory.length === 1 ? `supplier:${factory[0]!.supplierId}` : ""),
+      }));
+      setInspectionReport((current) => ({
+        ...current,
+        styleName: current.styleName ?? extracted.styleName,
+        color: current.color ?? extracted.color,
+        inspectionStage: current.inspectionStage ?? extracted.inspectionStage,
+        inspectionLocation: current.inspectionLocation ?? extracted.inspectionLocation,
+        sampleQuantity: current.sampleQuantity ?? extracted.sampleQuantity,
+      }));
+      setMessage(factory.length > 1
+        ? "图片已预填资料；供应商名称匹配到多个结果，请手动确认"
+        : "图片已预填可识别资料，请核对八项后提交");
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "图片识别失败，请手动填写八项资料");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   const locked = order?.status === "pending_process_configuration"
     || order?.status === "cancelled";
   const formDisabled = locked || restoringDraft;
-  const mutationDisabled = !isReworkFormMutationAllowed({ busy, uploading, restoringDraft });
+  const mutationDisabled = extracting || !isReworkFormMutationAllowed({ busy, uploading, restoringDraft });
   const requiredFieldsComplete = [
     Boolean(form.styleNo.trim()),
-    Boolean(form.merchandiserUserId),
     Boolean(form.factory),
-    Number.isInteger(Number(form.reworkQuantity)) && Number(form.reworkQuantity) > 0,
-    inspectionStepComplete(inspectionReport, 1),
-    inspectionStepComplete(inspectionReport, 2),
-    inspectionStepComplete(inspectionReport, 3),
+    Boolean(inspectionReport.styleName?.trim()),
+    Boolean(inspectionReport.color?.trim()),
+    Boolean(inspectionReport.inspectionStage),
+    Boolean(inspectionReport.inspectionLocation?.trim()),
+    Number.isInteger(Number(form.orderQuantity)) && Number(form.orderQuantity) > 0,
+    Number.isInteger(inspectionReport.sampleQuantity) && (inspectionReport.sampleQuantity ?? 0) > 0,
   ];
   const requiredCompletionCount = requiredFieldsComplete.filter(Boolean).length;
   const complete = requiredCompletionCount === requiredFieldsComplete.length;
@@ -497,9 +545,101 @@ export function ReworkInitiationForm({
       ? "success"
       : "info";
   const showStatus = Boolean(order) || message !== "填写中，尚未保存";
+  const paperEntryMode = true;
 
   return (
     <div className={`mobile-page rework-initiation-page${embedded ? " rework-initiation-page--embedded" : ""}`}>
+      {paperEntryMode ? (
+        <>
+          <div className="mobile-hero rework-initiation-hero">
+            <div className="mobile-title">
+              <h1>发起返工</h1>
+              <StatusBadge tone={badgeTone}>{order?.reworkNo ?? "草稿未保存"}</StatusBadge>
+            </div>
+            <p className="rework-initiation-hero__progress">上传纸质验货报告，系统预填；请核对下方八项后创建订单。</p>
+          </div>
+
+          <Surface className="rework-paper-entry">
+            <div className="section-title">
+              <div><h2>纸质报告识别</h2><p>上传报告图片后自动预填；识别结果不会自动提交。</p></div>
+              <StatusBadge tone={attachmentIds.length ? "success" : "info"}>{attachmentIds.length} 份</StatusBadge>
+            </div>
+            {!formDisabled && (
+              <label className="qc-file-button rework-paper-entry__upload">
+                <span>{uploading ? "正在上传…" : extracting ? "正在识别…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? "已达到 " + MAX_REWORK_ATTACHMENTS + " 份上限" : "上传纸质验货报告"}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  multiple
+                  disabled={mutationDisabled || attachmentIds.length >= MAX_REWORK_ATTACHMENTS}
+                  onChange={(event) => {
+                    void uploadFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+            {uploadedAttachments.length > 0 && (
+              <div className="qc-upload-preview-list" aria-label="已上传的验货报告">
+                {uploadedAttachments.map((attachment) => (
+                  <article className="qc-upload-preview" key={attachment.attachmentId}>
+                    {attachment.previewUrl
+                      ? <a href={attachment.previewUrl} rel="noreferrer" target="_blank" aria-label={"预览 " + attachment.filename}><img src={attachment.previewUrl} alt={attachment.filename} /></a>
+                      : <span className="qc-upload-preview__pdf">PDF</span>}
+                    <div><strong title={attachment.filename}>{attachment.filename}</strong><small>{attachment.mimeType.startsWith("image/") ? "可识别并在订单详情查看" : "PDF 附件"}</small></div>
+                    {!formDisabled && <div className="rework-paper-entry__item-actions">
+                      {attachment.mimeType.startsWith("image/") && <Button disabled={mutationDisabled} onClick={() => void extractFromReportImage(attachment.attachmentId)}>识别</Button>}
+                      <Button disabled={mutationDisabled} onClick={() => removeAttachment(attachment)}>移除</Button>
+                    </div>}
+                  </article>
+                ))}
+              </div>
+            )}
+          </Surface>
+
+          <Surface className="rework-initiation-required rework-core-fields">
+            <div className="section-title">
+              <div><h2>订单基本资料</h2><p>以下八项为创建订单的必填资料。</p></div>
+              <StatusBadge tone={complete ? "success" : "info"}>已填 {requiredCompletionCount}/8</StatusBadge>
+            </div>
+            <div className="qc-form-grid rework-core-fields__grid">
+              <label className="dx-field"><span>供应商（必填）</span><span className="dx-field__control factory-search-control"><FactorySearch factories={options.factories} value={form.factory} disabled={formDisabled} onChange={(factory) => setForm({ ...form, factory })} /></span></label>
+              <InsetField label="款号（必填）" value={form.styleNo} disabled={formDisabled} onChange={(event) => setForm({ ...form, styleNo: event.target.value })} />
+              <InsetField label="款式（必填）" value={inspectionReport.styleName ?? ""} disabled={formDisabled} onChange={(event) => setInspectionReport({ ...inspectionReport, styleName: optionalText(event.target.value) })} />
+              <InsetField label="颜色（必填）" value={inspectionReport.color ?? ""} disabled={formDisabled} onChange={(event) => setInspectionReport({ ...inspectionReport, color: optionalText(event.target.value) })} />
+              <label className="dx-field"><span>验货阶段（必填）</span><span className="dx-field__control"><select value={inspectionReport.inspectionStage ?? ""} disabled={formDisabled} onChange={(event) => setInspectionReport({ ...inspectionReport, inspectionStage: event.target.value ? event.target.value as InspectionReportDraft["inspectionStage"] : null })}><option value="">请选择</option><option value="midline">中查</option><option value="final">尾查</option><option value="warehouse">仓检</option><option value="reinspection">复检</option></select></span></label>
+              <InsetField label="验货地址（必填）" value={inspectionReport.inspectionLocation ?? ""} disabled={formDisabled} onChange={(event) => setInspectionReport({ ...inspectionReport, inspectionLocation: optionalText(event.target.value) })} />
+              <InsetField label="订单数量（必填）" type="number" min="1" step="1" suffix="件" value={form.orderQuantity} disabled={formDisabled} onChange={(event) => setForm({ ...form, orderQuantity: event.target.value })} />
+              <InsetField label="抽检数量（必填）" type="number" min="1" step="1" suffix="件" value={inspectionReport.sampleQuantity?.toString() ?? ""} disabled={formDisabled} onChange={(event) => setInspectionReport({ ...inspectionReport, sampleQuantity: event.target.value === "" ? null : Number(event.target.value) })} />
+            </div>
+          </Surface>
+
+          <Surface className="rework-initiation-optional rework-manual-entry">
+            <details>
+              <summary><span>手动录入</span><small className="rework-manual-entry__toggle" aria-hidden="true" /></summary>
+              <p>仅在纸质报告无法识别或需要补充时填写；不影响八项资料创建订单。</p>
+              <div className="qc-form-grid rework-manual-entry__order-fields">
+                <label className="dx-field"><span>订单跟单（可补充）</span><span className="dx-field__control search-select-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder={options.merchandisers.length ? "输入姓名搜索订单跟单" : "暂无可选订单跟单"} emptyText="没有匹配的订单跟单" disabled={formDisabled} onChange={(merchandiserUserId) => setForm({ ...form, merchandiserUserId })} /></span></label>
+                <InsetField label="订单号（可补充）" maxLength={100} value={form.orderNo} disabled={formDisabled} onChange={(event) => setForm({ ...form, orderNo: event.target.value })} />
+                <InsetField label="客供代号（可补充）" value={form.customerSupplyCode} disabled={formDisabled} onChange={(event) => setForm({ ...form, customerSupplyCode: event.target.value })} />
+                <InsetField label="工厂货号（可补充）" value={form.factoryStyleNo} disabled={formDisabled} onChange={(event) => setForm({ ...form, factoryStyleNo: event.target.value })} />
+              </div>
+              <InspectionReportStepOne report={inspectionReport} disabled={formDisabled} onChange={setInspectionReport} hideBasicFields />
+              <InspectionReportStepTwo report={inspectionReport} disabled={formDisabled} onChange={setInspectionReport} />
+              <InspectionReportStepThree report={inspectionReport} disabled={formDisabled} onChange={setInspectionReport} />
+              <div className="qc-form-grid rework-manual-entry__order-fields">
+                <InsetField label="返工数量（可补充）" type="number" min="1" step="1" suffix="件" value={form.reworkQuantity} disabled={formDisabled} onChange={(event) => setForm({ ...form, reworkQuantity: event.target.value })} />
+                <InsetField label="返工原因（可补充）" value={form.reworkReason} disabled={formDisabled} onChange={(event) => setForm({ ...form, reworkReason: event.target.value })} />
+                <InsetField label="返工工序（可补充）" value={form.reworkProcess} disabled={formDisabled} onChange={(event) => setForm({ ...form, reworkProcess: event.target.value })} />
+              </div>
+            </details>
+          </Surface>
+
+          {showStatus && <Surface className="qc-status"><p role="status">{message}</p></Surface>}
+          {!locked && <div className="mobile-actions rework-initiation-actions"><Button disabled={mutationDisabled} onClick={() => void save()}>{busy ? "处理中…" : restoringDraft ? "草稿加载中…" : "保存草稿"}</Button><Button variant="primary" disabled={mutationDisabled || !complete} onClick={() => void submit()}>提交返工</Button></div>}
+        </>
+      ) : (
+        <>
       {embedded ? (
         <div className="rework-initiation-embedded-heading">
           <div>
@@ -745,6 +885,8 @@ export function ReworkInitiationForm({
         <div className="qc-cancel-draft">
           <Button disabled={mutationDisabled} onClick={() => void transition("cancel")}>取消此草稿</Button>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 describe("rework initiation contracts", () => {
   const completeInspectionReport = (): InspectionReportDraft => ({
     schemaVersion: 1 as const,
+    styleName: "测试款式",
     inspectionStage: "final" as const,
     inspectionLocation: "一厂验货区",
     color: "藏青",
