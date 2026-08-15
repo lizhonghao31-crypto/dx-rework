@@ -45,6 +45,10 @@ const create = (
   businessRoles: readonly string[] = ["quality_control"],
   capabilities: readonly string[] = ["rework:initiate"],
   isRoot = false,
+  listInitiationOptions?: () => Promise<{
+    merchandisers: { userId: string; displayName: string }[];
+    factories: { supplierId: string; supplierVersion: number; supplierName: string }[];
+  }>,
 ) => {
   const service = {
     createDraft: vi.fn(async () => ({ value: response, reused: false })),
@@ -77,6 +81,7 @@ const create = (
       },
       service: service as never,
       root: { isRootUser: vi.fn(async () => isRoot) },
+      ...(listInitiationOptions ? { listInitiationOptions } : {}),
     },
   });
   apps.push(app);
@@ -126,6 +131,61 @@ describe("rework initiation routes", () => {
       actorRoles: ["owner_group", "quality_control"],
       authorizationCapability: "rework:initiate",
     }));
+  });
+
+  it("combines live master data with submitted-order supplier and color usage", async () => {
+    const supplierId = "00000000-0000-4000-8000-000000000088";
+    const { app, service } = create(
+      ["quality_control"],
+      ["rework:initiate"],
+      false,
+      async () => ({
+        merchandisers: [],
+        factories: [{ supplierId, supplierVersion: 3, supplierName: "常用供应商" }],
+      }),
+    );
+    service.listInitiationOptions.mockResolvedValueOnce({
+      merchandisers: [],
+      factories: [{
+        supplierId,
+        supplierVersion: 2,
+        supplierName: "旧名称",
+        personalUsageCount: 7,
+        globalUsageCount: 12,
+        lastUsedAt: "2026-08-15T08:00:00.000Z",
+      }],
+      colorSuggestions: [{
+        value: "藏青",
+        personalUsageCount: 5,
+        globalUsageCount: 9,
+        lastUsedAt: "2026-08-15T08:00:00.000Z",
+      }],
+    });
+
+    const result = await app.inject({
+      method: "GET",
+      url: "/rework-orders/initiation-options",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toEqual({
+      merchandisers: [],
+      factories: [{
+        supplierId,
+        supplierVersion: 3,
+        supplierName: "常用供应商",
+        personalUsageCount: 7,
+        globalUsageCount: 12,
+        lastUsedAt: "2026-08-15T08:00:00.000Z",
+      }],
+      colorSuggestions: [{
+        value: "藏青",
+        personalUsageCount: 5,
+        globalUsageCount: 9,
+        lastUsedAt: "2026-08-15T08:00:00.000Z",
+      }],
+    });
   });
 
   it("rejects non-QC non-owner roles even when a capability is present", async () => {

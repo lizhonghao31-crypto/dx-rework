@@ -173,8 +173,23 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
   });
   app.get("/rework-orders/initiation-options", async (request) => {
     const accessActor = await actor(request);
-    if (dependencies.listInitiationOptions) return dependencies.listInitiationOptions();
-    return dependencies.service.listInitiationOptions(accessActor);
+    const rankedOptions = await dependencies.service.listInitiationOptions(accessActor);
+    if (!dependencies.listInitiationOptions) return rankedOptions;
+    const masterOptions = await dependencies.listInitiationOptions();
+    const usageBySupplierId = new Map(rankedOptions.factories.map((factory) => [factory.supplierId, factory]));
+    return {
+      merchandisers: masterOptions.merchandisers,
+      factories: masterOptions.factories.map((factory) => {
+        const usage = usageBySupplierId.get(factory.supplierId);
+        return {
+          ...factory,
+          personalUsageCount: usage?.personalUsageCount ?? 0,
+          globalUsageCount: usage?.globalUsageCount ?? 0,
+          lastUsedAt: usage?.lastUsedAt ?? null,
+        };
+      }),
+      colorSuggestions: rankedOptions.colorSuggestions ?? [],
+    };
   });
   if (dependencies.businessDetailService) {
     app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/business-detail", async (request) =>

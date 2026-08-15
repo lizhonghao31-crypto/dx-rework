@@ -321,7 +321,7 @@ export class ReworkInitiationService {
       if (nextAttachmentIds.length > MAX_REWORK_ATTACHMENTS) {
         throw new ApplicationError(
           "VALIDATION_ERROR",
-          `每张返工单最多保留 ${MAX_REWORK_ATTACHMENTS} 份 QC 附件`,
+          `每张返工单最多保留 ${MAX_REWORK_ATTACHMENTS} 份附件`,
           400,
         );
       }
@@ -601,7 +601,7 @@ export class ReworkInitiationService {
     actor: TrustedActorContext,
   ): Promise<ReworkInitiationOptionsResponse> {
     this.ensureInitiator(actor);
-    const [merchandisers, factories] = await Promise.all([
+    const [merchandisers, factories, colors] = await Promise.all([
       this.database.query<{ user_id: string; display_name: string }>(
         `SELECT users.id AS user_id,users.display_name
          FROM app_users users
@@ -623,11 +623,57 @@ export class ReworkInitiationService {
         supplier_id: string;
         version: number;
         supplier_name: string;
+        personal_usage_count: number;
+        global_usage_count: number;
+        personal_last_used_at: Date | null;
+        global_last_used_at: Date | null;
       }>(
-        `SELECT supplier_id,version,supplier_name
-         FROM current_supplier_catalog
-         WHERE supplier_type='factory' AND active=true
-         ORDER BY supplier_name,supplier_id`,
+        `SELECT catalog.supplier_id,catalog.version,catalog.supplier_name,
+                COALESCE(usage.personal_usage_count,0)::int AS personal_usage_count,
+                COALESCE(usage.global_usage_count,0)::int AS global_usage_count,
+                usage.personal_last_used_at,usage.global_last_used_at
+         FROM current_supplier_catalog catalog
+         LEFT JOIN (
+           SELECT processing_factory_supplier_id AS supplier_id,
+                  COUNT(*) FILTER (WHERE created_by=$1)::int AS personal_usage_count,
+                  COUNT(*)::int AS global_usage_count,
+                  MAX(submitted_at) FILTER (WHERE created_by=$1) AS personal_last_used_at,
+                  MAX(submitted_at) AS global_last_used_at
+           FROM rework_orders
+           WHERE submitted_at IS NOT NULL
+             AND status<>'deleted'
+             AND processing_factory_type='supplier'
+             AND processing_factory_supplier_id IS NOT NULL
+           GROUP BY processing_factory_supplier_id
+         ) usage ON usage.supplier_id=catalog.supplier_id
+         WHERE catalog.supplier_type='factory' AND catalog.active=true
+         ORDER BY catalog.supplier_name,catalog.supplier_id`,
+        [actor.actorId],
+      ),
+      this.database.query<{
+        value: string;
+        personal_usage_count: number;
+        global_usage_count: number;
+        personal_last_used_at: Date | null;
+        global_last_used_at: Date | null;
+      }>(
+        `WITH submitted_colors AS (
+           SELECT BTRIM(inspection_report->>'color') AS value,
+                  LOWER(BTRIM(inspection_report->>'color')) AS normalized_value,
+                  created_by,submitted_at
+           FROM rework_orders
+           WHERE submitted_at IS NOT NULL
+             AND status<>'deleted'
+             AND BTRIM(COALESCE(inspection_report->>'color',''))<>''
+         )
+         SELECT (ARRAY_AGG(value ORDER BY submitted_at DESC))[1] AS value,
+                COUNT(*) FILTER (WHERE created_by=$1)::int AS personal_usage_count,
+                COUNT(*)::int AS global_usage_count,
+                MAX(submitted_at) FILTER (WHERE created_by=$1) AS personal_last_used_at,
+                MAX(submitted_at) AS global_last_used_at
+         FROM submitted_colors
+         GROUP BY normalized_value`,
+        [actor.actorId],
       ),
     ]);
     return {
@@ -639,6 +685,15 @@ export class ReworkInitiationService {
         supplierId: row.supplier_id,
         supplierVersion: row.version,
         supplierName: row.supplier_name,
+        personalUsageCount: row.personal_usage_count,
+        globalUsageCount: row.global_usage_count,
+        lastUsedAt: (row.personal_last_used_at ?? row.global_last_used_at)?.toISOString() ?? null,
+      })),
+      colorSuggestions: colors.rows.map((row) => ({
+        value: row.value,
+        personalUsageCount: row.personal_usage_count,
+        globalUsageCount: row.global_usage_count,
+        lastUsedAt: (row.personal_last_used_at ?? row.global_last_used_at)?.toISOString() ?? null,
       })),
     };
   }
@@ -961,7 +1016,7 @@ export class ReworkInitiationService {
       [attachmentIds, actorId, reworkOrderId],
     );
     if (result.rowCount !== attachmentIds.length) {
-      throw new ApplicationError("ATTACHMENT_NOT_READY", "QC附件未完成上传、归属不符或已被替换", 409);
+      throw new ApplicationError("ATTACHMENT_NOT_READY", "附件未完成上传、归属不符或已被替换", 409);
     }
   }
 
@@ -1015,7 +1070,7 @@ export class ReworkInitiationService {
   ): Promise<void> {
     const uniqueIds = [...new Set(attachmentIds)];
     if (uniqueIds.length !== attachmentIds.length) {
-      throw new ApplicationError("VALIDATION_ERROR", "QC附件不能重复", 400);
+      throw new ApplicationError("VALIDATION_ERROR", "附件不能重复", 400);
     }
     if (uniqueIds.length > 0) {
       const candidates = await client.query(
@@ -1035,7 +1090,7 @@ export class ReworkInitiationService {
       if (candidates.rowCount !== uniqueIds.length) {
         throw new ApplicationError(
           "ATTACHMENT_NOT_READY",
-          "QC附件未完成上传、并非本人上传或已绑定其他业务",
+          "附件未完成上传、并非本人上传或已绑定其他业务",
           409,
         );
       }
