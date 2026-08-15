@@ -37,6 +37,37 @@ const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 
+const n01CoreInspectionReport = (styleName: string) => ({
+  schemaVersion: 1 as const,
+  styleName,
+  inspectionStage: "final" as const,
+  inspectionLocation: "尾部质检区",
+  color: "藏青",
+  sampleQuantity: 20,
+  measurementUnit: "cm" as const,
+  measurementPrecision: 0.1 as const,
+  sizeSamples: [],
+  documentChecks: {
+    confirmationSample: false,
+    approvalCard: false,
+    supplierSelfInspection: false,
+    bulkFabricInspection: false,
+    exceptionReason: null,
+  },
+  fabricMatch: null,
+  fabricMismatchReason: null,
+  fitDecision: null,
+  factoryPreparation: null,
+  materialChecks: { physicalPerformance: null, washTest: null, productMarking: null },
+  issues: [],
+  nonconformanceCause: null,
+  approvalOpinion: null,
+  supplierSignatoryName: null,
+  supplierSignedOn: null,
+  inspectionDate: null,
+  disposition: "rework" as const,
+});
+
 class LegacyIeReviewTodoProjectionService extends TodoProjectionService {
   override async completeOpenByDedupeKey(
     ..._args: Parameters<TodoProjectionService["completeOpenByDedupeKey"]>
@@ -351,9 +382,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // N01 - QC initiates one order with the business total quantity.
     const draft = await initiation.createDraft(qc(), {
       styleNo: "UAT-FULL-CHAIN",
+      orderQuantity: 1_000,
       orderNo: "ORDER-FULL-001",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      inspectionReport: n01CoreInspectionReport("全链测试款"),
       problemPart: "袖口",
       problemDescription: "全链自动验收",
       reworkQuantity: 200,

@@ -52,6 +52,37 @@ const sessionCookie = "dx_rework_session=root-single-account-gate";
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 type Method = "GET" | "POST" | "PUT";
 
+const n01CoreInspectionReport = (styleName: string) => ({
+  schemaVersion: 1 as const,
+  styleName,
+  inspectionStage: "final" as const,
+  inspectionLocation: "尾部质检区",
+  color: "藏青",
+  sampleQuantity: 20,
+  measurementUnit: "cm" as const,
+  measurementPrecision: 0.1 as const,
+  sizeSamples: [],
+  documentChecks: {
+    confirmationSample: false,
+    approvalCard: false,
+    supplierSelfInspection: false,
+    bulkFabricInspection: false,
+    exceptionReason: null,
+  },
+  fabricMatch: null,
+  fabricMismatchReason: null,
+  fitDecision: null,
+  factoryPreparation: null,
+  materialChecks: { physicalPerformance: null, washTest: null, productMarking: null },
+  issues: [],
+  nonconformanceCause: null,
+  approvalOpinion: null,
+  supplierSignatoryName: null,
+  supplierSignedOn: null,
+  inspectionDate: null,
+  disposition: "rework" as const,
+});
+
 type PassFixture = Readonly<{
   app: FastifyInstance;
   database: pg.Pool;
@@ -292,9 +323,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       "/rework-orders/drafts",
       {
         styleNo: `ROOT-PASS-${pass}`,
+        orderQuantity: 100,
         orderNo: `ROOT-ORDER-${pass}`,
         merchandiserUserId: fixture.merchandiserUserId,
         processingFactory: { type: "supplier", supplierId: fixture.supplierId },
+        inspectionReport: n01CoreInspectionReport(`Root 全链测试款 ${pass}`),
         problemPart: "袖口",
         problemDescription: `Root 单账号第 ${pass} 遍完整业务链`,
         reworkQuantity: 10,
