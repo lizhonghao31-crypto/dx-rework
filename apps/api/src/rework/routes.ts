@@ -1,6 +1,7 @@
 import {
   CreateReworkDraftSchema,
   DeleteReworkOrderResponseSchema,
+  ExtractInspectionReportImageSchema,
   IdempotencyKeySchema,
   ReworkOrderParamsSchema,
   ReworkOrdersQuerySchema,
@@ -17,7 +18,9 @@ import type { AuthUser } from "../auth/service.js";
 import { registerErpIntegrationRoutes, type ErpIntegrationHttpDependencies } from "../erp/erp-integration-routes.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import type { AttachmentService } from "../tools/attachments.js";
 import type { ReworkBusinessDetailService } from "./rework-business-detail-service.js";
+import type { InspectionImageExtractionService } from "./inspection-image-extraction-service.js";
 import type { ReworkInitiationService } from "./service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
@@ -51,6 +54,8 @@ export type ReworkHttpDependencies = Readonly<{
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
+  attachments?: AttachmentService;
+  inspectionImageExtractor?: InspectionImageExtractionService;
 }>;
 
 export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkHttpDependencies): void {
@@ -108,6 +113,19 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
+  if (dependencies.attachments && dependencies.inspectionImageExtractor) {
+    app.post("/rework-orders/inspection-report-extractions", async (request) => {
+      const trustedActor = await actor(request);
+      const { attachmentId } = parse(ExtractInspectionReportImageSchema, request.body);
+      const image = await dependencies.attachments!.createDownloadIntent(
+        trustedActor,
+        attachmentId,
+        undefined,
+        "inline",
+      );
+      return dependencies.inspectionImageExtractor!.extract(image.downloadUrl);
+    });
+  }
   app.put<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/draft", async (request, reply) => {
     const params = parse(ReworkOrderParamsSchema, request.params);
     const result = await dependencies.service.updateDraft(await actor(request), params.reworkOrderId, parse(UpdateReworkDraftSchema, request.body), idempotencyKey(request));
