@@ -55,8 +55,14 @@ const EnvironmentSchema = z
       .default("dx-rework/private"),
     OSS_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     OSS_MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(104857600).default(20971520),
+    INSPECTION_IMAGE_PROVIDER: z.enum(["openai", "dashscope"]).default("openai"),
     OPENAI_API_KEY: z.string().min(1).optional(),
     OPENAI_VISION_MODEL: z.string().trim().min(1).max(100).default("gpt-5.6"),
+    DASHSCOPE_API_KEY: z.string().min(1).optional(),
+    DASHSCOPE_BASE_URL: z.string().url()
+      .refine((value) => value.startsWith("https://"), "must use HTTPS")
+      .default("https://dashscope.aliyuncs.com/compatible-mode/v1"),
+    DASHSCOPE_VISION_MODEL: z.string().trim().min(1).max(100).default("qwen3-vl-plus"),
   })
   .superRefine((environment, context) => {
     const ossValues = [environment.OSS_REGION, environment.OSS_ENDPOINT, environment.OSS_BUCKET, environment.OSS_ACCESS_KEY_ID, environment.OSS_ACCESS_KEY_SECRET];
@@ -152,7 +158,9 @@ export type AppConfig = Readonly<{
     timingIntervalMs: number;
   }>;
   objectStorage: Readonly<{ enabled: boolean; region: string | undefined; endpoint: string | undefined; bucket: string | undefined; accessKeyId: string | undefined; accessKeySecret: string | undefined; privatePrefix: string; signedUrlTtlSeconds: number; maxUploadBytes: number }>;
+  inspectionImage: Readonly<{ provider: "openai" | "dashscope" }>;
   openai: Readonly<{ apiKey: string | undefined; visionModel: string }>;
+  dashscope: Readonly<{ apiKey: string | undefined; baseUrl: string; visionModel: string }>;
 }>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -192,6 +200,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       timingIntervalMs: result.data.TODO_TIMING_INTERVAL_MS,
     },
     objectStorage: { enabled: Boolean(result.data.OSS_BUCKET), region: result.data.OSS_REGION, endpoint: result.data.OSS_ENDPOINT, bucket: result.data.OSS_BUCKET, accessKeyId: result.data.OSS_ACCESS_KEY_ID, accessKeySecret: result.data.OSS_ACCESS_KEY_SECRET, privatePrefix: result.data.OSS_PRIVATE_PREFIX.replace(/\/$/, ""), signedUrlTtlSeconds: result.data.OSS_SIGNED_URL_TTL_SECONDS, maxUploadBytes: result.data.OSS_MAX_UPLOAD_BYTES },
+    inspectionImage: { provider: result.data.INSPECTION_IMAGE_PROVIDER },
     openai: { apiKey: result.data.OPENAI_API_KEY, visionModel: result.data.OPENAI_VISION_MODEL },
+    dashscope: { apiKey: result.data.DASHSCOPE_API_KEY, baseUrl: result.data.DASHSCOPE_BASE_URL, visionModel: result.data.DASHSCOPE_VISION_MODEL },
   });
 }
