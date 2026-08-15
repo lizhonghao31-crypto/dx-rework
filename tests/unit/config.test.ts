@@ -23,6 +23,27 @@ describe("loadConfig", () => {
     expect(Object.isFrozen(config)).toBe(true);
   });
 
+  it("selects the DashScope vision provider without exposing its key to web config", () => {
+    const config = loadConfig({
+      ...validEnvironment,
+      INSPECTION_IMAGE_PROVIDER: "dashscope",
+      DASHSCOPE_API_KEY: "dashscope-test-key",
+    });
+    expect(config.inspectionImage.provider).toBe("dashscope");
+    expect(config.dashscope).toEqual({
+      apiKey: "dashscope-test-key",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      visionModel: "qwen3-vl-plus",
+    });
+  });
+
+  it("rejects a non-HTTPS DashScope base URL", () => {
+    expect(() => loadConfig({
+      ...validEnvironment,
+      DASHSCOPE_BASE_URL: "http://dashscope.example.test/compatible-mode/v1",
+    })).toThrow(ConfigurationError);
+  });
+
   it("rejects missing database configuration", () => {
     expect(() => loadConfig({ NODE_ENV: "test" })).toThrow(ConfigurationError);
   });
