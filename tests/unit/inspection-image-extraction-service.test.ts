@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { InspectionImageExtractionService } from "../../apps/api/src/rework/inspection-image-extraction-service.js";
+import {
+  buildInspectionImageProviderRequest,
+  InspectionImageExtractionService,
+} from "../../apps/api/src/rework/inspection-image-extraction-service.js";
 
 const validResult = {
   supplierName: "嘉顺",
@@ -18,6 +21,36 @@ describe("inspection image extraction", () => {
     const service = new InspectionImageExtractionService(
       { apiKey: "test-key", model: "gpt-5.6" },
       async () => ({ output_text: JSON.stringify(validResult) }),
+    );
+    await expect(service.extract("https://signed.example.test/report.jpg")).resolves.toEqual(validResult);
+  });
+
+  it("builds a non-thinking DashScope vision request with JSON output", () => {
+    const request = buildInspectionImageProviderRequest({
+      provider: "dashscope",
+      model: "qwen3-vl-plus",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      imageUrl: "https://signed.example.test/report.jpg",
+    });
+    expect(request.url).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+    expect(request.payload).toContain('"model":"qwen3-vl-plus"');
+    expect(request.payload).toContain('"response_format":{"type":"json_object"}');
+    expect(request.payload).toContain('"enable_thinking":false');
+    expect(request.payload).toContain('"image_url":{"url":"https://signed.example.test/report.jpg"}');
+  });
+
+  it("reads the eight fields from a DashScope compatible response", async () => {
+    const service = new InspectionImageExtractionService(
+      {
+        provider: "dashscope",
+        apiKey: "test-key",
+        model: "qwen3-vl-plus",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      },
+      async (input) => {
+        expect(input.provider).toBe("dashscope");
+        return { choices: [{ message: { content: JSON.stringify(validResult) } }] };
+      },
     );
     await expect(service.extract("https://signed.example.test/report.jpg")).resolves.toEqual(validResult);
   });
