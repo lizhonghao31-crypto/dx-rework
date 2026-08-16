@@ -479,14 +479,16 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     processId: IdSchema,
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: ProcessPricingUnitSchema,
-    unitPrice: z.number().finite().positive(),
+    // N02 only records the operational plan.  The tail supervisor enters the
+    // final price at N05 and IE verifies it at N06.
+    unitPrice: z.number().finite().positive().optional(),
   }).strict(),
   z.object({
     source: z.literal("custom"),
     customProcessName: z.string().trim().min(1).max(100),
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: ProcessPricingUnitSchema,
-    unitPrice: z.number().finite().positive(),
+    unitPrice: z.number().finite().positive().optional(),
   }).strict(),
 ]).superRefine((value, context) => {
   if (value.pricingUnit === "piece" && !Number.isInteger(value.plannedQuantity)) {
@@ -538,7 +540,7 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processName: z.string().min(1),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
-  unitPrice: z.number().positive(),
+  unitPrice: z.number().positive().nullable(),
   promotedProcessId: IdSchema.nullable(),
 });
 export const ProcessConfigurationResponseSchema = z.object({

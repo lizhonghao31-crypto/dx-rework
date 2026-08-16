@@ -125,7 +125,7 @@ export const transitionReworkOrder = (
 ): ReworkOrderStatus =>
   transitions<ReworkOrderStatus>({
     draft: ["draft", "pending_process_configuration", "cancelled"],
-    pending_process_configuration: ["draft", "pending_ie_review", "cancelled"],
+    pending_process_configuration: ["draft", "pending_ie_review", "pending_task_assignment", "cancelled"],
     pending_ie_review: ["pending_process_configuration", "pending_task_assignment"],
     pending_task_assignment: ["pending_ie_review", "in_progress"],
     in_progress: ["in_progress", "pending_order_review"],
