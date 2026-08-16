@@ -24,4 +24,11 @@ describe("N01 streamlined manual entry", () => {
     expect(source).toContain("manualEntryPage === 5");
     expect(source).toContain('aria-label="手动录入分页"');
   });
+
+  it("does not let the optional merchandiser field block an eight-field submission", async () => {
+    const source = await readFile("apps/api/src/rework/service.ts", "utf8");
+    expect(source).toContain("if (current.merchandiser_user_id) {");
+    expect(source).toContain("await this.ensureActiveMerchandiser(client, current.merchandiser_user_id);");
+    expect(source).not.toContain("current.merchandiser_user_id!");
+  });
 });
