@@ -37,7 +37,7 @@ const create = (
     options: vi.fn(async () => ({ processes: [] })),
     get: vi.fn(async () => response),
     saveDraft: vi.fn(async () => ({ value: response, reused: false })),
-    submit: vi.fn(async () => ({ value: { ...response, reworkStatus: "pending_ie_review" }, reused: false })),
+    submit: vi.fn(async () => ({ value: { ...response, reworkStatus: "pending_task_assignment" }, reused: false })),
     review: vi.fn(async () => ({ value: { ...response, reworkStatus: "pending_task_assignment" }, reused: false })),
   };
   const app = buildApp({
@@ -79,7 +79,6 @@ describe("process configuration routes", () => {
           customProcessName: "特殊翻边返修",
           plannedQuantity: 2.1,
           pricingUnit: "piece",
-          unitPrice: 0.55,
         }],
       },
     });
@@ -93,20 +92,20 @@ describe("process configuration routes", () => {
       "00000000-0000-4000-8000-000000000010",
       expect.objectContaining({
         expectedOrderVersion: 2,
-        items: [expect.objectContaining({ plannedQuantity: 2.1, unitPrice: 0.55 })],
+        items: [expect.objectContaining({ plannedQuantity: 2.1 })],
       }),
       "process-save-1",
     );
   });
 
-  it("accepts three-decimal unit prices without rounding them at the HTTP boundary", async () => {
+  it("accepts a plan without any price at the HTTP boundary", async () => {
     const { app, service } = create();
     const result = await app.inject({
       method: "PUT",
       url: "/rework-orders/00000000-0000-4000-8000-000000000010/process-configuration/draft",
       headers: {
         cookie: "dx_rework_session=trusted",
-        "idempotency-key": "process-three-decimal-price",
+        "idempotency-key": "process-plan-without-price",
       },
       payload: {
         expectedOrderVersion: 2,
@@ -115,7 +114,6 @@ describe("process configuration routes", () => {
           customProcessName: "细分返修",
           plannedQuantity: 2.1,
           pricingUnit: "hour",
-          unitPrice: 0.555,
         }],
       },
     });
@@ -125,9 +123,9 @@ describe("process configuration routes", () => {
       expect.anything(),
       "00000000-0000-4000-8000-000000000010",
       expect.objectContaining({
-        items: [expect.objectContaining({ unitPrice: 0.555 })],
+        items: [expect.not.objectContaining({ unitPrice: expect.anything() })],
       }),
-      "process-three-decimal-price",
+      "process-plan-without-price",
     );
   });
 

@@ -227,6 +227,10 @@
     {
       "version": "0057_n01_submission_constraint_alignment",
       "checksum": "b61fb1ec4d07a036c84de0afa06b3c4f08df6959943bbd1c4c22a243a7ba3eb6"
+    },
+    {
+      "version": "0058_phase1_n02_plan_without_price",
+      "checksum": "bec64fc7ca6001c5e526ecbcba9f2824f6405e7ee29422e36e0d1d19c25190aa"
     }
   ]
 }

@@ -15,14 +15,13 @@ describe("N02/N03 process configuration UI idempotency", () => {
     expect(source).toContain("pendingSubmit.current = null");
     expect(source).not.toContain('headers: { "idempotency-key": crypto.randomUUID() }');
   });
-  it("preserves the three-decimal unit-price precision accepted by the API", async () => {
+  it("keeps N02 limited to process and estimated quantity", async () => {
     const source = await read("apps/web/src/process-configuration-form.tsx");
 
-    expect(source).toContain("value.toFixed(3).replace(/\\.?0+$/, \"\")");
-    expect(source).toContain("const threeDecimals");
-    expect(source).toContain('min="0.001" step="0.001"');
-    expect(source).toContain("单价最多保留 3 位，最低 0.001 元。");
-    expect(source).toContain("¥{formatUnitPrice(item.unitPrice)}");
+    expect(source).toContain("工序与预估数量");
+    expect(source).toContain("预估数量仅作安排参考，不限制工人最终上数。");
+    expect(source).not.toContain("单价（元）");
+    expect(source).not.toContain("提交 IE 审核");
   });
 
 });
