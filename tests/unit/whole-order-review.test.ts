@@ -53,6 +53,7 @@ describe("whole-order review contracts", () => {
     expect(service).toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1");
     expect(service).not.toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1 FOR UPDATE");
     expect(service).toContain('kind === "whole_order_review" || kind === "tail_pricing"');
+    expect(service).toContain('sourceAction: "rework.tail_pricing.ie_approve"');
     expect(wageMaterialization).toContain("rework.tail_pricing.ie_approve");
     expect(migration).toContain("rework_tail_temporary_wage_coefficients");
     expect(migration).toContain("rework.tail_pricing.ie_approve");

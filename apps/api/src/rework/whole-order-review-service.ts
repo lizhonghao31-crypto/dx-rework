@@ -224,6 +224,51 @@ export class WholeOrderReviewService {
         [reviewId, reworkOrderId, actor.actorId, await this.snapshot(client, order, plans)],
       );
       await client.query("UPDATE rework_orders SET status='pending_responsibility_determination',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1", [reworkOrderId, actor.actorId]);
+      const todoFoundationAvailable = this.todos
+        && await this.todoFoundationAvailable(client);
+      if (todoFoundationAvailable) {
+        await this.todos!.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `whole-order-review:${reworkOrderId}:`,
+          "Tail pricing was approved by IE",
+        );
+        const wagePeriods = await client.query<{
+          period_id: string;
+          period_version: number;
+        }>(
+          `SELECT DISTINCT period.period_id,period.period_version
+           FROM rework_wage_periods period
+           JOIN rework_wage_items item ON item.period_id=period.period_id
+           WHERE item.order_review_id=$1
+             AND period.status='pending_tail_review'
+           ORDER BY period.period_id`,
+          [reviewId],
+        );
+        for (const wagePeriod of wagePeriods.rows) {
+          await this.todos.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            `wage-tail-review:${wagePeriod.period_id}:`,
+            "Newly materialized wage facts require a fresh tail review",
+          );
+          await this.todos.actionableForUniqueDirectRole(client, actor, {
+            category: "wage_tail_review",
+            sourceEventId: eventId,
+            sourceAction: "rework.tail_pricing.ie_approve",
+            entityType: "rework_order",
+            entityId: reworkOrderId,
+            requiredRole: "tail_supervisor",
+            requiredCapability: "wage:tail_review",
+            route: {
+              routeName: "wage_period_detail",
+              entityId: wagePeriod.period_id,
+            },
+            policyKey: "finance_return_or_wage_review",
+            dedupeKey: `wage-tail-review:${wagePeriod.period_id}:${wagePeriod.period_version}`,
+          });
+        }
+      }
       return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
     });
   }
