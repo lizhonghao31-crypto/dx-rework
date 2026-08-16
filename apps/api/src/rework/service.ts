@@ -359,7 +359,9 @@ export class ReworkInitiationService {
       this.ensureVersion(current, input.expectedVersion);
       transitionReworkOrder(current.status, "pending_process_configuration");
       this.ensureComplete(current);
-      await this.ensureActiveMerchandiser(client, current.merchandiser_user_id!);
+      if (current.merchandiser_user_id) {
+        await this.ensureActiveMerchandiser(client, current.merchandiser_user_id);
+      }
       await this.ensureFactoryStillAvailable(client, factoryFromRow(current)!);
       const attachmentIds = await this.attachmentIds(client, reworkOrderId);
       await this.ensureReadyBoundAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
