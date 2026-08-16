@@ -1052,4 +1052,35 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       { category: "wage_month_close" },
     ]);
   });
+
+  it("submits the eight required N01 facts without retired manual-entry fields", async () => {
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "UAT-N01-EIGHT-FIELDS",
+      orderQuantity: 120,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      inspectionReport: n01CoreInspectionReport("八项资料提交测试款"),
+    }, randomUUID());
+
+    expect(draft.value).toMatchObject({
+      merchandiserUserId: null,
+      problemPart: null,
+      problemDescription: null,
+      reworkQuantity: null,
+    });
+
+    const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, {
+      expectedVersion: draft.value.version,
+    }, randomUUID());
+
+    expect(submitted.value).toMatchObject({
+      status: "pending_process_configuration",
+      styleNo: "UAT-N01-EIGHT-FIELDS",
+      orderQuantity: 120,
+      merchandiserUserId: null,
+      problemPart: null,
+      problemDescription: null,
+      reworkQuantity: null,
+    });
+    expect(submitted.value.reworkNo).toMatch(/^RW-\d{4}-\d{4}-\d{3,}$/);
+  });
 });
