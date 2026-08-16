@@ -663,6 +663,41 @@ export const RejectWorkReportSchema = z.object({
   reason: ReasonSchema,
 }).strict();
 export const ReviewWholeOrderSchema = z.object({ expectedOrderVersion: z.number().int().positive() }).strict();
+const FinalProcessPriceSchema = z.object({
+  configurationItemId: IdSchema,
+  unitPrice: z.number().finite().positive().refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8, "Unit price keeps at most two decimals"),
+}).strict();
+const TemporaryWageCoefficientSchema = z.object({
+  configurationItemId: IdSchema,
+  personId: IdSchema,
+  multiplier: z.number().finite().positive().max(10).refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "Multiplier keeps at most three decimals"),
+  reason: z.string().trim().min(1).max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.multiplier !== 1 && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Non-default multiplier requires a reason" });
+  }
+});
+export const SubmitTailPricingSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  prices: z.array(FinalProcessPriceSchema).min(1),
+  temporaryCoefficients: z.array(TemporaryWageCoefficientSchema),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.prices.map((item) => item.configurationItemId)).size !== value.prices.length) {
+    context.addIssue({ code: "custom", path: ["prices"], message: "Process prices cannot contain duplicates" });
+  }
+  if (new Set(value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`)).size !== value.temporaryCoefficients.length) {
+    context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
+  }
+});
+export const ReviewTailPricingSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().min(1).max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+  }
+});
 export const CreateQuantityDecreaseSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   configurationItemId: IdSchema,
@@ -724,6 +759,8 @@ export const WholeOrderReviewResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   canReview: z.boolean(),
+  canSubmitTailPricing: z.boolean(),
+  canReviewTailPricing: z.boolean(),
   canAdjustQuantity: z.boolean(),
   canConfirmQuantity: z.boolean(),
   canReviewQuantityIncrease: z.boolean(),
@@ -734,6 +771,8 @@ export const WholeOrderReviewResponseSchema = z.object({
     plannedQuantity: z.number().positive(),
     completedQuantity: z.number().nonnegative(),
     complete: z.boolean(),
+    finalUnitPrice: z.number().positive().nullable(),
+    proposedUnitPrice: z.number().positive().nullable(),
   }).strict()),
   reports: z.array(z.object({
     workReportId: IdSchema,
@@ -750,10 +789,26 @@ export const WholeOrderReviewResponseSchema = z.object({
     resubmitsWorkReportId: IdSchema.nullable(),
   }).strict()),
   adjustments: z.array(QuantityAdjustmentResponseSchema),
+  temporaryWorkers: z.array(z.object({
+    configurationItemId: IdSchema,
+    processName: z.string().min(1),
+    personId: IdSchema,
+    displayName: z.string().min(1),
+    multiplier: z.number().positive(),
+    reason: z.string().nullable(),
+  }).strict()),
+  tailPricing: z.object({
+    submissionId: IdSchema,
+    version: z.number().int().positive(),
+    status: z.enum(["pending_ie_review", "approved", "rejected"]),
+    rejectionReason: z.string().nullable(),
+  }).nullable(),
   reviewId: IdSchema.nullable(),
 });
 export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
 export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
+export type SubmitTailPricing = z.infer<typeof SubmitTailPricingSchema>;
+export type ReviewTailPricing = z.infer<typeof ReviewTailPricingSchema>;
 export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;
 export type CreateQuantityIncrease = z.infer<typeof CreateQuantityIncreaseSchema>;
 export type ConfirmQuantityIncrease = z.infer<typeof ConfirmQuantityIncreaseSchema>;

@@ -15,7 +15,12 @@ const apps: FastifyInstance[] = [];
 const orderId = "00000000-0000-4000-8000-000000000010";
 const reportId = "00000000-0000-4000-8000-000000000011";
 const adjustmentId = "00000000-0000-4000-8000-000000000012";
-const response = { reworkOrderId: orderId, reworkStatus: "pending_order_review", orderVersion: 2, canReview: true, canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false, processes: [], reports: [], adjustments: [], reviewId: null };
+const response = {
+  reworkOrderId: orderId, reworkStatus: "pending_order_review", orderVersion: 2,
+  canReview: true, canSubmitTailPricing: true, canReviewTailPricing: false,
+  canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false,
+  processes: [], reports: [], adjustments: [], temporaryWorkers: [], tailPricing: null, reviewId: null,
+};
 
 afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 
