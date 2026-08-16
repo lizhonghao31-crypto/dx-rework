@@ -397,8 +397,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       entity_id: submitted.value.reworkOrderId,
     });
 
-    // N02 - planned quantity is fed from the N01 quantity instead of a second
-    // unrelated fixture value. The business can still change it per process.
+    // N02 only records process and planned quantity; it directly enters N03.
     const n02Input = SaveProcessConfigurationSchema.parse({
       expectedOrderVersion: supplemented.value.version,
       items: [{
@@ -406,7 +405,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         processId: publicProcessId,
         plannedQuantity: submitted.value.reworkQuantity,
         pricingUnit: "piece",
-        unitPrice: 0.55,
       }],
     });
     const n02Saved = await configuration.saveDraft(
@@ -419,132 +417,34 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       reworkStatus: "pending_process_configuration",
       configuration: {
         status: "draft",
-        items: [{ plannedQuantity: 200, unitPrice: 0.55 }],
+        items: [{ plannedQuantity: 200, unitPrice: null }],
       },
     });
-    const n02Queued = await configuration.submit(
+    const n03Assigned = await configuration.submit(
       tailConfigure(),
       submitted.value.reworkOrderId,
       SubmitProcessConfigurationSchema.parse({
         expectedOrderVersion: n02Saved.value.orderVersion,
-        expectedConfigurationVersion:
-          n02Saved.value.configuration!.configurationVersion,
+        expectedConfigurationVersion: n02Saved.value.configuration!.configurationVersion,
       }),
       randomUUID(),
     );
-    expect(n02Queued.value.reworkStatus).toBe("pending_ie_review");
-    await expect(database.query(
-      `SELECT count(*)::int open_count
-       FROM rework_todos
-       WHERE dedupe_key LIKE $1 AND status IN ('pending','blocked_recipient')`,
-      [`process-config:${submitted.value.reworkOrderId}:%`],
-    )).resolves.toMatchObject({ rows: [{ open_count: 0 }] });
-
-    // N03 - deliberately reject once, return to N02, then resubmit and approve.
-    const rejected = await legacyConfiguration.review(
-      ie(),
-      submitted.value.reworkOrderId,
-      ReviewProcessConfigurationSchema.parse({
-        expectedOrderVersion: n02Queued.value.orderVersion,
-        expectedConfigurationVersion:
-          n02Queued.value.configuration!.configurationVersion,
-        decision: "rejected",
-        reason: "全链测试：退回后重新提交",
-      }),
-      randomUUID(),
-    );
-    expect(rejected.value.reworkStatus).toBe("pending_process_configuration");
-    const firstIeDedupeKey = `ie-review:${submitted.value.reworkOrderId}:${n02Queued.value.configuration!.configurationVersion}`;
-    await expect(database.query(
-      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
-      [firstIeDedupeKey],
-    )).resolves.toMatchObject({ rows: [{ status: "pending" }] });
-    await database.query(await readFile(
-      new URL("../../apps/api/migrations/0052_ie_review_todo_completion_repair.sql", import.meta.url),
-      "utf8",
-    ));
-    await expect(database.query(
-      `SELECT todo.status,event.action,event.actor_id
-       FROM rework_todos todo
-       JOIN operation_events event ON event.event_id=todo.completed_operation_event_id
-       WHERE todo.dedupe_key=$1`,
-      [firstIeDedupeKey],
-    )).resolves.toMatchObject({ rows: [{
-      status: "completed",
-      action: "todo.complete",
-      actor_id: ids.ie,
-    }] });
-    const n02Resaved = await configuration.saveDraft(
-      tailConfigure(),
-      submitted.value.reworkOrderId,
-      SaveProcessConfigurationSchema.parse({
-        expectedOrderVersion: rejected.value.orderVersion,
-        items: [{
-          source: "catalog",
-          processId: publicProcessId,
-          plannedQuantity: submitted.value.reworkQuantity,
-          pricingUnit: "piece",
-          unitPrice: 0.55,
-        }],
-      }),
-      randomUUID(),
-    );
-    const n02Requeued = await configuration.submit(
-      tailConfigure(),
-      submitted.value.reworkOrderId,
-      SubmitProcessConfigurationSchema.parse({
-        expectedOrderVersion: n02Resaved.value.orderVersion,
-        expectedConfigurationVersion:
-          n02Resaved.value.configuration!.configurationVersion,
-      }),
-      randomUUID(),
-    );
-    await expect(database.query(
-      `SELECT count(*)::int open_count
-       FROM rework_todos
-       WHERE category='process_configuration_return'
-         AND entity_id=$1
-         AND status IN ('pending','blocked_recipient')`,
-      [submitted.value.reworkOrderId],
-    )).resolves.toMatchObject({ rows: [{ open_count: 0 }] });
-    const approved = await configuration.review(
-      ie(),
-      submitted.value.reworkOrderId,
-      ReviewProcessConfigurationSchema.parse({
-        expectedOrderVersion: n02Requeued.value.orderVersion,
-        expectedConfigurationVersion:
-          n02Requeued.value.configuration!.configurationVersion,
-        decision: "approved",
-      }),
-      randomUUID(),
-    );
-    expect(approved.value.reworkStatus).toBe("pending_task_assignment");
-    await expect(database.query(
-      `SELECT todo.status,event.action,event.actor_id
-       FROM rework_todos todo
-       JOIN operation_events event ON event.event_id=todo.completed_operation_event_id
-       WHERE todo.dedupe_key=$1`,
-      [`ie-review:${submitted.value.reworkOrderId}:${n02Requeued.value.configuration!.configurationVersion}`],
-    )).resolves.toMatchObject({ rows: [{
-      status: "completed",
-      action: "todo.complete",
-      actor_id: ids.ie,
-    }] });
-    const approvedItem = approved.value.configuration!.items[0]!;
+    expect(n03Assigned.value.reworkStatus).toBe("pending_task_assignment");
+    const approvedItem = n03Assigned.value.configuration!.items[0]!;
     expect(approvedItem).toMatchObject({
       processId: publicProcessId,
       processName: "袖口返修",
       plannedQuantity: 200,
       pricingUnit: "piece",
-      unitPrice: 0.55,
+      unitPrice: null,
     });
 
-    // N04 - the task receives exactly the approved N02/N03 facts.
+    // N03 needs an explicit assignment confirmation before work starts.
     const task = await work.createTask(
       tailAssign(),
       submitted.value.reworkOrderId,
       CreateWorkTaskSchema.parse({
-        expectedOrderVersion: approved.value.orderVersion,
+        expectedOrderVersion: n03Assigned.value.orderVersion,
         configurationItemId: approvedItem.configurationItemId,
         mode: "individual",
         members: [{ personId: workerPersonId }],
@@ -554,21 +454,27 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(task.value).toMatchObject({
       processName: "袖口返修",
       plannedQuantity: 200,
-      unitPrice: 0.55,
+      unitPrice: null,
       members: [{ personId: workerPersonId, displayName: "工人" }],
     });
-
-    // N05 - two reports sum to the plan. Replay of the first request must not
-    // create a duplicate record.
-    let workView = await work.list(
+    const pendingAssignments = await work.list(
       tailAssign(),
       submitted.value.reworkOrderId,
     );
-    expect(workView.reworkStatus).toBe("in_progress");
+    const n04Started = await work.confirmAssignments(
+      tailAssign(),
+      submitted.value.reworkOrderId,
+      { expectedOrderVersion: pendingAssignments.orderVersion },
+      randomUUID(),
+    );
+    expect(n04Started.value.reworkStatus).toBe("in_progress");
+
+    // N04 has one final completion report per assigned task; no price is
+    // disclosed or calculated before N05/N06.
     const firstReportKey = randomUUID();
     const firstReportInput = CreateWorkReportSchema.parse({
-      expectedOrderVersion: workView.orderVersion,
-      actualQuantity: 120,
+      expectedOrderVersion: n04Started.value.orderVersion,
+      actualQuantity: 200,
       completedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     });
     const firstReport = await work.submitReport(
@@ -585,88 +491,76 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(firstReplay.reused).toBe(true);
     expect(firstReplay.value.workReportId).toBe(firstReport.value.workReportId);
-    expect(firstReport.value.memberShares[0]?.amount).toBe(66);
+    expect(firstReport.value.memberShares[0]?.amount).toBe(0);
 
-    workView = await work.list(tailAssign(), submitted.value.reworkOrderId);
-    expect(workView.reworkStatus).toBe("in_progress");
-    const secondReport = await work.submitReport(
-      worker(),
-      task.value.workTaskId,
-      CreateWorkReportSchema.parse({
-        expectedOrderVersion: workView.orderVersion,
-        actualQuantity: 80,
-        completedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-      }),
-      randomUUID(),
-    );
-    expect(secondReport.value.memberShares[0]?.amount).toBe(44);
-    workView = await work.list(tailAssign(), submitted.value.reworkOrderId);
-    expect(workView.reworkStatus).toBe("pending_order_review");
-    expect(workView.tasks[0]).toMatchObject({
-      submittedQuantity: 200,
-      remainingQuantity: 0,
-    });
-
-    const returnedReport = await wholeOrder.rejectReport(
-      tailAudit(),
-      firstReport.value.workReportId,
-      RejectWorkReportSchema.parse({
-        expectedOrderVersion: workView.orderVersion,
-        rejectedPersonId: workerPersonId,
-        reason: "全链测试：退回后重新上数",
-      }),
-      randomUUID(),
-    );
-    expect(returnedReport.value.reworkStatus).toBe("in_progress");
-    await expect(database.query(
-      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
-      [`work-report-return:${firstReport.value.workReportId}`],
-    )).resolves.toMatchObject({ rows: [{ status: "pending" }] });
-    const correctedReport = await work.submitReport(
-      worker(),
-      task.value.workTaskId,
-      CreateWorkReportSchema.parse({
-        expectedOrderVersion: returnedReport.value.orderVersion,
-        actualQuantity: 120,
-        completedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-        resubmitsWorkReportId: firstReport.value.workReportId,
-      }),
-      randomUUID(),
-    );
-    expect(correctedReport.value.actualQuantity).toBe(120);
-    await expect(database.query(
-      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
-      [`work-report-return:${firstReport.value.workReportId}`],
-    )).resolves.toMatchObject({ rows: [{ status: "completed" }] });
-    workView = await work.list(tailAssign(), submitted.value.reworkOrderId);
-    expect(workView.reworkStatus).toBe("pending_order_review");
-
-    // N06 - the whole-order snapshot must reconcile to N02's plan exactly.
-    const n06View = await wholeOrder.get(
+    const n05View = await wholeOrder.get(
       tailAudit(),
       submitted.value.reworkOrderId,
     );
-    expect(n06View.processes).toEqual([
-      expect.objectContaining({
+    expect(n05View).toMatchObject({
+      reworkStatus: "pending_order_review",
+      processes: [expect.objectContaining({
         configurationItemId: approvedItem.configurationItemId,
         plannedQuantity: 200,
         completedQuantity: 200,
         complete: true,
-      }),
-    ]);
-    expect(n06View.reports).toHaveLength(3);
-    const n06Approved = await wholeOrder.approve(
+        finalUnitPrice: null,
+      })],
+    });
+
+    // N05 submits final price; N06 may reject once and accepts only the
+    // resubmitted price. The approval freezes worker wages and enters N07.
+    const firstPricing = await wholeOrder.submitTailPricing(
       tailAudit(),
       submitted.value.reworkOrderId,
-      ReviewWholeOrderSchema.parse({ expectedOrderVersion: n06View.orderVersion }),
+      {
+        expectedOrderVersion: n05View.orderVersion,
+        prices: [{ configurationItemId: approvedItem.configurationItemId, unitPrice: 0.55 }],
+        temporaryCoefficients: [],
+      },
       randomUUID(),
     );
-    expect(n06Approved.value.reworkStatus)
-      .toBe("pending_responsibility_determination");
+    expect(firstPricing.value.reworkStatus).toBe("pending_ie_review");
+    const rejectedPricing = await wholeOrder.reviewTailPricing(
+      ie(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: firstPricing.value.orderVersion,
+        decision: "rejected",
+        reason: "全链测试：IE 退回尾部定价后重提",
+      },
+      randomUUID(),
+    );
+    expect(rejectedPricing.value.reworkStatus).toBe("pending_order_review");
+    const resubmittedPricing = await wholeOrder.submitTailPricing(
+      tailAudit(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: rejectedPricing.value.orderVersion,
+        prices: [{ configurationItemId: approvedItem.configurationItemId, unitPrice: 0.55 }],
+        temporaryCoefficients: [],
+      },
+      randomUUID(),
+    );
+    const n06Approved = await wholeOrder.reviewTailPricing(
+      ie(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: resubmittedPricing.value.orderVersion,
+        decision: "approved",
+      },
+      randomUUID(),
+    );
+    expect(n06Approved.value).toMatchObject({
+      reworkStatus: "pending_responsibility_determination",
+      processes: [expect.objectContaining({
+        configurationItemId: approvedItem.configurationItemId,
+        finalUnitPrice: 0.55,
+      })],
+    });
 
-    // N07 - base amount is 200 * 0.55 = 110.00.  It is split across
-    // own factory, the original processing factory, an embroidery factory,
-    // and a fabric supplier.
+    // N07 records one primary responsibility for each process. Shared
+    // responsibility remains explanatory text and does not split money.
     const n07Draft = await responsibility.saveDraft(
       production(),
       submitted.value.reworkOrderId,
@@ -677,59 +571,26 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         processes: [{
           configurationItemId: approvedItem.configurationItemId,
           multiplier: "1.000",
-          allocations: [
-            {
-              responsibilityType: "own_factory",
-              shareBps: 2500,
-              multiplier: "1.000",
-            },
-            {
-              responsibilityType: "processing_factory",
-              shareBps: 5000,
-              multiplier: "1.200",
-              supplierId: factorySupplierId,
-            },
-            {
-              responsibilityType: "embroidery_factory",
-              shareBps: 1250,
-              multiplier: "1.200",
-              supplierId: embroiderySupplierId,
-            },
-            {
-              responsibilityType: "fabric_supplier",
-              shareBps: 1250,
-              multiplier: "1.200",
-              supplierId: fabricSupplierId,
-            },
-          ],
+          allocations: [{
+            responsibilityType: "processing_factory",
+            shareBps: 10000,
+            multiplier: "1.200",
+            supplierId: factorySupplierId,
+          }],
         }],
       }),
       randomUUID(),
     );
     expect(n07Draft.value.determination).toMatchObject({
       stage: "draft",
-      calculationTotal: "126.50",
+      calculationTotal: "132.00",
       processes: [{
         baseAmount: "110.00",
-        responsibilityAmount: "126.50",
-        allocations: expect.arrayContaining([
-          expect.objectContaining({
-            responsibilityType: "own_factory",
-            roundedAmount: "27.50",
-          }),
-          expect.objectContaining({
-            responsibilityType: "processing_factory",
-            roundedAmount: "66.00",
-          }),
-          expect.objectContaining({
-            responsibilityType: "embroidery_factory",
-            roundedAmount: "16.50",
-          }),
-          expect.objectContaining({
-            responsibilityType: "fabric_supplier",
-            roundedAmount: "16.50",
-          }),
-        ]),
+        responsibilityAmount: "132.00",
+        allocations: [expect.objectContaining({
+          responsibilityType: "processing_factory",
+          roundedAmount: "132.00",
+        })],
       }],
     });
     const n07Final = await responsibility.finalize(
@@ -932,14 +793,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const wagePeriod = periods[0]!;
     expect(wagePeriod).toMatchObject({
       status: "pending_tail_review",
-      sourceItemCount: 2,
+      sourceItemCount: 1,
       personCount: 1,
       originalTotal: "110.00",
       adjustmentTotal: "0.00",
       finalTotal: "110.00",
     });
     const wageDetail = await wages.get(tailWage(), wagePeriod.periodId);
-    expect(wageDetail.items).toHaveLength(2);
+    expect(wageDetail.items).toHaveLength(1);
     expect(wageDetail.items.reduce(
       (sum, item) => sum + Number(item.payableAmount),
       0,
@@ -1012,8 +873,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(totals.rows[0]).toEqual({
       report_total: "110.00",
-      responsibility_total: "126.50",
-      own_factory_total: "27.50",
+      responsibility_total: "132.00",
+      own_factory_total: "0.00",
       external_total: "0.00",
       wage_total: "110.00",
     });

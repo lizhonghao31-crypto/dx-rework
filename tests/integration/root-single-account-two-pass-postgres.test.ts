@@ -402,12 +402,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
             processId: fixture.processId,
             plannedQuantity: fixture.plannedQuantity,
             pricingUnit: fixture.pricingUnit,
-            unitPrice: fixture.unitPrice,
           }],
         },
       );
-    let saved = await save(supplemented.version);
-    let queued = await http<ProcessConfigurationResponse>(
+    const saved = await save(supplemented.version);
+    const approved = await http<ProcessConfigurationResponse>(
       fixture.app,
       "POST",
       `/rework-orders/${draft.reworkOrderId}/process-configuration/submit`,
@@ -416,43 +415,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedConfigurationVersion: saved.configuration!.configurationVersion,
       },
     );
-
-    if (pass === 2) {
-      const rejected = await http<ProcessConfigurationResponse>(
-        fixture.app,
-        "POST",
-        `/rework-orders/${draft.reworkOrderId}/process-configuration/review`,
-        {
-          expectedOrderVersion: queued.orderVersion,
-          expectedConfigurationVersion: queued.configuration!.configurationVersion,
-          decision: "rejected",
-          reason: "Root 第二遍：同账号 IE 驳回重提",
-        },
-      );
-      expect(rejected.reworkStatus).toBe("pending_process_configuration");
-      saved = await save(rejected.orderVersion);
-      queued = await http<ProcessConfigurationResponse>(
-        fixture.app,
-        "POST",
-        `/rework-orders/${draft.reworkOrderId}/process-configuration/submit`,
-        {
-          expectedOrderVersion: saved.orderVersion,
-          expectedConfigurationVersion: saved.configuration!.configurationVersion,
-        },
-      );
-    }
-
-    const approved = await http<ProcessConfigurationResponse>(
-      fixture.app,
-      "POST",
-      `/rework-orders/${draft.reworkOrderId}/process-configuration/review`,
-      {
-        expectedOrderVersion: queued.orderVersion,
-        expectedConfigurationVersion: queued.configuration!.configurationVersion,
-        decision: "approved",
-      },
-    );
     expect(approved.reworkStatus).toBe("pending_task_assignment");
+    expect(approved.configuration!.items[0]).toMatchObject({
+      plannedQuantity: fixture.plannedQuantity,
+      unitPrice: null,
+    });
     return {
       draft,
       approved,
@@ -467,8 +434,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     itemId: string,
     orderVersion: number,
   ): Promise<void> {
-    const multiplier = pass === 1 ? "1.000" : "2.500";
-    let determination = await http<ResponsibilityDeterminationResponse>(
+    const determination = await http<ResponsibilityDeterminationResponse>(
       fixture.app,
       "POST",
       `/rework-orders/${reworkOrderId}/responsibility-determinations/drafts`,
@@ -478,44 +444,17 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         handlerUserId: fixture.rootUserId,
         processes: [{
           configurationItemId: itemId,
-          multiplier,
-          ...(pass === 2
-            ? { highMultiplierReason: "Root 第二遍：高倍率同账号确认" }
-            : {}),
-          allocations: [
-            {
-              responsibilityType: "own_factory",
-              shareBps: 5000,
-              multiplier,
-            },
-            {
-              responsibilityType: "processing_factory",
-              shareBps: 5000,
-              multiplier: pass === 1 ? "1.200" : multiplier,
-              supplierId: fixture.supplierId,
-            },
-          ],
+          multiplier: "1.000",
+          allocations: [{
+            responsibilityType: "processing_factory",
+            shareBps: 10000,
+            multiplier: "1.200",
+            supplierId: fixture.supplierId,
+          }],
         }],
       },
     );
     expect(determination.canDetermine).toBe(true);
-    expect(determination.determination?.stage).toBe("draft");
-
-    if (pass === 2) {
-      expect(determination.canConfirmHighMultiplier).toBe(true);
-      determination = await http<ResponsibilityDeterminationResponse>(
-        fixture.app,
-        "POST",
-        `/responsibility-determinations/${determination.determination!.determinationId}/high-multiplier-confirm`,
-        {
-          expectedOrderVersion: determination.orderVersion,
-          expectedCurrentDeterminationVersion: determination.determination!.version,
-          reason: "Root 第二遍：自己完成高倍率确认",
-        },
-      );
-      expect(determination.determination!.highMultiplierConfirmed).toBe(true);
-    }
-
     const finalized = await http<ResponsibilityDeterminationResponse>(
       fixture.app,
       "POST",
@@ -526,13 +465,19 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       },
     );
     expect(finalized.reworkStatus).toBe("pending_owner_signature");
-    expect(finalized.canOwnerSign).toBe(true);
-
     const signed = await http<ResponsibilityDeterminationResponse>(
       fixture.app,
       "POST",
       `/rework-orders/${reworkOrderId}/responsibility-owner-signature/approve`,
-      { expectedOrderVersion: finalized.orderVersion },
+      {
+        expectedOrderVersion: finalized.orderVersion,
+        specialMultiplierAdjustments: pass === 2 ? [{
+          configurationItemId: itemId,
+          responsibilityType: "processing_factory",
+          multiplier: "1.500",
+          reason: "Root 第二遍：保留例外供应商倍率审计快照",
+        }] : [],
+      },
     );
     expect(signed).toMatchObject({
       reworkStatus: "completed",
@@ -541,72 +486,17 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         signedBy: fixture.rootUserId,
       },
     });
-
-    const batch = await http<ExternalResponsibilityBatchResponse>(
+    if (pass === 2) {
+      expect(signed.ownerSignature?.multiplierAdjustments).toEqual([
+        expect.objectContaining({ multiplier: "1.500" }),
+      ]);
+    }
+    const batch = await http<ExternalResponsibilityBatchResponse | null>(
       fixture.app,
       "GET",
       `/rework-orders/${reworkOrderId}/external-responsibilities`,
     );
     expect(batch).toBeNull();
-    /* N09/N11 supplier deduction is intentionally not materialized by the
-       phase-1 N08 approval. The legacy end-to-end deduction scenario remains
-       below as historical reference while its own phase is deferred.
-    const externalItems = batch!.items.filter(
-      (item) => item.responsibilityType === "processing_factory",
-    );
-    expect(externalItems).toHaveLength(1);
-    const n07ProcessingFactoryAmount = finalized.determination!.processes
-      .flatMap((process) => process.allocations)
-      .find((allocation) =>
-        allocation.responsibilityType === "processing_factory"
-      )!.roundedAmount;
-    expect(externalItems[0]).toMatchObject({
-      proposedAmount: n07ProcessingFactoryAmount,
-    });
-    expect(batch!.cases).toHaveLength(1);
-    let externalCase = batch!.cases[0]!;
-    expect(externalCase).toMatchObject({
-      responsibilityType: "processing_factory",
-      supplier: { supplierId: fixture.supplierId },
-      businessHandlerUserId: fixture.rootUserId,
-      proposedDeductionAmount: n07ProcessingFactoryAmount,
-      actualDeductedAmount: "0.00",
-      remainingAmount: n07ProcessingFactoryAmount,
-      status: "deduction_follow_up",
-      caseVersion: 1,
-    });
-    expect(externalCase.items.map((item) => item.externalItemId)).toEqual(
-      externalItems.map((item) => item.externalItemId),
-    );
-    expect(externalCase.canSign).toBe(false);
-    // N08 approval materializes the N09 ledger directly. N11 records the
-    // deduction without a separate supplier or payables acceptance click.
-    expect(externalCase.canRecordDeduction).toBe(true);
-    externalCase = await http<ExternalResponsibilityCaseResponse>(
-      fixture.app,
-      "POST",
-      `/external-responsibility-cases/${externalCase.caseId}/deductions`,
-      {
-        expectedCaseVersion: externalCase.caseVersion,
-        entryType: "deduction",
-        amount: externalCase.proposedDeductionAmount,
-        deductedOn: new Date().toISOString().slice(0, 10),
-        attachmentIds: [],
-      },
-    );
-    expect(Number(externalCase.remainingAmount)).toBe(0);
-    externalCase = await http<ExternalResponsibilityCaseResponse>(
-      fixture.app,
-      "POST",
-      `/external-responsibility-cases/${externalCase.caseId}/close`,
-      {
-        expectedCaseVersion: externalCase.caseVersion,
-        result: "full",
-        evidenceAttachmentIds: [],
-      },
-    );
-    expect(externalCase.status).toBe("closed");
-    */
   }
 
   async function runWages(pass: 1 | 2, fixture: PassFixture): Promise<void> {
@@ -689,16 +579,14 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   }
 
   async function assertReconciliation(
-    pass: 1 | 2,
     fixture: PassFixture,
     orderId: string,
   ): Promise<void> {
     const result = await fixture.database.query<{
-      report_total: string;
-      responsibility_total: string;
-      own_factory_total: string;
-      external_total: string;
-      wage_original_total: string;
+      reportTotal: string;
+      responsibilityTotal: string;
+      externalTotal: string;
+      wageOriginalTotal: string;
     }>(
       `SELECT
          (SELECT COALESCE(sum(report.group_amount),0)::numeric(18,2)::text
@@ -707,45 +595,28 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
             AND NOT EXISTS(
               SELECT 1 FROM rework_work_report_rejections rejection
               WHERE rejection.work_report_id=report.work_report_id
-            )) report_total,
+            )) AS "reportTotal",
          (SELECT calculation_total::numeric(18,2)::text
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
-          ORDER BY determination_version DESC LIMIT 1) responsibility_total,
-         (SELECT COALESCE(sum(allocation.rounded_amount),0)::numeric(18,2)::text
-          FROM rework_responsibility_allocations allocation
-          JOIN rework_responsibility_determinations determination
-            ON determination.determination_id=allocation.determination_id
-          WHERE determination.rework_order_id=$1
-            AND determination.stage='finalized'
-            AND allocation.responsibility_type='own_factory'
-            AND NOT EXISTS(
-              SELECT 1 FROM rework_responsibility_determinations successor
-              WHERE successor.replaces_determination_id=determination.determination_id
-            )) own_factory_total,
+          ORDER BY determination_version DESC LIMIT 1) AS "responsibilityTotal",
          (SELECT COALESCE(sum(proposed_deduction_amount),0)::numeric(18,2)::text
           FROM rework_external_responsibility_cases
-          WHERE rework_order_id=$1 AND status<>'superseded') external_total,
+          WHERE rework_order_id=$1 AND status<>'superseded') AS "externalTotal",
          (SELECT COALESCE(sum(payable_amount),0)::numeric(18,2)::text
-          FROM rework_wage_items WHERE rework_order_id=$1) wage_original_total`,
+          FROM rework_wage_items WHERE rework_order_id=$1) AS "wageOriginalTotal"`,
       [orderId],
     );
     const totals = result.rows[0]!;
-    expect(totals.report_total).toBe(totals.wage_original_total);
-    const expectedResponsibility = pass === 1
-      ? Number(totals.report_total) * 1.1
-      : Number(totals.report_total) * 2.5;
-    expect(Number(totals.responsibility_total)).toBeCloseTo(expectedResponsibility, 2);
-    expect(
-      Number(totals.own_factory_total) + Number(totals.external_total),
-    ).toBeCloseTo(Number(totals.responsibility_total), 2);
+    expect(totals.reportTotal).toBe(totals.wageOriginalTotal);
+    expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.reportTotal) * 1.2, 2);
+    expect(totals.externalTotal).toBe("0.00");
   }
 
   async function runPass(pass: 1 | 2): Promise<void> {
     const fixture = await setup(pass);
     try {
       const { draft, approved, item } = await startOrder(pass, fixture);
-      const mode = pass === 1 ? "collective" : "individual";
       const task = await http<WorkTaskResponse>(
         fixture.app,
         "POST",
@@ -753,17 +624,24 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         {
           expectedOrderVersion: approved.orderVersion,
           configurationItemId: item.configurationItemId,
-          mode,
-          members: (pass === 1
-            ? fixture.workerPersonIds
-            : [fixture.workerPersonIds[0]!]
-          ).map((personId) => ({ personId })),
+          mode: "individual",
+          members: [{ personId: fixture.workerPersonIds[0]! }],
         },
       );
-      expect(task.canSubmitReport).toBe(true);
+      const assignments = await http<ReworkWorkTasksResponse>(
+        fixture.app,
+        "GET",
+        `/rework-orders/${draft.reworkOrderId}/work-tasks`,
+      );
+      const started = await http<ReworkWorkTasksResponse>(
+        fixture.app,
+        "POST",
+        `/rework-orders/${draft.reworkOrderId}/work-tasks/confirm`,
+        { expectedOrderVersion: assignments.orderVersion },
+      );
+      expect(started.reworkStatus).toBe("in_progress");
 
       const submitReport = async (
-        actualQuantity: number,
         resubmitsWorkReportId?: string,
       ): Promise<WorkReportResponse> => {
         const view = await http<ReworkWorkTasksResponse>(
@@ -777,19 +655,16 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           `/work-tasks/${task.workTaskId}/reports`,
           {
             expectedOrderVersion: view.orderVersion,
-            actualQuantity,
+            actualQuantity: fixture.plannedQuantity,
             completedAt: new Date(Date.now() - 60_000).toISOString(),
             ...(resubmitsWorkReportId ? { resubmitsWorkReportId } : {}),
           },
         );
       };
 
-      if (pass === 1) {
-        await submitReport(4);
-        await submitReport(6);
-      } else {
-        let report = await submitReport(1.5);
-        let review = await http<WholeOrderReviewResponse>(
+      let report = await submitReport();
+      if (pass === 2) {
+        const review = await http<WholeOrderReviewResponse>(
           fixture.app,
           "GET",
           `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
@@ -801,97 +676,50 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           {
             expectedOrderVersion: review.orderVersion,
             rejectedPersonId: fixture.workerPersonIds[0],
-            reason: "Root 第二遍：自己驳回代录并重报",
+            reason: "Root 第二遍：自己驳回后重报",
           },
         );
         expect(returned.reworkStatus).toBe("in_progress");
-        report = await submitReport(1.5, report.workReportId);
-        expect(report.status).toBe("submitted");
-
-        review = await http<WholeOrderReviewResponse>(
-          fixture.app,
-          "GET",
-          `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
-        );
-        const increase = await http<QuantityAdjustmentResponse>(
-          fixture.app,
-          "POST",
-          `/rework-orders/${draft.reworkOrderId}/quantity-adjustments/increase`,
-          {
-            expectedOrderVersion: review.orderVersion,
-            configurationItemId: item.configurationItemId,
-            newPlannedQuantity: 2,
-            reason: "Root 第二遍：自己发起数量增加",
-            expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-            requiresIeReview: true,
-          },
-        );
-        expect(increase.status).toBe("pending_merchandiser_confirmation");
-
-        review = await http<WholeOrderReviewResponse>(
-          fixture.app,
-          "GET",
-          `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
-        );
-        const confirmed = await http<QuantityAdjustmentResponse>(
-          fixture.app,
-          "POST",
-          `/quantity-adjustments/${increase.adjustmentId}/confirm`,
-          {
-            expectedOrderVersion: review.orderVersion,
-            expectedAdjustmentVersion: increase.adjustmentVersion,
-            decision: "confirmed",
-            actualCutQuantity: 2,
-            actualReturnQuantity: 2,
-            allowedMaximumQuantity: 2,
-            reason: "Root 第二遍：自己做跟单确认",
-          },
-        );
-        expect(confirmed.status).toBe("pending_ie_review");
-
-        review = await http<WholeOrderReviewResponse>(
-          fixture.app,
-          "GET",
-          `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
-        );
-        const ieApproved = await http<QuantityAdjustmentResponse>(
-          fixture.app,
-          "POST",
-          `/quantity-adjustments/${increase.adjustmentId}/ie-review`,
-          {
-            expectedOrderVersion: review.orderVersion,
-            expectedAdjustmentVersion: increase.adjustmentVersion,
-            decision: "approved",
-            reason: "Root 第二遍：自己做 IE 数量复核",
-          },
-        );
-        expect(ieApproved.status).toBe("effective");
-        await submitReport(0.5);
+        report = await submitReport(report.workReportId);
       }
+      expect(report.status).toBe("submitted");
 
-      const wholeView = await http<WholeOrderReviewResponse>(
+      const n05 = await http<WholeOrderReviewResponse>(
         fixture.app,
         "GET",
         `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
       );
-      expect(wholeView.canReview).toBe(true);
-      expect(wholeView.processes).toEqual([
-        expect.objectContaining({ complete: true }),
+      expect(n05.processes).toEqual([
+        expect.objectContaining({ complete: true, finalUnitPrice: null }),
       ]);
-      const wholeApproved = await http<WholeOrderReviewResponse>(
+      const pricing = await http<WholeOrderReviewResponse>(
         fixture.app,
         "POST",
-        `/rework-orders/${draft.reworkOrderId}/whole-order-review/approve`,
-        { expectedOrderVersion: wholeView.orderVersion },
+        `/rework-orders/${draft.reworkOrderId}/tail-pricing`,
+        {
+          expectedOrderVersion: n05.orderVersion,
+          prices: [{ configurationItemId: item.configurationItemId, unitPrice: fixture.unitPrice }],
+          temporaryCoefficients: [],
+        },
       );
-      expect(wholeApproved.reworkStatus).toBe("pending_responsibility_determination");
+      expect(pricing.reworkStatus).toBe("pending_ie_review");
+      const ieReviewed = await http<WholeOrderReviewResponse>(
+        fixture.app,
+        "POST",
+        `/rework-orders/${draft.reworkOrderId}/tail-pricing/review`,
+        {
+          expectedOrderVersion: pricing.orderVersion,
+          decision: "approved",
+        },
+      );
+      expect(ieReviewed.reworkStatus).toBe("pending_responsibility_determination");
 
       await runResponsibilityToDeduction(
         pass,
         fixture,
         draft.reworkOrderId,
         item.configurationItemId,
-        wholeApproved.orderVersion,
+        ieReviewed.orderVersion,
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",
@@ -899,10 +727,8 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       )).rows[0]?.status).toBe("completed");
 
       await runWages(pass, fixture);
-      await assertReconciliation(pass, fixture, draft.reworkOrderId);
+      await assertReconciliation(fixture, draft.reworkOrderId);
 
-      // Root itself must still have zero ordinary role assignments; otherwise
-      // this gate would not prove the global Root semantics.
       const rootRoles = await fixture.database.query(
         `SELECT 1 FROM user_role_assignments
          WHERE user_id=$1 AND revoked_at IS NULL`,
@@ -916,7 +742,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     }
   }
 
-  it("runs two fresh Root orders end-to-end through distinct normal and correction paths", async () => {
+  it("runs two fresh Root orders  it("runs two fresh Root orders end-to-end through distinct normal and correction paths", async () => {
     await runPass(1);
     await runPass(2);
   });

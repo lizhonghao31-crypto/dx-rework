@@ -263,14 +263,16 @@ export class WorkReportingService {
         `SELECT NOT EXISTS (
            SELECT 1
            FROM rework_work_tasks pending_task
-           WHERE pending_task.rework_order_id=$1 AND pending_task.status='active'
+           WHERE pending_task.rework_order_id=$1
+             AND pending_task.status='active'
+             AND pending_task.work_task_id<>$2
              AND NOT EXISTS (
                SELECT 1 FROM rework_work_reports report
                WHERE report.work_task_id=pending_task.work_task_id AND report.status='submitted'
                  AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
              )
          ) AS complete`,
-        [task.rework_order_id],
+        [task.rework_order_id, task.work_task_id],
       );
       const completedOrder = completion.rows[0]?.complete === true;
       if (input.resubmitsWorkReportId) {
