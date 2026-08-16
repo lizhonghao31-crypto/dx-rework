@@ -29,12 +29,15 @@ import {
   type PendingSubmitAttempt,
 } from "./rework-submission.js";
 import {
+  currentUploadClientProfile,
   isImageAttachment,
   currentQcUploadConcurrency,
   isSupportedAttachment,
+  measureAttachmentUploadStage,
   prepareAndUploadWithConcurrency,
   prepareAttachmentForUpload,
   sha256Hex,
+  type AttachmentUploadTimingContext,
 } from "./attachment-upload.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -418,32 +421,57 @@ export function ReworkInitiationForm({
     try {
       const uploaded = await prepareAndUploadWithConcurrency(selected, uploadConcurrency, async (file, index) => {
         setMessage(`正在准备第 ${index + 1}/${selected.length} 份订单附件…`);
-        const prepared = await prepareAttachmentForUpload(file);
-        return { file: prepared, sha256: await sha256Hex(prepared) };
-      }, async ({ file, sha256 }, _sourceFile, index): Promise<UploadedAttachment> => {
+        const baseTiming = {
+          diagnosticId: crypto.randomUUID(),
+          ...currentUploadClientProfile(),
+          originalBytes: file.size,
+          uploadBytes: file.size,
+          mimeType: file.type,
+        } satisfies AttachmentUploadTimingContext;
+        const prepared = await measureAttachmentUploadStage(
+          baseTiming,
+          "prepare",
+          () => prepareAttachmentForUpload(file),
+        );
+        const timing = { ...baseTiming, uploadBytes: prepared.size } satisfies AttachmentUploadTimingContext;
+        const sha256 = await measureAttachmentUploadStage(timing, "hash", () => sha256Hex(prepared));
+        return { file: prepared, sha256, timing };
+      }, async ({ file, sha256, timing }, _sourceFile, index): Promise<UploadedAttachment> => {
         setMessage(`正在上传第 ${index + 1}/${selected.length} 份订单附件…`);
-        const intent = await request(
-          "tools/attachments/upload-intents",
-          UploadIntentResponseSchema,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              filename: file.name,
-              mimeType: file.type,
-              sizeBytes: file.size,
-              sha256,
-            }),
-          },
+        const intent = await measureAttachmentUploadStage(
+          timing,
+          "intent",
+          () => request(
+            "tools/attachments/upload-intents",
+            UploadIntentResponseSchema,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                filename: file.name,
+                mimeType: file.type,
+                sizeBytes: file.size,
+                sha256,
+              }),
+            },
+          ),
         );
         const upload = new FormData();
         for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
         upload.append("file", file);
-        const response = await fetch(intent.uploadUrl, { method: "POST", body: upload });
+        const response = await measureAttachmentUploadStage(
+          timing,
+          "oss",
+          () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
+        );
         if (!response.ok) throw new Error(`${file.name} 上传失败`);
-        const finalized = await request(
-          `tools/attachments/${intent.attachmentId}/finalize`,
-          AttachmentResponseSchema,
-          { method: "POST" },
+        const finalized = await measureAttachmentUploadStage(
+          timing,
+          "finalize",
+          () => request(
+            `tools/attachments/${intent.attachmentId}/finalize`,
+            AttachmentResponseSchema,
+            { method: "POST" },
+          ),
         );
         const previewUrl = isImageAttachment(file) ? URL.createObjectURL(file) : null;
         if (previewUrl) previewUrls.current.push(previewUrl);
