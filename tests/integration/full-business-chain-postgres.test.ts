@@ -13,7 +13,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
-import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
@@ -92,7 +91,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     database,
     todoProjection,
   );
-  const external = new ExternalResponsibilityApplicationService(database, todoProjection);
   const wages = new WageService(database, undefined, undefined, todoProjection);
 
   const ids = {
@@ -167,16 +165,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ids.ownerOne,
     ["owner_group"],
     "responsibility:owner_sign",
-  );
-  const merchandiser = () => actor(
-    ids.merchandiser,
-    ["order_merchandiser"],
-    "external_responsibility:view",
-    "external_responsibility:sign",
-    "external_deduction:follow_up",
-    "external_responsibility:request_revision",
-    "supplier_catalog:read",
-    "tools:user",
   );
   const tailWage = () => actor(
     ids.tail,
@@ -602,11 +590,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       },
     });
 
-    const externalBatch = await external.get(
-      merchandiser(),
-      submitted.value.reworkOrderId,
+    const externalCases = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM rework_external_responsibility_cases
+       WHERE rework_order_id=$1`,
+      [submitted.value.reworkOrderId],
     );
-    expect(externalBatch).toBeNull();
+    expect(externalCases.rows[0]?.count).toBe(0);
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
