@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("business-chain UI handoff contracts", () => {
-  it("inherits N01 quantity and persists a valid N02 draft before IE submit", async () => {
+  it("inherits N01 quantity and persists a valid N02 plan before personnel assignment", async () => {
     const source = await readFile(
       "apps/web/src/process-configuration-form.tsx",
       "utf8",
@@ -15,8 +15,9 @@ describe("business-chain UI handoff contracts", () => {
     expect(source).toContain(
       "expectedConfigurationVersion: savedConfiguration.configurationVersion",
     );
-    expect(source).toContain("待当前有效 IE 审核");
-    expect(source).not.toContain("待郎飞 IE 审核");
+    expect(source).toContain("计划已提交 · 待分配人员");
+    expect(source).toContain("确认进入人员分配");
+    expect(source).not.toContain("单价（元）");
   });
 
   it("warns about another same-style order only while that order is unfinished", async () => {
@@ -28,16 +29,14 @@ describe("business-chain UI handoff contracts", () => {
     expect(form).toContain("同款号存在其他未完结单；系统仅提示，不会自动合并");
   });
 
-  it("explains N03 self-review separation before the user sends a doomed request", async () => {
+  it("keeps IE review out of N02 and leaves its business detail facts readable", async () => {
     const [form, detail] = await Promise.all([
       readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
       readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
     ]);
-    expect(form).toContain("reviewSeparationBlocked");
-    expect(form).toContain("detail.createdBy.userId");
-    expect(form).toContain("detail.processConfigurationCreatedBy?.userId");
-    expect(form).toContain("按审核分离规则不能进行 IE 自审");
-    expect(form).toContain("多人补验");
+    expect(form).not.toContain("审核通过并生效");
+    expect(form).not.toContain("单价（元）");
+    expect(form).toContain("只填工序和预估数量");
     expect(detail).toContain("processConfigurationCreatedBy");
     expect(detail).toContain("latest_configuration.created_by");
   });
@@ -95,12 +94,14 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('title: "返工执行"');
     expect(detail).toContain('title: "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
+    expect(detail).toContain('node("process_configuration", "02", "返工计划"');
+    expect(detail).toContain('node("task_assignment", "03", "分配返工人员"');
+    expect(detail).toContain('node("work_reporting", "04", "完工上数"');
+    expect(detail).toContain('node("whole_order_review", "05", "尾部确认数量与单价"');
     expect(detail).toContain('node("responsibility", "07", "责任判定与资料核验"');
     expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
     expect(detail).toContain('node("settlement_ledger", "09", "责任结算台账"');
     expect(detail).toContain('node("settlement_followup", "10", "订单完成与后续结算"');
-    expect(detail).not.toContain('node("settlement_followup", "11", "后续结算"');
-    expect(detail).toContain('node.key === "settlement_followup" && node.state !== "future"');
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {

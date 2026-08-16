@@ -28,12 +28,13 @@ describe("root superuser self-review bypass", () => {
     expect(isIeSelfReviewBlocked(root, "root-user", "root-user")).toBe(false);
   });
 
-  it("does not hide the IE review controls from root in the web form", async () => {
+  it("does not expose an IE price-review control in the N02 planning form", async () => {
     const form = await readFile(
       new URL("../../apps/web/src/process-configuration-form.tsx", import.meta.url),
       "utf8",
     );
 
-    expect(form).toContain("&& user.isRoot !== true");
+    expect(form).not.toContain("审核通过并生效");
+    expect(form).not.toContain("单价（元）");
   });
 });

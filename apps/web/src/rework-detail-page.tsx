@@ -123,9 +123,9 @@ type WorkflowStage = Readonly<{
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
-  pending_process_configuration: { label: "待配置工序", next: "下一步由尾部主管配置工序、计划数量和单价" },
-  pending_ie_review: { label: "待 IE 审核", next: "下一步由 IE 审核工序、数量、单位和单价" },
-  pending_task_assignment: { label: "待分配任务", next: "工序已生效，下一步由尾部主管分配返工人员" },
+  pending_process_configuration: { label: "待返工计划", next: "下一步由尾部主管配置工序和预估数量" },
+  pending_ie_review: { label: "旧流程待 IE 审核", next: "历史订单保留原审核记录" },
+  pending_task_assignment: { label: "待分配人员", next: "返工计划已确认，下一步由尾部主管分配返工人员" },
   in_progress: { label: "返工执行中", next: "工人按实际完成进度登记完成数量，全部完成后进入整单审核" },
   pending_order_review: { label: "待整单审核", next: "下一步由尾部主管确认整张返工单已完成" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
@@ -282,12 +282,12 @@ const buildWorkflow = (
   };
 
   const executionNodes: WorkflowNode[] = [
-    node("task_assignment", "04", "分配返工人员", "尾部主管", "待工序生效后分配", "确认工序后分配人员或调整成员。"),
-    node("work_reporting", "05", "完成数量登记", "返工人员", "待任务分配", "按实际完成进度登记数量与完成时间。"),
-    node("whole_order_review", "06", "整单完成确认", "尾部主管", "待全部工序完成", "核对全部工序后确认整张返工单完成。"),
+    node("task_assignment", "03", "分配返工人员", "尾部主管", "待返工计划确认", "为各工序分配正式工或临时工。"),
+    node("work_reporting", "04", "完工上数", "返工人员", "待人员分配", "工人一次确认最终返工数量；临时工由尾部主管代录。"),
+    node("whole_order_review", "05", "尾部确认数量与单价", "尾部主管", "待全部人员完工", "对照预估与实际，确认数量并录入最终单价。"),
   ];
   if (detail.status === "pending_quantity_adjustment_ie_review") {
-    executionNodes.push(node("quantity_adjustment", "06A", "异常数量 IE 复核", "IE 审核", "当前由 IE 处理", "异常数量调整仅在该订单实际触发时显示。"));
+    executionNodes.push(node("quantity_adjustment", "06", "IE 核价", "IE 审核", "当前由 IE 处理", "IE 仅审核最终单价；驳回必须说明原因。"));
   }
 
   return [
@@ -295,9 +295,8 @@ const buildWorkflow = (
       key: "planning",
       title: "发起与方案",
       nodes: [
-        node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记订单、问题、数量及证据后提交返工单。"),
-        node("process_configuration", "02", "配置工序与单价", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、计划数量、计价单位与单价。"),
-        node("ie_review", "03", "IE 审核方案", "IE 审核", "待工序配置后分配", "审核工序、数量、单位与单价；不允许自审。"),
+        node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
+        node("process_configuration", "02", "返工计划", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "只配置返工工序和预估数量；确认后直接进入人员分配。"),
       ],
     },
     { key: "execution", title: "返工执行", nodes: executionNodes },
