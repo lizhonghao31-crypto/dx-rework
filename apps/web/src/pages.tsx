@@ -4,7 +4,6 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Header, Kpis, Queue, Shell, TaskCard } from "./components.js";
 import { members, tasks } from "./fixtures.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
-import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 
 type LoadState =
   | { kind: "loading" }
@@ -32,7 +31,7 @@ const detailOrderId = (): string | null => {
 
 export function Detail() {
   const reworkOrderId = detailOrderId();
-  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 核验资料，N08 老板签字，N09 自动建台账，N10 统一展示订单完成与后续结算" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成整单审核后进入 N07 责任判定与资料核验", "每个责任方独立维护比例、倍率和外部供应商", "N07 提交后由老板在 N08 确认同意或直接驳回", "N08 同意后系统自动生成并完成 N09 责任结算台账", "N10 同时展示订单完成状态、工资月结与供应商实际扣款进度"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /><ExternalResponsibilityPanel reworkOrderId={reworkOrderId} /></div></Shell>;
+  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 确认主责任方，N08 老板签字完成返工业务；供应商扣款规则待周一确认" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成 IE 核价后进入 N07 责任判定", "每道工序只保留一个主责任方；共同责任只作留痕说明", "N07 提交后由老板在 N08 确认同意或直接驳回", "N08 可留存特殊外部倍率及原因；默认倍率为 1.2", "N08 同意后返工业务完成；不生成供应商计划扣款"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /></div></Shell>;
 }
 
 export function MobileForm({ piecework = false }: { piecework?: boolean }) {

@@ -500,12 +500,35 @@ export class AuthorizedResponsibilityDeterminationService {
       [orderId],
     );
     const row = result.rows[0];
-    return row ? {
+    if (!row) return null;
+    const adjustments = await client.query<{
+      configuration_item_id: string;
+      responsibility_type: "processing_factory" | "embroidery_factory" | "washing_factory" | "fabric_supplier";
+      multiplier: string;
+      reason: string;
+    }>(
+      `SELECT adjustment.configuration_item_id,adjustment.responsibility_type,
+              adjustment.multiplier::text,adjustment.reason
+       FROM rework_responsibility_owner_multiplier_adjustments adjustment
+       JOIN rework_responsibility_owner_signatures signature
+         ON signature.owner_signature_id=adjustment.owner_signature_id
+       WHERE signature.rework_order_id=$1
+         AND signature.determination_id=$2
+       ORDER BY adjustment.configuration_item_id,adjustment.responsibility_type`,
+      [orderId, row.determination_id],
+    );
+    return {
       determinationId: row.determination_id,
       decision: row.decision,
       signedBy: row.signed_by,
       signedAt: row.signed_at.toISOString(),
-    } : null;
+      multiplierAdjustments: adjustments.rows.map((adjustment) => ({
+        configurationItemId: adjustment.configuration_item_id,
+        responsibilityType: adjustment.responsibility_type,
+        multiplier: adjustment.multiplier,
+        reason: adjustment.reason,
+      })),
+    };
   }
 
   private async canDetermine(client: Queryable, actorId: string, orderId: string): Promise<boolean> {

@@ -39,16 +39,22 @@ describe("whole-order review contracts", () => {
   });
 
   it("keeps N05 price entry separate from N06 IE approval", async () => {
-    const [panel, service, migration] = await Promise.all([
+    const [panel, service, migration, wageMaterialization] = await Promise.all([
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/migrations/0060_phase1_tail_pricing_ie_review.sql", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/migrations/0062_phase1_tail_pricing_wage_materialization.sql", import.meta.url), "utf8"),
     ]);
     expect(panel).toContain("最终单价与临时工系数");
     expect(panel).toContain("提交 IE 核价");
     expect(panel).toContain("IE 仅审核尾部已经提交的价格与临时工系数；不能在这里修改");
     expect(service).toContain("async submitTailPricing");
     expect(service).toContain("async reviewTailPricing");
+    expect(service).toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1");
+    expect(service).not.toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1 FOR UPDATE");
+    expect(service).toContain('kind === "whole_order_review" || kind === "tail_pricing"');
+    expect(service).toContain('sourceAction: "rework.tail_pricing.ie_approve"');
+    expect(wageMaterialization).toContain("rework.tail_pricing.ie_approve");
     expect(migration).toContain("rework_tail_temporary_wage_coefficients");
     expect(migration).toContain("rework.tail_pricing.ie_approve");
   });
