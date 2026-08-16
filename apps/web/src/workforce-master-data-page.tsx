@@ -12,6 +12,8 @@ type Person = Readonly<{
   personType: "internal" | "temporary";
   appUserId: string | null;
   displayName: string;
+  temporaryCode: string | null;
+  temporaryRemark: string | null;
   active: boolean;
   aliases: Array<Readonly<{
     aliasId: string;
@@ -44,6 +46,7 @@ export function WorkforceMasterDataPage() {
   const [query, setQuery] = useState("");
   const [name, setName] = useState("");
   const [aliases, setAliases] = useState("");
+  const [temporaryRemark, setTemporaryRemark] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -91,11 +94,13 @@ export function WorkforceMasterDataPage() {
           personType: "temporary",
           displayName,
           aliases: aliasValues,
+          ...(temporaryRemark.trim() ? { temporaryRemark: temporaryRemark.trim() } : {}),
           reason,
         }),
       });
       setName("");
       setAliases("");
+      setTemporaryRemark("");
     }, "临时工档案已建立，可在分工上数中直接选择。 ");
   };
 
@@ -144,7 +149,7 @@ export function WorkforceMasterDataPage() {
         .join(" ");
       const type = person.personType === "temporary" ? "临时工" : "内部工人 内部员工";
       const status = person.active ? "有效 可分配" : "停用";
-      return `${person.displayName} ${activeAliases} ${type} ${status}`
+      return `${person.displayName} ${person.temporaryCode ?? ""} ${person.temporaryRemark ?? ""} ${activeAliases} ${type} ${status}`
         .toLocaleLowerCase("zh-CN")
         .includes(needle);
     });
@@ -168,9 +173,10 @@ export function WorkforceMasterDataPage() {
 
         <Surface className="workforce-create">
           <h2>新增临时工</h2>
-          <p>只登记实际作业身份；临时工不上系统，由尾部主管或授权人员代录上数。</p>
+          <p>只登记实际作业身份；临时工不上系统，由尾部主管或授权人员代录上数。系统会生成固定临时工编号，避免同名人员的工资记录混淆。</p>
           <div className="workforce-create-grid">
             <label>姓名<input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} /></label>
+            <label>区分备注（可选）<input value={temporaryRemark} maxLength={100} placeholder="如：夜班、老张介绍" onChange={(event) => setTemporaryRemark(event.target.value)} /></label>
             <label>别名（可选，用逗号分隔）<input value={aliases} onChange={(event) => setAliases(event.target.value)} /></label>
             <Button variant="primary" disabled={busy} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
           </div>
@@ -188,7 +194,7 @@ export function WorkforceMasterDataPage() {
             label="搜索人员"
             type="search"
             value={query}
-            placeholder="输入姓名、别名、临时工或停用"
+            placeholder="输入姓名、临时编号、备注、别名、临时工或停用"
             onChange={(event) => setQuery(event.target.value)}
           />
         </Surface>
@@ -216,7 +222,7 @@ export function WorkforceMasterDataPage() {
             <div className="workforce-list">
               {temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporary.map((person) => (
                 <article key={person.personId}>
-                  <div><b>{person.displayName}</b><small>临时工 · 不登录</small></div>
+                  <div><b>{person.displayName}</b><small>临时工 · 不登录 · {person.temporaryCode ?? "历史临时工待补编号"}{person.temporaryRemark ? ` · ${person.temporaryRemark}` : ""}</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "可分配" : "已停用"}</StatusBadge>
                   <div className="workforce-row-actions">
                     <Button disabled={busy || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>

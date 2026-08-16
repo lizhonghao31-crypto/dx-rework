@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type {
   CreateWorkReport,
   CreateWorkTask,
+  ConfirmWorkAssignments,
   ReworkWorkTasksResponse,
   WorkReportResponse,
   WorkTaskResponse,
@@ -21,7 +22,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 type WorkTaskRow = Readonly<{
   work_task_id: string; rework_order_id: string; configuration_item_id: string;
   task_version: number; assignment_mode: "individual" | "collective"; status: "active" | "superseded";
-  process_name: string; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string;
+  process_name: string; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string | null;
 }>;
 type PersonRow = Readonly<{ person_id: string; person_type: "internal" | "temporary"; display_name: string; app_user_id: string | null }>;
 type OrderRow = Readonly<{
@@ -66,21 +67,6 @@ const decimalNumber = (units: bigint, scale: number): number => {
   const digits = (negative ? -units : units).toString().padStart(scale + 1, "0");
   const text = scale === 0 ? digits : `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
   return Number(negative ? `-${text}` : text);
-};
-
-const compareDecimal = (left: Decimal | string | number, right: Decimal | string | number): number => {
-  const leftDecimal = typeof left === "object" ? left : decimal(left);
-  const rightDecimal = typeof right === "object" ? right : decimal(right);
-  const scale = Math.max(leftDecimal.scale, rightDecimal.scale);
-  const difference = atScale(leftDecimal, scale) - atScale(rightDecimal, scale);
-  return difference === 0n ? 0 : difference < 0n ? -1 : 1;
-};
-
-const addDecimal = (left: string | number, right: string | number): Decimal => {
-  const leftDecimal = decimal(left);
-  const rightDecimal = decimal(right);
-  const scale = Math.max(leftDecimal.scale, rightDecimal.scale);
-  return { units: atScale(leftDecimal, scale) + atScale(rightDecimal, scale), scale };
 };
 
 export const hasAtMostDecimalPlaces = (value: number, maximum: number): boolean =>
@@ -141,9 +127,9 @@ export class WorkReportingService {
     this.ensure(actor, "work:assign");
     return this.mutate(actor, "rework.work_task.assign", key, { reworkOrderId, ...input }, 201, async (client) => {
       const order = await this.order(client, reworkOrderId, true);
-      if (order.status !== "pending_task_assignment" && order.status !== "in_progress") error("当前返工单不在分配任务节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "pending_task_assignment") error("当前返工单不在分配任务节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
-      const configuration = await client.query<{ configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string }>(
+      const configuration = await client.query<{ configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string | null }>(
         `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
                 COALESCE((SELECT adjustment.requested_planned_quantity
                   FROM rework_process_quantity_adjustments adjustment
@@ -169,6 +155,19 @@ export class WorkReportingService {
         [input.members.map((member) => member.personId)],
       );
       if (people.rowCount !== input.members.length) error("存在无效、停用或未获工人上数资格的内部人员", 400, "VALIDATION_ERROR");
+      if (input.mode === "individual") {
+        const duplicate = await client.query<{ person_id: string }>(
+          `SELECT member.person_id
+           FROM rework_work_tasks task
+           JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
+           WHERE task.rework_order_id=$1 AND task.configuration_item_id=$2
+             AND task.assignment_mode='individual' AND task.status='active'
+             AND member.person_id=$3
+           FOR UPDATE`,
+          [reworkOrderId, input.configurationItemId, input.members[0]!.personId],
+        );
+        if (duplicate.rows[0]) error("该人员已经分配到这道工序", 409, "CONFLICT");
+      }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["dx_rework:work-task:" + input.configurationItemId]);
       const latest = await client.query<{ task_version: number }>(
         "SELECT task_version FROM rework_work_tasks WHERE rework_order_id=$1 AND configuration_item_id=$2 ORDER BY task_version DESC LIMIT 1 FOR UPDATE",
@@ -180,13 +179,10 @@ export class WorkReportingService {
       ) : { rows: [] as Array<{ work_task_id: string }> };
       const version = (latest.rows[0]?.task_version ?? 0) + 1;
       const taskId = randomUUID();
-      const transitionToInProgress = order.status === "pending_task_assignment";
-      const nextOrderStatus = transitionToInProgress ? "in_progress" : order.status;
-      const nextOrderVersion = order.version + 1;
       const eventId = await this.events.append(client, actor, {
         action: "rework.work_task.assign", entityType: "rework_order", entityId: reworkOrderId,
         before: { orderVersion: order.version, activeTaskId: active.rows[0]?.work_task_id ?? null },
-        after: { ...this.orderAuditState(order, nextOrderStatus, nextOrderVersion), workTaskId: taskId, configurationItemId: item.configuration_item_id, mode: input.mode, memberIds: people.rows.map((person) => person.person_id) },
+        after: { ...this.orderAuditState(order, order.status, order.version), workTaskId: taskId, configurationItemId: item.configuration_item_id, mode: input.mode, memberIds: people.rows.map((person) => person.person_id) },
       });
       await this.context(client, eventId, actor.requestId);
       if (active.rows[0]) await client.query("UPDATE rework_work_tasks SET status='superseded',superseded_at=CURRENT_TIMESTAMP WHERE work_task_id=$1", [active.rows[0].work_task_id]);
@@ -195,11 +191,45 @@ export class WorkReportingService {
         "INSERT INTO rework_work_task_members(work_task_id,person_id,display_name_snapshot,person_type_snapshot) VALUES($1,$2,$3,$4)",
         [taskId, person.person_id, person.display_name, person.person_type],
       );
-      await client.query(
-        "UPDATE rework_orders SET status=$2,updated_by=$3,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$4",
-        [reworkOrderId, nextOrderStatus, actor.actorId, order.version],
-      );
       return this.taskDto(client, taskId, actor);
+    });
+  }
+
+  async confirmAssignments(actor: TrustedActorContext, reworkOrderId: string, input: ConfirmWorkAssignments, key: string): Promise<Result<ReworkWorkTasksResponse>> {
+    this.ensure(actor, "work:assign");
+    return this.mutate(actor, "rework.work_task.assignment_confirm", key, { reworkOrderId, ...input }, 200, async (client) => {
+      const order = await this.order(client, reworkOrderId, true);
+      if (order.status !== "pending_task_assignment") error("当前返工单不在人员分配节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
+      const missing = await client.query<{ process_name: string }>(
+        `SELECT item.process_name
+         FROM rework_process_configurations configuration
+         JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
+         WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+           AND NOT EXISTS (
+             SELECT 1 FROM rework_work_tasks task
+             WHERE task.rework_order_id=$1 AND task.configuration_item_id=item.configuration_item_id AND task.status='active'
+           )`,
+        [reworkOrderId],
+      );
+      if (missing.rows.length > 0) error(`请先为以下工序分配返工人员：${missing.rows.map((row) => row.process_name).join("、")}`, 400, "VALIDATION_ERROR");
+      const eventId = await this.events.append(client, actor, {
+        action: "rework.work_task.assignment_confirm", entityType: "rework_order", entityId: reworkOrderId,
+        before: this.orderAuditState(order, order.status, order.version),
+        after: this.orderAuditState(order, "in_progress", order.version + 1),
+      });
+      await this.context(client, eventId, actor.requestId);
+      await client.query(
+        "UPDATE rework_orders SET status='in_progress',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$3",
+        [reworkOrderId, actor.actorId, order.version],
+      );
+      const tasks = await this.tasks(client, reworkOrderId, actor);
+      return {
+        reworkOrderId,
+        reworkStatus: "in_progress",
+        orderVersion: order.version + 1,
+        tasks,
+      };
     });
   }
 
@@ -219,37 +249,28 @@ export class WorkReportingService {
       const completedAt = new Date(input.completedAt);
       const now = Date.now();
       if (Number.isNaN(completedAt.getTime()) || completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
-      const used = await client.query<{ quantity: string }>(
-        "SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.rework_order_id=$1 AND report.configuration_item_id=$2 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)",
-        [task.rework_order_id, task.configuration_item_id],
+      const existing = await client.query<{ work_report_id: string; quantity: string }>(
+        `SELECT report.work_report_id,report.actual_quantity AS quantity
+         FROM rework_work_reports report
+         WHERE report.work_task_id=$1 AND report.status='submitted'
+           AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+         FOR UPDATE`,
+        [workTaskId],
       );
-      const nextQuantity = addDecimal(used.rows[0]?.quantity ?? "0", input.actualQuantity);
-      if (compareDecimal(nextQuantity, task.planned_quantity) > 0) error("上数后将超过工序计划数量", 409, "CONFLICT");
-      const groupAmount = calculateWorkAmount(input.actualQuantity, task.unit_price);
+      if (existing.rows[0]) error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
+      const groupAmount = 0;
       const completion = await client.query<{ complete: boolean }>(
         `SELECT NOT EXISTS (
            SELECT 1
-           FROM rework_process_configurations configuration
-           JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
-           LEFT JOIN (
-             SELECT configuration_item_id,sum(actual_quantity) AS quantity
-             FROM rework_work_reports report
-             WHERE rework_order_id=$1 AND status='submitted'
-               AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-             GROUP BY configuration_item_id
-           ) report ON report.configuration_item_id=item.configuration_item_id
-           LEFT JOIN LATERAL (
-             SELECT adjustment.requested_planned_quantity
-             FROM rework_process_quantity_adjustments adjustment
-             WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective'
-             ORDER BY adjustment.adjustment_version DESC LIMIT 1
-           ) plan ON true
-           WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
-             AND CASE WHEN item.configuration_item_id=$2
-               THEN COALESCE(report.quantity,0)+$3::numeric < COALESCE(plan.requested_planned_quantity,item.planned_quantity)
-               ELSE COALESCE(report.quantity,0) < COALESCE(plan.requested_planned_quantity,item.planned_quantity) END
+           FROM rework_work_tasks pending_task
+           WHERE pending_task.rework_order_id=$1 AND pending_task.status='active'
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_reports report
+               WHERE report.work_task_id=pending_task.work_task_id AND report.status='submitted'
+                 AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+             )
          ) AS complete`,
-        [task.rework_order_id, task.configuration_item_id, input.actualQuantity],
+        [task.rework_order_id],
       );
       const completedOrder = completion.rows[0]?.complete === true;
       if (input.resubmitsWorkReportId) {
@@ -263,14 +284,10 @@ export class WorkReportingService {
         if (!rejected.rows[0]) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
       }
       const reportId = randomUUID();
-      const groupMills = atScale(decimal(groupAmount), MONEY_SCALE);
-      if (groupMills < BigInt(members.length)) {
-        error("本次计件总额过低，无法按0.001元分摊给当前成员", 400, "VALIDATION_ERROR");
-      }
-      const shares = splitAmount(groupAmount, members.length);
+      const shares = members.map(() => 0);
       const event = {
         action: "rework.work_report.submit", entityType: "rework_order", entityId: task.rework_order_id,
-        before: { submittedQuantity: numberValue(used.rows[0]?.quantity ?? "0"), plannedQuantity: numberValue(task.planned_quantity) },
+        before: { submittedQuantity: 0, plannedQuantity: numberValue(task.planned_quantity) },
         after: { ...this.orderAuditState(order, completedOrder ? "pending_order_review" : order.status, completedOrder ? order.version + 1 : order.version), workReportId: reportId, workTaskId, actualQuantity: input.actualQuantity, groupAmount, memberIds: members.map((member) => member.person_id), resubmitsWorkReportId: input.resubmitsWorkReportId ?? null },
         ...(input.remark ? { reason: input.remark } : {}),
       };
@@ -391,17 +408,17 @@ export class WorkReportingService {
     const proxyTask = this.canProxyReport(actor, members);
     const supervisor = this.isSupervisor(actor);
     if (!supervisor && !ownWorker && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
-    const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.rework_order_id=$1 AND report.configuration_item_id=$2 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)", [task.rework_order_id, task.configuration_item_id]);
+    const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.work_task_id=$1 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)", [task.work_task_id]);
     const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0");
     const workerView = ownWorker && !supervisor && !proxyTask;
     const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
     return {
       workTaskId: task.work_task_id, reworkOrderId: task.rework_order_id, configurationItemId: task.configuration_item_id,
       processName: task.process_name, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
-      unitPrice: numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
-      canSubmitReport: this.canSubmitReport(actor, members),
+      unitPrice: task.unit_price === null ? null : numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
+      canSubmitReport: this.canSubmitReport(actor, members) && submittedQuantity === 0,
       members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),
-      submittedQuantity, remainingQuantity: Math.max(0, numberValue(task.planned_quantity) - submittedQuantity),
+      submittedQuantity, remainingQuantity: submittedQuantity > 0 ? 0 : numberValue(task.planned_quantity),
     };
   }
 

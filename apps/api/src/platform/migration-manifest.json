@@ -231,6 +231,10 @@
     {
       "version": "0058_phase1_n02_plan_without_price",
       "checksum": "bec64fc7ca6001c5e526ecbcba9f2824f6405e7ee29422e36e0d1d19c25190aa"
+    },
+    {
+      "version": "0059_phase1_assignment_and_final_reporting",
+      "checksum": "7959f001001cd7b52b65bb2b35c5d6eb1f36502dd3c53583aaa5e1040cf420f2"
     }
   ]
 }

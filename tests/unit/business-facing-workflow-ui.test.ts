@@ -91,19 +91,17 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain('placeholder="多个订单号用逗号分隔，例如：PO001，PO002"');
   });
 
-  it("makes worker completion entry explicit and closes reporting after completion", async () => {
+  it("keeps worker completion to one final-count action and closes reporting after everyone completes", async () => {
     const source = await read("apps/web/src/work-reporting-form.tsx");
-    expect(source).toContain("actualQuantity > task.remainingQuantity");
-    expect(source).toContain('max={String(task.remainingQuantity)}');
-    expect(source).toContain('label={`本次完成数量（${unit}）`}');
-    expect(source).toContain('label="实际完成时间"');
-    expect(source).not.toContain("全部完成剩余 {task.remainingQuantity}");
-    expect(source).toContain("task.remainingQuantity <= 0");
-    expect(source).toContain('data.reworkStatus !== "in_progress"');
-    expect(source).toContain("订单已自动流转到 N06 · 待整单审核");
+    expect(source).toContain("我已完工&上数");
+    expect(source).toContain("请输入您的返工数量");
+    expect(source).toContain("返回返工");
+    expect(source).toContain("临时工代上数");
+    expect(source).toContain("data.reworkStatus === \"in_progress\"");
+    expect(source).toContain("已流转至 N05 · 尾部确认");
     expect(source).toContain("canReviewOrder(me.user)");
-    expect(source).not.toContain('label="本次上数（${unit}）"');
-    expect(source).not.toContain('label="完工时间"');
+    expect(source).not.toContain("登记本次完成数量");
+    expect(source).not.toContain('label="实际完成时间"');
     expect(source).not.toContain('data?.reworkOrderId ?? reworkOrderId ?? "返工任务"');
     expect(source).not.toContain("share.toFixed(8)");
     expect(source).not.toContain("result.groupAmount.toFixed(8)");
@@ -129,7 +127,8 @@ describe("business-facing workflow UI", () => {
     expect(reporting).not.toContain("全部完成剩余");
     expect(processConfiguration).not.toContain("当前处理说明");
     expect(reportingService).toContain('order.status !== "in_progress"');
-    expect(reportingService).toContain('order.status !== "pending_task_assignment" && order.status !== "in_progress"');
+    expect(reportingService).toContain('order.status !== "pending_task_assignment"');
+    expect(reportingService).toContain("rework.work_task.assignment_confirm");
     expect(reviewService).toContain('order.status !== "pending_order_review"');
   });
 

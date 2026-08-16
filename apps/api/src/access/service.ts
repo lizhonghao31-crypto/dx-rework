@@ -208,6 +208,8 @@ export class AccessMasterDataService {
     personType: string;
     appUserId: string | null;
     displayName: string;
+    temporaryCode: string | null;
+    temporaryRemark: string | null;
     active: boolean;
     aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
   }>> {
@@ -216,10 +218,12 @@ export class AccessMasterDataService {
       person_type: string;
       app_user_id: string | null;
       display_name: string;
+      temporary_code: string | null;
+      temporary_remark: string | null;
       active: boolean;
       aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
     }>(
-      `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.active,
+      `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.temporary_code,p.temporary_remark,p.active,
               COALESCE(
                 jsonb_agg(
                   jsonb_build_object(
@@ -246,6 +250,8 @@ export class AccessMasterDataService {
       personType: row.person_type,
       appUserId: row.app_user_id,
       displayName: row.display_name,
+      temporaryCode: row.temporary_code,
+      temporaryRemark: row.temporary_remark,
       active: row.active,
       aliases: row.aliases,
     }));
@@ -412,6 +418,10 @@ export class AccessMasterDataService {
       }
       const personId = randomUUID();
       const appUserId = input.personType === "internal" ? input.appUserId : null;
+      const temporaryCode = input.personType === "temporary"
+        ? `TMP-${personId.replace(/-/g, "").slice(0, 8).toUpperCase()}`
+        : null;
+      const temporaryRemark = input.personType === "temporary" ? input.temporaryRemark ?? null : null;
       const aliases = input.aliases.map((alias, index) => ({
         aliasId: randomUUID(),
         alias,
@@ -425,7 +435,7 @@ export class AccessMasterDataService {
         action: "master_data.person.create",
         entityType: "business_person",
         entityId: personId,
-        after: { personType: input.personType, appUserId, displayName: input.displayName, active: true, aliases },
+        after: { personType: input.personType, appUserId, displayName: input.displayName, temporaryCode, temporaryRemark, active: true, aliases },
         reason: input.reason,
       });
       await client.query(
@@ -435,8 +445,8 @@ export class AccessMasterDataService {
         [personEventId, actor.requestId],
       );
       await client.query(
-        "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,created_by) VALUES($1,$2,$3,$4,$5)",
-        [personId, input.personType, appUserId, input.displayName, actor.actorId],
+        "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,temporary_code,temporary_remark,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
+        [personId, input.personType, appUserId, input.displayName, temporaryCode, temporaryRemark, actor.actorId],
       );
       for (const alias of aliases) {
         await client.query(
