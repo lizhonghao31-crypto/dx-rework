@@ -247,13 +247,13 @@ describe("responsibility routes", () => {
     expect(service.approveOwnerSignature).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationCapability: "responsibility:owner_sign" }),
       orderId,
-      { expectedOrderVersion: 8 },
+      { expectedOrderVersion: 8, specialMultiplierAdjustments: [] },
       "route-owner-approve",
     );
     expect(service.rejectOwnerSignature).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationCapability: "responsibility:owner_sign" }),
       orderId,
-      { expectedOrderVersion: 8 },
+      { expectedOrderVersion: 8, specialMultiplierAdjustments: [] },
       "route-owner-reject",
     );
     await app.close();

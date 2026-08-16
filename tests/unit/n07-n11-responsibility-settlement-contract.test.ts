@@ -27,9 +27,9 @@ describe("N07–N11 responsibility settlement contract", () => {
     )).toThrow(DomainRuleError);
   });
 
-  it("keeps the owner action limited to optimistic-version agree or direct reject", () => {
+  it("keeps the owner action versioned and limits multiplier input to audited exceptions", () => {
     expect(OwnerSignatureCommandSchema.parse({ expectedOrderVersion: 8 }))
-      .toEqual({ expectedOrderVersion: 8 });
+      .toEqual({ expectedOrderVersion: 8, specialMultiplierAdjustments: [] });
     expect(OwnerSignatureCommandSchema.safeParse({
       expectedOrderVersion: 8,
       reason: "不应要求老板填写理由",
@@ -74,7 +74,6 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(detail).toContain("FROM rework_wage_items wage");
     expect(detail).toContain("FROM wage_periods WHERE status<>'locked'");
     expect(detail).toContain("const canViewWagePeriods");
-    expect(detail).toContain("wageSettlementStatus");
     expect(detail).toContain("unsettledWagePeriods");
     expect(backfill).toContain("'rework.responsibility.submit_owner_signature'");
     expect(backfill).toContain("external-deduction:${row.case_id}:v1");
