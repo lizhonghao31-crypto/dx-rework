@@ -1,13 +1,55 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  measureAttachmentUploadStage,
   prepareAndUploadWithConcurrency,
   qcUploadConcurrency,
   SMALL_IMAGE_DIRECT_UPLOAD_BYTES,
   shouldCompressImageBeforeUpload,
+  type AttachmentUploadTiming,
+  type AttachmentUploadTimingContext,
 } from "../../apps/web/src/attachment-upload.js";
 
+type TimingGlobal = typeof globalThis & {
+  __DX_REWORK_UPLOAD_TIMINGS__?: AttachmentUploadTiming[];
+};
+
 describe("attachment upload pipeline", () => {
+  it("records completed and failed stages without filenames or business data", async () => {
+    const target = globalThis as TimingGlobal;
+    delete target.__DX_REWORK_UPLOAD_TIMINGS__;
+    const context: AttachmentUploadTimingContext = {
+      diagnosticId: "timing-test",
+      clientKind: "desktop",
+      networkType: "4g",
+      originalBytes: 840 * 1024,
+      uploadBytes: 840 * 1024,
+      mimeType: "image/jpeg",
+    };
+
+    await expect(measureAttachmentUploadStage(context, "oss", async () => "uploaded"))
+      .resolves.toBe("uploaded");
+    expect(target.__DX_REWORK_UPLOAD_TIMINGS__).toEqual([
+      expect.objectContaining({
+        diagnosticId: "timing-test",
+        stage: "oss",
+        status: "completed",
+        durationMs: expect.any(Number),
+      }),
+    ]);
+
+    await expect(measureAttachmentUploadStage(context, "finalize", async () => {
+      throw new Error("finalize failed");
+    })).rejects.toThrow("finalize failed");
+    expect(target.__DX_REWORK_UPLOAD_TIMINGS__?.at(-1)).toEqual(expect.objectContaining({
+      diagnosticId: "timing-test",
+      stage: "finalize",
+      status: "failed",
+      durationMs: expect.any(Number),
+    }));
+    delete target.__DX_REWORK_UPLOAD_TIMINGS__;
+  });
+
   it("uploads small images directly and only compresses larger supported images", () => {
     expect(shouldCompressImageBeforeUpload({
       type: "image/jpeg",

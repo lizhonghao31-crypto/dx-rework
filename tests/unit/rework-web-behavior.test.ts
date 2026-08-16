@@ -146,6 +146,11 @@ describe("PR-05 web behavior", () => {
     expect(helper).toContain("const MAX_IMAGE_EDGE = 2048");
     expect(helper).toContain("SMALL_IMAGE_DIRECT_UPLOAD_BYTES = 1024 * 1024");
     expect(helper).toContain("shouldCompressImageBeforeUpload(file)");
+    expect(helper).toContain("__DX_REWORK_UPLOAD_TIMINGS__");
+    expect(form).toContain('measureAttachmentUploadStage(timing, "hash"');
+    expect(form).toContain('"intent"');
+    expect(form).toContain('"oss"');
+    expect(form).toContain('"finalize"');
     expect(helper).toContain('canvas.toBlob(resolve, "image/webp", WEBP_QUALITY)');
   });
 

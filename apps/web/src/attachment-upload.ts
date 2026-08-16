@@ -15,6 +15,86 @@ const WEBP_QUALITY = 0.85;
 export const SMALL_IMAGE_DIRECT_UPLOAD_BYTES = 1024 * 1024;
 
 type NetworkInformationLike = Readonly<{ effectiveType?: string }>;
+export type AttachmentUploadStage = "prepare" | "hash" | "intent" | "oss" | "finalize";
+export type AttachmentUploadTimingContext = Readonly<{
+  diagnosticId: string;
+  clientKind: "mobile" | "desktop";
+  networkType: string;
+  originalBytes: number;
+  uploadBytes: number;
+  mimeType: string;
+}>;
+export type AttachmentUploadTiming = AttachmentUploadTimingContext & Readonly<{
+  stage: AttachmentUploadStage;
+  status: "running" | "completed" | "failed";
+  durationMs: number | null;
+  recordedAt: string;
+}>;
+
+type UploadTimingGlobal = typeof globalThis & {
+  __DX_REWORK_UPLOAD_TIMINGS__?: AttachmentUploadTiming[];
+};
+
+const timingGlobal = (): UploadTimingGlobal => globalThis as UploadTimingGlobal;
+const uploadClock = (): number => globalThis.performance?.now() ?? Date.now();
+const roundedMilliseconds = (value: number): number => Math.round(value * 10) / 10;
+
+const storeUploadTiming = (timing: AttachmentUploadTiming): void => {
+  const target = timingGlobal();
+  const current = target.__DX_REWORK_UPLOAD_TIMINGS__ ?? [];
+  const withoutCurrentStage = current.filter((entry) =>
+    entry.diagnosticId !== timing.diagnosticId || entry.stage !== timing.stage);
+  target.__DX_REWORK_UPLOAD_TIMINGS__ = [...withoutCurrentStage, timing].slice(-100);
+};
+
+export const currentUploadClientProfile = (): Pick<AttachmentUploadTimingContext, "clientKind" | "networkType"> => {
+  if (typeof navigator === "undefined") return { clientKind: "desktop", networkType: "unknown" };
+  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+  return {
+    clientKind: /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ? "mobile" : "desktop",
+    networkType: connection?.effectiveType ?? "unknown",
+  };
+};
+
+/**
+ * Keeps a bounded, filename-free diagnostic buffer on globalThis. It is
+ * intentionally invisible in the business UI and can be inspected from the
+ * browser console as `window.__DX_REWORK_UPLOAD_TIMINGS__` during UAT.
+ */
+export const measureAttachmentUploadStage = async <T>(
+  context: AttachmentUploadTimingContext,
+  stage: AttachmentUploadStage,
+  work: () => Promise<T>,
+): Promise<T> => {
+  const startedAt = uploadClock();
+  storeUploadTiming({
+    ...context,
+    stage,
+    status: "running",
+    durationMs: null,
+    recordedAt: new Date().toISOString(),
+  });
+  try {
+    const result = await work();
+    storeUploadTiming({
+      ...context,
+      stage,
+      status: "completed",
+      durationMs: roundedMilliseconds(uploadClock() - startedAt),
+      recordedAt: new Date().toISOString(),
+    });
+    return result;
+  } catch (error) {
+    storeUploadTiming({
+      ...context,
+      stage,
+      status: "failed",
+      durationMs: roundedMilliseconds(uploadClock() - startedAt),
+      recordedAt: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
 
 /**
  * A third lane eliminates the second upload wave for ordinary 3–5-photo QC
