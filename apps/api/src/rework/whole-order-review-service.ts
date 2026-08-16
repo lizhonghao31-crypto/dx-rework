@@ -129,7 +129,7 @@ export class WholeOrderReviewService {
         error("每名临时工每道工序都必须保留一个调整系数；默认填 1.0", 400, "VALIDATION_ERROR");
       }
       const pricingVersions = await client.query<{ version: number }>(
-        "SELECT COALESCE(max(pricing_version),0)::int AS version FROM rework_tail_pricing_submissions WHERE rework_order_id=$1 FOR UPDATE",
+        "SELECT COALESCE(max(pricing_version),0)::int AS version FROM rework_tail_pricing_submissions WHERE rework_order_id=$1",
         [reworkOrderId],
       );
       const version = (pricingVersions.rows[0]?.version ?? 0) + 1;

@@ -49,6 +49,8 @@ describe("whole-order review contracts", () => {
     expect(panel).toContain("IE 仅审核尾部已经提交的价格与临时工系数；不能在这里修改");
     expect(service).toContain("async submitTailPricing");
     expect(service).toContain("async reviewTailPricing");
+    expect(service).toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1");
+    expect(service).not.toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1 FOR UPDATE");
     expect(migration).toContain("rework_tail_temporary_wage_coefficients");
     expect(migration).toContain("rework.tail_pricing.ie_approve");
   });
