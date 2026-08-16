@@ -30,6 +30,9 @@ describe("wage web and xlsx delivery", () => {
     expect(detail).toContain("administrative-approve");
     expect(detail).toContain("administrative-return");
     expect(detail).toContain("export.xlsx");
+    expect(detail).toContain("supplierNameSnapshot");
+    expect(detail).toContain("temporaryWageMultiplier");
+    expect(detail).toContain("actualPayableAmount");
     expect(adjustment).toContain("ExternalEvidenceUploader");
     expect(adjustment).toContain('"idempotency-key": attempt.key');
     expect(adjustment).toContain("pendingAttempt.current = attempt");

@@ -247,9 +247,10 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       <section className="wage-grid">
         {items.map((item) => (
           <Surface key={item.wageItemId} className="wage-item-card">
-            <h2>{item.personNameSnapshot} · ¥{formatBusinessMoney(item.payableAmount)}</h2>
-            <p>{item.reworkNoSnapshot} · {item.styleNoSnapshot}</p>
-            <p>{item.processNameSnapshot} · {formatBusinessDecimal(item.actualQuantitySnapshot)} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 单价 ¥{formatBusinessDecimal(item.unitPriceSnapshot)}</p>
+            <h2>{item.personNameSnapshot} · 实际应付 ¥{formatBusinessMoney(item.actualPayableAmount)}</h2>
+            <p>{item.supplierNameSnapshot} · {item.personTypeSnapshot === "temporary" ? "临时工" : "正式工"} · {item.reworkNoSnapshot} · {item.styleNoSnapshot}</p>
+            <p>{item.processNameSnapshot} · {formatBusinessDecimal(item.actualQuantitySnapshot)} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 基础单价 ¥{formatBusinessDecimal(item.unitPriceSnapshot)}</p>
+            <p>工资系数 ×{formatBusinessDecimal(item.temporaryWageMultiplier)} · 原始金额 ¥{formatBusinessMoney(item.payableAmount)} · 调整 ¥{formatBusinessMoney(item.adjustmentAmount)}</p>
             <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 ¥{formatBusinessMoney(item.groupAmount)}</p>
             <details className="wage-calculation-detail">
               <summary>查看分摊计算</summary>

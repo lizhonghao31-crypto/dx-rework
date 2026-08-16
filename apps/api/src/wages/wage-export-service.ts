@@ -15,9 +15,9 @@ type PeriodRow = {
 };
 type ExportLine = {
   period_month: string; person_id: string; person_name: string;
-  person_type: string; rework_no: string; style_no: string;
+  person_type: string; supplier_name: string; rework_no: string; style_no: string;
   process_name: string; quantity: string; unit: string; unit_price: string;
-  assignment_mode: string; member_count: number; member_snapshot: unknown;
+  temporary_wage_multiplier: string; assignment_mode: string; member_count: number; member_snapshot: unknown;
   group_amount: string; exact_share: string; original_amount: string;
   adjustment_amount: string; final_amount: string;
 };
@@ -66,9 +66,12 @@ export class WageExportService {
       ? await this.db.query<ExportLine>(
         `SELECT period.period_month::text,lines.person_id,
           lines.person_name_snapshot person_name,lines.person_type_snapshot person_type,
+          CASE WHEN orders.processing_factory_type='own_factory' THEN '本厂'
+               ELSE COALESCE(supplier.supplier_name,'供应商资料不可用') END supplier_name,
           lines.rework_no_snapshot rework_no,lines.style_no_snapshot style_no,
           lines.process_name_snapshot process_name,lines.quantity_snapshot::text quantity,
           lines.unit_snapshot unit,lines.unit_price_snapshot::text unit_price,
+          COALESCE(coefficient.multiplier,'1.000') temporary_wage_multiplier,
           lines.assignment_mode,jsonb_array_length(lines.member_snapshot) member_count,
           lines.member_snapshot,COALESCE(item.group_amount,0)::text group_amount,
           COALESCE(item.exact_person_share,0)::text exact_share,
@@ -79,6 +82,21 @@ export class WageExportService {
          LEFT JOIN rework_wage_items item ON item.wage_item_id=COALESCE(
            lines.wage_item_id,(SELECT original_wage_item_id FROM rework_wage_adjustments
              WHERE adjustment_id=lines.adjustment_id))
+         LEFT JOIN rework_orders orders ON orders.rework_order_id=item.rework_order_id
+         LEFT JOIN current_supplier_catalog supplier
+           ON supplier.supplier_id=orders.processing_factory_supplier_id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(multiplier.multiplier,1)::numeric(8,3)::text multiplier
+           FROM rework_tail_pricing_submissions submission
+           LEFT JOIN rework_tail_temporary_wage_coefficients multiplier
+             ON multiplier.tail_pricing_submission_id=submission.tail_pricing_submission_id
+            AND multiplier.configuration_item_id=item.configuration_item_id
+            AND multiplier.person_id=item.person_id
+           WHERE submission.rework_order_id=item.rework_order_id
+             AND submission.status='approved'
+           ORDER BY submission.pricing_version DESC
+           LIMIT 1
+         ) coefficient ON true
          WHERE closure.period_id=$1
          ORDER BY lines.person_name_snapshot,lines.closure_line_id`, [periodId],
       )
@@ -89,15 +107,33 @@ export class WageExportService {
            GROUP BY original_wage_item_id)
          SELECT period.period_month::text,item.person_id,
           item.person_name_snapshot person_name,item.person_type_snapshot person_type,
+          CASE WHEN orders.processing_factory_type='own_factory' THEN '本厂'
+               ELSE COALESCE(supplier.supplier_name,'供应商资料不可用') END supplier_name,
           item.rework_no_snapshot rework_no,item.style_no_snapshot style_no,
           item.process_name_snapshot process_name,item.actual_quantity_snapshot::text quantity,
           item.pricing_unit_snapshot unit,item.unit_price_snapshot::text unit_price,
+          COALESCE(coefficient.multiplier,'1.000') temporary_wage_multiplier,
           item.assignment_mode,item.member_count,item.member_snapshot,
           item.group_amount::text group_amount,item.exact_person_share::text exact_share,
           item.payable_amount::text original_amount,COALESCE(approved.amount,0)::text adjustment_amount,
           (item.payable_amount+COALESCE(approved.amount,0))::text final_amount
          FROM rework_wage_items item JOIN rework_wage_periods period ON period.period_id=item.period_id
          LEFT JOIN approved ON approved.original_wage_item_id=item.wage_item_id
+         JOIN rework_orders orders ON orders.rework_order_id=item.rework_order_id
+         LEFT JOIN current_supplier_catalog supplier
+           ON supplier.supplier_id=orders.processing_factory_supplier_id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(multiplier.multiplier,1)::numeric(8,3)::text multiplier
+           FROM rework_tail_pricing_submissions submission
+           LEFT JOIN rework_tail_temporary_wage_coefficients multiplier
+             ON multiplier.tail_pricing_submission_id=submission.tail_pricing_submission_id
+            AND multiplier.configuration_item_id=item.configuration_item_id
+            AND multiplier.person_id=item.person_id
+           WHERE submission.rework_order_id=item.rework_order_id
+             AND submission.status='approved'
+           ORDER BY submission.pricing_version DESC
+           LIMIT 1
+         ) coefficient ON true
          WHERE item.period_id=$1 ORDER BY item.person_name_snapshot,item.created_at,item.wage_item_id`, [periodId],
       );
     const tail = period.status === "pending_tail_review" ? "待当前有效尾部主管初核" : "已完成";
@@ -105,12 +141,12 @@ export class WageExportService {
       ? "待当前有效行政复核角色复核" : "已完成";
     const detailRows: Cell[][] = [
       [period.status === "locked" ? "正式月结文件" : "未锁定预览"],
-      ["工资月份","工人稳定ID","工人姓名快照","正式工/临时工","返工单号","款号","工序","数量/工时","单位","单价","个人/集体","集体成员人数","成员快照","组总额","高精度个人份额","正式个人金额","调整金额","最终金额","尾部初核","行政复核","月结状态","锁定人","锁定时间"],
+      ["工资月份","供应商","工人稳定ID","工人姓名快照","正式工/临时工","返工单号","款号","工序","数量/工时","单位","基础单价","临时工系数","个人/集体","集体成员人数","成员快照","组总额","高精度个人份额","原始个人金额","调整金额","实际应付","尾部初核","行政复核","月结状态","锁定人","锁定时间"],
       ...lines.rows.map((line) => [
-        line.period_month.slice(0, 7),line.person_id,line.person_name,
+        line.period_month.slice(0, 7),line.supplier_name,line.person_id,line.person_name,
         businessCellValue("personType", line.person_type),
         line.rework_no,line.style_no,line.process_name,line.quantity,
-        businessCellValue("unit", line.unit),line.unit_price,
+        businessCellValue("unit", line.unit),line.unit_price,line.temporary_wage_multiplier,
         businessCellValue("assignmentMode", line.assignment_mode),line.member_count,
         JSON.stringify(translateTechnicalDetails(line.member_snapshot)),
         line.group_amount,line.exact_share,line.original_amount,line.adjustment_amount,
