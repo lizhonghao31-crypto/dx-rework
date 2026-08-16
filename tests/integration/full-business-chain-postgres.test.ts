@@ -5,9 +5,6 @@ import {
   CreateResponsibilityDraftSchema,
   CreateWorkReportSchema,
   CreateWorkTaskSchema,
-  RejectWorkReportSchema,
-  ReviewProcessConfigurationSchema,
-  ReviewWholeOrderSchema,
   SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
@@ -63,15 +60,6 @@ const n01CoreInspectionReport = (styleName: string) => ({
   disposition: "rework" as const,
 });
 
-class LegacyIeReviewTodoProjectionService extends TodoProjectionService {
-  override async completeOpenByDedupeKey(
-    ..._args: Parameters<TodoProjectionService["completeOpenByDedupeKey"]>
-  ): Promise<boolean> {
-    void _args;
-    return false;
-  }
-}
-
 runWithPostgres("current-schema N01-N11 business chain", () => {
   const schema = `full_chain_${randomUUID().replaceAll("-", "")}`;
   const adminPool = new Pool({ connectionString: databaseUrl! });
@@ -97,13 +85,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     undefined,
     undefined,
     todoProjection,
-  );
-  const legacyConfiguration = new ProcessConfigurationService(
-    database,
-    undefined,
-    undefined,
-    undefined,
-    new LegacyIeReviewTodoProjectionService(todoService),
   );
   const work = new WorkReportingService(database, undefined, undefined, todoProjection);
   const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
@@ -134,8 +115,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   let workerPersonId = "";
   let factorySupplierId = "";
-  let fabricSupplierId = "";
-  let embroiderySupplierId = "";
   let publicProcessId = "";
 
   const actor = (
@@ -300,20 +279,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       supplierName: "全链测试加工厂",
       active: true,
       changeReason: "全链验收加工厂",
-    })).supplierId;
-    fabricSupplierId = (await access.createSupplier(ownerMasterData(), {
-      supplierCode: "UATFAB01",
-      supplierType: "fabric",
-      supplierName: "全链测试面料商",
-      active: true,
-      changeReason: "全链验收面料商",
-    })).supplierId;
-    embroiderySupplierId = (await access.createSupplier(ownerMasterData(), {
-      supplierCode: "UATEMB01",
-      supplierType: "embroidery_washing",
-      supplierName: "全链测试印绣花厂",
-      active: true,
-      changeReason: "全链验收印绣花厂",
     })).supplierId;
     publicProcessId = (await access.createProcess(ownerMasterData(), {
       processCode: "UATPROC01",

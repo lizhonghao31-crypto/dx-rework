@@ -4,7 +4,6 @@ import { readFile } from "node:fs/promises";
 import { loadConfig } from "@dx-rework/config";
 import type {
   ProcessConfigurationResponse,
-  QuantityAdjustmentResponse,
   ResponsibilityDeterminationResponse,
   ReworkOrderResponse,
   ReworkWorkTasksResponse,
@@ -12,6 +11,7 @@ import type {
   WorkReportResponse,
   WorkTaskResponse,
 } from "@dx-rework/contracts";
+import type { ExternalResponsibilityBatchResponse } from "@dx-rework/contracts/external-responsibility";
 import type {
   WageAdjustment,
   WagePeriod,
@@ -742,7 +742,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     }
   }
 
-  it("runs two fresh Root orders  it("runs two fresh Root orders end-to-end through distinct normal and correction paths", async () => {
+  it("runs two fresh Root orders end-to-end through distinct normal and correction paths", async () => {
     await runPass(1);
     await runPass(2);
   });
