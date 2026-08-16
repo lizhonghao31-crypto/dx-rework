@@ -31,19 +31,13 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain('"idempotency-key": idempotencyKey');
   });
 
-  it("treats an empty responsibility share as zero without masking malformed input", async () => {
+  it("keeps N07 to one primary responsibility and carries a joint-responsibility record", async () => {
     const source = await readFile(panelUrl, "utf8");
-    expect(source).toContain('if (value === "") return 0n;');
-    expect(source).toContain("const shareTotalBps = (");
-    expect(source).toContain("if (shareTotalBps(process.allocations) !== 10000n) return false;");
-    expect(source).toContain("const total = shareTotalBps(process.allocations);");
-    expect(source).toContain('total === null ? "输入有误"');
-    expect(source).toContain(
-      '?.shareBps ?? (current ? 0 : value === "own_factory" ? 10000 : 0)',
-    );
-    expect(source).toContain(
-      "allocation.shareBps !== null && allocation.shareBps > 0n",
-    );
+    expect(source).toContain("primaryResponsibilityType");
+    expect(source).toContain("setPrimaryResponsibility");
+    expect(source).toContain('sharePercent: "100"');
+    expect(source).toContain("共同责任记录 / 修改说明（可选）");
+    expect(source).toContain("不分摊比例或金额");
   });
 
   it("does not hardcode or calculate responsibility money in the browser", async () => {

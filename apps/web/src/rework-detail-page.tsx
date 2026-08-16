@@ -304,10 +304,9 @@ const buildWorkflow = (
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("responsibility", "07", "责任判定与资料核验", "生产管理", "待整单审核后分配", "确认责任方、比例、供应商与各责任方倍率。"),
-        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板只确认整套责任事实；可确认同意或直接驳回。"),
-        node("settlement_ledger", "09", "责任结算台账", "系统", "N08 同意后自动生成", "自动生成只读责任台账，不等待会计再次确认。"),
-        node("settlement_followup", "10", "订单完成与后续结算", "系统 / 工资月结 / 供应商扣款", "N09 生成后订单自动完成", "订单完成状态与工资、供应商后续结算进度在同一处查看。"),
+        node("responsibility", "07", "责任判定", "生产管理", "待 IE 核价后分配", "每道工序只选一个主责任方；共同责任仅作留痕说明。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板可确认或驳回；特殊外部倍率在此按需留痕。"),
+        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
       ],
     },
   ];
@@ -693,7 +692,7 @@ export function ReworkDetailPage({
                 </div>
               </details>;
             })}
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 完成资料核验后，提交老板签字；N09 台账由系统自动生成。</div> : null}
+            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
           </div>
         </section>
 

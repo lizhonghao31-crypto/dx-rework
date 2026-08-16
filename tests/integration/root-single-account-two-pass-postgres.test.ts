@@ -13,10 +13,6 @@ import type {
   WorkTaskResponse,
 } from "@dx-rework/contracts";
 import type {
-  ExternalResponsibilityBatchResponse,
-  ExternalResponsibilityCaseResponse,
-} from "@dx-rework/contracts/external-responsibility";
-import type {
   WageAdjustment,
   WagePeriod,
   WagePeriodDetail,
@@ -42,7 +38,6 @@ import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aw
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageExportService } from "../../apps/api/src/wages/wage-export-service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
-import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -331,7 +326,6 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         problemPart: "袖口",
         problemDescription: `Root 单账号第 ${pass} 遍完整业务链`,
         reworkQuantity: 10,
-        inspectionReport: completeInspectionReport(),
       },
     );
     const submitted = await http<ReworkOrderResponse>(
@@ -553,7 +547,10 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       "GET",
       `/rework-orders/${reworkOrderId}/external-responsibilities`,
     );
-    expect(batch).not.toBeNull();
+    expect(batch).toBeNull();
+    /* N09/N11 supplier deduction is intentionally not materialized by the
+       phase-1 N08 approval. The legacy end-to-end deduction scenario remains
+       below as historical reference while its own phase is deferred.
     const externalItems = batch!.items.filter(
       (item) => item.responsibilityType === "processing_factory",
     );
@@ -609,6 +606,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       },
     );
     expect(externalCase.status).toBe("closed");
+    */
   }
 
   async function runWages(pass: 1 | 2, fixture: PassFixture): Promise<void> {
@@ -901,19 +899,6 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       )).rows[0]?.status).toBe("completed");
 
       await runWages(pass, fixture);
-      const settlementDetail = await fixture.businessDetail.get({
-        actorId: fixture.rootUserId,
-        actorRoles: ["root_superuser"],
-        authorizationCapability: "business:detail:read",
-        authorizationCapabilities: ["business:read_all", "wage:view", "external_responsibility:view"],
-        requestId: randomUUID(),
-      }, draft.reworkOrderId);
-      expect(settlementDetail).toMatchObject({
-        status: "completed",
-        settlementStatus: "closed",
-        wageSettlementStatus: "in_progress",
-        unsettledWagePeriods: [expect.objectContaining({ status: "ready_to_lock" })],
-      });
       await assertReconciliation(pass, fixture, draft.reworkOrderId);
 
       // Root itself must still have zero ordinary role assignments; otherwise

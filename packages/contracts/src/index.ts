@@ -873,13 +873,36 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
     decision: z.enum(["approved", "rejected"]),
     signedBy: IdSchema,
     signedAt: z.string().datetime(),
+    multiplierAdjustments: z.array(z.object({
+      configurationItemId: IdSchema,
+      responsibilityType: z.enum(["processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
+      multiplier: z.string(),
+      reason: z.string(),
+    }).strict()).default([]),
   }).strict().nullable().default(null),
   sourceProcesses: z.array(z.object({ configurationItemId: IdSchema, processName: z.string().min(1), pricingUnit: ProcessPricingUnitSchema, baseAmount: z.string() }).strict()),
   determination: z.object({ determinationId: IdSchema, version: z.number().int().positive(), stage: z.enum(["draft", "finalized"]), reason: z.string().nullable(), calculationTotal: z.string(), highMultiplierConfirmed: z.boolean(), processes: z.array(z.object({ configurationItemId: IdSchema, processName: z.string(), pricingUnit: ProcessPricingUnitSchema, multiplier: z.string(), highMultiplierReason: z.string().nullable(), baseAmount: z.string(), responsibilityAmount: z.string(), allocations: z.array(z.object({ responsibilityType: ResponsibilityTypeSchema, shareBps: z.number().int(), roundedAmount: z.string(), multiplier: z.string().default("1.000"), supplier: z.object({ supplierId: IdSchema, version: z.number().int().positive(), code: z.string(), name: z.string(), type: z.enum(["factory", "embroidery_washing", "fabric"]) }).strict().nullable().default(null) })) })) }).nullable(),
 });
+export const OwnerSpecialMultiplierAdjustmentSchema = z.object({
+  configurationItemId: IdSchema,
+  responsibilityType: z.enum(["processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
+  multiplier: ResponsibilityMultiplierSchema.refine(
+    (value) => responsibilityMultiplierScaled(value) >= 1_200n,
+    "External responsibility multiplier cannot be lower than 1.2",
+  ),
+  reason: ReasonSchema,
+}).strict();
 export const OwnerSignatureCommandSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
-}).strict();
+  // N08 only receives exceptions. Omitted rows retain the external 1.2 default.
+  specialMultiplierAdjustments: z.array(OwnerSpecialMultiplierAdjustmentSchema).default([]),
+}).strict().superRefine((value, context) => {
+  const keys = value.specialMultiplierAdjustments.map((row) => `${row.configurationItemId}:${row.responsibilityType}`);
+  if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", path: ["specialMultiplierAdjustments"], message: "A responsibility can only have one owner multiplier adjustment" });
+  value.specialMultiplierAdjustments.forEach((row, index) => {
+    if (responsibilityMultiplierScaled(row.multiplier) === 1_200n) context.addIssue({ code: "custom", path: ["specialMultiplierAdjustments", index, "multiplier"], message: "Only non-default external multipliers need to be submitted" });
+  });
+});
 export type ResponsibilityType = z.infer<typeof ResponsibilityTypeSchema>;
 export type ResponsibilitySupplierOptionsResponse = z.infer<typeof ResponsibilitySupplierOptionsResponseSchema>;
 export type CreateResponsibilityDraft = z.infer<typeof CreateResponsibilityDraftSchema>;

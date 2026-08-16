@@ -239,6 +239,10 @@
     {
       "version": "0060_phase1_tail_pricing_ie_review",
       "checksum": "64429f61766d2cc399b42477f9dbe804e8e69e86257031472079952912aa6301"
+    },
+    {
+      "version": "0061_phase1_owner_multiplier_snapshot",
+      "checksum": "f4ab81e2dd6379cfb15affd76ab7f842fb86bfd06189f05cea86ee7a06c1a584"
     }
   ]
 }

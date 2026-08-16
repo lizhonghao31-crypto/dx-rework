@@ -98,10 +98,9 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('node("task_assignment", "03", "分配返工人员"');
     expect(detail).toContain('node("work_reporting", "04", "完工上数"');
     expect(detail).toContain('node("whole_order_review", "05", "尾部确认数量与单价"');
-    expect(detail).toContain('node("responsibility", "07", "责任判定与资料核验"');
+    expect(detail).toContain('node("responsibility", "07", "责任判定"');
     expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
-    expect(detail).toContain('node("settlement_ledger", "09", "责任结算台账"');
-    expect(detail).toContain('node("settlement_followup", "10", "订单完成与后续结算"');
+    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {

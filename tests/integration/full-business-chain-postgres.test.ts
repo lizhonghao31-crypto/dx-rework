@@ -11,10 +11,6 @@ import {
   SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
-import {
-  CloseExternalDeductionCaseSchema,
-  CreateExternalDeductionEntrySchema,
-} from "@dx-rework/contracts/external-responsibility";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -29,7 +25,6 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
-import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -204,49 +199,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     "supplier_catalog:read",
     "tools:user",
   );
-  const payables = () => actor(
-    ids.factoryPayables,
-    ["factory_payables"],
-    "external_responsibility:view",
-    "external_responsibility:payables_confirm",
-    "external_deduction:follow_up",
-    "external_deduction:record",
-    "external_deduction:close",
-    "supplier_catalog:read",
-    "tools:user",
-  );
-  const embroideryMerchandiser = () => actor(
-    ids.embroideryMerchandiser,
-    ["embroidery_washing_merchandiser"],
-    "external_responsibility:view",
-    "external_responsibility:sign",
-    "external_deduction:follow_up",
-    "external_responsibility:request_revision",
-    "supplier_catalog:read",
-    "tools:user",
-  );
-  const fabricPayables = () => actor(
-    ids.fabricPayables,
-    ["fabric_payables"],
-    "external_responsibility:view",
-    "external_responsibility:payables_confirm",
-    "external_deduction:follow_up",
-    "external_deduction:record",
-    "external_deduction:close",
-    "supplier_catalog:read",
-    "tools:user",
-  );
-  const embroideryPayables = () => actor(
-    ids.embroideryPayables,
-    ["embroidery_washing_payables"],
-    "external_responsibility:view",
-    "external_responsibility:payables_confirm",
-    "external_deduction:follow_up",
-    "external_deduction:record",
-    "external_deduction:close",
-    "supplier_catalog:read",
-    "tools:user",
-  );
   const tailWage = () => actor(
     ids.tail,
     ["tail_supervisor"],
@@ -390,7 +342,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       problemPart: "袖口",
       problemDescription: "全链自动验收",
       reworkQuantity: 200,
-      inspectionReport: completeInspectionReport(),
     }, randomUUID());
     expect(draft.value).toMatchObject({
       status: "draft",
@@ -794,24 +745,49 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(n07Final.value.reworkStatus).toBe("pending_owner_signature");
     expect(n07Final.value.canOwnerSign).toBe(false);
 
-    // N08 - the owner signs the immutable N07 facts once. N09 ledger cards
-    // are generated atomically, and the main order is then complete.
+    // N08 closes the phase-1 business flow. Supplier deduction planning is
+    // intentionally deferred until its calculation basis is confirmed.
+    const adjustedProcess = n07Final.value.determination!.processes
+      .find((process) => process.allocations.some((allocation) => allocation.responsibilityType === "processing_factory"))!;
+    const adjustedExternal = {
+      configurationItemId: adjustedProcess.configurationItemId,
+      responsibilityType: "processing_factory" as const,
+    };
     const ownerSigned = await responsibility.approveOwnerSignature(
       ownerApproval(),
       submitted.value.reworkOrderId,
-      { expectedOrderVersion: n07Final.value.orderVersion },
+      {
+        expectedOrderVersion: n07Final.value.orderVersion,
+        specialMultiplierAdjustments: [{
+          ...adjustedExternal,
+          multiplier: "1.500",
+          reason: "供应商确认的特殊返工承担倍率",
+        }],
+      },
       randomUUID(),
     );
     expect(ownerSigned.value).toMatchObject({
       reworkStatus: "completed",
-      ownerSignature: { decision: "approved", signedBy: ids.ownerOne },
+      ownerSignature: {
+        decision: "approved", signedBy: ids.ownerOne,
+        multiplierAdjustments: [expect.objectContaining({
+          ...adjustedExternal, multiplier: "1.500",
+        })],
+      },
     });
 
     const externalBatch = await external.get(
       merchandiser(),
       submitted.value.reworkOrderId,
     );
-    expect(externalBatch).not.toBeNull();
+    expect(externalBatch).toBeNull();
+    expect((await database.query<{ status: string }>(
+      "SELECT status FROM rework_orders WHERE rework_order_id=$1",
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({ status: "completed" });
+
+    /* N09/N11 deduction coverage is intentionally deferred from the phase-1
+       N07/N08 path. The legacy scenario remains below as historical context.
     expect(externalBatch!.cases).toEqual(expect.arrayContaining([
       expect.objectContaining({
         responsibilityType: "processing_factory",
@@ -945,9 +921,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
+    */
 
-    // N11 - the two N05 reports materialize into one worker's wage facts after
-    // the main order has already completed at N10.
+    // Wage settlement remains independent from the closed business flow.
     // The current natural month is intentionally not force-locked: the service
     // must reach ready_to_lock and then enforce the month-end barrier. The
     // historical-month lock itself remains covered by wage-workflow-postgres.
@@ -1028,7 +1004,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
               SELECT 1 FROM rework_responsibility_determinations successor
               WHERE successor.replaces_determination_id=determination.determination_id
             )) own_factory_total,
-         (SELECT sum(proposed_deduction_amount)::numeric(18,2)::text
+         (SELECT COALESCE(sum(proposed_deduction_amount),0)::numeric(18,2)::text
           FROM rework_external_responsibility_cases WHERE rework_order_id=$1) external_total,
          (SELECT sum(payable_amount)::numeric(18,2)::text
           FROM rework_wage_items WHERE rework_order_id=$1) wage_total`,
@@ -1038,7 +1014,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       report_total: "110.00",
       responsibility_total: "126.50",
       own_factory_total: "27.50",
-      external_total: "99.00",
+      external_total: "0.00",
       wage_total: "110.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(
