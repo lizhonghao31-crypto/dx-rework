@@ -243,6 +243,10 @@
     {
       "version": "0061_phase1_owner_multiplier_snapshot",
       "checksum": "f4ab81e2dd6379cfb15affd76ab7f842fb86bfd06189f05cea86ee7a06c1a584"
+    },
+    {
+      "version": "0062_phase1_tail_pricing_wage_materialization",
+      "checksum": "33311b1e0d03b9767b5e1b54ff1f33ac71437b3044a25e29303733bd0e928280"
     }
   ]
 }

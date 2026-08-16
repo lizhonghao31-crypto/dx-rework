@@ -885,7 +885,7 @@ export class WholeOrderReviewService {
   }
 
   private async context(client: PoolClient, eventId: string, requestId: string, kind: "whole_order_review" | "quantity_adjustment" | "tail_pricing"): Promise<void> {
-    const whole = kind === "whole_order_review" ? eventId : "";
+    const whole = kind === "whole_order_review" || kind === "tail_pricing" ? eventId : "";
     const quantity = kind === "quantity_adjustment" ? eventId : "";
     await client.query(
       "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true),set_config('dx_rework.whole_order_review_event_id',$3,true),set_config('dx_rework.whole_order_review_request_id',$2,true),set_config('dx_rework.quantity_adjustment_event_id',$4,true),set_config('dx_rework.quantity_adjustment_request_id',$2,true)",
