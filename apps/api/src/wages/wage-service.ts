@@ -33,11 +33,13 @@ type ItemRow = {
   wage_item_id: string; period_id: string; order_review_id: string;
   rework_order_id: string; configuration_item_id: string; work_task_id: string;
   work_report_id: string; person_id: string; person_name_snapshot: string;
-  person_type_snapshot: "internal" | "temporary"; rework_no_snapshot: string;
+  person_type_snapshot: "internal" | "temporary"; supplier_name_snapshot: string;
+  temporary_wage_multiplier: string; rework_no_snapshot: string;
   style_no_snapshot: string; process_name_snapshot: string;
   pricing_unit_snapshot: "piece" | "hour"; unit_price_snapshot: string;
   actual_quantity_snapshot: string; assignment_mode: "individual" | "collective";
   group_amount: string; exact_person_share: string; payable_amount: string;
+  adjustment_amount: string; actual_payable_amount: string;
   fractional_remainder: string; remainder_rank: number; member_count: number;
   member_snapshot: WageItem["memberSnapshot"];
 };
@@ -150,7 +152,7 @@ export class WageService {
                 adjustment_total::text,final_total::text,locked_by,locked_at,lock_note
          FROM rework_wage_periods WHERE period_id=$1`, [periodId],
       ),
-      this.db.query<ItemRow>(`${this.itemSelect()} WHERE period_id=$1 ORDER BY person_name_snapshot,created_at,wage_item_id`, [periodId]),
+      this.db.query<ItemRow>(`${this.itemSelect()} WHERE item.period_id=$1 ORDER BY item.person_name_snapshot,item.created_at,item.wage_item_id`, [periodId]),
       this.db.query<AdjustmentRow>(`${this.adjustmentSelect()} WHERE target_period_id=$1 ORDER BY requested_at,adjustment_id`, [periodId]),
       this.db.query<ReviewRow>(
         `SELECT review_action_id,period_id,period_version_snapshot,stage,decision,
@@ -179,7 +181,7 @@ export class WageService {
 
   async item(actor: TrustedActorContext, itemId: string): Promise<WageItem> {
     await this.requireView(actor);
-    const result = await this.db.query<ItemRow>(`${this.itemSelect()} WHERE wage_item_id=$1`, [itemId]);
+    const result = await this.db.query<ItemRow>(`${this.itemSelect()} WHERE item.wage_item_id=$1`, [itemId]);
     return this.itemDto(first(result.rows, "工资明细不存在"));
   }
 
@@ -592,6 +594,8 @@ export class WageService {
       workReportId: row.work_report_id, personId: row.person_id,
       personNameSnapshot: row.person_name_snapshot,
       personTypeSnapshot: row.person_type_snapshot,
+      supplierNameSnapshot: row.supplier_name_snapshot,
+      temporaryWageMultiplier: row.temporary_wage_multiplier,
       reworkNoSnapshot: row.rework_no_snapshot, styleNoSnapshot: row.style_no_snapshot,
       processNameSnapshot: row.process_name_snapshot,
       pricingUnitSnapshot: row.pricing_unit_snapshot,
@@ -599,6 +603,7 @@ export class WageService {
       actualQuantitySnapshot: row.actual_quantity_snapshot,
       assignmentMode: row.assignment_mode, groupAmount: row.group_amount,
       exactPersonShare: row.exact_person_share, payableAmount: row.payable_amount,
+      adjustmentAmount: row.adjustment_amount, actualPayableAmount: row.actual_payable_amount,
       fractionalRemainder: row.fractional_remainder,
       remainderRank: row.remainder_rank, memberCount: row.member_count,
       memberSnapshot: row.member_snapshot,
@@ -617,14 +622,42 @@ export class WageService {
     };
   }
   private itemSelect() {
-    return `SELECT wage_item_id,period_id,order_review_id,rework_order_id,
-      configuration_item_id,work_task_id,work_report_id,person_id,
-      person_name_snapshot,person_type_snapshot,rework_no_snapshot,
-      style_no_snapshot,process_name_snapshot,pricing_unit_snapshot,
-      unit_price_snapshot::text,actual_quantity_snapshot::text,assignment_mode,
-      group_amount::text,exact_person_share::text,payable_amount::text,
-      fractional_remainder::text,remainder_rank,member_count,member_snapshot
-      FROM rework_wage_items`;
+    return `SELECT item.wage_item_id,item.period_id,item.order_review_id,item.rework_order_id,
+      item.configuration_item_id,item.work_task_id,item.work_report_id,item.person_id,
+      item.person_name_snapshot,item.person_type_snapshot,
+      CASE WHEN orders.processing_factory_type='own_factory' THEN '本厂'
+           ELSE COALESCE(supplier.supplier_name,'供应商资料不可用') END supplier_name_snapshot,
+      COALESCE(coefficient.multiplier,'1.000') temporary_wage_multiplier,
+      item.rework_no_snapshot,item.style_no_snapshot,item.process_name_snapshot,
+      item.pricing_unit_snapshot,item.unit_price_snapshot::text,
+      item.actual_quantity_snapshot::text,item.assignment_mode,
+      item.group_amount::text,item.exact_person_share::text,item.payable_amount::text,
+      COALESCE(adjustment.amount,0)::numeric(18,2)::text adjustment_amount,
+      (item.payable_amount+COALESCE(adjustment.amount,0))::numeric(18,2)::text actual_payable_amount,
+      item.fractional_remainder::text,item.remainder_rank,item.member_count,item.member_snapshot
+      FROM rework_wage_items item
+      JOIN rework_orders orders ON orders.rework_order_id=item.rework_order_id
+      LEFT JOIN current_supplier_catalog supplier
+        ON supplier.supplier_id=orders.processing_factory_supplier_id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(coefficient.multiplier,1)::numeric(8,3)::text multiplier
+        FROM rework_tail_pricing_submissions submission
+        LEFT JOIN rework_tail_temporary_wage_coefficients coefficient
+          ON coefficient.tail_pricing_submission_id=submission.tail_pricing_submission_id
+         AND coefficient.configuration_item_id=item.configuration_item_id
+         AND coefficient.person_id=item.person_id
+        WHERE submission.rework_order_id=item.rework_order_id
+          AND submission.status='approved'
+        ORDER BY submission.pricing_version DESC
+        LIMIT 1
+      ) coefficient ON true
+      LEFT JOIN LATERAL (
+        SELECT sum(adjustment.adjustment_amount)::numeric(18,2) amount
+        FROM rework_wage_adjustments adjustment
+        WHERE adjustment.original_wage_item_id=item.wage_item_id
+          AND adjustment.target_period_id=item.period_id
+          AND adjustment.status='approved'
+      ) adjustment ON true`;
   }
   private adjustmentSelect() {
     return `SELECT adjustment_id,original_wage_item_id,target_period_id,
