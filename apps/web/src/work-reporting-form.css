@@ -29,6 +29,26 @@
   min-width: 0;
 }
 
+.work-reporting-page .work-reporting-primary-action {
+  border: 2px solid var(--dx-v2-color-primary, #1677ff);
+}
+
+.work-reporting-dialog-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  padding: var(--dx-v2-space-3);
+  background: rgb(0 0 0 / 38%);
+}
+
+.work-reporting-dialog {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
 @media (max-width: 520px) {
   .work-reporting-page .whole-order-actions {
     grid-template-columns: 1fr;

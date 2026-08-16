@@ -1,6 +1,7 @@
 import {
   CreateWorkReportSchema,
   CreateWorkTaskSchema,
+  ConfirmWorkAssignmentsSchema,
   IdempotencyKeySchema,
   ReworkWorkTasksParamsSchema,
   ReworkWorkTasksResponseSchema,
@@ -107,6 +108,16 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     return WorkTaskAssignablePeopleResponseSchema.parse({ people });
   });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request, reply) => { const result = await dependencies.service.createTask(await actor(request, "assign"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId, parse(CreateWorkTaskSchema, request.body), key(request)); if (result.reused) void reply.header("idempotency-replayed", "true"); return reply.code(201).send(WorkTaskResponseSchema.parse(result.value)); });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks/confirm", async (request, reply) => {
+    const result = await dependencies.service.confirmAssignments(
+      await actor(request, "assign"),
+      parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId,
+      parse(ConfirmWorkAssignmentsSchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(201).send(ReworkWorkTasksResponseSchema.parse(result.value));
+  });
   app.post<{ Params: { workTaskId: string } }>("/work-tasks/:workTaskId/reports", async (request, reply) => {
     const input = parse(CreateWorkReportSchema, request.body);
     if (!hasAtMostDecimalPlaces(input.actualQuantity, 1)) {

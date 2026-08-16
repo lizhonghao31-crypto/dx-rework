@@ -105,7 +105,10 @@ const PersonBaseSchema = z.object({
 });
 export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
   PersonBaseSchema.extend({ personType: z.literal("internal"), appUserId: IdSchema }).strict(),
-  PersonBaseSchema.extend({ personType: z.literal("temporary") }).strict(),
+  PersonBaseSchema.extend({
+    personType: z.literal("temporary"),
+    temporaryRemark: z.string().trim().min(1).max(100).optional(),
+  }).strict(),
 ]);
 export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
 export const PersonAliasParamsSchema = z.object({ aliasId: IdSchema }).strict();
@@ -594,6 +597,9 @@ export const CreateWorkTaskSchema = z.object({
 });
 export const WorkTaskParamsSchema = z.object({ workTaskId: IdSchema }).strict();
 export const ReworkWorkTasksParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const ConfirmWorkAssignmentsSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+}).strict();
 export const CreateWorkReportSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   actualQuantity: z.number().finite().positive(),
@@ -615,7 +621,7 @@ export const WorkTaskResponseSchema = z.object({
   processName: z.string().min(1),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
-  unitPrice: z.number().positive(),
+  unitPrice: z.number().positive().nullable(),
   mode: WorkTaskModeSchema,
   version: z.number().int().positive(),
   status: z.enum(["active", "superseded"]),
@@ -631,8 +637,8 @@ export const WorkReportResponseSchema = z.object({
   actualQuantity: z.number().positive(),
   completedAt: z.string().datetime(),
   status: z.literal("submitted"),
-  groupAmount: z.number().positive().nullable(),
-  memberShares: z.array(z.object({ personId: IdSchema, amount: z.number().positive() }).strict()),
+  groupAmount: z.number().nonnegative().nullable(),
+  memberShares: z.array(z.object({ personId: IdSchema, amount: z.number().nonnegative() }).strict()),
 });
 export const ReworkWorkTasksResponseSchema = z.object({
   reworkOrderId: IdSchema,
@@ -641,6 +647,7 @@ export const ReworkWorkTasksResponseSchema = z.object({
   tasks: z.array(WorkTaskResponseSchema),
 });
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
+export type ConfirmWorkAssignments = z.infer<typeof ConfirmWorkAssignmentsSchema>;
 export type CreateWorkReport = z.infer<typeof CreateWorkReportSchema>;
 export type WorkTaskAssignablePeopleResponse = z.infer<typeof WorkTaskAssignablePeopleResponseSchema>;
 export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;

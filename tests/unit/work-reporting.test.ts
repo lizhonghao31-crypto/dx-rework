@@ -32,24 +32,25 @@ describe("work reporting monetary snapshots", () => {
     expect(canAssignWork({ businessRoles: ["worker"], capabilities: ["work:report"] })).toBe(false);
     expect(canAssignWork({ businessRoles: ["tail_supervisor"], capabilities: ["work:assign"] })).toBe(true);
     const form = await readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8");
-    expect(form).toContain("if (!assignable || !assignmentView) {");
+    expect(form).toContain("if (!assignable || !assignmentView) return;");
     expect(form).toContain("request(\"work-task-options\"");
-    expect(form).toContain('effectiveTaskMode === "task_assignment" && data && canAssign && ["pending_task_assignment", "in_progress"].includes(data.reworkStatus) && <Surface>');
-    expect(form).toContain("你的本次计件金额 ¥");
+    expect(form).toContain('effectiveTaskMode === "task_assignment" && data');
+    expect(form).toContain("我已完工&上数");
     expect(form).toContain("task.canSubmitReport");
-    expect(form).toContain("reportDrafts");
+    expect(form).toContain("reportQuantities");
     expect(form).toContain('step="0.1"');
-    expect(form).toContain("本次完成数量最多保留一位小数");
-    expect(form).toContain("当前岗位只处理整单确认或数量异常，不展示工人的个人完成登记");
+    expect(form).toContain("最多保留一位小数");
+    expect(form).toContain("当前岗位只处理尾部确认，不展示工人的个人上数");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
 
-  it("versions every task assignment so concurrent N05 personnel edits cannot silently overwrite each other", async () => {
+  it("keeps assignment as an N03 draft and version-checks the unified start action", async () => {
     const service = await readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8");
-    expect(service).toContain("const nextOrderVersion = order.version + 1;");
-    expect(service).toContain("UPDATE rework_orders SET status=$2,updated_by=$3,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$4");
-    expect(service).not.toContain("if (transitionToInProgress) await client.query");
+    expect(service).toContain("async confirmAssignments");
+    expect(service).toContain("if (order.version !== input.expectedOrderVersion)");
+    expect(service).toContain("rework.work_task.assignment_confirm");
+    expect(service).toContain("该人员已经分配到这道工序");
   });
 
   it("reuses the idempotency key only while a report payload remains unresolved", () => {
