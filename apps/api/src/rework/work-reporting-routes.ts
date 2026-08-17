@@ -30,17 +30,10 @@ const token = (request: FastifyRequest): string | undefined => request.headers.c
 const parse = <T>(schema: { safeParse(input: unknown): { success: true; data: T } | { success: false } }, input: unknown): T => { const result = schema.safeParse(input); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
 const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
-type AssignablePerson = Readonly<{
-  personId: string;
-  displayName: string;
-  personType: "internal" | "temporary";
-}>;
-
 export type WorkReportingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: WorkReportingService;
   root?: RootAuthority;
-  listAssignablePeople?: () => Promise<AssignablePerson[]>;
 }>;
 
 export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: WorkReportingHttpDependencies): void {
@@ -102,9 +95,7 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request) => ReworkWorkTasksResponseSchema.parse(await dependencies.service.list(await actor(request, "read"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId)));
   app.get("/work-task-options", async (request) => {
     const assignActor = await actor(request, "assign");
-    const people = dependencies.listAssignablePeople
-      ? await dependencies.listAssignablePeople()
-      : await dependencies.service.listAssignablePeople(assignActor);
+    const people = await dependencies.service.listAssignablePeople(assignActor);
     return WorkTaskAssignablePeopleResponseSchema.parse({ people });
   });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request, reply) => { const result = await dependencies.service.createTask(await actor(request, "assign"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId, parse(CreateWorkTaskSchema, request.body), key(request)); if (result.reused) void reply.header("idempotency-replayed", "true"); return reply.code(201).send(WorkTaskResponseSchema.parse(result.value)); });

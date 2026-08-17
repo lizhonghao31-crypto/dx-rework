@@ -128,15 +128,21 @@ describe("business-chain UI handoff contracts", () => {
   });
 
   it("keeps N04 people sourced from worker eligibility and explicit temporary-worker records", async () => {
-    const [server, workerAware, migration, app, shell] = await Promise.all([
+    const [server, workerAware, workReportingRoutes, workReportingService, migration, app, shell] = await Promise.all([
       readFile("apps/api/src/server.ts", "utf8"),
       readFile("apps/api/src/access/worker-aware-access-service.ts", "utf8"),
+      readFile("apps/api/src/rework/work-reporting-routes.ts", "utf8"),
+      readFile("apps/api/src/rework/work-reporting-service.ts", "utf8"),
       readFile("apps/api/migrations/0038_worker_person_materialization.sql", "utf8"),
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
     ]);
     expect(server).toContain("WorkerAwareAccessMasterDataService");
-    expect(server).toContain("employee.businessRoles.includes(\"worker\")");
+    expect(server).not.toContain("listAssignablePeople: async");
+    expect(workReportingRoutes).toContain("dependencies.service.listAssignablePeople(assignActor)");
+    expect(workReportingService).toContain("JOIN app_users app_user");
+    expect(workReportingService).toContain("identity.active=true");
+    expect(workReportingService).toContain("assignment.role_code='worker'");
     expect(workerAware).toContain('input.roleCode !== "worker"');
     expect(workerAware).toContain("await this.createPerson");
     expect(workerAware).toContain("await super.revokeRole");
