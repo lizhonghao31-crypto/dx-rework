@@ -27,6 +27,7 @@ describe("N08-B/N10-B external responsibility UI safety", () => {
     expect(source).toContain('kind.startsWith("close")');
     expect(source).toContain("关闭后本条扣款台账进入终局状态");
     expect(source).toContain("确认通过责任变更？通过后会生成新的 N07 判责草稿");
-    expect(source).toContain("window.confirm");
+    expect(source).toContain("await confirmInApp");
+    expect(source).not.toContain("window.confirm");
   });
 });
