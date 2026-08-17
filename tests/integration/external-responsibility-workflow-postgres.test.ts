@@ -143,7 +143,6 @@ runWithPostgres("external responsibility reviewed workflow", () => {
           customProcessName: `返查-${label}`,
           pricingUnit: "piece",
           plannedQuantity: 1,
-          unitPrice: 1,
         }],
       },
       randomUUID(),
