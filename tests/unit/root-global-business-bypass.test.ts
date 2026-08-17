@@ -135,5 +135,7 @@ describe("root global business bypass policy", () => {
     );
     expect(source).toContain("!isRootActor(actor)");
     expect(source).toContain("orderCreatedBy === actor.actorId || configurationCreatedBy === actor.actorId");
+    expect(source).toContain("if (isRootActor(actor)) return this.dto(this.database, order);");
+    expect(source).toContain("if (isRootActor(actor)) return;");
   });
 });
