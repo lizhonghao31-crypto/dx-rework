@@ -60,6 +60,7 @@ export function WorkReportingForm({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  const [isRoot, setIsRoot] = useState(false);
   const [canReadTasks, setCanReadTasks] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
 
@@ -80,9 +81,10 @@ export function WorkReportingForm({
     const load = async () => {
       const me = await request("auth/me", (value) => value as AuthMe);
       const assignable = me.status === "authorized" && canAssignWork(me.user);
+      const root = me.status === "authorized" && me.user.isRoot === true;
       const taskReadable = me.status === "authorized" && canReadWorkFacts(me.user);
       const orderReviewable = me.status === "authorized" && canReviewOrder(me.user);
-      setCanAssign(assignable); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
+      setCanAssign(assignable); setIsRoot(root); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
       const assignmentView = taskMode === "task_assignment" || (taskMode === "workspace" && loaded?.reworkStatus === "pending_task_assignment");
@@ -147,7 +149,7 @@ export function WorkReportingForm({
     : taskMode;
   const pendingTasks = data?.tasks.filter((task) => data.reworkStatus === "in_progress" && task.canSubmitReport && task.remainingQuantity > 0) ?? [];
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
-  const reportableTasks = canAssign ? temporaryTasks : pendingTasks;
+  const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;
   const allProcessesAssigned = configItems.length > 0 && configItems.every((item) => data?.tasks.some((task) => task.configurationItemId === item.configurationItemId));
 
   if (effectiveTaskMode === "whole_order_review") return <div className="mobile-page work-reporting-page">
@@ -171,9 +173,9 @@ export function WorkReportingForm({
     </>}
     {effectiveTaskMode === "work_reporting" && <>
       {data?.tasks.map((task) => <Surface key={task.workTaskId}><div className="section-title"><div><h2>{task.processName}</h2><p>返工人员：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : "warning"}>{task.remainingQuantity === 0 ? "已完工" : "返工中"}</StatusBadge></div><p>{task.remainingQuantity === 0 ? `已上数 ${task.submittedQuantity} ${task.pricingUnit === "piece" ? "件" : "小时"}` : `计划数量仅供参考：${task.plannedQuantity} ${task.pricingUnit === "piece" ? "件" : "小时"}`}</p></Surface>)}
-      {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{canAssign ? "临时工代上数" : "我已返工完成"}</h2><p>{canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{canAssign ? "临时工完工上数" : "我已完工&上数"}</Button></Surface>}
+      {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "Root 代上数" : canAssign ? "临时工代上数" : "我已返工完成"}</h2><p>{isRoot ? "可代为任意返工人员录入最终数量，供 Root 验收与纠错使用。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为完工上数" : canAssign ? "临时工完工上数" : "我已完工&上数"}</Button></Surface>}
       {data?.tasks.length === 0 && <Surface>当前暂无返工任务。</Surface>}
     </>}
-    {reportTasks && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="完工上数"><h2>{canAssign ? "请输入临时工的返工数量" : "请输入您的返工数量"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（${task.pricingUnit === "piece" ? "件" : "小时"}）`} type="number" min="0.1" step="0.1" inputMode="decimal" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
+    {reportTasks && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="完工上数"><h2>{isRoot ? "请输入代上数的返工数量" : canAssign ? "请输入临时工的返工数量" : "请输入您的返工数量"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（${task.pricingUnit === "piece" ? "件" : "小时"}）`} type="number" min="0.1" step="0.1" inputMode="decimal" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;
 }
