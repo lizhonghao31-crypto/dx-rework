@@ -203,7 +203,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     return {
       orderId: created.value.reworkOrderId,
       itemId,
-      orderVersion: queued.value.orderVersion,
+      orderVersion: reviewed.value.orderVersion,
     };
   }
 
