@@ -17,31 +17,9 @@ import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
-const migrations = [
-  "0001_platform_foundation.sql",
-  "0002_dingtalk_identity_access.sql",
-  "0003_identity_union_continuity.sql",
-  "0004_public_tools_foundation.sql",
-  "0005_access_master_data.sql",
-  "0006_rework_initiation.sql",
-  "0056_n01_digital_inspection_report.sql",
-  "0007_process_configuration_ie_review.sql",
-  "0008_worker_assignment_reporting.sql",
-  "0009_whole_order_review_quantity_adjustment.sql",
-  "0010_responsibility_determination_amount_engine.sql",
-  "0011_responsibility_authorization_handler_closure.sql",
-  "0012_responsibility_direct_delegation.sql",
-  "0013_responsibility_review_closure.sql",
-  "0014_responsibility_source_share_coverage.sql",
-  "0015_own_factory_responsibility_approval.sql",
-  "0016_responsibility_amount_contract_restore.sql",
-  "0017_external_responsibility_deduction.sql",
-  "0018_external_responsibility_review_closure.sql",
-  "0019_external_revision_seed_ordering.sql",
-  "0020_external_responsibility_codex_closure.sql",
-  "0021_external_processing_factory_override_closure.sql",
-  "0042_external_processing_factory_auto_route.sql",
-] as const;
+type MigrationManifest = {
+  migrations: Array<{ version: string }>;
+};
 
 type ReviewedOrder = {
   orderId: string;
@@ -75,6 +53,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     delegate: randomUUID(),
     payables: randomUUID(),
     production: randomUUID(),
+    root: randomUUID(),
     embroideryMerch: randomUUID(),
   };
   let workerPersonId = "";
@@ -125,6 +104,11 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     "external_responsibility:approve_revision",
     "external_responsibility:view",
     "responsibility:determine",
+  );
+  const rootActor = (capability: string) => actor(
+    ids.root,
+    ["root_superuser"],
+    capability,
   );
 
   async function createReviewedOrder(label: string): Promise<ReviewedOrder> {
@@ -267,10 +251,17 @@ runWithPostgres("external responsibility reviewed workflow", () => {
 
   beforeAll(async () => {
     await adminPool.query(`CREATE SCHEMA ${schema}`);
-    for (const migration of migrations) {
+    const manifest = JSON.parse(await readFile(
+      new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
+      "utf8",
+    )) as MigrationManifest;
+    for (const migration of manifest.migrations) {
       await database.query(
         await readFile(
-          new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
+          new URL(
+            `../../apps/api/migrations/${migration.version}.sql`,
+            import.meta.url,
+          ),
           "utf8",
         ),
       );
@@ -292,6 +283,17 @@ runWithPostgres("external responsibility reviewed workflow", () => {
         "embroidery_washing_merchandiser",
       ],
     ] as const;
+    await database.query(
+      "INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",
+      [ids.root, "Root"],
+    );
+    await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,
+         active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(), ids.root, `ding-${ids.root}`, `union-${ids.root}`],
+    );
     for (const [userId, displayName, role] of users) {
       await database.query(
         "INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",
@@ -312,6 +314,12 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       );
     }
     await access.ensureOrganizationPolicy();
+    await database.query(
+      `INSERT INTO owner_bootstrap_consumptions(
+         singleton,user_id,provider_user_id,corp_id
+       ) VALUES(true,$1,$2,'corp')`,
+      [ids.root, `ding-${ids.root}`],
+    );
     workerPersonId = (
       await access.createPerson(adminActor(), {
         personType: "internal",
@@ -336,6 +344,81 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     await database.end();
     await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await adminPool.end();
+  });
+
+  it("lets a zero-role Root complete external deduction without changing ordinary role boundaries", async () => {
+    const rootAssignments = await database.query(
+      "SELECT 1 FROM user_role_assignments WHERE user_id=$1",
+      [ids.root],
+    );
+    expect(rootAssignments.rowCount).toBe(0);
+
+    const order = await createReviewedOrder("root-deduction");
+    await finalizeExternal(order);
+    const batch = await external.get(
+      rootActor("external_responsibility:view"),
+      order.orderId,
+    );
+    const pending = batch!.cases[0]!;
+    expect(pending).toMatchObject({
+      status: "pending_payables_confirmation",
+      canPayablesConfirm: true,
+      canRecordDeduction: true,
+      canClose: false,
+    });
+
+    const accepted = await external.payablesAccept(
+      rootActor("external_responsibility:payables_confirm"),
+      pending.caseId,
+      { expectedCaseVersion: pending.caseVersion },
+      randomUUID(),
+    );
+    expect(accepted.value).toMatchObject({
+      status: "deduction_follow_up",
+      canFollowUp: true,
+      canRecordDeduction: true,
+      canClose: true,
+    });
+
+    const followed = await external.followUp(
+      rootActor("external_deduction:follow_up"),
+      pending.caseId,
+      {
+        expectedCaseVersion: accepted.value.caseVersion,
+        content: "Root automatic acceptance: deduction follow-up confirmed.",
+        attachmentIds: [],
+      },
+      randomUUID(),
+    );
+    const recorded = await external.recordDeduction(
+      rootActor("external_deduction:record"),
+      pending.caseId,
+      {
+        expectedCaseVersion: followed.value.caseVersion,
+        entryType: "deduction",
+        amount: "1.00",
+        deductedOn: "2026-08-17",
+        attachmentIds: [],
+      },
+      randomUUID(),
+    );
+    const closed = await external.close(
+      rootActor("external_deduction:close"),
+      pending.caseId,
+      {
+        expectedCaseVersion: recorded.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      },
+      randomUUID(),
+    );
+    expect(closed.value).toMatchObject({
+      status: "closed",
+      closure: {
+        result: "full",
+        actualDeductedAmount: "1.00",
+      },
+    });
   });
 
   it("runs N08-B and N10-B with exact versions while N09 ignores actual-deduction completion", async () => {
