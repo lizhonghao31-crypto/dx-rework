@@ -153,6 +153,10 @@ jobs:
         if: env.DB_REQUIRED == 'true'
         run: npm run db:migrate:check
 
+      - name: Run PostgreSQL Root audit control-boundary regressions for migration changes
+        if: env.MIGRATION_SENSITIVE == 'true'
+        run: npx vitest run tests/integration/root-self-system-admin-postgres.test.ts
+
       - name: Run PostgreSQL business chain only for deployment-sensitive changes
         if: env.DEPLOYMENT_SENSITIVE == 'true'
         run: node scripts/run-business-chain-gate.mjs
