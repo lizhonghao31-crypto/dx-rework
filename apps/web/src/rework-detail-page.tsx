@@ -11,6 +11,7 @@ import { OrderImageSupplementUploader } from "./order-image-supplement-uploader.
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
+import { promptInApp } from "./system-dialog.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./rework-detail.css";
 
@@ -739,7 +740,7 @@ function InitiationFollowUpActions({
 
   const transition = async (action: "withdraw" | "cancel") => {
     const promptText = action === "withdraw" ? "请输入撤回原因" : "请输入取消原因";
-    const reason = window.prompt(promptText);
+    const reason = await promptInApp(promptText);
     if (!reason?.trim()) return;
     setBusyAction(action);
     try {

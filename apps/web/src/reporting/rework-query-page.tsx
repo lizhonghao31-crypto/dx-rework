@@ -3,6 +3,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
+import { confirmInApp } from "../system-dialog.js";
 import { deleteReworkOrder, loadReworkOrders, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
 import { ManagementOrderCard } from "./management-order-card.js";
 import type { AuthorizedUser } from "../auth.js";
@@ -58,9 +59,9 @@ export function ReworkQueryPage() {
       .catch(() => { if (mounted) setIsRoot(false); });
     return () => { mounted = false; };
   }, []);
-  const remove = (order: ManagementReworkRow) => {
+  const remove = async (order: ManagementReworkRow): Promise<void> => {
     const name = order.reworkNo ?? order.reworkOrderId;
-    if (!window.confirm(`确认删除 ${name} 吗？删除后将从业务与报表入口隐藏，并关闭相关待办。`)) return;
+    if (!(await confirmInApp(`确认删除 ${name} 吗？删除后将从业务与报表入口隐藏，并关闭相关待办。`))) return;
     setDeletingOrderId(order.reworkOrderId);
     setDeleteError("");
     void deleteReworkOrder(order.reworkOrderId)

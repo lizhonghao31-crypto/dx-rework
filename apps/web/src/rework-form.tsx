@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { FactorySearch } from "./factory-search.js";
 import { HistorySearchInput } from "./history-search-input.js";
+import { confirmInApp, promptInApp } from "./system-dialog.js";
 import {
   createEmptyInspectionReport,
   InspectionReportStepOne,
@@ -332,7 +333,7 @@ export function ReworkInitiationForm({
 
   const submit = async () => {
     if (!isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
-    if (!window.confirm("确认提交返工单？")) return;
+    if (!(await confirmInApp("确认提交返工单？"))) return;
     setBusy(true);
     try {
       const submitted = await executeReworkSubmit(
@@ -376,7 +377,7 @@ export function ReworkInitiationForm({
 
   const transition = async (action: "withdraw" | "cancel") => {
     if (!order || !isReworkFormMutationAllowed({ busy, uploading, restoringDraft })) return;
-    const reason = window.prompt(action === "withdraw" ? "请输入撤回原因" : "请输入取消原因");
+    const reason = await promptInApp(action === "withdraw" ? "请输入撤回原因" : "请输入取消原因");
     if (!reason?.trim()) return;
     setBusy(true);
     const body = { expectedVersion: order.version, reason: reason.trim() };

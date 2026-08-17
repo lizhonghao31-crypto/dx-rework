@@ -4,6 +4,7 @@ import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
+import { confirmInApp, promptInApp } from "./system-dialog.js";
 import "./employee-access.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -131,10 +132,10 @@ export function EmployeeAccessPage() {
       : assignableRoles[0]?.roleCode ?? "";
   };
 
-  const requireReason = (employee: EmployeeAccessEmployee, action: string): string => {
+  const requireReason = async (employee: EmployeeAccessEmployee, action: string): Promise<string> => {
     const existing = reason(employee.userId);
     if (existing) return existing;
-    const entered = window.prompt(`${action}前请输入操作原因`, "")?.trim() ?? "";
+    const entered = (await promptInApp(`${action}前请输入操作原因`, ""))?.trim() ?? "";
     if (!entered) return "";
     setReasonByUser((current) => ({ ...current, [employee.userId]: entered }));
     return entered;
@@ -143,12 +144,12 @@ export function EmployeeAccessPage() {
   const sync = () => void mutate("sync", () =>
     json("employee-access/directory/sync", { method: "POST" }));
 
-  const grant = (employee: EmployeeAccessEmployee, selected: string) => {
+  const grant = async (employee: EmployeeAccessEmployee, selected: string): Promise<void> => {
     if (!selected) {
       setError("请先选择要授予的角色。");
       return;
     }
-    const why = requireReason(employee, "授予角色");
+    const why = await requireReason(employee, "授予角色");
     if (!why) return;
     void mutate(`grant:${employee.userId}`, () =>
       json(`employee-access/employees/${employee.userId}/roles`, {
@@ -157,10 +158,10 @@ export function EmployeeAccessPage() {
       }));
   };
 
-  const revoke = (employee: EmployeeAccessEmployee, assignmentId: string, roleCode: string) => {
-    const why = requireReason(employee, "撤销角色");
+  const revoke = async (employee: EmployeeAccessEmployee, assignmentId: string, roleCode: string): Promise<void> => {
+    const why = await requireReason(employee, "撤销角色");
     if (!why) return;
-    if (!window.confirm(`确认撤销 ${employee.displayName} 的 ${roleName(roleCode)}？`)) return;
+    if (!(await confirmInApp(`确认撤销 ${employee.displayName} 的 ${roleName(roleCode)}？`))) return;
     void mutate(`revoke:${assignmentId}`, () =>
       json(`employee-access/assignments/${assignmentId}`, {
         method: "DELETE",
@@ -168,11 +169,11 @@ export function EmployeeAccessPage() {
       }));
   };
 
-  const changeAccess = (employee: EmployeeAccessEmployee, action: "disable" | "restore") => {
+  const changeAccess = async (employee: EmployeeAccessEmployee, action: "disable" | "restore"): Promise<void> => {
     const label = action === "disable" ? "停用访问" : "恢复访问";
-    const why = requireReason(employee, label);
+    const why = await requireReason(employee, label);
     if (!why) return;
-    if (!window.confirm(`确认${action === "disable" ? "停用" : "恢复"} ${employee.displayName} 的系统访问？`)) return;
+    if (!(await confirmInApp(`确认${action === "disable" ? "停用" : "恢复"} ${employee.displayName} 的系统访问？`))) return;
     void mutate(`${action}:${employee.userId}`, () =>
       json(`employee-access/employees/${employee.userId}/${action}`, {
         method: "POST",
@@ -274,21 +275,21 @@ export function EmployeeAccessPage() {
                           || !employee.active
                           || !employee.employed
                           || !employee.enabled}
-                        onClick={() => grant(employee, selected)}
+                        onClick={() => void grant(employee, selected)}
                       >
                         授予角色
                       </Button>
                       {employee.enabled ? (
                         <Button
                           disabled={Boolean(busy) || wouldDisableLastOwner || protectedTargetLocked}
-                          onClick={() => changeAccess(employee, "disable")}
+                          onClick={() => void changeAccess(employee, "disable")}
                         >
                           停用访问
                         </Button>
                       ) : (
                         <Button
                           disabled={Boolean(busy) || !employee.active || !employee.employed || protectedTargetLocked}
-                          onClick={() => changeAccess(employee, "restore")}
+                          onClick={() => void changeAccess(employee, "restore")}
                         >
                           恢复访问
                         </Button>
@@ -309,7 +310,7 @@ export function EmployeeAccessPage() {
                               disabled={Boolean(busy)
                                 || (PROTECTED_ROLES.has(history.roleCode) && me?.isRoot !== true)
                                 || (history.roleCode === "owner_group" && wouldDisableLastOwner)}
-                              onClick={() => revoke(employee, history.assignmentId, history.roleCode)}
+                              onClick={() => void revoke(employee, history.assignmentId, history.roleCode)}
                             >
                               撤销
                             </Button>

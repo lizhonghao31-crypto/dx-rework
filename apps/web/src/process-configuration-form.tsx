@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { SearchSelect } from "./search-select.js";
+import { confirmInApp } from "./system-dialog.js";
 import "./process-configuration-form.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -288,7 +289,7 @@ export function ProcessConfigurationForm({
   const submit = async () => {
     if (!response || !editable || busy) return;
     if (!validateCurrentForm()) return;
-    if (!window.confirm("确认提交当前工序和预估数量，并进入人员分配？")) return;
+    if (!(await confirmInApp("确认提交当前工序和预估数量，并进入人员分配？"))) return;
     setBusy(true);
     try {
       let attempt = pendingSubmit.current;

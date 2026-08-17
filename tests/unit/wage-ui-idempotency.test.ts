@@ -27,6 +27,7 @@ describe("N11 wage UI retry safety", () => {
     const source = await read("apps/web/src/wages/wage-period-detail.tsx");
 
     expect(source).toContain("确认锁定本月工资？锁定后本月不能直接修改，只能在后续未锁定月份生成调整。");
-    expect(source).toContain("window.confirm");
+    expect(source).toContain("await confirmInApp");
+    expect(source).not.toContain("window.confirm");
   });
 });

@@ -7,6 +7,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { confirmInApp, promptInApp } from "./system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
@@ -134,7 +135,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       setMessage(`增加后的计划数量必须大于当前计划 ${process.plannedQuantity}。`);
       return;
     }
-    const reason = window.prompt(kind === "decrease" ? "请填写减少计划数量的业务原因" : "请填写增加计划数量的业务原因");
+    const reason = await promptInApp(kind === "decrease" ? "请填写减少计划数量的业务原因" : "请填写增加计划数量的业务原因");
     if (!reason?.trim()) return;
     try {
       const body = kind === "decrease"
@@ -147,7 +148,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
 
   const reject = async (reportId: string, personId: string | null) => {
     if (!data) return;
-    const reason = window.prompt("请填写驳回这条完成记录的原因");
+    const reason = await promptInApp("请填写驳回这条完成记录的原因");
     if (!reason?.trim()) return;
     try {
       await call("work-reports/" + reportId + "/reject", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion, rejectedPersonId: personId, reason });
@@ -155,15 +156,15 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完成记录驳回失败"); }
   };
 
-  const confirm = async (adjustmentId: string, decision: "confirmed" | "rejected") => {
+  const confirmAdjustment = async (adjustmentId: string, decision: "confirmed" | "rejected") => {
     if (!data) return;
     const adjustment = data.adjustments.find((item) => item.adjustmentId === adjustmentId);
     if (!adjustment) return;
-    const cutInput = window.prompt("确认实裁数量", String(adjustment.requestedPlannedQuantity));
+    const cutInput = await promptInApp("确认实裁数量", String(adjustment.requestedPlannedQuantity));
     if (cutInput === null) return;
-    const returnInput = window.prompt("确认回货数量", String(adjustment.requestedPlannedQuantity));
+    const returnInput = await promptInApp("确认回货数量", String(adjustment.requestedPlannedQuantity));
     if (returnInput === null) return;
-    const maximumInput = window.prompt("确认允许的计划数量上限", String(adjustment.requestedPlannedQuantity));
+    const maximumInput = await promptInApp("确认允许的计划数量上限", String(adjustment.requestedPlannedQuantity));
     if (maximumInput === null) return;
     const quantityInputs = [cutInput.trim(), returnInput.trim(), maximumInput.trim()];
     const actualCutQuantity = Number(quantityInputs[0]);
@@ -179,7 +180,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       setMessage("实裁、回货和允许上限最多保留一位小数；数量不能为负数，允许上限必须大于 0。");
       return;
     }
-    const reason = decision === "rejected" ? window.prompt("请填写拒绝原因") : undefined;
+    const reason = decision === "rejected" ? await promptInApp("请填写拒绝原因") : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
     try {
       await call("quantity-adjustments/" + adjustmentId + "/confirm", QuantityAdjustmentResponseSchema.parse, { expectedOrderVersion: data.orderVersion, expectedAdjustmentVersion: adjustment.adjustmentVersion, decision, actualCutQuantity, actualReturnQuantity, allowedMaximumQuantity, ...(reason ? { reason } : {}) });
@@ -191,7 +192,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     if (!data) return;
     const adjustment = data.adjustments.find((item) => item.adjustmentId === adjustmentId);
     if (!adjustment) return;
-    const reason = decision === "rejected" ? window.prompt("请填写 IE 驳回原因") : undefined;
+    const reason = decision === "rejected" ? await promptInApp("请填写 IE 驳回原因") : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
     try {
       await call("quantity-adjustments/" + adjustmentId + "/ie-review", QuantityAdjustmentResponseSchema.parse, { expectedOrderVersion: data.orderVersion, expectedAdjustmentVersion: adjustment.adjustmentVersion, decision, ...(reason ? { reason } : {}) });
@@ -200,7 +201,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   };
 
   const approve = async () => {
-    if (!data || !window.confirm("确认本单所有有效完成记录无误，并进入责任判定？")) return;
+    if (!data || !(await confirmInApp("确认本单所有有效完成记录无误，并进入责任判定？"))) return;
     try {
       await call("rework-orders/" + reworkOrderId + "/whole-order-review/approve", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion });
       setMessage("本单返工已确认全部完成，已流转到 N07 · 待责任判定。");
@@ -244,7 +245,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
 
   const reviewTailPricing = async (decision: "approved" | "rejected") => {
     if (!data) return;
-    const reason = decision === "rejected" ? window.prompt("请填写 IE 驳回原因")?.trim() : undefined;
+    const reason = decision === "rejected" ? (await promptInApp("请填写 IE 驳回原因"))?.trim() : undefined;
     if (decision === "rejected" && !reason) return;
     try {
       await call("rework-orders/" + reworkOrderId + "/tail-pricing/review", WholeOrderReviewResponseSchema.parse, {
@@ -376,8 +377,8 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
             <p>{adjustmentStatusLabel(adjustment.status)} · {adjustment.reason}</p>
           </div>
           {data.canConfirmQuantity && adjustment.status === "pending_merchandiser_confirmation" && <div className="mobile-actions whole-order-actions">
-            <Button variant="primary" onClick={() => void confirm(adjustment.adjustmentId, "confirmed")} disabled={busy}>确认实裁/回货</Button>
-            <Button onClick={() => void confirm(adjustment.adjustmentId, "rejected")} disabled={busy}>拒绝申请</Button>
+            <Button variant="primary" onClick={() => void confirmAdjustment(adjustment.adjustmentId, "confirmed")} disabled={busy}>确认实裁/回货</Button>
+            <Button onClick={() => void confirmAdjustment(adjustment.adjustmentId, "rejected")} disabled={busy}>拒绝申请</Button>
           </div>}
           {data.canReviewQuantityIncrease && adjustment.status === "pending_ie_review" && <div className="mobile-actions whole-order-actions">
             <Button variant="primary" onClick={() => void reviewIncrease(adjustment.adjustmentId, "approved")} disabled={busy}>IE 通过</Button>
