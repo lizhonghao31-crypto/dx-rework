@@ -158,18 +158,9 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       },
       randomUUID(),
     );
-    const approved = await configuration.review(
-      actor(ids.ie, ["ie_reviewer"], "process:review"),
-      created.value.reworkOrderId,
-      {
-        expectedOrderVersion: queued.value.orderVersion,
-        expectedConfigurationVersion:
-          queued.value.configuration!.configurationVersion,
-        decision: "approved",
-      },
-      randomUUID(),
-    );
-    const itemId = approved.value.configuration!.items[0]!.configurationItemId;
+    // In the current N02/N03 flow, submitting the tail process plan directly
+    // promotes it to task assignment; IE review only applies to change plans.
+    const itemId = queued.value.configuration!.items[0]!.configurationItemId;
     const beforeTask = await reporting.list(
       actor(ids.tail, ["tail_supervisor"], "work:assign"),
       created.value.reworkOrderId,
@@ -212,7 +203,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     return {
       orderId: created.value.reworkOrderId,
       itemId,
-      orderVersion: reviewed.value.orderVersion,
+      orderVersion: queued.value.orderVersion,
     };
   }
 
