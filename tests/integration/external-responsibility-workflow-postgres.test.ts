@@ -71,9 +71,10 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     requestId: randomUUID(),
   });
 
-  const adminActor = () => actor(
-    ids.admin,
-    ["system_admin"],
+  // This fixture intentionally uses the zero-business-role Root identity for
+  // controlled master-data/delegation setup. system_admin is not a blanket
+  // business capability, so using it here would mask the production boundary.
+  const adminActor = () => rootActor(
     "master_data:manage",
     "delegation:manage",
   );
@@ -105,10 +106,10 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     "external_responsibility:view",
     "responsibility:determine",
   );
-  const rootActor = (capability: string) => actor(
+  const rootActor = (...capabilities: string[]) => actor(
     ids.root,
     ["root_superuser"],
-    capability,
+    ...capabilities,
   );
 
   async function createReviewedOrder(label: string): Promise<ReviewedOrder> {
