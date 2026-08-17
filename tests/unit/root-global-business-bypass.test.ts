@@ -23,14 +23,21 @@ describe("root global business bypass policy", () => {
   });
 
   it("lets root proxy-report any worker task while ordinary proxies stay temporary-only", async () => {
-    const source = await readFile(
-      new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url),
-      "utf8",
-    );
+    const [source, form] = await Promise.all([
+      readFile(
+        new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url),
+        "utf8",
+      ),
+    ]);
     expect(source).toContain("if (isRootActor(actor)) return true;");
     expect(source).toContain("members.some((person) => person.person_type === \"temporary\")");
+    expect(form).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
+    expect(form).toContain("Root 代上数");
   });
-
   it("bypasses root identity separation in quantity confirmation and IE review", async () => {
     const source = await readFile(
       new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url),
