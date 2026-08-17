@@ -38,6 +38,18 @@ describe("root global business bypass policy", () => {
     expect(form).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
     expect(form).toContain("Root 代上数");
   });
+  it("keeps external deduction authority Root-only while preserving ordinary role checks", async () => {
+    const migration = await readFile(
+      new URL("../../apps/api/migrations/0064_root_external_responsibility_bypass.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain("access_is_root_actor(candidate)");
+    expect(migration).toContain("external_responsibility_can_sign");
+    expect(migration).toContain("external_responsibility_can_payables");
+    expect(migration).toContain("external_responsibility_can_view_all");
+    expect(migration).toContain("responsibility_actor_has_direct_role");
+  });
+
   it("bypasses root identity separation in quantity confirmation and IE review", async () => {
     const source = await readFile(
       new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url),
