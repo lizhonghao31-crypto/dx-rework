@@ -176,15 +176,21 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       },
       randomUUID(),
     );
-    const beforeReport = await reporting.list(
+    const beforeAssignmentConfirm = await reporting.list(
       actor(ids.tail, ["tail_supervisor"], "work:assign"),
       created.value.reworkOrderId,
+    );
+    const confirmed = await reporting.confirmAssignments(
+      actor(ids.tail, ["tail_supervisor"], "work:assign"),
+      created.value.reworkOrderId,
+      { expectedOrderVersion: beforeAssignmentConfirm.orderVersion },
+      randomUUID(),
     );
     await reporting.submitReport(
       actor(ids.worker, ["worker"], "work:report"),
       task.value.workTaskId,
       {
-        expectedOrderVersion: beforeReport.orderVersion,
+        expectedOrderVersion: confirmed.orderVersion,
         actualQuantity: 1,
         completedAt: new Date().toISOString(),
       },
