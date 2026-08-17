@@ -117,6 +117,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       actor(ids.qc, ["quality_control"], "rework:initiate"),
       {
         styleNo: `EXT-${label}`,
+        orderQuantity: 1,
         merchandiserUserId: ids.merch,
         processingFactory: { type: "supplier", supplierId },
         problemPart: "袖口",
