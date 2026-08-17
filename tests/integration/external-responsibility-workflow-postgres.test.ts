@@ -266,7 +266,6 @@ runWithPostgres("external responsibility reviewed workflow", () => {
         ),
       );
     }
-    await access.ensureOrganizationPolicy();
     const users = [
       [ids.admin, "Admin", "system_admin"],
       [ids.qc, "QC", "quality_control"],
@@ -314,6 +313,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
         [randomUUID(), userId, role],
       );
     }
+    await access.ensureOrganizationPolicy();
     await database.query(
       `INSERT INTO owner_bootstrap_consumptions(
          singleton,user_id,provider_user_id,corp_id
