@@ -72,7 +72,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
+              tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|tests/integration/external-responsibility-workflow-postgres.test.ts|scripts/run-business-chain-gate.mjs|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
                 deployment_sensitive=true
                 ;;
             esac
