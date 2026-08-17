@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 
 describe("authorization policy closure", () => {
   it("keeps Root centralized and owner/system-admin axes explicit", async () => {
-    const [authority, root, migration] = await Promise.all([
+    const [authority, root, migration, canonicalization] = await Promise.all([
       readFile("apps/api/src/access/business-authority.ts", "utf8"),
       readFile("apps/api/src/access/root-authority.ts", "utf8"),
       readFile("apps/api/migrations/0036_permission_authority_closure.sql", "utf8"),
+      readFile("apps/api/migrations/0063_root_actor_role_snapshot_canonicalization.sql", "utf8"),
     ]);
 
     expect(authority).toContain('ROOT_ACTOR_ROLE = "root_superuser"');
@@ -14,6 +15,8 @@ describe("authorization policy closure", () => {
     expect(root).toContain("owner_bootstrap_consumptions");
     expect(root).toContain("assertConfigurationConsistency");
     expect(migration).toContain("('owner_group','business:read_all')");
+    expect(canonicalization).toContain("array_agg(role_code ORDER BY role_code)");
+    expect(canonicalization).toContain("array_append(COALESCE(actor_roles,'{}'::text[]),'root_superuser')");
     expect(migration).toContain("('owner_group','audit:read')");
     expect(migration).toContain("('owner_group','dashboard:site:read')");
     expect(migration).toContain("role_code='system_admin'");
