@@ -18,7 +18,7 @@ import { completeInspectionReport } from "../inspection-report-fixture.js";
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 type MigrationManifest = {
-  migrations: Array<{ version: string }>;
+  migrations: Array<{ version: string; checksum: string }>;
 };
 
 type ReviewedOrder = {
@@ -255,6 +255,13 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
     )) as MigrationManifest;
+    await database.query(`
+      CREATE TABLE schema_migrations (
+        version text PRIMARY KEY,
+        checksum char(64) NOT NULL,
+        applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     for (const migration of manifest.migrations) {
       await database.query(
         await readFile(
@@ -264,6 +271,10 @@ runWithPostgres("external responsibility reviewed workflow", () => {
           ),
           "utf8",
         ),
+      );
+      await database.query(
+        "INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",
+        [migration.version, migration.checksum],
       );
     }
     const users = [
