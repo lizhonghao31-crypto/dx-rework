@@ -190,7 +190,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       actor(ids.worker, ["worker"], "work:report"),
       task.value.workTaskId,
       {
-        expectedOrderVersion: confirmed.orderVersion,
+        expectedOrderVersion: confirmed.value.orderVersion,
         actualQuantity: 1,
         completedAt: new Date().toISOString(),
       },
