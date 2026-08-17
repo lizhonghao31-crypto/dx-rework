@@ -247,6 +247,10 @@
     {
       "version": "0062_phase1_tail_pricing_wage_materialization",
       "checksum": "33311b1e0d03b9767b5e1b54ff1f33ac71437b3044a25e29303733bd0e928280"
+    },
+    {
+      "version": "0063_root_actor_role_snapshot_canonicalization",
+      "checksum": "b02f42efccc5eca7ea0c657db08e33015885bf0d6087d92938977a1bd5a62413"
     }
   ]
 }
