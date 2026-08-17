@@ -196,20 +196,33 @@ runWithPostgres("external responsibility reviewed workflow", () => {
       },
       randomUUID(),
     );
-    const reviewView = await review.get(
+    const n05 = await review.get(
       actor(ids.tail, ["tail_supervisor"], "submission:audit"),
       created.value.reworkOrderId,
     );
-    const reviewed = await review.approve(
+    const priced = await review.submitTailPricing(
       actor(ids.tail, ["tail_supervisor"], "submission:audit"),
       created.value.reworkOrderId,
-      { expectedOrderVersion: reviewView.orderVersion },
+      {
+        expectedOrderVersion: n05.orderVersion,
+        prices: [{ configurationItemId: itemId, unitPrice: 1 }],
+        temporaryCoefficients: [],
+      },
+      randomUUID(),
+    );
+    const ieReviewed = await review.reviewTailPricing(
+      actor(ids.ie, ["ie_reviewer"], "process:review"),
+      created.value.reworkOrderId,
+      {
+        expectedOrderVersion: priced.value.orderVersion,
+        decision: "approved",
+      },
       randomUUID(),
     );
     return {
       orderId: created.value.reworkOrderId,
       itemId,
-      orderVersion: reviewed.value.orderVersion,
+      orderVersion: ieReviewed.value.orderVersion,
     };
   }
 
