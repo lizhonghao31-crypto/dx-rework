@@ -60,14 +60,20 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     if (!user.businessRoles?.length && !isRoot) {
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
     }
-    const rootManagedCapability = capability === "access:admin";
-    if (!user.capabilities.includes(capability) && !(isRoot && rootManagedCapability)) {
+    if (!user.capabilities.includes(capability) && !isRoot) {
       throw new ApplicationError("FORBIDDEN", "无权执行该操作", 403);
+    }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    const authorizationCapabilities = [...user.capabilities];
+    if (isRoot && !authorizationCapabilities.includes(capability)) {
+      authorizationCapabilities.push(capability);
     }
     return {
       actorId: user.id,
-      actorRoles: user.businessRoles ?? [],
+      actorRoles,
       authorizationCapability: capability,
+      authorizationCapabilities,
       requestId: request.id,
     };
   };

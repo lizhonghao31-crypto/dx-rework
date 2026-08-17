@@ -221,6 +221,33 @@ describe("access routes", () => {
     );
   });
 
+  it("passes Root identity and any requested master-data capability to controlled person creation", async () => {
+    const { app, service } = create([], [], true);
+    const response = await app.inject({
+      method: "POST",
+      url: "/master-data/people",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "root-temporary-person" },
+      payload: {
+        personType: "temporary",
+        displayName: "UAT临时工",
+        aliases: [],
+        reason: "无人值守全链路验收",
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(service.createPerson).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "00000000-0000-4000-8000-000000000001",
+        actorRoles: ["root_superuser"],
+        authorizationCapability: "master_data:manage",
+        authorizationCapabilities: ["master_data:manage"],
+        requestId: "root-temporary-person",
+      }),
+      expect.objectContaining({ personType: "temporary", displayName: "UAT临时工" }),
+    );
+  });
+
   it("uses separate read capabilities for business directory consumers", async () => {
     const { app, service } = create(["supplier_catalog:read"], ["quality_control"]);
     const response = await app.inject({

@@ -222,33 +222,6 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: workReportingService,
     root: rootAuthority,
-    listAssignablePeople: async () => {
-      const [directory, people] = await Promise.all([
-        employeeAccessService.listDirectory(),
-        accessService.listPeople(),
-      ]);
-      const activeWorkerIds = new Set(
-        directory.employees
-          .filter((employee) =>
-            employee.enabled
-            && employee.active
-            && employee.employed
-            && employee.businessRoles.includes("worker"))
-          .map((employee) => employee.userId),
-      );
-      return people
-        .filter((person) =>
-          person.active
-          && (
-            person.personType === "temporary"
-            || (person.appUserId !== null && activeWorkerIds.has(person.appUserId))
-          ))
-        .map((person) => ({
-          personId: person.personId,
-          displayName: person.displayName,
-          personType: person.personType as "internal" | "temporary",
-        }));
-    },
   },
   wholeOrderReview: {
     authenticate: (token) => auth.authenticate(token),
