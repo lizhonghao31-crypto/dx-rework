@@ -12,6 +12,7 @@ import { createWebUrls } from "../url-contract.js";
 import { shanghaiBusinessDate } from "./business-date.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { SearchSelect } from "./search-select.js";
+import { confirmInApp } from "./system-dialog.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -457,13 +458,13 @@ export function ExternalResponsibilityPanel({
         : kind === "close-partial"
           ? "按部分扣款关闭"
           : "按未扣成功关闭";
-      if (!window.confirm(`确认${closeLabel}？关闭后本条扣款台账进入终局状态；如后续需要改责任，必须通过责任变更重新进入 N07。`)) {
+      if (!(await confirmInApp(`确认${closeLabel}？关闭后本条扣款台账进入终局状态；如后续需要改责任，必须通过责任变更重新进入 N07。`))) {
         return;
       }
     }
     if (
       kind === "revision-approve"
-      && !window.confirm("确认通过责任变更？通过后会生成新的 N07 判责草稿，并按新责任版本重新进入后续处理。")
+      && !(await confirmInApp("确认通过责任变更？通过后会生成新的 N07 判责草稿，并按新责任版本重新进入后续处理。"))
     ) {
       return;
     }

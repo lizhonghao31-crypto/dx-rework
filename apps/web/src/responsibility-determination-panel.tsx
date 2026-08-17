@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { SearchSelect } from "./search-select.js";
+import { confirmInApp } from "./system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const responsibilityTypes: ReadonlyArray<{
@@ -170,7 +171,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const selectedHandlerUserId = response?.handlerUserId ?? initialHandlerUserId;
   const initialHandlerRequired = determination === null && response?.handlerUserId === null;
   const save = async (): Promise<void> => { if (!response || !editable || !allProcessesValid || !saveNeeded || !selectedHandlerUserId) return; await runWrite("save", `rework-orders/${response.reworkOrderId}/responsibility-determinations/drafts`, { expectedOrderVersion: response.orderVersion, expectedCurrentDeterminationVersion: determination?.version ?? null, handlerUserId: selectedHandlerUserId, ...(changeReason.trim() ? { reason: changeReason.trim() } : {}), processes: payloadProcesses() }, "责任判定草稿已保存。每道工序只保留一个主责任方；共同责任说明会随版本留痕。"); };
-  const finalize = async (): Promise<void> => { if (!response || !determination || !finalizable) return; if (!window.confirm("提交给老板签字？提交后将锁定主责任方与外部供应商。")) return; await runWrite("finalize", `rework-orders/${response.reworkOrderId}/responsibility-determinations/finalize`, { expectedOrderVersion: response.orderVersion, expectedCurrentDeterminationVersion: determination.version }, "已提交老板签字。特殊外部责任倍率只在 N08 按需调整并留痕。"); };
+  const finalize = async (): Promise<void> => { if (!response || !determination || !finalizable) return; if (!(await confirmInApp("提交给老板签字？提交后将锁定主责任方与外部供应商。"))) return; await runWrite("finalize", `rework-orders/${response.reworkOrderId}/responsibility-determinations/finalize`, { expectedOrderVersion: response.orderVersion, expectedCurrentDeterminationVersion: determination.version }, "已提交老板签字。特殊外部责任倍率只在 N08 按需调整并留痕。"); };
   const transfer = async (): Promise<void> => { if (!response || !determination || !transferUserId || !transferReason.trim() || hasUnsavedChanges) return; await runWrite("transfer", `rework-orders/${response.reworkOrderId}/responsibility-determinations/transfer`, { expectedOrderVersion: response.orderVersion, expectedCurrentDeterminationVersion: determination.version, toUserId: transferUserId, reason: transferReason.trim() }, "责任处理已转交。"); setTransferUserId(""); setTransferReason(""); };
   const takeover = async (): Promise<void> => { if (!response?.canTakeover || !takeoverReason.trim()) return; await runWrite("takeover", `rework-orders/${response.reworkOrderId}/responsibility-determinations/takeover`, { expectedOrderVersion: response.orderVersion, expectedCurrentDeterminationVersion: determination?.version ?? null, reason: takeoverReason.trim() }, "老板已接管责任处理。"); };
   const ownerDecision = async (decision: "approve" | "reject"): Promise<void> => {
@@ -182,7 +183,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     });
     if (decision === "approve" && specialMultiplierAdjustments.some((item) => (multiplierScaled(item.multiplier) ?? 0n) < 1200n)) { setMessage("特殊外部倍率必须是不低于 1.2 的有效数字。"); return; }
     if (decision === "approve" && specialMultiplierAdjustments.some((item) => !item.reason)) { setMessage("特殊外部倍率必须填写原因。"); return; }
-    if (!window.confirm(decision === "approve" ? "确认同意本次责任判定并完成返工业务？供应商计划扣款暂不生成。" : "直接驳回并退回责任判定？")) return;
+    if (!(await confirmInApp(decision === "approve" ? "确认同意本次责任判定并完成返工业务？供应商计划扣款暂不生成。" : "直接驳回并退回责任判定？"))) return;
     await runWrite(`owner-${decision}`, `rework-orders/${response.reworkOrderId}/responsibility-owner-signature/${decision}`, { expectedOrderVersion: response.orderVersion, ...(decision === "approve" ? { specialMultiplierAdjustments } : {}) }, decision === "approve" ? "老板已确认同意；返工业务已完成，供应商计划扣款仍待周一确认。" : "老板已驳回；订单已退回 N07 重新判定。");
   };
 

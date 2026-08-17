@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import { promptInApp } from "./system-dialog.js";
 import "./workforce-master-data-page.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -82,7 +83,7 @@ export function WorkforceMasterDataPage() {
       setMessage("请输入临时工姓名。");
       return;
     }
-    const reason = window.prompt("请输入建立临时工档案的原因", "返工临时工登记")?.trim();
+    const reason = (await promptInApp("请输入建立临时工档案的原因", "返工临时工登记"))?.trim();
     if (!reason) return;
     const aliasValues = [...new Set(
       aliases.split(/[，,]/).map((value) => value.trim()).filter(Boolean),
@@ -105,9 +106,9 @@ export function WorkforceMasterDataPage() {
   };
 
   const addAlias = async (person: Person): Promise<void> => {
-    const alias = window.prompt(`为 ${person.displayName} 新增别名`)?.trim();
+    const alias = (await promptInApp(`为 ${person.displayName} 新增别名`))?.trim();
     if (!alias) return;
-    const reason = window.prompt("请输入新增别名原因", "补充现场常用称呼")?.trim();
+    const reason = (await promptInApp("请输入新增别名原因", "补充现场常用称呼"))?.trim();
     if (!reason) return;
     await run(async () => {
       await json(`master-data/people/${person.personId}/aliases`, {
@@ -118,7 +119,7 @@ export function WorkforceMasterDataPage() {
   };
 
   const revokeAlias = async (aliasId: string): Promise<void> => {
-    const reason = window.prompt("请输入撤销别名原因")?.trim();
+    const reason = (await promptInApp("请输入撤销别名原因"))?.trim();
     if (!reason) return;
     await run(async () => {
       await json(`master-data/people/aliases/${aliasId}`, {
@@ -129,7 +130,7 @@ export function WorkforceMasterDataPage() {
   };
 
   const deactivateTemporary = async (person: Person): Promise<void> => {
-    const reason = window.prompt(`请输入停用临时工“${person.displayName}”的原因`)?.trim();
+    const reason = (await promptInApp(`请输入停用临时工“${person.displayName}”的原因`))?.trim();
     if (!reason) return;
     await run(async () => {
       await json(`master-data/people/${person.personId}`, {

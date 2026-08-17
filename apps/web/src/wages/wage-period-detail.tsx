@@ -12,6 +12,7 @@ import { z } from "zod";
 
 import { createWebUrls } from "../../url-contract.js";
 import { WageAdjustmentForm } from "./wage-adjustment-form.js";
+import { confirmInApp, promptInApp } from "../system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const PeriodListSchema = z.array(WagePeriodSchema);
@@ -135,12 +136,31 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   ): Promise<void> => {
     const reason = approved
       ? null
-      : window.prompt("请输入拒绝原因")?.trim() ?? "";
+      : (await promptInApp("请输入拒绝原因"))?.trim() ?? "";
     if (!approved && !reason) return;
     await command(
       `wage-adjustments/${adjustment.adjustmentId}/${approved ? "approve" : "reject"}`,
       { expectedVersion: adjustment.version, reason },
       approved ? "工资调整已批准，月份已重新进入尾部主管初核。" : "工资调整已拒绝。",
+    );
+  };
+
+  const returnToTailSupervisor = async (period: WagePeriod): Promise<void> => {
+    const reason = (await promptInApp("请输入退回尾部主管的原因"))?.trim();
+    if (!reason) return;
+    await command(
+      `wage-periods/${period.periodId}/administrative-return`,
+      { expectedVersion: period.periodVersion, reason },
+      "工资月份已退回尾部主管重新初核。",
+    );
+  };
+
+  const lockPeriod = async (period: WagePeriod): Promise<void> => {
+    if (!(await confirmInApp("确认锁定本月工资？锁定后本月不能直接修改，只能在后续未锁定月份生成调整。"))) return;
+    await command(
+      `wage-periods/${period.periodId}/lock`,
+      { expectedVersion: period.periodVersion, lockNote: null },
+      "工资月份已锁定。",
     );
   };
 
@@ -205,14 +225,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
               >复核通过</Button>
               <Button
                 disabled={busy}
-                onClick={() => {
-                  const reason = window.prompt("请输入退回尾部主管的原因")?.trim();
-                  if (reason) void command(
-                    `wage-periods/${period.periodId}/administrative-return`,
-                    { expectedVersion: period.periodVersion, reason },
-                    "工资月份已退回尾部主管重新初核。",
-                  );
-                }}
+                onClick={() => void returnToTailSupervisor(period)}
               >退回</Button>
             </>
           )}
@@ -220,14 +233,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
             <Button
               variant="primary"
               disabled={busy}
-              onClick={() => {
-                if (!window.confirm("确认锁定本月工资？锁定后本月不能直接修改，只能在后续未锁定月份生成调整。")) return;
-                void command(
-                  `wage-periods/${period.periodId}/lock`,
-                  { expectedVersion: period.periodVersion, lockNote: null },
-                  "工资月份已锁定。",
-                );
-              }}
+              onClick={() => void lockPeriod(period)}
             >月结锁定</Button>
           )}
           {period.canExport && (

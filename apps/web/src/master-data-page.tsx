@@ -4,6 +4,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
+import { promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
@@ -179,12 +180,12 @@ export function MasterDataPage() {
     });
   };
 
-  const reviseSupplier = (supplier: Supplier, change: "rename" | "toggle") => {
+  const reviseSupplier = async (supplier: Supplier, change: "rename" | "toggle"): Promise<void> => {
     const nextName = change === "rename"
-      ? window.prompt("请输入新的供应商名称", supplier.supplierName)?.trim()
+      ? (await promptInApp("请输入新的供应商名称", supplier.supplierName))?.trim()
       : supplier.supplierName;
     if (!nextName) return;
-    const reason = window.prompt(change === "rename" ? "请输入修改原因" : `请输入${supplier.active ? "停用" : "恢复"}原因`)?.trim();
+    const reason = (await promptInApp(change === "rename" ? "请输入修改原因" : `请输入${supplier.active ? "停用" : "恢复"}原因`))?.trim();
     if (!reason) return;
     void run(`supplier:${supplier.supplierId}`, () =>
       json(`master-data/suppliers/${supplier.supplierId}/versions`, {
@@ -218,12 +219,12 @@ export function MasterDataPage() {
     });
   };
 
-  const reviseProcess = (process: Process, change: "rename" | "toggle") => {
+  const reviseProcess = async (process: Process, change: "rename" | "toggle"): Promise<void> => {
     const nextName = change === "rename"
-      ? window.prompt("请输入新的工序名称", process.processName)?.trim()
+      ? (await promptInApp("请输入新的工序名称", process.processName))?.trim()
       : process.processName;
     if (!nextName) return;
-    const reason = window.prompt(change === "rename" ? "请输入修改原因" : `请输入${process.active ? "停用" : "恢复"}原因`)?.trim();
+    const reason = (await promptInApp(change === "rename" ? "请输入修改原因" : `请输入${process.active ? "停用" : "恢复"}原因`))?.trim();
     if (!reason) return;
     void run(`process:${process.processId}`, () =>
       json(`master-data/processes/${process.processId}/versions`, {
@@ -522,8 +523,8 @@ export function MasterDataPage() {
                   </div>
                   <StatusBadge tone={supplier.active ? "success" : "warning"}>{supplier.active ? "启用" : "停用"}</StatusBadge>
                   <div className="master-data-actions">
-                    <Button disabled={Boolean(busy)} onClick={() => reviseSupplier(supplier, "rename")}>修改名称</Button>
-                    <Button disabled={Boolean(busy)} onClick={() => reviseSupplier(supplier, "toggle")}>{supplier.active ? "停用" : "恢复"}</Button>
+                    <Button disabled={Boolean(busy)} onClick={() => void reviseSupplier(supplier, "rename")}>修改名称</Button>
+                    <Button disabled={Boolean(busy)} onClick={() => void reviseSupplier(supplier, "toggle")}>{supplier.active ? "停用" : "恢复"}</Button>
                   </div>
                 </article>
               ))}
@@ -578,8 +579,8 @@ export function MasterDataPage() {
                   </div>
                   <StatusBadge tone={process.active ? "success" : "warning"}>{process.active ? "启用" : "停用"}</StatusBadge>
                   <div className="master-data-actions">
-                    <Button disabled={Boolean(busy)} onClick={() => reviseProcess(process, "rename")}>修改名称</Button>
-                    <Button disabled={Boolean(busy)} onClick={() => reviseProcess(process, "toggle")}>{process.active ? "停用" : "恢复"}</Button>
+                    <Button disabled={Boolean(busy)} onClick={() => void reviseProcess(process, "rename")}>修改名称</Button>
+                    <Button disabled={Boolean(busy)} onClick={() => void reviseProcess(process, "toggle")}>{process.active ? "停用" : "恢复"}</Button>
                   </div>
                 </article>
               ))}

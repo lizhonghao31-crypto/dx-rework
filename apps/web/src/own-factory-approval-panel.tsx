@@ -6,6 +6,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { confirmInApp } from "./system-dialog.js";
 import "./own-factory-approval.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -116,7 +117,7 @@ export function OwnFactoryApprovalPanel({
       setMessage("驳回必须填写原因。");
       return;
     }
-    if (!window.confirm(decision === "approved" ? "确认通过本厂承担？" : "确认驳回并退回责任判定？")) return;
+    if (!(await confirmInApp(decision === "approved" ? "确认通过本厂承担？" : "确认驳回并退回责任判定？"))) return;
     setBusy(decision);
     setMessage("");
     try {
