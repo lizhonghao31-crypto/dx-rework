@@ -137,6 +137,19 @@ runWithPostgres("Root self system administrator assignment", () => {
         authorization_capability: "access:admin",
       });
 
+      await expect(service.createPerson({
+        ...rootActor,
+        actorRoles: ["root_superuser", "system_admin"],
+        authorizationCapability: "master_data:manage",
+        authorizationCapabilities: ["master_data:manage"],
+        requestId: randomUUID(),
+      }, {
+        personType: "temporary",
+        displayName: "Root审计排序验收临时工",
+        aliases: [],
+        reason: "验证Root与系统管理员角色共存时的审计快照顺序",
+      })).resolves.toEqual({ personId: expect.any(String) });
+
       await expect(service.assignRole(rootActor, {
         userId: rootUserId,
         roleCode: "production_management",
