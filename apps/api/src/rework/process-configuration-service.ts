@@ -165,6 +165,7 @@ export class ProcessConfigurationService {
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ProcessConfigurationResponse> {
     this.ensureRead(actor);
     const order = await this.order(this.database, reworkOrderId);
+    if (isRootActor(actor)) return this.dto(this.database, order);
     const isSupervisor = actor.actorRoles.includes("tail_supervisor")
       && actor.authorizationCapability === "process:configure";
     const isReviewer = actor.actorRoles.includes("ie_reviewer")
@@ -476,6 +477,7 @@ export class ProcessConfigurationService {
   }
 
   private ensureRead(actor: TrustedActorContext): void {
+    if (isRootActor(actor)) return;
     const canConfigure = actor.actorRoles.includes("tail_supervisor")
       && actor.authorizationCapability === "process:configure";
     const canReview = actor.actorRoles.includes("ie_reviewer")
