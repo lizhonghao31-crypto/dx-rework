@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 
 import {
   calculateWorkAmount,
-  hasAtMostDecimalPlaces,
   splitAmount,
 } from "../../apps/api/src/rework/work-reporting-service.js";
 import { canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
