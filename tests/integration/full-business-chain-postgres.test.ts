@@ -615,8 +615,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
 
-    /* N09/N11 deduction coverage is intentionally deferred from the phase-1
-       N07/N08 path. The legacy scenario remains below as historical context.
+    /* Historical N08-B scenario retained below as reference only. Current V2
+       N09/N11 execution is covered by the active assertions and Root double pass.
     expect(externalBatch!.cases).toEqual(expect.arrayContaining([
       expect.objectContaining({
         responsibilityType: "processing_factory",
@@ -843,7 +843,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       report_total: "110.00",
       responsibility_total: "132.00",
       own_factory_total: "0.00",
-      external_total: "0.00",
+      external_total: "132.00",
       wage_total: "110.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(
