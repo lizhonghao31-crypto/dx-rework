@@ -13,8 +13,6 @@ const createInput = {
   recipientUnionId: "union-14",
   recipientProviderUserId: "userid-14",
   category: "process_configuration",
-  subject: "配置返工工序",
-  description: "款号：DX-1001\n返工单：RW-2026-0813-001\n订单号：PO-88\n事项：请配置工序、计划数量和单价。",
   deliveryKind: "create" as const,
   sourceKey: "todo-source-13",
   route: {
@@ -23,6 +21,10 @@ const createInput = {
     todoId: "00000000-0000-4000-8000-000000000013",
   },
   deepLink: "https://staging.example/rework/ui/tasks/00000000-0000-4000-8000-000000000015",
+  presentation: {
+    subject: "配置返工工序",
+    description: "款号：STYLE-001\n返工单：RW-001\n订单号：SO-001\n事项：请配置工序、计划数量和单价。",
+  },
 };
 
 const json = (value: unknown, status = 200): Response => new Response(
@@ -114,7 +116,7 @@ describe("DingTalk todo provider boundary", () => {
     expect(new Headers(createCall?.init.headers).get("x-acs-dingtalk-access-token")).toBe("token-value");
     expect(JSON.parse(String(createCall?.init.body))).toMatchObject({
       subject: "配置返工工序",
-      description: createInput.description,
+      description: "款号：STYLE-001\n返工单：RW-001\n订单号：SO-001\n事项：请配置工序、计划数量和单价。",
       sourceId: "todo-source-13",
       executorIds: ["union-14"],
       notifyConfigs: {
@@ -124,6 +126,13 @@ describe("DingTalk todo provider boundary", () => {
       },
     });
     expect(JSON.parse(String(createCall?.init.body))).not.toHaveProperty("operatorId");
+    const update = calls.find((call) =>
+      new URL(call.url).pathname.endsWith("/tasks/task-1") && call.init.method === "PUT"
+    );
+    expect(JSON.parse(String(update?.init.body))).toMatchObject({
+      subject: "配置返工工序",
+      description: "款号：STYLE-001\n返工单：RW-001\n订单号：SO-001\n事项：请配置工序、计划数量和单价。",
+    });
     expect(calls.some((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
     )).toBe(false);

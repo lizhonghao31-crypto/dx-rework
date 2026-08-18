@@ -16,12 +16,11 @@ export type DingTalkTodoCreateInput = Readonly<{
   recipientUnionId: string;
   recipientProviderUserId: string;
   category: string;
-  subject: string;
-  description: string;
   deliveryKind: "create" | "information";
   sourceKey: string;
   route: TodoRouteDescriptor;
   deepLink: string;
+  presentation: Readonly<{ subject: string; description: string }>;
 }>;
 
 export type DingTalkTodoCompleteInput = Readonly<{
@@ -38,12 +37,11 @@ export type DingTalkTodoUpdateInput = Readonly<{
   recipientUnionId: string;
   providerTodoId?: string;
   category: string;
-  subject: string;
-  description: string;
   deliveryKind: "update" | "reminder" | "escalation";
   sourceKey: string;
   route: TodoRouteDescriptor;
   deepLink: string;
+  presentation: Readonly<{ subject: string; description: string }>;
 }>;
 
 export type DingTalkTodoDeliveryReceipt = Readonly<{
@@ -243,8 +241,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
     let reconciled = task !== null;
     if (!task) {
       const body = {
-        subject: input.subject,
-        description: input.description,
+        subject: input.presentation.subject,
+        description: input.presentation.description,
         executorIds: [input.recipientUnionId],
         participantIds: [],
         sourceId,
@@ -323,8 +321,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
       {
         method: "PUT",
         body: JSON.stringify({
-          subject: input.subject,
-          description: input.description,
+          subject: input.presentation.subject,
+          description: input.presentation.description,
           executorIds: [input.recipientUnionId],
           operatorId: input.recipientUnionId,
           detailUrl: { appUrl: input.deepLink, pcUrl: input.deepLink },

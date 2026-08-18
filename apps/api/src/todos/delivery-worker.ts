@@ -39,7 +39,7 @@ type TodoDeliveryRow = Readonly<{
   rework_no: string | null;
   order_no: string | null;
   style_no: string | null;
-  wage_period_month: string | null;
+  rework_status: string | null;
 }>;
 
 type BindingRow = Readonly<{
@@ -227,23 +227,21 @@ export class TodoDeliveryWorker {
       const createKind: "create" | "information" = input.deliveryKind === "information"
         ? "information"
         : "create";
-      const presentation = buildTodoPresentation({
-        category: todo.category,
-        deliveryKind: createKind,
-        orderContext: this.orderContext(todo),
-        wagePeriodMonth: todo.wage_period_month,
-      });
       const receipt = await this.provider.createTodo({
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
         recipientUnionId: recipientIdentity.unionId,
         recipientProviderUserId: recipientIdentity.providerUserId,
         category: todo.category,
-        ...presentation,
         deliveryKind: createKind,
         sourceKey,
         route: input.route,
         deepLink: buildTodoExternalDeepLink(this.todoPublicBaseUrl, input.route),
+        presentation: buildTodoPresentation({
+          category: todo.category,
+          deliveryKind: createKind,
+          orderContext: this.orderContext(todo),
+        }),
       });
       await this.recordSuccess(claimed, input, binding, receipt.providerTodoId, receipt.providerMessageId, "active");
       return "sent";
@@ -336,23 +334,21 @@ export class TodoDeliveryWorker {
         : input.deliveryKind === "escalation"
           ? "escalation"
           : "update";
-      const presentation = buildTodoPresentation({
-        category: todo.category,
-        deliveryKind: updateKind,
-        orderContext: this.orderContext(todo),
-        wagePeriodMonth: todo.wage_period_month,
-      });
       const receipt = await this.provider.updateTodo({
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
         recipientUnionId: binding.recipient_union_id,
         ...(binding.provider_todo_id ? { providerTodoId: binding.provider_todo_id } : {}),
         category: todo.category,
-        ...presentation,
         deliveryKind: updateKind,
         sourceKey: binding.source_key,
         route: input.route,
         deepLink: buildTodoExternalDeepLink(this.todoPublicBaseUrl, input.route),
+        presentation: buildTodoPresentation({
+          category: todo.category,
+          deliveryKind: updateKind,
+          orderContext: this.orderContext(todo),
+        }),
       });
       await this.recordSuccess(
         claimed,
@@ -606,23 +602,17 @@ export class TodoDeliveryWorker {
 
   private async todo(todoId: string): Promise<TodoDeliveryRow | null> {
     const result = await this.database.query<TodoDeliveryRow>(
-      `SELECT todo.todo_id,todo.todo_type,todo.category,todo.recipient_user_id,
-              todo.route_descriptor,todo.status,todo.completed_operation_event_id,
-              todo.cancelled_operation_event_id,orders.rework_no,orders.order_no,
-              orders.style_no,period.period_month::text wage_period_month
-       FROM rework_todos todo
+      `SELECT todos.todo_id,todos.todo_type,todos.category,todos.recipient_user_id,
+              todos.route_descriptor,todos.status,todos.completed_operation_event_id,
+              todos.cancelled_operation_event_id,orders.rework_no,orders.order_no,
+              orders.style_no,orders.status rework_status
+       FROM rework_todos todos
        LEFT JOIN rework_orders orders
          ON orders.rework_order_id=COALESCE(
-           NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid,
-           CASE
-             WHEN todo.route_descriptor->>'routeName'<>'wage_period_detail'
-             THEN NULLIF(todo.route_descriptor->>'entityId','')::uuid
-           END
+           NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
+           CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
          )
-       LEFT JOIN rework_wage_periods period
-         ON todo.route_descriptor->>'routeName'='wage_period_detail'
-        AND period.period_id=NULLIF(todo.route_descriptor->>'entityId','')::uuid
-       WHERE todo.todo_id=$1`,
+       WHERE todos.todo_id=$1`,
       [todoId],
     );
     return result.rows[0] ?? null;
@@ -633,13 +623,12 @@ export class TodoDeliveryWorker {
     orderNo: string | null;
     styleNo: string | null;
   }> | null {
-    return todo.rework_no || todo.order_no || todo.style_no
-      ? {
-          reworkNo: todo.rework_no,
-          orderNo: todo.order_no,
-          styleNo: todo.style_no,
-        }
-      : null;
+    if (!todo.rework_status) return null;
+    return {
+      reworkNo: todo.rework_no,
+      orderNo: todo.order_no,
+      styleNo: todo.style_no,
+    };
   }
 
   private payloadMatchesTodo(input: DeliveryPayload, todo: TodoDeliveryRow): boolean {
