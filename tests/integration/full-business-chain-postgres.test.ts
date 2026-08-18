@@ -364,7 +364,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(supplemented.value).toMatchObject({
       status: "pending_process_configuration",
       version: submitted.value.version + 1,
-      attachmentIds: [supplementalImageId],
+      attachmentIds: expect.arrayContaining([initialImageId, supplementalImageId]),
     });
     expect((await database.query(
       "SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1",
