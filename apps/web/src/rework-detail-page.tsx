@@ -742,7 +742,7 @@ export function ReworkDetailPage({
         </section>
 
         <section className="rework-detail-task" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><div><p>当前查看节点</p><h2>{selected?.number} · {selected?.label}</h2></div><StatusBadge tone={selected?.state === "completed" ? "success" : selected?.state === "current" ? "warning" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge></div>
+          <div className="rework-detail-task__heading"><div><p>当前查看节点</p><h2>{selected?.number} · {selected?.label}</h2></div><StatusBadge tone={selected?.state === "completed" ? "success" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge></div>
           {renderSelectedTask()}
         </section>
       </div>

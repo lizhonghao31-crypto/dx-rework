@@ -35,22 +35,40 @@
 
 .work-reporting-dialog-backdrop {
   position: fixed;
-  z-index: 30;
+  z-index: 1000;
   inset: 0;
   display: grid;
-  place-items: end center;
-  padding: var(--dx-v2-space-3);
-  background: rgb(0 0 0 / 38%);
+  place-items: center;
+  padding: var(--dx-v2-space-5);
+  background: rgb(19 28 38 / 58%);
 }
 
 .work-reporting-dialog {
   width: min(100%, 560px);
   max-height: calc(100vh - 32px);
   overflow: auto;
+  border: 1px solid #d5dee7;
+  background: #fff;
+  box-shadow: 0 20px 52px rgb(15 35 52 / 28%);
+}
+
+.work-reporting-dialog .dx-button {
+  min-height: 44px;
+  box-shadow: none;
+}
+
+.work-reporting-dialog .dx-button--secondary {
+  border-color: #cbd6df;
+  background: #fff;
 }
 
 @media (max-width: 520px) {
   .work-reporting-page .whole-order-actions {
     grid-template-columns: 1fr;
+  }
+
+  .work-reporting-dialog-backdrop {
+    align-items: end;
+    padding: var(--dx-v2-space-3);
   }
 }
