@@ -6,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
-import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -52,10 +51,10 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
       "0006_rework_initiation.sql",
-      "0056_n01_digital_inspection_report.sql",
       "0007_process_configuration_ie_review.sql",
       "0049_post_creation_order_image_binding.sql",
       "0053_root_rework_order_logical_deletion.sql",
+      "0068_n01_image_and_wage_integrity.sql",
     ]) {
       const sql = await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -127,8 +126,8 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       `INSERT INTO attachments(
          attachment_id,object_key,original_filename,mime_type,size_bytes,
          sha256,uploaded_by,status,ready_at
-       ) VALUES($1,$2,'qc.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
-      [attachmentId, `private/${attachmentId}.pdf`, "a".repeat(64), qcId],
+       ) VALUES($1,$2,'qc.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId, `private/${attachmentId}.webp`, "a".repeat(64), qcId],
     );
     const draft = await service.createDraft(qcActor(), {
       styleNo: "PD20529725",
@@ -138,7 +137,6 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       problemPart: "后浪",
       problemDescription: "针孔，需要拆包返查",
       reworkQuantity: 281,
-      inspectionReport: completeInspectionReport(),
       attachmentIds: [attachmentId],
     }, randomUUID());
     expect((await database.query(
@@ -226,6 +224,14 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
   });
 
   it("keeps one number through withdrawal, correction, resubmission and cancellation", async () => {
+    const attachmentId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'withdrawal.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId, `private/${attachmentId}.webp`, "e".repeat(64), qcId],
+    );
     const draft = await service.createDraft(qcActor(), {
       styleNo: "PD20611308",
       merchandiserUserId: merchandiserId,
@@ -233,7 +239,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       problemPart: "袖口",
       problemDescription: "线头返修",
       reworkQuantity: 100,
-      inspectionReport: completeInspectionReport(),
+      attachmentIds: [attachmentId],
     }, randomUUID());
     const submitted = await service.submit(qcActor(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,
@@ -280,6 +286,24 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       "rework.submit",
       "rework.cancel",
     ]);
+  });
+
+  it("rejects N01 submission without a ready image even when all other order facts are present", async () => {
+    const draft = await service.createDraft(qcActor(), {
+      styleNo: "N01-NO-IMAGE",
+      merchandiserUserId: merchandiserId,
+      processingFactory: { type: "own_factory" },
+      problemPart: "袖口",
+      problemDescription: "缺少现场图片",
+      reworkQuantity: 1,
+    }, randomUUID());
+
+    await expect(service.submit(qcActor(), draft.value.reworkOrderId, {
+      expectedVersion: draft.value.version,
+    }, randomUUID())).rejects.toMatchObject({
+      code: "REWORK_IMAGE_REQUIRED",
+      statusCode: 400,
+    });
   });
 
   it("allows only root to logically delete once while retaining immutable order evidence", async () => {

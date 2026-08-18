@@ -641,14 +641,13 @@ export class WageService {
         ON supplier.supplier_id=orders.processing_factory_supplier_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(coefficient.multiplier,1)::numeric(8,3)::text multiplier
-        FROM rework_tail_pricing_submissions submission
-        LEFT JOIN rework_tail_temporary_wage_coefficients coefficient
-          ON coefficient.tail_pricing_submission_id=submission.tail_pricing_submission_id
+        FROM rework_tail_completion_confirmations confirmation
+        LEFT JOIN rework_tail_completion_coefficients coefficient
+          ON coefficient.confirmation_id=confirmation.confirmation_id
          AND coefficient.configuration_item_id=item.configuration_item_id
          AND coefficient.person_id=item.person_id
-        WHERE submission.rework_order_id=item.rework_order_id
-          AND submission.status='approved'
-        ORDER BY submission.pricing_version DESC
+        WHERE confirmation.rework_order_id=item.rework_order_id
+        ORDER BY confirmation.confirmed_at DESC,confirmation.confirmation_id DESC
         LIMIT 1
       ) coefficient ON true
       LEFT JOIN LATERAL (
