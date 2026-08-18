@@ -207,6 +207,18 @@ export class TailInspectionService {
         );
       }
       if (readyAfterSubmit) {
+        const orderTransitionEventId = await this.events.append(client, actor, {
+          action: "rework.tail_inspection.submit",
+          entityType: "rework_order",
+          entityId: assignment.rework_order_id,
+          before: this.orderAudit(order, order.status, order.version),
+          after: {
+            ...this.orderAudit(order, "pending_order_review", order.version + 1),
+            assignmentId,
+            tailInspectionReportId: reportId,
+          },
+        });
+        await this.context(client, orderTransitionEventId, actor.requestId);
         await client.query(
           `UPDATE rework_orders
            SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1
