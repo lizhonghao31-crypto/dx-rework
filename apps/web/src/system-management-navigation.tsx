@@ -6,7 +6,7 @@ import type { AuthorizedUser } from "./auth.js";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 export type SystemManagementTechnicalTab = "audit" | "attachments" | "delegations" | "exceptions";
-export type SystemManagementSection = "employee-access" | "master-data" | SystemManagementTechnicalTab;
+export type SystemManagementSection = "employee-access" | "master-data" | "workforce" | SystemManagementTechnicalTab;
 
 const technicalTabs: readonly [SystemManagementTechnicalTab, string][] = [
   ["audit", "审计日志"],
@@ -47,6 +47,7 @@ export function SystemManagementNavigation({
   return <nav className="admin-navigation" aria-label="系统管理模块">
     {access.employee ? <a className={active === "employee-access" ? "active" : ""} href={pageUrl("ui/employee-access")}>员工权限管理</a> : null}
     {access.masterData ? <a className={active === "master-data" ? "active" : ""} href={pageUrl("ui/master-data")}>工厂&amp;工序管理</a> : null}
+    {access.masterData ? <a className={active === "workforce" ? "active" : ""} href={pageUrl("ui/people")}>作业人员与临时工</a> : null}
     {visibleTabs.map(([tab, label]) => onTechnicalTabChange ? (
       <button key={tab} className={active === tab ? "active" : ""} onClick={() => onTechnicalTabChange(tab)}>{label}</button>
     ) : (

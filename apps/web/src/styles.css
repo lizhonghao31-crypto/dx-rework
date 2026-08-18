@@ -232,7 +232,8 @@ dd { margin: 8px 0 0; overflow-wrap: anywhere; font-size: 18px; font-weight: 700
 .rework-paper-entry__item-actions { display: flex; gap: 6px; }
 .rework-paper-entry__item-actions .dx-button { min-width: 48px; }
 .rework-core-fields__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rework-manual-entry details { display: grid; gap: var(--dx-v2-space-3); }
+.rework-manual-entry details { display: block; }
+.rework-manual-entry details[open] { display: grid; gap: var(--dx-v2-space-3); }
 .rework-manual-entry summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
 .rework-manual-entry summary::-webkit-details-marker { display: none; }
 .rework-manual-entry summary > span { color: var(--dx-v2-color-text); font-size: 18px; font-weight: 700; }

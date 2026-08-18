@@ -14,6 +14,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type OrderRow = Readonly<{
@@ -66,6 +67,7 @@ export class TailInspectionService {
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async listOptions(actor: TrustedActorContext): Promise<TailInspectionOptionsResponse> {
@@ -212,6 +214,12 @@ export class TailInspectionService {
           [assignment.rework_order_id, actor.actorId, order.version],
         );
       }
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `tail-inspection:${assignment.rework_order_id}:${assignmentId}`,
+        "Tail inspection count was submitted",
+      );
       return this.dto(client, actor, await this.order(client, assignment.rework_order_id, false));
     });
   }

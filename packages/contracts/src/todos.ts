@@ -18,6 +18,7 @@ export const TodoRouteDescriptorSchema = z.object({
   todoId: TodoIdSchema,
   tab: z.enum([
     "process_configuration",
+    "tail_inspection",
     "whole_order_review",
     "responsibility",
     "own_factory_approval",

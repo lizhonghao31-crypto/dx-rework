@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 
 const id = "00000000-0000-4000-8000-000000000010";
 
-describe("phase-1 N07/N08 close", () => {
-  it("keeps N08 approval-only and rejects multiplier adjustments", () => {
+describe("phase-1 N08/N09 close", () => {
+  it("keeps N09 approval-only and rejects multiplier adjustments", () => {
     expect(OwnerSignatureCommandSchema.parse({ expectedOrderVersion: 8 }))
       .toEqual({ expectedOrderVersion: 8 });
     expect(OwnerSignatureCommandSchema.safeParse({
@@ -41,7 +41,7 @@ describe("phase-1 N07/N08 close", () => {
     expect(response.success).toBe(true);
   });
 
-  it("materialises N09 supplier ledgers from the locked N07 multiplier", async () => {
+  it("materialises N10 supplier ledgers from the locked N08 multiplier", async () => {
     const [ownerService, panel, migration] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-owner-signature-service.ts", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
@@ -51,7 +51,7 @@ describe("phase-1 N07/N08 close", () => {
     expect(ownerService).not.toContain("specialMultiplierAdjustments");
     expect(ownerService).toContain("this.external.ensureForFinalized(");
     expect(panel).toContain("外部扣款倍率（默认且最低 1.2）");
-    expect(panel).toContain("N08 仅可同意或驳回，不能修改倍率");
+    expect(panel).toContain("N09 仅可同意或驳回，不能修改倍率");
     expect(panel).toContain("共同责任记录 / 修改说明（可选）");
     expect(migration).toContain("rework_responsibility_owner_multiplier_adjustments");
     expect(migration).toContain("rework.responsibility.owner_approve");

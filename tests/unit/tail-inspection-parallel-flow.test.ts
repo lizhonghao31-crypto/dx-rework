@@ -32,10 +32,13 @@ describe("tail inspection parallel flow", () => {
   });
 
   it("retires the plan-adjustment path and gates N07 on per-process worker-to-tail reconciliation", async () => {
-    const [migration, service, workerService] = await Promise.all([
+    const [migration, service, workerService, configurationService, tailService, panel] = await Promise.all([
       readFile("apps/api/migrations/0067_tail_inspection_parallel_flow.sql", "utf8"),
       readFile("apps/api/src/rework/whole-order-review-service.ts", "utf8"),
       readFile("apps/api/src/rework/work-reporting-service.ts", "utf8"),
+      readFile("apps/api/src/rework/process-configuration-service.ts", "utf8"),
+      readFile("apps/api/src/rework/tail-inspection-service.ts", "utf8"),
+      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
     ]);
 
     expect(migration).toContain("quantity adjustment is retired");
@@ -46,5 +49,10 @@ describe("tail inspection parallel flow", () => {
     expect(service).toContain("worker.quantity>tail_checked.quantity");
     expect(workerService).toContain("rework_tail_inspection_assignments");
     expect(workerService).toContain("工人完工上数只能填写整数件数");
+    expect(configurationService).toContain('category: "tail_inspection"');
+    expect(configurationService).toContain("tail-inspection:${reworkOrderId}:${assignment.assignmentId}");
+    expect(tailService).toContain("completeOpenByDedupeKey");
+    expect(panel).toContain("返件总数（件）");
+    expect(panel).toContain("每个工序默认同步该总数");
   });
 });

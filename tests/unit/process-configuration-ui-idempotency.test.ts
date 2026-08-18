@@ -15,11 +15,12 @@ describe("N02/N03 process configuration UI idempotency", () => {
     expect(source).toContain("pendingSubmit.current = null");
     expect(source).not.toContain('headers: { "idempotency-key": crypto.randomUUID() }');
   });
-  it("requires N02 process, estimated quantity and price before N03 IE review", async () => {
+  it("requires N02 process, candidate price and tail-inspector assignment before N03 IE review", async () => {
     const source = await read("apps/web/src/process-configuration-form.tsx");
 
-    expect(source).toContain("工序、计划数量与单价");
-    expect(source).toContain("单价（元）");
+    expect(source).toContain("工序与候选单价");
+    expect(source).toContain("候选单价（元 / 件）");
+    expect(source).toContain("请至少分配一名尾查人员");
     expect(source).toContain("提交 IE 审核");
   });
 

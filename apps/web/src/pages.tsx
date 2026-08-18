@@ -31,7 +31,7 @@ const detailOrderId = (): string | null => {
 
 export function Detail() {
   const reworkOrderId = detailOrderId();
-  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 确认主责任方，N08 老板签字完成返工业务；供应商扣款规则待周一确认" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成 IE 核价后进入 N07 责任判定", "每道工序只保留一个主责任方；共同责任只作留痕说明", "N07 提交后由老板在 N08 确认同意或直接驳回", "N08 可留存特殊外部倍率及原因；默认倍率为 1.2", "N08 同意后返工业务完成；不生成供应商计划扣款"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /></div></Shell>;
+  return <Shell active="责任处理"><Header title={reworkOrderId ? `返工单 ${reworkOrderId}` : "返工单责任处理"} subtitle="N07 整单确认后进入 N08 判责，N09 老板签字完成返工业务；供应商扣款规则待周一确认" badge="实时读取订单状态" action="返回任务列表" /><div className="dashboard-grid"><Surface><h2>责任节点说明</h2><div className="queue">{["完成 N07 尾部主管整单确认后进入 N08 责任判定", "每道工序只保留一个主责任方；共同责任只作留痕说明", "N08 提交后由老板在 N09 确认同意或直接驳回", "外部扣款倍率默认且最低为 1.2，可由责任处理人调高；不影响工人工资", "N09 同意后返工业务完成；不生成供应商计划扣款"].map((row) => <div key={row}><span>{row}</span><StatusBadge tone="info">受控</StatusBadge></div>)}</div></Surface><ResponsibilityDeterminationPanel reworkOrderId={reworkOrderId} /></div></Shell>;
 }
 
 export function MobileForm({ piecework = false }: { piecework?: boolean }) {

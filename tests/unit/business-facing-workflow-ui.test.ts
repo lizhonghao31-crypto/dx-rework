@@ -44,7 +44,7 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("formatBusinessTime(approval.decision.decidedAt)");
   });
 
-  it("lets N07 users select exactly one party and set the external deduction multiplier", async () => {
+  it("lets N08 users select exactly one party and set the external deduction multiplier", async () => {
     const source = await read("apps/web/src/responsibility-determination-panel.tsx");
     expect(source).toContain("主责任方");
     expect(source).toContain("parsePercentToBps(allocation.sharePercent)");
@@ -94,11 +94,11 @@ describe("business-facing workflow UI", () => {
   it("keeps worker completion to one final-count action and closes reporting after everyone completes", async () => {
     const source = await read("apps/web/src/work-reporting-form.tsx");
     expect(source).toContain("我已完工&上数");
-    expect(source).toContain("请输入您的返工数量");
+    expect(source).toContain("请输入您的实际完工件数");
     expect(source).toContain("返回返工");
     expect(source).toContain("临时工代上数");
     expect(source).toContain("data.reworkStatus === \"in_progress\"");
-    expect(source).toContain("已流转至 N05 · 尾部确认");
+    expect(source).toContain("已流转至 N07 · 尾部主管整单确认");
     expect(source).toContain("canReviewOrder(me.user)");
     expect(source).not.toContain("登记本次完成数量");
     expect(source).not.toContain('label="实际完成时间"');
@@ -139,19 +139,17 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("当前处理说明");
   });
 
-  it("separates normal whole-order confirmation from quantity exceptions", async () => {
+  it("uses the tail-count reconciliation instead of the retired quantity-exception path", async () => {
     const [source, css] = await Promise.all([
       read("apps/web/src/whole-order-review-panel.tsx"),
       read("apps/web/src/work-reporting-form.css"),
     ]);
-    expect(source).toContain("工序完成状态（系统自动计算）");
-    expect(source).toContain("确认数量并进入责任判定");
-    expect(source).toContain("异常处理：数量调整");
-    expect(source).toContain("<details");
-    expect(source).toContain('kind === "decrease" && target >= process.plannedQuantity');
-    expect(source).toContain('kind === "decrease" && target < process.completedQuantity');
-    expect(source).toContain('kind === "increase" && target <= process.plannedQuantity');
-    expect(source).toContain("oneDecimalQuantity.test(rawTarget)");
+    expect(source).toContain("工人上数与尾查汇总对照");
+    expect(source).toContain("确认整单并进入责任判定");
+    expect(source).toContain("工人有效上数必须小于或等于尾查件数");
+    expect(source).toContain("countGap");
+    expect(source).not.toContain("quantity-adjustments");
+    expect(source).not.toContain("oneDecimalQuantity");
     expect(source).toContain('className="mobile-actions whole-order-actions"');
     expect(css).toContain(".work-reporting-page .whole-order-actions");
     expect(css).toContain("position: static;");

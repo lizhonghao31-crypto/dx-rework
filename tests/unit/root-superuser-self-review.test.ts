@@ -35,6 +35,6 @@ describe("root superuser self-review bypass", () => {
     );
 
     expect(form).toContain("审核通过并生效");
-    expect(form).toContain("单价（元）");
+    expect(form).toContain("候选单价（元 / 件）");
   });
 });

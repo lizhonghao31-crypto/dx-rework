@@ -54,7 +54,7 @@ describe("system dialog automation contract", () => {
     ]);
 
     expect(sources[0]).toContain('await confirmInApp("确认提交返工单？")');
-    expect(sources[1]).toContain('await confirmInApp("确认提交当前工序、计划数量与单价给 IE 审核？")');
+    expect(sources[1]).toContain('await confirmInApp("确认提交当前工序与候选单价给 IE 核价，并立即分配尾查？")');
     expect(sources[2]).toContain("await confirmInApp");
     expect(sources[2]).toContain("await promptInApp");
     expect(sources[3]).toContain("await confirmInApp");

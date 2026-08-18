@@ -39,9 +39,9 @@ const fail = (message: string, status = 409, code = "CONFLICT"): never => {
 };
 
 /**
- * N08 is intentionally a single owner decision. It does not ask the owner to
- * re-confirm or alter N07's responsible party, supplier, or deduction multiplier.
- * Approval materializes N09 supplier ledgers in the same transaction; actual
+ * N09 is intentionally a single owner decision. It does not ask the owner to
+ * re-confirm or alter N08's responsible party, supplier, or deduction multiplier.
+ * Approval materializes N10 supplier ledgers in the same transaction; actual
  * deduction remains an independent lifecycle and does not block order completion.
  */
 export class ResponsibilityOwnerSignatureService {
@@ -87,7 +87,7 @@ export class ResponsibilityOwnerSignatureService {
          VALUES($1,$2,$3,'approved',$4,$5,$6)`,
         [ownerSignatureId, orderId, determination.determination_id, actor.actorId, eventId, actor.requestId],
       );
-      // System-created N09 ledgers and the N08 signature commit atomically.
+      // System-created N10 ledgers and the N09 signature commit atomically.
       // If ledger materialization fails, the signature and order transition roll back.
       await this.external.ensureForFinalized(
         client,

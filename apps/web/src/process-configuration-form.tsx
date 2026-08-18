@@ -1,11 +1,13 @@
 import {
   ProcessConfigurationOptionsResponseSchema,
   ProcessConfigurationResponseSchema,
+  TailInspectionOptionsResponseSchema,
   type ProcessConfigurationOptionsResponse,
   type ProcessConfigurationResponse,
+  type TailInspectionOptionsResponse,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { SearchSelect } from "./search-select.js";
@@ -21,7 +23,6 @@ type User = {
   isRoot?: boolean;
 };
 type ReworkConfigurationDetail = {
-  reworkQuantity: number | null;
   createdBy: { userId: string; displayName: string };
   processConfigurationCreatedBy: { userId: string; displayName: string } | null;
 };
@@ -29,8 +30,6 @@ type ItemForm = {
   source: "catalog" | "custom";
   processId: string;
   customProcessName: string;
-  plannedQuantity: string;
-  pricingUnit: "piece" | "hour";
   unitPrice: string;
 };
 type SavePayloadItem = {
@@ -38,24 +37,24 @@ type SavePayloadItem = {
   processId?: string;
   customProcessName?: string;
   plannedQuantity: number;
-  pricingUnit: "piece" | "hour";
+  pricingUnit: "piece";
   unitPrice: number;
 };
+type TailInspectorSelection = Readonly<{ userId: string; boxScope: string }>;
 type PendingSubmitAttempt = Readonly<{
   reworkOrderId: string;
   body: {
     expectedOrderVersion: number;
     expectedConfigurationVersion: number;
+    tailInspectors: Array<Readonly<{ userId: string; boxScope?: string }>>;
   };
   key: string;
 }>;
 
-const emptyItem = (defaultPieceQuantity: number | null = null): ItemForm => ({
+const emptyItem = (): ItemForm => ({
   source: "catalog",
   processId: "",
   customProcessName: "",
-  plannedQuantity: defaultPieceQuantity === null ? "" : String(defaultPieceQuantity),
-  pricingUnit: "piece",
   unitPrice: "",
 });
 
@@ -64,13 +63,6 @@ const isPristineItem = (item: ItemForm): boolean =>
   && item.processId === ""
   && item.customProcessName === ""
   && item.unitPrice === "";
-
-function SelectField({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="dx-field">
-    <span>{label}</span>
-    <span className="dx-field__control">{children}</span>
-  </label>;
-}
 
 const errorMessage = async (response: Response): Promise<string> => {
   try {
@@ -108,8 +100,6 @@ const toItem = (
   source: item.source,
   processId: item.processId ?? "",
   customProcessName: item.source === "custom" ? item.processName : "",
-  plannedQuantity: item.plannedQuantity.toString(),
-  pricingUnit: item.pricingUnit,
   unitPrice: formatUnitPrice(item.unitPrice),
 });
 
@@ -120,7 +110,6 @@ const statusLabel = (response: ProcessConfigurationResponse): string => {
   return "当前状态不在工序配置节点";
 };
 
-const oneDecimal = /^\d+(?:\.\d)?$/;
 const threeDecimals = /^\d+(?:\.\d{1,3})?$/;
 
 const validateItemForms = (items: readonly ItemForm[]): string | null => {
@@ -129,10 +118,6 @@ const validateItemForms = (items: readonly ItemForm[]): string | null => {
     const label = `工序 ${index + 1}`;
     if (item.source === "catalog" && !item.processId) return `${label}：请选择公共工序。`;
     if (item.source === "custom" && !item.customProcessName.trim()) return `${label}：请输入自定义工序名称。`;
-    if (!item.plannedQuantity.trim()) return `${label}：请输入计划数量。`;
-    const plannedQuantity = Number(item.plannedQuantity);
-    if (!Number.isFinite(plannedQuantity) || plannedQuantity <= 0) return `${label}：计划数量必须大于 0。`;
-    if (!oneDecimal.test(item.plannedQuantity.trim())) return `${label}：计划数量最多保留一位小数。`;
     if (!item.unitPrice.trim()) return `${label}：请输入单价。`;
     const unitPrice = Number(item.unitPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0.001) return `${label}：单价不能低于 0.001 元。`;
@@ -146,8 +131,10 @@ const payloadItems = (items: readonly ItemForm[]): SavePayloadItem[] => items.ma
   ...(item.source === "catalog"
     ? { processId: item.processId }
     : { customProcessName: item.customProcessName.trim() }),
-  plannedQuantity: Number(item.plannedQuantity),
-  pricingUnit: item.pricingUnit,
+  // N02 no longer estimates production quantities. This compatibility field
+  // is deliberately fixed and never presented as a business quantity.
+  plannedQuantity: 1,
+  pricingUnit: "piece",
   unitPrice: Number(item.unitPrice),
 }));
 
@@ -160,9 +147,9 @@ export function ProcessConfigurationForm({
   const [options, setOptions] = useState<ProcessConfigurationOptionsResponse>({ processes: [] });
   const [response, setResponse] = useState<ProcessConfigurationResponse | null>(null);
   const [detail, setDetail] = useState<ReworkConfigurationDetail | null>(null);
-  const [reworkQuantity, setReworkQuantity] = useState<number | null>(null);
   const [items, setItems] = useState<ItemForm[]>([emptyItem()]);
-  const [changeReason, setChangeReason] = useState("");
+  const [tailInspectionOptions, setTailInspectionOptions] = useState<TailInspectionOptionsResponse>({ inspectors: [] });
+  const [tailInspectors, setTailInspectors] = useState<TailInspectorSelection[]>([]);
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载工序配置…");
   const [busy, setBusy] = useState(false);
@@ -181,8 +168,7 @@ export function ProcessConfigurationForm({
   const editable = Boolean(
     canConfigure
     && response
-    && (response.reworkStatus === "pending_process_configuration"
-      || response.reworkStatus === "pending_task_assignment"),
+    && response.reworkStatus === "pending_process_configuration",
   );
   const reviewSeparationBlocked = Boolean(
     user
@@ -215,13 +201,11 @@ export function ProcessConfigurationForm({
     setUser(me.user);
     setResponse(loaded);
     setDetail(loadedDetail);
-    setReworkQuantity(loadedDetail.reworkQuantity);
     if (loaded.configuration && loaded.configuration.status !== "pending_ie_review") {
       setItems(loaded.configuration.items.map(toItem));
-      setChangeReason(loaded.configuration.changeReason ?? "");
     } else if (!loaded.configuration && loaded.reworkStatus === "pending_process_configuration") {
       setItems((current) => current.length === 1 && current[0] && isPristineItem(current[0])
-        ? [emptyItem(loadedDetail.reworkQuantity)]
+        ? [emptyItem()]
         : current);
     }
     setMessage(statusLabel(loaded));
@@ -238,10 +222,14 @@ export function ProcessConfigurationForm({
         me.user.businessRoles?.includes("tail_supervisor")
         && me.user.capabilities.includes("process:configure"),
       );
-      const loadedOptions = canLoadOptions
-        ? await request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema)
-        : { processes: [] };
+      const [loadedOptions, loadedTailOptions]: [ProcessConfigurationOptionsResponse, TailInspectionOptionsResponse] = canLoadOptions
+        ? await Promise.all([
+          request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema),
+          request("tail-inspection-options", TailInspectionOptionsResponseSchema),
+        ])
+        : [{ processes: [] }, { inspectors: [] }];
       setOptions(loadedOptions);
+      setTailInspectionOptions(loadedTailOptions);
       return reload();
     }).catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : "工序配置加载失败");
@@ -254,40 +242,14 @@ export function ProcessConfigurationForm({
     ));
   };
 
-  const setPricingUnit = (index: number, nextUnit: ItemForm["pricingUnit"]) => {
-    setItems((current) => current.map((item, itemIndex) => {
-      if (itemIndex !== index) return item;
-      const inheritedQuantity = reworkQuantity !== null
-        && item.plannedQuantity === String(reworkQuantity);
-      return {
-        ...item,
-        pricingUnit: nextUnit,
-        plannedQuantity: nextUnit === "hour" && inheritedQuantity
-          ? ""
-          : nextUnit === "piece" && item.plannedQuantity === "" && reworkQuantity !== null
-            ? String(reworkQuantity)
-            : item.plannedQuantity,
-      };
-    }));
-  };
-
   const selectCatalogProcess = (index: number, processId: string) => {
-    const current = items[index];
-    if (!current) return;
-    const selected = options.processes.find((process) => process.processId === processId);
-    const nextUnit = selected?.pricingUnit ?? current.pricingUnit;
     setItem(index, { processId });
-    setPricingUnit(index, nextUnit);
   };
 
   const validateCurrentForm = (): boolean => {
     const itemError = validateItemForms(items);
     if (itemError) {
       setMessage(itemError);
-      return false;
-    }
-    if (response?.reworkStatus === "pending_task_assignment" && !changeReason.trim()) {
-      setMessage("已生效工序发生变更时必须填写变更原因。");
       return false;
     }
     return true;
@@ -308,9 +270,6 @@ export function ProcessConfigurationForm({
     const body = {
       expectedOrderVersion: response.orderVersion,
       items: payloadItems(items),
-      ...(response.reworkStatus === "pending_task_assignment"
-        ? { changeReason: changeReason.trim() }
-        : {}),
     };
     const signature = `draft:${path}:${JSON.stringify(body)}`;
     const saved = await request(
@@ -324,7 +283,7 @@ export function ProcessConfigurationForm({
     );
     delete pendingMutationKeys.current[signature];
     setResponse(saved);
-    setItems(saved.configuration?.items.map(toItem) ?? [emptyItem(reworkQuantity)]);
+    setItems(saved.configuration?.items.map(toItem) ?? [emptyItem()]);
     return saved;
   };
 
@@ -345,7 +304,11 @@ export function ProcessConfigurationForm({
   const submit = async () => {
     if (!response || !editable || busy) return;
     if (!validateCurrentForm()) return;
-    if (!(await confirmInApp("确认提交当前工序、计划数量与单价给 IE 审核？"))) return;
+    if (tailInspectors.length === 0) {
+      setMessage("请至少分配一名尾查人员。尾查会在提交后立即收到待办。 ");
+      return;
+    }
+    if (!(await confirmInApp("确认提交当前工序与候选单价给 IE 核价，并立即分配尾查？"))) return;
     setBusy(true);
     try {
       let attempt = pendingSubmit.current;
@@ -360,6 +323,10 @@ export function ProcessConfigurationForm({
           body: {
             expectedOrderVersion: saved.orderVersion,
             expectedConfigurationVersion: savedConfiguration.configurationVersion,
+            tailInspectors: tailInspectors.map((inspector) => ({
+              userId: inspector.userId,
+              ...(inspector.boxScope.trim() ? { boxScope: inspector.boxScope.trim() } : {}),
+            })),
           },
           key: crypto.randomUUID(),
         };
@@ -435,7 +402,7 @@ export function ProcessConfigurationForm({
         </StatusBadge>
       </div>
       <p>{response?.reworkNo ?? "返工单"} · {response ? "订单版本 " + response.orderVersion : "请稍候"}</p>
-      <StatusBadge tone="success">计划数量、单位、单价全程留痕</StatusBadge>
+      <StatusBadge tone="success">按件计价 · 候选单价全程留痕</StatusBadge>
     </div>
 
     {message && <p className="process-feedback" role="status">{message}</p>}
@@ -449,13 +416,13 @@ export function ProcessConfigurationForm({
     {editable && <Surface>
       <div className="section-title">
         <div>
-          <h2>工序、计划数量与单价</h2>
+          <h2>工序与候选单价</h2>
           <p>
-            {reworkQuantity === null ? "计划数量按实际工序填写。" : `返工总量 ${reworkQuantity} 件；按件工序默认带入该数量，可按实际工序调整。`}
-            计划数量 / 工时最多保留 1 位小数；单价最多保留 3 位，最低 0.001 元。
+            N02 只定义返工工序与候选单价；实际件数由 N05 工人上数和 N06 尾查报数交叉核验。
+            所有工序按件计价，单价最多保留 3 位，最低 0.001 元。
           </p>
         </div>
-        <Button onClick={() => setItems((current) => [...current, emptyItem(reworkQuantity)])} disabled={busy}>增加工序</Button>
+        <Button onClick={() => setItems((current) => [...current, emptyItem()])} disabled={busy}>增加工序</Button>
       </div>
       <div className="process-lines">
         {items.map((item, index) => <div className="process-line" key={index}>
@@ -472,8 +439,8 @@ export function ProcessConfigurationForm({
                 <SearchSelect
                   options={options.processes.map((process) => ({
                     value: process.processId,
-                    label: `${process.processName} · ${process.pricingUnit === "piece" ? "件" : "小时"}`,
-                    keywords: `${process.processName} ${process.pricingUnit === "piece" ? "按件 件" : "按小时 小时"}`,
+                    label: `${process.processName} · 按件`,
+                    keywords: `${process.processName} 按件 件`,
                   }))}
                   value={item.processId}
                   placeholder={options.processes.length ? "输入工序名称搜索" : "暂无公共工序"}
@@ -484,14 +451,30 @@ export function ProcessConfigurationForm({
               </span>
             </label>
             : <InsetField label="自定义工序" value={item.customProcessName} onChange={(event) => setItem(index, { customProcessName: event.target.value })} disabled={busy} placeholder="例如：特殊翻边返修" />}
-          <div className="process-line__grid">
-            <InsetField label={item.pricingUnit === "piece" ? "计划数量（件）" : "计划工时（小时）"} type="number" min="0.1" step="0.1" inputMode="decimal" value={item.plannedQuantity} onChange={(event) => setItem(index, { plannedQuantity: event.target.value })} disabled={busy} />
-            <SelectField label="计价单位"><select value={item.pricingUnit} onChange={(event) => setPricingUnit(index, event.target.value as ItemForm["pricingUnit"])} disabled={busy}><option value="piece">件</option><option value="hour">小时</option></select></SelectField>
-          </div>
-          <InsetField label="单价（元）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="例如：0.555" />
+          <InsetField label="候选单价（元 / 件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} onChange={(event) => setItem(index, { unitPrice: event.target.value })} disabled={busy} placeholder="例如：0.555" />
         </div>)}
       </div>
-      {response?.reworkStatus === "pending_task_assignment" && <InsetField label="变更原因" value={changeReason} onChange={(event) => setChangeReason(event.target.value)} disabled={busy} placeholder="说明改价或改数量的业务原因" />}
+      <section className="process-tail-inspectors" aria-labelledby="tail-inspector-heading">
+        <div className="section-title">
+          <div>
+            <h2 id="tail-inspector-heading">分配尾查</h2>
+            <p>提交后即向被分配的尾查推送待办；无需等待 IE 核价或工人完工。可多人清点，系统按每人的报数自动汇总。</p>
+          </div>
+          <StatusBadge tone={tailInspectors.length ? "success" : "warning"}>{tailInspectors.length ? `已分配 ${tailInspectors.length} 人` : "至少 1 人"}</StatusBadge>
+        </div>
+        <div className="process-tail-inspector-list">
+          {tailInspectionOptions.inspectors.map((inspector) => {
+            const selectedInspector = tailInspectors.find((item) => item.userId === inspector.userId);
+            return <div className="process-tail-inspector" key={inspector.userId}>
+              <label className="process-source"><input type="checkbox" checked={Boolean(selectedInspector)} disabled={busy} onChange={(event) => setTailInspectors((current) => event.target.checked
+                ? [...current, { userId: inspector.userId, boxScope: "" }]
+                : current.filter((item) => item.userId !== inspector.userId))} />{inspector.displayName}</label>
+              {selectedInspector ? <InsetField label="清点箱数 / 范围（可选）" value={selectedInspector.boxScope} maxLength={200} disabled={busy} placeholder="例如：3 箱、A1–A3" onChange={(event) => setTailInspectors((current) => current.map((item) => item.userId === inspector.userId ? { ...item, boxScope: event.target.value } : item))} /> : null}
+            </div>;
+          })}
+          {tailInspectionOptions.inspectors.length === 0 ? <p>当前没有可分配的尾查人员；请先在员工权限管理为相关人员授予“尾查”角色。</p> : null}
+        </div>
+      </section>
       <div className="mobile-actions process-configuration-actions">
         <Button onClick={() => void save()} disabled={busy}>{busy ? "处理中…" : "保存配置草稿"}</Button>
         <Button variant="primary" onClick={() => void submit()} disabled={busy || !response}>提交 IE 审核</Button>
@@ -503,7 +486,7 @@ export function ProcessConfigurationForm({
       <div className="process-readonly-list">
         {configuration.items.map((item) => <div key={item.configurationItemId}>
           <b>{item.processName}</b>
-          <small>{item.source === "custom" ? "自定义工序" : "公共工序"} · 计划 {item.plannedQuantity} {item.pricingUnit === "piece" ? "件" : "小时"} · ¥{formatUnitPrice(item.unitPrice)} / {item.pricingUnit === "piece" ? "件" : "小时"}</small>
+          <small>{item.source === "custom" ? "自定义工序" : "公共工序"} · ¥{formatUnitPrice(item.unitPrice)} / 件</small>
         </div>)}
       </div>
     </Surface>}
@@ -520,7 +503,7 @@ export function ProcessConfigurationForm({
 
     {reviewable && <Surface className="ie-review">
       <h2>IE 审核</h2>
-      <p>IE 确认计划数量、计价单位与单价。通过后配置生效；驳回必须留下原因。</p>
+      <p>IE 只核价：确认每道工序的候选单价。通过后配置生效；驳回必须留下原因。</p>
       <InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" />
       <div className="qc-secondary-actions">
         <Button onClick={() => void review("rejected")} disabled={busy}>驳回修改</Button>

@@ -21,9 +21,9 @@ describe("work reporting monetary snapshots", () => {
     expect(fortyPeople.reduce((total, share) => total + share, 0)).toBeCloseTo(18.75, 3);
   });
 
-  it("accepts one-decimal quantities and two-decimal prices for three-decimal work amounts", () => {
-    expect(hasAtMostDecimalPlaces(0.2, 1)).toBe(true);
-    expect(hasAtMostDecimalPlaces(0.21, 1)).toBe(false);
+  it("keeps worker quantities whole pieces and allows three-decimal IE prices", () => {
+    expect(Number.isInteger(2)).toBe(true);
+    expect(Number.isInteger(0.2)).toBe(false);
     expect(calculateWorkAmount(0.1, "0.55")).toBe(0.055);
     expect(calculateWorkAmount(1.2, "12.50")).toBe(15);
   });
@@ -38,8 +38,8 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("我已完工&上数");
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportQuantities");
-    expect(form).toContain('step="0.1"');
-    expect(form).toContain("最多保留一位小数");
+    expect(form).toContain('step="1"');
+    expect(form).toContain("大于 0 的整数件数");
     expect(form).toContain("当前岗位只处理尾部确认，不展示工人的个人上数");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
@@ -100,4 +100,3 @@ describe("work reporting monetary snapshots", () => {
     expect(localDateTimeValue(new Date(2026, 7, 2, 22, 3, 4))).toBe("2026-08-02T22:03");
   });
 });
-
