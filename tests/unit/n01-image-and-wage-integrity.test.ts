@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 
 describe("N01 image and wage integrity", () => {
   it("requires a ready image in both the service and database transition", async () => {
-    const [service, migration, form] = await Promise.all([
+    const [service, migration, castRepairMigration, form] = await Promise.all([
       readFile("apps/api/src/rework/service.ts", "utf8"),
       readFile("apps/api/migrations/0068_n01_image_and_wage_integrity.sql", "utf8"),
+      readFile("apps/api/migrations/0069_rework_image_submission_uuid_cast.sql", "utf8"),
       readFile("apps/web/src/rework-form.tsx", "utf8"),
     ]);
 
@@ -16,6 +17,8 @@ describe("N01 image and wage integrity", () => {
     expect(migration).toContain("guard_rework_submission_requires_image");
     expect(migration).toContain("attachment.status='ready'");
     expect(migration).toContain("attachment.mime_type IN ('image/jpeg','image/png','image/webp')");
+    expect(castRepairMigration).toContain("guard_rework_submission_requires_image");
+    expect(castRepairMigration).toContain("attachment.entity_id=NEW.rework_order_id::text");
     expect(form).toContain('accept="image/jpeg,image/png,image/webp"');
   });
 
