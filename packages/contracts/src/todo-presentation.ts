@@ -75,6 +75,11 @@ const deliveryPrefix = (kind: TodoPresentationDeliveryKind, category: string): s
 
 const value = (input: string | null): string => input?.trim() || "未填写";
 
+const orderSubject = (input: TodoPresentationOrderContext | null | undefined): string =>
+  input
+    ? `【返工单:${value(input.reworkNo)}｜款号:${value(input.styleNo)}｜订单号:${value(input.orderNo)}】`
+    : "";
+
 export const buildTodoPresentation = (input: Readonly<{
   category: string;
   deliveryKind: TodoPresentationDeliveryKind;
@@ -92,7 +97,7 @@ export const buildTodoPresentation = (input: Readonly<{
       ? [`工资月份：${input.wagePeriodMonth.slice(0, 7)}`]
       : [];
   return {
-    subject: `${deliveryPrefix(input.deliveryKind, input.category)}${presentation.title}`,
+    subject: `${deliveryPrefix(input.deliveryKind, input.category)}${orderSubject(input.orderContext)}${presentation.title}`,
     description: [...contextLines, `事项：${presentation.action}`].join("\n"),
   };
 };
