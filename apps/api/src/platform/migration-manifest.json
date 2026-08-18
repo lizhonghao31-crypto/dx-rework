@@ -259,6 +259,10 @@
     {
       "version": "0065_ie_pricing_before_assignment",
       "checksum": "6c5144229f1c0b456890026fbd7f2280aaba11d4a9401c60a2b0a919d5d07f3a"
+    },
+    {
+      "version": "0066_tail_inspection_foundation",
+      "checksum": "b4afae50eec8cbda14746a269fb24cd7ce1766ef2df338453e038a7b3beb7930"
     }
   ]
 }
