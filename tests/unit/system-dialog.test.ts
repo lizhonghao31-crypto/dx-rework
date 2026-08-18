@@ -29,6 +29,9 @@ describe("system dialog automation contract", () => {
     expect(source).toContain('request.kind === "prompt"');
     expect(source).toContain("mountNextDialog");
     expect(css).toContain(".system-dialog-backdrop");
+    expect(css).toContain("background: #fff;");
+    expect(css).toContain("box-shadow: 0 20px 52px");
+    expect(css).toContain(".system-dialog__actions .dx-button");
     expect(css).toContain("@media (max-width: 520px)");
   });
 
@@ -58,5 +61,17 @@ describe("system dialog automation contract", () => {
     expect(sources[2]).toContain("await confirmInApp");
     expect(sources[2]).toContain("await promptInApp");
     expect(sources[3]).toContain("await confirmInApp");
+  });
+
+  it("keeps custom report and image dialogs on the same clean overlay treatment", async () => {
+    const [reportingCss, detailCss] = await Promise.all([
+      readFile("apps/web/src/work-reporting-form.css", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+    ]);
+    expect(reportingCss).toContain(".work-reporting-dialog-backdrop");
+    expect(reportingCss).toContain("z-index: 1000;");
+    expect(reportingCss).toContain("background: #fff;");
+    expect(detailCss).toContain(".rework-image-modal__content");
+    expect(detailCss).toContain("box-shadow: 0 20px 52px");
   });
 });

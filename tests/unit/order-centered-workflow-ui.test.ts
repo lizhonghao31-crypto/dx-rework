@@ -39,7 +39,9 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain("taskMode={selected.key}");
     expect(detail).not.toContain('action: "返回全部订单"');
     expect(detail.match(/badge=\{meta\.label\}/g)).toHaveLength(1);
-    expect(styles).toMatch(/\.rework-workflow__node\.is-future \{[\s\S]*?color: #fff;[\s\S]*?background: var\(--dx-v2-color-primary-hover\);/);
+    expect(styles).toMatch(/\.rework-workflow__node\.is-completed \{[\s\S]*?background: #edf1f4;/);
+    expect(styles).toMatch(/\.rework-workflow__node\.is-current \{[\s\S]*?background: var\(--dx-v2-color-primary\);/);
+    expect(styles).toMatch(/\.rework-workflow__node\.is-future \{[\s\S]*?background: var\(--dx-v2-color-control\);/);
     expect(styles).toContain("color: rgb(255 255 255 / 80%);");
     expect(styles).not.toContain(".rework-workflow__node.is-selected");
     expect(detail).not.toContain('" is-selected"');
