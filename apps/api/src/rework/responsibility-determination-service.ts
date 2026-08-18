@@ -41,9 +41,9 @@ export const cents = (value: bigint): string =>
 export const validateBps = (
   rows: readonly { shareBps: number }[],
 ): void => {
-  if (rows.reduce((sum, row) => sum + row.shareBps, 0) !== 10000) {
+  if (rows.length !== 1 || rows[0]?.shareBps !== 10000) {
     fail(
-      "Responsibility shares must total 10000 bps",
+      "Each process must have exactly one responsible party bearing 100%",
       400,
       "VALIDATION_ERROR",
     );
@@ -650,6 +650,9 @@ export class ResponsibilityDeterminationService {
       fail("必须提交全部 approved 工序", 400, "VALIDATION_ERROR");
     }
     input.processes.forEach((row) => validateBps(row.allocations));
+    if (input.processes.some((row) => decimalToScaled(row.multiplier, 3) !== 1_000n || row.highMultiplierReason != null)) {
+      fail("责任系数已停用；每道工序只选择一个责任方", 400, "VALIDATION_ERROR");
+    }
     // Every determination created after migration 0054 is N07–N11 V2.  The
     // client must never be able to opt back into the retired V1 settlement
     // path by omitting optional wire fields; those fields remain optional only
@@ -793,8 +796,8 @@ export class ResponsibilityDeterminationService {
           calculation.input.configurationItemId,
           calculation.approved.process_name,
           calculation.approved.pricing_unit,
-          calculation.input.multiplier,
-          calculation.input.highMultiplierReason ?? null,
+          "1.000",
+          null,
           `${baseAmount / 100_000_000n}.${(baseAmount % 100_000_000n)
             .toString()
             .padStart(8, "0")}`,
@@ -954,25 +957,6 @@ export class ResponsibilityDeterminationService {
       route: { routeName: "responsibility_detail", entityId: orderId },
       dedupeKey: `responsibility:${orderId}:${version}`,
     });
-    if (this.todos && input.processes.some((process) => Number(process.multiplier) > 2)) {
-      const highMultiplierProjection = {
-        category: "high_multiplier_confirmation",
-        sourceEventId: eventId,
-        sourceAction: "rework.responsibility.draft",
-        entityType: "rework_order",
-        entityId: orderId,
-        requiredRole: "owner_group",
-        requiredCapability: "responsibility:confirm_high_multiplier",
-        route: { routeName: "responsibility_detail", entityId: orderId },
-        policyKey: "general",
-        dedupeKey: `high-multiplier:${determinationId}:${version}`,
-      } as const;
-      await this.todos.actionableForAllDirectRole(
-        client,
-        actor,
-        highMultiplierProjection,
-      );
-    }
     return this.get(actor, orderId, client);
   }
 

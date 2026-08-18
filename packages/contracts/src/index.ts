@@ -482,16 +482,14 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     processId: IdSchema,
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: ProcessPricingUnitSchema,
-    // N02 only records the operational plan.  The tail supervisor enters the
-    // final price at N05 and IE verifies it at N06.
-    unitPrice: z.number().finite().positive().optional(),
+    unitPrice: z.number().finite().positive(),
   }).strict(),
   z.object({
     source: z.literal("custom"),
     customProcessName: z.string().trim().min(1).max(100),
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: ProcessPricingUnitSchema,
-    unitPrice: z.number().finite().positive().optional(),
+    unitPrice: z.number().finite().positive(),
   }).strict(),
 ]).superRefine((value, context) => {
   if (value.pricingUnit === "piece" && !Number.isInteger(value.plannedQuantity)) {
@@ -543,6 +541,10 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processName: z.string().min(1),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
+  // Historical configurations created before N02 pricing was mandatory may
+  // still have no price. New writes remain strict in
+  // ProcessConfigurationItemSchema; this nullable response only keeps those
+  // immutable old orders readable.
   unitPrice: z.number().positive().nullable(),
   promotedProcessId: IdSchema.nullable(),
 });
@@ -662,40 +664,22 @@ export const RejectWorkReportSchema = z.object({
   rejectedPersonId: IdSchema.nullable(),
   reason: ReasonSchema,
 }).strict();
-export const ReviewWholeOrderSchema = z.object({ expectedOrderVersion: z.number().int().positive() }).strict();
-const FinalProcessPriceSchema = z.object({
-  configurationItemId: IdSchema,
-  unitPrice: z.number().finite().positive().refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8, "Unit price keeps at most two decimals"),
-}).strict();
-const TemporaryWageCoefficientSchema = z.object({
-  configurationItemId: IdSchema,
-  personId: IdSchema,
-  multiplier: z.number().finite().positive().max(10).refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "Multiplier keeps at most three decimals"),
-  reason: z.string().trim().min(1).max(500).optional(),
-}).strict().superRefine((value, context) => {
-  if (value.multiplier !== 1 && !value.reason) {
-    context.addIssue({ code: "custom", path: ["reason"], message: "Non-default multiplier requires a reason" });
-  }
-});
-export const SubmitTailPricingSchema = z.object({
+export const ReviewWholeOrderSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
-  prices: z.array(FinalProcessPriceSchema).min(1),
-  temporaryCoefficients: z.array(TemporaryWageCoefficientSchema),
+  temporaryCoefficients: z.array(z.object({
+    configurationItemId: IdSchema,
+    personId: IdSchema,
+    multiplier: z.number().finite().positive().max(10).refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "Multiplier keeps at most three decimals"),
+    reason: z.string().trim().min(1).max(500).optional(),
+  }).strict().superRefine((value, context) => {
+    if (value.multiplier !== 1 && !value.reason) {
+      context.addIssue({ code: "custom", path: ["reason"], message: "Non-default multiplier requires a reason" });
+    }
+  })),
 }).strict().superRefine((value, context) => {
-  if (new Set(value.prices.map((item) => item.configurationItemId)).size !== value.prices.length) {
-    context.addIssue({ code: "custom", path: ["prices"], message: "Process prices cannot contain duplicates" });
-  }
-  if (new Set(value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`)).size !== value.temporaryCoefficients.length) {
+  const keys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
+  if (new Set(keys).size !== keys.length) {
     context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
-  }
-});
-export const ReviewTailPricingSchema = z.object({
-  expectedOrderVersion: z.number().int().positive(),
-  decision: z.enum(["approved", "rejected"]),
-  reason: z.string().trim().min(1).max(500).optional(),
-}).strict().superRefine((value, context) => {
-  if (value.decision === "rejected" && !value.reason) {
-    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
   }
 });
 export const CreateQuantityDecreaseSchema = z.object({
@@ -759,8 +743,6 @@ export const WholeOrderReviewResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   canReview: z.boolean(),
-  canSubmitTailPricing: z.boolean(),
-  canReviewTailPricing: z.boolean(),
   canAdjustQuantity: z.boolean(),
   canConfirmQuantity: z.boolean(),
   canReviewQuantityIncrease: z.boolean(),
@@ -772,7 +754,6 @@ export const WholeOrderReviewResponseSchema = z.object({
     completedQuantity: z.number().nonnegative(),
     complete: z.boolean(),
     finalUnitPrice: z.number().positive().nullable(),
-    proposedUnitPrice: z.number().positive().nullable(),
   }).strict()),
   reports: z.array(z.object({
     workReportId: IdSchema,
@@ -797,18 +778,10 @@ export const WholeOrderReviewResponseSchema = z.object({
     multiplier: z.number().positive(),
     reason: z.string().nullable(),
   }).strict()),
-  tailPricing: z.object({
-    submissionId: IdSchema,
-    version: z.number().int().positive(),
-    status: z.enum(["pending_ie_review", "approved", "rejected"]),
-    rejectionReason: z.string().nullable(),
-  }).nullable(),
   reviewId: IdSchema.nullable(),
 });
 export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
 export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
-export type SubmitTailPricing = z.infer<typeof SubmitTailPricingSchema>;
-export type ReviewTailPricing = z.infer<typeof ReviewTailPricingSchema>;
 export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;
 export type CreateQuantityIncrease = z.infer<typeof CreateQuantityIncreaseSchema>;
 export type ConfirmQuantityIncrease = z.infer<typeof ConfirmQuantityIncreaseSchema>;
@@ -846,12 +819,24 @@ export const ResponsibilityProcessInputSchema = z.object({
   configurationItemId: IdSchema,
   multiplier: ResponsibilityMultiplierSchema,
   highMultiplierReason: ReasonSchema.optional(),
-  allocations: z.array(ResponsibilityAllocationInputSchema).min(1).max(5),
+  allocations: z.array(ResponsibilityAllocationInputSchema).length(1),
 }).strict().superRefine((value, context) => {
-  if (value.allocations.reduce((sum, row) => sum + row.shareBps, 0) !== 10_000) context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility shares must total 10000 bps" });
-  if (new Set(value.allocations.map((row) => row.responsibilityType)).size !== value.allocations.length) context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility types cannot repeat" });
-  const [whole, fraction = ""] = value.multiplier.split(".");
-  if (BigInt(whole!) * 1000n + BigInt(fraction.padEnd(3, "0")) > 2000n && !value.highMultiplierReason) context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: "A reason is required above 2x" });
+  if (responsibilityMultiplierScaled(value.multiplier) !== 1_000n) {
+    context.addIssue({ code: "custom", path: ["multiplier"], message: "The retired responsibility coefficient must remain 1" });
+  }
+  if (value.highMultiplierReason !== undefined) {
+    context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: "The retired responsibility coefficient reason is not accepted" });
+  }
+  const allocation = value.allocations[0]!;
+  if (allocation.shareBps !== 10_000) context.addIssue({ code: "custom", path: ["allocations", 0, "shareBps"], message: "The selected responsible party must bear 100%" });
+  const multiplier = responsibilityMultiplierScaled(allocation.multiplier ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"));
+  if (allocation.responsibilityType === "own_factory") {
+    if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", 0, "multiplier"], message: "Own-factory responsibility multiplier must be 1" });
+    if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", 0, "supplierId"], message: "Own-factory responsibility cannot carry a supplier" });
+  } else {
+    if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", 0, "multiplier"], message: "External deduction multiplier cannot be lower than 1.2" });
+    if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", 0, "supplierId"], message: "External responsibility requires the actual supplier" });
+  }
 });
 export const CreateResponsibilityDraftSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
@@ -883,26 +868,9 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
   sourceProcesses: z.array(z.object({ configurationItemId: IdSchema, processName: z.string().min(1), pricingUnit: ProcessPricingUnitSchema, baseAmount: z.string() }).strict()),
   determination: z.object({ determinationId: IdSchema, version: z.number().int().positive(), stage: z.enum(["draft", "finalized"]), reason: z.string().nullable(), calculationTotal: z.string(), highMultiplierConfirmed: z.boolean(), processes: z.array(z.object({ configurationItemId: IdSchema, processName: z.string(), pricingUnit: ProcessPricingUnitSchema, multiplier: z.string(), highMultiplierReason: z.string().nullable(), baseAmount: z.string(), responsibilityAmount: z.string(), allocations: z.array(z.object({ responsibilityType: ResponsibilityTypeSchema, shareBps: z.number().int(), roundedAmount: z.string(), multiplier: z.string().default("1.000"), supplier: z.object({ supplierId: IdSchema, version: z.number().int().positive(), code: z.string(), name: z.string(), type: z.enum(["factory", "embroidery_washing", "fabric"]) }).strict().nullable().default(null) })) })) }).nullable(),
 });
-export const OwnerSpecialMultiplierAdjustmentSchema = z.object({
-  configurationItemId: IdSchema,
-  responsibilityType: z.enum(["processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
-  multiplier: ResponsibilityMultiplierSchema.refine(
-    (value) => responsibilityMultiplierScaled(value) >= 1_200n,
-    "External responsibility multiplier cannot be lower than 1.2",
-  ),
-  reason: ReasonSchema,
-}).strict();
 export const OwnerSignatureCommandSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
-  // N08 only receives exceptions. Omitted rows retain the external 1.2 default.
-  specialMultiplierAdjustments: z.array(OwnerSpecialMultiplierAdjustmentSchema).default([]),
-}).strict().superRefine((value, context) => {
-  const keys = value.specialMultiplierAdjustments.map((row) => `${row.configurationItemId}:${row.responsibilityType}`);
-  if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", path: ["specialMultiplierAdjustments"], message: "A responsibility can only have one owner multiplier adjustment" });
-  value.specialMultiplierAdjustments.forEach((row, index) => {
-    if (responsibilityMultiplierScaled(row.multiplier) === 1_200n) context.addIssue({ code: "custom", path: ["specialMultiplierAdjustments", index, "multiplier"], message: "Only non-default external multipliers need to be submitted" });
-  });
-});
+}).strict();
 export type ResponsibilityType = z.infer<typeof ResponsibilityTypeSchema>;
 export type ResponsibilitySupplierOptionsResponse = z.infer<typeof ResponsibilitySupplierOptionsResponseSchema>;
 export type CreateResponsibilityDraft = z.infer<typeof CreateResponsibilityDraftSchema>;

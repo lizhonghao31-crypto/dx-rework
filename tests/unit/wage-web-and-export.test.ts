@@ -38,3 +38,4 @@ describe("wage web and xlsx delivery", () => {
     expect(adjustment).toContain("pendingAttempt.current = attempt");
   });
 });
+

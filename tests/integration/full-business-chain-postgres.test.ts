@@ -5,6 +5,7 @@ import {
   CreateResponsibilityDraftSchema,
   CreateWorkReportSchema,
   CreateWorkTaskSchema,
+  ReviewProcessConfigurationSchema,
   SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
@@ -350,7 +351,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       entity_id: submitted.value.reworkOrderId,
     });
 
-    // N02 only records process and planned quantity; it directly enters N03.
+    // N02 records process, planned quantity and price; N03 IE must approve it.
     const n02Input = SaveProcessConfigurationSchema.parse({
       expectedOrderVersion: supplemented.value.version,
       items: [{
@@ -358,6 +359,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         processId: publicProcessId,
         plannedQuantity: submitted.value.reworkQuantity,
         pricingUnit: "piece",
+        unitPrice: 0.55,
       }],
     });
     const n02Saved = await configuration.saveDraft(
@@ -370,10 +372,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       reworkStatus: "pending_process_configuration",
       configuration: {
         status: "draft",
-        items: [{ plannedQuantity: 200, unitPrice: null }],
+        items: [{ plannedQuantity: 200, unitPrice: 0.55 }],
       },
     });
-    const n03Assigned = await configuration.submit(
+    const n02Submitted = await configuration.submit(
       tailConfigure(),
       submitted.value.reworkOrderId,
       SubmitProcessConfigurationSchema.parse({
@@ -382,14 +384,25 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       }),
       randomUUID(),
     );
-    expect(n03Assigned.value.reworkStatus).toBe("pending_task_assignment");
-    const approvedItem = n03Assigned.value.configuration!.items[0]!;
+    expect(n02Submitted.value.reworkStatus).toBe("pending_ie_review");
+    const n03Approved = await configuration.review(
+      ie(),
+      submitted.value.reworkOrderId,
+      ReviewProcessConfigurationSchema.parse({
+        expectedOrderVersion: n02Submitted.value.orderVersion,
+        expectedConfigurationVersion: n02Submitted.value.configuration!.configurationVersion,
+        decision: "approved",
+      }),
+      randomUUID(),
+    );
+    expect(n03Approved.value.reworkStatus).toBe("pending_task_assignment");
+    const approvedItem = n03Approved.value.configuration!.items[0]!;
     expect(approvedItem).toMatchObject({
       processId: publicProcessId,
       processName: "袖口返修",
       plannedQuantity: 200,
       pricingUnit: "piece",
-      unitPrice: null,
+      unitPrice: 0.55,
     });
 
     // N03 needs an explicit assignment confirmation before work starts.
@@ -397,7 +410,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       tailAssign(),
       submitted.value.reworkOrderId,
       CreateWorkTaskSchema.parse({
-        expectedOrderVersion: n03Assigned.value.orderVersion,
+        expectedOrderVersion: n03Approved.value.orderVersion,
         configurationItemId: approvedItem.configurationItemId,
         mode: "individual",
         members: [{ personId: workerPersonId }],
@@ -407,7 +420,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(task.value).toMatchObject({
       processName: "袖口返修",
       plannedQuantity: 200,
-      unitPrice: null,
+      unitPrice: 0.55,
       members: [{ personId: workerPersonId, displayName: "工人" }],
     });
     const pendingAssignments = await work.list(
@@ -422,8 +435,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(n04Started.value.reworkStatus).toBe("in_progress");
 
-    // N04 has one final completion report per assigned task; no price is
-    // disclosed or calculated before N05/N06.
+    // N05 has one final completion report per assigned task; wage is still
+    // generated only after N06 confirms the quantity.
     const firstReportKey = randomUUID();
     const firstReportInput = CreateWorkReportSchema.parse({
       expectedOrderVersion: n04Started.value.orderVersion,
@@ -457,50 +470,17 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         plannedQuantity: 200,
         completedQuantity: 200,
         complete: true,
-        finalUnitPrice: null,
+        finalUnitPrice: 0.55,
       })],
     });
 
-    // N05 submits final price; N06 may reject once and accepts only the
-    // resubmitted price. The approval freezes worker wages and enters N07.
-    const firstPricing = await wholeOrder.submitTailPricing(
+    // N06 confirms valid quantities and creates wages directly from N03 price.
+    const n06Approved = await wholeOrder.approve(
       tailAudit(),
       submitted.value.reworkOrderId,
       {
         expectedOrderVersion: n05View.orderVersion,
-        prices: [{ configurationItemId: approvedItem.configurationItemId, unitPrice: 0.55 }],
         temporaryCoefficients: [],
-      },
-      randomUUID(),
-    );
-    expect(firstPricing.value.reworkStatus).toBe("pending_ie_review");
-    const rejectedPricing = await wholeOrder.reviewTailPricing(
-      ie(),
-      submitted.value.reworkOrderId,
-      {
-        expectedOrderVersion: firstPricing.value.orderVersion,
-        decision: "rejected",
-        reason: "全链测试：IE 退回尾部定价后重提",
-      },
-      randomUUID(),
-    );
-    expect(rejectedPricing.value.reworkStatus).toBe("pending_order_review");
-    const resubmittedPricing = await wholeOrder.submitTailPricing(
-      tailAudit(),
-      submitted.value.reworkOrderId,
-      {
-        expectedOrderVersion: rejectedPricing.value.orderVersion,
-        prices: [{ configurationItemId: approvedItem.configurationItemId, unitPrice: 0.55 }],
-        temporaryCoefficients: [],
-      },
-      randomUUID(),
-    );
-    const n06Approved = await wholeOrder.reviewTailPricing(
-      ie(),
-      submitted.value.reworkOrderId,
-      {
-        expectedOrderVersion: resubmittedPricing.value.orderVersion,
-        decision: "approved",
       },
       randomUUID(),
     );
@@ -561,22 +541,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
     // N08 completes the production flow and atomically materializes the N09
     // supplier ledger from the immutable N07 responsibility facts.
-    const adjustedProcess = n07Final.value.determination!.processes
-      .find((process) => process.allocations.some((allocation) => allocation.responsibilityType === "processing_factory"))!;
-    const adjustedExternal = {
-      configurationItemId: adjustedProcess.configurationItemId,
-      responsibilityType: "processing_factory" as const,
-    };
     const ownerSigned = await responsibility.approveOwnerSignature(
       ownerApproval(),
       submitted.value.reworkOrderId,
       {
         expectedOrderVersion: n07Final.value.orderVersion,
-        specialMultiplierAdjustments: [{
-          ...adjustedExternal,
-          multiplier: "1.500",
-          reason: "供应商确认的特殊返工承担倍率",
-        }],
       },
       randomUUID(),
     );
@@ -584,9 +553,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       reworkStatus: "completed",
       ownerSignature: {
         decision: "approved", signedBy: ids.ownerOne,
-        multiplierAdjustments: [expect.objectContaining({
-          ...adjustedExternal, multiplier: "1.500",
-        })],
+        multiplierAdjustments: [],
       },
     });
 

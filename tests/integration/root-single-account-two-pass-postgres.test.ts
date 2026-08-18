@@ -229,6 +229,14 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     });
 
     const masterDataActor = await rootActor("master_data:manage");
+    if (pass === 2) {
+      workerPersonIds[0] = (await access.createPerson(masterDataActor, {
+        personType: "temporary",
+        displayName: "Root 双跑临时工",
+        aliases: [],
+        reason: "验证临时工工资与外部扣款倍率隔离",
+      })).personId;
+    }
     const supplierId = (await access.createSupplier(masterDataActor, {
       supplierCode: `R${pass}FAC01`,
       supplierType: "factory",
@@ -405,11 +413,12 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
             processId: fixture.processId,
             plannedQuantity: fixture.plannedQuantity,
             pricingUnit: fixture.pricingUnit,
+            unitPrice: fixture.unitPrice,
           }],
         },
       );
     const saved = await save(supplemented.version);
-    const approved = await http<ProcessConfigurationResponse>(
+    const submittedConfiguration = await http<ProcessConfigurationResponse>(
       fixture.app,
       "POST",
       `/rework-orders/${draft.reworkOrderId}/process-configuration/submit`,
@@ -418,10 +427,21 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedConfigurationVersion: saved.configuration!.configurationVersion,
       },
     );
+    expect(submittedConfiguration.reworkStatus).toBe("pending_ie_review");
+    const approved = await http<ProcessConfigurationResponse>(
+      fixture.app,
+      "POST",
+      `/rework-orders/${draft.reworkOrderId}/process-configuration/review`,
+      {
+        expectedOrderVersion: submittedConfiguration.orderVersion,
+        expectedConfigurationVersion: submittedConfiguration.configuration!.configurationVersion,
+        decision: "approved",
+      },
+    );
     expect(approved.reworkStatus).toBe("pending_task_assignment");
     expect(approved.configuration!.items[0]).toMatchObject({
       plannedQuantity: fixture.plannedQuantity,
-      unitPrice: null,
+      unitPrice: fixture.unitPrice,
     });
     return {
       draft,
@@ -431,11 +451,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   }
 
   async function runResponsibilityToDeduction(
-    pass: 1 | 2,
     fixture: PassFixture,
     reworkOrderId: string,
     itemId: string,
     orderVersion: number,
+    expectedDeductionAmount: string,
   ): Promise<void> {
     const determination = await http<ResponsibilityDeterminationResponse>(
       fixture.app,
@@ -474,12 +494,6 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       `/rework-orders/${reworkOrderId}/responsibility-owner-signature/approve`,
       {
         expectedOrderVersion: finalized.orderVersion,
-        specialMultiplierAdjustments: pass === 2 ? [{
-          configurationItemId: itemId,
-          responsibilityType: "processing_factory",
-          multiplier: "1.500",
-          reason: "Root 第二遍：保留例外供应商倍率审计快照",
-        }] : [],
       },
     );
     expect(signed).toMatchObject({
@@ -489,11 +503,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         signedBy: fixture.rootUserId,
       },
     });
-    if (pass === 2) {
-      expect(signed.ownerSignature?.multiplierAdjustments).toEqual([
-        expect.objectContaining({ multiplier: "1.500" }),
-      ]);
-    }
+    expect(signed.ownerSignature?.multiplierAdjustments).toEqual([]);
     const batch = await http<ExternalResponsibilityBatchResponse | null>(
       fixture.app,
       "GET",
@@ -512,6 +522,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       canSign: false,
       canRecordDeduction: true,
     });
+    expect(externalCase.proposedDeductionAmount).toBe(expectedDeductionAmount);
 
     externalCase = await http<ExternalResponsibilityCaseResponse>(
       fixture.app,
@@ -737,36 +748,36 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
       );
       expect(n05.processes).toEqual([
-        expect.objectContaining({ complete: true, finalUnitPrice: null }),
+        expect.objectContaining({ complete: true, finalUnitPrice: fixture.unitPrice }),
       ]);
-      const pricing = await http<WholeOrderReviewResponse>(
+      const n06Confirmed = await http<WholeOrderReviewResponse>(
         fixture.app,
         "POST",
-        `/rework-orders/${draft.reworkOrderId}/tail-pricing`,
+        `/rework-orders/${draft.reworkOrderId}/whole-order-review/approve`,
         {
           expectedOrderVersion: n05.orderVersion,
-          prices: [{ configurationItemId: item.configurationItemId, unitPrice: fixture.unitPrice }],
-          temporaryCoefficients: [],
+          temporaryCoefficients: pass === 2 ? [{
+            configurationItemId: item.configurationItemId,
+            personId: fixture.workerPersonIds[0]!,
+            multiplier: 1.3,
+            reason: "旺季临时工加价",
+          }] : [],
         },
       );
-      expect(pricing.reworkStatus).toBe("pending_ie_review");
-      const ieReviewed = await http<WholeOrderReviewResponse>(
-        fixture.app,
-        "POST",
-        `/rework-orders/${draft.reworkOrderId}/tail-pricing/review`,
-        {
-          expectedOrderVersion: pricing.orderVersion,
-          decision: "approved",
-        },
-      );
-      expect(ieReviewed.reworkStatus).toBe("pending_responsibility_determination");
+      expect(n06Confirmed.reworkStatus).toBe("pending_responsibility_determination");
+      const generatedWage = (await fixture.database.query<{ payable_amount: string }>(
+        `SELECT payable_amount::text FROM rework_wage_items
+         WHERE rework_order_id=$1 AND person_id=$2`,
+        [draft.reworkOrderId, fixture.workerPersonIds[0]],
+      )).rows[0]?.payable_amount;
+      expect(generatedWage).toBe(pass === 2 ? "23.40" : "6.00");
 
       await runResponsibilityToDeduction(
-        pass,
         fixture,
         draft.reworkOrderId,
         item.configurationItemId,
-        ieReviewed.orderVersion,
+        n06Confirmed.orderVersion,
+        pass === 2 ? "28.08" : "7.20",
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",

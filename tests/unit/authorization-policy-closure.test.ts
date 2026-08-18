@@ -77,3 +77,4 @@ describe("authorization policy closure", () => {
     expect(projection).toContain("if (this.suppress(args[1], error)) return;");
   });
 });
+

@@ -11,8 +11,6 @@ import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-r
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
-import { completeInspectionReport } from "../inspection-report-fixture.js";
-
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 const migrations = [
@@ -22,7 +20,6 @@ const migrations = [
   "0004_public_tools_foundation.sql",
   "0005_access_master_data.sql",
   "0006_rework_initiation.sql",
-  "0056_n01_digital_inspection_report.sql",
   "0007_process_configuration_ie_review.sql",
   "0008_worker_assignment_reporting.sql",
   "0009_whole_order_review_quantity_adjustment.sql",
@@ -109,7 +106,6 @@ runWithPostgres("responsibility authorization and handler closure", () => {
         problemPart: "袖口",
         problemDescription: "S2 " + label,
         reworkQuantity: 1,
-        inspectionReport: completeInspectionReport(),
       },
       randomUUID(),
     );
@@ -194,7 +190,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     const reviewed = await review.approve(
       actor(ids.tail, ["tail_supervisor"], "submission:audit"),
       created.value.reworkOrderId,
-      { expectedOrderVersion: view.orderVersion },
+      { expectedOrderVersion: view.orderVersion, temporaryCoefficients: [] },
       randomUUID(),
     );
     return {
@@ -430,7 +426,7 @@ runWithPostgres("responsibility authorization and handler closure", () => {
     });
   });
 
-  it("allows a direct owner to self-confirm while preserving the exact snapshot", async () => {
+  it("rejects the retired process-level responsibility coefficient", async () => {
     const order = await createReviewedOrder("high");
     const submitter = actor(
       ids.ownerOne,
@@ -439,111 +435,19 @@ runWithPostgres("responsibility authorization and handler closure", () => {
       "responsibility:takeover",
       "responsibility:confirm_high_multiplier",
     );
-    const draft = await responsibility.saveDraft(
+    await expect(responsibility.saveDraft(
       submitter,
       order.orderId,
       draftInput(order.orderVersion, order.itemId, ids.ownerOne, "2.500", "特殊质量事故"),
       "s2-high-draft",
+    )).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    const stored = await database.query<{ count: string }>(
+      `SELECT count(*)::text count
+       FROM rework_responsibility_determinations
+       WHERE rework_order_id=$1`,
+      [order.orderId],
     );
-    const determinationId = draft.value.determination!.determinationId;
-    await expect(responsibility.confirmHighMultiplier(
-      actor(
-        ids.admin,
-        ["root_superuser"],
-        "responsibility:confirm_high_multiplier",
-      ),
-      determinationId,
-      {
-        expectedOrderVersion: draft.value.orderVersion,
-        expectedCurrentDeterminationVersion: 1,
-        reason: "非老板不能绕过直接角色确认",
-      },
-      "s2-non-owner-confirm",
-    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
-    const confirmed = await responsibility.confirmHighMultiplier(
-      submitter,
-      determinationId,
-      {
-        expectedOrderVersion: draft.value.orderVersion,
-        expectedCurrentDeterminationVersion: 1,
-        reason: "老板本人最终确认",
-      },
-      "s2-self-confirm",
-    );
-    expect(confirmed.value).toMatchObject({
-      orderVersion: draft.value.orderVersion + 1,
-      canConfirmHighMultiplier: false,
-      determination: { highMultiplierConfirmed: true },
-    });
-    const stored = await database.query<{
-      confirmed_by: string;
-      confirmation_snapshot: {
-        determinationId: string;
-        determinationVersion: number;
-        submittedBy: string;
-        handlerUserId: string;
-        processes: Array<{
-          configurationItemId: string;
-          multiplier: string;
-          highMultiplierReason: string;
-        }>;
-      };
-    }>(
-      `SELECT confirmed_by,confirmation_snapshot
-       FROM rework_responsibility_high_multiplier_confirmations
-       WHERE determination_id=$1`,
-      [determinationId],
-    );
-    expect(stored.rows[0]).toEqual({
-      confirmed_by: ids.ownerOne,
-      confirmation_snapshot: {
-        determinationId,
-        determinationVersion: 1,
-        submittedBy: ids.ownerOne,
-        handlerUserId: ids.ownerOne,
-        processes: [{
-          configurationItemId: order.itemId,
-          multiplier: "2.500",
-          highMultiplierReason: "特殊质量事故",
-        }],
-      },
-    });
-    const finalized = await responsibility.finalize(
-      submitter,
-      order.orderId,
-      {
-        expectedOrderVersion: confirmed.value.orderVersion,
-        expectedCurrentDeterminationVersion: 1,
-      },
-      "s2-high-finalize",
-    );
-    expect(finalized.value).toMatchObject({
-      reworkStatus: "pending_responsibility_action",
-      handlerUserId: ids.ownerOne,
-      determination: { stage: "finalized", version: 2 },
-    });
-    const approvalSnapshot = await ownFactoryApproval.get(
-      actor(ids.ownerOne, ["owner_group"], "own_factory:view", "own_factory:approve"),
-      order.orderId,
-    );
-    expect(approvalSnapshot.approval!.sourceSnapshot.finalizedDetermination)
-      .toMatchObject({
-        determinationVersion: 2,
-        highMultiplierConfirmation: {
-          confirmedBy: ids.ownerOne,
-          reason: "老板本人最终确认",
-        },
-      });
-    expect(approvalSnapshot.approval!.sourceSnapshot).toMatchObject({
-      qualityControl: { initiatedBy: ids.qc },
-      wholeOrderReview: {
-        reviewedBy: ids.tail,
-        reviewSnapshot: {
-          processes: expect.any(Array),
-          reports: expect.any(Array),
-        },
-      },
-    });
+    expect(stored.rows[0]?.count).toBe("0");
   });
 
   it("creates one immutable own-factory approval, queues the other owner result notice, and rejects non-owners", async () => {

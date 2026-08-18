@@ -73,7 +73,7 @@ type PreparedItem = Readonly<{
   processName: string;
   pricingUnit: "piece" | "hour";
   plannedQuantity: number;
-  unitPrice: number | null;
+  unitPrice: number;
 }>;
 
 type PromotionLockInput = Readonly<{
@@ -171,7 +171,7 @@ export class ProcessConfigurationService {
     const isReviewer = actor.actorRoles.includes("ie_reviewer")
       && actor.authorizationCapability === "process:review";
     if (
-      (isSupervisor && order.status !== "pending_process_configuration")
+      (isSupervisor && (order.status === "draft" || order.status === "cancelled"))
       || (isReviewer && order.status !== "pending_ie_review")
     ) {
       throw new ApplicationError("FORBIDDEN", "当前返工单不在您的工序处理范围内", 403);
@@ -206,10 +206,13 @@ export class ProcessConfigurationService {
     return this.mutate(actor, "rework.process_configuration.save", idempotencyKey, { reworkOrderId, ...input }, 201, async (client) => {
       const order = await this.lockOrder(client, reworkOrderId);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_process_configuration") {
+      if (order.status !== "pending_process_configuration" && order.status !== "pending_task_assignment") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不允许保存工序配置", 409);
       }
-      const kind = "initial" as const;
+      const kind = order.status === "pending_task_assignment" ? "change" : "initial";
+      if (kind === "change" && !input.changeReason) {
+        throw new ApplicationError("VALIDATION_ERROR", "已生效工序变更必须填写原因并生成变更单", 400);
+      }
       if (kind === "initial" && input.changeReason) {
         throw new ApplicationError("VALIDATION_ERROR", "初次配置不能伪造为变更单", 400);
       }
@@ -281,7 +284,7 @@ export class ProcessConfigurationService {
     return this.mutate(actor, "rework.process_configuration.submit", idempotencyKey, { reworkOrderId, ...input }, 200, async (client) => {
       const order = await this.lockOrder(client, reworkOrderId);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_process_configuration") {
+      if (order.status !== "pending_process_configuration" && order.status !== "pending_task_assignment") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不允许提交工序配置", 409);
       }
       const configuration = await this.latestConfiguration(client, reworkOrderId, true);
@@ -289,7 +292,7 @@ export class ProcessConfigurationService {
         throw new ApplicationError("CONFLICT", "工序配置已被更新，请刷新后重新提交", 409);
       }
       if ((await this.items(client, configuration.configuration_id)).length === 0) {
-        throw new ApplicationError("VALIDATION_ERROR", "至少配置一道工序后才能提交计划", 400);
+        throw new ApplicationError("VALIDATION_ERROR", "至少配置一道工序后才能提交IE审核", 400);
       }
       const nextOrderVersion = order.version + 1;
       const eventId = await this.events.append(client, actor, {
@@ -298,25 +301,25 @@ export class ProcessConfigurationService {
         entityId: reworkOrderId,
         before: { ...this.auditOrder(order), configuration: await this.configurationAudit(client, configuration) },
         after: {
-          ...this.auditOrder(order, "pending_task_assignment", nextOrderVersion),
-          configuration: { ...(await this.configurationAudit(client, configuration)), status: "approved" },
+          ...this.auditOrder(order, "pending_ie_review", nextOrderVersion),
+          configuration: { ...(await this.configurationAudit(client, configuration)), status: "pending_ie_review" },
         },
       });
       await this.setConfigurationContext(client, eventId, actor.requestId);
       await this.setReworkContext(client, eventId, actor.requestId);
       await client.query(
-        "UPDATE rework_process_configurations SET status='approved',submitted_at=CURRENT_TIMESTAMP WHERE configuration_id=$1",
+        "UPDATE rework_process_configurations SET status='pending_ie_review',submitted_at=CURRENT_TIMESTAMP WHERE configuration_id=$1",
         [configuration.configuration_id],
       );
       await client.query(
-        "UPDATE rework_orders SET status='pending_task_assignment',updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
+        "UPDATE rework_orders SET status='pending_ie_review',updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
         [reworkOrderId, actor.actorId, nextOrderVersion],
       );
       await this.todos?.completeOpenByDedupePrefix(
         client,
         actor,
         `process-config:${reworkOrderId}:`,
-        "Process plan was submitted for worker assignment",
+        "Process configuration was submitted for IE review",
       );
       const returnedConfigurations = await client.query<{ configuration_id: string }>(
         `SELECT configuration_id
@@ -333,6 +336,26 @@ export class ProcessConfigurationService {
           "Returned process configuration was corrected and resubmitted",
         );
       }
+      await this.outbox.enqueue(client, {
+        topic: "rework.process_configuration.pending_ie_review",
+        aggregateType: "rework_order",
+        aggregateId: reworkOrderId,
+        payload: { reworkOrderId, reworkNo: order.rework_no, configurationVersion: configuration.configuration_version },
+        recipientKey: "role:ie_reviewer",
+        idempotencyKey: reworkOrderId + ":process-configuration:" + configuration.configuration_version + ":submit",
+      });
+      await this.todos?.actionableForUniqueDirectRole(client, actor, {
+        category: "ie_review",
+        sourceEventId: eventId,
+        sourceAction: "rework.process_configuration.submit",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        requiredRole: "ie_reviewer",
+        requiredCapability: "process:review",
+        route: { routeName: "process_configuration", entityId: reworkOrderId },
+        policyKey: "general",
+        dedupeKey: `ie-review:${reworkOrderId}:${configuration.configuration_version}`,
+      });
       return this.dto(client, await this.order(client, reworkOrderId));
     });
   }
@@ -504,9 +527,9 @@ export class ProcessConfigurationService {
     const names = new Set<string>();
     for (const item of input) {
       const plannedQuantity = item.pricingUnit === "hour" ? truncateDecimal(item.plannedQuantity, 2) : item.plannedQuantity;
-      const unitPrice = item.unitPrice === undefined ? null : truncateDecimal(item.unitPrice, 3);
-      if (plannedQuantity <= 0 || (unitPrice !== null && unitPrice <= 0)) {
-        throw new ApplicationError("VALIDATION_ERROR", "预估数量必须大于0", 400);
+      const unitPrice = truncateDecimal(item.unitPrice, 3);
+      if (plannedQuantity <= 0 || unitPrice <= 0) {
+        throw new ApplicationError("VALIDATION_ERROR", "数量和单价经规则截位后必须大于0", 400);
       }
       let processId: string | null = null;
       let processVersion: number | null = null;

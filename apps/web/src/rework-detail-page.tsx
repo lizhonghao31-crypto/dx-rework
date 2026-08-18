@@ -124,13 +124,13 @@ type WorkflowStage = Readonly<{
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
-  pending_process_configuration: { label: "待返工计划", next: "下一步由尾部主管配置工序和预估数量" },
-  pending_ie_review: { label: "旧流程待 IE 审核", next: "历史订单保留原审核记录" },
-  pending_task_assignment: { label: "待分配人员", next: "返工计划已确认，下一步由尾部主管分配返工人员" },
-  in_progress: { label: "返工执行中", next: "工人按实际完成进度登记完成数量，全部完成后进入整单审核" },
-  pending_order_review: { label: "待整单审核", next: "下一步由尾部主管确认整张返工单已完成" },
+  pending_process_configuration: { label: "待返工计划", next: "下一步由尾部主管配置工序、预估数量和单价" },
+  pending_ie_review: { label: "待 IE 核价", next: "IE 通过工序与单价后，进入人员分配" },
+  pending_task_assignment: { label: "待分配人员", next: "工序与单价已核准，下一步由尾部主管分配返工人员" },
+  in_progress: { label: "返工执行中", next: "工人登记个人完成数量，全部完成后由尾部主管核量" },
+  pending_order_review: { label: "待尾部核量", next: "尾部主管核对有效完成数量并确认临时工实发系数" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
-  pending_responsibility_determination: { label: "待责任判定", next: "返工已完成审核，正在判定责任、倍率和承担比例" },
+  pending_responsibility_determination: { label: "待责任判定", next: "返工已完成核量，正在选择主责任方和外部扣款倍率" },
   pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任结算" },
   completed: { label: "已完成", next: "返工生产链已归档；工资与扣款按各自独立周期继续核对" },
@@ -283,12 +283,12 @@ const buildWorkflow = (
   };
 
   const executionNodes: WorkflowNode[] = [
-    node("task_assignment", "03", "分配返工人员", "尾部主管", "待返工计划确认", "为各工序分配正式工或临时工。"),
-    node("work_reporting", "04", "完工上数", "返工人员", "待人员分配", "工人一次确认最终返工数量；临时工由尾部主管代录。"),
-    node("whole_order_review", "05", "尾部确认数量与单价", "尾部主管", "待全部人员完工", "对照预估与实际，确认数量并录入最终单价。"),
+    node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按已核准的工序为正式工或临时工分配任务。"),
+    node("work_reporting", "05", "完工上数", "返工人员", "待人员分配", "工人一次确认最终返工数量；临时工由尾部主管代录。"),
+    node("whole_order_review", "06", "尾部确认数量", "尾部主管", "待全部人员完工", "核对个人有效上数，并确认临时工实发系数。"),
   ];
   if (detail.status === "pending_quantity_adjustment_ie_review") {
-    executionNodes.push(node("quantity_adjustment", "06", "IE 核价", "IE 审核", "当前由 IE 处理", "IE 仅审核最终单价；驳回必须说明原因。"));
+    executionNodes.push(node("quantity_adjustment", "06-A", "异常数量 IE 复核", "IE 审核", "当前由 IE 处理", "仅复核异常增加的计划数量，不重新核价。"));
   }
 
   return [
@@ -297,7 +297,8 @@ const buildWorkflow = (
       title: "发起与方案",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "返工计划", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "只配置返工工序和预估数量；确认后直接进入人员分配。"),
+        node("process_configuration", "02", "工序与价格", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、预估数量和拟定单价。"),
+        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "核准工序与单价；通过后才能分配人员。"),
       ],
     },
     { key: "execution", title: "返工执行", nodes: executionNodes },
@@ -305,8 +306,8 @@ const buildWorkflow = (
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("responsibility", "07", "责任判定", "生产管理", "待 IE 核价后分配", "每道工序只选一个主责任方；共同责任仅作留痕说明。"),
-        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板可确认或驳回；特殊外部倍率在此按需留痕。"),
+        node("responsibility", "07", "责任判定", "生产管理", "待尾部核量", "每道工序只选一个主责任方；外部倍率默认且最低 1.2，可向上调整。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板只确认或驳回已锁定的责任方与外部倍率。"),
         node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
       ],
     },

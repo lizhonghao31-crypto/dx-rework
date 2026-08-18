@@ -111,7 +111,7 @@ const draftBody = {
   processes: [
     {
       configurationItemId,
-      multiplier: "1.200",
+      multiplier: "1.000",
       allocations: [
         { responsibilityType: "own_factory", shareBps: 10000 },
       ],
@@ -247,13 +247,13 @@ describe("responsibility routes", () => {
     expect(service.approveOwnerSignature).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationCapability: "responsibility:owner_sign" }),
       orderId,
-      { expectedOrderVersion: 8, specialMultiplierAdjustments: [] },
+      { expectedOrderVersion: 8 },
       "route-owner-approve",
     );
     expect(service.rejectOwnerSignature).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationCapability: "responsibility:owner_sign" }),
       orderId,
-      { expectedOrderVersion: 8, specialMultiplierAdjustments: [] },
+      { expectedOrderVersion: 8 },
       "route-owner-reject",
     );
     await app.close();

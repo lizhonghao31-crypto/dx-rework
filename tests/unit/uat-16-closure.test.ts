@@ -90,3 +90,4 @@ describe("UAT 1.6 closure regressions", () => {
     expect(settledWageMigration).toContain("unit_price = trunc(unit_price, 3)");
   });
 });
+

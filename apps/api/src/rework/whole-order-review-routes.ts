@@ -7,9 +7,7 @@ import {
   QuantityAdjustmentResponseSchema,
   RejectWorkReportSchema,
   ReviewQuantityIncreaseSchema,
-  ReviewTailPricingSchema,
   ReviewWholeOrderSchema,
-  SubmitTailPricingSchema,
   WholeOrderReviewParamsSchema,
   WholeOrderReviewQuerySchema,
   WholeOrderReviewResponseSchema,
@@ -120,16 +118,6 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
   });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/whole-order-review/approve", async (request, reply) => {
     const result = await dependencies.service.approve(await actor(request, "submission:audit", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(ReviewWholeOrderSchema, request.body), key(request));
-    if (result.reused) void reply.header("idempotency-replayed", "true");
-    return WholeOrderReviewResponseSchema.parse(result.value);
-  });
-  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/tail-pricing", async (request, reply) => {
-    const result = await dependencies.service.submitTailPricing(await actor(request, "submission:audit", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(SubmitTailPricingSchema, request.body), key(request));
-    if (result.reused) void reply.header("idempotency-replayed", "true");
-    return WholeOrderReviewResponseSchema.parse(result.value);
-  });
-  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/tail-pricing/review", async (request, reply) => {
-    const result = await dependencies.service.reviewTailPricing(await actor(request, "process:review", "ie_reviewer"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(ReviewTailPricingSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
   });

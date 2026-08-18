@@ -42,3 +42,4 @@ describe("rework initiation information architecture", () => {
     expect(admin).toContain('<header className="page-heading">');
   });
 });
+
