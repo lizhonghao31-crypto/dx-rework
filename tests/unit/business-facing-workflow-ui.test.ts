@@ -119,6 +119,12 @@ describe("business-facing workflow UI", () => {
     expect(detail).toContain("taskMode={selected.key}");
     expect(detail).toContain("onOrderChanged={syncAfterNodeAction}");
     expect(detail).toContain('url.searchParams.set("node", nextNode)');
+    expect(detail).toContain(`<ProcessConfigurationForm
+        reworkOrderId={detail.reworkOrderId}
+        onOrderChanged={syncAfterNodeAction}
+      />`);
+    expect(processConfiguration).toContain("onOrderChanged?: () => Promise<void> | void;");
+    expect(processConfiguration.match(/await onOrderChanged\?\.\(\);/g)).toHaveLength(2);
     expect(reporting).toContain('effectiveTaskMode === "task_assignment"');
     expect(reporting).toContain('effectiveTaskMode === "work_reporting"');
     expect(reporting).toContain('effectiveTaskMode === "whole_order_review"');

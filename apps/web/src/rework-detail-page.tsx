@@ -299,18 +299,18 @@ const buildWorkflow = (
   return [
     {
       key: "planning",
-      title: "发起、配置与分工",
+      title: "发起、配置与核价",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
         node("process_configuration", "02", "工序与候选单价", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、候选单价并分配尾查；不再预估返工数量。"),
-        node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按 IE 核准的工序为正式工或临时工分配任务。"),
+        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后才能分配返工人员。"),
       ],
     },
     {
       key: "execution",
-      title: "核价与返工执行",
+      title: "分工与返工执行",
       nodes: [
-        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后才能分配返工人员。"),
+        node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按 IE 核准的工序为正式工或临时工分配任务。"),
         node("work_reporting", "05", "工人完工上数", "返工人员", "待人员分配", "工人一次提交本人最终完工件数；临时工由尾部主管代录。"),
         node("tail_inspection", "06", "尾查报数", "尾查", "待尾部主管分配", "N02 分配后即可开始；多人清点结果按工序汇总。"),
       ],
@@ -581,7 +581,10 @@ export function ReworkDetailPage({
       />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
-      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} />;
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm
+        reworkOrderId={detail.reworkOrderId}
+        onOrderChanged={syncAfterNodeAction}
+      />;
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
