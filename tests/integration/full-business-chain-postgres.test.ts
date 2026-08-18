@@ -854,6 +854,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        ORDER BY category,todo_id`,
     );
     expect(openBusinessTodos.rows).toEqual([
+      { category: "external_deduction_follow_up" },
       { category: "wage_month_close" },
     ]);
   });
