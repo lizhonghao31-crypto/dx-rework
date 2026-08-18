@@ -158,3 +158,4 @@ describe("root global business bypass policy", () => {
     expect(source).toContain("if (isRootActor(actor)) return;");
   });
 });
+

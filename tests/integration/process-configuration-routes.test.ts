@@ -79,6 +79,7 @@ describe("process configuration routes", () => {
           customProcessName: "特殊翻边返修",
           plannedQuantity: 2.1,
           pricingUnit: "piece",
+          unitPrice: 0.555,
         }],
       },
     });
@@ -98,7 +99,7 @@ describe("process configuration routes", () => {
     );
   });
 
-  it("accepts a plan without any price at the HTTP boundary", async () => {
+  it("rejects a plan without price at the HTTP boundary", async () => {
     const { app, service } = create();
     const result = await app.inject({
       method: "PUT",
@@ -118,15 +119,8 @@ describe("process configuration routes", () => {
       },
     });
 
-    expect(result.statusCode).toBe(201);
-    expect(service.saveDraft).toHaveBeenCalledWith(
-      expect.anything(),
-      "00000000-0000-4000-8000-000000000010",
-      expect.objectContaining({
-        items: [expect.not.objectContaining({ unitPrice: expect.anything() })],
-      }),
-      "process-plan-without-price",
-    );
+    expect(result.statusCode).toBe(400);
+    expect(service.saveDraft).not.toHaveBeenCalled();
   });
 
   it("rejects impractical quantity and price precision before calling the service", async () => {

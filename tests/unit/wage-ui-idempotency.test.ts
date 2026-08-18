@@ -31,3 +31,4 @@ describe("N11 wage UI retry safety", () => {
     expect(source).not.toContain("window.confirm");
   });
 });
+

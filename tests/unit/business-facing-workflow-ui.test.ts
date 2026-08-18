@@ -44,14 +44,14 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("formatBusinessTime(approval.decision.decidedAt)");
   });
 
-  it("lets N07 users work by responsibility party in percentages while preserving bps at the API boundary", async () => {
+  it("lets N07 users select exactly one party and set the external deduction multiplier", async () => {
     const source = await read("apps/web/src/responsibility-determination-panel.tsx");
-    expect(source).toContain('label="承担比例（%）"');
+    expect(source).toContain("主责任方");
     expect(source).toContain("parsePercentToBps(allocation.sharePercent)");
     expect(source).toContain("shareBps: Number(allocation.shareBps)");
-    expect(source).toContain('" · 必须严格等于 100%"');
-    expect(source).toContain("扣款倍率（外部最低 1.2）");
-    expect(source).toContain("实际扣款供应商");
+    expect(source).toContain("外部扣款倍率（默认且最低 1.2）");
+    expect(source).toContain("责任供应商");
+    expect(source).not.toContain('label="承担比例（%）"');
     expect(source).not.toContain('label="承担比例（bps）"');
     expect(source).not.toContain("返工单：{response?.reworkOrderId");
   });
@@ -145,7 +145,7 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/work-reporting-form.css"),
     ]);
     expect(source).toContain("工序完成状态（系统自动计算）");
-    expect(source).toContain("确认本单返工全部完成，进入责任判定");
+    expect(source).toContain("确认数量并进入责任判定");
     expect(source).toContain("异常处理：数量调整");
     expect(source).toContain("<details");
     expect(source).toContain('kind === "decrease" && target >= process.plannedQuantity');

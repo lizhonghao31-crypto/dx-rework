@@ -39,9 +39,8 @@ const fail = (message: string, status = 409, code = "CONFLICT"): never => {
 };
 
 /**
- * N08 is intentionally a single owner decision.  It does not ask the owner to
- * re-confirm a merchandiser's supplier selection: N07 already owns that data
- * quality.  The owner can retain only non-default external multipliers at N08.
+ * N08 is intentionally a single owner decision. It does not ask the owner to
+ * re-confirm or alter N07's responsible party, supplier, or deduction multiplier.
  * Approval materializes N09 supplier ledgers in the same transaction; actual
  * deduction remains an independent lifecycle and does not block order completion.
  */
@@ -73,11 +72,6 @@ export class ResponsibilityOwnerSignatureService {
       await this.requireOwner(client, actor);
       this.requirePending(order, input.expectedOrderVersion);
       const determination = await this.finalized(client, orderId);
-      await this.validateSpecialMultiplierAdjustments(
-        client,
-        determination.determination_id,
-        input.specialMultiplierAdjustments,
-      );
       const eventId = await this.event(
         client,
         actor,
@@ -93,17 +87,6 @@ export class ResponsibilityOwnerSignatureService {
          VALUES($1,$2,$3,'approved',$4,$5,$6)`,
         [ownerSignatureId, orderId, determination.determination_id, actor.actorId, eventId, actor.requestId],
       );
-      for (const adjustment of input.specialMultiplierAdjustments) {
-        await client.query(
-          `INSERT INTO rework_responsibility_owner_multiplier_adjustments(
-             adjustment_id,owner_signature_id,determination_id,configuration_item_id,
-             responsibility_type,multiplier,reason,operation_event_id,request_id)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [randomUUID(), ownerSignatureId, determination.determination_id,
-            adjustment.configurationItemId, adjustment.responsibilityType,
-            adjustment.multiplier, adjustment.reason, eventId, actor.requestId],
-        );
-      }
       // System-created N09 ledgers and the N08 signature commit atomically.
       // If ledger materialization fails, the signature and order transition roll back.
       await this.external.ensureForFinalized(
@@ -220,28 +203,6 @@ export class ResponsibilityOwnerSignatureService {
       [orderId],
     );
     return result.rows[0] ?? fail("待签字的责任版本不存在", 409, "INVALID_STATE_TRANSITION");
-  }
-
-  private async validateSpecialMultiplierAdjustments(
-    client: PoolClient,
-    determinationId: string,
-    adjustments: OwnerSignatureCommand["specialMultiplierAdjustments"],
-  ): Promise<void> {
-    const result = await client.query<{
-      configuration_item_id: string;
-      responsibility_type: "processing_factory" | "embroidery_factory" | "washing_factory" | "fabric_supplier";
-    }>(
-      `SELECT configuration_item_id,responsibility_type
-       FROM rework_responsibility_allocations
-       WHERE determination_id=$1 AND responsibility_type<>'own_factory'`,
-      [determinationId],
-    );
-    const available = new Set(result.rows.map((row) => `${row.configuration_item_id}:${row.responsibility_type}`));
-    for (const adjustment of adjustments) {
-      if (!available.has(`${adjustment.configurationItemId}:${adjustment.responsibilityType}`)) {
-        fail("特殊倍率只能调整本次签字中的外部责任方", 400, "VALIDATION_ERROR");
-      }
-    }
   }
 
   private async order(client: PoolClient, orderId: string, locked: boolean): Promise<OrderRow> {

@@ -7,9 +7,7 @@ import type {
   QuantityAdjustmentResponse,
   RejectWorkReport,
   ReviewQuantityIncrease,
-  ReviewTailPricing,
   ReviewWholeOrder,
-  SubmitTailPricing,
   WholeOrderReviewResponse,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
@@ -34,11 +32,7 @@ type OrderRow = Readonly<{
 }>;
 type PlanRow = Readonly<{
   configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour";
-  planned_quantity: string; completed_quantity: string; unit_price: string | null; proposed_unit_price: string | null;
-}>;
-type TailPricingRow = Readonly<{
-  tail_pricing_submission_id: string; pricing_version: number;
-  status: "pending_ie_review" | "approved" | "rejected"; review_reason: string | null;
+  planned_quantity: string; completed_quantity: string; unit_price: string | null;
 }>;
 type TemporaryWorkerRow = Readonly<{
   configuration_item_id: string; process_name: string; person_id: string; display_name: string;
@@ -95,182 +89,16 @@ export class WholeOrderReviewService {
       const canConfirmQuantity = await this.canConfirm(actor, order, configurationItemId);
       const canReviewQuantityIncrease = await this.can(actor, "ie_reviewer", "process:review", order, configurationItemId);
       if (!canAdjustQuantity && !canConfirmQuantity && !canReviewQuantityIncrease) error("当前用户无权读取该工序信息", 403, "FORBIDDEN");
-      const canSubmitTailPricing = await this.can(actor, "tail_supervisor", "submission:audit", order, configurationItemId);
-      const canReviewTailPricing = await this.can(actor, "ie_reviewer", "process:review", order, configurationItemId);
-      return this.dto(this.database, order, { canReview: false, canSubmitTailPricing, canReviewTailPricing, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease }, configurationItemId);
+      return this.dto(this.database, order, { canReview: false, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease }, configurationItemId);
     }
     const canReview = await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order);
-    const canSubmitTailPricing = canReview;
-    const canReviewTailPricing = await this.canOrderWide(actor, "ie_reviewer", "process:review", order);
     const canAdjustQuantity = await this.canOrderWide(actor, "tail_supervisor", "quantity:adjust", order);
     const canConfirmQuantity = await this.canConfirm(actor, order);
     const canReviewQuantityIncrease = await this.canOrderWide(actor, "ie_reviewer", "process:review", order);
-    if (!canReview && !canReviewTailPricing && !canAdjustQuantity && !canConfirmQuantity && !canReviewQuantityIncrease) {
+    if (!canReview && !canAdjustQuantity && !canConfirmQuantity && !canReviewQuantityIncrease) {
       error("当前用户无权读取整单审核与数量调整信息", 403, "FORBIDDEN");
     }
-    return this.dto(this.database, order, { canReview, canSubmitTailPricing, canReviewTailPricing, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease });
-  }
-
-  async submitTailPricing(actor: TrustedActorContext, reworkOrderId: string, input: SubmitTailPricing, key: string): Promise<Result<WholeOrderReviewResponse>> {
-    return this.mutate(actor, "rework.tail_pricing.submit", key, { reworkOrderId, ...input }, 200, async (client) => {
-      const order = await this.order(client, reworkOrderId, true);
-      await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
-      this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N05 尾部确认", 409, "INVALID_STATE_TRANSITION");
-      const plans = await this.plans(client, reworkOrderId);
-      if (plans.length === 0 || plans.some((plan) => plan.unit_price !== null)) error("当前订单不是待 N05 定价的新流程记录", 409, "CONFLICT");
-      if (new Set(input.prices.map((price) => price.configurationItemId)).size !== plans.length
-        || plans.some((plan) => !input.prices.some((price) => price.configurationItemId === plan.configuration_item_id))) {
-        error("每道返工工序都必须填写最终单价", 400, "VALIDATION_ERROR");
-      }
-      const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
-      if (new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`)).size !== temporaryWorkers.length
-        || temporaryWorkers.some((worker) => !input.temporaryCoefficients.some((item) => item.configurationItemId === worker.configuration_item_id && item.personId === worker.person_id))) {
-        error("每名临时工每道工序都必须保留一个调整系数；默认填 1.0", 400, "VALIDATION_ERROR");
-      }
-      const pricingVersions = await client.query<{ version: number }>(
-        "SELECT COALESCE(max(pricing_version),0)::int AS version FROM rework_tail_pricing_submissions WHERE rework_order_id=$1",
-        [reworkOrderId],
-      );
-      const version = (pricingVersions.rows[0]?.version ?? 0) + 1;
-      const submissionId = randomUUID();
-      const eventId = await this.events.append(client, this.withCapability(actor, "submission:audit"), {
-        action: "rework.tail_pricing.submit", entityType: "rework_order", entityId: reworkOrderId,
-        before: this.orderAudit(order),
-        after: { ...this.orderAudit(order, "pending_ie_review", order.version + 1), tailPricingSubmissionId: submissionId, pricingVersion: version },
-      });
-      await this.context(client, eventId, actor.requestId, "tail_pricing");
-      await client.query(
-        "INSERT INTO rework_tail_pricing_submissions(tail_pricing_submission_id,rework_order_id,pricing_version,status,submitted_by,operation_event_id,request_id) VALUES($1,$2,$3,'pending_ie_review',$4,$5,$6)",
-        [submissionId, reworkOrderId, version, actor.actorId, eventId, actor.requestId],
-      );
-      for (const price of input.prices) await client.query(
-        "INSERT INTO rework_tail_process_prices(tail_pricing_submission_id,configuration_item_id,unit_price) VALUES($1,$2,$3)",
-        [submissionId, price.configurationItemId, price.unitPrice],
-      );
-      for (const coefficient of input.temporaryCoefficients) await client.query(
-        "INSERT INTO rework_tail_temporary_wage_coefficients(tail_pricing_submission_id,configuration_item_id,person_id,multiplier,reason) VALUES($1,$2,$3,$4,$5)",
-        [submissionId, coefficient.configurationItemId, coefficient.personId, coefficient.multiplier, coefficient.reason ?? null],
-      );
-      await client.query(
-        "UPDATE rework_orders SET status='pending_ie_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
-        [reworkOrderId, actor.actorId],
-      );
-      return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
-    });
-  }
-
-  async reviewTailPricing(actor: TrustedActorContext, reworkOrderId: string, input: ReviewTailPricing, key: string): Promise<Result<WholeOrderReviewResponse>> {
-    return this.mutate(actor, `rework.tail_pricing.ie_${input.decision}`, key, { reworkOrderId, ...input }, 200, async (client) => {
-      const order = await this.order(client, reworkOrderId, true);
-      await this.ensureOrderWide(actor, "ie_reviewer", "process:review", order);
-      this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_ie_review") error("当前返工单不在 N06 IE 核价节点", 409, "INVALID_STATE_TRANSITION");
-      const pendingSubmission = await this.tailPricing(client, reworkOrderId, true)
-        ?? error("没有待 IE 审核的尾部定价", 409, "CONFLICT");
-      if (pendingSubmission.status !== "pending_ie_review") error("没有待 IE 审核的尾部定价", 409, "CONFLICT");
-      const approved = input.decision === "approved";
-      const eventId = await this.events.append(client, this.withCapability(actor, "process:review"), {
-        action: approved ? "rework.tail_pricing.ie_approve" : "rework.tail_pricing.ie_reject",
-        entityType: "rework_order", entityId: reworkOrderId,
-        before: { ...this.orderAudit(order), tailPricingSubmissionId: pendingSubmission.tail_pricing_submission_id },
-        after: { ...this.orderAudit(order, approved ? "pending_responsibility_determination" : "pending_order_review", order.version + 1), tailPricingSubmissionId: pendingSubmission.tail_pricing_submission_id, pricingDecision: input.decision },
-        ...(input.reason ? { reason: input.reason } : {}),
-      });
-      await this.context(client, eventId, actor.requestId, "tail_pricing");
-      await client.query(
-        "UPDATE rework_tail_pricing_submissions SET status=$2,reviewed_by=$3,reviewed_at=CURRENT_TIMESTAMP,review_reason=$4 WHERE tail_pricing_submission_id=$1",
-        [pendingSubmission.tail_pricing_submission_id, approved ? "approved" : "rejected", actor.actorId, input.reason ?? null],
-      );
-      if (!approved) {
-        await client.query("UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1", [reworkOrderId, actor.actorId]);
-        return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
-      }
-      await client.query(
-        `UPDATE rework_process_configuration_items item
-         SET unit_price=price.unit_price
-         FROM rework_tail_process_prices price
-         WHERE price.tail_pricing_submission_id=$1 AND price.configuration_item_id=item.configuration_item_id`,
-        [pendingSubmission.tail_pricing_submission_id],
-      );
-      await client.query(
-        `WITH amounts AS (
-           SELECT report.work_report_id,
-                  round(report.actual_quantity*price.unit_price*COALESCE(coefficient.multiplier,1),3) AS group_amount
-           FROM rework_work_reports report
-           JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id AND task.assignment_mode='individual'
-           JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
-           JOIN rework_tail_process_prices price ON price.tail_pricing_submission_id=$1 AND price.configuration_item_id=report.configuration_item_id
-           LEFT JOIN rework_tail_temporary_wage_coefficients coefficient
-             ON coefficient.tail_pricing_submission_id=$1 AND coefficient.configuration_item_id=report.configuration_item_id AND coefficient.person_id=member.person_id
-           WHERE report.rework_order_id=$2 AND report.group_amount=0
-             AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-         )
-         UPDATE rework_work_reports report SET group_amount=amounts.group_amount
-         FROM amounts WHERE report.work_report_id=amounts.work_report_id`,
-        [pendingSubmission.tail_pricing_submission_id, reworkOrderId],
-      );
-      await client.query(
-        `UPDATE rework_work_report_member_shares share SET amount=report.group_amount
-         FROM rework_work_reports report
-         WHERE report.work_report_id=share.work_report_id AND report.rework_order_id=$1 AND share.amount=0
-           AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)`,
-        [reworkOrderId],
-      );
-      const plans = await this.plans(client, reworkOrderId);
-      const reviewId = randomUUID();
-      await client.query(
-        "INSERT INTO rework_order_reviews(order_review_id,rework_order_id,reviewed_by,review_snapshot) VALUES($1,$2,$3,$4)",
-        [reviewId, reworkOrderId, actor.actorId, await this.snapshot(client, order, plans)],
-      );
-      await client.query("UPDATE rework_orders SET status='pending_responsibility_determination',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1", [reworkOrderId, actor.actorId]);
-      const todoFoundationAvailable = this.todos
-        && await this.todoFoundationAvailable(client);
-      if (todoFoundationAvailable) {
-        await this.todos!.completeOpenByDedupePrefix(
-          client,
-          actor,
-          `whole-order-review:${reworkOrderId}:`,
-          "Tail pricing was approved by IE",
-        );
-        const wagePeriods = await client.query<{
-          period_id: string;
-          period_version: number;
-        }>(
-          `SELECT DISTINCT period.period_id,period.period_version
-           FROM rework_wage_periods period
-           JOIN rework_wage_items item ON item.period_id=period.period_id
-           WHERE item.order_review_id=$1
-             AND period.status='pending_tail_review'
-           ORDER BY period.period_id`,
-          [reviewId],
-        );
-        for (const wagePeriod of wagePeriods.rows) {
-          await this.todos.cancelOpenByDedupePrefix(
-            client,
-            actor,
-            `wage-tail-review:${wagePeriod.period_id}:`,
-            "Newly materialized wage facts require a fresh tail review",
-          );
-          await this.todos.actionableForUniqueDirectRole(client, actor, {
-            category: "wage_tail_review",
-            sourceEventId: eventId,
-            sourceAction: "rework.tail_pricing.ie_approve",
-            entityType: "rework_order",
-            entityId: reworkOrderId,
-            requiredRole: "tail_supervisor",
-            requiredCapability: "wage:tail_review",
-            route: {
-              routeName: "wage_period_detail",
-              entityId: wagePeriod.period_id,
-            },
-            policyKey: "finance_return_or_wage_review",
-            dedupeKey: `wage-tail-review:${wagePeriod.period_id}:${wagePeriod.period_version}`,
-          });
-        }
-      }
-      return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
-    });
+    return this.dto(this.database, order, { canReview, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease });
   }
 
   async approve(actor: TrustedActorContext, reworkOrderId: string, input: ReviewWholeOrder, key: string): Promise<Result<WholeOrderReviewResponse>> {
@@ -278,25 +106,112 @@ export class WholeOrderReviewService {
       const order = await this.order(client, reworkOrderId, true);
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_order_review") error("当前返工单尚未进入整单审核节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N06 尾部核量节点", 409, "INVALID_STATE_TRANSITION");
       const existing = await client.query("SELECT 1 FROM rework_order_reviews WHERE rework_order_id=$1 FOR SHARE", [reworkOrderId]);
       if (existing.rowCount) error("该返工单已经完成整单审核", 409, "CONFLICT");
       const pending = await client.query(`SELECT 1 FROM rework_process_quantity_adjustments WHERE rework_order_id=$1 AND adjustment_kind='increase' AND (status='pending_ie_review' OR (status='pending_merchandiser_confirmation' AND expires_at>CURRENT_TIMESTAMP)) LIMIT 1`, [reworkOrderId]);
       if (pending.rowCount) error("存在待处理的计划数量增加申请，暂不能整单审核", 409, "CONFLICT");
       const plans = await this.plans(client, reworkOrderId);
       if (plans.some((plan) => plan.unit_price === null)) {
-        error("新流程必须先完成 N05 尾部定价和 N06 IE 核价", 409, "INVALID_STATE_TRANSITION");
+        error("每道工序必须在 N03 完成 IE 核价后才能核量", 409, "INVALID_STATE_TRANSITION");
       }
       if (plans.length === 0 || plans.some((plan) => numberValue(plan.completed_quantity) < numberValue(plan.planned_quantity))) {
         error("所有工序达到当前有效计划数量后才能整单审核", 409, "CONFLICT");
       }
+      const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
+      const submittedCoefficientKeys = new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`));
+      const expectedCoefficientKeys = new Set(temporaryWorkers.map((worker) => `${worker.configuration_item_id}:${worker.person_id}`));
+      if (submittedCoefficientKeys.size !== expectedCoefficientKeys.size
+        || [...expectedCoefficientKeys].some((value) => !submittedCoefficientKeys.has(value))) {
+        error("每名临时工每道工序都必须保留一个实发系数；默认填 1.0", 400, "VALIDATION_ERROR");
+      }
       const reviewId = randomUUID();
+      const completionConfirmationId = randomUUID();
       const eventId = await this.events.append(client, this.withCapability(actor, "submission:audit"), {
         action: "rework.whole_order.approve", entityType: "rework_order", entityId: reworkOrderId,
         before: this.orderAudit(order),
-        after: { ...this.orderAudit(order, "pending_responsibility_determination", order.version + 1), orderReviewId: reviewId },
+        after: {
+          ...this.orderAudit(order, "pending_responsibility_determination", order.version + 1),
+          orderReviewId: reviewId,
+          completionConfirmationId,
+          temporaryCoefficients: input.temporaryCoefficients,
+        },
       });
       await this.context(client, eventId, actor.requestId, "whole_order_review");
+      const completionTablesAvailable = await this.tailCompletionAvailable(client);
+      if (completionTablesAvailable) {
+        await client.query(
+        `INSERT INTO rework_tail_completion_confirmations(
+           confirmation_id,rework_order_id,confirmed_by,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5)`,
+        [completionConfirmationId, reworkOrderId, actor.actorId, eventId, actor.requestId],
+      );
+        for (const coefficient of input.temporaryCoefficients) {
+          await client.query(
+          `INSERT INTO rework_tail_completion_coefficients(
+             confirmation_id,configuration_item_id,person_id,multiplier,reason
+           ) VALUES($1,$2,$3,$4,$5)`,
+          [completionConfirmationId, coefficient.configurationItemId, coefficient.personId, coefficient.multiplier, coefficient.reason ?? null],
+        );
+        }
+        await client.query(
+        `WITH amounts AS (
+           SELECT share.work_report_id,share.person_id,
+                  round(
+                    report.actual_quantity*item.unit_price*
+                    CASE WHEN task.assignment_mode='collective'
+                      THEN 1::numeric / NULLIF(count(*) OVER(PARTITION BY share.work_report_id),0)
+                      ELSE 1
+                    END *
+                    CASE WHEN member.person_type_snapshot='temporary'
+                      THEN COALESCE(coefficient.multiplier,1)
+                      ELSE 1
+                    END,
+                    8
+                  ) AS amount
+           FROM rework_work_report_member_shares share
+           JOIN rework_work_reports report ON report.work_report_id=share.work_report_id
+           JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+           JOIN rework_work_task_members member
+             ON member.work_task_id=task.work_task_id AND member.person_id=share.person_id
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=report.configuration_item_id
+           LEFT JOIN rework_tail_completion_coefficients coefficient
+             ON coefficient.confirmation_id=$1
+            AND coefficient.configuration_item_id=report.configuration_item_id
+            AND coefficient.person_id=share.person_id
+           WHERE report.rework_order_id=$2
+             AND share.amount=0
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_report_rejections rejection
+               WHERE rejection.work_report_id=report.work_report_id
+             )
+         )
+         UPDATE rework_work_report_member_shares share SET amount=amounts.amount
+         FROM amounts
+         WHERE share.work_report_id=amounts.work_report_id
+           AND share.person_id=amounts.person_id`,
+        [completionConfirmationId, reworkOrderId],
+      );
+        await client.query(
+        `WITH amounts AS (
+           SELECT report.work_report_id,sum(share.amount) AS group_amount
+           FROM rework_work_reports report
+           JOIN rework_work_report_member_shares share
+             ON share.work_report_id=report.work_report_id
+           WHERE report.rework_order_id=$1
+             AND report.group_amount=0
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_report_rejections rejection
+               WHERE rejection.work_report_id=report.work_report_id
+             )
+           GROUP BY report.work_report_id
+         )
+         UPDATE rework_work_reports report SET group_amount=amounts.group_amount
+         FROM amounts WHERE report.work_report_id=amounts.work_report_id`,
+          [reworkOrderId],
+        );
+      }
       const snapshot = await this.snapshot(client, order, plans);
       await client.query(
         "INSERT INTO rework_order_reviews(order_review_id,rework_order_id,reviewed_by,review_snapshot) VALUES($1,$2,$3,$4)",
@@ -369,6 +284,15 @@ export class WholeOrderReviewService {
   private async todoFoundationAvailable(client: PoolClient): Promise<boolean> {
     const result = await client.query<{ available: boolean }>(
       "SELECT to_regclass('rework_todos') IS NOT NULL AS available",
+    );
+    return result.rows[0]?.available === true;
+  }
+
+  private async tailCompletionAvailable(
+    client: Pick<Pool, "query"> | PoolClient,
+  ): Promise<boolean> {
+    const result = await client.query<{ available: boolean }>(
+      "SELECT to_regclass('rework_tail_completion_confirmations') IS NOT NULL AS available",
     );
     return result.rows[0]?.available === true;
   }
@@ -612,26 +536,24 @@ export class WholeOrderReviewService {
   private async dto(
     client: Pick<Pool, "query"> | PoolClient,
     order: OrderRow,
-    permissions: Readonly<{ canReview: boolean; canSubmitTailPricing: boolean; canReviewTailPricing: boolean; canAdjustQuantity: boolean; canConfirmQuantity: boolean; canReviewQuantityIncrease: boolean }>,
+    permissions: Readonly<{ canReview: boolean; canAdjustQuantity: boolean; canConfirmQuantity: boolean; canReviewQuantityIncrease: boolean }>,
     configurationItemId?: string,
   ): Promise<WholeOrderReviewResponse> {
     const plans = await this.plans(client, order.rework_order_id);
-    const [reports, adjustments, reviews, temporaryWorkers, tailPricing] = await Promise.all([
+    const [reports, adjustments, reviews, temporaryWorkers] = await Promise.all([
       this.reports(client, order.rework_order_id, configurationItemId), this.adjustments(client, order.rework_order_id, configurationItemId),
       configurationItemId
         ? Promise.resolve({ rows: [] as Array<{ order_review_id: string }> })
         : client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
       this.temporaryWorkers(client, order.rework_order_id, configurationItemId),
-      this.tailPricing(client, order.rework_order_id),
     ]);
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
       ...permissions,
-      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) >= numberValue(plan.planned_quantity), finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price), proposedUnitPrice: plan.proposed_unit_price === null ? null : numberValue(plan.proposed_unit_price) })),
+      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) >= numberValue(plan.planned_quantity), finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price) })),
       reports,
       adjustments,
       temporaryWorkers: temporaryWorkers.map((worker) => ({ configurationItemId: worker.configuration_item_id, processName: worker.process_name, personId: worker.person_id, displayName: worker.display_name, multiplier: numberValue(worker.multiplier ?? "1"), reason: worker.reason })),
-      tailPricing: tailPricing ? { submissionId: tailPricing.tail_pricing_submission_id, version: tailPricing.pricing_version, status: tailPricing.status, rejectionReason: tailPricing.review_reason } : null,
       reviewId: reviews.rows[0]?.order_review_id ?? null,
     };
   }
@@ -648,7 +570,6 @@ export class WholeOrderReviewService {
   private async plans(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string): Promise<PlanRow[]> {
     const result = await client.query<PlanRow>(
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.unit_price,
-              proposal_price.unit_price::text AS proposed_unit_price,
               COALESCE(plan.requested_planned_quantity,item.planned_quantity)::text AS planned_quantity,
               COALESCE(completed.quantity,0)::text AS completed_quantity
        FROM rework_process_configurations configuration
@@ -663,12 +584,6 @@ export class WholeOrderReviewService {
          WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted'
            AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
        ) completed ON true
-       LEFT JOIN LATERAL (
-         SELECT price.unit_price FROM rework_tail_pricing_submissions submission
-         JOIN rework_tail_process_prices price ON price.tail_pricing_submission_id=submission.tail_pricing_submission_id
-         WHERE submission.rework_order_id=$1 AND price.configuration_item_id=item.configuration_item_id
-         ORDER BY submission.pricing_version DESC LIMIT 1
-       ) proposal_price ON true
        WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
        ORDER BY item.position,item.configuration_item_id`,
       [reworkOrderId],
@@ -724,21 +639,13 @@ export class WholeOrderReviewService {
     return result.rows.map((row) => this.adjustmentRow(row));
   }
 
-  private async tailPricing(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked = false): Promise<TailPricingRow | null> {
-    const result = await client.query<TailPricingRow>(
-      `SELECT tail_pricing_submission_id,pricing_version,status,review_reason
-       FROM rework_tail_pricing_submissions WHERE rework_order_id=$1
-       ORDER BY pricing_version DESC LIMIT 1${locked ? " FOR UPDATE" : ""}`,
-      [reworkOrderId],
-    );
-    return result.rows[0] ?? null;
-  }
-
   private async temporaryWorkers(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<TemporaryWorkerRow[]> {
+    const completionTablesAvailable = await this.tailCompletionAvailable(client);
     const result = await client.query<TemporaryWorkerRow>(
-      `WITH latest AS (
-         SELECT tail_pricing_submission_id FROM rework_tail_pricing_submissions
-         WHERE rework_order_id=$1 ORDER BY pricing_version DESC LIMIT 1
+      completionTablesAvailable
+        ? `WITH latest AS (
+         SELECT confirmation_id FROM rework_tail_completion_confirmations
+         WHERE rework_order_id=$1 ORDER BY confirmed_at DESC,confirmation_id DESC LIMIT 1
        )
        SELECT DISTINCT report.configuration_item_id,item.process_name,member.person_id,member.display_name_snapshot AS display_name,
               coefficient.multiplier::text,coefficient.reason
@@ -747,13 +654,31 @@ export class WholeOrderReviewService {
        JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id AND member.person_type_snapshot='temporary'
        JOIN rework_process_configuration_items item ON item.configuration_item_id=report.configuration_item_id
        LEFT JOIN latest ON true
-       LEFT JOIN rework_tail_temporary_wage_coefficients coefficient
-         ON coefficient.tail_pricing_submission_id=latest.tail_pricing_submission_id
+       LEFT JOIN rework_tail_completion_coefficients coefficient
+         ON coefficient.confirmation_id=latest.confirmation_id
         AND coefficient.configuration_item_id=report.configuration_item_id AND coefficient.person_id=member.person_id
        WHERE report.rework_order_id=$1 AND ($2::uuid IS NULL OR report.configuration_item_id=$2)
          AND report.status='submitted'
          AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-       ORDER BY item.process_name,member.display_name_snapshot,member.person_id`,
+       ORDER BY item.process_name,member.display_name_snapshot,member.person_id`
+        : `SELECT DISTINCT report.configuration_item_id,item.process_name,
+                 member.person_id,member.display_name_snapshot AS display_name,
+                 NULL::text AS multiplier,NULL::text AS reason
+           FROM rework_work_reports report
+           JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+           JOIN rework_work_task_members member
+             ON member.work_task_id=task.work_task_id
+            AND member.person_type_snapshot='temporary'
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=report.configuration_item_id
+           WHERE report.rework_order_id=$1
+             AND ($2::uuid IS NULL OR report.configuration_item_id=$2)
+             AND report.status='submitted'
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_report_rejections rejection
+               WHERE rejection.work_report_id=report.work_report_id
+             )
+           ORDER BY item.process_name,member.display_name_snapshot,member.person_id`,
       [reworkOrderId, configurationItemId ?? null],
     );
     return result.rows;
@@ -834,8 +759,6 @@ export class WholeOrderReviewService {
   private async permissions(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, order: OrderRow) {
     return {
       canReview: await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order, client),
-      canSubmitTailPricing: await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order, client),
-      canReviewTailPricing: await this.canOrderWide(actor, "ie_reviewer", "process:review", order, client),
       canAdjustQuantity: await this.canOrderWide(actor, "tail_supervisor", "quantity:adjust", order, client),
       canConfirmQuantity: await this.canConfirm(actor, order, undefined, client),
       canReviewQuantityIncrease: await this.canOrderWide(actor, "ie_reviewer", "process:review", order, client),
@@ -929,8 +852,8 @@ export class WholeOrderReviewService {
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");
   }
 
-  private async context(client: PoolClient, eventId: string, requestId: string, kind: "whole_order_review" | "quantity_adjustment" | "tail_pricing"): Promise<void> {
-    const whole = kind === "whole_order_review" || kind === "tail_pricing" ? eventId : "";
+  private async context(client: PoolClient, eventId: string, requestId: string, kind: "whole_order_review" | "quantity_adjustment"): Promise<void> {
+    const whole = kind === "whole_order_review" ? eventId : "";
     const quantity = kind === "quantity_adjustment" ? eventId : "";
     await client.query(
       "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true),set_config('dx_rework.whole_order_review_event_id',$3,true),set_config('dx_rework.whole_order_review_request_id',$2,true),set_config('dx_rework.quantity_adjustment_event_id',$4,true),set_config('dx_rework.quantity_adjustment_request_id',$2,true)",

@@ -27,9 +27,13 @@ describe("N07–N11 responsibility settlement contract", () => {
     )).toThrow(DomainRuleError);
   });
 
-  it("keeps the owner action versioned and limits multiplier input to audited exceptions", () => {
+  it("keeps the owner action versioned and rejects any multiplier mutation", () => {
     expect(OwnerSignatureCommandSchema.parse({ expectedOrderVersion: 8 }))
-      .toEqual({ expectedOrderVersion: 8, specialMultiplierAdjustments: [] });
+      .toEqual({ expectedOrderVersion: 8 });
+    expect(OwnerSignatureCommandSchema.safeParse({
+      expectedOrderVersion: 8,
+      specialMultiplierAdjustments: [],
+    }).success).toBe(false);
     expect(OwnerSignatureCommandSchema.safeParse({
       expectedOrderVersion: 8,
       reason: "不应要求老板填写理由",

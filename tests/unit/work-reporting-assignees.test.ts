@@ -33,3 +33,4 @@ describe("work-reporting assignable people", () => {
     expect(sql).toContain("assignment.role_code='worker'");
   });
 });
+

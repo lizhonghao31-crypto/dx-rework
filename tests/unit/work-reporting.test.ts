@@ -100,3 +100,4 @@ describe("work reporting monetary snapshots", () => {
     expect(localDateTimeValue(new Date(2026, 7, 2, 22, 3, 4))).toBe("2026-08-02T22:03");
   });
 });
+

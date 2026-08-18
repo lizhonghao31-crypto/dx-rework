@@ -39,14 +39,14 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
     processId: z.string().uuid(),
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: z.enum(["piece", "hour"]),
-    unitPrice: z.number().finite().min(0.001).optional(),
+    unitPrice: z.number().finite().min(0.001),
   }).strict(),
   z.object({
     source: z.literal("custom"),
     customProcessName: z.string().trim().min(1).max(100),
     plannedQuantity: z.number().finite().positive(),
     pricingUnit: z.enum(["piece", "hour"]),
-    unitPrice: z.number().finite().min(0.001).optional(),
+    unitPrice: z.number().finite().min(0.001),
   }).strict(),
 ]).superRefine((value, context) => {
   if (decimalPlaces(value.plannedQuantity) > 1) {
@@ -56,7 +56,7 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
       message: "计划数量最多保留一位小数",
     });
   }
-  if (value.unitPrice !== undefined && decimalPlaces(value.unitPrice) > 3) {
+  if (decimalPlaces(value.unitPrice) > 3) {
     context.addIssue({
       code: "custom",
       path: ["unitPrice"],
@@ -79,7 +79,7 @@ const parse = <T>(
   if (!result.success) {
     throw new ApplicationError(
       "VALIDATION_ERROR",
-      "工序配置参数不完整或格式不正确，请检查工序和预估数量",
+      "工序配置参数不完整或格式不正确，请检查工序、计划数量、计价单位和单价",
       400,
     );
   }
@@ -212,3 +212,4 @@ export function registerProcessConfigurationRoutes(
     },
   );
 }
+

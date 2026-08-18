@@ -37,7 +37,8 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("setPrimaryResponsibility");
     expect(source).toContain('sharePercent: "100"');
     expect(source).toContain("共同责任记录 / 修改说明（可选）");
-    expect(source).toContain("不分摊比例或金额");
+    expect(source).toContain("每道工序只选一个责任方");
+    expect(source).toContain("外部扣款倍率（默认且最低 1.2）");
   });
 
   it("does not hardcode or calculate responsibility money in the browser", async () => {
@@ -46,8 +47,8 @@ describe("responsibility determination web integration", () => {
     expect(source).not.toContain("parseFloat(");
     expect(source).not.toContain("Number(process.multiplier");
     expect(source).not.toMatch(/responsibilityAmount\s*[/+*-]/);
-    expect(source).toContain("persisted.responsibilityAmount");
-    expect(source).toContain("persistedAllocation.roundedAmount");
+    expect(source).toContain("process.baseAmount");
+    expect(source).toContain("persistedPrimary?.multiplier");
   });
 
   it("uses the real task URL UUID and permission fields for actions", async () => {

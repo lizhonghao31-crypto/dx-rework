@@ -15,3 +15,4 @@ describe("N03 worker assignment usability", () => {
     expect(contract).toContain('if (value.mode === "individual" && value.members.length !== 1)');
   });
 });
+

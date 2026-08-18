@@ -5,9 +5,8 @@ import {
   CreateQuantityDecreaseSchema,
   CreateQuantityIncreaseSchema,
   RejectWorkReportSchema,
+  ReviewWholeOrderSchema,
   ReviewQuantityIncreaseSchema,
-  ReviewTailPricingSchema,
-  SubmitTailPricingSchema,
   WholeOrderReviewResponseSchema,
 } from "../../packages/contracts/src/index.js";
 import { transitionReworkOrder } from "../../packages/domain/src/index.js";
@@ -24,12 +23,11 @@ describe("whole-order review contracts", () => {
     expect(ConfirmQuantityIncreaseSchema.safeParse({ expectedOrderVersion: 2, expectedAdjustmentVersion: 1, decision: "rejected", actualCutQuantity: 3, actualReturnQuantity: 3, allowedMaximumQuantity: 3 }).success).toBe(false);
     expect(ReviewQuantityIncreaseSchema.safeParse({ expectedOrderVersion: 2, expectedAdjustmentVersion: 1, decision: "rejected" }).success).toBe(false);
     const report = { workReportId: id, workTaskId: id, configurationItemId: id, actualQuantity: 1, completedAt: "2026-08-03T00:00:00.000Z", submittedBy: id, assignmentMode: "collective", members: [{ personId: id, displayName: "成员" }], rejected: true, rejectedPersonId: null, rejectionReason: "整条驳回", resubmitsWorkReportId: null };
-    const response = { reworkOrderId: id, reworkStatus: "pending_order_review", orderVersion: 2, canReview: true, canSubmitTailPricing: true, canReviewTailPricing: false, canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false, processes: [], reports: [report], adjustments: [], temporaryWorkers: [], tailPricing: null, reviewId: null };
+    const response = { reworkOrderId: id, reworkStatus: "pending_order_review", orderVersion: 2, canReview: true, canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false, processes: [], reports: [report], adjustments: [], temporaryWorkers: [], reviewId: null };
     expect(WholeOrderReviewResponseSchema.safeParse(response).success).toBe(true);
     expect(WholeOrderReviewResponseSchema.safeParse({ ...response, reports: [{ ...report, assignmentMode: undefined }] }).success).toBe(false);
-    expect(SubmitTailPricingSchema.safeParse({ expectedOrderVersion: 2, prices: [{ configurationItemId: id, unitPrice: 0.55 }], temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2, reason: "旺季临时工加价" }] }).success).toBe(true);
-    expect(SubmitTailPricingSchema.safeParse({ expectedOrderVersion: 2, prices: [{ configurationItemId: id, unitPrice: 0.555 }], temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2 }] }).success).toBe(false);
-    expect(ReviewTailPricingSchema.safeParse({ expectedOrderVersion: 2, decision: "rejected" }).success).toBe(false);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2, reason: "旺季临时工加价" }] }).success).toBe(true);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2 }] }).success).toBe(false);
   });
 
   it("keeps whole-order transitions explicit and terminal responsibility work out of PR-08", () => {
@@ -38,25 +36,21 @@ describe("whole-order review contracts", () => {
     expect(() => transitionReworkOrder("pending_responsibility_determination", "in_progress")).toThrow();
   });
 
-  it("keeps N05 price entry separate from N06 IE approval", async () => {
-    const [panel, service, migration, wageMaterialization] = await Promise.all([
+  it("uses N03-approved prices and sends N06 directly to responsibility", async () => {
+    const [panel, service, migration] = await Promise.all([
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
-      readFile(new URL("../../apps/api/migrations/0060_phase1_tail_pricing_ie_review.sql", import.meta.url), "utf8"),
-      readFile(new URL("../../apps/api/migrations/0062_phase1_tail_pricing_wage_materialization.sql", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/migrations/0065_ie_pricing_before_assignment.sql", import.meta.url), "utf8"),
     ]);
-    expect(panel).toContain("最终单价与临时工系数");
-    expect(panel).toContain("提交 IE 核价");
-    expect(panel).toContain("IE 仅审核尾部已经提交的价格与临时工系数；不能在这里修改");
-    expect(service).toContain("async submitTailPricing");
-    expect(service).toContain("async reviewTailPricing");
-    expect(service).toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1");
-    expect(service).not.toContain("FROM rework_tail_pricing_submissions WHERE rework_order_id=$1 FOR UPDATE");
-    expect(service).toContain('kind === "whole_order_review" || kind === "tail_pricing"');
-    expect(service).toContain('sourceAction: "rework.tail_pricing.ie_approve"');
-    expect(wageMaterialization).toContain("rework.tail_pricing.ie_approve");
-    expect(migration).toContain("rework_tail_temporary_wage_coefficients");
-    expect(migration).toContain("rework.tail_pricing.ie_approve");
+    expect(panel).toContain("单价已由 N03 IE 核准");
+    expect(panel).toContain("临时工实发系数");
+    expect(panel).toContain("确认数量并进入责任判定");
+    expect(service).not.toContain("async submitTailPricing");
+    expect(service).not.toContain("async reviewTailPricing");
+    expect(service).toContain('this.orderAudit(order, "pending_responsibility_determination"');
+    expect(migration).toContain("rework_tail_completion_coefficients");
+    expect(migration).toContain("rework.whole_order.approve");
+    expect(migration).not.toContain("rework.tail_pricing.ie_approve");
   });
 
   it("adds only a forward PR-08 migration with immutable rejection and adjustment guards", async () => {
