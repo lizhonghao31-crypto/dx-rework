@@ -4,14 +4,18 @@
 - base branch: `main`
 - base SHA: `7b8f4c1387e606cef8fbc47c886564aaf0e485d3`
 - working branch: `agent/verify-tail-flow-full-gate`
-- task scope: repair the two PostgreSQL business-chain gates so they execute the mandatory N01 image rule and the N02–N07 parallel tail-inspection workflow on the current schema
+- task scope: repair the two PostgreSQL business-chain gates so they execute the mandatory N01 image rule and the N02–N07 parallel tail-inspection workflow on the current schema; close the exact text/UUID trigger defect exposed by the first real Full Gate
 - allowed files:
+  - `apps/api/migrations/0069_rework_image_submission_uuid_cast.sql`
+  - `apps/api/src/platform/migration-manifest.json`
   - `tests/integration/full-business-chain-postgres.test.ts`
   - `tests/integration/root-single-account-two-pass-postgres.test.ts`
+  - `tests/unit/n01-image-and-wage-integrity.test.ts`
   - `docs/engineering/pr-144-preflight.md`
-- forbidden files: production services, routes, migrations, contracts, UI, DingTalk integration, deployment configuration, secrets and environment files
+- forbidden files: production services, routes, historical migrations 0001–0068, contracts, UI, DingTalk integration, deployment configuration, secrets and environment files
 
-This PR changes no production behavior. Its first remote Full Gate is intentionally
-used to expose any runtime defect that the previously skipped PostgreSQL gates failed
-to detect; any product-code fix found by that gate must be separately reviewed before
-it is added to this PR.
+The first remote Full Gate exposed a production database defect in migration 0068:
+`attachments.entity_id` is text, while `rework_orders.rework_order_id` is UUID. A
+forward-only 0069 migration replaces the guard function with an explicit `::text`
+cast; 0068 remains byte-for-byte unchanged. No service, route, contract or UI changes
+are permitted in this PR.
