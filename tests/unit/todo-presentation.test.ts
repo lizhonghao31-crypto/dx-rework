@@ -16,7 +16,7 @@ describe("todo business presentation", () => {
         styleNo: "DX-1001",
       },
     })).toEqual({
-      subject: "返工上数被退回",
+      subject: "【返工单:RW-2026-0813-001｜款号:DX-1001｜订单号:PO-88】返工上数被退回",
       description: [
         "款号：DX-1001",
         "返工单：RW-2026-0813-001",
