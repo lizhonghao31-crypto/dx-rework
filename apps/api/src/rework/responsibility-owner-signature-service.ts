@@ -14,6 +14,7 @@ import {
 } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
 import { AuthorizedResponsibilityDeterminationService } from "./responsibility-determination-authorized-service.js";
+import { ExternalResponsibilityService } from "./external-responsibility-service.js";
 
 type OrderRow = Readonly<{
   rework_order_id: string;
@@ -41,13 +42,14 @@ const fail = (message: string, status = 409, code = "CONFLICT"): never => {
  * N08 is intentionally a single owner decision.  It does not ask the owner to
  * re-confirm a merchandiser's supplier selection: N07 already owns that data
  * quality.  The owner can retain only non-default external multipliers at N08.
- * Supplier deduction plans remain untouched in phase 1; they are intentionally
- * deferred until the business confirms their calculation basis.
+ * Approval materializes N09 supplier ledgers in the same transaction; actual
+ * deduction remains an independent lifecycle and does not block order completion.
  */
 export class ResponsibilityOwnerSignatureService {
   private readonly idempotency = new IdempotencyService();
   private readonly events = new OperationEventRepository();
   private readonly determinations: AuthorizedResponsibilityDeterminationService;
+  private readonly external: ExternalResponsibilityService;
 
   constructor(
     private readonly database: Pool,
@@ -57,6 +59,7 @@ export class ResponsibilityOwnerSignatureService {
       database,
       todos,
     );
+    this.external = new ExternalResponsibilityService(database, todos);
   }
 
   approve(
@@ -101,6 +104,14 @@ export class ResponsibilityOwnerSignatureService {
             adjustment.multiplier, adjustment.reason, eventId, actor.requestId],
         );
       }
+      // System-created N09 ledgers and the N08 signature commit atomically.
+      // If ledger materialization fails, the signature and order transition roll back.
+      await this.external.ensureForFinalized(
+        client,
+        actor,
+        order,
+        determination.determination_id,
+      );
       await client.query(
         `UPDATE rework_orders
          SET status='completed',version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP
@@ -111,7 +122,7 @@ export class ResponsibilityOwnerSignatureService {
         client,
         actor,
         `owner-signature:${orderId}:`,
-        "Owner signature approved; supplier deduction planning remains deferred",
+        "Owner signature approved; settlement ledgers were generated",
       );
       return this.determinations.get(actor, orderId, client);
     });

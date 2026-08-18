@@ -74,4 +74,25 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).not.toContain('name: "返工上数"');
     expect(source).not.toContain('step: "');
   });
+
+  it("does not mask Root workflow actions behind ordinary-role-only UI gates", async () => {
+    const [process, work, review, responsibility, external] = await Promise.all([
+      readFile(new URL("../../apps/web/src/process-configuration-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/responsibility-determination-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/external-responsibility-panel.tsx", import.meta.url), "utf8"),
+    ]);
+
+    expect(process).toContain("user?.isRoot === true");
+    expect(work).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
+    expect(work).toContain('isRoot ? "Root 代上数"');
+    expect(review).toContain("data.canSubmitTailPricing");
+    expect(review).toContain("data.canReviewTailPricing");
+    expect(review).toContain("data.canReview");
+    expect(responsibility).toContain("response.canDetermine");
+    expect(responsibility).toContain("response?.canOwnerSign");
+    expect(external).toContain("caseItem.canRecordDeduction");
+    expect(external).toContain("caseItem.canClose");
+  });
 });

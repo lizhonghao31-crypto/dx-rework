@@ -50,14 +50,14 @@ describe("phase-1 N07/N08 close", () => {
     expect(response.success).toBe(true);
   });
 
-  it("closes N08 without materialising supplier deduction plans", async () => {
+  it("materialises N09 supplier ledgers while preserving N08 multiplier snapshots", async () => {
     const [ownerService, panel, migration] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-owner-signature-service.ts", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/migrations/0061_phase1_owner_multiplier_snapshot.sql", "utf8"),
     ]);
     expect(ownerService).toContain("validateSpecialMultiplierAdjustments");
-    expect(ownerService).not.toContain("external.ensureForFinalized");
+    expect(ownerService).toContain("this.external.ensureForFinalized(");
     expect(panel).toContain("特殊外部倍率（默认 1.2）");
     expect(panel).toContain("共同责任记录 / 修改说明（可选）");
     expect(migration).toContain("rework_responsibility_owner_multiplier_adjustments");

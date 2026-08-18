@@ -11,7 +11,10 @@ import type {
   WorkReportResponse,
   WorkTaskResponse,
 } from "@dx-rework/contracts";
-import type { ExternalResponsibilityBatchResponse } from "@dx-rework/contracts/external-responsibility";
+import type {
+  ExternalResponsibilityBatchResponse,
+  ExternalResponsibilityCaseResponse,
+} from "@dx-rework/contracts/external-responsibility";
 import type {
   WageAdjustment,
   WagePeriod,
@@ -496,7 +499,51 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       "GET",
       `/rework-orders/${reworkOrderId}/external-responsibilities`,
     );
-    expect(batch).toBeNull();
+    expect(batch).not.toBeNull();
+    expect(batch!.cases).toHaveLength(1);
+    let externalCase = batch!.cases[0]!;
+    expect(externalCase).toMatchObject({
+      responsibilityType: "processing_factory",
+      supplier: { supplierId: fixture.supplierId },
+      status: "deduction_follow_up",
+      caseVersion: 1,
+      actualDeductedAmount: "0.00",
+      remainingAmount: externalCase.proposedDeductionAmount,
+      canSign: false,
+      canRecordDeduction: true,
+    });
+
+    externalCase = await http<ExternalResponsibilityCaseResponse>(
+      fixture.app,
+      "POST",
+      `/external-responsibility-cases/${externalCase.caseId}/deductions`,
+      {
+        expectedCaseVersion: externalCase.caseVersion,
+        entryType: "deduction",
+        amount: externalCase.proposedDeductionAmount,
+        deductedOn: new Date().toISOString().slice(0, 10),
+        attachmentIds: [],
+      },
+    );
+    expect(externalCase.remainingAmount).toBe("0.00");
+
+    externalCase = await http<ExternalResponsibilityCaseResponse>(
+      fixture.app,
+      "POST",
+      `/external-responsibility-cases/${externalCase.caseId}/close`,
+      {
+        expectedCaseVersion: externalCase.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      },
+    );
+    expect(externalCase).toMatchObject({
+      status: "closed",
+      closure: {
+        result: "full",
+        remainingAmount: "0.00",
+      },
+    });
   }
 
   async function runWages(pass: 1 | 2, fixture: PassFixture): Promise<void> {
@@ -610,7 +657,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const totals = result.rows[0]!;
     expect(totals.reportTotal).toBe(totals.wageOriginalTotal);
     expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.reportTotal) * 1.2, 2);
-    expect(totals.externalTotal).toBe("0.00");
+    expect(totals.externalTotal).toBe(totals.responsibilityTotal);
   }
 
   async function runPass(pass: 1 | 2): Promise<void> {

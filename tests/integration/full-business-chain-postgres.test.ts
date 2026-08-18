@@ -559,8 +559,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(n07Final.value.reworkStatus).toBe("pending_owner_signature");
     expect(n07Final.value.canOwnerSign).toBe(false);
 
-    // N08 closes the phase-1 business flow. Supplier deduction planning is
-    // intentionally deferred until its calculation basis is confirmed.
+    // N08 completes the production flow and atomically materializes the N09
+    // supplier ledger from the immutable N07 responsibility facts.
     const adjustedProcess = n07Final.value.determination!.processes
       .find((process) => process.allocations.some((allocation) => allocation.responsibilityType === "processing_factory"))!;
     const adjustedExternal = {
@@ -590,20 +590,33 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       },
     });
 
-    const externalCases = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count
+    const externalCases = await database.query<{
+      responsibilityType: string;
+      supplierId: string;
+      proposedAmount: string;
+      status: string;
+    }>(
+      `SELECT responsibility_type AS "responsibilityType",
+              supplier_id AS "supplierId",
+              proposed_deduction_amount::text AS "proposedAmount",
+              status
        FROM rework_external_responsibility_cases
        WHERE rework_order_id=$1`,
       [submitted.value.reworkOrderId],
     );
-    expect(externalCases.rows[0]?.count).toBe(0);
+    expect(externalCases.rows).toEqual([{
+      responsibilityType: "processing_factory",
+      supplierId: factorySupplierId,
+      proposedAmount: "132.00",
+      status: "deduction_follow_up",
+    }]);
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
 
-    /* N09/N11 deduction coverage is intentionally deferred from the phase-1
-       N07/N08 path. The legacy scenario remains below as historical context.
+    /* Historical N08-B scenario retained below as reference only. Current V2
+       N09/N11 execution is covered by the active assertions and Root double pass.
     expect(externalBatch!.cases).toEqual(expect.arrayContaining([
       expect.objectContaining({
         responsibilityType: "processing_factory",
@@ -830,7 +843,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       report_total: "110.00",
       responsibility_total: "132.00",
       own_factory_total: "0.00",
-      external_total: "0.00",
+      external_total: "132.00",
       wage_total: "110.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(
@@ -841,6 +854,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        ORDER BY category,todo_id`,
     );
     expect(openBusinessTodos.rows).toEqual([
+      { category: "external_deduction_follow_up" },
       { category: "wage_month_close" },
     ]);
   });

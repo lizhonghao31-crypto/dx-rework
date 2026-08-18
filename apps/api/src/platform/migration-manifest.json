@@ -251,6 +251,10 @@
     {
       "version": "0063_root_actor_role_snapshot_canonicalization",
       "checksum": "b02f42efccc5eca7ea0c657db08e33015885bf0d6087d92938977a1bd5a62413"
+    },
+    {
+      "version": "0064_root_external_responsibility_bypass",
+      "checksum": "231ca253c1864033b583b86fe1e3e1a086c2b5e7d9b5bd5ea2ba7caccda0277d"
     }
   ]
 }
