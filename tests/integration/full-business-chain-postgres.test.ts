@@ -17,6 +17,7 @@ import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
@@ -86,6 +87,12 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     undefined,
     todoProjection,
   );
+  const tailInspection = new TailInspectionService(
+    database,
+    undefined,
+    undefined,
+    todoProjection,
+  );
   const work = new WorkReportingService(database, undefined, undefined, todoProjection);
   const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
   const responsibility = new ResponsibilityDeterminationApplicationService(
@@ -99,6 +106,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ownerTwo: randomUUID(),
     qc: randomUUID(),
     tail: randomUUID(),
+    tailInspector: randomUUID(),
     ie: randomUUID(),
     worker: randomUUID(),
     merchandiser: randomUUID(),
@@ -149,6 +157,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ["tail_supervisor"],
     "work:assign",
     "work:report_for_worker",
+  );
+  const tailInspect = () => actor(
+    ids.tailInspector,
+    ["tail_inspector"],
+    "tail_inspection:report",
   );
   const worker = () => actor(ids.worker, ["worker"], "work:report");
   const tailAudit = () => actor(
@@ -222,6 +235,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.ownerTwo, "老板二", "owner_group"],
       [ids.qc, "品控", "quality_control"],
       [ids.tail, "李同生", "tail_supervisor"],
+      [ids.tailInspector, "尾查", "tail_inspector"],
       [ids.ie, "IE", "ie_reviewer"],
       [ids.worker, "工人", "worker"],
       [ids.merchandiser, "订单跟单", "order_merchandiser"],
@@ -286,6 +300,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("carries one real order from N01 through N11 without losing cross-node facts", async () => {
     // N01 - QC initiates one order with the business total quantity.
+    const initialImageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'full-chain-initial.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [initialImageId, `private/${initialImageId}.webp`, "d".repeat(64), ids.qc],
+    );
     const draft = await initiation.createDraft(qc(), {
       styleNo: "UAT-FULL-CHAIN",
       orderQuantity: 1_000,
@@ -296,6 +318,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       problemPart: "袖口",
       problemDescription: "全链自动验收",
       reworkQuantity: 200,
+      attachmentIds: [initialImageId],
     }, randomUUID());
     expect(draft.value).toMatchObject({
       status: "draft",
@@ -381,6 +404,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       SubmitProcessConfigurationSchema.parse({
         expectedOrderVersion: n02Saved.value.orderVersion,
         expectedConfigurationVersion: n02Saved.value.configuration!.configurationVersion,
+        tailInspectors: [{ userId: ids.tailInspector, boxScope: "全链测试箱" }],
       }),
       randomUUID(),
     );
@@ -459,11 +483,37 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(firstReplay.value.workReportId).toBe(firstReport.value.workReportId);
     expect(firstReport.value.memberShares[0]?.amount).toBe(0);
 
-    const n05View = await wholeOrder.get(
+    const tailView = await tailInspection.get(
+      tailInspect(),
+      submitted.value.reworkOrderId,
+    );
+    expect(tailView).toMatchObject({
+      reworkStatus: "in_progress",
+      assignments: [expect.objectContaining({
+        tailInspectorUserId: ids.tailInspector,
+        canSubmit: true,
+      })],
+    });
+    const tailAssignment = tailView.assignments[0]!;
+    const tailReported = await tailInspection.submit(
+      tailInspect(),
+      tailAssignment.assignmentId,
+      {
+        returnedQuantity: 200,
+        items: [{
+          configurationItemId: approvedItem.configurationItemId,
+          inspectedQuantity: 200,
+        }],
+      },
+      randomUUID(),
+    );
+    expect(tailReported.value.reworkStatus).toBe("pending_order_review");
+
+    const n07View = await wholeOrder.get(
       tailAudit(),
       submitted.value.reworkOrderId,
     );
-    expect(n05View).toMatchObject({
+    expect(n07View).toMatchObject({
       reworkStatus: "pending_order_review",
       processes: [expect.objectContaining({
         configurationItemId: approvedItem.configurationItemId,
@@ -474,17 +524,17 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       })],
     });
 
-    // N06 confirms valid quantities and creates wages directly from N03 price.
-    const n06Approved = await wholeOrder.approve(
+    // N07 confirms worker counts against tail-inspection facts and creates wages.
+    const n07Approved = await wholeOrder.approve(
       tailAudit(),
       submitted.value.reworkOrderId,
       {
-        expectedOrderVersion: n05View.orderVersion,
+        expectedOrderVersion: n07View.orderVersion,
         temporaryCoefficients: [],
       },
       randomUUID(),
     );
-    expect(n06Approved.value).toMatchObject({
+    expect(n07Approved.value).toMatchObject({
       reworkStatus: "pending_responsibility_determination",
       processes: [expect.objectContaining({
         configurationItemId: approvedItem.configurationItemId,
@@ -498,7 +548,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       production(),
       submitted.value.reworkOrderId,
       CreateResponsibilityDraftSchema.parse({
-        expectedOrderVersion: n06Approved.value.orderVersion,
+        expectedOrderVersion: n07Approved.value.orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
         processes: [{
