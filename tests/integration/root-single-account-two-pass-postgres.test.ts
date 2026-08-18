@@ -759,6 +759,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       expect(tailAssignment).toMatchObject({
         tailInspectorUserId: fixture.tailInspectorUserId,
         status: "active",
+        canSubmit: true,
       });
       const tailReported = await http<TailInspectionResponse>(
         fixture.app,
