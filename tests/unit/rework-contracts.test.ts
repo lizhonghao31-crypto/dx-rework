@@ -165,7 +165,7 @@ describe("rework initiation contracts", () => {
       .toThrowError(/Cannot transition/);
   });
 
-  it("keeps configuration units and IE rejection reasons explicit", () => {
+  it("limits new configurations to piece counts and keeps IE rejection reasons explicit", () => {
     expect(SaveProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 2,
       items: [{
@@ -185,7 +185,7 @@ describe("rework initiation contracts", () => {
         plannedQuantity: 1.2,
         unitPrice: 0.55,
       }],
-    }).success).toBe(true);
+    }).success).toBe(false);
     expect(ReviewProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 2,
       expectedConfigurationVersion: 1,

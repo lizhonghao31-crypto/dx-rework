@@ -27,6 +27,7 @@ import {
   type ProcessConfigurationHttpDependencies,
 } from "./rework/process-configuration-routes.js";
 import { registerWorkReportingRoutes, type WorkReportingHttpDependencies } from "./rework/work-reporting-routes.js";
+import { registerTailInspectionRoutes, type TailInspectionHttpDependencies } from "./rework/tail-inspection-routes.js";
 import { registerWholeOrderReviewRoutes, type WholeOrderReviewHttpDependencies } from "./rework/whole-order-review-routes.js";
 import { registerResponsibilityDeterminationRoutes, type ResponsibilityDeterminationHttpDependencies } from "./rework/responsibility-determination-routes.js";
 import { registerOwnFactoryApprovalRoutes, type OwnFactoryApprovalHttpDependencies } from "./rework/own-factory-approval-routes.js";
@@ -48,6 +49,7 @@ export type AppDependencies = Readonly<{
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
   workReporting?: WorkReportingHttpDependencies;
+  tailInspection?: TailInspectionHttpDependencies;
   wholeOrderReview?: WholeOrderReviewHttpDependencies;
   responsibilityDetermination?: ResponsibilityDeterminationHttpDependencies;
   ownFactoryApproval?: OwnFactoryApprovalHttpDependencies;
@@ -130,6 +132,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     registerProcessConfigurationRoutes(app, dependencies.processConfiguration);
   }
   if (dependencies.workReporting) registerWorkReportingRoutes(app, dependencies.workReporting);
+  if (dependencies.tailInspection) registerTailInspectionRoutes(app, dependencies.tailInspection);
   if (dependencies.wholeOrderReview) registerWholeOrderReviewRoutes(app, dependencies.wholeOrderReview);
   if (dependencies.responsibilityDetermination) registerResponsibilityDeterminationRoutes(app, dependencies.responsibilityDetermination);
   if (dependencies.ownFactoryApproval) registerOwnFactoryApprovalRoutes(app, dependencies.ownFactoryApproval);

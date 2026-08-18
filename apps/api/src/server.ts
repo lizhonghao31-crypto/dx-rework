@@ -28,6 +28,7 @@ import { ReworkBusinessDetailService } from "./rework/rework-business-detail-ser
 import { InspectionImageExtractionService } from "./rework/inspection-image-extraction-service.js";
 import { ReworkInitiationService } from "./rework/service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
+import { TailInspectionService } from "./rework/tail-inspection-service.js";
 import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
 import { RootAwareTodoProjectionService } from "./todos/root-aware-projection-service.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
@@ -129,6 +130,7 @@ const workReportingService = new WorkReportingService(
   undefined,
   todoProjection,
 );
+const tailInspectionService = new TailInspectionService(database);
 const wholeOrderReviewService = new BusinessAwareWholeOrderReviewService(
   database,
   todoProjection,
@@ -221,6 +223,11 @@ const app = buildApp({
   workReporting: {
     authenticate: (token) => auth.authenticate(token),
     service: workReportingService,
+    root: rootAuthority,
+  },
+  tailInspection: {
+    authenticate: (token) => auth.authenticate(token),
+    service: tailInspectionService,
     root: rootAuthority,
   },
   wholeOrderReview: {

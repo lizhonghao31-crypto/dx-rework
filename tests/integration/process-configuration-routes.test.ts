@@ -77,7 +77,7 @@ describe("process configuration routes", () => {
         items: [{
           source: "custom",
           customProcessName: "特殊翻边返修",
-          plannedQuantity: 2.1,
+          plannedQuantity: 2,
           pricingUnit: "piece",
           unitPrice: 0.555,
         }],
@@ -93,7 +93,7 @@ describe("process configuration routes", () => {
       "00000000-0000-4000-8000-000000000010",
       expect.objectContaining({
         expectedOrderVersion: 2,
-        items: [expect.objectContaining({ plannedQuantity: 2.1 })],
+        items: [expect.objectContaining({ plannedQuantity: 2 })],
       }),
       "process-save-1",
     );

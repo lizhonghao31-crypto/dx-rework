@@ -254,7 +254,7 @@ export class WorkReportingService {
       const reportingCapability = this.reportCapability(actor, members);
       if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability! };
-      if (!hasAtMostDecimalPlaces(input.actualQuantity, 1)) error("本次上数最多保留一位小数", 400, "VALIDATION_ERROR");
+      if (!Number.isInteger(input.actualQuantity)) error("工人完工上数只能填写整数件数", 400, "VALIDATION_ERROR");
       const completedAt = new Date(input.completedAt);
       const now = Date.now();
       if (Number.isNaN(completedAt.getTime()) || completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
@@ -268,22 +268,7 @@ export class WorkReportingService {
       );
       if (existing.rows[0]) error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
       const groupAmount = 0;
-      const completion = await client.query<{ complete: boolean }>(
-        `SELECT NOT EXISTS (
-           SELECT 1
-           FROM rework_work_tasks pending_task
-           WHERE pending_task.rework_order_id=$1
-             AND pending_task.status='active'
-             AND pending_task.work_task_id<>$2
-             AND NOT EXISTS (
-               SELECT 1 FROM rework_work_reports report
-               WHERE report.work_task_id=pending_task.work_task_id AND report.status='submitted'
-                 AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-             )
-         ) AS complete`,
-        [task.rework_order_id, task.work_task_id],
-      );
-      const completedOrder = completion.rows[0]?.complete === true;
+      const completedOrder = await this.readyForWholeOrderReview(client, task.rework_order_id, task.work_task_id);
       if (input.resubmitsWorkReportId) {
         const rejected = await client.query<{ work_report_id: string }>(
           `SELECT report.work_report_id FROM rework_work_reports report
@@ -405,6 +390,43 @@ export class WorkReportingService {
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
     const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
+  }
+
+  private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskId: string): Promise<boolean> {
+    const result = await client.query<{ ready: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1 FROM rework_work_tasks task
+         WHERE task.rework_order_id=$1 AND task.status='active'
+       )
+       AND NOT EXISTS(
+         SELECT 1 FROM rework_work_tasks task
+         WHERE task.rework_order_id=$1 AND task.status='active'
+           AND task.work_task_id IS DISTINCT FROM $2::uuid
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_work_reports report
+             WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_work_report_rejections rejection
+                 WHERE rejection.work_report_id=report.work_report_id
+               )
+           )
+       )
+       AND EXISTS(
+         SELECT 1 FROM rework_tail_inspection_assignments assignment
+         WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+       )
+       AND NOT EXISTS(
+         SELECT 1 FROM rework_tail_inspection_assignments assignment
+         WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_tail_inspection_reports report
+             WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
+               AND report.status='submitted'
+           )
+       ) AS ready`,
+      [reworkOrderId, submittedWorkTaskId],
+    );
+    return result.rows[0]?.ready === true;
   }
 
   private async members(client: Pick<Pool, "query"> | PoolClient, taskId: string): Promise<PersonRow[]> {

@@ -1,12 +1,6 @@
 import {
-  ConfirmQuantityIncreaseSchema,
-  CreateQuantityDecreaseSchema,
-  CreateQuantityIncreaseSchema,
   IdempotencyKeySchema,
-  QuantityAdjustmentParamsSchema,
-  QuantityAdjustmentResponseSchema,
   RejectWorkReportSchema,
-  ReviewQuantityIncreaseSchema,
   ReviewWholeOrderSchema,
   WholeOrderReviewParamsSchema,
   WholeOrderReviewQuerySchema,
@@ -125,25 +119,5 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
     const result = await dependencies.service.rejectReport(await actor(request, "submission:audit", "tail_supervisor"), parse(WorkReportRejectionParamsSchema, request.params).workReportId, parse(RejectWorkReportSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
-  });
-  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/quantity-adjustments/decrease", async (request, reply) => {
-    const result = await dependencies.service.decrease(await actor(request, "quantity:adjust", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(CreateQuantityDecreaseSchema, request.body), key(request));
-    if (result.reused) void reply.header("idempotency-replayed", "true");
-    return reply.code(201).send(QuantityAdjustmentResponseSchema.parse(result.value));
-  });
-  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/quantity-adjustments/increase", async (request, reply) => {
-    const result = await dependencies.service.requestIncrease(await actor(request, "quantity:adjust", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(CreateQuantityIncreaseSchema, request.body), key(request));
-    if (result.reused) void reply.header("idempotency-replayed", "true");
-    return reply.code(201).send(QuantityAdjustmentResponseSchema.parse(result.value));
-  });
-  app.post<{ Params: { adjustmentId: string } }>("/quantity-adjustments/:adjustmentId/confirm", async (request, reply) => {
-    const result = await dependencies.service.confirmIncrease(await actor(request, "quantity:confirm", "order_merchandiser"), parse(QuantityAdjustmentParamsSchema, request.params).adjustmentId, parse(ConfirmQuantityIncreaseSchema, request.body), key(request));
-    if (result.reused) void reply.header("idempotency-replayed", "true");
-    return QuantityAdjustmentResponseSchema.parse(result.value);
-  });
-  app.post<{ Params: { adjustmentId: string } }>("/quantity-adjustments/:adjustmentId/ie-review", async (request, reply) => {
-    const result = await dependencies.service.reviewIncrease(await actor(request, "process:review", "ie_reviewer"), parse(QuantityAdjustmentParamsSchema, request.params).adjustmentId, parse(ReviewQuantityIncreaseSchema, request.body), key(request));
-    if (result.reused) void reply.header("idempotency-replayed", "true");
-    return QuantityAdjustmentResponseSchema.parse(result.value);
   });
 }
