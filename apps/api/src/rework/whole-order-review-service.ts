@@ -32,7 +32,7 @@ type OrderRow = Readonly<{
 }>;
 type PlanRow = Readonly<{
   configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour";
-  planned_quantity: string; completed_quantity: string; unit_price: string | null;
+  planned_quantity: string; completed_quantity: string; tail_checked_quantity: string; unit_price: string | null;
 }>;
 type TemporaryWorkerRow = Readonly<{
   configuration_item_id: string; process_name: string; person_id: string; display_name: string;
@@ -85,20 +85,13 @@ export class WholeOrderReviewService {
         [reworkOrderId, configurationItemId],
       );
       if (!scopedItem.rowCount) error("工序不存在或不属于该返工单当前生效配置", 404, "NOT_FOUND");
-      const canAdjustQuantity = await this.can(actor, "tail_supervisor", "quantity:adjust", order, configurationItemId);
-      const canConfirmQuantity = await this.canConfirm(actor, order, configurationItemId);
-      const canReviewQuantityIncrease = await this.can(actor, "ie_reviewer", "process:review", order, configurationItemId);
-      if (!canAdjustQuantity && !canConfirmQuantity && !canReviewQuantityIncrease) error("当前用户无权读取该工序信息", 403, "FORBIDDEN");
-      return this.dto(this.database, order, { canReview: false, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease }, configurationItemId);
+      const canReview = await this.can(actor, "tail_supervisor", "submission:audit", order, configurationItemId);
+      if (!canReview) error("当前用户无权读取整单确认信息", 403, "FORBIDDEN");
+      return this.dto(this.database, order, { canReview, canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false }, configurationItemId);
     }
     const canReview = await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order);
-    const canAdjustQuantity = await this.canOrderWide(actor, "tail_supervisor", "quantity:adjust", order);
-    const canConfirmQuantity = await this.canConfirm(actor, order);
-    const canReviewQuantityIncrease = await this.canOrderWide(actor, "ie_reviewer", "process:review", order);
-    if (!canReview && !canAdjustQuantity && !canConfirmQuantity && !canReviewQuantityIncrease) {
-      error("当前用户无权读取整单审核与数量调整信息", 403, "FORBIDDEN");
-    }
-    return this.dto(this.database, order, { canReview, canAdjustQuantity, canConfirmQuantity, canReviewQuantityIncrease });
+    if (!canReview) error("当前用户无权读取整单确认信息", 403, "FORBIDDEN");
+    return this.dto(this.database, order, { canReview, canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false });
   }
 
   async approve(actor: TrustedActorContext, reworkOrderId: string, input: ReviewWholeOrder, key: string): Promise<Result<WholeOrderReviewResponse>> {
@@ -109,15 +102,12 @@ export class WholeOrderReviewService {
       if (order.status !== "pending_order_review") error("当前返工单尚未进入 N06 尾部核量节点", 409, "INVALID_STATE_TRANSITION");
       const existing = await client.query("SELECT 1 FROM rework_order_reviews WHERE rework_order_id=$1 FOR SHARE", [reworkOrderId]);
       if (existing.rowCount) error("该返工单已经完成整单审核", 409, "CONFLICT");
-      const pending = await client.query(`SELECT 1 FROM rework_process_quantity_adjustments WHERE rework_order_id=$1 AND adjustment_kind='increase' AND (status='pending_ie_review' OR (status='pending_merchandiser_confirmation' AND expires_at>CURRENT_TIMESTAMP)) LIMIT 1`, [reworkOrderId]);
-      if (pending.rowCount) error("存在待处理的计划数量增加申请，暂不能整单审核", 409, "CONFLICT");
       const plans = await this.plans(client, reworkOrderId);
       if (plans.some((plan) => plan.unit_price === null)) {
         error("每道工序必须在 N03 完成 IE 核价后才能核量", 409, "INVALID_STATE_TRANSITION");
       }
-      if (plans.length === 0 || plans.some((plan) => numberValue(plan.completed_quantity) < numberValue(plan.planned_quantity))) {
-        error("所有工序达到当前有效计划数量后才能整单审核", 409, "CONFLICT");
-      }
+      if (plans.length === 0) error("当前返工单没有 IE 已核价工序", 409, "INVALID_STATE_TRANSITION");
+      await this.assertTailReconciliation(client, reworkOrderId);
       const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
       const submittedCoefficientKeys = new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`));
       const expectedCoefficientKeys = new Set(temporaryWorkers.map((worker) => `${worker.configuration_item_id}:${worker.person_id}`));
@@ -540,8 +530,8 @@ export class WholeOrderReviewService {
     configurationItemId?: string,
   ): Promise<WholeOrderReviewResponse> {
     const plans = await this.plans(client, order.rework_order_id);
-    const [reports, adjustments, reviews, temporaryWorkers] = await Promise.all([
-      this.reports(client, order.rework_order_id, configurationItemId), this.adjustments(client, order.rework_order_id, configurationItemId),
+    const [reports, reviews, temporaryWorkers] = await Promise.all([
+      this.reports(client, order.rework_order_id, configurationItemId),
       configurationItemId
         ? Promise.resolve({ rows: [] as Array<{ order_review_id: string }> })
         : client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
@@ -550,9 +540,9 @@ export class WholeOrderReviewService {
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
       ...permissions,
-      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) >= numberValue(plan.planned_quantity), finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price) })),
+      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity), countGap: numberValue(plan.tail_checked_quantity) - numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) <= numberValue(plan.tail_checked_quantity), finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price) })),
       reports,
-      adjustments,
+      adjustments: [],
       temporaryWorkers: temporaryWorkers.map((worker) => ({ configurationItemId: worker.configuration_item_id, processName: worker.process_name, personId: worker.person_id, displayName: worker.display_name, multiplier: numberValue(worker.multiplier ?? "1"), reason: worker.reason })),
       reviewId: reviews.rows[0]?.order_review_id ?? null,
     };
@@ -561,34 +551,103 @@ export class WholeOrderReviewService {
   private async snapshot(client: PoolClient, order: OrderRow, plans: readonly PlanRow[]): Promise<Record<string, unknown>> {
     return {
       order: this.orderAudit(order),
-      processes: plans.map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity) })),
+      processes: plans.map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, workerReportedQuantity: numberValue(plan.completed_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity) })),
       reports: await this.reports(client, order.rework_order_id),
-      adjustments: await this.adjustments(client, order.rework_order_id),
     };
   }
 
   private async plans(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string): Promise<PlanRow[]> {
     const result = await client.query<PlanRow>(
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.unit_price,
-              COALESCE(plan.requested_planned_quantity,item.planned_quantity)::text AS planned_quantity,
-              COALESCE(completed.quantity,0)::text AS completed_quantity
+              item.planned_quantity::text AS planned_quantity,
+              COALESCE(completed.quantity,0)::text AS completed_quantity,
+              COALESCE(tail_checked.quantity,0)::text AS tail_checked_quantity
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
-       LEFT JOIN LATERAL (
-         SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment
-         WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective'
-         ORDER BY adjustment.adjustment_version DESC LIMIT 1
-       ) plan ON true
        LEFT JOIN LATERAL (
          SELECT sum(report.actual_quantity) AS quantity FROM rework_work_reports report
          WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted'
            AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
        ) completed ON true
+       LEFT JOIN LATERAL (
+         SELECT sum(report_item.inspected_quantity) AS quantity
+         FROM rework_tail_inspection_report_items report_item
+         JOIN rework_tail_inspection_reports report
+           ON report.tail_inspection_report_id=report_item.tail_inspection_report_id
+          AND report.status='submitted'
+         JOIN rework_tail_inspection_assignments assignment
+           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id
+          AND assignment.revoked_at IS NULL
+         WHERE report.rework_order_id=$1
+           AND report_item.configuration_item_id=item.configuration_item_id
+       ) tail_checked ON true
        WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
        ORDER BY item.position,item.configuration_item_id`,
       [reworkOrderId],
     );
     return result.rows;
+  }
+
+  private async assertTailReconciliation(client: PoolClient, reworkOrderId: string): Promise<void> {
+    const pending = await client.query<{ issue: string }>(
+      `SELECT 'worker'::text AS issue
+       WHERE EXISTS(
+         SELECT 1 FROM rework_work_tasks task
+         WHERE task.rework_order_id=$1 AND task.status='active'
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_work_reports report
+             WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_work_report_rejections rejection
+                 WHERE rejection.work_report_id=report.work_report_id
+               )
+           )
+       )
+       UNION ALL
+       SELECT 'tail'::text AS issue
+       WHERE EXISTS(
+         SELECT 1 FROM rework_tail_inspection_assignments assignment
+         WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_tail_inspection_reports report
+             WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
+               AND report.status='submitted'
+           )
+       )
+       UNION ALL
+       SELECT item.process_name
+       FROM rework_process_configurations configuration
+       JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(sum(report.actual_quantity),0) AS quantity
+         FROM rework_work_reports report
+         WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id
+           AND report.status='submitted'
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_work_report_rejections rejection
+             WHERE rejection.work_report_id=report.work_report_id
+           )
+       ) worker ON true
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(sum(report_item.inspected_quantity),0) AS quantity
+         FROM rework_tail_inspection_report_items report_item
+         JOIN rework_tail_inspection_reports report
+           ON report.tail_inspection_report_id=report_item.tail_inspection_report_id
+          AND report.status='submitted'
+         JOIN rework_tail_inspection_assignments assignment
+           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id
+          AND assignment.revoked_at IS NULL
+         WHERE report.rework_order_id=$1
+           AND report_item.configuration_item_id=item.configuration_item_id
+       ) tail_checked ON true
+       WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+         AND worker.quantity>tail_checked.quantity`,
+      [reworkOrderId],
+    );
+    const issues = pending.rows.map((row) => row.issue);
+    if (issues.includes("worker")) error("仍有工人完工上数未完成，不能整单确认", 409, "CONFLICT");
+    if (issues.includes("tail")) error("仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
+    if (issues.length > 0) error(`工人上数超过尾查数量：${issues.join("、")}；请驳回并调整上数或尾查报数`, 409, "CONFLICT");
   }
 
   private async reports(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse["reports"]> {
@@ -759,9 +818,9 @@ export class WholeOrderReviewService {
   private async permissions(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, order: OrderRow) {
     return {
       canReview: await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order, client),
-      canAdjustQuantity: await this.canOrderWide(actor, "tail_supervisor", "quantity:adjust", order, client),
-      canConfirmQuantity: await this.canConfirm(actor, order, undefined, client),
-      canReviewQuantityIncrease: await this.canOrderWide(actor, "ie_reviewer", "process:review", order, client),
+      canAdjustQuantity: false,
+      canConfirmQuantity: false,
+      canReviewQuantityIncrease: false,
     };
   }
 

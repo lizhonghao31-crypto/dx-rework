@@ -480,15 +480,16 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("catalog"),
     processId: IdSchema,
-    plannedQuantity: z.number().finite().positive(),
-    pricingUnit: ProcessPricingUnitSchema,
+    // 计划数量已由尾查实物清点取代；保留该字段仅兼容历史审计结构。
+    plannedQuantity: z.number().finite().positive().optional().default(1),
+    pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),
   }).strict(),
   z.object({
     source: z.literal("custom"),
     customProcessName: z.string().trim().min(1).max(100),
-    plannedQuantity: z.number().finite().positive(),
-    pricingUnit: ProcessPricingUnitSchema,
+    plannedQuantity: z.number().finite().positive().optional().default(1),
+    pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),
   }).strict(),
 ]).superRefine((value, context) => {
@@ -519,7 +520,15 @@ export const SaveProcessConfigurationSchema = z.object({
 export const SubmitProcessConfigurationSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   expectedConfigurationVersion: z.number().int().positive(),
-}).strict();
+  tailInspectors: z.array(z.object({
+    userId: IdSchema,
+    boxScope: z.string().trim().min(1).max(200).optional(),
+  }).strict()).min(1).max(20),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.tailInspectors.map((item) => item.userId)).size !== value.tailInspectors.length) {
+    context.addIssue({ code: "custom", path: ["tailInspectors"], message: "Tail inspectors cannot contain duplicates" });
+  }
+});
 
 export const ReviewProcessConfigurationSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
@@ -574,6 +583,51 @@ export const ProcessConfigurationOptionsResponseSchema = z.object({
     pricingUnit: ProcessPricingUnitSchema,
   }).strict()),
 });
+
+export const TailInspectionAssignmentSchema = z.object({
+  assignmentId: IdSchema,
+  tailInspectorUserId: IdSchema,
+  tailInspectorName: z.string().min(1),
+  boxScope: z.string().nullable(),
+  status: z.enum(["active", "revoked"]),
+  returnedQuantity: z.number().int().positive().nullable(),
+  submittedAt: z.string().datetime().nullable(),
+  canSubmit: z.boolean(),
+}).strict();
+export const TailInspectionItemSchema = z.object({
+  configurationItemId: IdSchema,
+  processName: z.string().min(1),
+  inspectedQuantity: z.number().int().nonnegative(),
+}).strict();
+export const TailInspectionResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkStatus: ReworkOrderStatusSchema,
+  assignments: z.array(TailInspectionAssignmentSchema),
+  processes: z.array(TailInspectionItemSchema),
+}).strict();
+export const TailInspectionOptionsResponseSchema = z.object({
+  inspectors: z.array(z.object({ userId: IdSchema, displayName: z.string().min(1) }).strict()),
+}).strict();
+export const SubmitTailInspectionReportSchema = z.object({
+  returnedQuantity: z.number().int().positive(),
+  items: z.array(z.object({
+    configurationItemId: IdSchema,
+    inspectedQuantity: z.number().int().nonnegative(),
+  }).strict()).min(1).max(100),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.items.map((item) => item.configurationItemId)).size !== value.items.length) {
+    context.addIssue({ code: "custom", path: ["items"], message: "Each process may be counted once" });
+  }
+  for (const [index, item] of value.items.entries()) {
+    if (item.inspectedQuantity > value.returnedQuantity) {
+      context.addIssue({ code: "custom", path: ["items", index, "inspectedQuantity"], message: "Process count cannot exceed returned quantity" });
+    }
+  }
+});
+export const TailInspectionAssignmentParamsSchema = z.object({ assignmentId: IdSchema }).strict();
+export type TailInspectionResponse = z.infer<typeof TailInspectionResponseSchema>;
+export type TailInspectionOptionsResponse = z.infer<typeof TailInspectionOptionsResponseSchema>;
+export type SubmitTailInspectionReport = z.infer<typeof SubmitTailInspectionReportSchema>;
 
 export type ProcessConfigurationItem = z.infer<typeof ProcessConfigurationItemSchema>;
 export type SaveProcessConfiguration = z.infer<typeof SaveProcessConfigurationSchema>;
@@ -752,6 +806,8 @@ export const WholeOrderReviewResponseSchema = z.object({
     pricingUnit: ProcessPricingUnitSchema,
     plannedQuantity: z.number().positive(),
     completedQuantity: z.number().nonnegative(),
+    tailCheckedQuantity: z.number().int().nonnegative(),
+    countGap: z.number().int(),
     complete: z.boolean(),
     finalUnitPrice: z.number().positive().nullable(),
   }).strict()),

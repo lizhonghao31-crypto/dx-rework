@@ -263,6 +263,10 @@
     {
       "version": "0066_tail_inspection_foundation",
       "checksum": "b4afae50eec8cbda14746a269fb24cd7ce1766ef2df338453e038a7b3beb7930"
+    },
+    {
+      "version": "0067_tail_inspection_parallel_flow",
+      "checksum": "4f696007e3e433053fd69195bc103fc1f248477dc1b9def2113c917cf9fb8f31"
     }
   ]
 }

@@ -21,10 +21,7 @@ import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import {
-  hasAtMostDecimalPlaces,
-  type WorkReportingService,
-} from "./work-reporting-service.js";
+import { type WorkReportingService } from "./work-reporting-service.js";
 
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
 const parse = <T>(schema: { safeParse(input: unknown): { success: true; data: T } | { success: false } }, input: unknown): T => { const result = schema.safeParse(input); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
@@ -111,8 +108,8 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
   });
   app.post<{ Params: { workTaskId: string } }>("/work-tasks/:workTaskId/reports", async (request, reply) => {
     const input = parse(CreateWorkReportSchema, request.body);
-    if (!hasAtMostDecimalPlaces(input.actualQuantity, 1)) {
-      throw new ApplicationError("VALIDATION_ERROR", "本次上数最多保留一位小数", 400);
+    if (!Number.isInteger(input.actualQuantity)) {
+      throw new ApplicationError("VALIDATION_ERROR", "工人完工上数只能填写整数件数", 400);
     }
     const result = await dependencies.service.submitReport(
       await actor(request, "report"),

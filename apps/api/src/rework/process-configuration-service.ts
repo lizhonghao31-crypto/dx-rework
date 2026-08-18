@@ -184,7 +184,7 @@ export class ProcessConfigurationService {
     const result = await this.database.query<{
       process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour";
     }>(
-      "SELECT process_id,version,process_name,pricing_unit FROM current_process_catalog WHERE active=true ORDER BY process_name,process_id",
+      "SELECT process_id,version,process_name,pricing_unit FROM current_process_catalog WHERE active=true AND pricing_unit='piece' ORDER BY process_name,process_id",
     );
     return {
       processes: result.rows.map((row) => ({
@@ -206,14 +206,11 @@ export class ProcessConfigurationService {
     return this.mutate(actor, "rework.process_configuration.save", idempotencyKey, { reworkOrderId, ...input }, 201, async (client) => {
       const order = await this.lockOrder(client, reworkOrderId);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_process_configuration" && order.status !== "pending_task_assignment") {
+      if (order.status !== "pending_process_configuration") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不允许保存工序配置", 409);
       }
-      const kind = order.status === "pending_task_assignment" ? "change" : "initial";
-      if (kind === "change" && !input.changeReason) {
-        throw new ApplicationError("VALIDATION_ERROR", "已生效工序变更必须填写原因并生成变更单", 400);
-      }
-      if (kind === "initial" && input.changeReason) {
+      const kind = "initial" as const;
+      if (input.changeReason) {
         throw new ApplicationError("VALIDATION_ERROR", "初次配置不能伪造为变更单", 400);
       }
       const items = await this.prepareItems(client, input.items);
@@ -284,7 +281,7 @@ export class ProcessConfigurationService {
     return this.mutate(actor, "rework.process_configuration.submit", idempotencyKey, { reworkOrderId, ...input }, 200, async (client) => {
       const order = await this.lockOrder(client, reworkOrderId);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_process_configuration" && order.status !== "pending_task_assignment") {
+      if (order.status !== "pending_process_configuration") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不允许提交工序配置", 409);
       }
       const configuration = await this.latestConfiguration(client, reworkOrderId, true);
@@ -294,7 +291,14 @@ export class ProcessConfigurationService {
       if ((await this.items(client, configuration.configuration_id)).length === 0) {
         throw new ApplicationError("VALIDATION_ERROR", "至少配置一道工序后才能提交IE审核", 400);
       }
+      const inspectors = await this.tailInspectors(client, input.tailInspectors);
       const nextOrderVersion = order.version + 1;
+      const tailAssignments = inspectors.map((inspector) => ({
+        assignmentId: randomUUID(),
+        userId: inspector.id,
+        displayName: inspector.display_name,
+        boxScope: input.tailInspectors.find((item) => item.userId === inspector.id)?.boxScope ?? null,
+      }));
       const eventId = await this.events.append(client, actor, {
         action: "rework.process_configuration.submit",
         entityType: "rework_order",
@@ -303,10 +307,19 @@ export class ProcessConfigurationService {
         after: {
           ...this.auditOrder(order, "pending_ie_review", nextOrderVersion),
           configuration: { ...(await this.configurationAudit(client, configuration)), status: "pending_ie_review" },
+          tailAssignments,
         },
       });
       await this.setConfigurationContext(client, eventId, actor.requestId);
       await this.setReworkContext(client, eventId, actor.requestId);
+      for (const assignment of tailAssignments) {
+        await client.query(
+          `INSERT INTO rework_tail_inspection_assignments(
+             tail_inspection_assignment_id,rework_order_id,tail_inspector_user_id,assigned_by,box_scope,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+          [assignment.assignmentId, reworkOrderId, assignment.userId, actor.actorId, assignment.boxScope, eventId, actor.requestId],
+        );
+      }
       await client.query(
         "UPDATE rework_process_configurations SET status='pending_ie_review',submitted_at=CURRENT_TIMESTAMP WHERE configuration_id=$1",
         [configuration.configuration_id],
@@ -382,11 +395,7 @@ export class ProcessConfigurationService {
       }
       const items = await this.items(client, configuration.configuration_id);
       const approved = input.decision === "approved";
-      const nextStatus = approved
-        ? "pending_task_assignment" as const
-        : configuration.configuration_kind === "change"
-          ? "pending_task_assignment" as const
-          : "pending_process_configuration" as const;
+      const nextStatus = approved ? "pending_task_assignment" as const : "pending_process_configuration" as const;
       const nextOrderVersion = order.version + 1;
       const previousApproved = approved && configuration.configuration_kind === "change"
         ? await this.approvedConfiguration(client, reworkOrderId)
@@ -411,6 +420,11 @@ export class ProcessConfigurationService {
       });
       await this.setConfigurationContext(client, eventId, actor.requestId);
       await this.setReworkContext(client, eventId, actor.requestId);
+      if (!approved) {
+        await this.revokeTailAssignments(client, actor, reworkOrderId, configuration.configuration_id);
+        await this.setConfigurationContext(client, eventId, actor.requestId);
+        await this.setReworkContext(client, eventId, actor.requestId);
+      }
       if (previousApproved) {
         await client.query(
           "UPDATE rework_process_configurations SET status='superseded' WHERE configuration_id=$1",
@@ -522,13 +536,88 @@ export class ProcessConfigurationService {
     }
   }
 
+  private async tailInspectors(
+    client: PoolClient,
+    input: readonly { userId: string; boxScope?: string | undefined }[],
+  ): Promise<Array<{ id: string; display_name: string }>> {
+    const ids = input.map((item) => item.userId);
+    const result = await client.query<{ id: string; display_name: string }>(
+      `SELECT user_row.id,user_row.display_name
+       FROM app_users user_row
+       JOIN user_role_assignments assignment
+         ON assignment.user_id=user_row.id
+        AND assignment.role_code='tail_inspector'
+        AND assignment.revoked_at IS NULL
+       JOIN business_roles role
+         ON role.role_code=assignment.role_code
+        AND role.enabled=true
+       JOIN role_capabilities capability
+         ON capability.role_code=assignment.role_code
+        AND capability.capability='tail_inspection:report'
+       WHERE user_row.enabled=true AND user_row.id=ANY($1::uuid[])
+       ORDER BY user_row.id FOR SHARE`,
+      [ids],
+    );
+    if (result.rowCount !== ids.length) {
+      throw new ApplicationError("VALIDATION_ERROR", "尾查人员必须是已启用且已授权的尾查角色", 400);
+    }
+    return result.rows;
+  }
+
+  private async revokeTailAssignments(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    configurationId: string,
+  ): Promise<void> {
+    const assignments = await client.query<{
+      tail_inspection_assignment_id: string;
+      tail_inspector_user_id: string;
+      box_scope: string | null;
+    }>(
+      `SELECT tail_inspection_assignment_id,tail_inspector_user_id,box_scope
+       FROM rework_tail_inspection_assignments
+       WHERE rework_order_id=$1 AND revoked_at IS NULL
+       ORDER BY assigned_at,tail_inspection_assignment_id FOR UPDATE`,
+      [reworkOrderId],
+    );
+    for (const assignment of assignments.rows) {
+      const eventId = await this.events.append(client, actor, {
+        action: "rework.tail_inspection.revoke",
+        entityType: "rework_tail_inspection_assignment",
+        entityId: assignment.tail_inspection_assignment_id,
+        before: {
+          reworkOrderId,
+          tailInspectorUserId: assignment.tail_inspector_user_id,
+          boxScope: assignment.box_scope,
+          status: "active",
+        },
+        after: {
+          reworkOrderId,
+          tailInspectorUserId: assignment.tail_inspector_user_id,
+          status: "revoked",
+          configurationId,
+        },
+        reason: "IE退回工序与价格，原尾查分配及报数不再参与后续核验",
+      });
+      await this.setReworkContext(client, eventId, actor.requestId);
+      await client.query(
+        `UPDATE rework_tail_inspection_assignments
+         SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,
+             revoke_reason='IE退回工序与价格，需重新分配尾查'
+         WHERE tail_inspection_assignment_id=$1`,
+        [assignment.tail_inspection_assignment_id, actor.actorId],
+      );
+    }
+  }
+
   private async prepareItems(client: PoolClient, input: readonly ProcessConfigurationItem[]): Promise<PreparedItem[]> {
     const prepared: PreparedItem[] = [];
     const names = new Set<string>();
     for (const item of input) {
-      const plannedQuantity = item.pricingUnit === "hour" ? truncateDecimal(item.plannedQuantity, 2) : item.plannedQuantity;
+      const plannedQuantity = item.plannedQuantity;
       const unitPrice = truncateDecimal(item.unitPrice, 3);
-      if (plannedQuantity <= 0 || unitPrice <= 0) {
+      if (!Number.isInteger(plannedQuantity) || plannedQuantity <= 0 || unitPrice <= 0) {
         throw new ApplicationError("VALIDATION_ERROR", "数量和单价经规则截位后必须大于0", 400);
       }
       let processId: string | null = null;

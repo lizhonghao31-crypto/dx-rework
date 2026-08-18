@@ -14,22 +14,19 @@ const config = loadConfig({
 const apps: FastifyInstance[] = [];
 const orderId = "00000000-0000-4000-8000-000000000010";
 const reportId = "00000000-0000-4000-8000-000000000011";
-const adjustmentId = "00000000-0000-4000-8000-000000000012";
 const response = {
   reworkOrderId: orderId, reworkStatus: "pending_order_review", orderVersion: 2,
   canReview: true,
-  canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false,
+  canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false,
   processes: [], reports: [], adjustments: [], temporaryWorkers: [], reviewId: null,
 };
 
 afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 
-const create = (businessRoles: readonly string[] = ["tail_supervisor"], capabilities: readonly string[] = ["submission:audit", "quantity:adjust"]) => {
+const create = (businessRoles: readonly string[] = ["tail_supervisor"], capabilities: readonly string[] = ["submission:audit"]) => {
   const service = {
     get: vi.fn(async () => response), approve: vi.fn(async () => ({ value: response, reused: false })),
     rejectReport: vi.fn(async () => ({ value: response, reused: false })),
-    decrease: vi.fn(async () => ({ value: { adjustmentId, configurationItemId: reportId, adjustmentVersion: 1, kind: "decrease", status: "effective", previousPlannedQuantity: 2, requestedPlannedQuantity: 1, reason: "实裁", requiresIeReview: false, expiresAt: null, requestedBy: reportId, requestedAt: "2026-08-03T00:00:00.000Z", confirmedBy: null, confirmedAt: null, reviewedBy: null, reviewedAt: null }, reused: false })),
-    requestIncrease: vi.fn(), confirmIncrease: vi.fn(), reviewIncrease: vi.fn(),
   };
   const app = buildApp({
     config, checkDatabase: async () => undefined, getAppliedSchemaHistory: async () => null,
@@ -69,10 +66,9 @@ describe("whole order review routes", () => {
     expect(service.rejectReport).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "submission:audit" }), reportId, expect.objectContaining({ reason: "漏检" }), "reject-2");
   });
 
-  it("does not expose quantity mutations to an unauthenticated request", async () => {
-    const { app, service } = create();
+  it("does not expose retired quantity-adjustment mutations", async () => {
+    const { app } = create();
     const result = await app.inject({ method: "POST", url: "/rework-orders/" + orderId + "/quantity-adjustments/decrease", headers: { "idempotency-key": "decrease-1" }, payload: { expectedOrderVersion: 2, configurationItemId: reportId, newPlannedQuantity: 1, reason: "实裁" } });
-    expect(result.statusCode).toBe(401);
-    expect(service.decrease).not.toHaveBeenCalled();
+    expect(result.statusCode).toBe(404);
   });
 });
