@@ -136,7 +136,7 @@ export function WorkReportingForm({
     try {
       for (const { task, text } of quantities) await request(`work-tasks/${task.workTaskId}/reports`, WorkReportResponseSchema.parse, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(text), completedAt: new Date().toISOString() }),
+        body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(text) }),
       });
       const loaded = await reload(); setReportTasks(null);
       if (loaded?.reworkStatus === "pending_order_review") { setMessage("工人上数与尾查报数均已完成，已流转至 N07 · 尾部主管整单确认。"); await onOrderChanged?.(); }

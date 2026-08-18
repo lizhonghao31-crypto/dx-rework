@@ -255,9 +255,6 @@ export class WorkReportingService {
       if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability! };
       if (!Number.isInteger(input.actualQuantity)) error("工人完工上数只能填写整数件数", 400, "VALIDATION_ERROR");
-      const completedAt = new Date(input.completedAt);
-      const now = Date.now();
-      if (Number.isNaN(completedAt.getTime()) || completedAt.getTime() > now || completedAt.getTime() < now - 7 * 24 * 60 * 60 * 1000) error("完工时间只能补录最近七天且不能晚于现在", 400, "VALIDATION_ERROR");
       const existing = await client.query<{ work_report_id: string; quantity: string }>(
         `SELECT report.work_report_id,report.actual_quantity AS quantity
          FROM rework_work_reports report
@@ -289,10 +286,11 @@ export class WorkReportingService {
       };
       const eventId = await this.events.append(client, reportingActor, event);
       await this.context(client, eventId, actor.requestId);
-      await client.query(
-        "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
-        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, completedAt, input.remark ?? null, groupAmount, actor.actorId, input.resubmitsWorkReportId ?? null],
+      const reportInsert = await client.query<{ completed_at: Date }>(
+        "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP,$6,$7,$8,$9) RETURNING completed_at",
+        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, input.remark ?? null, groupAmount, actor.actorId, input.resubmitsWorkReportId ?? null],
       );
+      const completedAt = reportInsert.rows[0]?.completed_at ?? error("完工时间记录失败", 500, "INTERNAL_ERROR");
       if (input.resubmitsWorkReportId) {
         await this.todos?.completeOpenByDedupeKey(
           client,

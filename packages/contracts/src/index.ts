@@ -659,7 +659,7 @@ export const ConfirmWorkAssignmentsSchema = z.object({
 export const CreateWorkReportSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   actualQuantity: z.number().finite().positive(),
-  completedAt: z.string().datetime(),
+  completedAt: z.string().datetime().optional(),
   remark: z.string().trim().min(1).max(500).optional(),
   resubmitsWorkReportId: IdSchema.optional(),
 }).strict();
