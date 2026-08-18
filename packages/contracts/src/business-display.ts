@@ -125,6 +125,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   production_management: "生产管理",
   quality_control: "质检",
   tail_supervisor: "尾部主管",
+  tail_inspector: "尾查",
   ie_reviewer: "IE 审核",
   order_merchandiser: "订单跟单",
   embroidery_washing_merchandiser: "印绣花/洗水跟单",
@@ -168,6 +169,7 @@ const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   "quantity:confirm": "确认数量调整",
   "process:configure": "配置工序",
   "process:review": "审核工序",
+  "tail_inspection:report": "尾查报数",
 };
 
 const ENTITY_LABELS: Readonly<Record<string, string>> = {
