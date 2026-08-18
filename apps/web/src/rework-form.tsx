@@ -159,6 +159,7 @@ export function ReworkInitiationForm({
   const [inspectionReport, setInspectionReport] = useState<InspectionReportDraft>(createDefaultInspectionReport);
   const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
   const [manualEntryPage, setManualEntryPage] = useState<ManualEntryPage>(1);
+  const [manualEntryExpanded, setManualEntryExpanded] = useState(false);
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({
     merchandisers: [],
     factories: [],
@@ -609,8 +610,8 @@ export function ReworkInitiationForm({
           </Surface>
 
           <Surface className="rework-initiation-optional rework-manual-entry">
-            <details>
-              <summary><span>手动录入</span><small className="rework-manual-entry__toggle" aria-hidden="true" /></summary>
+            <details open={manualEntryExpanded} onToggle={(event) => setManualEntryExpanded(event.currentTarget.open)}>
+              <summary aria-expanded={manualEntryExpanded}><span>手动录入</span><small className="rework-manual-entry__toggle" aria-hidden="true" /></summary>
               <p>按页面补充完整报告；左右切换时不会丢失已填写内容，也不影响八项资料创建订单。</p>
               <div className="rework-manual-entry__page-heading">
                 <strong>{manualEntryPageTitles[manualEntryPage - 1]}</strong>

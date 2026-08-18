@@ -130,7 +130,7 @@ const workReportingService = new WorkReportingService(
   undefined,
   todoProjection,
 );
-const tailInspectionService = new TailInspectionService(database);
+const tailInspectionService = new TailInspectionService(database, undefined, undefined, todoProjection);
 const wholeOrderReviewService = new BusinessAwareWholeOrderReviewService(
   database,
   todoProjection,

@@ -33,6 +33,7 @@ export function buildTodoDeepLink(
   switch (route.routeName) {
     case "rework_detail":
       path = fallback;
+      if (route.tab) query.set("node", route.tab);
       break;
     case "process_configuration":
       path = "/ui/process-configuration";
@@ -79,4 +80,3 @@ export function buildTodoExternalDeepLink(
   const internalPath = buildTodoDeepLink(basePath, descriptor);
   return new URL(internalPath, base.origin).toString();
 }
-

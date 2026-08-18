@@ -371,6 +371,22 @@ export class ReworkBusinessDetailService {
       if (assignment.rows[0]) return true;
     }
 
+    if (
+      actor.actorRoles.includes("tail_inspector")
+      && actorCapabilities(actor).includes("tail_inspection:report")
+    ) {
+      const assignment = await this.database.query(
+        `SELECT 1
+         FROM rework_tail_inspection_assignments assignment
+         WHERE assignment.rework_order_id=$2
+           AND assignment.tail_inspector_user_id=$1
+           AND assignment.revoked_at IS NULL
+         LIMIT 1`,
+        [actor.actorId, row.rework_order_id],
+      );
+      if (assignment.rows[0]) return true;
+    }
+
     if (actor.actorRoles.some((role) => [
       "embroidery_washing_merchandiser",
       "factory_payables",

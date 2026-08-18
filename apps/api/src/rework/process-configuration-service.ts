@@ -328,6 +328,24 @@ export class ProcessConfigurationService {
         "UPDATE rework_orders SET status='pending_ie_review',updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
         [reworkOrderId, actor.actorId, nextOrderVersion],
       );
+      // N06 is deliberately parallel to IE review and later work reporting:
+      // the named tail inspector receives an actionable todo immediately once
+      // N02 succeeds, rather than waiting for any downstream node.
+      for (const assignment of tailAssignments) {
+        await this.todos?.actionableForNamedRecipient(client, actor, {
+          category: "tail_inspection",
+          sourceEventId: eventId,
+          sourceAction: "rework.process_configuration.submit",
+          entityType: "rework_order",
+          entityId: reworkOrderId,
+          recipientUserId: assignment.userId,
+          requiredRole: "tail_inspector",
+          requiredCapability: "tail_inspection:report",
+          route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "tail_inspection" },
+          policyKey: "general",
+          dedupeKey: `tail-inspection:${reworkOrderId}:${assignment.assignmentId}`,
+        });
+      }
       await this.todos?.completeOpenByDedupePrefix(
         client,
         actor,
@@ -607,6 +625,12 @@ export class ProcessConfigurationService {
              revoke_reason='IE退回工序与价格，需重新分配尾查'
          WHERE tail_inspection_assignment_id=$1`,
         [assignment.tail_inspection_assignment_id, actor.actorId],
+      );
+      await this.todos?.cancelOpenByDedupeKey(
+        client,
+        actor,
+        `tail-inspection:${reworkOrderId}:${assignment.tail_inspection_assignment_id}`,
+        "IE returned the process configuration and revoked this tail-inspection assignment",
       );
     }
   }

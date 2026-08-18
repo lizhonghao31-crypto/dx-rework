@@ -88,7 +88,7 @@ describe("zero-role Root UI entry contract", () => {
     expect(work).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
     expect(work).toContain('isRoot ? "Root 代上数"');
     expect(review).toContain("data.canReview");
-    expect(review).toContain("data.canReviewQuantityIncrease");
+    expect(review).toContain("data.processes.every((process) => process.complete)");
     expect(review).not.toContain("data.canSubmitTailPricing");
     expect(responsibility).toContain("response.canDetermine");
     expect(responsibility).toContain("response?.canOwnerSign");

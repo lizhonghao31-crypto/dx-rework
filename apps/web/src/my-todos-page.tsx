@@ -1,8 +1,4 @@
-import {
-  TodoListResponseSchema,
-  todoPresentationForCategory,
-  type TodoResponse,
-} from "@dx-rework/contracts";
+import { TodoListResponseSchema, type TodoResponse } from "@dx-rework/contracts";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -28,12 +24,33 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
 };
 
 const taskTitle = (todo: TodoResponse): string =>
-  todoPresentationForCategory(todo.category).title === "返工业务待办"
-    ? taskLabel[todo.route.routeName]
-    : todoPresentationForCategory(todo.category).title;
+  todo.category === "owner_signature"
+    ? "老板确认签字"
+    : todo.category === "tail_inspection"
+      ? "尾查报数"
+    : todo.category === "external_supplier_selection"
+      ? "历史供应商选择"
+      : taskLabel[todo.route.routeName];
 
 const categoryLabel = (todo: TodoResponse): string => {
-  return todoPresentationForCategory(todo.category).title;
+  const labels: Record<string, string> = {
+    process_configuration: "配置返工工序",
+    process_configuration_return: "退回重新配置工序",
+    process_configuration_rejection_notice: "工序审核退回通知",
+    ie_review: "IE 审核",
+    task_assignment: "分配返工人员",
+    work_reporting: "登记返工完成",
+    tail_inspection: "尾查报数",
+    whole_order_review: "整单审核",
+    quantity_adjustment: "数量调整审核",
+    responsibility_determination: "责任判定与资料核验",
+    owner_signature: "老板确认签字",
+    own_factory_approval: "历史本厂金额审批",
+    external_supplier_selection: "历史供应商选择",
+    external_responsibility: "供应商实际扣款",
+    wage_review: "返工工资核对",
+  };
+  return labels[todo.category] ?? taskTitle(todo);
 };
 
 const todoHref = (todo: TodoResponse): string => {
@@ -61,6 +78,7 @@ const todoHref = (todo: TodoResponse): string => {
       break;
     case "rework_detail":
       target = `ui/tasks/${orderId}`;
+      if (route.tab) query.set("node", route.tab);
       break;
   }
   return `${pageUrl(target)}?${query.toString()}`;

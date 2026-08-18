@@ -36,15 +36,16 @@ describe("whole-order review contracts", () => {
     expect(() => transitionReworkOrder("pending_responsibility_determination", "in_progress")).toThrow();
   });
 
-  it("uses N03-approved prices and sends N06 directly to responsibility", async () => {
+  it("uses N03-approved prices and sends N07 directly to responsibility", async () => {
     const [panel, service, migration] = await Promise.all([
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/migrations/0065_ie_pricing_before_assignment.sql", import.meta.url), "utf8"),
     ]);
-    expect(panel).toContain("单价已由 N03 IE 核准");
+    expect(panel).toContain("N03 IE 核准单价");
     expect(panel).toContain("临时工实发系数");
-    expect(panel).toContain("确认数量并进入责任判定");
+    expect(panel).toContain("确认整单并进入责任判定");
+    expect(panel).toContain("工人上数与尾查汇总对照");
     expect(service).not.toContain("async submitTailPricing");
     expect(service).not.toContain("async reviewTailPricing");
     expect(service).toContain('this.orderAudit(order, "pending_responsibility_determination"');
@@ -80,7 +81,7 @@ describe("whole-order review contracts", () => {
     expect(form).toContain('const orderReviewable = me.status === "authorized" && canReviewOrder(me.user);');
     expect(form).toContain("setReviewEligible(orderReviewable);");
     expect(panel).toContain("whole-order-review/approve");
-    expect(panel).toContain("quantity-adjustments");
+    expect(panel).not.toContain("quantity-adjustments");
     expect(panel).toContain('report.assignmentMode === "collective"');
     expect(panel).not.toContain("report.members.length > 1");
     expect(panel).not.toContain("@mui");

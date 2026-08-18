@@ -68,15 +68,15 @@ export function ResponsibilityQueuePage() {
     <Shell active="责任处理">
       <Header
         title="待责任判定"
-        subtitle="订单进入 N07 后自动出现在这里；责任提交完成后自动离开本队列"
+        subtitle="订单完成 N07 整单确认后自动出现在这里；责任提交完成后自动离开本队列"
         badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"}
       />
       <Surface className="responsibility-queue-summary">
         <div>
           <h2>责任处理工作台</h2>
-          <p>谁来处理：有判责、接管或独立确认权限的人；资料核验完成后提交 N08 · 老板确认签字。</p>
+          <p>谁来处理：有判责、接管或独立确认权限的人；完成后流向 N09 老板签字。</p>
         </div>
-        <StatusBadge tone="info">N07 · 待判责</StatusBadge>
+        <StatusBadge tone="info">N08 · 待判责</StatusBadge>
       </Surface>
       <Surface className="reporting-filters">
         <InsetField label="搜索当前节点订单" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />

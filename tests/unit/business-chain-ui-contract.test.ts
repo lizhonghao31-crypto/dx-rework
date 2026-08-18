@@ -2,13 +2,12 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("business-chain UI handoff contracts", () => {
-  it("inherits N01 quantity and persists a priced N02 plan before IE review", async () => {
+  it("persists N02 processes and candidate prices before IE review, without estimating quantity", async () => {
     const source = await readFile(
       "apps/web/src/process-configuration-form.tsx",
       "utf8",
     );
     expect(source).toContain("/business-detail");
-    expect(source).toContain("emptyItem(loadedDetail.reworkQuantity)");
     expect(source).toContain("validateItemForms");
     expect(source).toContain("const saved = await persistCurrentDraft()");
     expect(source).toContain("expectedOrderVersion: saved.orderVersion");
@@ -16,8 +15,9 @@ describe("business-chain UI handoff contracts", () => {
       "expectedConfigurationVersion: savedConfiguration.configurationVersion",
     );
     expect(source).toContain("已提交 IE 审核");
-    expect(source).toContain("确认提交当前工序、计划数量与单价给 IE 审核");
-    expect(source).toContain("单价（元）");
+    expect(source).toContain("确认提交当前工序与候选单价给 IE 核价，并立即分配尾查");
+    expect(source).toContain("候选单价（元 / 件）");
+    expect(source).toContain("plannedQuantity: 1");
   });
 
   it("warns about another same-style order only while that order is unfinished", async () => {
@@ -35,27 +35,21 @@ describe("business-chain UI handoff contracts", () => {
       readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
     ]);
     expect(form).toContain("审核通过并生效");
-    expect(form).toContain("单价（元）");
-    expect(form).toContain("工序、计划数量与单价");
+    expect(form).toContain("候选单价（元 / 件）");
+    expect(form).toContain("工序与候选单价");
     expect(detail).toContain("processConfigurationCreatedBy");
     expect(detail).toContain("latest_configuration.created_by");
   });
 
-  it("lets N06 quantity confirmation and IE-review roles reach their actual workflow", async () => {
-    const [app, detail, panel] = await Promise.all([
-      readFile("apps/web/src/App.tsx", "utf8"),
+  it("lets tail inspectors and IE-review roles reach their actual workflow", async () => {
+    const [detail, tailPanel] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
+      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
     ]);
-    expect(app).toContain('{ requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" }');
-    expect(app).toContain('{ requiredRole: "ie_reviewer", requiredCapability: "process:review" }');
-    expect(detail).toContain('hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm")');
+    expect(detail).toContain('hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report")');
     expect(detail).toContain('hasRole(user, "ie_reviewer") && hasCapability(user, "process:review")');
-    expect(panel).toContain('if (cutInput === null) return');
-    expect(panel).toContain('if (returnInput === null) return');
-    expect(panel).toContain('if (maximumInput === null) return');
-    expect(panel).toContain("待订单跟单确认");
-    expect(panel).toContain("待 IE 复核");
+    expect(tailPanel).toContain("返件总数（件）");
+    expect(tailPanel).toContain("提交尾查报数");
   });
 
   it("keeps N07 party facts valid, supplier-owned and transfer targets human-readable", async () => {
@@ -90,18 +84,19 @@ describe("business-chain UI handoff contracts", () => {
     }
     expect(shell).not.toContain('name: "返工上数"');
     expect(shell).not.toContain("flow-navigation__arrow");
-    expect(detail).toContain('title: "发起与方案"');
-    expect(detail).toContain('title: "返工执行"');
+    expect(detail).toContain('title: "发起、配置与分工"');
+    expect(detail).toContain('title: "核价与返工执行"');
     expect(detail).toContain('title: "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
-    expect(detail).toContain('node("process_configuration", "02", "工序与价格"');
+    expect(detail).toContain('node("process_configuration", "02", "工序与候选单价"');
     expect(detail).toContain('node("ie_review", "03", "IE 核价"');
     expect(detail).toContain('node("task_assignment", "04", "分配返工人员"');
-    expect(detail).toContain('node("work_reporting", "05", "完工上数"');
-    expect(detail).toContain('node("whole_order_review", "06", "尾部确认数量"');
-    expect(detail).toContain('node("responsibility", "07", "责任判定"');
-    expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
-    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
+    expect(detail).toContain('node("work_reporting", "05", "工人完工上数"');
+    expect(detail).toContain('node("tail_inspection", "06", "尾查报数"');
+    expect(detail).toContain('node("whole_order_review", "07", "尾部主管整单确认"');
+    expect(detail).toContain('node("responsibility", "08", "责任判定"');
+    expect(detail).toContain('node("owner_signature", "09", "老板确认签字"');
+    expect(detail).toContain('node("settlement_followup", "10", "返工业务完成"');
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
@@ -178,7 +173,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(externalQueue).not.toContain('actionHref="/ui/responsibility"');
   });
 
-  it("keeps N08 owner signature retry-safe, with only agree and direct reject actions", async () => {
+  it("keeps N09 owner signature retry-safe, with only agree and direct reject actions", async () => {
     const source = await readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8");
     expect(source).toContain("pendingMutationKeys");
     expect(source).toContain("responsibility-owner-signature/${decision}");

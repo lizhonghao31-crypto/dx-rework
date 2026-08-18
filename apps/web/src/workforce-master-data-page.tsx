@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
 import { promptInApp } from "./system-dialog.js";
+import { SystemManagementNavigation } from "./system-management-navigation.js";
 import "./workforce-master-data-page.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -162,6 +163,7 @@ export function WorkforceMasterDataPage() {
   return (
     <Shell active="人员资料">
       <div className="workforce-page">
+        <SystemManagementNavigation active="workforce" />
         <header className="page-heading workforce-heading">
           <div>
             <h1>作业人员与临时工</h1>

@@ -102,8 +102,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(processConfigurationForm).toContain("/process-configuration/draft");
     expect(processConfigurationForm).toContain("/process-configuration/submit");
     expect(processConfigurationForm).toContain("/process-configuration/review");
-    expect(processConfigurationForm).toContain("计划数量最多保留一位小数");
-    expect(processConfigurationForm).toContain("工序、计划数量与单价");
-    expect(processConfigurationForm).toContain("单价（元）");
+    expect(processConfigurationForm).toContain("工序与候选单价");
+    expect(processConfigurationForm).toContain("候选单价（元 / 件）");
+    expect(processConfigurationForm).toContain("分配尾查");
   });
 });

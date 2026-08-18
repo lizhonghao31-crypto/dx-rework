@@ -12,6 +12,7 @@ import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 import { promptInApp } from "./system-dialog.js";
+import { TailInspectionPanel } from "./tail-inspection-panel.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./rework-detail.css";
 
@@ -36,6 +37,7 @@ export type WorkflowNodeKey =
   | "ie_review"
   | "task_assignment"
   | "work_reporting"
+  | "tail_inspection"
   | "whole_order_review"
   | "quantity_adjustment"
   | "responsibility"
@@ -124,13 +126,13 @@ type WorkflowStage = Readonly<{
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
-  pending_process_configuration: { label: "待返工计划", next: "下一步由尾部主管配置工序、预估数量和单价" },
-  pending_ie_review: { label: "待 IE 核价", next: "IE 通过工序与单价后，进入人员分配" },
+  pending_process_configuration: { label: "待工序与候选单价", next: "下一步由尾部主管配置工序、候选单价并分配尾查" },
+  pending_ie_review: { label: "待 IE 核价", next: "尾查已可并行清点；IE 通过工序与单价后，进入人员分配" },
   pending_task_assignment: { label: "待分配人员", next: "工序与单价已核准，下一步由尾部主管分配返工人员" },
   in_progress: { label: "返工执行中", next: "工人登记个人完成数量，全部完成后由尾部主管核量" },
-  pending_order_review: { label: "待尾部核量", next: "尾部主管核对有效完成数量并确认临时工实发系数" },
+  pending_order_review: { label: "待尾部主管整单确认", next: "核对工人上数不超过尾查汇总，并确认临时工实发系数" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
-  pending_responsibility_determination: { label: "待责任判定", next: "返工已完成核量，正在选择主责任方和外部扣款倍率" },
+  pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
   pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任结算" },
   completed: { label: "已完成", next: "返工生产链已归档；工资与扣款按各自独立周期继续核对" },
@@ -158,7 +160,7 @@ const currentNodeByStatus: Partial<Record<ReworkStatus, WorkflowNodeKey>> = {
   pending_task_assignment: "task_assignment",
   in_progress: "work_reporting",
   pending_order_review: "whole_order_review",
-  pending_quantity_adjustment_ie_review: "quantity_adjustment",
+  pending_quantity_adjustment_ie_review: "whole_order_review",
   pending_responsibility_determination: "responsibility",
   pending_owner_signature: "owner_signature",
   pending_responsibility_action: "settlement_followup",
@@ -171,6 +173,7 @@ const nodeRank: Record<WorkflowNodeKey, number> = {
   ie_review: 2,
   task_assignment: 3,
   work_reporting: 4,
+  tail_inspection: 4,
   whole_order_review: 5,
   quantity_adjustment: 5,
   responsibility: 6,
@@ -181,7 +184,7 @@ const nodeRank: Record<WorkflowNodeKey, number> = {
 };
 
 const nodeKeys = new Set<WorkflowNodeKey>([
-  "initiation", "process_configuration", "ie_review", "task_assignment", "work_reporting",
+  "initiation", "process_configuration", "ie_review", "task_assignment", "work_reporting", "tail_inspection",
   "whole_order_review", "quantity_adjustment", "responsibility", "owner_signature", "settlement_ledger", "archive", "settlement_followup",
 ]);
 
@@ -232,10 +235,21 @@ const canUseWorkWorkspace = (user: AuthorizedUser | null): boolean => elevated(u
   || hasCapability(user, "work:report_for_worker")
   || (hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm"))
   || (hasRole(user, "ie_reviewer") && hasCapability(user, "process:review"));
+const canUseTailInspection = (user: AuthorizedUser | null): boolean => elevated(user)
+  || (hasRole(user, "tail_supervisor") && (
+    hasCapability(user, "process:configure") || hasCapability(user, "submission:audit")
+  ))
+  || (hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report"));
 const workflowState = (detail: ReworkBusinessDetail, key: WorkflowNodeKey): WorkflowNodeState => {
   if (detail.status === "cancelled") return "future";
-  // N09 is an atomic, system-generated ledger. Once the order has entered the
-  // responsibility-action state, there is no human N09 work left to perform.
+  // N06 begins immediately after N02 assigns a tail inspector. It runs in
+  // parallel with IE review, worker assignment and worker reporting.
+  if (key === "tail_inspection") {
+    if (["pending_ie_review", "pending_task_assignment", "in_progress"].includes(detail.status)) return "current";
+    return statusRank[detail.status] > nodeRank[key] ? "completed" : "future";
+  }
+  // The ledger is atomic. Once the order has entered the responsibility-action
+  // state, there is no human settlement node left to perform here.
   if (key === "settlement_ledger" && detail.status === "pending_responsibility_action") return "completed";
   // The final N10 card combines the completed order with later wage/supplier
   // settlement presentation, without falsely reopening the order itself.
@@ -282,33 +296,33 @@ const buildWorkflow = (
     };
   };
 
-  const executionNodes: WorkflowNode[] = [
-    node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按已核准的工序为正式工或临时工分配任务。"),
-    node("work_reporting", "05", "完工上数", "返工人员", "待人员分配", "工人一次确认最终返工数量；临时工由尾部主管代录。"),
-    node("whole_order_review", "06", "尾部确认数量", "尾部主管", "待全部人员完工", "核对个人有效上数，并确认临时工实发系数。"),
-  ];
-  if (detail.status === "pending_quantity_adjustment_ie_review") {
-    executionNodes.push(node("quantity_adjustment", "06-A", "异常数量 IE 复核", "IE 审核", "当前由 IE 处理", "仅复核异常增加的计划数量，不重新核价。"));
-  }
-
   return [
     {
       key: "planning",
-      title: "发起与方案",
+      title: "发起、配置与分工",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "工序与价格", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、预估数量和拟定单价。"),
-        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "核准工序与单价；通过后才能分配人员。"),
+        node("process_configuration", "02", "工序与候选单价", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、候选单价并分配尾查；不再预估返工数量。"),
+        node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按 IE 核准的工序为正式工或临时工分配任务。"),
       ],
     },
-    { key: "execution", title: "返工执行", nodes: executionNodes },
+    {
+      key: "execution",
+      title: "核价与返工执行",
+      nodes: [
+        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后才能分配返工人员。"),
+        node("work_reporting", "05", "工人完工上数", "返工人员", "待人员分配", "工人一次提交本人最终完工件数；临时工由尾部主管代录。"),
+        node("tail_inspection", "06", "尾查报数", "尾查", "待尾部主管分配", "N02 分配后即可开始；多人清点结果按工序汇总。"),
+      ],
+    },
     {
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("responsibility", "07", "责任判定", "生产管理", "待尾部核量", "每道工序只选一个主责任方；外部倍率默认且最低 1.2，可向上调整。"),
-        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板只确认或驳回已锁定的责任方与外部倍率。"),
-        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
+        node("whole_order_review", "07", "尾部主管整单确认", "尾部主管", "待工人上数与尾查报数完成", "逐工序核对工人上数不得超过尾查汇总；临时工实发系数在此确认。"),
+        node("responsibility", "08", "责任判定", "生产管理", "待 N07 提交", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
+        node("owner_signature", "09", "老板确认签字", "老板", "待 N08 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
+        node("settlement_followup", "10", "返工业务完成", "系统", "N09 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
       ],
     },
   ];
@@ -354,6 +368,7 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
   // terminal review action before the broader process-configuration match.
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
   if (action.includes("process_configuration")) return "process_configuration";
+  if (action.includes("tail_inspection")) return "tail_inspection";
   if (action.includes("work_task")) return "task_assignment";
   if (action.includes("work_report")) return "work_reporting";
   if (action.includes("whole_order")) return "whole_order_review";
@@ -370,6 +385,7 @@ const historyActionLabel = (action: string): string => {
   if (action === "rework.submit") return "提交返工单";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
   if (action.includes("process_configuration")) return "工序配置处理";
+  if (action.includes("tail_inspection")) return "尾查报数";
   if (action.includes("work_task")) return "返工人员分配";
   if (action.includes("work_report")) return "完成数量登记";
   if (action.includes("whole_order")) return "整单审核";
@@ -576,6 +592,13 @@ export function ReworkDetailPage({
       />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
+    if (selected.state !== "future" && selected.key === "tail_inspection") {
+      if (canUseTailInspection(currentUser)) return <TailInspectionPanel
+        reworkOrderId={detail.reworkOrderId}
+        onOrderChanged={syncAfterNodeAction}
+      />;
+      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
+    }
     if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "quantity_adjustment")) {
       if (canSeeWholeOrderReview) return <WorkReportingForm
         reworkOrderId={detail.reworkOrderId}
@@ -613,23 +636,43 @@ export function ReworkDetailPage({
           <div className="section-title">
             <div><h2>返工单信息</h2><p>订单是唯一的流程与执行载体；处理动作始终在对应节点下方完成。</p></div>
           </div>
-          <dl className="rework-detail-facts">
-            <div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
-            <div><dt>工厂货号</dt><dd>{detail.factoryStyleNo ?? "—"}</dd></div><div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
-            <div><dt>订单数量</dt><dd>{detail.orderQuantity === null ? "—" : `${detail.orderQuantity} 件`}</dd></div><div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
-            <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div><div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
-            <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div><div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
-            <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
-            <div className="rework-detail-wide rework-detail-description"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
-            {otherAttachments.length > 0 && <div className="rework-detail-wide"><dt>其他附件（含外部责任凭证）</dt><dd>{otherAttachments.map((attachment) => <span key={attachment.attachmentId}>
-              {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
-              <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
-              <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
-            </span>)}</dd></div>}
-            <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div><div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
-            <div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
-            {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
-          </dl>
+          <div className="rework-detail-summary-sections">
+            <section className="rework-detail-summary-section">
+              <h3>订单与执行</h3>
+              <dl className="rework-detail-facts rework-detail-facts--core">
+                <div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
+                <div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
+                <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
+                <div><dt>订单数量</dt><dd>{detail.orderQuantity === null ? "—" : `${detail.orderQuantity} 件`}</dd></div>
+                <div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
+              </dl>
+            </section>
+            <section className="rework-detail-summary-section">
+              <h3>返工问题</h3>
+              <dl className="rework-detail-facts rework-detail-facts--issue">
+                <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div>
+                <div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
+                <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
+                <div className="rework-detail-wide rework-detail-description"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
+              </dl>
+            </section>
+            <details className="rework-detail-secondary-facts">
+              <summary><b>更多订单资料</b><small>客供代号、附件与操作记录</small></summary>
+              <dl className="rework-detail-facts rework-detail-facts--secondary">
+                <div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
+                <div><dt>工厂货号</dt><dd>{detail.factoryStyleNo ?? "—"}</dd></div>
+                <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
+                <div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
+                <div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
+                {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
+                {otherAttachments.length > 0 && <div className="rework-detail-wide"><dt>其他附件（含外部责任凭证）</dt><dd>{otherAttachments.map((attachment) => <span key={attachment.attachmentId}>
+                  {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
+                  <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
+                  <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
+                </span>)}</dd></div>}
+              </dl>
+            </details>
+          </div>
           {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
           <section className="rework-detail-images" aria-label="订单图片">
             <div className="section-title">
@@ -694,7 +737,7 @@ export function ReworkDetailPage({
                 </div>
               </details>;
             })}
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
+            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N08 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
           </div>
         </section>
 

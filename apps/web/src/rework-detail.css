@@ -17,10 +17,32 @@
 
 .rework-detail-facts {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   margin: 8px 0 0;
 }
+
+.rework-detail-summary-sections { display: grid; gap: var(--dx-v2-space-3); margin-top: var(--dx-v2-space-3); }
+.rework-detail-summary-section { display: grid; gap: 0; }
+.rework-detail-summary-section > h3 { margin: 0; color: var(--dx-v2-color-text-secondary); font-size: 13px; }
+.rework-detail-facts--core { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rework-detail-facts--issue { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rework-detail-facts--secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rework-detail-secondary-facts {
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-inset);
+}
+.rework-detail-secondary-facts summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-3);
+  padding: var(--dx-v2-space-3);
+  cursor: pointer;
+}
+.rework-detail-secondary-facts summary small { color: var(--dx-v2-color-text-secondary); }
+.rework-detail-secondary-facts[open] summary { border-bottom: 1px solid var(--dx-v2-color-border); }
+.rework-detail-secondary-facts .rework-detail-facts { margin: 0; padding: var(--dx-v2-space-3); }
 
 .rework-detail-facts > div {
   min-width: 0;
@@ -373,6 +395,8 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .rework-detail-facts--core { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
   .rework-workflow__stages {
     grid-template-columns: 1fr;
   }
@@ -408,6 +432,12 @@
     min-height: 54px;
     padding: 6px;
   }
+
+  .rework-detail-facts--core,
+  .rework-detail-facts--issue,
+  .rework-detail-facts--secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .rework-detail-secondary-facts summary { align-items: flex-start; flex-direction: column; }
 
   .inspection-readonly__facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));

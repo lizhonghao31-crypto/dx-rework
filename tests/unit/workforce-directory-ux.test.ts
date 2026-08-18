@@ -9,4 +9,10 @@ describe("workforce directory UX", () => {
     expect(source).toContain("内部员工 · 可登录");
     expect(source).not.toContain("<small>{person.appUserId}</small>");
   });
+
+  it("exposes the workforce directory from system management", async () => {
+    const source = await readFile("apps/web/src/system-management-navigation.tsx", "utf8");
+    expect(source).toContain('href={pageUrl("ui/people")}');
+    expect(source).toContain(">作业人员与临时工<");
+  });
 });

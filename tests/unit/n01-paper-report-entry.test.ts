@@ -10,6 +10,8 @@ describe("N01 streamlined manual entry", () => {
     }
     expect(source).toContain("手动录入");
     expect(source).toContain("rework-manual-entry__toggle");
+    expect(source).toContain("manualEntryExpanded");
+    expect(source).toContain("<details open={manualEntryExpanded}");
     expect(source).not.toContain("rework-orders/inspection-report-extractions");
     expect(source).not.toContain("extractFromReportImage");
     expect(source).toContain('inspectionLocation: "仓库"');
