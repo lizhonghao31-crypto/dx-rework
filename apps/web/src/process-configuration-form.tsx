@@ -140,7 +140,11 @@ const payloadItems = (items: readonly ItemForm[]): SavePayloadItem[] => items.ma
 
 export function ProcessConfigurationForm({
   reworkOrderId: providedReworkOrderId,
-}: { reworkOrderId?: string } = {}) {
+  onOrderChanged,
+}: {
+  reworkOrderId?: string;
+  onOrderChanged?: () => Promise<void> | void;
+} = {}) {
   const reworkOrderId = providedReworkOrderId
     ?? new URLSearchParams(window.location.search).get("rework");
   const [user, setUser] = useState<User | null>(null);
@@ -344,6 +348,7 @@ export function ProcessConfigurationForm({
       pendingSubmit.current = null;
       setResponse(submitted);
       setMessage("已提交 IE 审核；当前工序配置已锁定，等待 IE 处理。");
+      await onOrderChanged?.();
     } catch (error: unknown) {
       setMessage(pendingSubmit.current
         ? "提交结果暂未确认；请直接再次点击“提交 IE 审核”，系统会复用同一次提交，不会重复生成配置。"
@@ -386,6 +391,7 @@ export function ProcessConfigurationForm({
       setMessage(decision === "approved"
         ? "IE 已通过；工序已生效，自定义工序已进入公共工序库。"
         : "IE 已驳回；原因已保留，等待尾部主管重新配置。");
+      await onOrderChanged?.();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "IE审核提交失败");
     } finally {
