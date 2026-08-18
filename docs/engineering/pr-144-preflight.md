@@ -7,6 +7,7 @@
 - task scope: repair the two PostgreSQL business-chain gates so they execute the mandatory N01 image rule and the N02–N07 parallel tail-inspection workflow on the current schema; close the exact text/UUID trigger defect exposed by the first real Full Gate
 - allowed files:
   - `apps/api/migrations/0069_rework_image_submission_uuid_cast.sql`
+  - `apps/api/migrations/0070_root_tail_inspection_reporting.sql`
   - `apps/api/src/rework/tail-inspection-service.ts`
   - `apps/api/src/platform/migration-manifest.json`
   - `tests/integration/full-business-chain-postgres.test.ts`
@@ -14,6 +15,7 @@
   - `tests/integration/root-self-system-admin-postgres.test.ts`
   - `tests/unit/n01-image-and-wage-integrity.test.ts`
   - `tests/unit/tail-inspection-parallel-flow.test.ts`
+  - `tests/unit/tail-inspection-foundation.test.ts`
   - `docs/engineering/pr-144-preflight.md`
 - forbidden files: production services other than the listed tail-inspection service, routes, historical migrations 0001–0068, contracts, UI, DingTalk integration, deployment configuration, secrets and environment files
 
@@ -35,3 +37,10 @@ insert guard, but that same event cannot authorize the order status write becaus
 order guard requires a `rework_order` event. When N06 completes the parallel counts,
 the service now appends a separate order-transition audit event before moving the
 order to `pending_order_review`; both events share the trusted request and actor.
+
+The fifth Full Gate completed the ordinary-role N01–N11 PostgreSQL chain (2/2),
+then exposed that the 0066 report-insert guard contradicted the established Root
+service bypass by requiring the submitted actor to be the assigned inspector. A
+forward-only 0070 function replacement preserves that requirement for ordinary
+actors and permits only an audit snapshot containing `root_superuser` whose actor id
+also passes the database-owned `access_is_root_actor` identity check.
