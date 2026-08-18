@@ -271,6 +271,14 @@
     {
       "version": "0068_n01_image_and_wage_integrity",
       "checksum": "1b7012c166a08c946628e86b96245ea57d21c2cf84b0271c40a1c6b9b09a9a25"
+    },
+    {
+      "version": "0069_rework_image_submission_uuid_cast",
+      "checksum": "59dc48dc708261940935791d8a97704d705273ebf358ff0700b234a25b96ff55"
+    },
+    {
+      "version": "0070_root_tail_inspection_reporting",
+      "checksum": "5d81290dc3aa946b4a19672b2f0e9c89675e56ea812bc80470343fd37a55ef69"
     }
   ]
 }

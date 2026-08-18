@@ -76,17 +76,22 @@ describe("zero-role Root UI entry contract", () => {
   });
 
   it("does not mask Root workflow actions behind ordinary-role-only UI gates", async () => {
-    const [process, work, review, responsibility, external] = await Promise.all([
+    const [process, work, tail, review, responsibility, external, detail] = await Promise.all([
       readFile(new URL("../../apps/web/src/process-configuration-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/tail-inspection-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/responsibility-determination-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/external-responsibility-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url), "utf8"),
     ]);
 
     expect(process).toContain("user?.isRoot === true");
     expect(work).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
     expect(work).toContain('isRoot ? "Root 代上数"');
+    expect(tail).toContain('isRoot ? "Root 代报尾查数量"');
+    expect(tail).toContain('isRoot ? "Root 可代报"');
+    expect(detail).toContain("isRoot={currentUser?.isRoot === true}");
     expect(review).toContain("data.canReview");
     expect(review).toContain("data.processes.every((process) => process.complete)");
     expect(review).not.toContain("data.canSubmitTailPricing");

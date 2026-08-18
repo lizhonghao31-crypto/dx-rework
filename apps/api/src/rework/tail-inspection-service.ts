@@ -118,6 +118,7 @@ export class TailInspectionService {
       [reworkOrderId],
     );
     const quantities = new Map(reported.rows.map((row) => [row.configuration_item_id, Number(row.inspected_quantity)]));
+    const rootCanSubmit = isRootActor(actor);
     return {
       reworkOrderId,
       reworkStatus: order.status as TailInspectionResponse["reworkStatus"],
@@ -131,7 +132,7 @@ export class TailInspectionService {
         submittedAt: assignment.submitted_at?.toISOString() ?? null,
         canSubmit: assignment.revoked_at === null
           && assignment.returned_quantity === null
-          && assignment.tail_inspector_user_id === actor.actorId
+          && (assignment.tail_inspector_user_id === actor.actorId || rootCanSubmit)
           && isOpenForTailInspection(order.status),
       })),
       processes: processes.map((item) => ({
@@ -207,6 +208,18 @@ export class TailInspectionService {
         );
       }
       if (readyAfterSubmit) {
+        const orderTransitionEventId = await this.events.append(client, actor, {
+          action: "rework.tail_inspection.submit",
+          entityType: "rework_order",
+          entityId: assignment.rework_order_id,
+          before: this.orderAudit(order, order.status, order.version),
+          after: {
+            ...this.orderAudit(order, "pending_order_review", order.version + 1),
+            assignmentId,
+            tailInspectionReportId: reportId,
+          },
+        });
+        await this.context(client, orderTransitionEventId, actor.requestId);
         await client.query(
           `UPDATE rework_orders
            SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1

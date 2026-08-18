@@ -33,9 +33,11 @@ const isPieceCount = (value: string): boolean => /^\d+$/.test(value) && Number(v
 export function TailInspectionPanel({
   reworkOrderId,
   onOrderChanged,
+  isRoot = false,
 }: {
   reworkOrderId: string;
   onOrderChanged?: () => Promise<void> | void;
+  isRoot?: boolean;
 }) {
   const [data, setData] = useState<TailInspectionResponse | null>(null);
   const [returnedQuantity, setReturnedQuantity] = useState("");
@@ -51,7 +53,9 @@ export function TailInspectionPanel({
     );
     setData(result);
     setMessage(result.assignments.some((assignment) => assignment.canSubmit)
-      ? "先填本次返件总数；每道工序会默认同步总数，按实际清点结果修改即可。"
+      ? isRoot
+        ? "Root 可代理未报数尾查提交；先选择系统提供的可代报任务并填写实际清点数量。"
+        : "先填本次返件总数；每道工序会默认同步总数，按实际清点结果修改即可。"
       : "当前尾查报数已提交，或尚未到本人处理。"
     );
     return result;
@@ -61,7 +65,7 @@ export function TailInspectionPanel({
     void load().catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : "尾查任务加载失败");
     });
-  }, [reworkOrderId]);
+  }, [isRoot, reworkOrderId]);
 
   const updateReturnedQuantity = (nextValue: string) => {
     setReturnedQuantity(nextValue);
@@ -99,7 +103,10 @@ export function TailInspectionPanel({
       setMessage("单道工序的清点数量不能超过本次返件总数。 ");
       return;
     }
-    if (!(await confirmInApp("确认提交本人的尾查报数？提交后如需调整，请由尾部主管退回后重新报数。"))) return;
+    const confirmation = isRoot
+      ? `确认以 Root 身份代 ${assignment.tailInspectorName} 提交尾查报数？提交后如需调整，请由尾部主管退回后重新报数。`
+      : "确认提交本人的尾查报数？提交后如需调整，请由尾部主管退回后重新报数。";
+    if (!(await confirmInApp(confirmation))) return;
     setBusy(true);
     try {
       const submitted = await request(
@@ -124,14 +131,14 @@ export function TailInspectionPanel({
     }
   };
 
-  const ownAssignment = data?.assignments.find((assignment) => assignment.canSubmit) ?? null;
+  const actionableAssignment = data?.assignments.find((assignment) => assignment.canSubmit) ?? null;
   const submittedAssignments = data?.assignments.filter((assignment) => assignment.submittedAt !== null) ?? [];
 
   return <div className="mobile-page tail-inspection-page">
     <div className="mobile-hero">
       <div className="mobile-title">
         <h1>尾查报数</h1>
-        <StatusBadge tone={ownAssignment ? "info" : "success"}>N06</StatusBadge>
+        <StatusBadge tone={actionableAssignment ? "info" : "success"}>N06</StatusBadge>
       </div>
       <p>尾查与工人完工上数并行开始；系统按工序汇总多人清点结果，作为 N07 整单确认的数量基准。</p>
     </div>
@@ -144,23 +151,23 @@ export function TailInspectionPanel({
           <h2>本单尾查进度</h2>
           <p>多人清点时，下方已提交人员的各工序数量会自动相加。</p>
         </div>
-        <StatusBadge tone={ownAssignment ? "warning" : "success"}>{ownAssignment ? "待本人报数" : "本人已完成"}</StatusBadge>
+        <StatusBadge tone={actionableAssignment ? "warning" : "success"}>{actionableAssignment ? isRoot ? "Root 可代报" : "待本人报数" : isRoot ? "暂无可代报" : "本人已完成"}</StatusBadge>
       </div>
       <div className="tail-inspection-assignment-list">
         {data.assignments.map((assignment) => <div key={assignment.assignmentId}>
           <div><b>{assignment.tailInspectorName}</b><small>{assignment.boxScope ? `清点范围：${assignment.boxScope}` : "未填写箱数或范围"}</small></div>
-          <StatusBadge tone={assignment.submittedAt ? "success" : assignment.canSubmit ? "warning" : "info"}>{assignment.submittedAt ? `${assignment.returnedQuantity} 件已提交` : assignment.canSubmit ? "待本人清点" : "待清点"}</StatusBadge>
+          <StatusBadge tone={assignment.submittedAt ? "success" : assignment.canSubmit ? "warning" : "info"}>{assignment.submittedAt ? `${assignment.returnedQuantity} 件已提交` : assignment.canSubmit ? isRoot ? "Root 可代清点" : "待本人清点" : "待清点"}</StatusBadge>
         </div>)}
       </div>
     </Surface>}
 
-    {ownAssignment && data && <Surface className="tail-inspection-entry">
+    {actionableAssignment && data && <Surface className="tail-inspection-entry">
       <div className="section-title">
         <div>
-          <h2>填写本次清点</h2>
+          <h2>{isRoot ? `代 ${actionableAssignment.tailInspectorName} 填写本次清点` : "填写本次清点"}</h2>
           <p>先填返件总数。每个工序默认同步该总数，避免逐项重复输入；按实际分布修改后再提交。</p>
         </div>
-        {ownAssignment.boxScope ? <StatusBadge tone="info">{ownAssignment.boxScope}</StatusBadge> : null}
+        {actionableAssignment.boxScope ? <StatusBadge tone="info">{actionableAssignment.boxScope}</StatusBadge> : null}
       </div>
       <InsetField label="返件总数（件）" type="number" min="1" step="1" inputMode="numeric" value={returnedQuantity} disabled={busy} onChange={(event) => updateReturnedQuantity(event.target.value)} />
       <div className="tail-inspection-processes">
@@ -170,10 +177,10 @@ export function TailInspectionPanel({
         </div>)}
       </div>
       <div className="mobile-actions tail-inspection-actions">
-        <Button variant="primary" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : "提交尾查报数"}</Button>
+        <Button variant="primary" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "Root 代报尾查数量" : "提交尾查报数"}</Button>
       </div>
     </Surface>}
 
-    {data && !ownAssignment && submittedAssignments.length === 0 ? <Surface>本单尚未分配到您的尾查任务。</Surface> : null}
+    {data && !actionableAssignment && submittedAssignments.length === 0 ? <Surface>{isRoot ? "本单暂无可由 Root 代报的尾查任务。" : "本单尚未分配到您的尾查任务。"}</Surface> : null}
   </div>;
 }

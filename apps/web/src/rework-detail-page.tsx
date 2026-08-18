@@ -595,6 +595,7 @@ export function ReworkDetailPage({
     if (selected.state !== "future" && selected.key === "tail_inspection") {
       if (canUseTailInspection(currentUser)) return <TailInspectionPanel
         reworkOrderId={detail.reworkOrderId}
+        isRoot={currentUser?.isRoot === true}
         onOrderChanged={syncAfterNodeAction}
       />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;

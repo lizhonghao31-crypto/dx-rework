@@ -17,7 +17,10 @@ describe("tail inspection foundation", () => {
   });
 
   it("stores independent, audited assignments and per-process physical counts", async () => {
-    const migration = await readFile("apps/api/migrations/0066_tail_inspection_foundation.sql", "utf8");
+    const [migration, rootReportingMigration] = await Promise.all([
+      readFile("apps/api/migrations/0066_tail_inspection_foundation.sql", "utf8"),
+      readFile("apps/api/migrations/0070_root_tail_inspection_reporting.sql", "utf8"),
+    ]);
 
     expect(migration).toContain("rework_tail_inspection_assignments");
     expect(migration).toContain("box_scope text CHECK");
@@ -27,5 +30,8 @@ describe("tail inspection foundation", () => {
     expect(migration).toContain("inspected_quantity>report_returned_quantity");
     expect(migration).toContain("rework.tail_inspection.revoke");
     expect(migration).not.toContain("target.status='pending_ie_review'");
+    expect(rootReportingMigration).toContain("assignment.tail_inspector_user_id=NEW.submitted_by");
+    expect(rootReportingMigration).toContain("event.actor_roles @> ARRAY['root_superuser']::text[]");
+    expect(rootReportingMigration).toContain("access_is_root_actor(event.actor_id)");
   });
 });

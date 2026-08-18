@@ -7,6 +7,7 @@ import type {
   ResponsibilityDeterminationResponse,
   ReworkOrderResponse,
   ReworkWorkTasksResponse,
+  TailInspectionResponse,
   WholeOrderReviewResponse,
   WorkReportResponse,
   WorkTaskResponse,
@@ -36,6 +37,7 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
@@ -87,11 +89,12 @@ type PassFixture = Readonly<{
   rootUserId: string;
   businessDetail: ReworkBusinessDetailService;
   merchandiserUserId: string;
+  tailInspectorUserId: string;
   workerPersonIds: string[];
   supplierId: string;
   processId: string;
   processName: string;
-  pricingUnit: "piece" | "hour";
+  pricingUnit: "piece";
   plannedQuantity: number;
   unitPrice: number;
 }>;
@@ -158,6 +161,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
 
     const rootUserId = randomUUID();
     const merchandiserUserId = randomUUID();
+    const tailInspectorUserId = randomUUID();
     const workerUserIds = pass === 1
       ? [randomUUID(), randomUUID(), randomUUID()]
       : [randomUUID()];
@@ -165,6 +169,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const users = [
       [rootUserId, `Root 双跑 ${pass}`, rootDingtalkUserId],
       [merchandiserUserId, `订单跟单 ${pass}`, `merch-${pass}`],
+      [tailInspectorUserId, `尾查 ${pass}`, `tail-inspector-${pass}`],
       ...workerUserIds.map((id, index) => [
         id,
         `作业员工 ${pass}-${index + 1}`,
@@ -214,6 +219,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       roleCode: "order_merchandiser",
       reason: `Root 双跑 ${pass}：建立订单跟单事实`,
     });
+    await access.assignRole(accessActor, {
+      userId: tailInspectorUserId,
+      roleCode: "tail_inspector",
+      reason: `Root 双跑 ${pass}：建立尾查事实`,
+    });
     for (const [index, workerUserId] of workerUserIds.entries()) {
       await access.assignRole(accessActor, {
         userId: workerUserId,
@@ -244,10 +254,10 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       active: true,
       changeReason: `Root 双跑 ${pass} 加工厂`,
     })).supplierId;
-    const pricingUnit = pass === 1 ? "piece" as const : "hour" as const;
-    const processName = pass === 1 ? "袖口返修" : "小时返修";
+    const pricingUnit = "piece" as const;
+    const processName = pass === 1 ? "袖口返修" : "临时工返修";
     const processId = (await access.createProcess(masterDataActor, {
-      processCode: pass === 1 ? "R1PCE01" : "R2HOUR1",
+      processCode: pass === 1 ? "R1PCE01" : "R2PCE01",
       processName,
       pricingUnit,
       active: true,
@@ -258,6 +268,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const initiation = new ReworkInitiationService(database, "corp", undefined, undefined, undefined, todoProjection);
     const businessDetail = new ReworkBusinessDetailService(database);
     const configuration = new ProcessConfigurationService(database, undefined, undefined, undefined, todoProjection);
+    const tailInspection = new TailInspectionService(database, undefined, undefined, todoProjection);
     const work = new WorkReportingService(database, undefined, undefined, todoProjection);
     const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
     const responsibility = new ResponsibilityDeterminationApplicationService(database, todoProjection);
@@ -292,6 +303,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         root,
       },
       processConfiguration: { authenticate, service: configuration, root },
+      tailInspection: { authenticate, service: tailInspection, root },
       workReporting: { authenticate, service: work, root },
       wholeOrderReview: { authenticate, service: wholeOrder, root },
       responsibilityDetermination: { authenticate, service: responsibility, root },
@@ -311,18 +323,33 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       rootUserId,
       businessDetail,
       merchandiserUserId,
+      tailInspectorUserId,
       workerPersonIds,
       supplierId,
       processId,
       processName,
       pricingUnit,
-      plannedQuantity: pass === 1 ? 10 : 1.5,
-      unitPrice: pass === 1 ? 0.6 : 12,
+      plannedQuantity: pass === 1 ? 10 : 2,
+      unitPrice: pass === 1 ? 0.6 : 9,
       schema,
     };
   }
 
   async function startOrder(pass: 1 | 2, fixture: PassFixture) {
+    const initialImageId = randomUUID();
+    await fixture.database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,$3,'image/webp',10,$4,$5,'ready',CURRENT_TIMESTAMP)`,
+      [
+        initialImageId,
+        `private/${initialImageId}.webp`,
+        `root-pass-${pass}-initial.webp`,
+        "e".repeat(64),
+        fixture.rootUserId,
+      ],
+    );
     const draft = await http<ReworkOrderResponse>(
       fixture.app,
       "POST",
@@ -337,6 +364,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         problemPart: "袖口",
         problemDescription: `Root 单账号第 ${pass} 遍完整业务链`,
         reworkQuantity: 10,
+        attachmentIds: [initialImageId],
       },
     );
     const submitted = await http<ReworkOrderResponse>(
@@ -372,7 +400,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     expect(supplemented).toMatchObject({
       status: "pending_process_configuration",
       version: submitted.version + 1,
-      attachmentIds: [supplementalImageId],
+      attachmentIds: expect.arrayContaining([initialImageId, supplementalImageId]),
     });
 
     const directDetail = await fixture.businessDetail.get({
@@ -425,6 +453,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       {
         expectedOrderVersion: saved.orderVersion,
         expectedConfigurationVersion: saved.configuration!.configurationVersion,
+        tailInspectors: [{ userId: fixture.tailInspectorUserId, boxScope: `Root 第 ${pass} 遍` }],
       },
     );
     expect(submittedConfiguration.reworkStatus).toBe("pending_ie_review");
@@ -721,6 +750,30 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       };
 
       let report = await submitReport();
+      const tailView = await http<TailInspectionResponse>(
+        fixture.app,
+        "GET",
+        `/rework-orders/${draft.reworkOrderId}/tail-inspection`,
+      );
+      const tailAssignment = tailView.assignments[0];
+      expect(tailAssignment).toMatchObject({
+        tailInspectorUserId: fixture.tailInspectorUserId,
+        status: "active",
+        canSubmit: true,
+      });
+      const tailReported = await http<TailInspectionResponse>(
+        fixture.app,
+        "POST",
+        `/tail-inspection-assignments/${tailAssignment!.assignmentId}/reports`,
+        {
+          returnedQuantity: fixture.plannedQuantity,
+          items: [{
+            configurationItemId: item.configurationItemId,
+            inspectedQuantity: fixture.plannedQuantity,
+          }],
+        },
+      );
+      expect(tailReported.reworkStatus).toBe("pending_order_review");
       if (pass === 2) {
         const review = await http<WholeOrderReviewResponse>(
           fixture.app,

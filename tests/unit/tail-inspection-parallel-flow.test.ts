@@ -52,7 +52,12 @@ describe("tail inspection parallel flow", () => {
     expect(configurationService).toContain('category: "tail_inspection"');
     expect(configurationService).toContain("tail-inspection:${reworkOrderId}:${assignment.assignmentId}");
     expect(tailService).toContain("completeOpenByDedupeKey");
+    expect(tailService).toContain("orderTransitionEventId");
+    expect(tailService).toContain('entityType: "rework_order"');
+    expect(tailService).toContain("assignment.tail_inspector_user_id === actor.actorId || rootCanSubmit");
     expect(panel).toContain("返件总数（件）");
+    expect(panel).toContain("Root 可代报");
+    expect(panel).toContain("Root 代报尾查数量");
     expect(panel).toContain("每个工序默认同步该总数");
   });
 });
