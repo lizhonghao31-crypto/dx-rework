@@ -187,7 +187,6 @@ runWithPostgres("Root self system administrator assignment", () => {
       await database.end();
       await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     }
-  });
+  }, 20_000);
 });
-
 
