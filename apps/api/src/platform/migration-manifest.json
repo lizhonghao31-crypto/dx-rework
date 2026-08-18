@@ -275,6 +275,10 @@
     {
       "version": "0069_rework_image_submission_uuid_cast",
       "checksum": "59dc48dc708261940935791d8a97704d705273ebf358ff0700b234a25b96ff55"
+    },
+    {
+      "version": "0070_root_tail_inspection_reporting",
+      "checksum": "5d81290dc3aa946b4a19672b2f0e9c89675e56ea812bc80470343fd37a55ef69"
     }
   ]
 }
