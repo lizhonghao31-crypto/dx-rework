@@ -400,7 +400,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     expect(supplemented).toMatchObject({
       status: "pending_process_configuration",
       version: submitted.version + 1,
-      attachmentIds: [supplementalImageId],
+      attachmentIds: expect.arrayContaining([initialImageId, supplementalImageId]),
     });
 
     const directDetail = await fixture.businessDetail.get({
