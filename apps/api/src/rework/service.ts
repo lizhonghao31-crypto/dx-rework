@@ -1005,9 +1005,15 @@ export class ReworkInitiationService {
     reworkOrderId: string,
     attachmentIds: readonly string[],
   ): Promise<void> {
-    if (attachmentIds.length === 0) return;
-    const result = await client.query(
-      `SELECT attachment_id
+    if (attachmentIds.length === 0) {
+      throw new ApplicationError(
+        "REWORK_IMAGE_REQUIRED",
+        "提交返工单前至少上传 1 张验货或问题图片",
+        400,
+      );
+    }
+    const result = await client.query<{ attachment_id: string; mime_type: string }>(
+      `SELECT attachment_id,mime_type
        FROM attachments
        WHERE attachment_id=ANY($1::uuid[])
          AND uploaded_by=$2
@@ -1019,6 +1025,13 @@ export class ReworkInitiationService {
     );
     if (result.rowCount !== attachmentIds.length) {
       throw new ApplicationError("ATTACHMENT_NOT_READY", "附件未完成上传、归属不符或已被替换", 409);
+    }
+    if (!result.rows.some((attachment) => ["image/jpeg", "image/png", "image/webp"].includes(attachment.mime_type))) {
+      throw new ApplicationError(
+        "REWORK_IMAGE_REQUIRED",
+        "提交返工单前至少上传 1 张验货或问题图片，PDF 仅可作为补充附件",
+        400,
+      );
     }
   }
 

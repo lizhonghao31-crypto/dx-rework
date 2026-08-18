@@ -87,14 +87,13 @@ export class WageExportService {
            ON supplier.supplier_id=orders.processing_factory_supplier_id
          LEFT JOIN LATERAL (
            SELECT COALESCE(multiplier.multiplier,1)::numeric(8,3)::text multiplier
-           FROM rework_tail_pricing_submissions submission
-           LEFT JOIN rework_tail_temporary_wage_coefficients multiplier
-             ON multiplier.tail_pricing_submission_id=submission.tail_pricing_submission_id
+           FROM rework_tail_completion_confirmations confirmation
+           LEFT JOIN rework_tail_completion_coefficients multiplier
+             ON multiplier.confirmation_id=confirmation.confirmation_id
             AND multiplier.configuration_item_id=item.configuration_item_id
             AND multiplier.person_id=item.person_id
-           WHERE submission.rework_order_id=item.rework_order_id
-             AND submission.status='approved'
-           ORDER BY submission.pricing_version DESC
+           WHERE confirmation.rework_order_id=item.rework_order_id
+           ORDER BY confirmation.confirmed_at DESC,confirmation.confirmation_id DESC
            LIMIT 1
          ) coefficient ON true
          WHERE closure.period_id=$1
@@ -124,14 +123,13 @@ export class WageExportService {
            ON supplier.supplier_id=orders.processing_factory_supplier_id
          LEFT JOIN LATERAL (
            SELECT COALESCE(multiplier.multiplier,1)::numeric(8,3)::text multiplier
-           FROM rework_tail_pricing_submissions submission
-           LEFT JOIN rework_tail_temporary_wage_coefficients multiplier
-             ON multiplier.tail_pricing_submission_id=submission.tail_pricing_submission_id
+           FROM rework_tail_completion_confirmations confirmation
+           LEFT JOIN rework_tail_completion_coefficients multiplier
+             ON multiplier.confirmation_id=confirmation.confirmation_id
             AND multiplier.configuration_item_id=item.configuration_item_id
             AND multiplier.person_id=item.person_id
-           WHERE submission.rework_order_id=item.rework_order_id
-             AND submission.status='approved'
-           ORDER BY submission.pricing_version DESC
+           WHERE confirmation.rework_order_id=item.rework_order_id
+           ORDER BY confirmation.confirmed_at DESC,confirmation.confirmation_id DESC
            LIMIT 1
          ) coefficient ON true
          WHERE item.period_id=$1 ORDER BY item.person_name_snapshot,item.created_at,item.wage_item_id`, [periodId],

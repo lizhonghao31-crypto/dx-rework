@@ -19,7 +19,8 @@ describe("N01 streamlined manual entry", () => {
   it("shows unified attachments and paginates manual report modules", async () => {
     const source = await readFile("apps/web/src/rework-form.tsx", "utf8");
     expect(source).toContain("订单附件");
-    expect(source).toContain("验货报告、衣服照片及其他现场图片统一上传");
+    expect(source).toContain("提交前至少上传 1 张验货或问题图片");
+    expect(source).toContain('accept="image/jpeg,image/png,image/webp"');
     expect(source).toContain("manualEntryPage === 1");
     expect(source).toContain("manualEntryPage === 5");
     expect(source).toContain('aria-label="手动录入分页"');

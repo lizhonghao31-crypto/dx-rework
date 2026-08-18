@@ -267,6 +267,10 @@
     {
       "version": "0067_tail_inspection_parallel_flow",
       "checksum": "4f696007e3e433053fd69195bc103fc1f248477dc1b9def2113c917cf9fb8f31"
+    },
+    {
+      "version": "0068_n01_image_and_wage_integrity",
+      "checksum": "1b7012c166a08c946628e86b96245ea57d21c2cf84b0271c40a1c6b9b09a9a25"
     }
   ]
 }

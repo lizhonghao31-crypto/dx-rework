@@ -530,6 +530,7 @@ export function ReworkInitiationForm({
     Boolean(inspectionReport.inspectionLocation?.trim()),
     Number.isInteger(Number(form.orderQuantity)) && Number(form.orderQuantity) > 0,
     Number.isInteger(inspectionReport.sampleQuantity) && (inspectionReport.sampleQuantity ?? 0) > 0,
+    attachmentIds.length > 0,
   ];
   const requiredCompletionCount = requiredFieldsComplete.filter(Boolean).length;
   const complete = requiredCompletionCount === requiredFieldsComplete.length;
@@ -555,15 +556,15 @@ export function ReworkInitiationForm({
 
           <Surface className="rework-paper-entry">
             <div className="section-title">
-              <div><h2>订单附件</h2><p>验货报告、衣服照片及其他现场图片统一上传，最多 6 张。</p></div>
+              <div><h2>订单附件</h2><p>提交前至少上传 1 张验货或问题图片；PDF 仅作补充附件，最多 6 份。</p></div>
               <StatusBadge tone={attachmentIds.length ? "success" : "info"}>{attachmentIds.length} 份</StatusBadge>
             </div>
             {!formDisabled && (
               <label className="qc-file-button rework-paper-entry__upload">
-                <span>{uploading ? "正在上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? "已达到 " + MAX_REWORK_ATTACHMENTS + " 份上限" : "上传订单图片 / PDF"}</span>
+                  <span>{uploading ? "正在上传…" : attachmentIds.length >= MAX_REWORK_ATTACHMENTS ? "已达到 " + MAX_REWORK_ATTACHMENTS + " 份上限" : "上传验货 / 问题图片"}</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  accept="image/jpeg,image/png,image/webp"
                   multiple
                   disabled={mutationDisabled || attachmentIds.length >= MAX_REWORK_ATTACHMENTS}
                   onChange={(event) => {
@@ -592,8 +593,8 @@ export function ReworkInitiationForm({
 
           <Surface className="rework-initiation-required rework-core-fields">
             <div className="section-title">
-              <div><h2>订单基本资料</h2><p>以下八项为创建订单的必填资料。</p></div>
-              <StatusBadge tone={complete ? "success" : "info"}>已填 {requiredCompletionCount}/8</StatusBadge>
+              <div><h2>订单基本资料</h2><p>以下资料与至少一张验货或问题图片为创建订单的必填内容。</p></div>
+              <StatusBadge tone={complete ? "success" : "info"}>已填 {requiredCompletionCount}/{requiredFieldsComplete.length}</StatusBadge>
             </div>
             <div className="qc-form-grid rework-core-fields__grid">
               <label className="dx-field"><span>供应商（必填）</span><span className="dx-field__control factory-search-control"><FactorySearch factories={options.factories} value={form.factory} disabled={formDisabled} onChange={(factory) => setForm({ ...form, factory })} /></span></label>

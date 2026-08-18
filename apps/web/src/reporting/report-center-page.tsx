@@ -21,7 +21,7 @@ const snapshotBusinessValue=(key:string,value:string):string=>{
   const formatted=businessValue(key,value);
   const numeric=Number(value);
   return formatted.startsWith("¥")&&Number.isFinite(numeric)
-    ? `¥${Math.round(numeric).toLocaleString("zh-CN")}`
+    ? `¥${numeric.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2})}`
     : formatted;
 };
 

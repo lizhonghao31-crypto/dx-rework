@@ -59,7 +59,8 @@ describe("UAT interface closure", () => {
     expect(report).toContain("businessValue(column.key, row[column.key])");
     expect(report).toContain("businessFieldLabel(key)");
     expect(report).toContain("snapshotBusinessValue(key, total)");
-    expect(report).toContain("Math.round(numeric)");
+    expect(report).toContain("minimumFractionDigits:2");
+    expect(report).not.toContain("Math.round(numeric)");
     expect(report).not.toContain('action="返回全部订单"');
     expect(report).not.toContain("数据快照：");
     expect(reportingStyles).toContain(".reporting-summary>div:last-child{justify-content:flex-start}");
