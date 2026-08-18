@@ -10,6 +10,7 @@
   - `apps/api/src/platform/migration-manifest.json`
   - `tests/integration/full-business-chain-postgres.test.ts`
   - `tests/integration/root-single-account-two-pass-postgres.test.ts`
+  - `tests/integration/root-self-system-admin-postgres.test.ts`
   - `tests/unit/n01-image-and-wage-integrity.test.ts`
   - `docs/engineering/pr-144-preflight.md`
 - forbidden files: production services, routes, historical migrations 0001–0068, contracts, UI, DingTalk integration, deployment configuration, secrets and environment files
@@ -19,3 +20,9 @@ The first remote Full Gate exposed a production database defect in migration 006
 forward-only 0069 migration replaces the guard function with an explicit `::text`
 cast; 0068 remains byte-for-byte unchanged. No service, route, contract or UI changes
 are permitted in this PR.
+
+The second Full Gate applied 0069 successfully, then exposed that the Root audit
+regression creates an isolated schema, replays the entire migration history, and
+executes its authorization assertions under Vitest's 5-second default. It timed out
+at 5.006 seconds without an assertion failure. That single PostgreSQL test receives a
+20-second ceiling; its setup, assertions and cleanup remain unchanged.
