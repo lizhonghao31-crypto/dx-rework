@@ -84,8 +84,8 @@ describe("business-chain UI handoff contracts", () => {
     }
     expect(shell).not.toContain('name: "返工上数"');
     expect(shell).not.toContain("flow-navigation__arrow");
-    expect(detail).toContain('title: "发起、配置与分工"');
-    expect(detail).toContain('title: "核价与返工执行"');
+    expect(detail).toContain('title: "发起、配置与核价"');
+    expect(detail).toContain('title: "分工与返工执行"');
     expect(detail).toContain('title: "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
     expect(detail).toContain('node("process_configuration", "02", "工序与候选单价"');
@@ -97,6 +97,22 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('node("responsibility", "08", "责任判定"');
     expect(detail).toContain('node("owner_signature", "09", "老板确认签字"');
     expect(detail).toContain('node("settlement_followup", "10", "返工业务完成"');
+    const workflowNodePositions = Array.from({ length: 10 }, (_, index) =>
+      detail.indexOf(`node("${[
+        "initiation",
+        "process_configuration",
+        "ie_review",
+        "task_assignment",
+        "work_reporting",
+        "tail_inspection",
+        "whole_order_review",
+        "responsibility",
+        "owner_signature",
+        "settlement_followup",
+      ][index]}", "${String(index + 1).padStart(2, "0")}"`),
+    );
+    expect(workflowNodePositions.every((position) => position >= 0)).toBe(true);
+    expect(workflowNodePositions).toEqual([...workflowNodePositions].sort((left, right) => left - right));
   });
 
   it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
