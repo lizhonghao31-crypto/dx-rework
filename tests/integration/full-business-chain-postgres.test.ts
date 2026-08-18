@@ -877,11 +877,20 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   });
 
   it("submits the eight required N01 facts without retired manual-entry fields", async () => {
+    const initialImageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'n01-eight-fields.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [initialImageId, `private/${initialImageId}.webp`, "f".repeat(64), ids.qc],
+    );
     const draft = await initiation.createDraft(qc(), {
       styleNo: "UAT-N01-EIGHT-FIELDS",
       orderQuantity: 120,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
       inspectionReport: n01CoreInspectionReport("八项资料提交测试款"),
+      attachmentIds: [initialImageId],
     }, randomUUID());
 
     expect(draft.value).toMatchObject({
