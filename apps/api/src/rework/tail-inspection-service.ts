@@ -118,6 +118,7 @@ export class TailInspectionService {
       [reworkOrderId],
     );
     const quantities = new Map(reported.rows.map((row) => [row.configuration_item_id, Number(row.inspected_quantity)]));
+    const rootCanSubmit = isRootActor(actor);
     return {
       reworkOrderId,
       reworkStatus: order.status as TailInspectionResponse["reworkStatus"],
@@ -131,7 +132,7 @@ export class TailInspectionService {
         submittedAt: assignment.submitted_at?.toISOString() ?? null,
         canSubmit: assignment.revoked_at === null
           && assignment.returned_quantity === null
-          && assignment.tail_inspector_user_id === actor.actorId
+          && (assignment.tail_inspector_user_id === actor.actorId || rootCanSubmit)
           && isOpenForTailInspection(order.status),
       })),
       processes: processes.map((item) => ({
