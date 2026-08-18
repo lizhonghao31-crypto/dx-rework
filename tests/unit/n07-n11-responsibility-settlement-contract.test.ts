@@ -39,7 +39,7 @@ describe("N07–N11 responsibility settlement contract", () => {
   });
 
   it("makes every new draft V2 and enforces party facts before server-only N09 materialization", async () => {
-    const [service, panel, migration, multiplierGuard, detail, backfill, externalPanel, application, authorized, finalExternal, external, close] = await Promise.all([
+    const [service, panel, migration, multiplierGuard, detail, backfill, externalPanel, application, authorized, ownerSignature, finalExternal, external, close] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql", "utf8"),
@@ -49,6 +49,7 @@ describe("N07–N11 responsibility settlement contract", () => {
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
       readFile("apps/api/src/rework/responsibility-determination-application-service.ts", "utf8"),
       readFile("apps/api/src/rework/responsibility-determination-authorized-service.ts", "utf8"),
+      readFile("apps/api/src/rework/responsibility-owner-signature-service.ts", "utf8"),
       readFile("apps/api/src/rework/final-external-responsibility-service.ts", "utf8"),
       readFile("apps/api/src/rework/external-responsibility-service.ts", "utf8"),
       readFile("apps/api/src/rework/external-responsibility-close-service.ts", "utf8"),
@@ -87,6 +88,8 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(application).toContain("请为初始责任判定选择有权限的处理人");
     expect(authorized).toContain("permission.handlerUserId ?? (");
     expect(authorized).toContain("permission.canDetermine && !isRootActor(actor) ? actor.actorId : null");
+    expect(ownerSignature).toContain("await this.external.ensureForFinalized(");
+    expect(ownerSignature).toContain("settlement ledgers were generated");
     expect(migration).toContain("SELECT access_is_root_actor(candidate)");
     expect(migration).toContain("Root is a globally authorized actor");
     expect(externalPanel).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");

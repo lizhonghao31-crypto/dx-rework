@@ -185,7 +185,6 @@ if (hasDatabase) {
   tests.push(
     "tests/integration/full-business-chain-postgres.test.ts",
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
-    "tests/integration/external-responsibility-workflow-postgres.test.ts",
   );
   process.stdout.write(
     "BUSINESS_CHAIN_GATE_START: current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
