@@ -441,29 +441,41 @@ export class WageService {
                FROM rework_wage_adjustments WHERE target_period_id=$1 AND status='approved'),
              final_total=original_total+(SELECT COALESCE(sum(adjustment_amount),0)
                FROM rework_wage_adjustments WHERE target_period_id=$1 AND status='approved'),
-             status='pending_tail_review',period_version=period_version+1,
+             status='ready_to_lock',period_version=period_version+1,
           updated_at=CURRENT_TIMESTAMP WHERE period_id=$1`, [target.period_id],
         );
         await this.todos?.cancelOpenByDedupePrefix(
           client,
           actor,
           `wage-tail-review:${target.period_id}:`,
-          "An approved wage adjustment requires a new tail review",
+          "Tail wage review was removed from the workflow",
+        );
+        await this.todos?.cancelOpenByDedupePrefix(
+          client,
+          actor,
+          `wage-admin-review:${target.period_id}:`,
+          "Administrative wage review was removed from the workflow",
+        );
+        await this.todos?.cancelOpenByDedupePrefix(
+          client,
+          actor,
+          `wage-month-lock:${target.period_id}:`,
+          "Approved wage adjustment changed the month-close version",
         );
         await this.todos?.actionableForUniqueDirectRole(client, actor, {
-          category: "wage_tail_review",
+          category: "wage_month_close",
           sourceEventId: eventId,
           sourceAction: "wage.adjustment.approve",
           entityType: "wage_adjustment",
           entityId: adjustmentId,
-          requiredRole: "tail_supervisor",
-          requiredCapability: "wage:tail_review",
+          requiredRole: "wage_month_close_accountant",
+          requiredCapability: "wage:month_close",
           route: {
             routeName: "wage_period_detail",
             entityId: target.period_id,
           },
           policyKey: "finance_return_or_wage_review",
-          dedupeKey: `wage-tail-review:${target.period_id}:${target.period_version + 1}`,
+          dedupeKey: `wage-month-lock:${target.period_id}:${target.period_version + 1}`,
         });
       }
       return this.adjustmentDto(await this.adjustmentRow(client, adjustmentId, false));
@@ -480,7 +492,7 @@ export class WageService {
     await this.requireDirect(actor, "wage_month_close_accountant", "wage:month_close");
     return this.mutate(actor, "wage.month_close", key, { periodId, expectedVersion, note }, async (client) => {
       const period = await this.period(client, periodId);
-      if (period.period_version !== expectedVersion || period.status !== "ready_to_lock") fail("工资期间尚未完成复核或版本冲突");
+      if (period.period_version !== expectedVersion || period.status !== "ready_to_lock") fail("工资期间尚未进入可月结状态或版本冲突");
       const ended = await client.query<{ ended: boolean }>(
         `SELECT CURRENT_TIMESTAMP >= (($1::date+interval '1 month')::timestamp
           AT TIME ZONE 'Asia/Singapore') ended`, [period.period_month],
@@ -578,8 +590,8 @@ export class WageService {
       originalTotal: row.original_total, adjustmentTotal: row.adjustment_total,
       finalTotal: row.final_total, lockedBy: row.locked_by, lockedAt: iso(row.locked_at),
       lockNote: row.lock_note,
-      canTailReview: permission.tail && row.status === "pending_tail_review",
-      canAdministrativeReview: permission.administrative && row.status === "pending_admin_review",
+      canTailReview: false,
+      canAdministrativeReview: false,
       canLock: permission.monthClose && row.status === "ready_to_lock",
       canRequestAdjustment: permission.tail,
       canApproveAdjustment: permission.administrative && row.status !== "locked",
