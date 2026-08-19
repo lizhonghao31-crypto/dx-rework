@@ -136,7 +136,7 @@ export class ManagementReportingService {
         pendingAssignment: map.get("pending_task_assignment") ?? 0,
         inProgress: map.get("in_progress") ?? 0,
         pendingOrderReview: (map.get("pending_order_review") ?? 0) + (map.get("pending_quantity_adjustment_ie_review") ?? 0),
-        pendingWageReview,
+        pendingWageReview: pendingWageMonthClose,
         siteExceptions: number(exceptions.rows[0]?.count ?? "0"),
       },
       nodeCounts,
