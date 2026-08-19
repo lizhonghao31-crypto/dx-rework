@@ -93,4 +93,18 @@ describe("system dialog automation contract", () => {
     expect(visual).toContain("z-index: 1000;");
     expect(visual).toContain("border: 1px solid var(--dx-dialog-border);");
   });
+
+  it("defines every spacing token used by the dialog shells so padding cannot silently collapse", async () => {
+    const [tokens, systemCss, reportingCss, detailCss] = await Promise.all([
+      readFile("packages/ui/src/tokens.css", "utf8"),
+      readFile("apps/web/src/system-dialog.css", "utf8"),
+      readFile("apps/web/src/work-reporting-form.css", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+    ]);
+
+    expect(tokens).toContain("--dx-v2-space-5: 16px;");
+    expect(systemCss).toContain("var(--dx-v2-space-5)");
+    expect(reportingCss).toContain("var(--dx-v2-space-5)");
+    expect(detailCss).toContain("var(--dx-v2-space-5)");
+  });
 });
