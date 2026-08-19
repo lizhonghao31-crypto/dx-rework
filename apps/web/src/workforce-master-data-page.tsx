@@ -181,7 +181,7 @@ export function WorkforceMasterDataPage() {
             <label>姓名<input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} /></label>
             <label>区分备注（可选）<input value={temporaryRemark} maxLength={100} placeholder="如：夜班、老张介绍" onChange={(event) => setTemporaryRemark(event.target.value)} /></label>
             <label>别名（可选，用逗号分隔）<input value={aliases} onChange={(event) => setAliases(event.target.value)} /></label>
-            <Button variant="primary" disabled={busy} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
+            <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
           </div>
         </Surface>
 

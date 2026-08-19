@@ -188,6 +188,13 @@ export function ProcessConfigurationForm({
     && response?.reworkStatus === "pending_ie_review"
     && !reviewSeparationBlocked,
   );
+  const itemValidationError = validateItemForms(items);
+  const saveReady = editable && itemValidationError === null;
+  const submitReadinessIssues = [
+    ...(itemValidationError ? [itemValidationError.replace(/。$/, "")] : []),
+    ...(tailInspectors.length === 0 ? ["至少分配 1 名尾查"] : []),
+  ];
+  const submitReady = editable && submitReadinessIssues.length === 0;
 
   const reload = async () => {
     if (!reworkOrderId) return;
@@ -482,9 +489,10 @@ export function ProcessConfigurationForm({
         </div>
       </section>
       <div className="mobile-actions process-configuration-actions">
-        <Button onClick={() => void save()} disabled={busy}>{busy ? "处理中…" : "保存配置草稿"}</Button>
-        <Button variant="primary" onClick={() => void submit()} disabled={busy || !response}>提交 IE 审核</Button>
+        <Button onClick={() => void save()} disabled={busy || !saveReady}>{busy ? "处理中…" : "保存配置草稿"}</Button>
+        <Button variant="primary" onClick={() => void submit()} disabled={busy || !submitReady}>{busy ? "提交中…" : "提交 IE 审核"}</Button>
       </div>
+      {!submitReady && submitReadinessIssues.length > 0 && <p className="process-readiness" role="status">还需完成：{submitReadinessIssues.join("；")}</p>}
     </Surface>}
 
     {!editable && configuration && <Surface>
@@ -512,7 +520,7 @@ export function ProcessConfigurationForm({
       <p>IE 只核价：确认每道工序的候选单价。通过后配置生效；驳回必须留下原因。</p>
       <InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" />
       <div className="qc-secondary-actions">
-        <Button onClick={() => void review("rejected")} disabled={busy}>驳回修改</Button>
+        <Button onClick={() => void review("rejected")} disabled={busy || !reviewReason.trim()}>驳回修改</Button>
         <Button variant="primary" onClick={() => void review("approved")} disabled={busy}>审核通过并生效</Button>
       </div>
     </Surface>}
