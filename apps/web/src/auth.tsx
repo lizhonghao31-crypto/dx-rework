@@ -140,7 +140,7 @@ export function AuthGate({
       mounted = false;
     };
   }, []);
-  if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在通过服务端核验钉钉组织与账号状态，请稍候。" />;
+  if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在确认钉钉组织与账号状态，请稍候。" />;
   if (state === "denied") return <LoginPage />;
   if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的达兴组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><Button onClick={() => void fetch(apiUrl("auth/logout"), { method: "POST", credentials: "include" }).then(() => window.location.assign(base))}>退出登录</Button></StatePage>;
   if (
@@ -248,14 +248,14 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
       cache: "no-store",
     });
     if (!session.ok) {
-      setMessage("扫码已通过，但登录会话未建立成功。请不要重新扫码，联系管理员检查会话 Cookie。 ");
+      setMessage("扫码已通过，但登录未完成。请联系管理员后重试。");
       return false;
     }
     resetQrStart();
     window.location.replace(base);
     return true;
   } catch {
-    setMessage("扫码结果未送达服务端，请检查网络后重新生成二维码。");
+    setMessage("扫码结果未送达，请检查网络后重新生成二维码。");
     return false;
   }
 }
@@ -388,4 +388,4 @@ export function QrRelayPage() {
   return <StatePage tone="info" title="正在完成扫码登录" detail={message} />;
 }
 
-export function DeniedPage() { return <StatePage tone="danger" title="无法进入系统" detail="达兴组织、在职或账号启用状态未通过服务端校验。如有疑问，请联系管理员。"><Button onClick={() => window.location.assign(base)}>返回登录</Button></StatePage>; }
+export function DeniedPage() { return <StatePage tone="danger" title="无法进入系统" detail="达兴组织、在职或账号启用状态未通过校验。如有疑问，请联系管理员。"><Button onClick={() => window.location.assign(base)}>返回登录</Button></StatePage>; }
