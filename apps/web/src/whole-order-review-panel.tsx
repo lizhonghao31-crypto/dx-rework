@@ -1,4 +1,9 @@
-import { WholeOrderReviewResponseSchema, type WholeOrderReviewResponse } from "@dx-rework/contracts";
+import {
+  TailInspectionResponseSchema,
+  WholeOrderReviewResponseSchema,
+  type TailInspectionResponse,
+  type WholeOrderReviewResponse,
+} from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -30,14 +35,19 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
 
 export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrderId: string; onChanged: () => Promise<void> }) {
   const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
+  const [tailData, setTailData] = useState<TailInspectionResponse | null>(null);
   const [message, setMessage] = useState("正在加载整单完成状态…");
   const [busy, setBusy] = useState(false);
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
   const attempts = useRef<Record<string, string>>({});
   const load = async () => {
-    const overview = await request("rework-orders/" + reworkOrderId + "/whole-order-review", WholeOrderReviewResponseSchema.parse);
+    const [overview, tail] = await Promise.all([
+      request("rework-orders/" + reworkOrderId + "/whole-order-review", WholeOrderReviewResponseSchema.parse),
+      request("rework-orders/" + reworkOrderId + "/tail-inspection", TailInspectionResponseSchema.parse),
+    ]);
     setData(overview);
+    setTailData(tail);
     setMultipliers((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
       const id = `${worker.configurationItemId}:${worker.personId}`;
       return [id, current[id] ?? String(worker.multiplier)];
@@ -49,7 +59,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     if (overview.reviewId) {
       setMessage("本单已完成整单确认并进入责任判定。");
     } else if (overview.reworkStatus === "pending_order_review") {
-      setMessage("请核对工人上数不超过尾查汇总；临时工可调整实发系数。");
+      setMessage("请核对工人上数不超过尾查汇总；数据有误可分别驳回工人或尾查重报。");
     } else if (overview.reworkStatus === "in_progress") {
       setMessage("工人上数与尾查报数均完成后进入整单确认。");
     } else {
@@ -98,6 +108,22 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完成记录驳回失败"); }
   };
 
+  const rejectTailInspection = async (assignmentId: string, inspectorName: string) => {
+    if (!data || data.reworkStatus !== "pending_order_review") return;
+    const reason = await promptInApp(`请填写驳回 ${inspectorName} 尾查报数的原因`);
+    if (!reason?.trim()) return;
+    try {
+      await call(
+        "tail-inspection-assignments/" + assignmentId + "/reject",
+        TailInspectionResponseSchema.parse,
+        { expectedOrderVersion: data.orderVersion, reason: reason.trim() },
+      );
+      setMessage(`已驳回 ${inspectorName} 的尾查报数；原记录保留，尾查可重新报数。`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "尾查报数驳回失败");
+    }
+  };
+
   const approve = async () => {
     if (!data) return;
     const coefficientRows = data.temporaryWorkers.map((worker) => {
@@ -130,6 +156,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   if (!data || ["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
 
   const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
+  const submittedTailAssignments = tailData?.assignments.filter((assignment) => assignment.submittedAt !== null) ?? [];
   const temporaryCoefficientRows = data.temporaryWorkers.map((worker) => {
     const id = `${worker.configurationItemId}:${worker.personId}`;
     return { text: multipliers[id]?.trim() ?? "", reason: multiplierReasons[id]?.trim() ?? "" };
@@ -153,7 +180,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
 
     <Surface>
       <h2>{data.reworkStatus === "pending_order_review" ? "工人上数与尾查汇总对照" : "并行报数状态"}</h2>
-      <p>{data.reworkStatus === "pending_order_review" ? "每道工序的工人有效上数不得超过尾查件数；超过时须驳回调整。" : "工人上数与尾查报数全部完成后进入整单确认。"}</p>
+      <p>{data.reworkStatus === "pending_order_review" ? "每道工序的工人有效上数不得超过尾查件数；任一侧报错都可驳回重报。" : "工人上数与尾查报数全部完成后进入整单确认。"}</p>
       {data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}>
         <div className="whole-order-process-main">
           <b className="whole-order-process-name">{process.processName}</b>
@@ -168,8 +195,8 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     </Surface>
 
     {(data.canReview || data.reports.length > 0) && <Surface>
-      <h2>完成记录与驳回</h2>
-      <p>记录有误时驳回；正常记录无需重复确认。</p>
+      <h2>工人上数记录</h2>
+      <p>工人上数有误时驳回；正常记录无需重复确认。</p>
       {data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}>
         <div className="whole-order-report-main">
           <b className="whole-order-person-name">{report.members.map((member) => member.displayName).join("、")}</b>
@@ -185,7 +212,25 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
             : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId)} disabled={busy}>驳回 {member.displayName}</Button>)}
         </div>}
       </div>)}
-      {data.reports.length === 0 && <p>尚无完成记录。</p>}
+      {data.reports.length === 0 && <p>尚无工人上数记录。</p>}
+    </Surface>}
+
+    {data.reworkStatus === "pending_order_review" && submittedTailAssignments.length > 0 && <Surface>
+      <h2>尾查报数记录</h2>
+      <p>尾查数量有误时驳回，原记录保留，尾查重新报数后自动回到本节点核对。</p>
+      {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>
+        <div className="whole-order-report-main">
+          <b className="whole-order-person-name">{assignment.tailInspectorName}</b>
+          <div className="whole-order-report-meta">
+            <span className="whole-order-report-label">返件总数</span>
+            <strong className="whole-order-report-value">{assignment.returnedQuantity ?? 0} 件</strong>
+            <span className="whole-order-report-state">当前有效</span>
+          </div>
+        </div>
+        {data.canReview && <div className="mobile-actions whole-order-actions">
+          <Button disabled={busy} onClick={() => void rejectTailInspection(assignment.assignmentId, assignment.tailInspectorName)}>驳回尾查</Button>
+        </div>}
+      </div>)}
     </Surface>}
 
     {data.canReview && data.reworkStatus === "pending_order_review" && data.temporaryWorkers.length > 0 && <Surface>
