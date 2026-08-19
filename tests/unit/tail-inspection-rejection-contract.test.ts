@@ -23,6 +23,16 @@ describe("N07 tail inspection rejection", () => {
     expect(panel).toContain("尾查可重新报数");
   });
 
+  it("keeps the rejection todo on the same assignment entity as its source event", async () => {
+    const service = await read("apps/api/src/rework/tail-inspection-service.ts");
+    const todoProjection = service.split('sourceAction: "rework.tail_inspection.reject"')[1]
+      ?.split("recipientUserId:")[0] ?? "";
+
+    expect(todoProjection).toContain('entityType: "rework_tail_inspection_assignment"');
+    expect(todoProjection).toContain("entityId: assignmentId");
+    expect(todoProjection).not.toContain('entityType: "rework_order"');
+  });
+
   it("does not disturb valid worker completion records when correcting N06", async () => {
     const service = await read("apps/api/src/rework/tail-inspection-service.ts");
     expect(service).not.toContain("UPDATE rework_work_reports");
