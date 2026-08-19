@@ -69,7 +69,8 @@ export class WageExportService {
     await this.db.query("SELECT access_authorized_actor_roles($1,'wage:export')", [actor.actorId]);
     const periodResult = await this.db.query<PeriodRow>(
       `SELECT period_month::text,status,original_total::text,locked_by,locked_at
-       FROM rework_wage_periods WHERE period_id=$1`,
+       FROM rework_wage_periods
+       WHERE period_id=$1 AND (status='locked' OR source_item_count>0)`,
       [periodId],
     );
     const period = first(periodResult.rows, "工资期间不存在");
@@ -137,7 +138,9 @@ export class WageExportService {
            ORDER BY confirmation.confirmed_at DESC,confirmation.confirmation_id DESC
            LIMIT 1
          ) coefficient ON true
-         WHERE item.period_id=$1 ORDER BY item.person_name_snapshot,item.created_at,item.wage_item_id`,
+         WHERE item.period_id=$1
+           AND item.invalidated_at IS NULL
+         ORDER BY item.person_name_snapshot,item.created_at,item.wage_item_id`,
         [periodId],
       );
 
