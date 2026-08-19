@@ -21,8 +21,9 @@ describe("rework initiation information architecture", () => {
     expect(detail).toContain("<ReworkInitiationForm");
     expect(detail).toContain('reworkOrderId={detail.reworkOrderId}');
     expect(detail).toContain('detail.status === "pending_process_configuration"');
-    expect(detail).toContain('? "initiation"');
+    expect(detail).toContain('const defaultSelectedNode = activeNode ?? "settlement_followup";');
     expect(detail).toContain("const selectedNode = selectedFromUrl");
+    expect(detail).not.toContain('detail.status === "pending_process_configuration" ? "initiation"');
     expect(shell).toContain(".app-shell > aside .primary-navigation");
   });
 
@@ -42,4 +43,3 @@ describe("rework initiation information architecture", () => {
     expect(admin).toContain('<header className="page-heading">');
   });
 });
-

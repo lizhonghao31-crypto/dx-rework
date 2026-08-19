@@ -50,6 +50,14 @@ describe("order detail information architecture", () => {
     expect(styles).toContain("flex: 0 0 126px");
   });
 
+  it("defaults to the real active node while preserving explicit historical node links", async () => {
+    const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
+    expect(detail).toContain('const defaultSelectedNode = activeNode ?? "settlement_followup";');
+    expect(detail).toContain("const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);");
+    expect(detail).not.toContain('detail.status === "pending_process_configuration" ? "initiation"');
+    expect(detail).toContain('embedded onOrderChanged={() => { void syncAfterNodeAction(); }}');
+  });
+
   it("keeps real workflow numbering and existing node workspaces instead of copying mock data", async () => {
     const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
     expect(detail).toContain('node("initiation", "01", "发起返工"');
