@@ -94,7 +94,7 @@ export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; lab
   pending_owner_signature: { node: "N08", label: "待老板确认签字" },
   // Only legacy records remain on this status. New orders complete their main
   // chain at N10 and keep actual deductions in the independent N11 ledger.
-  pending_responsibility_action: { node: "N-LEGACY", label: "旧责任处理" },
+  pending_responsibility_action: { node: "N-LEGACY", label: "责任结算中" },
   completed: { node: "N10", label: "订单已完成" },
   cancelled: { node: "N-C", label: "已取消" },
 };
