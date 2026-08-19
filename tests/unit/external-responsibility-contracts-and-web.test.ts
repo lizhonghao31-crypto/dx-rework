@@ -70,7 +70,7 @@ describe("PR-11 external responsibility contracts and mobile UI", () => {
     }).success).toBe(true);
   });
 
-  it("uses real uploads, server money, stable idempotency, UUID routes, refresh, and review-closure guards", async () => {
+  it("uses real uploads, exact server ledger rules, stable idempotency, UUID routes, and simplified finance actions", async () => {
     const [panel, uploader, uploadHelper, queue, app, css, migration17, migration18, migration19] = await Promise.all([
       readFile(new URL("../../apps/web/src/external-responsibility-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/external-evidence-uploader.tsx", import.meta.url), "utf8"),
@@ -85,7 +85,9 @@ describe("PR-11 external responsibility contracts and mobile UI", () => {
 
     expect(panel).toContain("ExternalResponsibilityBatchResponseSchema");
     expect(panel).toContain("ExternalEvidenceUploader");
-    expect(panel).toContain("remaining_difference_to_own_factory");
+    expect(panel).toContain("本次扣款金额");
+    expect(panel).toContain("重判责任");
+    expect(panel).toContain('recorded.remainingAmount === "0.00" && recorded.canClose');
     expect(panel).toContain("seededDeterminationId");
     expect(panel).toContain('"idempotency-key": mutationKey(signature)');
     expect(panel).toContain("pendingMutationKeys.current[signature]");
