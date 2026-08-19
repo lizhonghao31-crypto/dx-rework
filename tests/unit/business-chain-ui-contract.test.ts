@@ -167,14 +167,19 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).toContain('href: "/ui/admin"');
   });
 
-  it("prevalidates N11 supplier deduction and unresolved-difference closure inputs", async () => {
+  it("prevalidates the simple supplier deduction and auto-closes when cumulative deduction reaches the target", async () => {
     const source = await readFile(
       "apps/web/src/external-responsibility-panel.tsx",
       "utf8",
     );
-    expect(source).toContain("请先填写大于 0、最多两位小数的实际扣款金额");
-    expect(source).toContain("部分扣款或未扣成功关闭必须先上传扣款结果证据");
-    expect(source).toContain("部分扣款或未扣成功关闭必须填写剩余差额最终处理方式");
+    expect(source).toContain("本次扣款金额必须大于 0，最多两位小数");
+    expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(source).toContain('recorded.remainingAmount === "0.00" && recorded.canClose');
+    expect(source).toContain("await closeFull(recorded)");
+    expect(source).toContain("<ExternalEvidenceUploader");
+    expect(source).toContain("重判责任");
+    expect(source).not.toContain("按部分关闭");
+    expect(source).not.toContain("登记未扣成功");
   });
 
   it("keeps responsibility and external-settlement queues linked to the actual order detail", async () => {
