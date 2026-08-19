@@ -74,4 +74,23 @@ describe("system dialog automation contract", () => {
     expect(detailCss).toContain(".rework-image-modal__content");
     expect(detailCss).toContain("box-shadow: 0 20px 52px");
   });
+
+  it("applies one explicit high-contrast visual boundary contract to every dialog variant", async () => {
+    const [main, visual] = await Promise.all([
+      readFile("apps/web/src/main.tsx", "utf8"),
+      readFile("apps/web/src/dialog-visual-system.css", "utf8"),
+    ]);
+
+    expect(main).toContain('import "./dialog-visual-system.css";');
+    expect(visual).toContain("--dx-dialog-border: #8195a6;");
+    expect(visual).toContain("--dx-dialog-field-border: #8fa2b3;");
+    expect(visual).toContain(".system-dialog.system-dialog");
+    expect(visual).toContain(".work-reporting-dialog.work-reporting-dialog");
+    expect(visual).toContain(".rework-image-modal .rework-image-modal__content");
+    expect(visual).toContain(".work-reporting-dialog .dx-field__control");
+    expect(visual).toContain(".system-dialog .system-dialog__actions .dx-button--secondary");
+    expect(visual).toContain(".rework-image-modal .rework-image-modal__heading button");
+    expect(visual).toContain("z-index: 1000;");
+    expect(visual).toContain("border: 1px solid var(--dx-dialog-border);");
+  });
 });
