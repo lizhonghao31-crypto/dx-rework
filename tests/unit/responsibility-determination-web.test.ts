@@ -37,8 +37,8 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("setPrimaryResponsibility");
     expect(source).toContain('sharePercent: "100"');
     expect(source).toContain("共同责任记录 / 修改说明（可选）");
-    expect(source).toContain("每道工序只选一个责任方");
-    expect(source).toContain("外部扣款倍率（默认且最低 1.2）");
+    expect(source).toContain("每道工序选择一个责任方");
+    expect(source).toContain("外部扣款倍率（最低 1.2）");
   });
 
   it("does not hardcode or calculate responsibility money in the browser", async () => {
