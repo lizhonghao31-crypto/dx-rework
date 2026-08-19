@@ -17,7 +17,6 @@ import type {
   ExternalResponsibilityCaseResponse,
 } from "@dx-rework/contracts/external-responsibility";
 import type {
-  WageAdjustment,
   WagePeriod,
   WagePeriodDetail,
 } from "@dx-rework/contracts/wages";
@@ -586,10 +585,10 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     });
   }
 
-  async function runWages(pass: 1 | 2, fixture: PassFixture): Promise<void> {
-    let periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
+  async function runWages(fixture: PassFixture): Promise<void> {
+    const periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
     expect(periods).toHaveLength(1);
-    let period = periods[0]!;
+    const period = periods[0]!;
     expect(period.status).toBe("ready_to_lock");
     let detail = await http<WagePeriodDetail>(
       fixture.app,
@@ -597,36 +596,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       `/wage-periods/${period.periodId}`,
     );
     expect(detail.items.length).toBeGreaterThan(0);
-
-    if (pass === 2) {
-      const adjustment = await http<WageAdjustment>(
-        fixture.app,
-        "POST",
-        "/wage-adjustments",
-        {
-          originalWageItemId: detail.items[0]!.wageItemId,
-          targetPeriodId: period.periodId,
-          adjustmentAmount: "0.01",
-          reason: "Root 第二遍：自己发起工资调整",
-          attachmentIds: [],
-          expectedVersion: period.periodVersion,
-        },
-      );
-      const approved = await http<WageAdjustment>(
-        fixture.app,
-        "POST",
-        `/wage-adjustments/${adjustment.adjustmentId}/approve`,
-        {
-          expectedVersion: adjustment.version,
-          reason: "Root 第二遍：自己审批工资调整",
-        },
-      );
-      expect(approved.status).toBe("approved");
-      periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
-      period = periods[0]!;
-      expect(period.adjustmentTotal).toBe("0.01");
-      expect(period.status).toBe("ready_to_lock");
-    }
+    expect(period.totalAmount).toBe(
+      detail.items.reduce((sum, item) => sum + Number(item.payableAmount), 0).toFixed(2),
+    );
+    expect(detail).not.toHaveProperty("adjustments");
+    expect(detail).not.toHaveProperty("reviewActions");
 
     // This is a real accounting rule, not an identity restriction. Root must
     // still be blocked from locking the current natural month early.
@@ -824,7 +798,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         [draft.reworkOrderId],
       )).rows[0]?.status).toBe("completed");
 
-      await runWages(pass, fixture);
+      await runWages(fixture);
       await assertReconciliation(fixture, draft.reworkOrderId);
 
       const rootRoles = await fixture.database.query(
