@@ -623,6 +623,9 @@ export function ReworkDetailPage({
               <div><h2>订单流程</h2></div>
               <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
             </div>
+            <div className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
+              {workflowNodes.map(renderWorkflowNode)}
+            </div>
             <div className="rework-workflow__stages rework-workflow__desktop-stages">
               {stages.map((stage) => {
                 const state = stageState(stage);
