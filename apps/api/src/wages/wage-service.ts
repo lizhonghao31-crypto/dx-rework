@@ -135,7 +135,9 @@ export class WageService {
       `SELECT period_id,period_month::text,timezone,status,period_version,
               source_item_count,person_count,original_total::text,
               locked_by,locked_at,lock_note
-       FROM rework_wage_periods ORDER BY period_month DESC`,
+       FROM rework_wage_periods
+       WHERE status='locked' OR source_item_count>0
+       ORDER BY period_month DESC`,
     );
     return result.rows.map((row) => this.periodDto(row, permissions));
   }
@@ -148,7 +150,8 @@ export class WageService {
         `SELECT period_id,period_month::text,timezone,status,period_version,
                 source_item_count,person_count,original_total::text,
                 locked_by,locked_at,lock_note
-         FROM rework_wage_periods WHERE period_id=$1`,
+         FROM rework_wage_periods
+         WHERE period_id=$1 AND (status='locked' OR source_item_count>0)`,
         [periodId],
       ),
       this.db.query<ItemRow>(
@@ -238,7 +241,8 @@ export class WageService {
            style_no_snapshot,process_name_snapshot,actual_quantity_snapshot,
            pricing_unit_snapshot,unit_price_snapshot,assignment_mode,member_snapshot,
            payable_amount,0,payable_amount
-         FROM rework_wage_items WHERE period_id=$1`,
+         FROM rework_wage_items
+         WHERE period_id=$1 AND invalidated_at IS NULL`,
         [periodId, closureId],
       );
       await client.query(
@@ -358,7 +362,9 @@ export class WageService {
       item.group_amount::text,item.exact_person_share::text,item.payable_amount::text,
       item.fractional_remainder::text,item.remainder_rank,item.member_count,item.member_snapshot
       FROM rework_wage_items item
-      JOIN rework_orders orders ON orders.rework_order_id=item.rework_order_id
+      JOIN rework_orders orders
+        ON orders.rework_order_id=item.rework_order_id
+       AND item.invalidated_at IS NULL
       LEFT JOIN current_supplier_catalog supplier
         ON supplier.supplier_id=orders.processing_factory_supplier_id
       LEFT JOIN LATERAL (
