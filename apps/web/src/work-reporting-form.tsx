@@ -151,6 +151,11 @@ export function WorkReportingForm({
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
   const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;
   const allProcessesAssigned = configItems.length > 0 && configItems.every((item) => data?.tasks.some((task) => task.configurationItemId === item.configurationItemId));
+  const selectedPeopleCount = people.filter((person) => selected[person.personId]).length;
+  const reportsReady = Boolean(reportTasks?.length && reportTasks.every((task) => {
+    const text = reportQuantities[task.workTaskId]?.trim() ?? "";
+    return /^\d+$/.test(text) && Number(text) > 0;
+  }));
 
   if (effectiveTaskMode === "whole_order_review") return <div className="mobile-page work-reporting-page">
     {!reviewEligible && <Surface>{message}</Surface>}
@@ -166,7 +171,8 @@ export function WorkReportingForm({
         <InsetField label="搜索返工人员" type="search" value={peopleQuery} placeholder="输入姓名，或搜索“临时工”" disabled={busy} onChange={(event) => setPeopleQuery(event.target.value)} />
         {filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName} · {person.personType === "temporary" ? "临时工（主管代录）" : "内部人员"}</label>)}
         {people.length === 0 && <p>当前没有可分配的人员；请先维护人员资料或工人权限。</p>}
-        <div className="mobile-actions work-reporting-actions">{configItems.map((item) => <Button key={item.configurationItemId} onClick={() => void assign(item.configurationItemId)} disabled={busy}>分配 {item.processName}</Button>)}</div>
+        {selectedPeopleCount === 0 && people.length > 0 && <p>先选择至少一名返工人员，再分配到对应工序。</p>}
+        <div className="mobile-actions work-reporting-actions">{configItems.map((item) => <Button key={item.configurationItemId} onClick={() => void assign(item.configurationItemId)} disabled={busy || selectedPeopleCount === 0}>分配 {item.processName}</Button>)}</div>
         <Button variant="primary" onClick={() => void confirmAssignments()} disabled={busy || !allProcessesAssigned}>{busy ? "处理中…" : "完成分配，开始返工"}</Button>
         {!allProcessesAssigned && configItems.length > 0 && <p>每道工序至少分配一名人员后才能开始返工。</p>}
       </Surface>}
@@ -176,6 +182,6 @@ export function WorkReportingForm({
       {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "Root 代上数" : canAssign ? "临时工代上数" : "我已返工完成"}</h2><p>{isRoot ? "可代为任意返工人员录入最终数量，供 Root 验收与纠错使用。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为完工上数" : canAssign ? "临时工完工上数" : "我已完工&上数"}</Button></Surface>}
       {data?.tasks.length === 0 && <Surface>当前暂无返工任务。</Surface>}
     </>}
-    {reportTasks && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="工人完工上数"><h2>{isRoot ? "请输入代上数的实际件数" : canAssign ? "请输入临时工的实际件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
+    {reportTasks && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="工人完工上数"><h2>{isRoot ? "请输入代上数的实际件数" : canAssign ? "请输入临时工的实际件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;
 }
