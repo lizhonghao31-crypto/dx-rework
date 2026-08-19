@@ -42,7 +42,7 @@ describe("whole-order review contracts", () => {
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/migrations/0065_ie_pricing_before_assignment.sql", import.meta.url), "utf8"),
     ]);
-    expect(panel).toContain("N03 IE 核准单价");
+    expect(panel).toContain("data.processes.every((process) => process.finalUnitPrice !== null)");
     expect(panel).toContain("临时工实发系数");
     expect(panel).toContain("确认整单并进入责任判定");
     expect(panel).toContain("工人上数与尾查汇总对照");
