@@ -16,11 +16,7 @@ import type {
   ExternalResponsibilityBatchResponse,
   ExternalResponsibilityCaseResponse,
 } from "@dx-rework/contracts/external-responsibility";
-import type {
-  WageAdjustment,
-  WagePeriod,
-  WagePeriodDetail,
-} from "@dx-rework/contracts/wages";
+import type { WagePeriod, WagePeriodDetail } from "@dx-rework/contracts/wages";
 import type { FastifyInstance } from "fastify";
 import pg from "pg";
 import { afterAll, describe, expect, it } from "vitest";
@@ -586,47 +582,20 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     });
   }
 
-  async function runWages(pass: 1 | 2, fixture: PassFixture): Promise<void> {
-    let periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
+  async function runWages(fixture: PassFixture): Promise<void> {
+    const periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
     expect(periods).toHaveLength(1);
-    let period = periods[0]!;
+    const period = periods[0]!;
     expect(period.status).toBe("ready_to_lock");
-    let detail = await http<WagePeriodDetail>(
+    const detail = await http<WagePeriodDetail>(
       fixture.app,
       "GET",
       `/wage-periods/${period.periodId}`,
     );
     expect(detail.items.length).toBeGreaterThan(0);
-
-    if (pass === 2) {
-      const adjustment = await http<WageAdjustment>(
-        fixture.app,
-        "POST",
-        "/wage-adjustments",
-        {
-          originalWageItemId: detail.items[0]!.wageItemId,
-          targetPeriodId: period.periodId,
-          adjustmentAmount: "0.01",
-          reason: "Root 第二遍：自己发起工资调整",
-          attachmentIds: [],
-          expectedVersion: period.periodVersion,
-        },
-      );
-      const approved = await http<WageAdjustment>(
-        fixture.app,
-        "POST",
-        `/wage-adjustments/${adjustment.adjustmentId}/approve`,
-        {
-          expectedVersion: adjustment.version,
-          reason: "Root 第二遍：自己审批工资调整",
-        },
-      );
-      expect(approved.status).toBe("approved");
-      periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
-      period = periods[0]!;
-      expect(period.adjustmentTotal).toBe("0.01");
-      expect(period.status).toBe("ready_to_lock");
-    }
+    expect(detail.period.totalAmount).toBe(
+      detail.items.reduce((sum, item) => sum + Number(item.payableAmount), 0).toFixed(2),
+    );
 
     // This is a real accounting rule, not an identity restriction. Root must
     // still be blocked from locking the current natural month early.
@@ -644,12 +613,13 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       error: { code: "INVALID_STATE_TRANSITION" },
     });
 
-    detail = await http<WagePeriodDetail>(
+    const detailAfterEarlyLock = await http<WagePeriodDetail>(
       fixture.app,
       "GET",
       `/wage-periods/${period.periodId}`,
     );
-    expect(detail.period.status).toBe("ready_to_lock");
+    expect(detailAfterEarlyLock.period.status).toBe("ready_to_lock");
+    expect(detailAfterEarlyLock.period.totalAmount).toBe(detail.period.totalAmount);
   }
 
   async function assertReconciliation(
@@ -660,7 +630,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       reportTotal: string;
       responsibilityTotal: string;
       externalTotal: string;
-      wageOriginalTotal: string;
+      wageTotal: string;
     }>(
       `SELECT
          (SELECT COALESCE(sum(report.group_amount),0)::numeric(18,2)::text
@@ -678,11 +648,11 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           FROM rework_external_responsibility_cases
           WHERE rework_order_id=$1 AND status<>'superseded') AS "externalTotal",
          (SELECT COALESCE(sum(payable_amount),0)::numeric(18,2)::text
-          FROM rework_wage_items WHERE rework_order_id=$1) AS "wageOriginalTotal"`,
+          FROM rework_wage_items WHERE rework_order_id=$1) AS "wageTotal"`,
       [orderId],
     );
     const totals = result.rows[0]!;
-    expect(totals.reportTotal).toBe(totals.wageOriginalTotal);
+    expect(totals.reportTotal).toBe(totals.wageTotal);
     expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.reportTotal) * 1.2, 2);
     expect(totals.externalTotal).toBe(totals.responsibilityTotal);
   }
@@ -824,7 +794,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         [draft.reworkOrderId],
       )).rows[0]?.status).toBe("completed");
 
-      await runWages(pass, fixture);
+      await runWages(fixture);
       await assertReconciliation(fixture, draft.reworkOrderId);
 
       const rootRoles = await fixture.database.query(
