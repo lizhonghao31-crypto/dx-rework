@@ -604,6 +604,8 @@ export function ExternalResponsibilityPanel({
     ? batch.cases.filter((caseItem) => caseItem.caseId === focusCaseId)
     : batch.cases;
   const visibleUnassigned = readOnly || focusCaseId ? [] : unassigned;
+  const supplierAllocationReady = visibleUnassigned.length > 0
+    && visibleUnassigned.every((item) => Boolean(selection[item.externalItemId]));
   if (focusCaseId && visibleCases.length === 0) {
     return <Surface className="external-state">该供应商扣款任务不在当前有效台账中。</Surface>;
   }
@@ -630,6 +632,7 @@ export function ExternalResponsibilityPanel({
             const matchingSuppliers = suppliers.filter(
               (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
             );
+            const temporaryNameReady = Boolean(temporarySupplierName[item.responsibilityType]?.trim());
             return (
               <div className="external-operation-grid" key={item.externalItemId}>
                 <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 服务端拟扣 ¥{item.proposedAmount}</span>
@@ -660,7 +663,7 @@ export function ExternalResponsibilityPanel({
                       }))}
                       placeholder="名录中暂无可选项时，在此临时新增"
                     />
-                    <Button disabled={busy} onClick={() => void createTemporarySupplier(item)}>
+                    <Button disabled={busy || !temporaryNameReady} onClick={() => void createTemporarySupplier(item)}>
                       新增并选择
                     </Button>
                     <small>新增后保留在供应商名录，供后续返工和扣款复用。</small>
@@ -677,7 +680,8 @@ export function ExternalResponsibilityPanel({
               placeholder="仅当实际拟扣加工厂不同于返工单加工厂时必填"
             />
           )}
-          <Button variant="primary" disabled={busy} onClick={() => void allocate()}>锁定供应商与拟扣台账</Button>
+          {!supplierAllocationReady && <p role="status">还需完成：为每个外部责任项目选择实际拟扣供应商。</p>}
+          <Button variant="primary" disabled={busy || !supplierAllocationReady} onClick={() => void allocate()}>锁定供应商与拟扣台账</Button>
         </section>
       )}
 
@@ -689,6 +693,20 @@ export function ExternalResponsibilityPanel({
         {visibleCases.map((caseItem) => {
           const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
           const evidence = attachments[caseItem.caseId] ?? [];
+          const note = remark[caseItem.caseId]?.trim() ?? "";
+          const disposition = differenceDisposition[caseItem.caseId]?.trim() ?? "";
+          const nextValue = nextFollowUpAt[caseItem.caseId]?.trim() ?? "";
+          const nextFollowUpReady = !nextValue || (() => {
+            const nextDate = new Date(nextValue);
+            return !Number.isNaN(nextDate.getTime()) && nextDate.getTime() > Date.now();
+          })();
+          const deductionAmount = amount[caseItem.caseId]?.trim() ?? "";
+          const deductionDate = deductedOn[caseItem.caseId] ?? shanghaiBusinessDate();
+          const deductionReady = /^\d+(?:\.\d{1,2})?$/.test(deductionAmount)
+            && Number(deductionAmount) > 0
+            && /^\d{4}-\d{2}-\d{2}$/.test(deductionDate)
+            && deductionDate <= shanghaiBusinessDate();
+          const closeWithDifferenceReady = Boolean(note && evidence.length > 0 && disposition);
           const canSign = !readOnly && caseItem.canSign;
           const canPayablesConfirm = !readOnly && caseItem.canPayablesConfirm;
           const canFollowUp = !readOnly && caseItem.canFollowUp;
@@ -740,16 +758,16 @@ export function ExternalResponsibilityPanel({
                   </Button>
                 )}
                 {canPayablesConfirm && (
-                  <Button disabled={busy} onClick={() => void operation(caseItem, "return")}>退回资料问题</Button>
+                  <Button disabled={busy || !note} onClick={() => void operation(caseItem, "return")}>退回资料问题</Button>
                 )}
-                {canFollowUp && <Button disabled={busy} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
-                {canRecordDeduction && <Button variant="primary" disabled={busy} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
+                {canFollowUp && <Button disabled={busy || !note || !nextFollowUpReady} onClick={() => void operation(caseItem, "follow")}>新增跟进</Button>}
+                {canRecordDeduction && <Button variant="primary" disabled={busy || !deductionReady} onClick={() => void operation(caseItem, "deduct")}>记录实际扣款</Button>}
                 {canClose && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "close-full")}>按全额关闭</Button>
-                  <Button disabled={busy} onClick={() => void operation(caseItem, "close-partial")}>按部分关闭</Button>
-                  <Button disabled={busy} onClick={() => void operation(caseItem, "close-none")}>登记未扣成功</Button>
+                  <Button disabled={busy || !closeWithDifferenceReady} onClick={() => void operation(caseItem, "close-partial")}>按部分关闭</Button>
+                  <Button disabled={busy || !closeWithDifferenceReady} onClick={() => void operation(caseItem, "close-none")}>登记未扣成功</Button>
                 </>}
-                {canRequestRevision && <Button disabled={busy} onClick={() => void operation(caseItem, "revision")}>申请责任变更</Button>}
+                {canRequestRevision && <Button disabled={busy || !note} onClick={() => void operation(caseItem, "revision")}>申请责任变更</Button>}
                 {canApproveRevision && pendingRevision && <>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "revision-approve")}>通过责任变更</Button>
                   <Button disabled={busy} onClick={() => void operation(caseItem, "revision-reject")}>驳回责任变更</Button>
@@ -777,6 +795,7 @@ export function ExternalResponsibilityPanel({
                     onChange={(event) => setNextFollowUpAt((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                   />
                   <small>设置下次跟进时间后，如到期仍没有新的跟进记录，外部扣款队列会提示逾期。</small>
+                  {nextValue && !nextFollowUpReady && <small role="status">下次跟进时间必须晚于当前时间。</small>}
                 </>}
                 {canEditDisposition && <InsetField
                   label="未扣差额最终处理"
@@ -820,6 +839,7 @@ export function ExternalResponsibilityPanel({
                     onChange={(event) => setDeductionReference((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
                     placeholder="例如：付款单号、对账单号或银行流水号"
                   />
+                  {!deductionReady && <small role="status">记录实际扣款前，请填写大于 0、最多两位小数的金额和不晚于今天的有效日期。</small>}
                 </>}
                 {canAttachEvidence && <ExternalEvidenceUploader
                   attachmentIds={evidence}
