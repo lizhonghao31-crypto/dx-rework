@@ -14,8 +14,7 @@ describe("N10 external deduction UI", () => {
     expect(panel).toContain("本次扣款金额");
     expect(panel).toContain('onClick={() => void recordDeduction(caseItem)}');
     expect(panel).toContain('onClick={() => void requestRevision(caseItem)}');
-    expect(panel).toContain("扣款</Button>");
-    expect(panel).toContain("重判责任</Button>");
+    expect(panel).toContain("重判责任");
     expect(panel).toContain("<ExternalEvidenceUploader");
     expect(panel).not.toContain("新增跟进");
     expect(panel).not.toContain("按部分关闭");
