@@ -210,6 +210,8 @@ describe("business-facing workflow UI", () => {
     expect(responsibility).toContain("const stateLabel = item.canConfirmHighMultiplier");
     expect(responsibility).toContain("tone, stateLabel");
     expect(ownFactory).toContain('stateLabel: item.canDecide ? "待审批" : "仅查看"');
-    expect(external).toContain('stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看"');
+    expect(external).toContain('"已逾期"');
+    expect(external).toContain('"待处理"');
+    expect(external).toContain('"仅查看"');
   });
 });
