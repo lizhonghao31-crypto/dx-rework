@@ -73,6 +73,7 @@ describe("zero-role Root UI entry contract", () => {
     }
     expect(source).not.toContain('name: "返工上数"');
     expect(source).not.toContain('step: "');
+    expect(source).not.toContain('...(isRoot ? ["超级用户"] : [])');
   });
 
   it("does not mask Root workflow actions behind ordinary-role-only UI gates", async () => {
@@ -88,9 +89,9 @@ describe("zero-role Root UI entry contract", () => {
 
     expect(process).toContain("user?.isRoot === true");
     expect(work).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
-    expect(work).toContain('isRoot ? "Root 代上数"');
-    expect(tail).toContain('isRoot ? "Root 代报尾查数量"');
-    expect(tail).toContain('isRoot ? "Root 可代报"');
+    expect(work).toContain('isRoot ? "代上数"');
+    expect(tail).toContain('isRoot ? "可代报"');
+    expect(tail).toContain('isRoot ? `代 ${actionableAssignment.tailInspectorName} 填写本次清点`');
     expect(detail).toContain("isRoot={currentUser?.isRoot === true}");
     expect(review).toContain("data.canReview");
     expect(review).toContain("data.processes.every((process) => process.complete)");

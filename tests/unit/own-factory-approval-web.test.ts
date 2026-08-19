@@ -34,9 +34,9 @@ describe("own-factory approval web integration", () => {
     expect(source).not.toMatch(/ownFactoryTotalAmount\s*[/+*-]/);
   });
 
-  it("describes outbox notification intent without claiming delivery", async () => {
+  it("keeps notification transport details out of the business UI", async () => {
     const source = await readFile(panelUrl, "utf8");
-    expect(source).toContain("结果知会已进入发送队列");
+    expect(source).not.toContain("发送队列");
     expect(source).not.toContain("已收到一次结果通知");
   });
 

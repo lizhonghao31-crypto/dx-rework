@@ -68,13 +68,13 @@ export function ResponsibilityQueuePage() {
     <Shell active="责任处理">
       <Header
         title="待责任判定"
-        subtitle="订单完成 N07 整单确认后自动出现在这里；责任提交完成后自动离开本队列"
-        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"}
+        subtitle="订单完成整单确认后进入这里；责任提交完成后自动离开当前队列"
+        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"}
       />
       <Surface className="responsibility-queue-summary">
         <div>
           <h2>责任处理工作台</h2>
-          <p>谁来处理：有判责、接管或独立确认权限的人；完成后流向 N09 老板签字。</p>
+          <p>处理责任方、供应商及外部扣款倍率，完成后提交老板签字。</p>
         </div>
         <StatusBadge tone="info">N08 · 待判责</StatusBadge>
       </Surface>
@@ -93,7 +93,7 @@ export function ResponsibilityQueuePage() {
                 ? "高倍率待你独立确认"
                 : "高倍率待独立确认"
               : item.determinationStage === "draft"
-                ? `责任草稿 V${item.determinationVersion}`
+                ? "责任草稿待处理"
                 : "待创建责任草稿";
             const permission = item.canConfirmHighMultiplier
               ? "可独立确认高倍率"

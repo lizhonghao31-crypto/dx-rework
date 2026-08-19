@@ -167,18 +167,18 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   if (!detail) {
     return (
       <div className="wage-page">
-        <header className="page-heading"><div><h1>工资详情</h1><p>正在读取工资期间与对应返工工资明细。</p></div></header>
-        <Surface><p>{message || "正在加载工资期间…"}</p></Surface>
+        <header className="page-heading"><div><h1>工资详情</h1></div></header>
+        <Surface><p>{message || "正在加载工资明细…"}</p></Surface>
       </div>
     );
   }
   const { period, items, adjustments, reviewActions } = detail;
   const statusLabel = period.status === "pending_tail_review"
-    ? "待当前有效尾部主管初核"
+    ? "待尾部初核"
     : period.status === "pending_admin_review"
-      ? "待当前有效行政复核角色复核"
+      ? "待行政复核"
       : period.status === "ready_to_lock"
-        ? "待当前有效月结角色处理"
+        ? "待月结"
         : "已锁定";
 
   return (
@@ -186,7 +186,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       <header className="page-heading">
         <div>
           <h1>返工工资核对</h1>
-          <p>工资期间：{period.periodMonth.slice(0, 7)} · N10 订单完成与后续结算</p>
+          <p>工资期间：{period.periodMonth.slice(0, 7)}</p>
         </div>
         <StatusBadge tone={period.status === "locked" ? "success" : "info"}>
           {statusLabel}

@@ -17,7 +17,7 @@ describe("N08-B/N10-B external responsibility UI safety", () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
 
     expect(source).toContain("revisionToOwnFactory[caseItem.caseId] === true");
-    expect(source).toContain("将未扣差额转为本厂承担，并进入 N07 重新判责");
+    expect(source).toContain("将未扣差额转为本厂承担，并进入 N08 重新判责");
     expect(source).not.toContain('includes("本厂")');
   });
 
@@ -25,8 +25,8 @@ describe("N08-B/N10-B external responsibility UI safety", () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
 
     expect(source).toContain('kind.startsWith("close")');
-    expect(source).toContain("关闭后本条扣款台账进入终局状态");
-    expect(source).toContain("确认通过责任变更？通过后会生成新的 N07 判责草稿");
+    expect(source).toContain("关闭后如需改责任，必须通过责任变更重新进入 N08");
+    expect(source).toContain("确认通过责任变更？通过后会生成新的 N08 责任判定草稿，并重新进入后续处理。");
     expect(source).toContain("await confirmInApp");
     expect(source).not.toContain("window.confirm");
   });

@@ -10,7 +10,7 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   pending_quantity_adjustment_ie_review: "数量调整待 IE 审核",
   pending_responsibility_determination: "责任判定与资料核验",
   pending_owner_signature: "待老板确认签字",
-  pending_responsibility_action: "旧责任处理",
+  pending_responsibility_action: "责任结算中",
   completed: "订单已完成",
   cancelled: "已取消",
   deleted: "已删除",

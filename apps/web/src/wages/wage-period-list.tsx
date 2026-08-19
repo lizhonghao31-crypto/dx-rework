@@ -18,9 +18,9 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const PeriodListSchema = z.array(WagePeriodSchema);
 
 const statusLabel: Record<WagePeriod["status"], string> = {
-  pending_tail_review: "待当前有效尾部主管初核",
-  pending_admin_review: "待当前有效行政复核角色复核",
-  ready_to_lock: "待当前有效月结角色处理",
+  pending_tail_review: "待尾部初核",
+  pending_admin_review: "待行政复核",
+  ready_to_lock: "待月结",
   locked: "已锁定",
 };
 
@@ -144,7 +144,7 @@ export function WagePeriodList() {
       <header className="page-heading">
         <div>
           <h1>工资管理</h1>
-          <p>按工人、返工单、款号和期间交叉查询；金额直接读取服务端工资事实。</p>
+          <p>按工人、返工单、款号和期间交叉查询。</p>
         </div>
       </header>
 

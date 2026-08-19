@@ -42,7 +42,7 @@ const bpsToPercent = (value: number): string => {
 };
 
 const reviewSnapshotSummary = (snapshot: unknown): string => {
-  if (!snapshot || typeof snapshot !== "object") return "整单审核快照已锁定";
+  if (!snapshot || typeof snapshot !== "object") return "整单审核记录已保留";
   const source = snapshot as {
     processes?: unknown;
     reports?: Array<{ members?: unknown }>;
@@ -53,7 +53,7 @@ const reviewSnapshotSummary = (snapshot: unknown): string => {
     (total, report) => total + (Array.isArray(report.members) ? report.members.length : 0),
     0,
   );
-  return `已锁定 ${processes} 道工序、${reports.length} 条上数、${members} 位成员快照`;
+  return `${processes} 道工序 · ${reports.length} 条上数 · ${members} 位成员`;
 };
 
 export function OwnFactoryApprovalPanel({
@@ -152,7 +152,7 @@ export function OwnFactoryApprovalPanel({
       delete pendingDecisionKeys.current[signature];
       setState({ kind: "ready", value: next });
       setOpinion("");
-      setMessage(decision === "approved" ? "审批已通过，另一位老板的结果知会已进入发送队列。" : "已驳回并退回 N07；另一位老板的结果知会已进入发送队列。请形成新的责任版本后重新发起审批。");
+      setMessage(decision === "approved" ? "审批已通过。" : "已驳回并退回责任判定，请重新判责后发起审批。");
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "审批操作失败");
     } finally {
@@ -162,7 +162,7 @@ export function OwnFactoryApprovalPanel({
 
   if (state.kind === "hidden") return null;
   if (state.kind === "loading") {
-    return <Surface className="own-factory-approval-state">正在核验本厂承担审批权限…</Surface>;
+    return <Surface className="own-factory-approval-state">正在加载审批…</Surface>;
   }
   if (state.kind === "unavailable") {
     return <Surface className="own-factory-approval-state">{state.message}</Surface>;
@@ -173,7 +173,7 @@ export function OwnFactoryApprovalPanel({
   if (!approval) {
     return (
       <Surface className="own-factory-approval-state">
-        当前正式责任版本没有本厂承担金额，因此不创建 N08-A 审批。
+        本单没有本厂承担金额，无需审批。
       </Surface>
     );
   }
@@ -185,9 +185,7 @@ export function OwnFactoryApprovalPanel({
       <div className="section-title own-factory-approval-heading">
         <div>
           <h2>本厂承担审批</h2>
-          <p>
-            N08-A · 锁定责任正式版本 V{approval.finalizedDeterminationVersion}，金额和工人快照均由服务端保存。
-          </p>
+          <p>核对本厂承担金额与工人明细后审批。</p>
         </div>
         <StatusBadge tone={decisionTone}>
           {approval.status === "pending" ? "待审批" : approval.status === "approved" ? "已通过" : "已驳回"}
@@ -202,14 +200,14 @@ export function OwnFactoryApprovalPanel({
       </div>
 
       <section className="own-factory-approval-section">
-        <h3>QC 与整单审核来源</h3>
-        <p>QC 发起记录 · {formatBusinessTime(approval.sourceSnapshot.qualityControl.initiatedAt)}</p>
-        <p>整单审核记录 · {formatBusinessTime(approval.sourceSnapshot.wholeOrderReview.reviewedAt)}</p>
+        <h3>审核来源</h3>
+        <p>QC 发起 · {formatBusinessTime(approval.sourceSnapshot.qualityControl.initiatedAt)}</p>
+        <p>整单确认 · {formatBusinessTime(approval.sourceSnapshot.wholeOrderReview.reviewedAt)}</p>
         <small>{reviewSnapshotSummary(approval.sourceSnapshot.wholeOrderReview.reviewSnapshot)}</small>
       </section>
 
       <section className="own-factory-approval-section">
-        <h3>锁定工序与责任金额</h3>
+        <h3>工序与责任金额</h3>
         <div className="own-factory-processes">
           {approval.sourceSnapshot.processes.map((process) => (
             <div key={process.configurationItemId}>
@@ -222,7 +220,7 @@ export function OwnFactoryApprovalPanel({
       </section>
 
       <section className="own-factory-approval-section">
-        <h3>工人上数快照</h3>
+        <h3>工人上数明细</h3>
         <div className="own-factory-amount-lines">
           {approval.sourceSnapshot.amountLines.map((line) => (
             <div key={`${line.workReportId}:${line.personId}`}>
@@ -236,14 +234,14 @@ export function OwnFactoryApprovalPanel({
 
       {approval.sourceSnapshot.finalizedDetermination.highMultiplierConfirmation && (
         <section className="own-factory-approval-section">
-          <h3>高倍率独立确认</h3>
-          <p>已锁定确认记录：{approval.sourceSnapshot.finalizedDetermination.highMultiplierConfirmation.reason}</p>
+          <h3>高倍率确认</h3>
+          <p>{approval.sourceSnapshot.finalizedDetermination.highMultiplierConfirmation.reason}</p>
         </section>
       )}
 
       {approval.decision && (
         <section className="own-factory-approval-section own-factory-decision">
-          <h3>终局决定</h3>
+          <h3>审批结果</h3>
           <p>
             {approval.decision.decision === "approved" ? "通过" : "驳回"} · {formatBusinessTime(approval.decision.decidedAt)}
             {approval.decision.opinion ? ` · ${approval.decision.opinion}` : ""}
@@ -266,7 +264,7 @@ export function OwnFactoryApprovalPanel({
           </div>
         </div>
       )}
-      {pending && !value.canDecide && <StatusBadge tone="info">当前仅可查看；终局审批由直接有效老板或有效订单范围代理执行。</StatusBadge>}
+      {pending && !value.canDecide && <StatusBadge tone="info">等待有审批权限的老板处理。</StatusBadge>}
 
       <section className="own-factory-approval-section">
         <h3>审批历史</h3>

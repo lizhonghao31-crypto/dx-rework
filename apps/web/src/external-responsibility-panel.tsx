@@ -42,7 +42,7 @@ const caseLabel: Record<CaseStatus, string> = {
   returned: "资料已退回",
   pending_responsibility_revision: "待责任变更审核",
   closed: "扣款已关闭",
-  superseded: "已由新责任版本替代",
+  superseded: "已替代",
 };
 
 const responsibilityTypeLabel: Record<ResponsibilityType, string> = {
@@ -360,7 +360,7 @@ export function ExternalResponsibilityPanel({
       delete pendingMutationKeys.current[signature];
       setState({ kind: "ready", value });
       setMessage(
-        "供应商与拟扣台账已锁定，下一步已直接交给对应应付记录扣款。",
+        "供应商与拟扣台账已锁定，下一步交给对应应付记录扣款。",
       );
     } catch (error: unknown) {
       setMessage(
@@ -458,13 +458,13 @@ export function ExternalResponsibilityPanel({
         : kind === "close-partial"
           ? "按部分扣款关闭"
           : "按未扣成功关闭";
-      if (!(await confirmInApp(`确认${closeLabel}？关闭后本条扣款台账进入终局状态；如后续需要改责任，必须通过责任变更重新进入 N07。`))) {
+      if (!(await confirmInApp(`确认${closeLabel}？关闭后如需改责任，必须通过责任变更重新进入 N08。`))) {
         return;
       }
     }
     if (
       kind === "revision-approve"
-      && !(await confirmInApp("确认通过责任变更？通过后会生成新的 N07 判责草稿，并按新责任版本重新进入后续处理。"))
+      && !(await confirmInApp("确认通过责任变更？通过后会生成新的 N08 责任判定草稿，并重新进入后续处理。"))
     ) {
       return;
     }
@@ -576,10 +576,10 @@ export function ExternalResponsibilityPanel({
       setRevisionToOwnFactory((current) => ({ ...current, [caseItem.caseId]: false }));
       await refresh(
         kind === "revision-approve"
-          ? "责任变更已批准，并已生成可继续编辑的 N07 判责草稿。"
+          ? "责任变更已批准，并已生成新的 N08 责任判定草稿。"
           : kind === "follow"
             ? "扣款跟进已记录；设置了下次跟进时间的事项会在到期未更新时进入逾期提示。"
-            : "操作已写入服务端台账；金额、权限与当前责任版本已重新核验。",
+            : "操作已完成。",
       );
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "操作失败");
@@ -590,7 +590,7 @@ export function ExternalResponsibilityPanel({
 
   if (state.kind === "hidden") return null;
   if (state.kind === "loading") {
-    return <Surface className="external-state">正在核验外部责任台账权限…</Surface>;
+    return <Surface className="external-state">正在加载扣款台账…</Surface>;
   }
   if (state.kind === "unavailable") {
     return <Surface className="external-state">{state.message}</Surface>;
@@ -615,11 +615,11 @@ export function ExternalResponsibilityPanel({
         <div>
           <h2>{readOnly ? "责任结算台账" : "供应商扣款处理"}</h2>
           <p>{readOnly
-            ? `责任版本 V${batch.finalizedDeterminationVersion} 已由系统自动生成；供应商与倍率已在 N07 核验、N08 签字，台账不可改写。`
-            : `责任版本 V${batch.finalizedDeterminationVersion} · 每个责任方独立记录实际扣款；资料有误可申请责任变更返回 N07。`}</p>
+            ? "供应商与扣款倍率已确认，台账只读。"
+            : "每个责任方独立记录实际扣款；资料有误可申请责任变更。"}</p>
         </div>
         <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>
-          {batch.status === "active" ? "当前责任版本" : "已替代历史"}
+          {batch.status === "active" ? "当前台账" : "历史台账"}
         </StatusBadge>
       </div>
       {message && <div className="own-factory-approval-message" role="status">{message}</div>}
@@ -627,7 +627,7 @@ export function ExternalResponsibilityPanel({
       {visibleUnassigned.length > 0 && (
         <section className="external-operation">
           <h3>选择实际拟扣供应商</h3>
-          <p>每个正式责任项目只能覆盖到一个有效供应商台账；系统不接受浏览器传入的拟扣金额。</p>
+          <p>每个责任项目对应一个供应商扣款台账。</p>
           {visibleUnassigned.map((item) => {
             const matchingSuppliers = suppliers.filter(
               (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
@@ -635,7 +635,7 @@ export function ExternalResponsibilityPanel({
             const temporaryNameReady = Boolean(temporarySupplierName[item.responsibilityType]?.trim());
             return (
               <div className="external-operation-grid" key={item.externalItemId}>
-                <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 服务端拟扣 ¥{item.proposedAmount}</span>
+                <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 拟扣 ¥{item.proposedAmount}</span>
                 <SearchSelect
                   options={matchingSuppliers.map((supplier) => ({
                     value: supplier.supplierId,
@@ -686,7 +686,7 @@ export function ExternalResponsibilityPanel({
       )}
 
       {visibleCases.length === 0 && visibleUnassigned.length === 0 && (
-        <StatusBadge tone="info">当前外部责任项目金额均为 0.00，不创建无意义扣款台账。</StatusBadge>
+        <StatusBadge tone="info">当前外部责任金额为 0，无需创建扣款台账。</StatusBadge>
       )}
 
       <section className="external-case-list">
@@ -814,7 +814,7 @@ export function ExternalResponsibilityPanel({
                       }))}
                       disabled={busy}
                     />
-                    <span>将未扣差额转为本厂承担，并进入 N07 重新判责</span>
+                    <span>将未扣差额转为本厂承担，并进入 N08 重新判责</span>
                   </label>
                 )}
                 {canRecordDeduction && <>
@@ -872,7 +872,7 @@ export function ExternalResponsibilityPanel({
                 {closureResultLabel[caseItem.closure.result]} · 剩余 ¥{caseItem.closure.remainingAmount}
               </StatusBadge>}
               {caseItem.revisionRequests.filter((item) => item.seededDeterminationId).map((item) => (
-                <StatusBadge key={item.revisionRequestId} tone="success">责任变更已通过，已生成新的 N07 判责草稿</StatusBadge>
+                <StatusBadge key={item.revisionRequestId} tone="success">责任变更已通过，已生成新的 N08 责任判定草稿</StatusBadge>
               ))}
             </article>
           );

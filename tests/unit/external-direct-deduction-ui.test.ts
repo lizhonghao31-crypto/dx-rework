@@ -8,7 +8,7 @@ describe("N09 ledger and merged N10 external deduction UI", () => {
       readFile("apps/web/src/external-responsibility-queue-page.tsx", "utf8"),
     ]);
 
-    expect(panel).toContain("供应商与倍率已在 N07 核验、N08 签字，台账不可改写。");
+    expect(panel).toContain("供应商与扣款倍率已确认，台账只读。");
     expect(panel).toContain("const visibleUnassigned = readOnly || focusCaseId ? [] : unassigned;");
     expect(panel).toContain("!readOnly && caseItem.canRecordDeduction");
     expect(panel).toContain("退回资料问题");

@@ -47,13 +47,13 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       return [id, current[id] ?? worker.reason ?? ""];
     })));
     if (overview.reviewId) {
-      setMessage("本单已完成整单确认并进入责任判定。完成记录继续保留供追溯。");
+      setMessage("本单已完成整单确认并进入责任判定。");
     } else if (overview.reworkStatus === "pending_order_review") {
-      setMessage("N07：请逐工序核对工人上数不得超过尾查汇总；临时工可调整实发系数，确认后进入责任判定。");
+      setMessage("请核对工人上数不超过尾查汇总；临时工可调整实发系数。");
     } else if (overview.reworkStatus === "in_progress") {
-      setMessage("当前仍在 N05 / N06 并行报数中。工人上数和尾查报数都完成后，自动进入 N07 尾部主管整单确认。");
+      setMessage("工人上数与尾查报数均完成后进入整单确认。");
     } else {
-      setMessage(`当前状态：${reworkStatusLabel(overview.reworkStatus)}。`);
+      setMessage("");
     }
   };
   useEffect(() => {
@@ -123,7 +123,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
           ...(reason ? { reason } : {}),
         })),
       });
-      setMessage("本单返工已完成 N07 整单确认，已流转到 N08 · 待责任判定。");
+      setMessage("整单确认已完成，进入责任判定。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "整单完成确认失败"); }
   };
 
@@ -145,20 +145,15 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       <div className="section-title">
         <div>
           <h2>{data.reworkStatus === "pending_order_review" ? "N07 · 尾部主管整单确认" : "返工完成进度"}</h2>
-          <p>{message}</p>
+          {message && <p>{message}</p>}
         </div>
         <StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : allComplete ? "success" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge>
-      </div>
-      <div className="workflow-queue-guide">
-        <div><small>谁来处理</small><strong>{data.reworkStatus === "pending_order_review" ? "尾部主管" : "系统自动判断 / 授权主管查看"}</strong></div>
-        <div><small>当前要做什么</small><strong>{data.reworkStatus === "pending_order_review" ? "核对工人上数不超过尾查汇总，确认临时工实发系数" : "等待工人上数与尾查报数同时完成"}</strong></div>
-        <div><small>完成后去哪里</small><strong>{data.reworkStatus === "pending_order_review" ? "确认后直接进入 N08 · 责任判定" : "两项报数完成后自动进入 N07 整单确认"}</strong></div>
       </div>
     </Surface>
 
     <Surface>
       <h2>{data.reworkStatus === "pending_order_review" ? "工人上数与尾查汇总对照" : "并行报数状态"}</h2>
-      <p>{data.reworkStatus === "pending_order_review" ? "以尾查汇总为准：每道工序的工人有效上数必须小于或等于尾查件数。少报允许并显示缺口；超过时须驳回调整。" : "N05 工人上数与 N06 尾查报数互不等待；两项全部提交后，系统才开放 N07。"}</p>
+      <p>{data.reworkStatus === "pending_order_review" ? "每道工序的工人有效上数不得超过尾查件数；超过时须驳回调整。" : "工人上数与尾查报数全部完成后进入整单确认。"}</p>
       {data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}>
         <div>
           <b>{process.processName}</b>
@@ -170,7 +165,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
 
     {(data.canReview || data.reports.length > 0) && <Surface>
       <h2>完成记录与驳回</h2>
-      <p>主管只在记录确有错误时驳回；正常情况下无需逐条重复确认。</p>
+      <p>记录有误时驳回；正常记录无需重复确认。</p>
       {data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}>
         <div>
           <b>完成 {report.actualQuantity}</b>
@@ -187,11 +182,11 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
 
     {data.canReview && data.reworkStatus === "pending_order_review" && data.temporaryWorkers.length > 0 && <Surface>
       <h2>临时工实发系数</h2>
-      <p>默认 1.0。旺季加价时按“人员 + 工序”调整；非 1.0 必须填写原因。该系数只影响实发工资；外部扣款倍率在责任环节另行调整。</p>
+      <p>默认 1.0；非 1.0 必须填写调整原因。</p>
       {data.temporaryWorkers.map((worker) => {
         const id = `${worker.configurationItemId}:${worker.personId}`;
         return <div className="section-title whole-order-row" key={id}>
-          <div><b>{worker.displayName} · {worker.processName}</b><p>实发工资 = 有效上数 × IE 核准单价 × 临时工系数。</p></div>
+          <div><b>{worker.displayName} · {worker.processName}</b></div>
           <div className="mobile-actions whole-order-actions">
             <InsetField label="实发系数" type="number" min="0.001" max="10" step="0.001" inputMode="decimal" value={multipliers[id] ?? "1"} disabled={busy} onChange={(event) => setMultipliers((current) => ({ ...current, [id]: event.target.value }))} />
             <InsetField label="调整原因（非 1.0 必填）" value={multiplierReasons[id] ?? ""} disabled={busy} onChange={(event) => setMultiplierReasons((current) => ({ ...current, [id]: event.target.value }))} />
@@ -200,10 +195,9 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       })}
     </Surface>}
 
-
     {data.canReview && data.reworkStatus === "pending_order_review" && data.processes.every((process) => process.finalUnitPrice !== null) && <Surface>
       <h2>确认整单并生成工资</h2>
-      <p>确认后系统按个人有效上数、N03 IE 核准单价及临时工实发系数生成工资，并直接进入责任判定。若工人上数超过尾查汇总，请先驳回对应记录。</p>
+      <p>确认后生成工资并进入责任判定；若工人上数超过尾查汇总，请先驳回对应记录。</p>
       {temporaryCoefficientIssue && <p role="status">{temporaryCoefficientIssue}</p>}
       <div className="mobile-actions">
         <Button variant="primary" onClick={() => void approve()} disabled={busy || !wholeOrderReady}>{busy ? "确认中…" : "确认整单并进入责任判定"}</Button>

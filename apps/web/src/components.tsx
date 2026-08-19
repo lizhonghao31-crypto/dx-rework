@@ -285,13 +285,8 @@ export function Shell({
     href: "/ui/wages",
   });
 
-  const roleLabels = currentUser
-    ? [
-        ...(isRoot ? ["超级用户"] : []),
-        ...(currentUser.businessRoles?.map(roleLabel) ?? []),
-      ]
-    : [];
-  const roleText = roleLabels.length ? roleLabels.join(" · ") : "未分配角色";
+  const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
+  const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
 
   return (
@@ -393,20 +388,20 @@ export function Kpis({ supervisor = false }: { supervisor?: boolean }) {
 export function Queue({ supervisor = false }: { supervisor?: boolean }) {
   const rows = supervisor
     ? [
-        "N02　待配置工序 / 单价",
-        "N04　待分派成员",
-        "N04-V2　新成员快照待确认",
-        "N06　待整单审核",
-        "N10-A　工资初核",
-        "异常　现场异常 / 等待补料",
+        "N02　工序与候选单价",
+        "N04　分配返工人员",
+        "N05　工人完工上数",
+        "N06　尾查报数",
+        "N07　尾部主管整单确认",
+        "N08　责任判定",
       ]
     : [
-        "N01　待主管配置",
-        "N03　待 IE 复核",
-        "N05　返工执行中",
-        "N07　待责任确认",
-        "N08-A　本厂承担审批",
-        "N08-B　外部签收 / 扣款跟进",
+        "N01　发起返工",
+        "N03　IE 核价",
+        "N05　工人完工上数",
+        "N08　责任判定",
+        "N09　老板确认签字",
+        "N10　后续结算",
       ];
   return (
     <Surface>
