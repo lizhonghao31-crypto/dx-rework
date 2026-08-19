@@ -50,16 +50,16 @@ describe("business action readiness contract", () => {
     expect(source).toContain('disabled={Boolean(busy) || !opinion.trim()}');
   });
 
-  it("gates external allocation, deduction, follow-up, closure and revision actions", async () => {
+  it("gates external supplier allocation and the simplified deduction action", async () => {
     const source = await readFile("apps/web/src/external-responsibility-panel.tsx", "utf8");
     expect(source).toContain("const supplierAllocationReady =");
     expect(source).toContain('disabled={busy || !supplierAllocationReady}');
     expect(source).toContain('disabled={busy || !temporaryNameReady}');
-    expect(source).toContain("const deductionReady =");
+    expect(source).toContain("const deductionReady = inputCents !== null");
+    expect(source).toContain("&& inputCents <= remainingCents;");
     expect(source).toContain('disabled={busy || !deductionReady}');
-    expect(source).toContain('disabled={busy || !note || !nextFollowUpReady}');
-    expect(source).toContain('disabled={busy || !closeWithDifferenceReady}');
-    expect(source).toContain('disabled={busy || !note} onClick={() => void operation(caseItem, "revision")}');
+    expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(source).toContain("requestRevision(caseItem)");
   });
 
   it("gates deterministic system-management create and import actions", async () => {
