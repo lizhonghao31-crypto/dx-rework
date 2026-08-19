@@ -27,9 +27,11 @@ describe("business-facing workflow UI", () => {
     const source = await read("apps/web/src/wages/wage-period-detail.tsx");
     expect(source).toContain('item.pricingUnitSnapshot === "piece" ? "件" : "小时"');
     expect(source).toContain("adjustmentStatusLabel(adjustment.status)");
-    expect(source).toContain("reviewStageLabel(action.stage)");
-    expect(source).toContain("reviewDecisionLabel(action.decision)");
-    expect(source).toContain("formatBusinessTime(action.actedAt)");
+    expect(source).toContain('const statusLabel = period.status === "locked" ? "已月结" : "可月结";');
+    expect(source).toContain("<h2>月结状态</h2>");
+    expect(source).toContain("工资已经汇总，可在自然月结束后直接月结锁定。");
+    expect(source).not.toContain("reviewStageLabel");
+    expect(source).not.toContain("reviewDecisionLabel");
   });
 
   it("shows N08 approval proportions as percentages and times in the business timezone", async () => {
