@@ -31,6 +31,17 @@ const request = async <T,>(path: string, parse: (value: unknown) => T, init?: Re
   return parse(await response.json());
 };
 
+const requestNoContent = async (path: string, init?: RequestInit): Promise<void> => {
+  const response = await fetch(apiUrl(path), {
+    credentials: "include", ...init,
+    headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(body?.error?.message ?? "请求未完成，请稍后重试");
+  }
+};
+
 const canReviewOrder = (user: WorkReportingUser): boolean => user.isRoot === true || [
   "submission:audit", "quantity:adjust", "quantity:confirm", "process:review",
 ].some((capability) => user.capabilities.includes(capability));
@@ -53,27 +64,41 @@ export function WorkReportingForm({
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
   const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string }>>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [peopleType, setPeopleType] = useState<"internal" | "temporary">("internal");
   const [peopleQuery, setPeopleQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [removalTask, setRemovalTask] = useState<Task | null>(null);
+  const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
+  const [temporaryName, setTemporaryName] = useState("");
+  const [temporaryRemark, setTemporaryRemark] = useState("");
   const [reportTasks, setReportTasks] = useState<Task[] | null>(null);
   const [reportQuantities, setReportQuantities] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  const [canCreateTemporary, setCanCreateTemporary] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [canReadTasks, setCanReadTasks] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
 
   const filteredPeople = useMemo(() => {
+    const typedPeople = people.filter((person) => person.personType === peopleType);
     const needle = peopleQuery.trim().toLocaleLowerCase("zh-CN");
-    if (!needle) return people;
-    return people.filter((person) => `${person.displayName} ${person.personType === "temporary" ? "临时工 代录" : "内部人员"}`.toLocaleLowerCase("zh-CN").includes(needle));
-  }, [people, peopleQuery]);
+    if (!needle) return typedPeople;
+    return typedPeople.filter((person) => person.displayName.toLocaleLowerCase("zh-CN").includes(needle));
+  }, [people, peopleQuery, peopleType]);
+
   const reload = async (): Promise<ReworkWorkTasksResponse | null> => {
     if (!reworkOrderId) return null;
     const loaded = await request(`rework-orders/${reworkOrderId}/work-tasks`, ReworkWorkTasksResponseSchema.parse);
     setData(loaded);
     return loaded;
+  };
+
+  const reloadPeople = async (): Promise<Person[]> => {
+    const peopleResult = await request("work-task-options", WorkTaskAssignablePeopleResponseSchema.parse);
+    setPeople(peopleResult.people);
+    return peopleResult.people;
   };
 
   useEffect(() => {
@@ -84,21 +109,28 @@ export function WorkReportingForm({
       const root = me.status === "authorized" && me.user.isRoot === true;
       const taskReadable = me.status === "authorized" && canReadWorkFacts(me.user);
       const orderReviewable = me.status === "authorized" && canReviewOrder(me.user);
-      setCanAssign(assignable); setIsRoot(root); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
+      const temporaryManageable = me.status === "authorized"
+        && (root || me.user.capabilities.includes("temporary_worker:manage"));
+      setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
       const assignmentView = loaded?.reworkStatus === "pending_task_assignment"
         && (taskMode === "task_assignment" || taskMode === "workspace");
       if (!assignable || !assignmentView) return;
-      const [peopleResult, configuration] = await Promise.all([
-        request("work-task-options", WorkTaskAssignablePeopleResponseSchema.parse),
+      const [, configuration] = await Promise.all([
+        reloadPeople(),
         request(`rework-orders/${reworkOrderId}/process-configuration`, ProcessConfigurationResponseSchema.parse),
       ]);
-      setPeople(peopleResult.people);
       setConfigItems(configuration.configuration?.items.map((item) => ({ configurationItemId: item.configurationItemId, processName: item.processName })) ?? []);
     };
     void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"));
   }, [reworkOrderId, taskMode]);
+
+  const choosePeopleType = (type: "internal" | "temporary") => {
+    setPeopleType(type);
+    setPeopleQuery("");
+    setSelected({});
+  };
 
   const assign = async (configurationItemId: string) => {
     if (!data || data.reworkStatus !== "pending_task_assignment" || busy) return;
@@ -112,6 +144,58 @@ export function WorkReportingForm({
       });
       await reload(); setSelected({}); setMessage("人员已分配。各工序都分完后，再统一点击“开始返工”。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "人员分配失败"); } finally { setBusy(false); }
+  };
+
+  const confirmRemoval = async () => {
+    if (!data || data.reworkStatus !== "pending_task_assignment" || !removalTask || busy) return;
+    const workerName = removalTask.members[0]?.displayName ?? "该人员";
+    setBusy(true);
+    try {
+      await requestNoContent(`work-tasks/${removalTask.workTaskId}/remove`, {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
+      });
+      await reload();
+      setRemovalTask(null);
+      setMessage(`已移除 ${workerName} 的错误分配。`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "无法移除该人员分配");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createTemporaryWorker = async () => {
+    if (!canCreateTemporary || busy) return;
+    const displayName = temporaryName.trim();
+    const remark = temporaryRemark.trim();
+    if (!displayName) { setMessage("请填写临时工姓名。"); return; }
+    setBusy(true);
+    try {
+      await request("master-data/temporary-workers", (value) => value as { personId: string }, {
+        method: "POST",
+        body: JSON.stringify({
+          personType: "temporary",
+          displayName,
+          aliases: [],
+          reason: "N04 现场新增临时工",
+          ...(remark ? { temporaryRemark: remark } : {}),
+        }),
+      });
+      await reloadPeople();
+      setPeopleType("temporary");
+      setPeopleQuery("");
+      setSelected({});
+      setTemporaryName("");
+      setTemporaryRemark("");
+      setTemporaryDialogOpen(false);
+      setMessage(`临时工 ${displayName} 已添加，可直接选择分配。`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "临时工添加失败");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const confirmAssignments = async () => {
@@ -169,12 +253,19 @@ export function WorkReportingForm({
     <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "分配返工人员" : "工人完工上数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "N04" : "N05"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "每名人员独立分配。全部分完后统一开始返工。" : "只填实际整数件数；尾查报数与本节点并行，不以计划数作为上数依据。"}</p></div>
     {message && <p className="work-reporting-feedback" role="status">{message}</p>}
     {effectiveTaskMode === "task_assignment" && data && <>
-      {data.tasks.length > 0 && <Surface><h2>已分配人员</h2>{data.tasks.map((task) => <div className="section-title whole-order-row" key={task.workTaskId}><div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={assignmentWritable ? "info" : "success"}>{assignmentWritable ? "待开工" : "已处理"}</StatusBadge></div>)}</Surface>}
+      {data.tasks.length > 0 && <Surface><h2>已分配人员</h2>{data.tasks.map((task) => <div className="section-title whole-order-row n04-assignment-row" key={task.workTaskId}><div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")}</p></div><div className="n04-assignment-controls"><StatusBadge tone={assignmentWritable ? "info" : "success"}>{assignmentWritable ? "待开工" : "已处理"}</StatusBadge>{canAssign && assignmentWritable && task.mode === "individual" && task.members.length === 1 && <Button onClick={() => setRemovalTask(task)} disabled={busy}>移除</Button>}</div></div>)}</Surface>}
       {canAssign && assignmentWritable && <Surface><h2>选择人员并分配工序</h2><p>可同时选择多人；临时工由尾部主管代上数。</p>
-        <InsetField label="搜索返工人员" type="search" value={peopleQuery} placeholder="输入姓名，或搜索“临时工”" disabled={busy} onChange={(event) => setPeopleQuery(event.target.value)} />
-        {filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName} · {person.personType === "temporary" ? "临时工（主管代录）" : "内部人员"}</label>)}
-        {people.length === 0 && <p>当前没有可分配的人员；请先维护人员资料或工人权限。</p>}
-        {selectedPeopleCount === 0 && people.length > 0 && <p>先选择至少一名返工人员，再分配到对应工序。</p>}
+        <div className="workforce-type-toolbar">
+          <div className="workforce-type-tabs" role="tablist" aria-label="返工人员类别">
+            <button type="button" role="tab" aria-selected={peopleType === "internal"} className={peopleType === "internal" ? "is-active" : ""} onClick={() => choosePeopleType("internal")} disabled={busy}>正式工</button>
+            <button type="button" role="tab" aria-selected={peopleType === "temporary"} className={peopleType === "temporary" ? "is-active" : ""} onClick={() => choosePeopleType("temporary")} disabled={busy}>临时工</button>
+          </div>
+          {peopleType === "temporary" && canCreateTemporary && <Button onClick={() => setTemporaryDialogOpen(true)} disabled={busy}>+ 添加临时工</Button>}
+        </div>
+        <InsetField label={`搜索${peopleType === "internal" ? "正式工" : "临时工"}`} type="search" value={peopleQuery} placeholder="输入姓名搜索" disabled={busy} onChange={(event) => setPeopleQuery(event.target.value)} />
+        <div className="workforce-person-list">{filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName}</label>)}</div>
+        {filteredPeople.length === 0 && <p>当前没有可选择的{peopleType === "internal" ? "正式工" : "临时工"}。</p>}
+        {selectedPeopleCount === 0 && filteredPeople.length > 0 && <p>先选择至少一名返工人员，再分配到对应工序。</p>}
         <div className="mobile-actions work-reporting-actions">{configItems.map((item) => <Button key={item.configurationItemId} onClick={() => void assign(item.configurationItemId)} disabled={busy || selectedPeopleCount === 0}>分配 {item.processName}</Button>)}</div>
         <Button variant="primary" onClick={() => void confirmAssignments()} disabled={busy || !allProcessesAssigned}>{busy ? "处理中…" : "完成分配，开始返工"}</Button>
         {!allProcessesAssigned && configItems.length > 0 && <p>每道工序至少分配一名人员后才能开始返工。</p>}
@@ -185,6 +276,8 @@ export function WorkReportingForm({
       {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代上数" : canAssign ? "临时工代上数" : "我已返工完成"}</h2><p>{isRoot ? "为返工人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为完工上数" : canAssign ? "临时工完工上数" : "我已完工&上数"}</Button></Surface>}
       {data?.tasks.length === 0 && <Surface>当前暂无返工任务。</Surface>}
     </>}
+    {removalTask && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”分配？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}
+    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
     {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="工人完工上数"><h2>{isRoot ? "请输入代上数的实际件数" : canAssign ? "请输入临时工的实际件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;
 }
