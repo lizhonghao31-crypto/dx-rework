@@ -29,20 +29,25 @@ describe("order detail information architecture", () => {
     expect(styles).not.toContain("display: contents");
   });
 
-  it("uses the confirmed desktop two-column overview and compact mobile rails", async () => {
+  it("uses the confirmed desktop overview, five-column two-row workflow and mobile horizontal rail", async () => {
     const [detail, styles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-compact.css", "utf8"),
     ]);
     expect(detail).toContain('className="rework-detail-overview-grid"');
+    expect(detail).toContain('className="rework-workflow__desktop-grid"');
     expect(detail).toContain('className="rework-workflow__mobile-rail"');
+    expect(detail).toContain("{workflowNodes.map(renderWorkflowNode)}");
     expect(detail).toContain("当前工作区");
     expect(detail).toContain("当前步骤 {activeStepIndex} / {workflowNodes.length}");
     expect(styles).toContain(".rework-detail-overview-grid");
     expect(styles).toContain("grid-template-columns: minmax(280px, .82fr) minmax(0, 1.48fr);");
+    expect(styles).toContain(".rework-workflow__desktop-grid");
+    expect(styles).toContain("grid-template-columns: repeat(5, minmax(0, 1fr));");
     expect(styles).toContain(".rework-workflow__mobile-rail");
     expect(styles).toContain("overflow-x: auto");
-    expect(styles).toContain("flex: 0 0 92px");
+    expect(styles).toContain("scroll-snap-type: x proximity;");
+    expect(styles).toContain("flex: 0 0 126px");
   });
 
   it("keeps real workflow numbering and existing node workspaces instead of copying mock data", async () => {
