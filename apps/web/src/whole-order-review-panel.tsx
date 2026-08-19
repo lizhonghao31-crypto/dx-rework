@@ -155,9 +155,13 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       <h2>{data.reworkStatus === "pending_order_review" ? "工人上数与尾查汇总对照" : "并行报数状态"}</h2>
       <p>{data.reworkStatus === "pending_order_review" ? "每道工序的工人有效上数不得超过尾查件数；超过时须驳回调整。" : "工人上数与尾查报数全部完成后进入整单确认。"}</p>
       {data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}>
-        <div>
-          <b>{process.processName}</b>
-          <p>工人有效上数 {process.completedQuantity} 件 · 尾查汇总 {process.tailCheckedQuantity} 件 · {process.countGap >= 0 ? `未上数差额 ${process.countGap} 件` : `超出 ${Math.abs(process.countGap)} 件`}</p>
+        <div className="whole-order-process-main">
+          <b className="whole-order-process-name">{process.processName}</b>
+          <div className="whole-order-metrics">
+            <span className="whole-order-metric"><span className="whole-order-metric-label">工人上数</span><strong className="whole-order-metric-value">{process.completedQuantity} 件</strong></span>
+            <span className="whole-order-metric"><span className="whole-order-metric-label">尾查汇总</span><strong className="whole-order-metric-value">{process.tailCheckedQuantity} 件</strong></span>
+            <span className={`whole-order-gap${process.countGap < 0 ? " is-danger" : ""}`}><span className="whole-order-gap-label">{process.countGap >= 0 ? "差额" : "超出"}</span><strong className="whole-order-gap-value">{Math.abs(process.countGap)} 件</strong></span>
+          </div>
         </div>
         <StatusBadge tone={process.complete ? "success" : "danger"}>{process.complete ? data.reworkStatus === "pending_order_review" ? "可确认" : "待两项完成" : "需驳回调整"}</StatusBadge>
       </div>)}
@@ -167,9 +171,13 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       <h2>完成记录与驳回</h2>
       <p>记录有误时驳回；正常记录无需重复确认。</p>
       {data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}>
-        <div>
-          <b>完成 {report.actualQuantity}</b>
-          <p>{report.members.map((member) => member.displayName).join("、")} · {report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</p>
+        <div className="whole-order-report-main">
+          <b className="whole-order-person-name">{report.members.map((member) => member.displayName).join("、")}</b>
+          <div className="whole-order-report-meta">
+            <span className="whole-order-report-label">上数</span>
+            <strong className="whole-order-report-value">{report.actualQuantity} 件</strong>
+            <span className={`whole-order-report-state${report.rejected ? " is-danger" : ""}`}>{report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</span>
+          </div>
         </div>
         {data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">
           {report.assignmentMode === "collective"
@@ -197,7 +205,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
 
     {data.canReview && data.reworkStatus === "pending_order_review" && data.processes.every((process) => process.finalUnitPrice !== null) && <Surface>
       <h2>确认整单并生成工资</h2>
-      <p>确认后生成工资并进入责任判定；若工人上数超过尾查汇总，请先驳回对应记录。</p>
+      <p className="whole-order-confirmation-copy">确认后生成工资并进入责任判定。</p>
       {temporaryCoefficientIssue && <p role="status">{temporaryCoefficientIssue}</p>}
       <div className="mobile-actions">
         <Button variant="primary" onClick={() => void approve()} disabled={busy || !wholeOrderReady}>{busy ? "确认中…" : "确认整单并进入责任判定"}</Button>
