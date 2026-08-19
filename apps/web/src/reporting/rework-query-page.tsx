@@ -1,5 +1,5 @@
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
-import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { Button, InsetField, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
@@ -14,7 +14,7 @@ const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
   ["", "全部状态"],["draft","草稿"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],
   ["pending_task_assignment","待分工"],["in_progress","返工执行中"],["pending_order_review","待整单审核"],
   ["pending_quantity_adjustment_ie_review","数量调整待 IE"],["pending_responsibility_determination","责任判定与资料核验"],
-  ["pending_owner_signature","待老板确认签字"],["pending_responsibility_action","旧责任处理"],["completed","订单已完成"],["cancelled","已取消"],
+  ["pending_owner_signature","待老板确认签字"],["pending_responsibility_action","责任结算中"],["completed","订单已完成"],["cancelled","已取消"],
 ];
 const responsibilityTypes = [["","全部责任"],["own_factory","本厂承担"],["processing_factory","加工厂"],["embroidery_factory","印绣花厂"],["washing_factory","洗水厂"],["fabric_supplier","面料商"]] as const;
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -71,7 +71,7 @@ export function ReworkQueryPage() {
   };
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="全部订单">
-    <Header title="全部订单" subtitle="查看权限范围内订单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "服务端实时查询"} />
+    <Header title="全部订单" subtitle="查看权限范围内订单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "查询中"} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
@@ -90,7 +90,6 @@ export function ReworkQueryPage() {
     {state.kind === "ready" && (cursor || state.value.nextCursor) && <Surface className="reporting-pagination">
       {cursor && <Button onClick={()=>setCursor("")}>返回第一页</Button>}
       {state.value.nextCursor && <Button variant="primary" onClick={()=>setCursor(state.value.nextCursor??"")}>下一页</Button>}
-      <StatusBadge tone="info">使用稳定游标翻页，不因新增数据重复读取当前页。</StatusBadge>
     </Surface>}
   </Shell>;
 }
