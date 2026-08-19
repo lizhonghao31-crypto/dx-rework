@@ -65,15 +65,15 @@ export function OwnFactoryApprovalQueuePage() {
     <Shell active="本厂审批">
       <Header
         title="本厂承担审批"
-        subtitle="责任分支进入本厂审批后自动出现在这里；审批完成后自动离开当前队列"
-        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "实时队列"}
+        subtitle="需要审批的本厂承担事项集中在这里"
+        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"}
       />
       <Surface className="responsibility-queue-summary">
         <div>
           <h2>本厂承担审批工作台</h2>
-          <p>谁来处理：有最终审批权限的老板；当前要做：核对锁定责任快照并决定；完成后继续责任分支闭环。</p>
+          <p>核对责任金额与明细后决定通过或驳回。</p>
         </div>
-        <StatusBadge tone="warning">N08-A · 待审批</StatusBadge>
+        <StatusBadge tone="warning">待审批</StatusBadge>
       </Surface>
       <Surface className="reporting-filters">
         <InsetField label="搜索当前节点订单" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />
@@ -87,12 +87,12 @@ export function OwnFactoryApprovalQueuePage() {
             <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.approvalId}>
               <TaskCard task={{
                 id: item.reworkNo ?? "返工单",
-                title: item.canDecide ? "本厂承担待终局审批" : "本厂承担待查看",
+                title: item.canDecide ? "本厂承担待审批" : "本厂承担待查看",
                 meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", item.problemPart ?? "问题部位未填写", `本厂 ¥${item.ownFactoryTotalAmount}`, item.canDecide ? "可审批" : "仅查看"].join(" · "),
                 tone: item.canDecide ? "warning" : "info",
                 stateLabel: item.canDecide ? "待审批" : "仅查看",
               }} />
-              <span>打开锁定审批快照 →</span>
+              <span>打开审批 →</span>
             </a>
           ))}
         </div>
