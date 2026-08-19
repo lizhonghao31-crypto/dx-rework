@@ -27,8 +27,10 @@ describe("wage web and xlsx delivery", () => {
     expect(app).toContain('{ requiredCapability: "wage:view" }');
     expect(list).not.toContain("window.setInterval");
     expect(list).not.toContain('window.addEventListener("focus"');
-    expect(detail).toContain("administrative-approve");
-    expect(detail).toContain("administrative-return");
+    expect(detail).not.toContain("administrative-approve");
+    expect(detail).not.toContain("administrative-return");
+    expect(detail).toContain("wage-periods/${period.periodId}/lock");
+    expect(detail).toContain(">月结锁定</Button>");
     expect(detail).toContain("export.xlsx");
     expect(detail).toContain("supplierNameSnapshot");
     expect(detail).toContain("temporaryWageMultiplier");
@@ -38,4 +40,3 @@ describe("wage web and xlsx delivery", () => {
     expect(adjustment).toContain("pendingAttempt.current = attempt");
   });
 });
-
