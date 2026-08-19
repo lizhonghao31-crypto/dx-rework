@@ -10,10 +10,10 @@ describe("external responsibility UI contract", () => {
     expect(source).toContain("if (response.status === 403) return [] as Supplier[];");
   });
 
-  it("records deductions using the Shanghai business date", async () => {
+  it("records deductions using the Shanghai business date without asking finance to enter it", async () => {
     const source = await readFile("apps/web/src/external-responsibility-panel.tsx", "utf8");
-    expect(source).toContain("deductedOn: deductedOn[caseItem.caseId] ?? shanghaiBusinessDate()");
-    expect(source).toContain("max={shanghaiBusinessDate()}");
+    expect(source).toContain("deductedOn: shanghaiBusinessDate()");
+    expect(source).not.toContain('label="实际扣款日期"');
     expect(source).not.toContain("toISOString().slice(0, 10)");
   });
 });

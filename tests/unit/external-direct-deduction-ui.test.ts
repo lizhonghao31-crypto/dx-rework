@@ -1,20 +1,34 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-describe("N09 ledger and merged N10 external deduction UI", () => {
-  it("keeps N09 read-only while exposing usable deduction or data-return actions in N10", async () => {
+describe("N10 external deduction UI", () => {
+  it("keeps the settlement view readable and gives finance only the core deduction actions", async () => {
     const [panel, queue] = await Promise.all([
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-queue-page.tsx", "utf8"),
     ]);
 
-    expect(panel).toContain("供应商与扣款倍率已确认，台账只读。");
-    expect(panel).toContain("const visibleUnassigned = readOnly || focusCaseId ? [] : unassigned;");
-    expect(panel).toContain("!readOnly && caseItem.canRecordDeduction");
-    expect(panel).toContain("退回资料问题");
-    expect(panel).toContain('variant="primary"');
-    expect(panel).toContain("记录实际扣款");
-    expect(queue).toContain('pending_payables_confirmation: "待记录扣款"');
-    expect(queue).toContain("应付直接记录实际扣款或退回资料问题");
+    expect(panel).toContain('readOnly ? "责任结算台账" : "供应商扣款"');
+    expect(panel).toContain("应扣金额");
+    expect(panel).toContain("累计已扣");
+    expect(panel).toContain("本次扣款金额");
+    expect(panel).toContain('onClick={() => void recordDeduction(caseItem)}');
+    expect(panel).toContain('onClick={() => void requestRevision(caseItem)}');
+    expect(panel).toContain("重判责任");
+    expect(panel).toContain("<ExternalEvidenceUploader");
+    expect(panel).not.toContain("新增跟进");
+    expect(panel).not.toContain("按部分关闭");
+    expect(panel).not.toContain("登记未扣成功");
+    expect(panel).not.toContain('label="扣款凭证号（选填）"');
+    expect(queue).toContain('pending_payables_confirmation: "待扣款"');
+    expect(queue).toContain("录入本次扣款即可");
+  });
+
+  it("auto-closes a fully deducted ledger while leaving a recovery action if close fails", async () => {
+    const panel = await readFile("apps/web/src/external-responsibility-panel.tsx", "utf8");
+    expect(panel).toContain('recorded.remainingAmount === "0.00" && recorded.canClose');
+    expect(panel).toContain("await closeFull(recorded)");
+    expect(panel).toContain("完成扣款");
+    expect(panel).toContain("本次扣款金额不能超过当前剩余应扣金额");
   });
 });

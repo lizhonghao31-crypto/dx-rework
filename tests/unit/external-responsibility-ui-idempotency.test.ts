@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
 
-describe("N08-B/N10-B external responsibility UI safety", () => {
+describe("external responsibility UI safety", () => {
   it("reuses idempotency keys for case and supplier-allocation retries", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
 
@@ -13,20 +13,21 @@ describe("N08-B/N10-B external responsibility UI safety", () => {
     expect(source).not.toContain('"idempotency-key": crypto.randomUUID()');
   });
 
-  it("uses an explicit business choice instead of guessing own-factory transfer from free text", async () => {
+  it("uses a structured responsibility-revision request instead of inferring responsibility from free text", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
 
-    expect(source).toContain("revisionToOwnFactory[caseItem.caseId] === true");
-    expect(source).toContain("将未扣差额转为本厂承担，并进入 N08 重新判责");
+    expect(source).toContain('kind: "other"');
+    expect(source).toContain("configurationItemIds: caseItem.items.map");
+    expect(source).toContain("summary: reason");
     expect(source).not.toContain('includes("本厂")');
   });
 
-  it("requires confirmation before terminal close and responsibility-revision approval", async () => {
+  it("auto-closes only after the amount reaches zero remaining and confirms rejudgment approval", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
 
-    expect(source).toContain('kind.startsWith("close")');
-    expect(source).toContain("关闭后如需改责任，必须通过责任变更重新进入 N08");
-    expect(source).toContain("确认通过责任变更？通过后会生成新的 N08 责任判定草稿，并重新进入后续处理。");
+    expect(source).toContain('recorded.remainingAmount === "0.00" && recorded.canClose');
+    expect(source).toContain("await closeFull(recorded)");
+    expect(source).toContain("确认通过重判责任？通过后重新进入 N08 判责。");
     expect(source).toContain("await confirmInApp");
     expect(source).not.toContain("window.confirm");
   });
