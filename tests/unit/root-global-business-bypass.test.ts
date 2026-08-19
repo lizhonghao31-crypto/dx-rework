@@ -24,20 +24,15 @@ describe("root global business bypass policy", () => {
 
   it("lets root proxy-report any worker task while ordinary proxies stay temporary-only", async () => {
     const [source, form] = await Promise.all([
-      readFile(
-        new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url),
-        "utf8",
-      ),
-      readFile(
-        new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url),
-        "utf8",
-      ),
+      readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8"),
     ]);
     expect(source).toContain("if (isRootActor(actor)) return true;");
     expect(source).toContain("members.some((person) => person.person_type === \"temporary\")");
     expect(form).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
     expect(form).toContain('isRoot ? "代上数"');
   });
+
   it("keeps external deduction authority Root-only while preserving ordinary role checks", async () => {
     const migration = await readFile(
       new URL("../../apps/api/migrations/0064_root_external_responsibility_bypass.sql", import.meta.url),
@@ -88,7 +83,6 @@ describe("root global business bypass policy", () => {
     expect(queue).toContain("const hasTakeover = root || actorCapabilities.includes");
     expect(queue).toContain("const hasConfirm = root || actorCapabilities.includes");
     expect(queue).not.toContain("root || row.leaf_created_by !== actor.actorId");
-
     expect(migration).toContain("event_actor IS DISTINCT FROM effective_handler");
     expect(migration).toContain("NOT access_is_root_actor(event_actor)");
     expect(migration).toContain("NEW.acted_by IS DISTINCT FROM current_handler");
@@ -98,37 +92,25 @@ describe("root global business bypass policy", () => {
     expect(migration).toContain("process.multiplier > 2");
     expect(migration).toContain("confirmation snapshot does not match the draft");
     expect(ownerSelfConfirmationMigration).toContain("SELECT access_is_root_actor(candidate)");
-    expect(ownerSelfConfirmationMigration).not.toContain(
-      "high multiplier submitter cannot confirm the same version",
-    );
-    expect(ownerSelfConfirmationMigration).toContain(
-      "high multiplier confirmation requires a direct active owner or root",
-    );
+    expect(ownerSelfConfirmationMigration).not.toContain("high multiplier submitter cannot confirm the same version");
+    expect(ownerSelfConfirmationMigration).toContain("high multiplier confirmation requires a direct active owner or root");
   });
 
-  it("bypasses root wage adjustment actor separation without bypassing wage state rules", async () => {
-    const [service, migration] = await Promise.all([
-      readFile(
-        new URL("../../apps/api/src/wages/wage-service.ts", import.meta.url),
-        "utf8",
-      ),
-      readFile(
-        new URL("../../apps/api/migrations/0040_root_identity_separation_bypass.sql", import.meta.url),
-        "utf8",
-      ),
+  it("keeps Root wage access without reviving the retired review or adjustment workflow", async () => {
+    const [routes, service, retirement] = await Promise.all([
+      readFile(new URL("../../apps/api/src/wages/wage-routes.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/wages/wage-service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/migrations/0074_wage_review_adjustment_retirement.sql", import.meta.url), "utf8"),
     ]);
-    expect(service).toContain("!isRootActor(actor) && adjustment.requested_by === actor.actorId");
-    expect(service).toContain("($3::boolean OR uploaded_by=$2)");
-    expect(service).toContain("target.status === \"locked\"");
-    expect(service).toContain("period.status !== \"ready_to_lock\"");
-
-    expect(migration).toContain("NEW.decided_by=OLD.requested_by");
-    expect(migration).toContain("NOT access_is_root_actor(NEW.decided_by)");
-    expect(migration).toContain("NOT access_is_root_actor(NEW.requested_by)");
-    expect(migration).toContain("NOT access_is_root_actor(target_adjustment.requested_by)");
-    expect(migration).toContain("target_period.status='locked'");
-    expect(migration).toContain("period_status='locked'");
-    expect(migration).toContain("person_total<0");
+    expect(routes).toContain('capability === "wage:view" && await isRootUser');
+    expect(routes).toContain('"wage:export"');
+    expect(routes).not.toContain("tail-approve");
+    expect(routes).not.toContain("administrative-approve");
+    expect(routes).not.toContain("wage-adjustments");
+    expect(service).toContain('period.status !== "ready_to_lock"');
+    expect(service).toContain("自然月结束前不能锁定");
+    expect(retirement).toContain("wage review workflow is retired");
+    expect(retirement).toContain("wage adjustment workflow is retired");
   });
 
   it("does not let recipient routing or account-separation setup block root UAT", async () => {

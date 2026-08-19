@@ -18,8 +18,6 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const PeriodListSchema = z.array(WagePeriodSchema);
 
 const statusLabel: Record<WagePeriod["status"], string> = {
-  pending_tail_review: "可月结",
-  pending_admin_review: "可月结",
   ready_to_lock: "可月结",
   locked: "已月结",
 };
@@ -83,9 +81,7 @@ export function WagePeriodList() {
   useEffect(() => {
     mounted.current = true;
     void loadPeriods();
-    return () => {
-      mounted.current = false;
-    };
+    return () => { mounted.current = false; };
   }, [loadPeriods]);
 
   useEffect(() => {
@@ -131,7 +127,7 @@ export function WagePeriodList() {
       const name = String(row.personName ?? "未知人员");
       const current = rows.get(name) ?? { name, orderCount: new Set<string>(), amount: 0 };
       current.orderCount.add(String(row.reworkNo ?? row.reworkOrderId ?? "未知返工单"));
-      current.amount += Number(row.finalAmount ?? 0);
+      current.amount += Number(row.wageAmount ?? 0);
       rows.set(name, current);
     }
     return [...rows.values()].sort((left, right) => right.amount - left.amount);
@@ -213,7 +209,7 @@ export function WagePeriodList() {
 
       <section className="wage-period-section">
         <div className="wage-section-heading">
-          <div><h2>月结批次</h2><p>工资汇总后可直接月结锁定；如有错误，可在锁定前申请调整。</p></div>
+          <div><h2>月结批次</h2><p>系统自动汇总返工工资；月底直接月结锁定。</p></div>
         </div>
         {message ? <p role="alert" className="form-message">{message}</p> : null}
         <div className="wage-grid">
@@ -225,14 +221,12 @@ export function WagePeriodList() {
               </div>
               <dl>
                 <dt>工人 / 明细</dt><dd>{period.personCount} / {period.sourceItemCount}</dd>
-                <dt>原始金额</dt><dd>¥{period.originalTotal}</dd>
-                <dt>调整金额</dt><dd>¥{period.adjustmentTotal}</dd>
-                <dt>最终金额</dt><dd><strong>¥{period.finalTotal}</strong></dd>
+                <dt>工资总额</dt><dd><strong>¥{period.totalAmount}</strong></dd>
               </dl>
             </Surface>
           ))}
         </div>
-        {periods.length === 0 && !message ? <Surface><p>暂无已通过整单审核的工资来源。</p></Surface> : null}
+        {periods.length === 0 && !message ? <Surface><p>暂无已生成的返工工资。</p></Surface> : null}
       </section>
     </div>
   );
