@@ -1,6 +1,7 @@
 import {
   AssignRoleSchema,
   CatalogListQuerySchema,
+  ConfirmWorkAssignmentsSchema,
   CreateBusinessPersonSchema,
   CreateDelegationSchema,
   CreatePersonAliasSchema,
@@ -8,6 +9,7 @@ import {
   CreateSupplierSchema,
   DelegationParamsSchema,
   DelegationsQuerySchema,
+  IdempotencyKeySchema,
   PeopleListQuerySchema,
   ProcessParamsSchema,
   PersonAliasParamsSchema,
@@ -18,6 +20,7 @@ import {
   RoleAssignmentParamsSchema,
   RoleAssignmentsQuerySchema,
   SupplierParamsSchema,
+  WorkTaskParamsSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -44,9 +47,21 @@ const parse = <T>(
   return result.data;
 };
 
+const idempotencyKey = (request: FastifyRequest): string =>
+  parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
+
+type AssignmentCorrectionService = Readonly<{
+  removeWorkAssignment(
+    actor: TrustedActorContext,
+    workTaskId: string,
+    expectedOrderVersion: number,
+    key: string,
+  ): Promise<{ reused: boolean }>;
+}>;
+
 export type AccessHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
-  service: AccessMasterDataService;
+  service: AccessMasterDataService & Partial<AssignmentCorrectionService>;
   root: RootAuthority;
 }>;
 
@@ -181,6 +196,23 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       ),
     ));
 
+  app.post("/master-data/temporary-workers", async (request, reply) => {
+    const input = parse(CreateBusinessPersonSchema, request.body);
+    if (input.personType !== "temporary") {
+      throw new ApplicationError("VALIDATION_ERROR", "该入口只能新增临时工", 400);
+    }
+    const temporaryActor = await actor(request, "temporary_worker:manage");
+    const permittedRole = temporaryActor.actorRoles.includes("tail_supervisor")
+      || temporaryActor.actorRoles.includes("owner_group")
+      || temporaryActor.actorRoles.includes(ROOT_ACTOR_ROLE);
+    if (!permittedRole) {
+      throw new ApplicationError("FORBIDDEN", "当前角色无权新增临时工", 403);
+    }
+    return reply.code(201).send(
+      await dependencies.service.createPerson(temporaryActor, input),
+    );
+  });
+
   app.post<{ Params: { personId: string } }>("/master-data/people/:personId/aliases", async (request, reply) =>
     reply.code(201).send(
       await dependencies.service.addPersonAlias(
@@ -260,4 +292,27 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     await dependencies.service.revokeDelegation(await actor(request, "delegation:manage"), input.delegationId, body.reason);
     return reply.code(204).send();
   });
+
+  const removeWorkAssignment = dependencies.service.removeWorkAssignment;
+  if (removeWorkAssignment) {
+    app.post<{ Params: { workTaskId: string } }>("/work-tasks/:workTaskId/remove", async (request, reply) => {
+      const assignmentActor = await actor(request, "work:assign");
+      const permittedRole = assignmentActor.actorRoles.includes("tail_supervisor")
+        || assignmentActor.actorRoles.includes(ROOT_ACTOR_ROLE);
+      if (!permittedRole) {
+        throw new ApplicationError("FORBIDDEN", "当前角色无权调整返工人员分配", 403);
+      }
+      const params = parse(WorkTaskParamsSchema, request.params);
+      const input = parse(ConfirmWorkAssignmentsSchema, request.body);
+      const result = await removeWorkAssignment.call(
+        dependencies.service,
+        assignmentActor,
+        params.workTaskId,
+        input.expectedOrderVersion,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(204).send();
+    });
+  }
 }

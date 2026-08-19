@@ -279,6 +279,10 @@
     {
       "version": "0070_root_tail_inspection_reporting",
       "checksum": "5d81290dc3aa946b4a19672b2f0e9c89675e56ea812bc80470343fd37a55ef69"
+    },
+    {
+      "version": "0071_n04_assignment_workforce_ux",
+      "checksum": "e7a3ebaa3a745e17cb6a58f46fc20459d99f00bb939b64a17d7b2b343fe3d6a7"
     }
   ]
 }

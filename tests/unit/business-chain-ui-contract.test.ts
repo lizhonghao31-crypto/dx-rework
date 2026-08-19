@@ -134,7 +134,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(initiation).toContain("<FactorySearch");
     expect(processConfiguration).toContain("输入工序名称搜索");
     expect(processConfiguration).toContain("selectCatalogProcess");
-    expect(workReporting).toContain("搜索返工人员");
+    expect(workReporting).toContain('peopleType === "internal" ? "正式工" : "临时工"');
     expect(workReporting).toContain("filteredPeople");
     expect(externalResponsibility).toContain("输入供应商名称搜索");
   });

@@ -15,6 +15,71 @@
   padding: var(--dx-v2-space-2) 0;
 }
 
+.work-reporting-page .n04-assignment-row {
+  align-items: center;
+}
+
+.work-reporting-page .n04-assignment-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dx-v2-space-2);
+  margin-left: auto;
+}
+
+.work-reporting-page .n04-assignment-controls .dx-button {
+  min-height: 34px;
+  padding: 6px 12px;
+}
+
+.work-reporting-page .workforce-type-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-2);
+  margin: var(--dx-v2-space-3) 0;
+}
+
+.work-reporting-page .workforce-type-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #cbd6df;
+  border-radius: 10px;
+  background: #eef2f6;
+}
+
+.work-reporting-page .workforce-type-tabs button {
+  min-width: 88px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dx-v2-color-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.work-reporting-page .workforce-type-tabs button.is-active {
+  background: #fff;
+  color: var(--dx-v2-color-primary);
+  box-shadow: 0 1px 4px rgb(15 35 52 / 12%);
+}
+
+.work-reporting-page .workforce-type-tabs button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.work-reporting-page .workforce-person-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: var(--dx-v2-space-2);
+}
+
 .work-reporting-page .whole-order-actions {
   position: static;
   flex: 1 1 100%;
@@ -160,6 +225,25 @@
   .work-reporting-page .whole-order-metric-value,
   .work-reporting-page .whole-order-report-value {
     font-size: 18px;
+  }
+
+  .work-reporting-page .n04-assignment-controls {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: var(--dx-v2-space-2);
+  }
+
+  .work-reporting-page .workforce-type-toolbar {
+    align-items: stretch;
+  }
+
+  .work-reporting-page .workforce-type-tabs,
+  .work-reporting-page .workforce-type-toolbar > .dx-button {
+    width: 100%;
+  }
+
+  .work-reporting-page .workforce-type-tabs button {
+    flex: 1 1 0;
   }
 
   .work-reporting-dialog-backdrop {
