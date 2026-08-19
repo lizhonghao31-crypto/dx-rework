@@ -3,23 +3,25 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
 
-describe("external deduction follow-up workflow", () => {
-  it("lets business users record supplier feedback and a real next-follow-up deadline", async () => {
+describe("external deduction finance UI", () => {
+  it("keeps finance focused on the actual deduction instead of follow-up administration", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
-    expect(source).toContain('label="供应商反馈（选填）"');
-    expect(source).toContain('label="下次跟进时间（选填）"');
-    expect(source).toContain('type="datetime-local"');
-    expect(source).toContain("supplierFeedback: feedback");
-    expect(source).toContain("nextFollowUpAt: new Date(nextValue).toISOString()");
-    expect(source).toContain("nextDate.getTime() <= Date.now()");
+    expect(source).toContain('label="本次扣款金额"');
+    expect(source).toContain("应扣金额");
+    expect(source).toContain("累计已扣");
+    expect(source).toContain("剩余");
+    expect(source).not.toContain('label="供应商反馈（选填）"');
+    expect(source).not.toContain('label="下次跟进时间（选填）"');
+    expect(source).not.toContain("新增跟进");
   });
 
-  it("shows follow-up history instead of making a saved follow-up disappear after refresh", async () => {
+  it("keeps deduction evidence upload and immutable deduction history visible", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
-    expect(source).toContain("caseItem.followUps.length > 0");
-    expect(source).toContain("followUp.content");
-    expect(source).toContain("followUp.supplierFeedback");
-    expect(source).toContain("followUp.nextFollowUpAt");
-    expect(source).toContain('timeZone: "Asia/Shanghai"');
+    expect(source).toContain("<ExternalEvidenceUploader");
+    expect(source).toContain("attachmentIds: files");
+    expect(source).toContain("caseItem.deductions.length > 0");
+    expect(source).toContain("扣款记录");
+    expect(source).toContain("entry.deductedOn");
+    expect(source).toContain("entry.amount");
   });
 });
