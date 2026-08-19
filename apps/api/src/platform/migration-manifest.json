@@ -47,7 +47,7 @@
     { "version": "0045_responsibility_settled_wage_base", "checksum": "8153c0182b0c6cb91e47ea102807e4930bc8d2f34faad1f453b27991123d155d" },
     { "version": "0046_external_temporary_supplier_scope", "checksum": "06529ad63fbd65d28dcce2fb2ee8f05421f207c0cd9226611cc1380a76a20b92" },
     { "version": "0047_responsibility_rounding_reconciliation", "checksum": "262f566e631ddc96205454ba9feece52fc2c755a3ece48413719e32fc77f1ba3" },
-    { "version": "0048_uat_systemic_closure", "checksum": "7f19f5b51e71738156c427ca1f1e2ad81dc0209ce5784327183257ce3afc27" },
+    { "version": "0048_uat_systemic_closure", "checksum": "7f19f5b51e71738156c427ca1f1eaf9ef5ee486ed93fd972d42289da945fe422" },
     { "version": "0049_post_creation_order_image_binding", "checksum": "52d86a97415a332413e372c9efa7b06a937f9577507ad85784ff037bca4ef3af" },
     { "version": "0050_root_self_system_admin", "checksum": "395b8021cabdff349c6454239c6b76e3937b87a68a5ddb8fb6936f2cca4fefc0" },
     { "version": "0051_owner_self_confirmation_root_todo", "checksum": "fabcf86eadf4e828943d62fd693b8c89f0de44f61ec1441f5f31546e9748bcfa" },
