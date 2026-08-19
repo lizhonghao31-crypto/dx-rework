@@ -64,7 +64,8 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(panel).toContain("const canEditDetermination");
     expect(panel).toContain("response.ownerSignature?.decision === \"rejected\"");
     expect(panel).toContain("determination?.stage === \"finalized\"");
-    expect(panel).toContain("determination?.stage === \"draft\"");
+    expect(panel).toContain('determination.stage === "draft"');
+    expect(panel).toContain('const needsSave = determination === null || determination.stage === "finalized" || hasUnsavedChanges');
     expect(migration).toContain("V2 supplier ledger must be server-created from N07 facts");
     expect(multiplierGuard).toContain("COALESCE(allocation.multiplier, process.multiplier)");
     expect(multiplierGuard).toContain("NEW.multiplier IS DISTINCT FROM parent_multiplier");

@@ -52,7 +52,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(tailPanel).toContain("提交尾查报数");
   });
 
-  it("keeps N07 party facts valid, supplier-owned and transfer targets human-readable", async () => {
+  it("keeps responsibility party facts valid while the primary UI records the current actor automatically", async () => {
     const [panel, service, routes] = await Promise.all([
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
       readFile("apps/api/src/rework/responsibility-determination-application-service.ts", "utf8"),
@@ -62,11 +62,13 @@ describe("business-chain UI handoff contracts", () => {
     expect(panel).toContain("if (shareTotalBps(process.allocations) !== 10000n) return false;");
     expect(panel).toContain('multiplier >= 1200n && allocation.supplierId.length > 0');
     expect(panel).toContain('supplierId: allocation.supplierId || undefined');
-    expect(panel).toContain("输入姓名搜索");
-    expect(panel).toContain("ResponsibilityTransferOptionsResponseSchema");
+    expect(panel).toContain("requestCurrentUserId");
+    expect(panel).toContain('const handlerUserId = response?.handlerUserId ?? currentUserId');
+    expect(panel).not.toContain("ResponsibilityTransferOptionsResponseSchema");
+    expect(panel).not.toContain("新的责任处理人");
+    expect(panel).not.toContain("转交责任处理");
     expect(panel).not.toContain('label="目标用户 UUID"');
     expect(service).toContain("responsibility_can_determine(u.id,$2)");
-    expect(service).toContain("只有当前有效责任处理人可以查看转交对象");
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 

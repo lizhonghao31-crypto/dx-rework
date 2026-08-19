@@ -2,15 +2,17 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("business action readiness contract", () => {
-  it("keeps N01 and N08 existing readiness gates intact", async () => {
+  it("keeps N01 readiness and gates the simplified N08 submit action", async () => {
     const [initiation, responsibility] = await Promise.all([
       readFile("apps/web/src/rework-form.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
     ]);
 
     expect(initiation).toContain('disabled={mutationDisabled || !complete}');
-    expect(responsibility).toContain("const finalizable =");
-    expect(responsibility).toContain('disabled={!finalizable || Boolean(busyAction)}');
+    expect(responsibility).toContain("const allProcessesValid = processes.length > 0 && processes.every(processValid);");
+    expect(responsibility).toContain("!response || !editable || !allProcessesValid || !handlerUserId || busyAction");
+    expect(responsibility).toContain('disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}');
+    expect(responsibility).toContain('const needsSave = determination === null || determination.stage === "finalized" || hasUnsavedChanges');
   });
 
   it("gates N02 save, submit and IE rejection with deterministic prerequisites", async () => {
