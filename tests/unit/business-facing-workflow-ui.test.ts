@@ -49,7 +49,7 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("主责任方");
     expect(source).toContain("parsePercentToBps(allocation.sharePercent)");
     expect(source).toContain("shareBps: Number(allocation.shareBps)");
-    expect(source).toContain("外部扣款倍率（默认且最低 1.2）");
+    expect(source).toContain("外部扣款倍率（最低 1.2）");
     expect(source).toContain("责任供应商");
     expect(source).not.toContain('label="承担比例（%）"');
     expect(source).not.toContain('label="承担比例（bps）"');
@@ -149,7 +149,7 @@ describe("business-facing workflow UI", () => {
     ]);
     expect(source).toContain("工人上数与尾查汇总对照");
     expect(source).toContain("确认整单并进入责任判定");
-    expect(source).toContain("工人有效上数必须小于或等于尾查件数");
+    expect(source).toContain("工人有效上数不得超过尾查件数");
     expect(source).toContain("countGap");
     expect(source).not.toContain("quantity-adjustments");
     expect(source).not.toContain("oneDecimalQuantity");
