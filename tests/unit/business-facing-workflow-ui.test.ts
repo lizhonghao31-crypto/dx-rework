@@ -119,10 +119,7 @@ describe("business-facing workflow UI", () => {
     expect(detail).toContain("taskMode={selected.key}");
     expect(detail).toContain("onOrderChanged={syncAfterNodeAction}");
     expect(detail).toContain('url.searchParams.set("node", nextNode)');
-    expect(detail).toContain(`<ProcessConfigurationForm
-        reworkOrderId={detail.reworkOrderId}
-        onOrderChanged={syncAfterNodeAction}
-      />`);
+    expect(detail).toMatch(/<ProcessConfigurationForm[\s\S]*?reworkOrderId=\{detail\.reworkOrderId\}[\s\S]*?onOrderChanged=\{syncAfterNodeAction\}[\s\S]*?\/>/);
     expect(processConfiguration).toContain("onOrderChanged?: () => Promise<void> | void;");
     expect(processConfiguration.match(/await onOrderChanged\?\.\(\);/g)).toHaveLength(2);
     expect(reporting).toContain('effectiveTaskMode === "task_assignment"');
@@ -172,7 +169,9 @@ describe("business-facing workflow UI", () => {
     }
     expect(navigation).not.toContain('name: "返工执行"');
     expect(navigation).not.toContain('name: "返工上数"');
-    expect(detail).toContain("订单是唯一的流程与执行载体");
+    expect(detail).toContain("rework-detail-target-layout");
+    expect(detail).toContain("rework-detail-overview-grid");
+    expect(detail).toContain("rework-workflow__mobile-rail");
     expect(detail).toContain("rework-workflow__stage");
     expect(detail).toContain("<ProcessConfigurationForm");
     expect(detail).toContain("<WorkReportingForm");
