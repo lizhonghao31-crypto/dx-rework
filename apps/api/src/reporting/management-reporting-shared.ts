@@ -94,14 +94,14 @@ export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; lab
   pending_owner_signature: { node: "N08", label: "待老板确认签字" },
   // Only legacy records remain on this status. New orders complete their main
   // chain at N10 and keep actual deductions in the independent N11 ledger.
-  pending_responsibility_action: { node: "N-LEGACY", label: "责任结算中" },
+  pending_responsibility_action: { node: "N-LEGACY", label: "旧责任处理" },
   completed: { node: "N10", label: "订单已完成" },
   cancelled: { node: "N-C", label: "已取消" },
 };
 
 export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>>> = {
   rework_overview: new Set(Object.keys(nodeMeta)),
-  wages: new Set(["pending_tail_review", "pending_admin_review", "ready_to_lock", "locked"]),
+  wages: new Set(["ready_to_lock", "locked"]),
   responsibilities: new Set(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
   own_factory: new Set(["pending", "approved", "rejected"]),
   external_deductions: new Set([

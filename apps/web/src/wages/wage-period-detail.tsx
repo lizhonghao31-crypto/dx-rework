@@ -42,12 +42,6 @@ const formatBusinessTime = (value: string | null): string => {
 const adjustmentStatusLabel = (status: WageAdjustment["status"]): string =>
   status === "pending" ? "待审批" : status === "approved" ? "已批准" : "已拒绝";
 
-const reviewStageLabel = (stage: WagePeriodDetail["reviewActions"][number]["stage"]): string =>
-  stage === "tail" ? "尾部主管初核" : "行政复核";
-
-const reviewDecisionLabel = (decision: WagePeriodDetail["reviewActions"][number]["decision"]): string =>
-  decision === "approved" ? "通过" : "退回";
-
 export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   const [detail, setDetail] = useState<WagePeriodDetail | null>(null);
   const [periods, setPeriods] = useState<WagePeriod[]>([]);
@@ -141,17 +135,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
     await command(
       `wage-adjustments/${adjustment.adjustmentId}/${approved ? "approve" : "reject"}`,
       { expectedVersion: adjustment.version, reason },
-      approved ? "工资调整已批准，月份已重新进入尾部主管初核。" : "工资调整已拒绝。",
-    );
-  };
-
-  const returnToTailSupervisor = async (period: WagePeriod): Promise<void> => {
-    const reason = (await promptInApp("请输入退回尾部主管的原因"))?.trim();
-    if (!reason) return;
-    await command(
-      `wage-periods/${period.periodId}/administrative-return`,
-      { expectedVersion: period.periodVersion, reason },
-      "工资月份已退回尾部主管重新初核。",
+      approved ? "工资调整已批准，月份保持可月结。" : "工资调整已拒绝。",
     );
   };
 
@@ -167,26 +151,20 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   if (!detail) {
     return (
       <div className="wage-page">
-        <header className="page-heading"><div><h1>工资详情</h1></div></header>
-        <Surface><p>{message || "正在加载工资明细…"}</p></Surface>
+        <header className="page-heading"><div><h1>工资详情</h1><p>正在读取工资期间与对应返工工资明细。</p></div></header>
+        <Surface><p>{message || "正在加载工资期间…"}</p></Surface>
       </div>
     );
   }
-  const { period, items, adjustments, reviewActions } = detail;
-  const statusLabel = period.status === "pending_tail_review"
-    ? "待尾部初核"
-    : period.status === "pending_admin_review"
-      ? "待行政复核"
-      : period.status === "ready_to_lock"
-        ? "待月结"
-        : "已锁定";
+  const { period, items, adjustments } = detail;
+  const statusLabel = period.status === "locked" ? "已月结" : "可月结";
 
   return (
     <div className="wage-page">
       <header className="page-heading">
         <div>
-          <h1>返工工资核对</h1>
-          <p>工资期间：{period.periodMonth.slice(0, 7)}</p>
+          <h1>返工工资月结</h1>
+          <p>工资期间：{period.periodMonth.slice(0, 7)} · N10 订单完成与后续结算</p>
         </div>
         <StatusBadge tone={period.status === "locked" ? "success" : "info"}>
           {statusLabel}
@@ -201,34 +179,6 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
           <dt>最终金额</dt><dd><strong>¥{period.finalTotal}</strong></dd>
         </dl>
         <div className="wage-actions">
-          {period.canTailReview && (
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={() => void command(
-                `wage-periods/${period.periodId}/tail-approve`,
-                { expectedVersion: period.periodVersion },
-                "尾部主管初核已完成，现进入行政复核。",
-              )}
-            >初核通过</Button>
-          )}
-          {period.canAdministrativeReview && (
-            <>
-              <Button
-                variant="primary"
-                disabled={busy}
-                onClick={() => void command(
-                  `wage-periods/${period.periodId}/administrative-approve`,
-                  { expectedVersion: period.periodVersion },
-                  "行政复核已完成，月份已具备月结条件。",
-                )}
-              >复核通过</Button>
-              <Button
-                disabled={busy}
-                onClick={() => void returnToTailSupervisor(period)}
-              >退回</Button>
-            </>
-          )}
           {period.canLock && (
             <Button
               variant="primary"
@@ -310,15 +260,10 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       </Surface>
 
       <Surface>
-        <h2>核对历史</h2>
-        {reviewActions.length === 0 && <p>尚未开始核对。</p>}
-        {reviewActions.map((action) => (
-          <p key={action.reviewActionId}>
-            {formatBusinessTime(action.actedAt)} · {reviewStageLabel(action.stage)} · {reviewDecisionLabel(action.decision)}
-            {action.reason ? ` · ${action.reason}` : ""}
-          </p>
-        ))}
-        {period.lockedAt && <p>锁定时间：{formatBusinessTime(period.lockedAt)}</p>}
+        <h2>月结状态</h2>
+        {period.lockedAt
+          ? <p>已月结，锁定时间：{formatBusinessTime(period.lockedAt)}</p>
+          : <p>工资已经汇总，可在自然月结束后直接月结锁定。</p>}
       </Surface>
     </div>
   );

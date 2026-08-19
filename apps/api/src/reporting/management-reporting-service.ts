@@ -109,7 +109,7 @@ export class ManagementReportingService {
     const [counts, recent, wageReview, exceptions] = await Promise.all([
       this.db.query<CountRow>(`SELECT status,count(*)::text count FROM rework_orders WHERE status NOT IN ('completed','cancelled','deleted') GROUP BY status`),
       fetchFacts(this.db, { limit: 12, siteOnly: true }),
-      this.db.query<{ count: string }>(`SELECT count(*)::text count FROM rework_wage_periods WHERE status='pending_tail_review'`),
+      this.db.query<{ count: string }>(`SELECT count(*)::text count FROM rework_wage_periods WHERE status='ready_to_lock'`),
       this.db.query<{ count: string }>(
         `SELECT count(DISTINCT order_record.rework_order_id)::text count
          FROM rework_orders order_record
@@ -122,10 +122,10 @@ export class ManagementReportingService {
       ),
     ]);
     const map = new Map(counts.rows.map((row) => [row.status, number(row.count)]));
-    const pendingWageReview = number(wageReview.rows[0]?.count ?? "0");
+    const pendingWageMonthClose = number(wageReview.rows[0]?.count ?? "0");
     const nodeCounts = Object.entries(nodeMeta).map(([status, meta]) => ({ ...meta, count: map.get(status) ?? 0 }))
       .filter((item) => ["N02", "N03", "N04", "N05", "N06", "N06-A"].includes(item.node));
-    nodeCounts.push({ node: "N11", label: "订单完成与后续结算 · 待工资初核", count: pendingWageReview });
+    nodeCounts.push({ node: "N11", label: "订单完成与后续结算 · 工资可月结", count: pendingWageMonthClose });
     const currentCapabilities = capabilities(actor);
     return {
       mode: "site",
@@ -136,7 +136,7 @@ export class ManagementReportingService {
         pendingAssignment: map.get("pending_task_assignment") ?? 0,
         inProgress: map.get("in_progress") ?? 0,
         pendingOrderReview: (map.get("pending_order_review") ?? 0) + (map.get("pending_quantity_adjustment_ie_review") ?? 0),
-        pendingWageReview,
+        pendingWageReview: pendingWageMonthClose,
         siteExceptions: number(exceptions.rows[0]?.count ?? "0"),
       },
       nodeCounts,

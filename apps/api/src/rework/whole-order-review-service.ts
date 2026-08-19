@@ -228,7 +228,7 @@ export class WholeOrderReviewService {
            FROM rework_wage_periods period
            JOIN rework_wage_items item ON item.period_id=period.period_id
            WHERE item.order_review_id=$1
-             AND period.status='pending_tail_review'
+             AND period.status='ready_to_lock'
            ORDER BY period.period_id`,
           [reviewId],
         );
@@ -237,22 +237,34 @@ export class WholeOrderReviewService {
             client,
             actor,
             `wage-tail-review:${wagePeriod.period_id}:`,
-            "Newly materialized wage facts require a fresh tail review",
+            "Tail wage review was removed from the workflow",
+          );
+          await this.todos.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            `wage-admin-review:${wagePeriod.period_id}:`,
+            "Administrative wage review was removed from the workflow",
+          );
+          await this.todos.cancelOpenByDedupePrefix(
+            client,
+            actor,
+            `wage-month-lock:${wagePeriod.period_id}:`,
+            "Newly materialized wage facts require a fresh month-close task",
           );
           await this.todos.actionableForUniqueDirectRole(client, actor, {
-            category: "wage_tail_review",
+            category: "wage_month_close",
             sourceEventId: eventId,
             sourceAction: "rework.whole_order.approve",
             entityType: "rework_order",
             entityId: reworkOrderId,
-            requiredRole: "tail_supervisor",
-            requiredCapability: "wage:tail_review",
+            requiredRole: "wage_month_close_accountant",
+            requiredCapability: "wage:month_close",
             route: {
               routeName: "wage_period_detail",
               entityId: wagePeriod.period_id,
             },
             policyKey: "finance_return_or_wage_review",
-            dedupeKey: `wage-tail-review:${wagePeriod.period_id}:${wagePeriod.period_version}`,
+            dedupeKey: `wage-month-lock:${wagePeriod.period_id}:${wagePeriod.period_version}`,
           });
         }
       }

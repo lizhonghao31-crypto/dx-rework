@@ -18,18 +18,16 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const PeriodListSchema = z.array(WagePeriodSchema);
 
 const statusLabel: Record<WagePeriod["status"], string> = {
-  pending_tail_review: "待尾部初核",
-  pending_admin_review: "待行政复核",
-  ready_to_lock: "待月结",
-  locked: "已锁定",
+  pending_tail_review: "可月结",
+  pending_admin_review: "可月结",
+  ready_to_lock: "可月结",
+  locked: "已月结",
 };
 
 const statusOptions = [
   ["", "全部状态"],
-  ["pending_tail_review", "待尾部初核"],
-  ["pending_admin_review", "待行政复核"],
-  ["ready_to_lock", "待月结"],
-  ["locked", "已锁定"],
+  ["ready_to_lock", "可月结"],
+  ["locked", "已月结"],
 ] as const;
 
 type ReportState =
@@ -215,7 +213,7 @@ export function WagePeriodList() {
 
       <section className="wage-period-section">
         <div className="wage-section-heading">
-          <div><h2>月结批次</h2><p>进入月份后执行初核、行政复核、调整和锁定。</p></div>
+          <div><h2>月结批次</h2><p>工资汇总后可直接月结锁定；如有错误，可在锁定前申请调整。</p></div>
         </div>
         {message ? <p role="alert" className="form-message">{message}</p> : null}
         <div className="wage-grid">
