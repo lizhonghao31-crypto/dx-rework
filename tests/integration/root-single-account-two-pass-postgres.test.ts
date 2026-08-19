@@ -590,6 +590,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     let periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
     expect(periods).toHaveLength(1);
     let period = periods[0]!;
+    expect(period.status).toBe("ready_to_lock");
     let detail = await http<WagePeriodDetail>(
       fixture.app,
       "GET",
@@ -624,22 +625,8 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
       period = periods[0]!;
       expect(period.adjustmentTotal).toBe("0.01");
+      expect(period.status).toBe("ready_to_lock");
     }
-
-    period = await http<WagePeriod>(
-      fixture.app,
-      "POST",
-      `/wage-periods/${period.periodId}/tail-approve`,
-      { expectedVersion: period.periodVersion },
-    );
-    expect(period.status).toBe("pending_admin_review");
-    period = await http<WagePeriod>(
-      fixture.app,
-      "POST",
-      `/wage-periods/${period.periodId}/administrative-approve`,
-      { expectedVersion: period.periodVersion },
-    );
-    expect(period.status).toBe("ready_to_lock");
 
     // This is a real accounting rule, not an identity restriction. Root must
     // still be blocked from locking the current natural month early.
