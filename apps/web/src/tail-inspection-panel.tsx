@@ -133,6 +133,21 @@ export function TailInspectionPanel({
 
   const actionableAssignment = data?.assignments.find((assignment) => assignment.canSubmit) ?? null;
   const submittedAssignments = data?.assignments.filter((assignment) => assignment.submittedAt !== null) ?? [];
+  const returnedReady = /^\d+$/.test(returnedQuantity.trim()) && Number(returnedQuantity) > 0;
+  const processCountsReady = Boolean(data && data.processes.every((process) => {
+    const text = processQuantities[process.configurationItemId]?.trim() ?? "";
+    return text !== "" && isPieceCount(text);
+  }));
+  const processCountsWithinReturned = Boolean(data && returnedReady && data.processes.every((process) =>
+    Number(processQuantities[process.configurationItemId]) <= Number(returnedQuantity)));
+  const tailSubmitReady = Boolean(actionableAssignment && returnedReady && processCountsReady && processCountsWithinReturned);
+  const tailReadinessMessage = !returnedReady
+    ? "还需完成：返件总数填写为大于 0 的整数"
+    : !processCountsReady
+      ? "还需完成：每道工序填写整数件数；无返件填 0"
+      : !processCountsWithinReturned
+        ? "还需完成：单道工序数量不能超过返件总数"
+        : "";
 
   return <div className="mobile-page tail-inspection-page">
     <div className="mobile-hero">
@@ -176,8 +191,9 @@ export function TailInspectionPanel({
           <InsetField label="本次工序数量（件）" type="number" min="0" step="1" inputMode="numeric" value={processQuantities[process.configurationItemId] ?? ""} disabled={busy} onChange={(event) => setProcessQuantities((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} />
         </div>)}
       </div>
+      {tailReadinessMessage && <p className="tail-inspection-readiness" role="status">{tailReadinessMessage}</p>}
       <div className="mobile-actions tail-inspection-actions">
-        <Button variant="primary" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "Root 代报尾查数量" : "提交尾查报数"}</Button>
+        <Button variant="primary" disabled={busy || !tailSubmitReady} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "Root 代报尾查数量" : "提交尾查报数"}</Button>
       </div>
     </Surface>}
 
