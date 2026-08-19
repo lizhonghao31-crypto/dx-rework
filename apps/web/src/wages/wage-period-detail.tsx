@@ -1,14 +1,16 @@
-import { WagePeriodDetailSchema, WagePeriodSchema, type WagePeriod } from "@dx-rework/contracts/wages";
+import {
+  WagePeriodDetailSchema,
+  type WagePeriod,
+  type WagePeriodDetail,
+} from "@dx-rework/contracts/wages";
 import { formatBusinessDecimal, formatBusinessMoney } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { z } from "zod";
 
 import { createWebUrls } from "../../url-contract.js";
 import { confirmInApp } from "../system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const PeriodListSchema = z.array(WagePeriodSchema);
 
 const responseError = async (response: Response): Promise<string> => {
   try {
@@ -33,7 +35,7 @@ const formatBusinessTime = (value: string | null): string => {
 };
 
 export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
-  const [detail, setDetail] = useState<z.infer<typeof WagePeriodDetailSchema> | null>(null);
+  const [detail, setDetail] = useState<WagePeriodDetail | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const refreshing = useRef(false);
