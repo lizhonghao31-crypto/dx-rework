@@ -187,14 +187,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     "wage:tail_review",
     "wage:adjustment_request",
   );
-  const administrativeWage = () => actor(
-    ids.administrative,
-    ["administrative_clerk"],
-    "wage:view",
-    "wage:administrative_review",
-    "wage:adjustment_approve",
-    "wage:export",
-  );
   const monthCloseWage = () => actor(
     ids.monthClose,
     ["wage_month_close_accountant"],
@@ -777,7 +769,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(periods).toHaveLength(1);
     const wagePeriod = periods[0]!;
     expect(wagePeriod).toMatchObject({
-      status: "pending_tail_review",
+      status: "ready_to_lock",
       sourceItemCount: 1,
       personCount: 1,
       originalTotal: "110.00",
@@ -790,28 +782,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       (sum, item) => sum + Number(item.payableAmount),
       0,
     )).toBe(110);
-    const tailReviewed = await wages.review(
-      tailWage(),
-      wagePeriod.periodId,
-      wagePeriod.periodVersion,
-      "tail",
-      null,
-      randomUUID(),
-    );
-    expect(tailReviewed.value.status).toBe("pending_admin_review");
-    const adminReviewed = await wages.review(
-      administrativeWage(),
-      wagePeriod.periodId,
-      tailReviewed.value.periodVersion,
-      "administrative_approve",
-      null,
-      randomUUID(),
-    );
-    expect(adminReviewed.value.status).toBe("ready_to_lock");
     await expect(wages.lock(
       monthCloseWage(),
       wagePeriod.periodId,
-      adminReviewed.value.periodVersion,
+      wagePeriod.periodVersion,
       "全链测试月结",
       randomUUID(),
     )).rejects.toMatchObject({
