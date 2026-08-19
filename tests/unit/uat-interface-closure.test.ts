@@ -110,13 +110,14 @@ describe("UAT interface closure", () => {
     expect(main.indexOf('"./workflow-shell.css"')).toBeGreaterThan(main.indexOf('"./styles.css"'));
   });
 
-  it("keeps one wage adjustment form open and downloads without page navigation", async () => {
+  it("keeps wage detail and download without adjustment controls or page navigation", async () => {
     const detail = await read("apps/web/src/wages/wage-period-detail.tsx");
-    expect(detail).toContain("adjustmentItemId === item.wageItemId");
     expect(detail).toContain("查看分摊计算");
     expect(detail).toContain("formatBusinessMoney(item.payableAmount)");
     expect(detail).toContain("download");
     expect(detail).not.toContain("window.location.assign");
+    expect(detail).not.toContain("发起工资调整");
+    expect(detail).not.toContain("WageAdjustmentForm");
   });
 
   it("uses the shared Chinese vocabulary in report and wage workbooks", async () => {
