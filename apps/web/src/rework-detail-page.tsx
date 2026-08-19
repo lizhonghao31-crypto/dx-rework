@@ -15,8 +15,10 @@ import { promptInApp } from "./system-dialog.js";
 import { TailInspectionPanel } from "./tail-inspection-panel.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./rework-detail.css";
+import "./rework-detail-compact.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+
 type ReworkStatus =
   | "draft"
   | "pending_process_configuration"
@@ -97,17 +99,8 @@ type ReworkBusinessDetail = Readonly<{
 }>;
 
 type ReworkAttachment = ReworkBusinessDetail["attachments"][number];
-
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "ready"; value: ReworkBusinessDetail }
-  | { kind: "error"; message: string };
-
-type AuthMe = Readonly<{
-  status: "authorized" | "no_role";
-  user: AuthorizedUser;
-}>;
-
+type LoadState = { kind: "loading" } | { kind: "ready"; value: ReworkBusinessDetail } | { kind: "error"; message: string };
+type AuthMe = Readonly<{ status: "authorized" | "no_role"; user: AuthorizedUser }>;
 type WorkflowNodeState = "completed" | "current" | "future" | "followup";
 type WorkflowNode = Readonly<{
   key: WorkflowNodeKey;
@@ -118,11 +111,7 @@ type WorkflowNode = Readonly<{
   state: WorkflowNodeState;
   preview: string;
 }>;
-type WorkflowStage = Readonly<{
-  key: string;
-  title: string;
-  nodes: readonly WorkflowNode[];
-}>;
+type WorkflowStage = Readonly<{ key: string; title: string; nodes: readonly WorkflowNode[] }>;
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
@@ -193,9 +182,7 @@ const orderIdFromLocation = (): string | null => {
   const currentPath = window.location.pathname.startsWith(basePath)
     ? window.location.pathname.slice(basePath.length) || "/"
     : window.location.pathname;
-  const match = currentPath.match(
-    /^\/ui\/tasks\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i,
-  );
+  const match = currentPath.match(/^\/ui\/tasks\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
   return match?.[1] ?? null;
 };
 
@@ -213,15 +200,11 @@ const formatTime = (value: string | null): string => {
   }).format(new Date(value));
 };
 
-const attachmentUrl = (
-  attachmentId: string,
-  mode: "preview" | "download",
-): string => apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
+const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
+  apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
-const hasRole = (user: AuthorizedUser | null, role: string): boolean =>
-  user?.businessRoles?.includes(role) === true;
-const hasCapability = (user: AuthorizedUser | null, capability: string): boolean =>
-  user?.capabilities.includes(capability) === true;
+const hasRole = (user: AuthorizedUser | null, role: string): boolean => user?.businessRoles?.includes(role) === true;
+const hasCapability = (user: AuthorizedUser | null, capability: string): boolean => user?.capabilities.includes(capability) === true;
 const elevated = (user: AuthorizedUser | null): boolean => user?.isRoot === true || hasRole(user, "owner_group");
 
 const canUseProcessWorkspace = (user: AuthorizedUser | null): boolean => elevated(user)
@@ -240,19 +223,14 @@ const canUseTailInspection = (user: AuthorizedUser | null): boolean => elevated(
     hasCapability(user, "process:configure") || hasCapability(user, "submission:audit")
   ))
   || (hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report"));
+
 const workflowState = (detail: ReworkBusinessDetail, key: WorkflowNodeKey): WorkflowNodeState => {
   if (detail.status === "cancelled") return "future";
-  // N06 begins immediately after N02 assigns a tail inspector. It runs in
-  // parallel with IE review, worker assignment and worker reporting.
   if (key === "tail_inspection") {
     if (["pending_ie_review", "pending_task_assignment", "in_progress"].includes(detail.status)) return "current";
     return statusRank[detail.status] > nodeRank[key] ? "completed" : "future";
   }
-  // The ledger is atomic. Once the order has entered the responsibility-action
-  // state, there is no human settlement node left to perform here.
   if (key === "settlement_ledger" && detail.status === "pending_responsibility_action") return "completed";
-  // The final N10 card combines the completed order with later wage/supplier
-  // settlement presentation, without falsely reopening the order itself.
   if (detail.status === "completed") {
     if (key !== "settlement_followup") return "completed";
     return ["in_progress", "revision_in_progress"].includes(detail.settlementStatus)
@@ -295,7 +273,6 @@ const buildWorkflow = (
       preview,
     };
   };
-
   return [
     {
       key: "planning",
@@ -335,11 +312,7 @@ const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.ever
     : stage.nodes.some((node) => node.state === "followup") ? "followup" : "future";
 
 const wageStatusLabel = (status: ReworkBusinessDetail["unsettledWagePeriods"][number]["status"]): string =>
-  status === "pending_tail_review"
-    ? "待尾部主管初核"
-    : status === "pending_admin_review"
-      ? "待行政复核"
-      : "待工资月结会计锁定";
+  status === "pending_tail_review" ? "待尾部主管初核" : status === "pending_admin_review" ? "待行政复核" : "待工资月结会计锁定";
 
 const followUpStatusLabel = (detail: ReworkBusinessDetail): string => {
   const labels: string[] = [];
@@ -355,17 +328,13 @@ const followUpStatusLabel = (detail: ReworkBusinessDetail): string => {
 const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): string =>
   node.key === "settlement_followup" && node.state !== "future"
     ? `${detail.status === "completed" ? "订单已完成 · " : ""}${followUpStatusLabel(detail)}`
-    : node.state === "completed"
-      ? "已完成"
-      : node.state === "current" ? "处理中" : "未开始";
+    : node.state === "completed" ? "已完成" : node.state === "current" ? "处理中" : "未开始";
 
 const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
 
 const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action === "rework.attachments.supplement") return "initiation";
   if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
-  // IE approval is recorded by the configuration service, so distinguish the
-  // terminal review action before the broader process-configuration match.
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
   if (action.includes("process_configuration")) return "process_configuration";
   if (action.includes("tail_inspection")) return "tail_inspection";
@@ -415,9 +384,7 @@ export function ReworkDetailPage({
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
-    window.matchMedia("(max-width: 640px)").matches
-      ? new Set(["planning", "execution", "responsibility"])
-      : new Set(),
+    window.matchMedia("(max-width: 640px)").matches ? new Set(["planning", "execution", "responsibility"]) : new Set(),
   );
 
   const load = useCallback(async (signal?: AbortSignal): Promise<ReworkBusinessDetail | null> => {
@@ -447,8 +414,7 @@ export function ReworkDetailPage({
       url.searchParams.set("node", nextNode);
       window.history.replaceState({}, "", url);
     } catch {
-      // The business mutation already succeeded. Keep its success feedback and
-      // let the user retry a manual page refresh instead of reporting a false failure.
+      // Mutation already succeeded; preserve its success feedback and allow a manual refresh.
     }
   }, [load]);
 
@@ -464,9 +430,7 @@ export function ReworkDetailPage({
 
   useEffect(() => {
     if (!selectedImage) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedImage(null);
-    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setSelectedImage(null); };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [selectedImage]);
@@ -485,10 +449,7 @@ export function ReworkDetailPage({
     return () => controller.abort();
   }, [load, reworkOrderId]);
 
-  const backAction = returnToTodos
-    ? { action: "返回我的待办", actionHref: "/ui/my-tasks" }
-    : {};
-
+  const backAction = returnToTodos ? { action: "返回我的待办", actionHref: "/ui/my-tasks" } : {};
   if (state.kind === "loading") {
     return <Shell active="全部订单"><Header title="返工单详情" badge="实时读取" {...backAction} /><Surface>正在加载返工单…</Surface></Shell>;
   }
@@ -498,18 +459,17 @@ export function ReworkDetailPage({
 
   const detail = state.value;
   const orderAttachments = detail.attachments.filter((attachment) => attachment.entityType === "rework_order");
-  const imageAttachments = detail.attachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
-  const otherAttachments = detail.attachments.filter((attachment) => !attachment.mimeType.startsWith("image/"));
+  const imageAttachments = orderAttachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
-  const activeNode = stages.flatMap((stage) => stage.nodes)
-    .find((node) => node.state === "current" || node.state === "followup")?.key;
+  const workflowNodes = stages.flatMap((stage) => stage.nodes);
+  const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key;
   const selectedFromUrl = workflowNodeFromSearch();
-  const defaultSelectedNode = detail.status === "pending_process_configuration"
-    ? "initiation"
-    : activeNode ?? "settlement_followup";
+  const defaultSelectedNode = detail.status === "pending_process_configuration" ? "initiation" : activeNode ?? "settlement_followup";
   const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
-  const selected = stages.flatMap((stage) => stage.nodes).find((node) => node.key === selectedNode);
+  const selected = workflowNodes.find((node) => node.key === selectedNode);
+  const activeStepIndex = Math.max(1, workflowNodes.findIndex((node) => node.key === activeNode) + 1);
+
   const canSeeResponsibility = elevated(currentUser)
     || hasCapability(currentUser, "responsibility:determine")
     || hasCapability(currentUser, "responsibility:takeover")
@@ -518,27 +478,21 @@ export function ReworkDetailPage({
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
   const canSeeWages = elevated(currentUser) || hasCapability(currentUser, "wage:view");
   const canSeeWholeOrderReview = elevated(currentUser) || [
-    "submission:audit",
-    "quantity:adjust",
-    "quantity:confirm",
-    "process:review",
+    "submission:audit", "quantity:adjust", "quantity:confirm", "process:review",
   ].some((capability) => hasCapability(currentUser, capability));
   const canSupplementOrderImages = detail.status !== "completed"
     && detail.status !== "cancelled"
-    && (elevated(currentUser) || (
-      hasRole(currentUser, "quality_control")
-      && hasCapability(currentUser, "rework:initiate")
-    ));
-  const canHandleInitiation = elevated(currentUser) || (
-    hasRole(currentUser, "quality_control")
-    && hasCapability(currentUser, "rework:initiate")
-  );
+    && (elevated(currentUser) || (hasRole(currentUser, "quality_control") && hasCapability(currentUser, "rework:initiate")));
+  const canHandleInitiation = elevated(currentUser)
+    || (hasRole(currentUser, "quality_control") && hasCapability(currentUser, "rework:initiate"));
 
   const renderNodePreview = () => {
     if (!selected) return null;
     const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
     return <Surface className="rework-detail-node-preview">
-      <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>{selected.state === "completed" ? "已完成 · 可只读" : selected.state === "followup" ? `${nodeStatusLabel(selected, detail)} · 只读` : "未开始 · 可预览"}</StatusBadge>
+      <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>
+        {selected.state === "completed" ? "已完成 · 可只读" : selected.state === "followup" ? `${nodeStatusLabel(selected, detail)} · 只读` : "未开始 · 可预览"}
+      </StatusBadge>
       <h2>{selected.number} · {selected.label}</h2>
       <p>{selected.preview}</p>
       <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
@@ -566,49 +520,26 @@ export function ReworkDetailPage({
     if (!selected) return null;
     if (selected.key === "initiation" && detail.status === "draft") {
       return canHandleInitiation
-        ? <ReworkInitiationForm
-          reworkOrderId={detail.reworkOrderId}
-          embedded
-          onOrderChanged={() => { void load(); }}
-        />
+        ? <ReworkInitiationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={() => { void load(); }} />
         : <NodePermissionNotice node={selected} />;
     }
     if (selected.key === "initiation" && detail.status === "pending_process_configuration") {
-      return <InitiationFollowUpActions
-        detail={detail}
-        canHandleInitiation={canHandleInitiation}
-        onChanged={() => { void load(); }}
-      />;
+      return <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
-      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm
-        reworkOrderId={detail.reworkOrderId}
-        onOrderChanged={syncAfterNodeAction}
-      />;
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
-      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm
-        reworkOrderId={detail.reworkOrderId}
-        taskMode={selected.key}
-        onOrderChanged={syncAfterNodeAction}
-      />;
+      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && selected.key === "tail_inspection") {
-      if (canUseTailInspection(currentUser)) return <TailInspectionPanel
-        reworkOrderId={detail.reworkOrderId}
-        isRoot={currentUser?.isRoot === true}
-        onOrderChanged={syncAfterNodeAction}
-      />;
+      if (canUseTailInspection(currentUser)) return <TailInspectionPanel reworkOrderId={detail.reworkOrderId} isRoot={currentUser?.isRoot === true} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "quantity_adjustment")) {
-      if (canSeeWholeOrderReview) return <WorkReportingForm
-        reworkOrderId={detail.reworkOrderId}
-        taskMode="whole_order_review"
-        onOrderChanged={syncAfterNodeAction}
-      />;
+      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "responsibility" || selected.key === "owner_signature")) {
@@ -632,54 +563,32 @@ export function ReworkDetailPage({
     return renderNodePreview();
   };
 
+  const renderWorkflowNode = (node: WorkflowNode) => (
+    <a className={`rework-workflow__node is-${node.state}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
+      <b>{node.number}</b>
+      <span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span>
+      <em>{nodeStatusLabel(node, detail)}</em>
+    </a>
+  );
+
   return (
     <Shell active="全部订单">
       <Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} {...backAction} />
-      <div className="rework-detail-layout">
-        <Surface className="rework-detail-summary">
-          <div className="section-title">
-            <div><h2>返工单信息</h2><p>订单是唯一的流程与执行载体；处理动作始终在对应节点下方完成。</p></div>
-          </div>
-          <div className="rework-detail-summary-sections">
-            <section className="rework-detail-summary-section">
-              <h3>订单与执行</h3>
-              <dl className="rework-detail-facts rework-detail-facts--core">
-                <div><dt>订单号</dt><dd>{detail.orderNo ?? "未填写"}</dd></div>
-                <div><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
-                <div><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
-                <div><dt>订单数量</dt><dd>{detail.orderQuantity === null ? "—" : `${detail.orderQuantity} 件`}</dd></div>
-                <div><dt>返工数量</dt><dd>{detail.reworkQuantity === null ? "—" : `${detail.reworkQuantity} 件`}</dd></div>
-              </dl>
-            </section>
-            <section className="rework-detail-summary-section">
-              <h3>返工问题</h3>
-              <dl className="rework-detail-facts rework-detail-facts--issue">
-                <div><dt>返工原因</dt><dd>{detail.reworkReason ?? "—"}</dd></div>
-                <div><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
-                <div><dt>问题部位</dt><dd>{detail.problemPart ?? "—"}</dd></div>
-                <div className="rework-detail-wide rework-detail-description"><dt>问题描述</dt><dd>{detail.problemDescription ?? "—"}</dd></div>
-              </dl>
-            </section>
-            <details className="rework-detail-secondary-facts">
-              <summary><b>更多订单资料</b><small>客供代号、附件与操作记录</small></summary>
-              <dl className="rework-detail-facts rework-detail-facts--secondary">
-                <div><dt>客供代号</dt><dd>{detail.customerSupplyCode ?? "—"}</dd></div>
-                <div><dt>工厂货号</dt><dd>{detail.factoryStyleNo ?? "—"}</dd></div>
-                <div><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
-                <div><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
-                <div><dt>最近更新</dt><dd>{formatTime(detail.updatedAt)}</dd></div>
-                {detail.cancelReason ? <div className="rework-detail-wide"><dt>取消原因</dt><dd>{detail.cancelReason}</dd></div> : null}
-                {otherAttachments.length > 0 && <div className="rework-detail-wide"><dt>其他附件（含外部责任凭证）</dt><dd>{otherAttachments.map((attachment) => <span key={attachment.attachmentId}>
-                  {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}（{attachment.mimeType}）{" "}
-                  <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
-                  <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
-                </span>)}</dd></div>}
-              </dl>
-            </details>
-          </div>
-          {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
+      <div className="rework-detail-layout rework-detail-target-layout">
+        <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
+          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
+          <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--attachments"><dt>附件</dt><dd>{orderAttachments.length} 份</dd></div>
+        </dl>
+
+        {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
+
+        <div className="rework-detail-overview-grid">
           <section className="rework-detail-images" aria-label="订单图片">
-            <div className="section-title">
+            <div className="section-title rework-detail-panel-title">
               <div><h2>订单图片</h2></div>
               <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge>
             </div>
@@ -702,54 +611,60 @@ export function ReworkDetailPage({
                     aria-label={`放大查看 ${attachment.filename}`}
                   >
                     <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
-                    <span>{attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}</span>
+                    <span>{attachment.filename}</span>
                   </button>
                 ))}
               </div>
-            ) : null}
+            ) : <p className="rework-detail-empty">暂无订单图片</p>}
           </section>
-        </Surface>
 
-        <section className="rework-workflow" key={detail.status} aria-label="订单流程">
-          <div className="rework-workflow__heading"><div><h2>订单流程</h2><p>阶段可收起；点击任务节点查看规则、历史或当前处理页。</p></div></div>
-          <div className="rework-workflow__stages">
-            {stages.map((stage) => {
-              const state = stageState(stage);
-              const isOpen = !collapsedStages.has(stage.key);
-              return <details
-                className={`rework-workflow__stage is-${state}`}
-                key={stage.key}
-                open={isOpen}
-                onToggle={(event) => {
-                  const nextOpen = event.currentTarget.open;
-                  setCollapsedStages((current) => {
-                    const next = new Set(current);
-                    if (nextOpen) next.delete(stage.key);
-                    else next.add(stage.key);
-                    return next;
-                  });
-                }}
-              >
-                <summary>
-                  <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
-                  <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
-                </summary>
-                <div className="rework-workflow__nodes">
-                  {stage.nodes.map((node) => <a className={`rework-workflow__node is-${node.state}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
-                    <b>{node.number}</b><span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span><em>{nodeStatusLabel(node, detail)}</em>
-                  </a>)}
-                </div>
-              </details>;
-            })}
+          <section className="rework-workflow" key={detail.status} aria-label="订单流程">
+            <div className="rework-workflow__heading rework-detail-panel-title">
+              <div><h2>订单流程</h2></div>
+              <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
+            </div>
+            <div className="rework-workflow__stages rework-workflow__desktop-stages">
+              {stages.map((stage) => {
+                const state = stageState(stage);
+                const isOpen = !collapsedStages.has(stage.key);
+                return <details
+                  className={`rework-workflow__stage is-${state}`}
+                  key={stage.key}
+                  open={isOpen}
+                  onToggle={(event) => {
+                    const nextOpen = event.currentTarget.open;
+                    setCollapsedStages((current) => {
+                      const next = new Set(current);
+                      if (nextOpen) next.delete(stage.key);
+                      else next.add(stage.key);
+                      return next;
+                    });
+                  }}
+                >
+                  <summary>
+                    <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
+                    <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
+                  </summary>
+                  <div className="rework-workflow__nodes">{stage.nodes.map(renderWorkflowNode)}</div>
+                </details>;
+              })}
+            </div>
+            <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
+              {workflowNodes.map(renderWorkflowNode)}
+            </div>
             {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N08 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section className="rework-detail-task" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><div><p>当前查看节点</p><h2>{selected?.number} · {selected?.label}</h2></div><StatusBadge tone={selected?.state === "completed" ? "success" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge></div>
+        <section className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
+          <div className="rework-detail-task__heading">
+            <div><h2>当前工作区</h2><p>{selected?.number} · {selected?.label}</p></div>
+            <StatusBadge tone={selected?.state === "completed" ? "success" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge>
+          </div>
           {renderSelectedTask()}
         </section>
       </div>
+
       {selectedImage && (
         <div className="rework-image-modal" role="presentation" onMouseDown={() => setSelectedImage(null)}>
           <section
@@ -760,7 +675,7 @@ export function ReworkDetailPage({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="rework-image-modal__heading">
-              <strong>{selectedImage.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{selectedImage.filename}</strong>
+              <strong>{selectedImage.filename}</strong>
               <button type="button" onClick={() => setSelectedImage(null)}>关闭</button>
             </div>
             <img src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
@@ -858,9 +773,7 @@ function OrderCompletionAndSettlementSummary({ detail }: { detail: ReworkBusines
   </Surface>;
 }
 
-function WageSettlementFollowUp({ periods }: {
-  periods: ReworkBusinessDetail["unsettledWagePeriods"];
-}) {
+function WageSettlementFollowUp({ periods }: { periods: ReworkBusinessDetail["unsettledWagePeriods"] }) {
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone="info">已计入工资批次</StatusBadge>
     <h2>工资结算进度</h2>
