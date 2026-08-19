@@ -237,6 +237,77 @@ export class TailInspectionService {
     });
   }
 
+  async reject(
+    actor: TrustedActorContext,
+    assignmentId: string,
+    input: { expectedOrderVersion: number; reason: string },
+    idempotencyKey: string,
+  ): Promise<Result<TailInspectionResponse>> {
+    this.ensureReviewer(actor);
+    return this.mutate(actor, "rework.tail_inspection.reject", idempotencyKey, { assignmentId, ...input }, 200, async (client) => {
+      const assignment = await this.assignment(client, assignmentId, true);
+      const order = await this.order(client, assignment.rework_order_id, true);
+      if (order.version !== input.expectedOrderVersion) fail("返工单版本冲突，请刷新后重试");
+      if (order.status !== "pending_order_review") fail("只有 N07 整单确认阶段可以驳回尾查报数", 409, "INVALID_STATE_TRANSITION");
+      if (assignment.revoked_at !== null) fail("该尾查分配已失效", 409, "INVALID_STATE_TRANSITION");
+      const report = await client.query<{ tail_inspection_report_id: string; returned_quantity: string }>(
+        `SELECT tail_inspection_report_id,returned_quantity
+         FROM rework_tail_inspection_reports
+         WHERE tail_inspection_assignment_id=$1 AND status='submitted'
+         ORDER BY submitted_at DESC,tail_inspection_report_id DESC
+         LIMIT 1 FOR UPDATE`,
+        [assignmentId],
+      );
+      const current = report.rows[0] ?? fail("当前没有可驳回的尾查报数", 409, "CONFLICT");
+      const reason = input.reason.trim();
+      if (!reason) fail("驳回尾查必须填写原因", 400, "VALIDATION_ERROR");
+      const eventId = await this.events.append(client, actor, {
+        action: "rework.tail_inspection.reject",
+        entityType: "rework_tail_inspection_assignment",
+        entityId: assignmentId,
+        before: {
+          reworkOrderId: assignment.rework_order_id,
+          assignmentId,
+          tailInspectionReportId: current.tail_inspection_report_id,
+          status: "submitted",
+          returnedQuantity: Number(current.returned_quantity),
+          orderStatus: order.status,
+          orderVersion: order.version,
+        },
+        after: {
+          reworkOrderId: assignment.rework_order_id,
+          assignmentId,
+          tailInspectionReportId: current.tail_inspection_report_id,
+          status: "rejected",
+          orderStatus: order.status,
+          orderVersion: order.version,
+        },
+        reason,
+      });
+      await this.context(client, eventId, actor.requestId);
+      await client.query(
+        `UPDATE rework_tail_inspection_reports
+         SET status='rejected',rejected_at=CURRENT_TIMESTAMP,rejected_by=$2,rejection_reason=$3
+         WHERE tail_inspection_report_id=$1 AND status='submitted'`,
+        [current.tail_inspection_report_id, actor.actorId, reason],
+      );
+      await this.todos?.actionableForNamedRecipient(client, actor, {
+        category: "tail_inspection",
+        sourceEventId: eventId,
+        sourceAction: "rework.tail_inspection.reject",
+        entityType: "rework_order",
+        entityId: assignment.rework_order_id,
+        recipientUserId: assignment.tail_inspector_user_id,
+        requiredRole: "tail_inspector",
+        requiredCapability: "tail_inspection:report",
+        route: { routeName: "rework_detail", entityId: assignment.rework_order_id, tab: "tail_inspection" },
+        policyKey: "general",
+        dedupeKey: `tail-inspection-return:${current.tail_inspection_report_id}`,
+      });
+      return this.dto(client, actor, order);
+    });
+  }
+
   private ensureSupervisor(actor: TrustedActorContext): void {
     if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_supervisor") || actor.authorizationCapability !== "process:configure")) {
       fail("只有尾部主管可以分配尾查人员", 403, "FORBIDDEN");
@@ -246,6 +317,12 @@ export class TailInspectionService {
   private ensureReporter(actor: TrustedActorContext): void {
     if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_inspector") || actor.authorizationCapability !== "tail_inspection:report")) {
       fail("只有尾查可以提交尾查报数", 403, "FORBIDDEN");
+    }
+  }
+
+  private ensureReviewer(actor: TrustedActorContext): void {
+    if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_supervisor") || actor.authorizationCapability !== "submission:audit")) {
+      fail("只有尾部主管可以驳回尾查报数", 403, "FORBIDDEN");
     }
   }
 
