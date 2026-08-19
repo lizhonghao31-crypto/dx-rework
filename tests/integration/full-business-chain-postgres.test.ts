@@ -180,13 +180,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ["owner_group"],
     "responsibility:owner_sign",
   );
-  const tailWage = () => actor(
-    ids.tail,
-    ["tail_supervisor"],
-    "wage:view",
-    "wage:tail_review",
-    "wage:adjustment_request",
-  );
+  const tailWage = () => actor(ids.tail, ["tail_supervisor"], "wage:view");
   const monthCloseWage = () => actor(
     ids.monthClose,
     ["wage_month_close_accountant"],
@@ -624,147 +618,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
 
-    /* Historical N08-B scenario retained below as reference only. Current V2
-       N09/N11 execution is covered by the active assertions and Root double pass.
-    expect(externalBatch!.cases).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        responsibilityType: "processing_factory",
-        supplier: expect.objectContaining({ supplierId: factorySupplierId }),
-        proposedDeductionAmount: "66.00",
-        actualDeductedAmount: "0.00",
-        status: "deduction_follow_up",
-        caseVersion: 1,
-      }),
-      expect.objectContaining({
-        responsibilityType: "fabric_supplier",
-        supplier: expect.objectContaining({ supplierId: fabricSupplierId }),
-        proposedDeductionAmount: "16.50",
-      }),
-    ]));
-    const externalCase = externalBatch!.cases.find(
-      (item) => item.responsibilityType === "processing_factory",
-    )!;
-    const deduction = await external.recordDeduction(
-      payables(),
-      externalCase.caseId,
-      CreateExternalDeductionEntrySchema.parse({
-        expectedCaseVersion: externalCase.caseVersion,
-        entryType: "deduction",
-        amount: "66.00",
-        deductedOn: new Date().toISOString().slice(0, 10),
-        attachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    expect(deduction.value).toMatchObject({
-      status: "deduction_follow_up",
-      actualDeductedAmount: "66.00",
-      remainingAmount: "0.00",
-    });
-    const fabricCase = externalBatch!.cases.find(
-      (item) => item.responsibilityType === "fabric_supplier",
-    )!;
-    const fabricDeduction = await external.recordDeduction(
-      fabricPayables(),
-      fabricCase.caseId,
-      CreateExternalDeductionEntrySchema.parse({
-        expectedCaseVersion: fabricCase.caseVersion,
-        entryType: "deduction",
-        amount: "16.50",
-        deductedOn: new Date().toISOString().slice(0, 10),
-        attachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    expect(fabricDeduction.value).toMatchObject({
-      status: "deduction_follow_up",
-      actualDeductedAmount: "16.50",
-      remainingAmount: "0.00",
-    });
-    const embroideryBatch = await external.get(
-      embroideryMerchandiser(),
-      submitted.value.reworkOrderId,
-    );
-    expect(embroideryBatch).not.toBeNull();
-    const embroideryCase = embroideryBatch!.cases[0]!;
-    expect(embroideryCase).toMatchObject({
-      responsibilityType: "embroidery_factory",
-      supplier: { supplierId: embroiderySupplierId },
-      proposedDeductionAmount: "16.50",
-      status: "deduction_follow_up",
-    });
-    const embroideryDeduction = await external.recordDeduction(
-      embroideryPayables(),
-      embroideryCase.caseId,
-      CreateExternalDeductionEntrySchema.parse({
-        expectedCaseVersion: embroideryCase.caseVersion,
-        entryType: "deduction",
-        amount: "16.50",
-        deductedOn: new Date().toISOString().slice(0, 10),
-        attachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    expect(embroideryDeduction.value).toMatchObject({
-      status: "deduction_follow_up",
-      actualDeductedAmount: "16.50",
-      remainingAmount: "0.00",
-    });
-    expect((await database.query<{ status: string }>(
-      "SELECT status FROM rework_orders WHERE rework_order_id=$1",
-      [submitted.value.reworkOrderId],
-    )).rows[0]).toEqual({ status: "completed" });
-
-    // N10-B - actual deduction remains a separate lifecycle after N09.
-    const closed = await external.close(
-      payables(),
-      externalCase.caseId,
-      CloseExternalDeductionCaseSchema.parse({
-        expectedCaseVersion: deduction.value.caseVersion,
-        result: "full",
-        evidenceAttachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    expect(closed.value).toMatchObject({
-      status: "closed",
-      closure: {
-        result: "full",
-        proposedAmount: "66.00",
-        actualDeductedAmount: "66.00",
-        remainingAmount: "0.00",
-      },
-    });
-    await external.close(
-      fabricPayables(),
-      fabricCase.caseId,
-      CloseExternalDeductionCaseSchema.parse({
-        expectedCaseVersion: fabricDeduction.value.caseVersion,
-        result: "full",
-        evidenceAttachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    await external.close(
-      embroideryPayables(),
-      embroideryCase.caseId,
-      CloseExternalDeductionCaseSchema.parse({
-        expectedCaseVersion: embroideryDeduction.value.caseVersion,
-        result: "full",
-        evidenceAttachmentIds: [],
-      }),
-      randomUUID(),
-    );
-    expect((await database.query<{ status: string }>(
-      "SELECT status FROM rework_orders WHERE rework_order_id=$1",
-      [submitted.value.reworkOrderId],
-    )).rows[0]).toEqual({ status: "completed" });
-    */
-
     // Wage settlement remains independent from the closed business flow.
     // The current natural month is intentionally not force-locked: the service
-    // must reach ready_to_lock and then enforce the month-end barrier. The
-    // historical-month lock itself remains covered by wage-workflow-postgres.
+    // must reach ready_to_lock and then enforce the month-end barrier.
     const periods = await wages.list(tailWage());
     expect(periods).toHaveLength(1);
     const wagePeriod = periods[0]!;
@@ -772,16 +628,18 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "ready_to_lock",
       sourceItemCount: 1,
       personCount: 1,
-      originalTotal: "110.00",
-      adjustmentTotal: "0.00",
-      finalTotal: "110.00",
+      totalAmount: "110.00",
     });
+    expect(wagePeriod).not.toHaveProperty("adjustmentTotal");
+    expect(wagePeriod).not.toHaveProperty("finalTotal");
     const wageDetail = await wages.get(tailWage(), wagePeriod.periodId);
     expect(wageDetail.items).toHaveLength(1);
     expect(wageDetail.items.reduce(
       (sum, item) => sum + Number(item.payableAmount),
       0,
     )).toBe(110);
+    expect(wageDetail).not.toHaveProperty("adjustments");
+    expect(wageDetail).not.toHaveProperty("reviewActions");
     await expect(wages.lock(
       monthCloseWage(),
       wagePeriod.periodId,
