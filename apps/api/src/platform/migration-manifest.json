@@ -71,6 +71,7 @@
     { "version": "0069_rework_image_submission_uuid_cast", "checksum": "59dc48dc708261940935791d8a97704d705273ebf358ff0700b234a25b96ff55" },
     { "version": "0070_root_tail_inspection_reporting", "checksum": "5d81290dc3aa946b4a19672b2f0e9c89675e56ea812bc80470343fd37a55ef69" },
     { "version": "0071_n04_assignment_workforce_ux", "checksum": "e7a3ebaa3a745e17cb6a58f46fc20459d99f00bb939b64a17d7b2b343fe3d6a7" },
-    { "version": "0072_tail_inspection_rejection", "checksum": "238984ca539ab697871b35836825d3cf9c62b7f5b86883aadef67326ab58573f" }
+    { "version": "0072_tail_inspection_rejection", "checksum": "238984ca539ab697871b35836825d3cf9c62b7f5b86883aadef67326ab58573f" },
+    { "version": "0073_wage_direct_month_close_guard", "checksum": "c6e4ebc9c7eb4ee15b0da9b02a186a42a5e29e3d53528cd50df5815081819189" }
   ]
 }
