@@ -6,6 +6,10 @@ const panelUrl = new URL(
   "../../apps/web/src/responsibility-determination-panel.tsx",
   import.meta.url,
 );
+const routesUrl = new URL(
+  "../../apps/api/src/rework/responsibility-determination-routes.ts",
+  import.meta.url,
+);
 const pagesUrl = new URL("../../apps/web/src/pages.tsx", import.meta.url);
 const styleUrl = new URL(
   "../../apps/web/src/responsibility-determination.css",
@@ -13,25 +17,31 @@ const styleUrl = new URL(
 );
 
 describe("responsibility determination web integration", () => {
-  it("loads the live N07/N08 schemas and supplier plus owner-signature endpoints", async () => {
-    const source = await readFile(panelUrl, "utf8");
+  it("uses one primary N08 submit action while retaining backend takeover and transfer compatibility", async () => {
+    const [source, routes] = await Promise.all([
+      readFile(panelUrl, "utf8"),
+      readFile(routesUrl, "utf8"),
+    ]);
     expect(source).toContain("ResponsibilityDeterminationResponseSchema");
     expect(source).toContain(
       "rework-orders/${reworkOrderId}/responsibility-determination",
     );
     expect(source).toContain("responsibility-determinations/drafts");
     expect(source).toContain("responsibility-determinations/finalize");
-    expect(source).toContain("responsibility-determinations/transfer");
     expect(source).toContain("responsibility-determinations/takeover");
+    expect(source).not.toContain("responsibility-determinations/transfer`");
+    expect(routes).toContain("responsibility-determinations/transfer");
     expect(source).toContain("responsibility-determinations/supplier-options");
     expect(source).toContain("responsibility-owner-signature/${decision}");
     expect(source).toContain(
       "pendingMutationKeys.current[signature] ?? crypto.randomUUID()",
     );
     expect(source).toContain('"idempotency-key": idempotencyKey');
+    expect(source).toContain("提交老板签字");
+    expect(source).not.toContain("请先保存草稿");
   });
 
-  it("keeps N07 to one primary responsibility and carries a joint-responsibility record", async () => {
+  it("keeps N08 to one primary responsibility and carries a joint-responsibility record", async () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).toContain("primaryResponsibilityType");
     expect(source).toContain("setPrimaryResponsibility");
@@ -63,6 +73,7 @@ describe("responsibility determination web integration", () => {
     expect(panel).toContain("response.canDetermine");
     expect(panel).toContain("response?.canTakeover");
     expect(panel).toContain("response?.canOwnerSign");
+    expect(panel).toContain("requestCurrentUserId");
   });
 
   it("keeps the responsibility workspace usable on narrow screens", async () => {
