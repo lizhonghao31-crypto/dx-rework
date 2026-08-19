@@ -63,6 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           migration_sensitive=false
+          business_chain_sensitive=false
           deployment_sensitive=false
           git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
           while IFS= read -r path; do
@@ -72,22 +73,28 @@ jobs:
                 ;;
             esac
             case "$path" in
+              apps/api/src/rework/*|apps/api/src/wages/*|apps/api/src/todos/*|packages/contracts/src/wages.ts|packages/contracts/src/todo-presentation.ts|tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/run-business-chain-gate.mjs)
+                business_chain_sensitive=true
+                ;;
+            esac
+            case "$path" in
               tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
                 deployment_sensitive=true
                 ;;
             esac
           done < "$RUNNER_TEMP/full-gate-changed-files.txt"
           db_required=false
-          if [[ "$migration_sensitive" == true || "$deployment_sensitive" == true ]]; then
+          if [[ "$migration_sensitive" == true || "$business_chain_sensitive" == true || "$deployment_sensitive" == true ]]; then
             db_required=true
           fi
           {
             echo "MIGRATION_SENSITIVE=$migration_sensitive"
+            echo "BUSINESS_CHAIN_SENSITIVE=$business_chain_sensitive"
             echo "DEPLOYMENT_SENSITIVE=$deployment_sensitive"
             echo "DB_REQUIRED=$db_required"
           } >> "$GITHUB_ENV"
-          printf 'migration_sensitive=%s\ndeployment_sensitive=%s\ndb_required=%s\n' \
-            "$migration_sensitive" "$deployment_sensitive" "$db_required"
+          printf 'migration_sensitive=%s\nbusiness_chain_sensitive=%s\ndeployment_sensitive=%s\ndb_required=%s\n' \
+            "$migration_sensitive" "$business_chain_sensitive" "$deployment_sensitive" "$db_required"
 
       - name: Install locked dependencies
         run: npm ci
@@ -157,8 +164,8 @@ jobs:
         if: env.MIGRATION_SENSITIVE == 'true'
         run: npx vitest run tests/integration/root-self-system-admin-postgres.test.ts
 
-      - name: Run PostgreSQL business chain only for deployment-sensitive changes
-        if: env.DEPLOYMENT_SENSITIVE == 'true'
+      - name: Run PostgreSQL business chain for business, migration or deployment-sensitive changes
+        if: env.BUSINESS_CHAIN_SENSITIVE == 'true' || env.MIGRATION_SENSITIVE == 'true' || env.DEPLOYMENT_SENSITIVE == 'true'
         run: node scripts/run-business-chain-gate.mjs
 
       - name: PostgreSQL backup and isolated restore drill
@@ -242,6 +249,7 @@ jobs:
             echo "- Head SHA: $(git rev-parse HEAD)"
             echo "- Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed"
             echo "- Migration-sensitive: ${MIGRATION_SENSITIVE:-false}"
+            echo "- Business-chain-sensitive: ${BUSINESS_CHAIN_SENSITIVE:-false}"
             echo "- Deployment-sensitive: ${DEPLOYMENT_SENSITIVE:-false}"
-            echo "- PostgreSQL / release work runs only when exact diff classification requires it"
+            echo "- PostgreSQL business chain runs for business, migration, or deployment-sensitive exact diffs"
           } >> "${GITHUB_STEP_SUMMARY}"

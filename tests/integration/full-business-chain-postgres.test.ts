@@ -180,12 +180,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ["owner_group"],
     "responsibility:owner_sign",
   );
-  const tailWage = () => actor(
+  const wageView = () => actor(
     ids.tail,
     ["tail_supervisor"],
     "wage:view",
-    "wage:tail_review",
-    "wage:adjustment_request",
   );
   const monthCloseWage = () => actor(
     ids.monthClose,
@@ -765,23 +763,22 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // The current natural month is intentionally not force-locked: the service
     // must reach ready_to_lock and then enforce the month-end barrier. The
     // historical-month lock itself remains covered by wage-workflow-postgres.
-    const periods = await wages.list(tailWage());
+    const periods = await wages.list(wageView());
     expect(periods).toHaveLength(1);
     const wagePeriod = periods[0]!;
     expect(wagePeriod).toMatchObject({
       status: "ready_to_lock",
       sourceItemCount: 1,
       personCount: 1,
-      originalTotal: "110.00",
-      adjustmentTotal: "0.00",
-      finalTotal: "110.00",
+      totalAmount: "110.00",
     });
-    const wageDetail = await wages.get(tailWage(), wagePeriod.periodId);
+    const wageDetail = await wages.get(wageView(), wagePeriod.periodId);
     expect(wageDetail.items).toHaveLength(1);
     expect(wageDetail.items.reduce(
       (sum, item) => sum + Number(item.payableAmount),
       0,
     )).toBe(110);
+    expect(wageDetail.period.totalAmount).toBe("110.00");
     await expect(wages.lock(
       monthCloseWage(),
       wagePeriod.periodId,
