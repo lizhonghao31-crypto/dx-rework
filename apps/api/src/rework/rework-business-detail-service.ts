@@ -134,7 +134,7 @@ export class ReworkBusinessDetailService {
          orders.processing_factory_type,orders.processing_factory_supplier_id,
          supplier.supplier_name,
          to_jsonb(orders)->>'rework_reason' rework_reason,
-         to_jsonb(orders)->>'rework_process' rework_process,
+         COALESCE(NULLIF(latest_configuration.process_names,''),to_jsonb(orders)->>'rework_process') rework_process,
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
          orders.inspection_report,
          orders.created_by,creator.display_name creator_name,
@@ -148,7 +148,12 @@ export class ReworkBusinessDetailService {
          ON supplier.supplier_id=orders.processing_factory_supplier_id
         AND supplier.version=orders.processing_factory_supplier_version
        LEFT JOIN LATERAL (
-         SELECT configuration.created_by
+         SELECT configuration.created_by,
+                (
+                  SELECT string_agg(item.process_name,'、' ORDER BY item.position)
+                  FROM rework_process_configuration_items item
+                  WHERE item.configuration_id=configuration.configuration_id
+                ) process_names
          FROM rework_process_configurations configuration
          WHERE configuration.rework_order_id=orders.rework_order_id
          ORDER BY configuration.configuration_version DESC
