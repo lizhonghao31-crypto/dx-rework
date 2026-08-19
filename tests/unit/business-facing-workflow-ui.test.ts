@@ -56,31 +56,28 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("返工单：{response?.reworkOrderId");
   });
 
-  it("keeps the external deduction workspace in business language and only shows usable fields", async () => {
+  it("keeps the external deduction workspace focused on amounts, evidence and rejudgment", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
     expect(source).toContain("responsibilityTypeLabel[caseItem.responsibilityType]");
-    expect(source).toContain("bpsToPercent(item.shareBpsSnapshot)");
     expect(source).toContain("deductionEntryLabel[entry.entryType]");
-    expect(source).toContain("closureResultLabel[caseItem.closure.result]");
     expect(source).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
-    expect(source).toContain("canRecordDeduction && <>");
-    expect(source).toContain("hasEditableFields && <div className=\"external-operation\"");
-    expect(source).not.toContain("item.configurationItemId)} · {item.responsibilityType}");
-    expect(source).not.toContain("{caseItem.responsibilityType}");
-    expect(source).not.toContain("{item.shareBpsSnapshot} bps");
+    expect(source).toContain("external-finance-summary");
+    expect(source).toContain("本次扣款金额");
+    expect(source).toContain("<ExternalEvidenceUploader");
+    expect(source).toContain("重判责任");
+    expect(source).not.toContain("供应商反馈（选填）");
+    expect(source).not.toContain("未扣差额最终处理");
     expect(source).not.toContain("· 版本 {caseItem.caseVersion}");
     expect(source).not.toContain("已生成 N07 草稿 {item.seededDeterminationId}");
   });
 
-  it("records the real external deduction date and optional business reference", async () => {
+  it("records the Shanghai business date automatically without extra finance inputs", async () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
-    expect(source).toContain('label="实际扣款日期"');
-    expect(source).toContain('type="date"');
-    expect(source).toContain("max={shanghaiBusinessDate()}");
-    expect(source).toContain('label="扣款凭证号（选填）"');
-    expect(source).toContain("deductedOn: deductedOn[caseItem.caseId] ?? shanghaiBusinessDate()");
-    expect(source).toContain("...(referenceNo ? { referenceNo } : {})");
-    expect(source).toContain('deductionDate > shanghaiBusinessDate()');
+    expect(source).toContain("deductedOn: shanghaiBusinessDate()");
+    expect(source).not.toContain('label="实际扣款日期"');
+    expect(source).not.toContain('label="扣款凭证号（选填）"');
+    expect(source).not.toContain("deductionReference");
+    expect(source).not.toContain("deductedOn[");
   });
 
   it("lets one rework reference multiple order numbers without changing the one-style boundary", async () => {
