@@ -130,6 +130,16 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   if (!data || ["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
 
   const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
+  const temporaryCoefficientRows = data.temporaryWorkers.map((worker) => {
+    const id = `${worker.configurationItemId}:${worker.personId}`;
+    return { text: multipliers[id]?.trim() ?? "", reason: multiplierReasons[id]?.trim() ?? "" };
+  });
+  const temporaryCoefficientIssue = temporaryCoefficientRows.some((row) => !/^\d+(?:\.\d{1,3})?$/.test(row.text) || Number(row.text) <= 0 || Number(row.text) > 10)
+    ? "还需完成：临时工实发系数须大于 0、不超过 10，最多三位小数"
+    : temporaryCoefficientRows.some((row) => Number(row.text) !== 1 && !row.reason)
+      ? "还需完成：非 1.0 的临时工实发系数必须填写调整原因"
+      : "";
+  const wholeOrderReady = allComplete && temporaryCoefficientIssue === "";
   return <div className="whole-order-review-flow">
     <Surface>
       <div className="section-title">
@@ -194,8 +204,9 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     {data.canReview && data.reworkStatus === "pending_order_review" && data.processes.every((process) => process.finalUnitPrice !== null) && <Surface>
       <h2>确认整单并生成工资</h2>
       <p>确认后系统按个人有效上数、N03 IE 核准单价及临时工实发系数生成工资，并直接进入责任判定。若工人上数超过尾查汇总，请先驳回对应记录。</p>
+      {temporaryCoefficientIssue && <p role="status">{temporaryCoefficientIssue}</p>}
       <div className="mobile-actions">
-        <Button variant="primary" onClick={() => void approve()} disabled={busy || !allComplete}>{busy ? "确认中…" : "确认整单并进入责任判定"}</Button>
+        <Button variant="primary" onClick={() => void approve()} disabled={busy || !wholeOrderReady}>{busy ? "确认中…" : "确认整单并进入责任判定"}</Button>
       </div>
     </Surface>}
   </div>;
