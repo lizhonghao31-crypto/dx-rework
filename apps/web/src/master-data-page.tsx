@@ -510,7 +510,7 @@ export function MasterDataPage() {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <Button disabled={Boolean(busy)} onClick={createSupplier}>
+              <Button disabled={Boolean(busy) || !supplierName.trim()} onClick={createSupplier}>
                 {busy === "create-supplier" ? "新增中…" : "新增"}
               </Button>
             </div>
@@ -566,7 +566,7 @@ export function MasterDataPage() {
                 <option value="piece">件</option>
                 <option value="hour">小时</option>
               </select>
-              <Button disabled={Boolean(busy)} onClick={createProcess}>
+              <Button disabled={Boolean(busy) || !processName.trim()} onClick={createProcess}>
                 {busy === "create-process" ? "新增中…" : "新增"}
               </Button>
             </div>
@@ -616,9 +616,11 @@ export function MasterDataPage() {
               操作原因
               <input value={importReason} maxLength={500} onChange={(event) => setImportReason(event.target.value)} />
             </label>
+            {!importReason.trim() && <p role="status">确认导入前请填写操作原因。</p>}
+            {previewSummary.create + previewSummary.update === 0 && <p role="status">当前预检没有需要新增或更新的记录。</p>}
             <Button
               variant="primary"
-              disabled={Boolean(busy) || previewSummary.error > 0}
+              disabled={Boolean(busy) || previewSummary.error > 0 || !importReason.trim() || previewSummary.create + previewSummary.update === 0}
               onClick={() => void applyImport()}
             >
               {busy === "batch-import" ? "导入中…" : "确认导入"}
