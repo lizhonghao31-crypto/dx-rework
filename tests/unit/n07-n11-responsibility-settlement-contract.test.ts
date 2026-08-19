@@ -98,7 +98,7 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(migration).toContain("SELECT access_is_root_actor(candidate)");
     expect(migration).toContain("Root is a globally authorized actor");
     expect(externalPanel).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
-    expect(externalPanel).toContain("|| canRecordDeduction");
+    expect(externalPanel).toContain("const canAttachEvidence = canRecordDeduction || canRequestRevision || canLegacySubmit");
     expect(finalExternal).toContain("settlement_schema_version");
     expect(finalExternal).toContain("supplier_code_snapshot,supplier_name_snapshot,supplier_type_snapshot");
     expect(finalExternal).toContain("`external-deduction:${supersededCase.case_id}:`");
