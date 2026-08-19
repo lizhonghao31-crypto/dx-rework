@@ -44,7 +44,7 @@ export function ManagementOrderCard({
         <div className="reporting-order-card__heading">
           <div>
             <strong>{order.styleNo ?? "款号未填写"}</strong>
-            <small>{order.reworkNo ?? "返工单"} · {order.orderNo ?? "订单号未填写"}</small>
+            <small>{order.reworkNo ?? "返工单"}</small>
           </div>
           <StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge>
         </div>
