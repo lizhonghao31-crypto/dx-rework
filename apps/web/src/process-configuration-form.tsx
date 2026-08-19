@@ -104,10 +104,10 @@ const toItem = (
 });
 
 const statusLabel = (response: ProcessConfigurationResponse): string => {
-  if (response.reworkStatus === "pending_process_configuration") return "待当前有效尾部主管配置";
-  if (response.reworkStatus === "pending_ie_review") return "待当前有效 IE 审核";
-  if (response.reworkStatus === "pending_task_assignment") return "工序已生效 · 待分工";
-  return "当前状态不在工序配置节点";
+  if (response.reworkStatus === "pending_process_configuration") return "待配置";
+  if (response.reworkStatus === "pending_ie_review") return "待 IE 审核";
+  if (response.reworkStatus === "pending_task_assignment") return "待分工";
+  return "已处理";
 };
 
 const threeDecimals = /^\d+(?:\.\d{1,3})?$/;
@@ -219,7 +219,7 @@ export function ProcessConfigurationForm({
         ? [emptyItem()]
         : current);
     }
-    setMessage(statusLabel(loaded));
+    setMessage("");
   };
 
   useEffect(() => {
@@ -414,8 +414,8 @@ export function ProcessConfigurationForm({
           {response ? statusLabel(response) : "加载中"}
         </StatusBadge>
       </div>
-      <p>{response?.reworkNo ?? "返工单"} · {response ? "订单版本 " + response.orderVersion : "请稍候"}</p>
-      <StatusBadge tone="success">按件计价 · 候选单价全程留痕</StatusBadge>
+      <p>{response?.reworkNo ?? "返工单"}</p>
+      <StatusBadge tone="success">按件计价</StatusBadge>
     </div>
 
     {message && <p className="process-feedback" role="status">{message}</p>}
@@ -423,17 +423,14 @@ export function ProcessConfigurationForm({
       <div className="qc-warning"><b>IE 驳回原因：</b>{configuration.reviewReason}</div>
     )}
     {configuration?.kind === "change" && (
-      <StatusBadge tone="warning">变更单 V{configuration.configurationVersion} · 已生效历史不会被覆盖</StatusBadge>
+      <StatusBadge tone="warning">工序变更已留痕</StatusBadge>
     )}
 
     {editable && <Surface>
       <div className="section-title">
         <div>
           <h2>工序与候选单价</h2>
-          <p>
-            N02 只定义返工工序与候选单价；实际件数由 N05 工人上数和 N06 尾查报数交叉核验。
-            所有工序按件计价，单价最多保留 3 位，最低 0.001 元。
-          </p>
+          <p>填写返工工序和候选单价；单价最多 3 位小数，最低 0.001 元 / 件。</p>
         </div>
         <Button onClick={() => setItems((current) => [...current, emptyItem()])} disabled={busy}>增加工序</Button>
       </div>
@@ -471,7 +468,7 @@ export function ProcessConfigurationForm({
         <div className="section-title">
           <div>
             <h2 id="tail-inspector-heading">分配尾查</h2>
-            <p>提交后即向被分配的尾查推送待办；无需等待 IE 核价或工人完工。可多人清点，系统按每人的报数自动汇总。</p>
+            <p>提交后尾查即可开始清点；可多人清点，结果自动汇总。</p>
           </div>
           <StatusBadge tone={tailInspectors.length ? "success" : "warning"}>{tailInspectors.length ? `已分配 ${tailInspectors.length} 人` : "至少 1 人"}</StatusBadge>
         </div>
@@ -496,7 +493,7 @@ export function ProcessConfigurationForm({
     </Surface>}
 
     {!editable && configuration && <Surface>
-      <h2>本次工序配置 V{configuration.configurationVersion}</h2>
+      <h2>本次工序配置</h2>
       <div className="process-readonly-list">
         {configuration.items.map((item) => <div key={item.configurationItemId}>
           <b>{item.processName}</b>
@@ -508,16 +505,14 @@ export function ProcessConfigurationForm({
     {canReview && response?.reworkStatus === "pending_ie_review" && reviewSeparationBlocked && <Surface className="ie-review">
       <div className="section-title">
         <h2>IE 审核</h2>
-        <StatusBadge tone="warning">多人补验</StatusBadge>
+        <StatusBadge tone="warning">需其他 IE 审核</StatusBadge>
       </div>
-      <p>
-        当前账号曾发起该返工单或配置当前工序，按审核分离规则不能进行 IE 自审；请使用另一名 IE 账号完成审核。
-      </p>
+      <p>当前账号参与了本单发起或工序配置，不能自审；请由另一名 IE 完成审核。</p>
     </Surface>}
 
     {reviewable && <Surface className="ie-review">
       <h2>IE 审核</h2>
-      <p>IE 只核价：确认每道工序的候选单价。通过后配置生效；驳回必须留下原因。</p>
+      <p>确认每道工序的候选单价。通过后配置生效；驳回必须填写原因。</p>
       <InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" />
       <div className="qc-secondary-actions">
         <Button onClick={() => void review("rejected")} disabled={busy || !reviewReason.trim()}>驳回修改</Button>
