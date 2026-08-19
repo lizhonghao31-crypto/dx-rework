@@ -465,7 +465,7 @@ export function ReworkDetailPage({
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
   const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key;
   const selectedFromUrl = workflowNodeFromSearch();
-  const defaultSelectedNode = detail.status === "pending_process_configuration" ? "initiation" : activeNode ?? "settlement_followup";
+  const defaultSelectedNode = activeNode ?? "settlement_followup";
   const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
   const selected = workflowNodes.find((node) => node.key === selectedNode);
   const activeStepIndex = Math.max(1, workflowNodes.findIndex((node) => node.key === activeNode) + 1);
@@ -520,7 +520,7 @@ export function ReworkDetailPage({
     if (!selected) return null;
     if (selected.key === "initiation" && detail.status === "draft") {
       return canHandleInitiation
-        ? <ReworkInitiationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={() => { void load(); }} />
+        ? <ReworkInitiationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={() => { void syncAfterNodeAction(); }} />
         : <NodePermissionNotice node={selected} />;
     }
     if (selected.key === "initiation" && detail.status === "pending_process_configuration") {
