@@ -11,6 +11,7 @@ const createInput = {
   todoId: "00000000-0000-4000-8000-000000000013",
   recipientUserId: "00000000-0000-4000-8000-000000000014",
   recipientUnionId: "union-14",
+  creatorUnionId: "union-creator",
   recipientProviderUserId: "userid-14",
   category: "process_configuration",
   subject: "配置返工工序",
@@ -97,10 +98,13 @@ describe("DingTalk todo provider boundary", () => {
       ...createInput,
       providerTodoId: "task-1",
       deliveryKind: "reminder",
+      operatorUnionId: "union-operator",
     })).resolves.toMatchObject({ providerTodoId: "task-1", state: "updated" });
     await expect(provider.completeTodo({
       todoId: createInput.todoId,
       recipientUnionId: createInput.recipientUnionId,
+      creatorUnionId: createInput.creatorUnionId,
+      operatorUnionId: "union-operator",
       providerTodoId: "task-1",
       sourceKey: createInput.sourceKey,
       reason: "completed",
@@ -109,12 +113,13 @@ describe("DingTalk todo provider boundary", () => {
     const createCall = calls.find((call) =>
       new URL(call.url).pathname.endsWith("/tasks") && call.init.method === "POST"
     );
-    expect(createCall?.url).toContain("/v1.0/todo/users/union-14/tasks");
-    expect(new URL(createCall!.url).searchParams.get("operatorId")).toBe("union-14");
+    expect(createCall?.url).toContain("/v1.0/todo/users/union-creator/tasks");
+    expect(new URL(createCall!.url).searchParams.get("operatorId")).toBe("union-creator");
     expect(new Headers(createCall?.init.headers).get("x-acs-dingtalk-access-token")).toBe("token-value");
     expect(JSON.parse(String(createCall?.init.body))).toMatchObject({
       subject: "配置返工工序",
       description: createInput.description,
+      creatorId: "union-creator",
       sourceId: "todo-source-13",
       executorIds: ["union-14"],
       notifyConfigs: {
@@ -124,13 +129,20 @@ describe("DingTalk todo provider boundary", () => {
       },
     });
     expect(JSON.parse(String(createCall?.init.body))).not.toHaveProperty("operatorId");
+    const update = calls.find((call) =>
+      new URL(call.url).pathname.endsWith("/tasks/task-1") && call.init.method === "PUT"
+    );
+    expect(update?.url).toContain("/v1.0/todo/users/union-creator/tasks/task-1");
+    expect(new URL(update!.url).searchParams.get("operatorId")).toBe("union-operator");
+    expect(JSON.parse(String(update?.init.body))).not.toHaveProperty("operatorId");
     expect(calls.some((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
     )).toBe(false);
     const completion = calls.find((call) =>
       new URL(call.url).pathname.endsWith("/executorStatus")
     );
-    expect(new URL(completion!.url).searchParams.get("operatorId")).toBe("union-14");
+    expect(completion?.url).toContain("/v1.0/todo/users/union-creator/tasks/task-1/executorStatus");
+    expect(new URL(completion!.url).searchParams.get("operatorId")).toBe("union-operator");
     expect(JSON.parse(String(completion?.init.body))).toEqual({
       executorStatusList: [{ id: "union-14", isDone: true }],
     });
