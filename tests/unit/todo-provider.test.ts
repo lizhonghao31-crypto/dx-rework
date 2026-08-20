@@ -74,7 +74,7 @@ describe("DingTalk todo provider boundary", () => {
       if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
         return json({ id: "task-1", requestId: "request-create" });
       }
-      if (url.endsWith("/tasks/task-1") && init.method === "PUT") {
+      if (new URL(url).pathname.endsWith("/tasks/task-1") && init.method === "PUT") {
         return json({ requestId: "request-update" });
       }
       if (new URL(url).pathname.endsWith("/tasks/task-1/executorStatus") && init.method === "PUT") {
