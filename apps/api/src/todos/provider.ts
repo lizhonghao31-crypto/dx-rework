@@ -14,6 +14,7 @@ export type DingTalkTodoCreateInput = Readonly<{
   todoId: string;
   recipientUserId: string;
   recipientUnionId: string;
+  creatorUnionId: string;
   recipientProviderUserId: string;
   category: string;
   subject: string;
@@ -27,6 +28,8 @@ export type DingTalkTodoCreateInput = Readonly<{
 export type DingTalkTodoCompleteInput = Readonly<{
   todoId: string;
   recipientUnionId: string;
+  creatorUnionId: string;
+  operatorUnionId: string;
   providerTodoId?: string;
   sourceKey: string;
   reason: string;
@@ -36,6 +39,8 @@ export type DingTalkTodoUpdateInput = Readonly<{
   todoId: string;
   recipientUserId: string;
   recipientUnionId: string;
+  creatorUnionId: string;
+  operatorUnionId: string;
   providerTodoId?: string;
   category: string;
   subject: string;
@@ -239,12 +244,13 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   async createTodo(input: DingTalkTodoCreateInput): Promise<DingTalkTodoDeliveryReceipt> {
     this.assertEnabled();
     const sourceId = dingTalkTodoSourceId(input.sourceKey);
-    let task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
+    let task = await this.getBySourceId(input.creatorUnionId, sourceId, true);
     let reconciled = task !== null;
     if (!task) {
       const body = {
         subject: input.subject,
         description: input.description,
+        creatorId: input.creatorUnionId,
         executorIds: [input.recipientUnionId],
         participantIds: [],
         sourceId,
@@ -259,14 +265,14 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
       };
       try {
         const created = await this.request(
-          `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks?operatorId=${encodeURIComponent(input.recipientUnionId)}`,
+          `/v1.0/todo/users/${encodeURIComponent(input.creatorUnionId)}/tasks?operatorId=${encodeURIComponent(input.creatorUnionId)}`,
           { method: "POST", body: JSON.stringify(body) },
           "create",
         );
         if (this.optionalTaskId(created)) {
           task = created;
         } else {
-          task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
+          task = await this.getBySourceId(input.creatorUnionId, sourceId, true);
           reconciled = task !== null;
           if (!task) {
             throw new DingTalkTodoDeliveryError(
@@ -279,7 +285,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         }
       } catch (error: unknown) {
         if (error instanceof DingTalkTodoDeliveryError && error.unknownResponse) {
-          task = await this.getBySourceId(input.recipientUnionId, sourceId, true);
+          task = await this.getBySourceId(input.creatorUnionId, sourceId, true);
           reconciled = task !== null;
         }
         if (!task) throw error;
@@ -296,9 +302,9 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   async completeTodo(input: DingTalkTodoCompleteInput): Promise<DingTalkTodoDeliveryReceipt> {
     this.assertEnabled();
     const providerTodoId = input.providerTodoId
-      ?? await this.resolveTaskId(input.recipientUnionId, input.sourceKey);
+      ?? await this.resolveTaskId(input.creatorUnionId, input.sourceKey);
     const result = await this.request(
-      `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks/${encodeURIComponent(providerTodoId)}/executorStatus?operatorId=${encodeURIComponent(input.recipientUnionId)}`,
+      `/v1.0/todo/users/${encodeURIComponent(input.creatorUnionId)}/tasks/${encodeURIComponent(providerTodoId)}/executorStatus?operatorId=${encodeURIComponent(input.operatorUnionId)}`,
       {
         method: "PUT",
         body: JSON.stringify({
@@ -317,16 +323,15 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
   async updateTodo(input: DingTalkTodoUpdateInput): Promise<DingTalkTodoDeliveryReceipt> {
     this.assertEnabled();
     const providerTodoId = input.providerTodoId
-      ?? await this.resolveTaskId(input.recipientUnionId, input.sourceKey);
+      ?? await this.resolveTaskId(input.creatorUnionId, input.sourceKey);
     const result = await this.request(
-      `/v1.0/todo/users/${encodeURIComponent(input.recipientUnionId)}/tasks/${encodeURIComponent(providerTodoId)}`,
+      `/v1.0/todo/users/${encodeURIComponent(input.creatorUnionId)}/tasks/${encodeURIComponent(providerTodoId)}?operatorId=${encodeURIComponent(input.operatorUnionId)}`,
       {
         method: "PUT",
         body: JSON.stringify({
           subject: input.subject,
           description: input.description,
           executorIds: [input.recipientUnionId],
-          operatorId: input.recipientUnionId,
           detailUrl: { appUrl: input.deepLink, pcUrl: input.deepLink },
         }),
       },
