@@ -74,6 +74,7 @@
     { "version": "0072_tail_inspection_rejection", "checksum": "238984ca539ab697871b35836825d3cf9c62b7f5b86883aadef67326ab58573f" },
     { "version": "0073_wage_direct_month_close_guard", "checksum": "c6e4ebc9c7eb4ee15b0da9b02a186a42a5e29e3d53528cd50df5815081819189" },
     { "version": "0074_wage_review_adjustment_retirement", "checksum": "37c93954349fad851bfe2b813c2113271b5e8c355d4abc7223488d990167bbfc" },
-    { "version": "0075_root_delete_wage_cleanup", "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018" }
+    { "version": "0075_root_delete_wage_cleanup", "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018" },
+    { "version": "0076_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" }
   ]
 }
