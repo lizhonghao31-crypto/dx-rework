@@ -42,6 +42,7 @@ const migrations = [
   "0026_todo_notification_foundation.sql",
   "0027_todo_routing_lifecycle_closure.sql",
   "0028_dingtalk_todo_external_bindings.sql",
+  "0076_dingtalk_todo_creator_identity.sql",
 ] as const;
 
 runWithPostgres("PR-13 todo notification lifecycle", () => {
@@ -205,6 +206,14 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
       "dingtalk_todo_external_bindings",
     ]);
     await expect(database.query(
+      `SELECT count(*)::int count
+       FROM information_schema.columns
+       WHERE table_schema=current_schema()
+         AND table_name='dingtalk_todo_external_bindings'
+         AND column_name='creator_union_id'
+         AND is_nullable='NO'`,
+    )).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    await expect(database.query(
       `SELECT count(*)::int count FROM role_capabilities
        WHERE role_code='system_admin' AND capability='todo:runtime'`,
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
@@ -361,6 +370,21 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
     const provider = new FakeDingTalkTodoProvider();
     const worker = new TodoDeliveryWorker(database, provider, "https://staging.example/rework/");
     expect((await worker.runOnce()).sent).toBe(1);
+    expect(provider.calls[0]).toMatchObject({
+      method: "create",
+      input: {
+        creatorUnionId: `union-${actor.userId}`,
+        recipientUnionId: `union-${original.userId}`,
+      },
+    });
+    await expect(database.query(
+      `SELECT recipient_union_id,creator_union_id
+       FROM dingtalk_todo_external_bindings WHERE todo_id=$1`,
+      [transferable.todoId],
+    )).resolves.toMatchObject({ rows: [{
+      recipient_union_id: `union-${original.userId}`,
+      creator_union_id: `union-${actor.userId}`,
+    }] });
 
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [original.userId]);
     const revalidation = await database.connect();
