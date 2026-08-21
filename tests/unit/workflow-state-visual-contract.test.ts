@@ -16,14 +16,19 @@ describe("workflow state visual contract", () => {
     expect(css).toContain("background: var(--dx-v2-color-primary);");
   });
 
-  it("keeps N02 readiness feedback under the right-hand submit action", async () => {
-    const css = await readFile("apps/web/src/workflow-state-visual.css", "utf8");
-    const form = await readFile("apps/web/src/process-configuration-form.tsx", "utf8");
+  it("keeps N02 readiness feedback with the save and submit actions", async () => {
+    const [form, css] = await Promise.all([
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.css", "utf8"),
+    ]);
 
-    expect(form).toContain('className="process-readiness"');
-    expect(form).toContain("还需完成：{submitReadinessIssues.join");
-    expect(css).toContain(".process-configuration-page .process-readiness");
-    expect(css).toContain("width: calc(50% - 6px);");
-    expect(css).toContain("margin: 2px 0 0 auto;");
+    expect(form).toContain('className="process-worker-actions"');
+    expect(form).toContain('还需完成：{readinessIssues.join("；")}');
+    expect(form.indexOf('className="process-worker-actions"')).toBeLessThan(
+      form.indexOf('readinessIssues.length ? <p role="status">'),
+    );
+    expect(css).toContain(".process-worker-actions{display:grid");
+    expect(css).toContain(".process-worker-actions p{margin:0");
+    expect(css).toContain(".process-worker-actions p{grid-column:1/-1}");
   });
 });
