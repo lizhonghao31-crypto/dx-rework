@@ -536,10 +536,25 @@ export function ReworkInitiationV2Form({
       </div> : null}
     </Surface> : null}
 
-    <Surface className="rework-v2-status"><p role="status">{message}</p></Surface>
-    <div className="rework-v2-actions">
-      <Button disabled={busy || uploading || (Boolean(reworkOrderId) && !order)} onClick={() => void save()}>{busy ? "处理中…" : "保存草稿"}</Button>
-      <Button variant="primary" disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)} onClick={() => void submit()}>提交返工</Button>
+    <div className="rework-v2-action-area">
+      <div className="rework-v2-actions">
+        <Button
+          type="button"
+          disabled={busy || uploading || (Boolean(reworkOrderId) && !order)}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void save();
+          }}
+        >{busy ? "处理中…" : "保存草稿"}</Button>
+        <Button
+          type="button"
+          variant="primary"
+          disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)}
+          onClick={() => void submit()}
+        >提交返工</Button>
+      </div>
+      <p className="rework-v2-action-feedback" role="status">{message}</p>
     </div>
   </div>;
 }
