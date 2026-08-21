@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import "./order-board-page.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type BoardRow = Readonly<{
   styleNo: string;
@@ -25,6 +25,15 @@ type BoardResult = Readonly<{
     differenceRate: number;
   }>;
   rows: readonly BoardRow[];
+}>;
+
+type BoardMe = Readonly<{
+  status: string;
+  user?: Readonly<{
+    isRoot?: boolean;
+    businessRoles?: readonly string[];
+    capabilities: readonly string[];
+  }>;
 }>;
 
 const localDate = (): string => {
@@ -48,6 +57,21 @@ export function OrderBoardPage() {
   const [query, setQuery] = useState("");
   const [data, setData] = useState<BoardResult | null>(null);
   const [message, setMessage] = useState("正在加载订单看板…");
+  const [canReceive, setCanReceive] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
+      .then(async (response) => response.ok ? await response.json() as BoardMe : null)
+      .then((body) => {
+        if (!active || body?.status !== "authorized" || !body.user) return;
+        const warehouseReceiver = body.user.businessRoles?.includes("warehouse_receiver") === true
+          && body.user.capabilities.includes("receiving:create");
+        setCanReceive(body.user.isRoot === true || warehouseReceiver);
+      })
+      .catch(() => { if (active) setCanReceive(false); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -82,13 +106,16 @@ export function OrderBoardPage() {
 
   return <div className="order-board-page">
     <div className="order-board-heading">
-      <div>
+      <div className="order-board-heading__title">
         <h1>订单看板</h1>
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">
         <label>日期<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
         <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+      </div>
+      <div className="order-board-heading__action">
+        {canReceive ? <a className="order-board-receiving-link" href={pageUrl("ui/receiving")}>＋ 仓库收货</a> : null}
       </div>
     </div>
 
