@@ -1,0 +1,71 @@
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+
+const read = (path: string) => readFile(path, "utf8");
+
+describe("PR-04 unified rework execution", () => {
+  it("makes unified execution the only new-flow model", async () => {
+    const migration = await read("apps/api/migrations/0079_rework_v2_unified_execution.sql");
+    expect(migration).toContain("ADD COLUMN unified_execution_required boolean NOT NULL DEFAULT true");
+    expect(migration).toContain("ADD COLUMN execution_kind text NOT NULL DEFAULT 'worker'");
+    expect(migration).toContain("execution_kind IN ('worker','tail_inspection')");
+    expect(migration).toContain("rework_process_configuration_one_tail_execution_idx");
+  });
+
+  it("keeps tail inspectors as their real role while using unified work reports", async () => {
+    const [migration, plan, reporting, routes] = await Promise.all([
+      read("apps/api/migrations/0079_rework_v2_unified_execution.sql"),
+      read("apps/api/src/rework/process-worker-plan-service.ts"),
+      read("apps/api/src/rework/work-reporting-service.ts"),
+      read("apps/api/src/rework/work-reporting-routes.ts"),
+    ]);
+    expect(plan).toContain("assignment.role_code='tail_inspector'");
+    expect(reporting).toContain('task.execution_kind === "tail_inspection"');
+    expect(reporting).toContain('return "tail_inspection:report"');
+    expect(routes).toContain('user.businessRoles?.includes("tail_inspector")');
+    expect(migration).toContain("tail inspection task member must be an active eligible tail inspector");
+  });
+
+  it("creates one explicit tail special process in N02 and never writes the retired tail-assignment path", async () => {
+    const [form, configuration, contracts] = await Promise.all([
+      read("apps/web/src/process-worker-assignment-form.tsx"),
+      read("apps/api/src/rework/process-configuration-service.ts"),
+      read("packages/contracts/src/index.ts"),
+    ]);
+    expect(form).toContain('customProcessName: "尾查"');
+    expect(form).toContain('executionKind: "tail_inspection" as const');
+    expect(form).toContain("尾查候选单价（元/件）");
+    expect(form).toContain('eligibleExecutionKinds.includes("tail_inspection")');
+    expect(form).not.toContain("tail-inspection-options");
+    expect(form).not.toContain("历史尾查分配");
+    expect(configuration).not.toContain("INSERT INTO rework_tail_inspection_assignments");
+    expect(configuration).not.toContain('category: "tail_inspection"');
+    expect(contracts).not.toContain("tailInspectors: z.array");
+  });
+
+  it("removes the independent tail node from the current flow", async () => {
+    const detail = await read("apps/web/src/rework-detail-page.tsx");
+    expect(detail).toContain('node("work_reporting", "04", "返工执行报数"');
+    expect(detail).not.toContain('node("tail_inspection"');
+    expect(detail).not.toContain("<TailInspectionPanel");
+    expect(detail).not.toContain('if (value === "tail_inspection")');
+    expect(detail).toContain('node("whole_order_review", "05", "尾部主管整单确认"');
+    expect(detail).toContain('node("responsibility", "06", "责任判定"');
+    expect(detail).toContain('node("owner_signature", "07", "老板确认签字"');
+    expect(detail).toContain('node("settlement_followup", "08", "返工业务完成"');
+  });
+
+  it("uses work tasks and work reports as the execution quantity fact chain", async () => {
+    const [reviewService, reviewPanel, reporting] = await Promise.all([
+      read("apps/api/src/rework/whole-order-review-service.ts"),
+      read("apps/web/src/whole-order-review-panel.tsx"),
+      read("apps/api/src/rework/work-reporting-service.ts"),
+    ]);
+    expect(reviewService).toContain("tail_item.execution_kind='tail_inspection'");
+    expect(reviewService).toContain("item.execution_kind='worker'");
+    expect(reviewPanel).toContain("返工执行报数记录");
+    expect(reviewPanel).toContain('report.executionKind === "tail_inspection"');
+    expect(reporting).toContain('task.execution_kind === "tail_inspection"');
+    expect(reporting).toContain("rework_work_reports");
+  });
+});
