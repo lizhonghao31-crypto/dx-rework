@@ -6,6 +6,10 @@ const hasRole = (user: AuthorizedUser, role: string): boolean =>
   user.businessRoles?.includes(role) === true;
 
 export function landingTarget(user: AuthorizedUser): string | null {
+  if (hasRole(user, "warehouse_receiver") && has(user, "receiving:create")) {
+    return "ui/receiving";
+  }
+
   if (has(user, "todo:view")) return "ui/my-tasks";
 
   if (
