@@ -148,7 +148,7 @@ export class ReworkV2SubmissionService {
     await this.ensureActiveMerchandiser(client, current.merchandiser_user_id);
     await this.ensureFactoryStillAvailable(client, factoryFromRow(current));
     const attachmentIds = await this.attachmentIds(client, reworkOrderId);
-    await this.ensureReadyBoundImage(client, actor.actorId, reworkOrderId, attachmentIds);
+    await this.ensureReadyBoundImage(client, actor, reworkOrderId, attachmentIds);
 
     const numberResult = current.rework_no
       ? { rows: [{ rework_no: current.rework_no }] }
@@ -282,23 +282,24 @@ export class ReworkV2SubmissionService {
 
   private async ensureReadyBoundImage(
     client: PoolClient,
-    actorId: string,
+    actor: TrustedActorContext,
     reworkOrderId: string,
     attachmentIds: readonly string[],
   ): Promise<void> {
     if (attachmentIds.length === 0) {
       throw new ApplicationError("REWORK_IMAGE_REQUIRED", "提交返工单前至少上传 1 张验货或问题图片", 400);
     }
+    const expectedUploader = actor.actorRoles.includes("root_superuser") ? null : actor.actorId;
     const result = await client.query<{ attachment_id: string; mime_type: string }>(
       `SELECT attachment_id,mime_type
        FROM attachments
        WHERE attachment_id=ANY($1::uuid[])
-         AND uploaded_by=$2
+         AND ($2::uuid IS NULL OR uploaded_by=$2)
          AND status='ready'
          AND entity_type='rework_order'
          AND entity_id=$3
        FOR UPDATE`,
-      [attachmentIds, actorId, reworkOrderId],
+      [attachmentIds, expectedUploader, reworkOrderId],
     );
     if (result.rowCount !== attachmentIds.length) {
       throw new ApplicationError("ATTACHMENT_NOT_READY", "附件未完成上传、归属不符或已被替换", 409);
