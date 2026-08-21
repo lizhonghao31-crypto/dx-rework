@@ -42,7 +42,20 @@ BEGIN
       ON event.event_id=NEW.operation_event_id
      AND event.request_id=NEW.request_id
      AND event.actor_id=NEW.planned_by
-     AND event.actor_roles=access_authorized_actor_roles(NEW.planned_by,'work:assign')
+     AND event.actor_roles=(
+       CASE
+         WHEN access_is_root_actor(NEW.planned_by) THEN (
+           SELECT array_agg(DISTINCT role_code ORDER BY role_code)
+           FROM unnest(
+             array_append(
+               access_authorized_actor_roles(NEW.planned_by,'work:assign'),
+               'tail_supervisor'
+             )
+           ) AS authorized_roles(role_code)
+         )
+         ELSE access_authorized_actor_roles(NEW.planned_by,'work:assign')
+       END
+     )
      AND event.authorization_capability='work:assign'
      AND event.action='rework.process_worker_plan.save'
      AND event.entity_type='rework_order'
