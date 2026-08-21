@@ -285,7 +285,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   return <Surface className="responsibility-panel">
     <div className="section-title responsibility-heading">
       <div>
-        <h2>{ownerSigning ? "N09 · 老板签字" : "N08 · 责任判定"}</h2>
+        <h2>{ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"}</h2>
         <p>{ownerSigning ? "核对责任判定结果后同意或驳回。" : "每道工序选择一个责任方；外部责任选择供应商，扣款倍率最低 1.2。"}</p>
       </div>
       <StatusBadge tone={ownerSigning || determination?.stage === "finalized" ? "success" : "warning"}>{statusText}</StatusBadge>
