@@ -12,7 +12,8 @@ const tokens = read("../../packages/ui/src/tokens.css");
 const components = read("../../packages/ui/src/components.css");
 const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
-const reworkForm = read("../../apps/web/src/rework-form.tsx");
+const reworkV2Form = read("../../apps/web/src/rework-v2-form.tsx");
+const legacyReworkForm = read("../../apps/web/src/rework-form.tsx");
 const attachmentUpload = read("../../apps/web/src/attachment-upload.ts");
 const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
 const landingTarget = read("../../apps/web/src/landing-target.ts");
@@ -77,21 +78,23 @@ describe("PR-01A UI prototype contract", () => {
     expect(components).toContain("min-height: 44px");
     expect(pages).not.toContain('href="#"');
   });
-  it("turns only the approved QC page into an idempotent real workflow while admitting owners", () => {
-    expect(app).toContain('<Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationForm /></Shell>');
+  it("turns the approved QC page into an idempotent real v2 workflow while admitting owners and root", () => {
+    expect(app).toContain('<Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
     expect(app).toContain('{ requiredRole: "quality_control", requiredCapability: "rework:initiate" }');
     expect(app).toContain('const owner = { requiredRole: "owner_group" } as const');
-    expect(reworkForm).toContain('"rework-orders/initiation-options"');
-    expect(reworkForm).toContain('"idempotency-key"');
-    expect(reworkForm).toContain("executeReworkSubmit");
-    expect(reworkForm).toContain("sha256Hex");
+    expect(reworkV2Form).toContain('"rework-orders/initiation-options"');
+    expect(reworkV2Form).toContain('"idempotency-key"');
+    expect(reworkV2Form).toContain("submit-v2");
+    expect(reworkV2Form).toContain("sha256Hex");
     expect(attachmentUpload).toContain("crypto.subtle.digest");
-    expect(reworkForm).toContain('upload.append("file", file)');
-    expect(reworkForm).toContain("一张返工单一个款号");
-    expect(reworkForm).toContain("订单号（可填多个，知道时填写）");
-    expect(reworkForm).toContain("撤回修改");
-    expect(reworkForm).toContain("取消返工单");
-    expect(reworkForm).not.toContain("styleNos");
+    expect(reworkV2Form).toContain('upload.append("file", file)');
+    expect(reworkV2Form).toContain("款号 <b>*</b>");
+    expect(reworkV2Form).toContain("加工厂 <b>*</b>");
+    expect(reworkV2Form).toContain("订单跟单 <b>*</b>");
+    expect(reworkV2Form).toContain("现场图片 <b>*</b>");
+    expect(reworkV2Form).not.toContain("styleNos");
+    expect(legacyReworkForm).toContain("撤回修改");
+    expect(legacyReworkForm).toContain("取消返工单");
     expect(webCss).not.toContain("--dx-v2-color-primary:");
   });
   it("adds the PR-06 process page without replacing the established layout", () => {
