@@ -53,4 +53,17 @@ describe("PR-01 receiving fact layer", () => {
     expect(boardCss).toContain(".order-board-row.is-extra");
     expect(boardCss).toContain(".order-board-row.is-even");
   });
+
+  it("uses two rows of three facts and a full-width bottom rework action on mobile", async () => {
+    const [board, boardCss] = await Promise.all([
+      read("apps/web/src/order-board-page.tsx"),
+      read("apps/web/src/order-board-page.css"),
+    ]);
+    expect(board).toContain("order-board-rework-link--desktop");
+    expect(board).toContain("order-board-rework-link--mobile");
+    expect(boardCss).toContain("grid-template-columns:repeat(3,minmax(0,1fr))!important");
+    expect(boardCss).toContain(".order-board-rework-link--desktop{display:none}");
+    expect(boardCss).toContain(".order-board-rework-link--mobile{display:flex;grid-column:1/-1");
+    expect(boardCss).toContain("min-height:44px");
+  });
 });

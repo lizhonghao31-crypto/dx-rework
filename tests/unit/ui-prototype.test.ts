@@ -92,7 +92,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkV2Form).toContain("款号 <b>*</b>");
     expect(reworkV2Form).toContain("加工厂 <b>*</b>");
     expect(reworkV2Form).toContain("订单跟单 <b>*</b>");
-    expect(reworkV2Form).toContain("现场图片 <b>*</b>");
+    expect(reworkV2Form).toContain("上传报告 <b>*</b>");
+    expect(reworkV2Form).toContain("<summary>更多信息</summary>");
     expect(reworkV2Form).not.toContain("styleNos");
     expect(reworkDetail).toContain("撤回修改");
     expect(reworkDetail).toContain("取消返工单");

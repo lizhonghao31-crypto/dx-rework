@@ -133,7 +133,7 @@ export function ReworkInitiationV2Form({
       ? "正在读取返工草稿…"
       : initialStyleNo()
         ? "已从订单看板带入款号，请补充返工资料"
-        : "填写三项核心资料并上传现场图片",
+        : "填写三项核心资料并上传报告",
   );
   const pendingSave = useRef<PendingSave | null>(null);
   const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
@@ -181,7 +181,7 @@ export function ReworkInitiationV2Form({
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
           embroideryMerchandiserUserId: context.embroideryMerchandiserUserId ?? "",
         });
-        setMessage(`草稿已读取 · 当前已有 ${draft.attachmentIds.length} 张现场图片`);
+        setMessage(`草稿已读取 · 当前已有 ${draft.attachmentIds.length} 份报告`);
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "返工草稿加载失败");
@@ -320,7 +320,6 @@ export function ReworkInitiationV2Form({
       setMessage(saved.hasOtherOpenStyleOrder
         ? "同款号存在其他未完结单；系统仅提示，不会自动合并"
         : `草稿已保存 · ${saved.styleNo ?? "未填款号"}`);
-      await onOrderChanged?.();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "草稿保存失败");
     } finally {
@@ -377,15 +376,15 @@ export function ReworkInitiationV2Form({
     if (!files || files.length === 0 || uploading || busy || embedded) return;
     const selected = Array.from(files);
     if (images.length + selected.length > MAX_REWORK_ATTACHMENTS) {
-      setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张图片`);
+      setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张报告图片`);
       return;
     }
     if (selected.some((file) => !isImageAttachment(file))) {
-      setMessage("仅支持 JPEG / PNG / WebP 图片");
+      setMessage("报告仅支持 JPEG / PNG / WebP 图片格式");
       return;
     }
     setUploading(true);
-    setMessage(`正在上传 ${selected.length} 张现场图片…`);
+    setMessage(`正在上传 ${selected.length} 张报告图片…`);
     const uploadConcurrency = currentQcUploadConcurrency();
     try {
       const profile = currentUploadClientProfile();
@@ -410,7 +409,7 @@ export function ReworkInitiationV2Form({
           return { file: prepared, timing, sha256, index };
         },
         async ({ file, timing, sha256 }, _source, index): Promise<UploadedImage> => {
-          setMessage(`正在上传第 ${index + 1}/${selected.length} 张图片…`);
+          setMessage(`正在上传第 ${index + 1}/${selected.length} 张报告图片…`);
           const intent = await measureAttachmentUploadStage(
             timing,
             "intent",
@@ -459,9 +458,9 @@ export function ReworkInitiationV2Form({
       setImages((current) => [...current, ...uploaded]);
       pendingSave.current = null;
       pendingSubmit.current = null;
-      setMessage(`图片上传完成，共 ${images.length + uploaded.length} 张`);
+      setMessage(`报告上传完成，共 ${images.length + uploaded.length} 张`);
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "图片上传失败");
+      setMessage(error instanceof Error ? error.message : "报告上传失败");
     } finally {
       setUploading(false);
     }
@@ -500,28 +499,33 @@ export function ReworkInitiationV2Form({
 
     <Surface className="rework-v2-core">
       <div className="rework-v2-section-heading">
-        <div><h2>{embedded ? "返工核心资料" : "核心资料"}</h2><p><strong>*</strong> 为必填；其他供应商没有就留空。</p></div>
-        {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{availableImageCount} 张现场图片</StatusBadge> : null}
+        <div><h2>{embedded ? "返工核心资料" : "核心资料"}</h2><p><strong>*</strong> 为必填；其他资料按实际情况补充。</p></div>
+        {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{availableImageCount} 份报告</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
         <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
         <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory }); pendingSubmit.current = null; }} /></div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
-        <label><span>洗水厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.washingSupplierId} placeholder="没有可留空" emptyText="没有匹配的洗水厂" disabled={busy} onChange={(washingSupplierId) => setForm({ ...form, washingSupplierId })} /></div></label>
-        <label><span>印绣花厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.embroiderySupplierId} placeholder="没有可留空" emptyText="没有匹配的印绣花厂" disabled={busy} onChange={(embroiderySupplierId) => setForm({ ...form, embroiderySupplierId })} /></div></label>
-        <label><span>面辅料供应商</span><div className="rework-v2-control"><SearchSelect options={fabricSupplierOptions} value={form.fabricSupplierId} placeholder="没有可留空" emptyText="没有匹配的面辅料供应商" disabled={busy} onChange={(fabricSupplierId) => setForm({ ...form, fabricSupplierId })} /></div></label>
-        <label><span>印绣花跟单</span><div className="rework-v2-control"><SearchSelect options={supplyOptions.embroideryWashingMerchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.embroideryMerchandiserUserId} placeholder="没有可留空" emptyText="没有匹配的印绣花跟单" disabled={busy} onChange={(embroideryMerchandiserUserId) => setForm({ ...form, embroideryMerchandiserUserId })} /></div></label>
       </div>
+      <details className="rework-v2-more">
+        <summary>更多信息</summary>
+        <div className="rework-v2-grid rework-v2-grid--more">
+          <label><span>洗水厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.washingSupplierId} placeholder="没有可留空" emptyText="没有匹配的洗水厂" disabled={busy} onChange={(washingSupplierId) => { setForm({ ...form, washingSupplierId }); pendingSubmit.current = null; }} /></div></label>
+          <label><span>印绣花厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.embroiderySupplierId} placeholder="没有可留空" emptyText="没有匹配的印绣花厂" disabled={busy} onChange={(embroiderySupplierId) => { setForm({ ...form, embroiderySupplierId }); pendingSubmit.current = null; }} /></div></label>
+          <label><span>面辅料供应商</span><div className="rework-v2-control"><SearchSelect options={fabricSupplierOptions} value={form.fabricSupplierId} placeholder="没有可留空" emptyText="没有匹配的面辅料供应商" disabled={busy} onChange={(fabricSupplierId) => { setForm({ ...form, fabricSupplierId }); pendingSubmit.current = null; }} /></div></label>
+          <label><span>印绣花跟单</span><div className="rework-v2-control"><SearchSelect options={supplyOptions.embroideryWashingMerchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.embroideryMerchandiserUserId} placeholder="没有可留空" emptyText="没有匹配的印绣花跟单" disabled={busy} onChange={(embroideryMerchandiserUserId) => { setForm({ ...form, embroideryMerchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
+        </div>
+      </details>
       {order?.hasOtherOpenStyleOrder ? <p className="rework-v2-same-style-warning">同款号存在其他未完结单；系统仅提示，不会自动合并</p> : null}
     </Surface>
 
     {!embedded ? <Surface className="rework-v2-images">
       <div className="rework-v2-section-heading">
-        <div><h2>现场图片 <b>*</b></h2><p>至少 1 张，最多 {MAX_REWORK_ATTACHMENTS} 张；支持 JPEG / PNG / WebP。</p></div>
+        <div><h2>上传报告 <b>*</b></h2><p>至少 1 张，最多 {MAX_REWORK_ATTACHMENTS} 张；支持 JPEG / PNG / WebP。</p></div>
         <StatusBadge tone={images.length ? "success" : "info"}>{images.length}/{MAX_REWORK_ATTACHMENTS}</StatusBadge>
       </div>
       <label className="rework-v2-upload">
-        <span>{uploading ? "正在上传…" : "＋ 添加现场图片"}</span>
+        <span>{uploading ? "正在上传…" : "＋ 上传报告"}</span>
         <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || uploading || images.length >= MAX_REWORK_ATTACHMENTS} onChange={(event) => { void uploadFiles(event.target.files); event.target.value = ""; }} />
       </label>
       {images.length ? <div className="rework-v2-image-grid">

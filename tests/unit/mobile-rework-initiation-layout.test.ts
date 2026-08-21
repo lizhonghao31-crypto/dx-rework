@@ -13,7 +13,7 @@ describe("mobile rework initiation layout", () => {
     expect(source).toContain("款号 <b>*</b>");
     expect(source).toContain("加工厂 <b>*</b>");
     expect(source).toContain("订单跟单 <b>*</b>");
-    expect(source).toContain("现场图片 <b>*</b>");
+    expect(source).toContain("上传报告 <b>*</b>");
     expect(source).toContain("rework-v2-grid");
     expect(source).not.toContain("InspectionReportStepOne");
     expect(source).not.toContain("InspectionReportStepTwo");
@@ -22,11 +22,15 @@ describe("mobile rework initiation layout", () => {
     expect(css).toContain("@media(max-width:600px)");
     expect(css).toContain("grid-template-columns:1fr");
     expect(css).toContain("env(safe-area-inset-bottom,0px)");
+    expect(css).toContain(".rework-v2-upload");
+    expect(css).toContain("background:#fff");
   });
 
-  it("keeps optional relationships on the same page and preserves the simple save-submit path", async () => {
+  it("folds optional relationships under more info and keeps draft save on the current page", async () => {
     const source = await read("apps/web/src/rework-v2-form.tsx");
 
+    expect(source).toContain('<details className="rework-v2-more">');
+    expect(source).toContain("<summary>更多信息</summary>");
     for (const label of ["洗水厂", "印绣花厂", "面辅料供应商", "印绣花跟单"]) {
       expect(source).toContain(label);
     }
@@ -34,6 +38,10 @@ describe("mobile rework initiation layout", () => {
     expect(source).toContain("提交返工");
     expect(source).toContain('await confirmInApp("确认提交返工单？")');
     expect(source).toContain('accept="image/jpeg,image/png,image/webp"');
+    const saveBlock = source.match(/const save = async \(\): Promise<void> => \{[\s\S]*?\n {2}const submit = async/);
+    expect(saveBlock?.[0]).toBeTruthy();
+    expect(saveBlock?.[0]).not.toContain("onOrderChanged");
+    expect(saveBlock?.[0]).not.toContain("window.location");
     expect(source).not.toContain("更多订单资料（可补充）");
     expect(source).not.toContain("验货报告步骤");
   });
