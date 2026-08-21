@@ -122,7 +122,7 @@ export function TailInspectionPanel({
         },
       );
       setData(submitted);
-      setMessage("尾查报数已提交。系统会与工人完工上数并行等待，二者完成后才进入尾部主管整单确认。 ");
+      setMessage("历史尾查报数已提交；旧订单会继续按原兼容链路进入尾部主管整单确认。 ");
       await onOrderChanged?.();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "尾查报数提交失败");
@@ -152,10 +152,10 @@ export function TailInspectionPanel({
   return <div className="mobile-page tail-inspection-page">
     <div className="mobile-hero">
       <div className="mobile-title">
-        <h1>尾查报数</h1>
-        <StatusBadge tone={actionableAssignment ? "info" : "success"}>N05</StatusBadge>
+        <h1>历史尾查报数</h1>
+        <StatusBadge tone="warning">历史流程</StatusBadge>
       </div>
-      <p>尾查与工人完工上数并行开始；系统按工序汇总多人清点结果，作为 N06 整单确认的数量基准。</p>
+      <p>仅用于旧订单兼容；新订单的尾查已作为特殊返工工序并入 N04「返工执行报数」。</p>
     </div>
 
     {message ? <p className="tail-inspection-feedback" role="status">{message}</p> : null}

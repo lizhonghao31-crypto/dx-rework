@@ -633,7 +633,8 @@ export class ResponsibilityDeterminationService {
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item USING(configuration_id)
        WHERE configuration.rework_order_id=$1
-         AND configuration.status='approved'`,
+         AND configuration.status='approved'
+         AND item.execution_kind='worker'`,
       [orderId],
     );
     if (

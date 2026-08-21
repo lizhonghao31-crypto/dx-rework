@@ -47,6 +47,7 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().min(0.001),
+    executionKind: z.enum(["worker", "tail_inspection"]).optional().default("worker"),
   }).strict(),
   z.object({
     source: z.literal("custom"),
@@ -54,6 +55,7 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().min(0.001),
+    executionKind: z.enum(["worker", "tail_inspection"]).optional().default("worker"),
   }).strict(),
 ]).superRefine((value, context) => {
   if (!Number.isInteger(value.plannedQuantity)) {

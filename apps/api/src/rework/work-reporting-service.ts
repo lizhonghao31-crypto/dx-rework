@@ -22,7 +22,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 type WorkTaskRow = Readonly<{
   work_task_id: string; rework_order_id: string; configuration_item_id: string;
   task_version: number; assignment_mode: "individual" | "collective"; status: "active" | "superseded";
-  process_name: string; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string | null;
+  process_name: string; execution_kind: "worker" | "tail_inspection"; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string | null;
 }>;
 type PersonRow = Readonly<{ person_id: string; person_type: "internal" | "temporary"; display_name: string; app_user_id: string | null }>;
 type OrderRow = Readonly<{
@@ -105,31 +105,58 @@ export class WorkReportingService {
     return { reworkOrderId, reworkStatus: order.status as ReworkWorkTasksResponse["reworkStatus"], orderVersion: order.version, tasks };
   }
 
-  async listAssignablePeople(actor: TrustedActorContext): Promise<Array<{ personId: string; displayName: string; personType: "internal" | "temporary" }>> {
+  async listAssignablePeople(actor: TrustedActorContext): Promise<Array<{
+    personId: string;
+    displayName: string;
+    personType: "internal" | "temporary";
+    eligibleExecutionKinds: Array<"worker" | "tail_inspection">;
+  }>> {
     this.ensure(actor, "work:assign");
-    const result = await this.database.query<Pick<PersonRow, "person_id" | "display_name" | "person_type">>(
-      `SELECT person_id,display_name,person_type
+    const result = await this.database.query<{
+      person_id: string;
+      display_name: string;
+      person_type: "internal" | "temporary";
+      worker_eligible: boolean;
+      tail_eligible: boolean;
+    }>(
+      `SELECT person.person_id,person.display_name,person.person_type,
+              (person.person_type='temporary' OR EXISTS (
+                SELECT 1 FROM user_role_assignments assignment
+                JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+                JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
+                JOIN identity_mappings identity ON identity.user_id=app_user.id
+                  AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
+                JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+                WHERE assignment.user_id=person.app_user_id
+                  AND assignment.role_code='worker' AND assignment.revoked_at IS NULL
+              )) AS worker_eligible,
+              (person.person_type='internal' AND EXISTS (
+                SELECT 1 FROM user_role_assignments assignment
+                JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+                JOIN role_capabilities capability ON capability.role_code=assignment.role_code
+                  AND capability.capability='tail_inspection:report'
+                JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
+                JOIN identity_mappings identity ON identity.user_id=app_user.id
+                  AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
+                JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+                WHERE assignment.user_id=person.app_user_id
+                  AND assignment.role_code='tail_inspector' AND assignment.revoked_at IS NULL
+              )) AS tail_eligible
        FROM business_people person
-       WHERE person.active=true AND (
-         person.person_type='temporary' OR EXISTS (
-           SELECT 1 FROM user_role_assignments assignment
-           JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
-           JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
-           JOIN identity_mappings identity
-             ON identity.user_id=app_user.id
-            AND identity.provider='dingtalk'
-            AND identity.active=true
-            AND identity.employed=true
-           JOIN access_security_policy policy
-             ON policy.policy_key='primary'
-            AND policy.dingtalk_corp_id=identity.corp_id
-           WHERE assignment.user_id=person.app_user_id
-             AND assignment.role_code='worker' AND assignment.revoked_at IS NULL
-         )
-       )
+       WHERE person.active=true
        ORDER BY person.display_name,person.person_id`,
     );
-    return result.rows.map((person) => ({ personId: person.person_id, displayName: person.display_name, personType: person.person_type }));
+    return result.rows.flatMap((person) => {
+      const eligibleExecutionKinds: Array<"worker" | "tail_inspection"> = [];
+      if (person.worker_eligible) eligibleExecutionKinds.push("worker");
+      if (person.tail_eligible) eligibleExecutionKinds.push("tail_inspection");
+      return eligibleExecutionKinds.length > 0 ? [{
+        personId: person.person_id,
+        displayName: person.display_name,
+        personType: person.person_type,
+        eligibleExecutionKinds,
+      }] : [];
+    });
   }
 
   async createTask(actor: TrustedActorContext, reworkOrderId: string, input: CreateWorkTask, key: string): Promise<Result<WorkTaskResponse>> {
@@ -251,10 +278,10 @@ export class WorkReportingService {
       if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
       const members = await this.members(client, task.work_task_id);
       const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
-      const reportingCapability = this.reportCapability(actor, members);
+      const reportingCapability = this.reportCapability(actor, task, members);
       if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability! };
-      if (!Number.isInteger(input.actualQuantity)) error("工人完工上数只能填写整数件数", 400, "VALIDATION_ERROR");
+      if (!Number.isInteger(input.actualQuantity)) error("返工执行报数只能填写整数件数", 400, "VALIDATION_ERROR");
       const existing = await client.query<{ work_report_id: string; quantity: string }>(
         `SELECT report.work_report_id,report.actual_quantity AS quantity
          FROM rework_work_reports report
@@ -318,7 +345,7 @@ export class WorkReportingService {
           dedupeKey: `whole-order-review:${task.rework_order_id}:${order.version + 1}`,
         });
       }
-      const workerView = reportingCapability === "work:report" && !this.isSupervisor(actor);
+      const workerView = reportingCapability !== "work:report_for_worker" && !this.isSupervisor(actor) && !isRootActor(actor);
       const visibleShares = members.map((member, index) => ({ personId: member.person_id, amount: shares[index]! })).filter((share) => !workerView || share.personId === ownPerson?.person_id);
       return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount: workerView ? null : groupAmount, memberShares: visibleShares };
     });
@@ -336,6 +363,10 @@ export class WorkReportingService {
     return actor.actorRoles.includes("worker") && this.capabilities(actor).includes("work:report");
   }
 
+  private isTailInspector(actor: TrustedActorContext): boolean {
+    return actor.actorRoles.includes("tail_inspector") && this.capabilities(actor).includes("tail_inspection:report");
+  }
+
   private canProxyReport(actor: TrustedActorContext, members?: readonly PersonRow[]): boolean {
     if (isRootActor(actor)) return true;
     return this.capabilities(actor).includes("work:report_for_worker")
@@ -346,14 +377,26 @@ export class WorkReportingService {
     return this.isWorker(actor) && members.some((person) => person.app_user_id === actor.actorId);
   }
 
-  private reportCapability(actor: TrustedActorContext, members: readonly PersonRow[]): "work:report" | "work:report_for_worker" | undefined {
+  private isOwnTailInspector(actor: TrustedActorContext, members: readonly PersonRow[]): boolean {
+    return this.isTailInspector(actor) && members.some((person) => person.app_user_id === actor.actorId);
+  }
+
+  private reportCapability(
+    actor: TrustedActorContext,
+    task: WorkTaskRow,
+    members: readonly PersonRow[],
+  ): "work:report" | "work:report_for_worker" | "tail_inspection:report" | undefined {
+    if (task.execution_kind === "tail_inspection") {
+      if (isRootActor(actor) || this.isOwnTailInspector(actor, members)) return "tail_inspection:report";
+      return undefined;
+    }
     if (this.isOwnWorker(actor, members)) return "work:report";
     if (this.canProxyReport(actor, members)) return "work:report_for_worker";
     return undefined;
   }
 
-  private canSubmitReport(actor: TrustedActorContext, members: readonly PersonRow[]): boolean {
-    return this.reportCapability(actor, members) !== undefined;
+  private canSubmitReport(actor: TrustedActorContext, task: WorkTaskRow, members: readonly PersonRow[]): boolean {
+    return this.reportCapability(actor, task, members) !== undefined;
   }
 
   private ensure(actor: TrustedActorContext, capability: string): void {
@@ -386,7 +429,7 @@ export class WorkReportingService {
   }
 
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
-    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
+    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.execution_kind,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
   }
 
@@ -409,18 +452,28 @@ export class WorkReportingService {
                )
            )
        )
-       AND EXISTS(
-         SELECT 1 FROM rework_tail_inspection_assignments assignment
-         WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
-       )
-       AND NOT EXISTS(
-         SELECT 1 FROM rework_tail_inspection_assignments assignment
-         WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
-           AND NOT EXISTS(
-             SELECT 1 FROM rework_tail_inspection_reports report
-             WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
-               AND report.status='submitted'
+       AND (
+         COALESCE((
+           SELECT configuration.unified_execution_required
+           FROM rework_process_configurations configuration
+           WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+           LIMIT 1
+         ),false)
+         OR (
+           EXISTS(
+             SELECT 1 FROM rework_tail_inspection_assignments assignment
+             WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
            )
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_tail_inspection_assignments assignment
+             WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_tail_inspection_reports report
+                 WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
+                   AND report.status='submitted'
+               )
+           )
+         )
        ) AS ready`,
       [reworkOrderId, submittedWorkTaskId],
     );
@@ -435,42 +488,52 @@ export class WorkReportingService {
   private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> {
     const task = await this.task(client as PoolClient, id, false);
     const members = await this.members(client, id);
-    const ownWorker = this.isOwnWorker(actor, members);
-    const proxyTask = this.canProxyReport(actor, members);
-    const supervisor = this.isSupervisor(actor);
-    if (!supervisor && !ownWorker && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
+    const ownWorker = task.execution_kind === "worker" && this.isOwnWorker(actor, members);
+    const ownTailInspector = task.execution_kind === "tail_inspection" && this.isOwnTailInspector(actor, members);
+    const proxyTask = task.execution_kind === "worker" && this.canProxyReport(actor, members);
+    const supervisor = this.isSupervisor(actor) || isRootActor(actor);
+    if (!supervisor && !ownWorker && !ownTailInspector && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
     const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.work_task_id=$1 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)", [task.work_task_id]);
     const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0");
-    const workerView = ownWorker && !supervisor && !proxyTask;
-    const visibleMembers = workerView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
+    const personalView = (ownWorker || ownTailInspector) && !supervisor && !proxyTask;
+    const visibleMembers = personalView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
     return {
       workTaskId: task.work_task_id, reworkOrderId: task.rework_order_id, configurationItemId: task.configuration_item_id,
-      processName: task.process_name, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
+      processName: task.process_name, executionKind: task.execution_kind, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
       unitPrice: task.unit_price === null ? null : numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
-      canSubmitReport: this.canSubmitReport(actor, members) && submittedQuantity === 0,
+      canSubmitReport: this.canSubmitReport(actor, task, members) && submittedQuantity === 0,
       members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),
       submittedQuantity, remainingQuantity: submittedQuantity > 0 ? 0 : numberValue(task.planned_quantity),
     };
   }
 
   private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> {
-    const supervisor = this.isSupervisor(actor);
+    const supervisor = this.isSupervisor(actor) || isRootActor(actor);
     const filters: string[] = [];
     const values: string[] = [orderId];
     if (this.isWorker(actor)) {
       values.push(actor.actorId);
-      filters.push(`EXISTS (SELECT 1 FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=task.work_task_id AND person.app_user_id=$${values.length})`);
+      filters.push(`item.execution_kind='worker' AND EXISTS (SELECT 1 FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=task.work_task_id AND person.app_user_id=$${values.length})`);
+    }
+    if (this.isTailInspector(actor)) {
+      values.push(actor.actorId);
+      filters.push(`item.execution_kind='tail_inspection' AND EXISTS (SELECT 1 FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=task.work_task_id AND person.app_user_id=$${values.length})`);
     }
     if (this.canProxyReport(actor)) {
-      filters.push("EXISTS (SELECT 1 FROM rework_work_task_members member WHERE member.work_task_id=task.work_task_id AND member.person_type_snapshot='temporary')");
+      filters.push("item.execution_kind='worker' AND EXISTS (SELECT 1 FROM rework_work_task_members member WHERE member.work_task_id=task.work_task_id AND member.person_type_snapshot='temporary')");
     }
-    if (!supervisor && filters.length === 0) error("当前用户无权读取工人任务", 403, "FORBIDDEN");
-    const access = supervisor ? "" : ` AND (${filters.join(" OR ")})`;
+    if (!supervisor && filters.length === 0) error("当前用户无权读取返工执行任务", 403, "FORBIDDEN");
+    const access = supervisor ? "" : ` AND (${filters.map((value) => `(${value})`).join(" OR ")})`;
     const result = await client.query<{ work_task_id: string }>(
-      `SELECT task.work_task_id FROM rework_work_tasks task WHERE task.rework_order_id=$1 AND task.status='active'${access} ORDER BY task.created_at,task.work_task_id`,
+      `SELECT task.work_task_id
+       FROM rework_work_tasks task
+       JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
+       WHERE task.rework_order_id=$1 AND task.status='active'${access}
+       ORDER BY task.created_at,task.work_task_id`,
       values,
     );
     return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor)));
   }
+
   private async mutate<T>(actor: TrustedActorContext, action: string, key: string, payload: unknown, statusCode: number, work: (client: PoolClient) => Promise<T>): Promise<Result<T>> { const client = await this.database.connect(); try { await client.query("BEGIN"); const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key, requestHash: hash(action, payload), expiresAt: new Date(Date.now()+24*60*60*1000) }, async () => ({ statusCode, response: await work(client) })); await client.query("COMMIT"); return { value: outcome.response, reused: outcome.reused }; } catch (cause) { await client.query("ROLLBACK"); throw cause; } finally { client.release(); } }
 }

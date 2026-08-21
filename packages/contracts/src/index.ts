@@ -476,6 +476,7 @@ export type ExtractInspectionReportImage = z.infer<typeof ExtractInspectionRepor
 export type InspectionReportImageExtraction = z.infer<typeof InspectionReportImageExtractionSchema>;
 
 export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);
+export const ProcessExecutionKindSchema = z.enum(["worker", "tail_inspection"]);
 export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("catalog"),
@@ -484,6 +485,7 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),
+    executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   }).strict(),
   z.object({
     source: z.literal("custom"),
@@ -491,6 +493,7 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),
+    executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   }).strict(),
 ]).superRefine((value, context) => {
   if (value.pricingUnit === "piece" && !Number.isInteger(value.plannedQuantity)) {
@@ -520,15 +523,7 @@ export const SaveProcessConfigurationSchema = z.object({
 export const SubmitProcessConfigurationSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   expectedConfigurationVersion: z.number().int().positive(),
-  tailInspectors: z.array(z.object({
-    userId: IdSchema,
-    boxScope: z.string().trim().min(1).max(200).optional(),
-  }).strict()).min(1).max(20),
-}).strict().superRefine((value, context) => {
-  if (new Set(value.tailInspectors.map((item) => item.userId)).size !== value.tailInspectors.length) {
-    context.addIssue({ code: "custom", path: ["tailInspectors"], message: "Tail inspectors cannot contain duplicates" });
-  }
-});
+}).strict();
 
 export const ReviewProcessConfigurationSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
@@ -548,6 +543,7 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processId: IdSchema.nullable(),
   processVersion: z.number().int().positive().nullable(),
   processName: z.string().min(1),
+  executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   // Historical configurations created before N02 pricing was mandatory may
@@ -572,6 +568,7 @@ export const ProcessConfigurationResponseSchema = z.object({
     createdAt: z.string().datetime(),
     submittedAt: z.string().datetime().nullable(),
     reviewedAt: z.string().datetime().nullable(),
+    unifiedExecutionRequired: z.boolean().optional().default(false),
     items: z.array(ProcessConfigurationItemResponseSchema),
   }).nullable(),
 });
@@ -606,7 +603,7 @@ export const TailInspectionResponseSchema = z.object({
   processes: z.array(TailInspectionItemSchema),
 }).strict();
 export const TailInspectionOptionsResponseSchema = z.object({
-  inspectors: z.array(z.object({ userId: IdSchema, displayName: z.string().min(1) }).strict()),
+  inspectors: z.array(z.object({ userId: IdSchema, personId: IdSchema.optional(), displayName: z.string().min(1) }).strict()),
 }).strict();
 export const SubmitTailInspectionReportSchema = z.object({
   returnedQuantity: z.number().int().positive(),
@@ -668,6 +665,7 @@ export const WorkTaskAssignablePeopleResponseSchema = z.object({
     personId: IdSchema,
     displayName: z.string().min(1),
     personType: z.enum(["internal", "temporary"]),
+    eligibleExecutionKinds: z.array(ProcessExecutionKindSchema).min(1),
   }).strict()),
 });
 export const WorkTaskResponseSchema = z.object({
@@ -675,6 +673,7 @@ export const WorkTaskResponseSchema = z.object({
   reworkOrderId: IdSchema,
   configurationItemId: IdSchema,
   processName: z.string().min(1),
+  executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   unitPrice: z.number().positive().nullable(),
@@ -800,6 +799,7 @@ export const WholeOrderReviewResponseSchema = z.object({
   canAdjustQuantity: z.boolean(),
   canConfirmQuantity: z.boolean(),
   canReviewQuantityIncrease: z.boolean(),
+  unifiedExecutionRequired: z.boolean().optional().default(false),
   processes: z.array(z.object({
     configurationItemId: IdSchema,
     processName: z.string().min(1),
@@ -819,6 +819,7 @@ export const WholeOrderReviewResponseSchema = z.object({
     completedAt: z.string().datetime(),
     submittedBy: IdSchema,
     assignmentMode: z.enum(["individual", "collective"]),
+    executionKind: ProcessExecutionKindSchema.optional().default("worker"),
     members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1) }).strict()),
     rejected: z.boolean(),
     rejectedPersonId: IdSchema.nullable(),

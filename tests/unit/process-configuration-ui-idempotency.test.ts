@@ -22,7 +22,7 @@ describe("N02/N03 process configuration UI idempotency", () => {
   it("requires N02 process, candidate price, worker and tail-inspector assignment before N03 IE review", async () => {
     const source = await read("apps/web/src/process-worker-assignment-form.tsx");
 
-    expect(source).toContain("分配工序&工人");
+    expect(source).toContain("分配工序 &工人");
     expect(source).toContain("候选单价（元/件）");
     expect(source).toContain("至少分配 1 名工人");
     expect(source).toContain("至少分配 1 名尾查");

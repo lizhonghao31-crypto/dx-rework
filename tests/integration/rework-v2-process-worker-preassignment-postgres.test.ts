@@ -12,6 +12,7 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
+import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { completeInspectionReport } from "../inspection-report-fixture.js";
 
@@ -20,7 +21,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 
-runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
+runWithPostgres("PR-04 unified execution PostgreSQL", () => {
   const schema = `rework_v2_${randomUUID().replaceAll("-", "")}`;
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
@@ -29,6 +30,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
   const v2Submission = new ReworkV2SubmissionService(database, "corp");
   const configuration = new ProcessConfigurationService(database);
   const workerPlan = new ProcessWorkerPlanService(database);
+  const workReporting = new WorkReportingService(database);
 
   const ids = {
     owner: randomUUID(),
@@ -42,6 +44,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
   };
   const rootDingtalkUserId = `pr03-root-${randomUUID()}`;
   let workerPersonId = "";
+  let tailPersonId = "";
   let processId = "";
   let rootAuthority: RootAuthority;
 
@@ -62,6 +65,8 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
   const tailConfigure = () => actor(ids.tail, ["tail_supervisor"], "process:configure");
   const tailAssign = () => actor(ids.tail, ["tail_supervisor"], "work:assign");
   const ie = () => actor(ids.ie, ["ie_reviewer"], "process:review");
+  const workerReport = () => actor(ids.worker, ["worker"], "work:report");
+  const tailReport = () => actor(ids.tailInspector, ["tail_inspector"], "tail_inspection:report");
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -105,7 +110,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
         [randomUUID(), userId, dingId, `union-${dingId}`],
       );
       await database.query(
-        "INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'PR-03 postgres fixture')",
+        "INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'PR-04 postgres fixture')",
         [randomUUID(), userId, roleCode],
       );
     }
@@ -130,14 +135,21 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       appUserId: ids.worker,
       displayName: "返工工人",
       aliases: [],
-      reason: "PR-03 PostgreSQL 预分配工人",
+      reason: "PR-04 PostgreSQL 预分配工人",
+    })).personId;
+    tailPersonId = (await access.createPerson(owner(), {
+      personType: "internal",
+      appUserId: ids.tailInspector,
+      displayName: "尾查",
+      aliases: [],
+      reason: "PR-04 PostgreSQL 尾查特殊工序人员",
     })).personId;
     processId = (await access.createProcess(owner(), {
-      processCode: "PR03PROC",
-      processName: "PR03返修工序",
+      processCode: "PR04PROC",
+      processName: "PR04返修工序",
       pricingUnit: "piece",
       active: true,
-      changeReason: "PR-03 PostgreSQL 工序",
+      changeReason: "PR-04 PostgreSQL 工序",
     })).processId;
   });
 
@@ -160,7 +172,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "own_factory" },
       problemPart: "袖口",
-      problemDescription: "PR-03 预分配验收",
+      problemDescription: "PR-04 统一执行验收",
       reworkQuantity: 10,
       inspectionReport: completeInspectionReport(),
       attachmentIds: [attachmentId],
@@ -176,18 +188,28 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       items: [{
         source: "catalog",
         processId,
+        executionKind: "worker",
         plannedQuantity: 1,
         pricingUnit: "piece",
         unitPrice: 0.6,
+      }, {
+        source: "custom",
+        customProcessName: "尾查",
+        executionKind: "tail_inspection",
+        plannedQuantity: 1,
+        pricingUnit: "piece",
+        unitPrice: 0.2,
       }],
     }, randomUUID());
 
   it("blocks IE submission until every process has workers, then auto-activates the approved plan", async () => {
-    const order = await createSubmittedOrder("PR03-PG-ORDINARY");
+    const order = await createSubmittedOrder("PR04-PG-ORDINARY");
     const saved = await saveConfiguration(order.value.reworkOrderId, order.value.version);
     const configurationId = saved.value.configuration!.configurationId;
     const configurationVersion = saved.value.configuration!.configurationVersion;
-    const itemId = saved.value.configuration!.items[0]!.configurationItemId;
+    const workerItem = saved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const tailItem = saved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
+    const itemId = workerItem.configurationItemId;
 
     expect((await database.query(
       "SELECT worker_preassignment_required AS required FROM rework_process_configurations WHERE configuration_id=$1",
@@ -201,7 +223,10 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       expectedOrderVersion: saved.value.orderVersion,
       configurationId,
       expectedConfigurationVersion: configurationVersion,
-      assignments: [{ configurationItemId: itemId, memberIds: [workerPersonId] }],
+      assignments: [
+        { configurationItemId: itemId, memberIds: [workerPersonId] },
+        { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
+      ],
     }, randomUUID());
     expect(planned.value).toMatchObject({ required: true, complete: true });
     await expect(workerPlan.assertReadyForSubmit(order.value.reworkOrderId, configurationVersion)).resolves.toBe(true);
@@ -209,7 +234,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
     const submitted = await configuration.submit(tailConfigure(), order.value.reworkOrderId, {
       expectedOrderVersion: saved.value.orderVersion,
       expectedConfigurationVersion: configurationVersion,
-      tailInspectors: [{ userId: ids.tailInspector, boxScope: "PR-03" }],
+      tailInspectors: [],
     }, randomUUID());
     expect(submitted.value.reworkStatus).toBe("pending_ie_review");
 
@@ -225,15 +250,47 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       configurationVersion,
       randomUUID(),
     );
-    expect(activated).toMatchObject({ reworkStatus: "in_progress", tasksCreated: 1 });
+    expect(activated).toMatchObject({ reworkStatus: "in_progress", tasksCreated: 2 });
     expect((await database.query("SELECT status FROM rework_orders WHERE rework_order_id=$1", [order.value.reworkOrderId])).rows[0]?.status).toBe("in_progress");
     expect((await database.query(
-      `SELECT task.status,member.person_id
+      `SELECT item.execution_kind,task.work_task_id,task.status,member.person_id
        FROM rework_work_tasks task
+       JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
        JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
-       WHERE task.rework_order_id=$1`,
+       WHERE task.rework_order_id=$1
+       ORDER BY item.execution_kind`,
       [order.value.reworkOrderId],
-    )).rows).toEqual([{ status: "active", person_id: workerPersonId }]);
+    )).rows.map(({ execution_kind, status, person_id }) => ({ execution_kind, status, person_id }))).toEqual([
+      { execution_kind: "tail_inspection", status: "active", person_id: tailPersonId },
+      { execution_kind: "worker", status: "active", person_id: workerPersonId },
+    ]);
+    expect((await database.query(
+      "SELECT count(*)::int AS count FROM rework_tail_inspection_assignments WHERE rework_order_id=$1",
+      [order.value.reworkOrderId],
+    )).rows[0]?.count).toBe(0);
+
+    const activeTasks = (await database.query<{ work_task_id: string; execution_kind: "worker" | "tail_inspection" }>(
+      `SELECT task.work_task_id,item.execution_kind
+       FROM rework_work_tasks task
+       JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
+       WHERE task.rework_order_id=$1 AND task.status='active'`,
+      [order.value.reworkOrderId],
+    )).rows;
+    const workerTask = activeTasks.find((task) => task.execution_kind === "worker")!;
+    const tailTask = activeTasks.find((task) => task.execution_kind === "tail_inspection")!;
+    const executionOrderVersion = activated!.orderVersion;
+    await workReporting.submitReport(workerReport(), workerTask.work_task_id, {
+      expectedOrderVersion: executionOrderVersion,
+      actualQuantity: 8,
+    }, randomUUID());
+    await workReporting.submitReport(tailReport(), tailTask.work_task_id, {
+      expectedOrderVersion: executionOrderVersion,
+      actualQuantity: 10,
+    }, randomUUID());
+    expect((await database.query(
+      "SELECT status FROM rework_orders WHERE rework_order_id=$1",
+      [order.value.reworkOrderId],
+    )).rows[0]?.status).toBe("pending_order_review");
     await expect(database.query(
       "UPDATE rework_process_worker_plans SET planned_by=$2 WHERE configuration_id=$1",
       [configurationId, ids.owner],
@@ -241,7 +298,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
   });
 
   it("lets Root save a worker plan without any ordinary business-role assignment", async () => {
-    const order = await createSubmittedOrder("PR03-PG-ROOT");
+    const order = await createSubmittedOrder("PR04-PG-ROOT");
     const saved = await saveConfiguration(order.value.reworkOrderId, order.value.version);
     const rootUser: AuthUser = { id: ids.root, displayName: "Root", capabilities: [], businessRoles: [] };
     const rootAssign = await businessActor(
@@ -252,14 +309,16 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       "tail_supervisor",
     );
 
+    const rootWorkerItem = saved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const rootTailItem = saved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
     const planned = await workerPlan.save(rootAssign, order.value.reworkOrderId, {
       expectedOrderVersion: saved.value.orderVersion,
       configurationId: saved.value.configuration!.configurationId,
       expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
-      assignments: [{
-        configurationItemId: saved.value.configuration!.items[0]!.configurationItemId,
-        memberIds: [workerPersonId],
-      }],
+      assignments: [
+        { configurationItemId: rootWorkerItem.configurationItemId, memberIds: [workerPersonId] },
+        { configurationItemId: rootTailItem.configurationItemId, memberIds: [tailPersonId] },
+      ],
     }, randomUUID());
     expect(planned.value.complete).toBe(true);
     expect((await database.query(

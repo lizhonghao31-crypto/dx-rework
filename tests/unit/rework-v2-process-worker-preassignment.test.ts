@@ -22,7 +22,7 @@ describe("PR-03 process and worker preassignment", () => {
     expect(routes).toContain("activateAfterIeApproval");
     expect(routes).toContain('"/rework-orders/:reworkOrderId/process-worker-plan"');
     expect(routes).toContain('"/rework-orders/:reworkOrderId/process-worker-plan/activate"');
-    expect(service).toContain("每道返工工序都必须分配至少一名工人");
+    expect(service).toContain("每道执行工序都必须分配至少一名人员");
     expect(service).toContain('action: "rework.work_task.assign"');
     expect(service).toContain('action: "rework.work_task.assignment_confirm"');
     expect(service).toContain("status='in_progress'");
@@ -34,7 +34,7 @@ describe("PR-03 process and worker preassignment", () => {
       readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
     ]);
     expect(wrapper).toContain("ProcessWorkerAssignmentForm");
-    expect(screen).toContain("分配工序&工人");
+    expect(screen).toContain("分配工序 &工人");
     expect(screen).toContain("返工人员 *");
     expect(screen).toContain("候选单价（元/件）");
     expect(screen).toContain("人员已经由尾部主管预分配；IE 只核准工序与单价，不修改分工。");

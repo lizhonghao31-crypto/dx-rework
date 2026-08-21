@@ -42,10 +42,16 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
   const attempts = useRef<Record<string, string>>({});
   const load = async () => {
-    const [overview, tail] = await Promise.all([
-      request("rework-orders/" + reworkOrderId + "/whole-order-review", WholeOrderReviewResponseSchema.parse),
-      request("rework-orders/" + reworkOrderId + "/tail-inspection", TailInspectionResponseSchema.parse),
-    ]);
+    const overview = await request(
+      "rework-orders/" + reworkOrderId + "/whole-order-review",
+      WholeOrderReviewResponseSchema.parse,
+    );
+    const tail = overview.unifiedExecutionRequired
+      ? null
+      : await request(
+        "rework-orders/" + reworkOrderId + "/tail-inspection",
+        TailInspectionResponseSchema.parse,
+      );
     setData(overview);
     setTailData(tail);
     setMultipliers((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
@@ -59,9 +65,9 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     if (overview.reviewId) {
       setMessage("本单已完成整单确认并进入责任判定。");
     } else if (overview.reworkStatus === "pending_order_review") {
-      setMessage("请核对工人上数不超过尾查汇总；数据有误可分别驳回工人或尾查重报。");
+      setMessage("请核对返工人员上数不超过尾查数量；数据有误可直接驳回对应执行记录重报。");
     } else if (overview.reworkStatus === "in_progress") {
-      setMessage("工人上数与尾查报数均完成后进入整单确认。");
+      setMessage("返工人员与尾查的执行报数全部完成后进入整单确认。");
     } else {
       setMessage("");
     }
@@ -98,13 +104,15 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     } finally { setBusy(false); }
   };
 
-  const reject = async (reportId: string, personId: string | null) => {
+  const reject = async (reportId: string, personId: string | null, executionKind: "worker" | "tail_inspection" = "worker") => {
     if (!data) return;
-    const reason = await promptInApp("请填写驳回这条完成记录的原因");
+    const reason = await promptInApp(executionKind === "tail_inspection" ? "请填写驳回这条尾查报数的原因" : "请填写驳回这条完成记录的原因");
     if (!reason?.trim()) return;
     try {
       await call("work-reports/" + reportId + "/reject", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion, rejectedPersonId: personId, reason });
-      setMessage(personId ? "已驳回该人员的完成记录；订单将按有效完成数量重新判断是否补齐。" : "已驳回整条集体完成记录；订单将按有效完成数量重新判断是否补齐。");
+      setMessage(executionKind === "tail_inspection"
+        ? "已驳回该尾查报数；原记录保留，尾查可在 N04 重新报数。"
+        : personId ? "已驳回该人员的完成记录；订单将按有效完成数量重新判断是否补齐。" : "已驳回整条集体完成记录；订单将按有效完成数量重新判断是否补齐。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完成记录驳回失败"); }
   };
 
@@ -171,7 +179,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     <Surface>
       <div className="section-title">
         <div>
-          <h2>{data.reworkStatus === "pending_order_review" ? "N06 · 尾部主管整单确认" : "返工完成进度"}</h2>
+          <h2>{data.reworkStatus === "pending_order_review" ? "N05 · 尾部主管整单确认" : "返工完成进度"}</h2>
           {message && <p>{message}</p>}
         </div>
         <StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : allComplete ? "success" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge>
@@ -179,8 +187,8 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     </Surface>
 
     <Surface>
-      <h2>{data.reworkStatus === "pending_order_review" ? "工人上数与尾查汇总对照" : "并行报数状态"}</h2>
-      <p>{data.reworkStatus === "pending_order_review" ? "每道工序的工人有效上数不得超过尾查件数；任一侧报错都可驳回重报。" : "工人上数与尾查报数全部完成后进入整单确认。"}</p>
+      <h2>{data.reworkStatus === "pending_order_review" ? "返工上数与尾查数量对照" : "统一执行报数状态"}</h2>
+      <p>{data.reworkStatus === "pending_order_review" ? "每道返工工序的有效上数不得超过尾查件数；报数有误可直接驳回对应执行记录。" : "返工人员与尾查的执行报数全部完成后进入整单确认。"}</p>
       {data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}>
         <div className="whole-order-process-main">
           <b className="whole-order-process-name">{process.processName}</b>
@@ -195,11 +203,11 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     </Surface>
 
     {(data.canReview || data.reports.length > 0) && <Surface>
-      <h2>工人上数记录</h2>
-      <p>工人上数有误时驳回；正常记录无需重复确认。</p>
+      <h2>{data.unifiedExecutionRequired ? "返工执行报数记录" : "工人上数记录"}</h2>
+      <p>{data.unifiedExecutionRequired ? "返工人员与尾查都使用同一报数事实；有误时直接驳回对应记录。" : "工人上数有误时驳回；正常记录无需重复确认。"}</p>
       {data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}>
         <div className="whole-order-report-main">
-          <b className="whole-order-person-name">{report.members.map((member) => member.displayName).join("、")}</b>
+          <b className="whole-order-person-name">{report.executionKind === "tail_inspection" ? "尾查 · " : ""}{report.members.map((member) => member.displayName).join("、")}</b>
           <div className="whole-order-report-meta">
             <span className="whole-order-report-label">上数</span>
             <strong className="whole-order-report-value">{report.actualQuantity} 件</strong>
@@ -208,14 +216,14 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
         </div>
         {data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">
           {report.assignmentMode === "collective"
-            ? <Button onClick={() => void reject(report.workReportId, null)} disabled={busy}>驳回整条集体记录</Button>
-            : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId)} disabled={busy}>驳回 {member.displayName}</Button>)}
+            ? <Button onClick={() => void reject(report.workReportId, null, report.executionKind)} disabled={busy}>驳回整条集体记录</Button>
+            : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId, report.executionKind)} disabled={busy}>驳回 {report.executionKind === "tail_inspection" ? "尾查 " : ""}{member.displayName}</Button>)}
         </div>}
       </div>)}
-      {data.reports.length === 0 && <p>尚无工人上数记录。</p>}
+      {data.reports.length === 0 && <p>尚无执行报数记录。</p>}
     </Surface>}
 
-    {data.reworkStatus === "pending_order_review" && submittedTailAssignments.length > 0 && <Surface>
+    {!data.unifiedExecutionRequired && data.reworkStatus === "pending_order_review" && submittedTailAssignments.length > 0 && <Surface>
       <h2>尾查报数记录</h2>
       <p>尾查数量有误时驳回，原记录保留，尾查重新报数后自动回到本节点核对。</p>
       {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>

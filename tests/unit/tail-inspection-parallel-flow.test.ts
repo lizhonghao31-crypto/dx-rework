@@ -6,14 +6,14 @@ import {
 } from "@dx-rework/contracts";
 import { describe, expect, it } from "vitest";
 
-describe("tail inspection parallel flow", () => {
-  it("requires N02 to assign distinct tail inspectors and validates per-process physical counts", () => {
+describe("legacy tail inspection parallel flow", () => {
+  it("rejects the retired standalone tail-assignment payload while preserving historical report validation", () => {
     const assignment = "00000000-0000-4000-8000-000000000001";
     expect(SubmitProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 1,
       expectedConfigurationVersion: 1,
       tailInspectors: [{ userId: assignment, boxScope: "A箱" }],
-    }).success).toBe(true);
+    }).success).toBe(false);
     expect(SubmitProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 1,
       expectedConfigurationVersion: 1,
@@ -31,7 +31,7 @@ describe("tail inspection parallel flow", () => {
     }).success).toBe(false);
   });
 
-  it("retires the plan-adjustment path and gates N07 on per-process worker-to-tail reconciliation", async () => {
+  it("keeps historical per-process worker-to-tail reconciliation readable", async () => {
     const [migration, service, workerService, configurationService, tailService, panel] = await Promise.all([
       readFile("apps/api/migrations/0067_tail_inspection_parallel_flow.sql", "utf8"),
       readFile("apps/api/src/rework/whole-order-review-service.ts", "utf8"),
@@ -46,11 +46,13 @@ describe("tail inspection parallel flow", () => {
     expect(migration).toContain("alternative_action:='rework.tail_inspection.submit'");
     expect(migration).toContain("dx_rework.rework_request_id");
     expect(service).toContain("assertTailReconciliation");
-    expect(service).toContain("worker.quantity>tail_checked.quantity");
+    expect(service).toContain("tail_item.execution_kind='tail_inspection'");
+    expect(service).toContain("item.execution_kind='worker'");
+    expect(service).toContain("worker.quantity > CASE WHEN active.unified_execution_required");
     expect(workerService).toContain("rework_tail_inspection_assignments");
-    expect(workerService).toContain("工人完工上数只能填写整数件数");
-    expect(configurationService).toContain('category: "tail_inspection"');
-    expect(configurationService).toContain("tail-inspection:${reworkOrderId}:${assignment.assignmentId}");
+    expect(workerService).toContain("返工执行报数只能填写整数件数");
+    expect(configurationService).not.toContain('category: "tail_inspection"');
+    expect(configurationService).not.toContain("INSERT INTO rework_tail_inspection_assignments");
     expect(tailService).toContain("completeOpenByDedupeKey");
     expect(tailService).toContain("orderTransitionEventId");
     expect(tailService).toContain('entityType: "rework_order"');
