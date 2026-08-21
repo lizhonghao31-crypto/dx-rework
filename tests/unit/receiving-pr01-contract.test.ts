@@ -54,7 +54,7 @@ describe("PR-01 receiving fact layer", () => {
     expect(boardCss).toContain(".order-board-row.is-even");
   });
 
-  it("uses two rows of three facts and a full-width bottom rework action on mobile", async () => {
+  it("uses two rows of three facts and a slim full-width bottom rework action on mobile", async () => {
     const [board, boardCss] = await Promise.all([
       read("apps/web/src/order-board-page.tsx"),
       read("apps/web/src/order-board-page.css"),
@@ -64,6 +64,8 @@ describe("PR-01 receiving fact layer", () => {
     expect(boardCss).toContain("grid-template-columns:repeat(3,minmax(0,1fr))!important");
     expect(boardCss).toContain(".order-board-rework-link--desktop{display:none}");
     expect(boardCss).toContain(".order-board-rework-link--mobile{display:flex;grid-column:1/-1");
-    expect(boardCss).toContain("min-height:44px");
+    expect(boardCss).toContain("min-height:36px");
+    expect(boardCss).toContain("color:#fff!important");
+    expect(boardCss).toContain("font-weight:800");
   });
 });
