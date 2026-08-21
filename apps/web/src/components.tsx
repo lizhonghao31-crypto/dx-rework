@@ -31,6 +31,7 @@ const ROLE_LABELS: Record<string, string> = {
   system_admin: "系统管理员",
   production_management: "生产管理",
   quality_control: "质检",
+  warehouse_receiver: "仓管人员",
   tail_supervisor: "尾部主管",
   ie_reviewer: "IE 审核",
   order_merchandiser: "订单跟单",
@@ -90,12 +91,13 @@ function PrimaryNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "发起返工", "全部订单"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
+  "订单看板": { label: "收货", glyph: "收" },
   "发起返工": { label: "发起", glyph: "发" },
-  "全部订单": { label: "订单", glyph: "单" },
+  "返工单看板": { label: "返工", glyph: "返" },
 };
 
 function isMobilePrimaryNavigation(entry: NavigationEntry): boolean {
@@ -253,6 +255,11 @@ export function Shell({
       href: "/ui/my-tasks",
     });
   }
+  navigation.push({
+    name: "订单看板",
+    description: "查看每日收货与数量差异",
+    href: "/ui/orders",
+  });
   if (initiationAccess) {
     navigation.push({
       name: "发起返工",
@@ -262,8 +269,8 @@ export function Shell({
   }
   if (reportAccess) {
     navigation.push({
-      name: "全部订单",
-      description: "查看权限范围内订单及完整流程",
+      name: "返工单看板",
+      description: "查看权限范围内返工单及完整流程",
       href: "/ui/tasks",
     });
   }
