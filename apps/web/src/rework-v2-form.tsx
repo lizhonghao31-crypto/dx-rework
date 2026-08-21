@@ -28,7 +28,12 @@ import {
   type AttachmentUploadTimingContext,
 } from "./attachment-upload.js";
 import { FactorySearch } from "./factory-search.js";
+import {
+  executeReworkSubmit,
+  type PendingSubmitAttempt,
+} from "./rework-submission.js";
 import { SearchSelect } from "./search-select.js";
+import { confirmInApp } from "./system-dialog.js";
 import "./rework-v2-form.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -131,6 +136,7 @@ export function ReworkInitiationV2Form({
         : "填写三项核心资料并上传现场图片",
   );
   const pendingSave = useRef<PendingSave | null>(null);
+  const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
   const previewUrls = useRef<string[]>([]);
 
   useEffect(() => {
@@ -175,7 +181,7 @@ export function ReworkInitiationV2Form({
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
           embroideryMerchandiserUserId: context.embroideryMerchandiserUserId ?? "",
         });
-        setMessage(`草稿已读取 · 当前已有 ${existingAttachmentCount} 张现场图片`);
+        setMessage(`草稿已读取 · 当前已有 ${draft.attachmentIds.length} 张现场图片`);
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "返工草稿加载失败");
@@ -192,14 +198,16 @@ export function ReworkInitiationV2Form({
     }
 
     return () => { active = false; controller.abort(); };
-  }, [existingAttachmentCount, reworkOrderId]);
+  }, [reworkOrderId]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrls.current = [];
   }, []);
 
-  const availableImageCount = reworkOrderId ? existingAttachmentCount : images.length;
+  const availableImageCount = reworkOrderId
+    ? order?.attachmentIds.length ?? existingAttachmentCount
+    : images.length;
   const complete = Boolean(
     form.styleNo.trim()
     && form.factory
@@ -247,7 +255,7 @@ export function ReworkInitiationV2Form({
     );
   };
 
-  const persistDraft = async (): Promise<ReworkOrderResponse> => {
+  const persistDraft = async (clearPendingSubmit = true): Promise<ReworkOrderResponse> => {
     const processingFactory = coreFactory();
     const key = saveKey();
     let saved: ReworkOrderResponse;
@@ -298,6 +306,7 @@ export function ReworkInitiationV2Form({
 
     setOrder(saved);
     pendingSave.current = null;
+    if (clearPendingSubmit) pendingSubmit.current = null;
     await saveSupplyContext(saved.reworkOrderId);
     return saved;
   };
@@ -308,7 +317,9 @@ export function ReworkInitiationV2Form({
     setMessage("正在保存草稿…");
     try {
       const saved = await persistDraft();
-      setMessage(`草稿已保存 · ${saved.styleNo ?? "未填款号"}`);
+      setMessage(saved.hasOtherOpenStyleOrder
+        ? "同款号存在其他未完结单；系统仅提示，不会自动合并"
+        : `草稿已保存 · ${saved.styleNo ?? "未填款号"}`);
       await onOrderChanged?.();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "草稿保存失败");
@@ -319,19 +330,34 @@ export function ReworkInitiationV2Form({
 
   const submit = async (): Promise<void> => {
     if (busy || uploading || !complete) return;
+    if (!(await confirmInApp("确认提交返工单？"))) return;
     setBusy(true);
     setMessage("正在提交返工…");
     try {
-      const saved = await persistDraft();
-      const submitted = await request(
-        `rework-orders/${saved.reworkOrderId}/submit-v2`,
-        ReworkOrderResponseSchema,
-        {
-          method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({ expectedVersion: saved.version }),
+      const submitted = await executeReworkSubmit(
+        order,
+        pendingSubmit.current,
+        () => persistDraft(false),
+        (saved) => {
+          const attempt: PendingSubmitAttempt = {
+            reworkOrderId: saved.reworkOrderId,
+            body: { expectedVersion: saved.version },
+            key: crypto.randomUUID(),
+          };
+          pendingSubmit.current = attempt;
+          return attempt;
         },
+        (attempt) => request(
+          `rework-orders/${attempt.reworkOrderId}/submit-v2`,
+          ReworkOrderResponseSchema,
+          {
+            method: "POST",
+            headers: { "idempotency-key": attempt.key },
+            body: JSON.stringify(attempt.body),
+          },
+        ),
       );
+      pendingSubmit.current = null;
       setOrder(submitted);
       if (embedded) {
         setMessage(`已提交 ${submitted.reworkNo ?? "返工单"}`);
@@ -360,11 +386,12 @@ export function ReworkInitiationV2Form({
     }
     setUploading(true);
     setMessage(`正在上传 ${selected.length} 张现场图片…`);
+    const uploadConcurrency = currentQcUploadConcurrency();
     try {
       const profile = currentUploadClientProfile();
       const uploaded = await prepareAndUploadWithConcurrency(
         selected,
-        currentQcUploadConcurrency(),
+        uploadConcurrency,
         async (file, index) => {
           const baseTiming: AttachmentUploadTimingContext = {
             diagnosticId: crypto.randomUUID(),
@@ -431,6 +458,7 @@ export function ReworkInitiationV2Form({
       );
       setImages((current) => [...current, ...uploaded]);
       pendingSave.current = null;
+      pendingSubmit.current = null;
       setMessage(`图片上传完成，共 ${images.length + uploaded.length} 张`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "图片上传失败");
@@ -449,6 +477,7 @@ export function ReworkInitiationV2Form({
       return current.filter((image) => image.attachmentId !== attachmentId);
     });
     pendingSave.current = null;
+    pendingSubmit.current = null;
   };
 
   const embroiderySupplierOptions = useMemo(() => supplyOptions.embroideryWashingSuppliers.map((supplier) => ({
@@ -475,14 +504,15 @@ export function ReworkInitiationV2Form({
         {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{availableImageCount} 张现场图片</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
-        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy} onChange={(event) => setForm({ ...form, styleNo: event.target.value })} placeholder="输入款号" /></label>
-        <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => setForm({ ...form, factory })} /></div></label>
-        <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => setForm({ ...form, merchandiserUserId })} /></div></label>
+        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
+        <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory }); pendingSubmit.current = null; }} /></div></label>
+        <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
         <label><span>洗水厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.washingSupplierId} placeholder="没有可留空" emptyText="没有匹配的洗水厂" disabled={busy} onChange={(washingSupplierId) => setForm({ ...form, washingSupplierId })} /></div></label>
         <label><span>印绣花厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.embroiderySupplierId} placeholder="没有可留空" emptyText="没有匹配的印绣花厂" disabled={busy} onChange={(embroiderySupplierId) => setForm({ ...form, embroiderySupplierId })} /></div></label>
         <label><span>面辅料供应商</span><div className="rework-v2-control"><SearchSelect options={fabricSupplierOptions} value={form.fabricSupplierId} placeholder="没有可留空" emptyText="没有匹配的面辅料供应商" disabled={busy} onChange={(fabricSupplierId) => setForm({ ...form, fabricSupplierId })} /></div></label>
         <label><span>印绣花跟单</span><div className="rework-v2-control"><SearchSelect options={supplyOptions.embroideryWashingMerchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.embroideryMerchandiserUserId} placeholder="没有可留空" emptyText="没有匹配的印绣花跟单" disabled={busy} onChange={(embroideryMerchandiserUserId) => setForm({ ...form, embroideryMerchandiserUserId })} /></div></label>
       </div>
+      {order?.hasOtherOpenStyleOrder ? <p className="rework-v2-same-style-warning">同款号存在其他未完结单；系统仅提示，不会自动合并</p> : null}
     </Surface>
 
     {!embedded ? <Surface className="rework-v2-images">
