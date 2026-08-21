@@ -24,6 +24,7 @@ import type { InspectionImageExtractionService } from "./inspection-image-extrac
 import type { ReworkInitiationService } from "./service.js";
 import { registerReworkSupplyContextRoutes } from "./supply-context-routes.js";
 import type { ReworkSupplyContextService } from "./supply-context-service.js";
+import type { ReworkV2SubmissionService } from "./v2-submission-service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -52,6 +53,7 @@ const translateTodoRoutingError = (error: unknown): never => {
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  v2SubmissionService?: ReworkV2SubmissionService;
   businessDetailService?: ReworkBusinessDetailService;
   supplyContextService?: ReworkSupplyContextService;
   root?: RootAuthority;
@@ -156,6 +158,23 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
       return translateTodoRoutingError(error);
     }
   });
+  if (dependencies.v2SubmissionService) {
+    app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/submit-v2", async (request, reply) => {
+      const params = parse(ReworkOrderParamsSchema, request.params);
+      try {
+        const result = await dependencies.v2SubmissionService!.submit(
+          await actor(request),
+          params.reworkOrderId,
+          parse(SubmitReworkOrderSchema, request.body),
+          idempotencyKey(request),
+        );
+        if (result.reused) void reply.header("idempotency-replayed", "true");
+        return result.value;
+      } catch (error: unknown) {
+        return translateTodoRoutingError(error);
+      }
+    });
+  }
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/withdraw", async (request, reply) => {
     const params = parse(ReworkOrderParamsSchema, request.params);
     const result = await dependencies.service.withdraw(await actor(request), params.reworkOrderId, parse(TransitionReworkOrderSchema, request.body), idempotencyKey(request));
