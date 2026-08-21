@@ -165,7 +165,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(workReportingService).toContain("JOIN app_users app_user");
     expect(workReportingService).toContain("identity.active=true");
     expect(workReportingService).toContain("assignment.role_code='worker'");
-    expect(workerAware).toContain('input.roleCode !== "worker"');
+    expect(workerAware).toContain('["worker", "tail_inspector"]');
     expect(workerAware).toContain("await this.createPerson");
     expect(workerAware).toContain("await super.revokeRole");
     expect(migration).toContain("rework_work_task_members_employee_eligibility");

@@ -30,7 +30,7 @@ describe("root global business bypass policy", () => {
     expect(source).toContain("if (isRootActor(actor)) return true;");
     expect(source).toContain("members.some((person) => person.person_type === \"temporary\")");
     expect(form).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
-    expect(form).toContain('isRoot ? "代上数"');
+    expect(form).toContain('isRoot ? "代为报数"');
   });
 
   it("keeps external deduction authority Root-only while preserving ordinary role checks", async () => {

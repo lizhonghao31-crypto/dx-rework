@@ -60,7 +60,7 @@ describe("business copy noise contract", () => {
     expect(components).toContain("const isRoot = currentUser?.isRoot === true;");
     expect(components).not.toContain('...(isRoot ? ["超级用户"] : [])');
     expect(reporting).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
-    expect(reporting).toContain('isRoot ? "代上数"');
+    expect(reporting).toContain('isRoot ? "代为报数"');
     expect(tail).toContain('isRoot ? "可代报"');
   });
 

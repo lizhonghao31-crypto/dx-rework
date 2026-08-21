@@ -109,7 +109,7 @@ describe("zero-role Root UI entry contract", () => {
 
     expect(process).toContain("user?.isRoot === true");
     expect(work).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
-    expect(work).toContain('isRoot ? "代上数"');
+    expect(work).toContain('isRoot ? "代为报数"');
     expect(tail).toContain('isRoot ? "可代报"');
     expect(work).toContain('task.executionKind === "tail_inspection"');
     expect(detail).toContain("const canUseWorkWorkspace");

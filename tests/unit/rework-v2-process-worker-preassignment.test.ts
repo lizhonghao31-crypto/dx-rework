@@ -22,7 +22,7 @@ describe("PR-03 process and worker preassignment", () => {
     expect(routes).toContain("activateAfterIeApproval");
     expect(routes).toContain('"/rework-orders/:reworkOrderId/process-worker-plan"');
     expect(routes).toContain('"/rework-orders/:reworkOrderId/process-worker-plan/activate"');
-    expect(service).toContain("每道返工工序都必须分配至少一名工人");
+    expect(service).toContain("每道执行工序都必须分配至少一名人员");
     expect(service).toContain('action: "rework.work_task.assign"');
     expect(service).toContain('action: "rework.work_task.assignment_confirm"');
     expect(service).toContain("status='in_progress'");

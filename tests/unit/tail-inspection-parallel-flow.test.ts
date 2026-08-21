@@ -7,13 +7,13 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("legacy tail inspection parallel flow", () => {
-  it("keeps the historical contract for distinct tail inspectors and validates per-process physical counts", () => {
+  it("rejects the retired standalone tail-assignment payload while preserving historical report validation", () => {
     const assignment = "00000000-0000-4000-8000-000000000001";
     expect(SubmitProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 1,
       expectedConfigurationVersion: 1,
       tailInspectors: [{ userId: assignment, boxScope: "A箱" }],
-    }).success).toBe(true);
+    }).success).toBe(false);
     expect(SubmitProcessConfigurationSchema.safeParse({
       expectedOrderVersion: 1,
       expectedConfigurationVersion: 1,
@@ -46,7 +46,9 @@ describe("legacy tail inspection parallel flow", () => {
     expect(migration).toContain("alternative_action:='rework.tail_inspection.submit'");
     expect(migration).toContain("dx_rework.rework_request_id");
     expect(service).toContain("assertTailReconciliation");
-    expect(service).toContain("worker.quantity>tail_checked.quantity");
+    expect(service).toContain("tail_item.execution_kind='tail_inspection'");
+    expect(service).toContain("item.execution_kind='worker'");
+    expect(service).toContain("worker.quantity > CASE WHEN active.unified_execution_required");
     expect(workerService).toContain("rework_tail_inspection_assignments");
     expect(workerService).toContain("返工执行报数只能填写整数件数");
     expect(configurationService).not.toContain('category: "tail_inspection"');

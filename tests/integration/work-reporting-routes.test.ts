@@ -28,7 +28,7 @@ const create = (
 ) => {
   const service = {
     list: vi.fn(async () => ({ reworkOrderId: orderId, reworkStatus: "in_progress", orderVersion: 2, tasks: [] })),
-    listAssignablePeople: vi.fn(async () => [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" as const }]),
+    listAssignablePeople: vi.fn(async () => [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" as const, eligibleExecutionKinds: ["worker"] as const }]),
     createTask: vi.fn(),
     submitReport: vi.fn(async (_actor, submittedTaskId) => ({
       value: {
@@ -66,7 +66,7 @@ describe("work reporting routes", () => {
     const response = await app.inject({ method: "GET", url: "/work-task-options", headers: { cookie: "dx_rework_session=trusted" } });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ people: [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" }] });
+    expect(response.json()).toEqual({ people: [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal", eligibleExecutionKinds: ["worker"] }] });
     expect(service.listAssignablePeople).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "work:assign" }));
   });
 
