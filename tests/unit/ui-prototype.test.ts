@@ -15,7 +15,7 @@ const auth = read("../../apps/web/src/auth.tsx");
 const reworkV2Form = read("../../apps/web/src/rework-v2-form.tsx");
 const reworkDetail = read("../../apps/web/src/rework-detail-page.tsx");
 const attachmentUpload = read("../../apps/web/src/attachment-upload.ts");
-const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
+const processConfigurationForm = read("../../apps/web/src/process-worker-assignment-form.tsx");
 const landingTarget = read("../../apps/web/src/landing-target.ts");
 
 describe("PR-01A UI prototype contract", () => {
@@ -99,7 +99,7 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkDetail).toContain("取消返工单");
     expect(webCss).not.toContain("--dx-v2-color-primary:");
   });
-  it("adds the PR-06 process page without replacing the established layout", () => {
+  it("adds the merged N02 process and worker page without replacing the established layout", () => {
     expect(app).toContain("requiredAnyOf");
     expect(app).toContain('requiredRole: "tail_supervisor"');
     expect(app).toContain('requiredRole: "ie_reviewer"');
@@ -107,8 +107,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(processConfigurationForm).toContain("/process-configuration/draft");
     expect(processConfigurationForm).toContain("/process-configuration/submit");
     expect(processConfigurationForm).toContain("/process-configuration/review");
-    expect(processConfigurationForm).toContain("工序与候选单价");
-    expect(processConfigurationForm).toContain("候选单价（元 / 件）");
+    expect(processConfigurationForm).toContain("分配工序&工人");
+    expect(processConfigurationForm).toContain("候选单价（元/件）");
     expect(processConfigurationForm).toContain("分配尾查");
   });
 });
