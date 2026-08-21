@@ -9,10 +9,10 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("UAT 1.6 closure regressions", () => {
-  it("keeps terminal archive, complete initiation context and readonly history visible in the order detail", async () => {
-    const [detail, form, service] = await Promise.all([
+  it("keeps terminal archive and historical initiation facts readable without restoring retired fields to N01 v2", async () => {
+    const [detail, v2Form, service] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/api/src/rework/service.ts", "utf8"),
     ]);
     expect(detail).toContain('if (detail.status === "completed")');
@@ -36,9 +36,15 @@ describe("UAT 1.6 closure regressions", () => {
       "reworkReason",
       "reworkProcess",
     ]) {
-      expect(form).toContain(field);
       expect(service).toContain(field);
     }
+    expect(v2Form).toContain("款号 <b>*</b>");
+    expect(v2Form).toContain("加工厂 <b>*</b>");
+    expect(v2Form).toContain("订单跟单 <b>*</b>");
+    expect(v2Form).not.toContain("客户货号");
+    expect(v2Form).not.toContain("工厂款号");
+    expect(v2Form).not.toContain("订单数量（必填）");
+    expect(v2Form).not.toContain("返工原因");
   });
 
   it("uses settled wage cents and allows an absent external supplier to be added at the handling point", async () => {

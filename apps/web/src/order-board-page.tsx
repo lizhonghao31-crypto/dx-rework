@@ -58,6 +58,7 @@ export function OrderBoardPage() {
   const [data, setData] = useState<BoardResult | null>(null);
   const [message, setMessage] = useState("正在加载订单看板…");
   const [canReceive, setCanReceive] = useState(false);
+  const [canInitiate, setCanInitiate] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -65,11 +66,21 @@ export function OrderBoardPage() {
       .then(async (response) => response.ok ? await response.json() as BoardMe : null)
       .then((body) => {
         if (!active || body?.status !== "authorized" || !body.user) return;
-        const warehouseReceiver = body.user.businessRoles?.includes("warehouse_receiver") === true
-          && body.user.capabilities.includes("receiving:create");
-        setCanReceive(body.user.isRoot === true || warehouseReceiver);
+        const isRoot = body.user.isRoot === true;
+        const roles = body.user.businessRoles ?? [];
+        const capabilities = body.user.capabilities;
+        const warehouseReceiver = roles.includes("warehouse_receiver")
+          && capabilities.includes("receiving:create");
+        const qualityControl = roles.includes("quality_control")
+          && capabilities.includes("rework:initiate");
+        setCanReceive(isRoot || warehouseReceiver);
+        setCanInitiate(isRoot || roles.includes("owner_group") || qualityControl);
       })
-      .catch(() => { if (active) setCanReceive(false); });
+      .catch(() => {
+        if (!active) return;
+        setCanReceive(false);
+        setCanInitiate(false);
+      });
     return () => { active = false; };
   }, []);
 
@@ -136,6 +147,7 @@ export function OrderBoardPage() {
       {data?.rows.map((row) => {
         const tone = row.differenceQuantity < 0 ? "short" : row.differenceQuantity > 0 ? "extra" : "even";
         const signed = row.differenceQuantity > 0 ? `+${row.differenceQuantity}` : String(row.differenceQuantity);
+        const initiateHref = `${pageUrl("ui/qc/new")}?styleNo=${encodeURIComponent(row.styleNo)}`;
         return <Surface className={`order-board-row is-${tone}`} key={row.styleNo}>
           <div className="order-board-row__style">
             <span>款号</span>
@@ -144,6 +156,7 @@ export function OrderBoardPage() {
               <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
+              {canInitiate ? <a className="order-board-rework-link" href={initiateHref}>发起返工</a> : null}
             </div>
           </div>
           <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>

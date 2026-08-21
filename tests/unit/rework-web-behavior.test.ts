@@ -86,11 +86,15 @@ describe("PR-05 web behavior", () => {
   });
 
   it("keeps the submit idempotency attempt after the draft save that precedes it", async () => {
-    const form = await readFile("apps/web/src/rework-form.tsx", "utf8");
+    const form = await readFile("apps/web/src/rework-v2-form.tsx", "utf8");
 
+    expect(form).toContain("const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);");
     expect(form).toContain("const persistDraft = async (clearPendingSubmit = true)");
     expect(form).toContain("if (clearPendingSubmit) pendingSubmit.current = null;");
+    expect(form).toContain("executeReworkSubmit(");
     expect(form).toContain("() => persistDraft(false)");
+    expect(form).toContain("pendingSubmit.current = attempt;");
+    expect(form).toContain('headers: { "idempotency-key": attempt.key }');
   });
 
   it("blocks every form mutation until an existing draft has finished restoring", () => {
@@ -118,7 +122,7 @@ describe("PR-05 web behavior", () => {
 
   it("keeps QC uploads compact, capped and previewable throughout the order detail", async () => {
     const [form, detail, helper, supplement] = await Promise.all([
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/attachment-upload.ts", "utf8"),
       readFile("apps/web/src/order-image-supplement-uploader.tsx", "utf8"),
@@ -126,11 +130,12 @@ describe("PR-05 web behavior", () => {
 
     expect(form).toContain("MAX_REWORK_ATTACHMENTS");
     expect(form).toContain("const uploadConcurrency = currentQcUploadConcurrency();");
-    expect(form).toContain("prepareAndUploadWithConcurrency(selected, uploadConcurrency");
+    expect(form).toContain("prepareAndUploadWithConcurrency(");
+    expect(form).toContain("uploadConcurrency,");
     expect(form).not.toContain("mapWithConcurrency(selected, 2, prepareAttachmentForUpload)");
     expect(form).not.toContain("firstUploadStartedAt");
     expect(form).not.toContain("秒开始上传");
-    expect(form).toContain("qc-upload-preview-list");
+    expect(form).toContain("rework-v2-image-grid");
     expect(form).toContain("URL.createObjectURL(file)");
     expect(detail).toContain("订单图片");
     expect(detail).toContain("rework-detail-image-grid");

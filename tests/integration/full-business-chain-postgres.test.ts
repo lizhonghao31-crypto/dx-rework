@@ -18,6 +18,7 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
+import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
@@ -73,6 +74,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   const todoService = new TodoService(database);
   const todoProjection = new TodoProjectionService(todoService);
   const initiation = new ReworkInitiationService(
+    database,
+    "corp",
+    undefined,
+    undefined,
+    undefined,
+    todoProjection,
+  );
+  const v2Submission = new ReworkV2SubmissionService(
     database,
     "corp",
     undefined,
@@ -847,42 +856,46 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ]);
   });
 
-  it("submits the eight required N01 facts without retired manual-entry fields", async () => {
+  it("submits simplified N01 without retired manual-entry facts", async () => {
     const initialImageId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
          attachment_id,object_key,original_filename,mime_type,size_bytes,
          sha256,uploaded_by,status,ready_at
-       ) VALUES($1,$2,'n01-eight-fields.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+       ) VALUES($1,$2,'n01-v2-minimal.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [initialImageId, `private/${initialImageId}.webp`, "f".repeat(64), ids.qc],
     );
     const draft = await initiation.createDraft(qc(), {
-      styleNo: "UAT-N01-EIGHT-FIELDS",
-      orderQuantity: 120,
+      styleNo: "UAT-N01-V2-MINIMAL",
+      merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
-      inspectionReport: n01CoreInspectionReport("八项资料提交测试款"),
       attachmentIds: [initialImageId],
     }, randomUUID());
 
     expect(draft.value).toMatchObject({
-      merchandiserUserId: null,
+      status: "draft",
+      styleNo: "UAT-N01-V2-MINIMAL",
+      orderQuantity: null,
+      merchandiserUserId: ids.merchandiser,
       problemPart: null,
       problemDescription: null,
       reworkQuantity: null,
+      inspectionReport: null,
     });
 
-    const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, {
+    const submitted = await v2Submission.submit(qc(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,
     }, randomUUID());
 
     expect(submitted.value).toMatchObject({
       status: "pending_process_configuration",
-      styleNo: "UAT-N01-EIGHT-FIELDS",
-      orderQuantity: 120,
-      merchandiserUserId: null,
+      styleNo: "UAT-N01-V2-MINIMAL",
+      orderQuantity: null,
+      merchandiserUserId: ids.merchandiser,
       problemPart: null,
       problemDescription: null,
       reworkQuantity: null,
+      inspectionReport: null,
     });
     expect(submitted.value.reworkNo).toMatch(/^RW-\d{4}-\d{4}-\d{3,}$/);
   });

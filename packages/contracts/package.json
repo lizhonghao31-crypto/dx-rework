@@ -20,6 +20,10 @@
       "types": "./src/external-responsibility.ts",
       "import": "./dist/external-responsibility.js"
     },
+    "./rework-supply-context": {
+      "types": "./src/rework-supply-context.ts",
+      "import": "./dist/rework-supply-context.js"
+    },
     "./wages": {
       "types": "./src/wages.ts",
       "import": "./dist/wages.js"

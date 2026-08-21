@@ -27,7 +27,7 @@ describe("mobile primary navigation", () => {
     expect(css).toContain("position: fixed;");
     expect(css).toContain("env(safe-area-inset-bottom, 0px)");
     expect(css).toContain(".mobile-primary-navigation__more[open] .mobile-primary-navigation__drawer");
-    expect(app).toContain('<Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationForm /></Shell>');
+    expect(app).toContain('<Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>');
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
   });

@@ -23,7 +23,7 @@ describe("business-chain UI handoff contracts", () => {
   it("warns about another same-style order only while that order is unfinished", async () => {
     const [service, form] = await Promise.all([
       readFile("apps/api/src/rework/service.ts", "utf8"),
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
     ]);
     expect(service).toContain("other.status NOT IN ('completed','cancelled','deleted')");
     expect(form).toContain("同款号存在其他未完结单；系统仅提示，不会自动合并");
@@ -126,13 +126,13 @@ describe("business-chain UI handoff contracts", () => {
 
   it("keeps high-frequency business selectors searchable without exposing internal IDs", async () => {
     const [initiation, processConfiguration, workReporting, externalResponsibility] = await Promise.all([
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
     ]);
     expect(initiation).toContain("<SearchSelect");
-    expect(initiation).toContain("输入姓名搜索订单跟单");
+    expect(initiation).toContain('placeholder="搜索订单跟单"');
     expect(initiation).toContain("<FactorySearch");
     expect(processConfiguration).toContain("输入工序名称搜索");
     expect(processConfiguration).toContain("selectCatalogProcess");

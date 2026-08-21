@@ -2,21 +2,20 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("rework initiation information architecture", () => {
-  it("keeps the initiation page dedicated to one new order and routes follow-up work to order detail", async () => {
+  it("keeps the standalone initiation page dedicated to one new order and routes follow-up work to order detail", async () => {
     const [app, form, detail, shell] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/workflow-shell.css", "utf8"),
     ]);
 
-    expect(app).toContain("<ReworkInitiationForm />");
+    expect(app).toContain("<ReworkInitiationV2Form />");
     expect(app).not.toContain("ReworkInitiationWorkbench");
     expect(form).not.toContain('get("draft")');
-    expect(form).not.toContain("setDraftQuery");
-    expect(form).toContain("const resetSubmittedForm");
-    expect(form).toContain("resetSubmittedForm(submitted);");
-    expect(form).toContain("已提交，可以直接填写下一张返工单");
+    expect(form).toContain('get("styleNo")');
+    expect(form).toContain("window.location.assign(pageUrl(`ui/tasks/${submitted.reworkOrderId}`))");
+    expect(form).toContain("只填返工真正需要的资料");
     expect(detail).toContain("InitiationFollowUpActions");
     expect(detail).toContain("<ReworkInitiationForm");
     expect(detail).toContain('reworkOrderId={detail.reworkOrderId}');

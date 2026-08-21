@@ -83,12 +83,13 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("deductedOn[");
   });
 
-  it("lets one rework reference multiple order numbers without changing the one-style boundary", async () => {
-    const source = await read("apps/web/src/rework-form.tsx");
-    expect(source).toContain("一张返工单一个款号");
-    expect(source).toContain('label="订单号（可填多个，知道时填写）"');
-    expect(source).toContain('maxLength={100}');
-    expect(source).toContain('placeholder="多个订单号用逗号分隔，例如：PO001，PO002"');
+  it("keeps one style per rework while leaving order numbers to the upstream order domain", async () => {
+    const source = await read("apps/web/src/rework-v2-form.tsx");
+    expect(source).toContain("款号 <b>*</b>");
+    expect(source).toContain("styleNo: form.styleNo.trim() || null");
+    expect(source).not.toContain("订单号（可填多个，知道时填写）");
+    expect(source).not.toContain("多个订单号用逗号分隔");
+    expect(source).not.toContain("orderNo:");
   });
 
   it("keeps worker completion to one final-count action and closes reporting after everyone completes", async () => {

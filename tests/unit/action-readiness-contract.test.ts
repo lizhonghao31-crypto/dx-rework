@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 describe("business action readiness contract", () => {
   it("keeps N01 readiness and gates the simplified N08 submit action", async () => {
     const [initiation, responsibility] = await Promise.all([
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
     ]);
 
-    expect(initiation).toContain('disabled={mutationDisabled || !complete}');
+    expect(initiation).toContain("const complete = Boolean(");
+    expect(initiation).toContain("availableImageCount > 0");
+    expect(initiation).toContain('disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)}');
     expect(responsibility).toContain("const allProcessesValid = processes.length > 0 && processes.every(processValid);");
     expect(responsibility).toContain("!response || !editable || !allProcessesValid || !handlerUserId || busyAction");
     expect(responsibility).toContain('disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}');

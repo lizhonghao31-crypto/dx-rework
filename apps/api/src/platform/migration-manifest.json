@@ -75,6 +75,7 @@
     { "version": "0073_wage_direct_month_close_guard", "checksum": "c6e4ebc9c7eb4ee15b0da9b02a186a42a5e29e3d53528cd50df5815081819189" },
     { "version": "0074_wage_review_adjustment_retirement", "checksum": "37c93954349fad851bfe2b813c2113271b5e8c355d4abc7223488d990167bbfc" },
     { "version": "0075_root_delete_wage_cleanup", "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018" },
-    { "version": "0076_receiving_fact_layer", "checksum": "cc01d08c793638f6290df825f126e554ffd1c485fa79739f9920a251b4142f79" }
+    { "version": "0076_receiving_fact_layer", "checksum": "cc01d08c793638f6290df825f126e554ffd1c485fa79739f9920a251b4142f79" },
+    { "version": "0077_rework_v2_n01_supply_context", "checksum": "bda0d654533c6c6020a1d725206a13116f44f817636842dc60117ea82ede621d" }
   ]
 }

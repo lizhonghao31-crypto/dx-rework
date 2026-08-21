@@ -22,6 +22,11 @@ import type { AttachmentService } from "../tools/attachments.js";
 import type { ReworkBusinessDetailService } from "./rework-business-detail-service.js";
 import type { InspectionImageExtractionService } from "./inspection-image-extraction-service.js";
 import type { ReworkInitiationService } from "./service.js";
+import { registerReworkSupplyContextRoutes } from "./supply-context-routes.js";
+import type { ReworkSupplyContextService } from "./supply-context-service.js";
+import { registerReworkV2DraftRoutes } from "./v2-draft-routes.js";
+import type { ReworkV2DraftService } from "./v2-draft-service.js";
+import type { ReworkV2SubmissionService } from "./v2-submission-service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -50,7 +55,10 @@ const translateTodoRoutingError = (error: unknown): never => {
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  v2DraftService?: ReworkV2DraftService;
+  v2SubmissionService?: ReworkV2SubmissionService;
   businessDetailService?: ReworkBusinessDetailService;
+  supplyContextService?: ReworkSupplyContextService;
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
@@ -153,6 +161,23 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
       return translateTodoRoutingError(error);
     }
   });
+  if (dependencies.v2SubmissionService) {
+    app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/submit-v2", async (request, reply) => {
+      const params = parse(ReworkOrderParamsSchema, request.params);
+      try {
+        const result = await dependencies.v2SubmissionService!.submit(
+          await actor(request),
+          params.reworkOrderId,
+          parse(SubmitReworkOrderSchema, request.body),
+          idempotencyKey(request),
+        );
+        if (result.reused) void reply.header("idempotency-replayed", "true");
+        return result.value;
+      } catch (error: unknown) {
+        return translateTodoRoutingError(error);
+      }
+    });
+  }
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/withdraw", async (request, reply) => {
     const params = parse(ReworkOrderParamsSchema, request.params);
     const result = await dependencies.service.withdraw(await actor(request), params.reworkOrderId, parse(TransitionReworkOrderSchema, request.body), idempotencyKey(request));
@@ -203,5 +228,20 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     const query = parse(ReworkOrdersQuerySchema, request.query);
     return dependencies.service.listOwn(await actor(request), query.status);
   });
+
+  if (dependencies.v2DraftService) {
+    registerReworkV2DraftRoutes(app, {
+      authenticate: dependencies.authenticate,
+      service: dependencies.v2DraftService,
+      ...(dependencies.root ? { root: dependencies.root } : {}),
+    });
+  }
+  if (dependencies.supplyContextService) {
+    registerReworkSupplyContextRoutes(app, {
+      authenticate: dependencies.authenticate,
+      service: dependencies.supplyContextService,
+      ...(dependencies.root ? { root: dependencies.root } : {}),
+    });
+  }
   if (dependencies.erp) registerErpIntegrationRoutes(app, { authenticateSession: dependencies.authenticate, ...dependencies.erp });
 }

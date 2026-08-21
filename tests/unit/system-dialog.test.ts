@@ -50,7 +50,7 @@ describe("system dialog automation contract", () => {
 
   it("uses the shared dialog in the unattended acceptance workflow", async () => {
     const sources = await Promise.all([
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),

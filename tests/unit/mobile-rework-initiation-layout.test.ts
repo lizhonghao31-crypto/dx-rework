@@ -4,45 +4,37 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFile(path, "utf8");
 
 describe("mobile rework initiation layout", () => {
-  it("splits the digital inspection report into three navigable steps", async () => {
-    const [source, reportSource] = await Promise.all([
-      read("apps/web/src/rework-form.tsx"),
-      read("apps/web/src/inspection-report-form.tsx"),
+  it("keeps the new N01 as one compact mobile-first page instead of the retired inspection wizard", async () => {
+    const [source, css] = await Promise.all([
+      read("apps/web/src/rework-v2-form.tsx"),
+      read("apps/web/src/rework-v2-form.css"),
     ]);
 
-    expect(source).toContain("const requiredFieldsComplete = [");
-    expect(source).toContain("const requiredCompletionCount = requiredFieldsComplete.filter(Boolean).length;");
-    expect(source).toContain("第 {formStep}/3 步");
-    expect(source).toContain("InspectionReportStepOne");
-    expect(source).toContain("InspectionReportStepTwo");
-    expect(source).toContain("InspectionReportStepThree");
-    expect(source).toContain('aria-label="验货报告步骤"');
-    expect(source).not.toMatch(/\n}\n\n}$/);
-
-    expect(reportSource).toContain("验货基本资料");
-    expect(reportSource).toContain("尺寸核验");
-    expect(reportSource).toContain("资料核对");
-    expect(reportSource).toContain("面辅料查验");
-    expect(reportSource).toContain("验货问题总结");
-    expect(reportSource).toContain("结论与签名");
+    expect(source).toContain("款号 <b>*</b>");
+    expect(source).toContain("加工厂 <b>*</b>");
+    expect(source).toContain("订单跟单 <b>*</b>");
+    expect(source).toContain("现场图片 <b>*</b>");
+    expect(source).toContain("rework-v2-grid");
+    expect(source).not.toContain("InspectionReportStepOne");
+    expect(source).not.toContain("InspectionReportStepTwo");
+    expect(source).not.toContain("InspectionReportStepThree");
+    expect(source).not.toContain("formStep");
+    expect(css).toContain("@media(max-width:600px)");
+    expect(css).toContain("grid-template-columns:1fr");
+    expect(css).toContain("env(safe-area-inset-bottom,0px)");
   });
 
-  it("keeps non-blocking order data collapsible and preserves the existing action path", async () => {
-    const [source, css] = await Promise.all([
-      read("apps/web/src/rework-form.tsx"),
-      read("apps/web/src/styles.css"),
-    ]);
+  it("keeps optional relationships on the same page and preserves the simple save-submit path", async () => {
+    const source = await read("apps/web/src/rework-v2-form.tsx");
 
-    expect(source).toContain("更多订单资料（可补充）");
-    expect(source).toContain("<details>");
-    expect(source).toContain("QC 证据");
-    expect(source).toContain('className="mobile-actions rework-initiation-actions"');
-    expect(source).toContain("formStep === 3 && !complete");
-    expect(source).toContain("{formStep < 3 ? \"下一步\" : \"提交返工\"}");
-    expect(css).toContain(".rework-initiation-actions");
-    expect(css).toContain(".inspection-measurement-row");
-    expect(css).toContain(".inspection-step-navigation");
-    expect(css).toContain(".rework-initiation-optional details[open] summary > small");
-    expect(css).toContain("env(safe-area-inset-bottom, 0px)");
+    for (const label of ["洗水厂", "印绣花厂", "面辅料供应商", "印绣花跟单"]) {
+      expect(source).toContain(label);
+    }
+    expect(source).toContain("保存草稿");
+    expect(source).toContain("提交返工");
+    expect(source).toContain('await confirmInApp("确认提交返工单？")');
+    expect(source).toContain('accept="image/jpeg,image/png,image/webp"');
+    expect(source).not.toContain("更多订单资料（可补充）");
+    expect(source).not.toContain("验货报告步骤");
   });
 });
