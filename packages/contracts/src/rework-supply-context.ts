@@ -38,6 +38,19 @@ export const ReworkSupplyContextOptionsResponseSchema = z.object({
   fabricSuppliers: z.array(SupplierOptionSchema),
 }).strict();
 
+const ReworkV2ProcessingFactoryInputSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("own_factory") }).strict(),
+  z.object({ type: z.literal("supplier"), supplierId: IdSchema }).strict(),
+]);
+
+export const SaveReworkV2DraftSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  styleNo: z.string().trim().min(1).max(80).nullable(),
+  merchandiserUserId: IdSchema.nullable(),
+  processingFactory: ReworkV2ProcessingFactoryInputSchema.nullable(),
+}).strict();
+
 export type SaveReworkSupplyContext = z.infer<typeof SaveReworkSupplyContextSchema>;
 export type ReworkSupplyContextResponse = z.infer<typeof ReworkSupplyContextResponseSchema>;
 export type ReworkSupplyContextOptionsResponse = z.infer<typeof ReworkSupplyContextOptionsResponseSchema>;
+export type SaveReworkV2Draft = z.infer<typeof SaveReworkV2DraftSchema>;
