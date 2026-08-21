@@ -72,8 +72,8 @@ export class TailInspectionService {
 
   async listOptions(actor: TrustedActorContext): Promise<TailInspectionOptionsResponse> {
     this.ensureSupervisor(actor);
-    const result = await this.database.query<{ id: string; display_name: string }>(
-      `SELECT DISTINCT user_row.id,user_row.display_name
+    const result = await this.database.query<{ id: string; person_id: string; display_name: string }>(
+      `SELECT DISTINCT user_row.id,person.person_id,user_row.display_name
        FROM app_users user_row
        JOIN user_role_assignments assignment
          ON assignment.user_id=user_row.id
@@ -84,10 +84,14 @@ export class TailInspectionService {
        JOIN role_capabilities capability
          ON capability.role_code=assignment.role_code
         AND capability.capability='tail_inspection:report'
+       JOIN business_people person
+         ON person.app_user_id=user_row.id
+        AND person.person_type='internal'
+        AND person.active=true
        WHERE user_row.enabled=true
        ORDER BY user_row.display_name,user_row.id`,
     );
-    return { inspectors: result.rows.map((row) => ({ userId: row.id, displayName: row.display_name })) };
+    return { inspectors: result.rows.map((row) => ({ userId: row.id, personId: row.person_id, displayName: row.display_name })) };
   }
 
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<TailInspectionResponse> {

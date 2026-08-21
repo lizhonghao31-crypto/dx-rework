@@ -52,6 +52,7 @@ export const ProcessWorkerPlanMemberSchema = z.object({
 export const ProcessWorkerPlanAssignmentSchema = z.object({
   configurationItemId: IdSchema,
   processName: z.string().min(1),
+  executionKind: z.enum(["worker", "tail_inspection"]).optional().default("worker"),
   members: z.array(ProcessWorkerPlanMemberSchema),
 }).strict();
 

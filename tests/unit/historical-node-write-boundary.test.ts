@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFile(path, "utf8");
 
 describe("historical node write boundary", () => {
-  it("never reopens N04 or N05 controls from a historical node click", async () => {
+  it("never reopens retired assignment or tail controls from a historical node click", async () => {
     const source = await read("apps/web/src/work-reporting-form.tsx");
 
     expect(source).toContain('loaded?.reworkStatus === "pending_task_assignment"');

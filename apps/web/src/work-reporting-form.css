@@ -98,7 +98,7 @@
   border: 2px solid var(--dx-v2-color-primary, #1677ff);
 }
 
-/* N05: process first, people second, submitted quantity as the primary fact. */
+/* N04: process first, people second, submitted quantity as the primary fact. */
 .work-reporting-page > .dx-surface > .section-title h2 {
   margin-bottom: 4px;
   font-size: 16px;
@@ -120,7 +120,7 @@
   color: var(--dx-v2-color-primary);
 }
 
-/* N07: turn reconciliation into a scan-friendly business comparison. */
+/* N05: turn reconciliation into a scan-friendly business comparison. */
 .work-reporting-page .whole-order-process-main,
 .work-reporting-page .whole-order-report-main {
   display: grid;

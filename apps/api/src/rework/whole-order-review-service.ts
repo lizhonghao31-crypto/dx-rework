@@ -41,7 +41,7 @@ type TemporaryWorkerRow = Readonly<{
 type ReportRow = Readonly<{
   work_report_id: string; work_task_id: string; configuration_item_id: string; actual_quantity: string;
   completed_at: Date; submitted_by: string; resubmits_work_report_id: string | null;
-  assignment_mode: "individual" | "collective"; report_rejection_id: string | null;
+  assignment_mode: "individual" | "collective"; execution_kind: "worker" | "tail_inspection"; report_rejection_id: string | null;
   rejected_person_id: string | null; rejection_reason: string | null;
 }>;
 type MemberRow = Readonly<{ work_report_id: string; person_id: string; display_name: string }>;
@@ -56,7 +56,7 @@ type AdjustmentRow = Readonly<{
 type AdjustmentForUpdate = AdjustmentRow & Readonly<{
   rework_order_id: string; confirmation_reason: string | null;
 }>;
-type ItemRow = Readonly<{ configuration_item_id: string; pricing_unit: "piece" | "hour"; planned_quantity: string }>;
+type ItemRow = Readonly<{ configuration_item_id: string; execution_kind: "worker" | "tail_inspection"; pricing_unit: "piece" | "hour"; planned_quantity: string }>;
 
 const numberValue = (value: string | number): number => Number(value);
 const hash = (scope: string, payload: unknown): string =>
@@ -99,7 +99,7 @@ export class WholeOrderReviewService {
       const order = await this.order(client, reworkOrderId, true);
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N06 尾部核量节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N05 尾部核量节点", 409, "INVALID_STATE_TRANSITION");
       const existing = await client.query("SELECT 1 FROM rework_order_reviews WHERE rework_order_id=$1 FOR SHARE", [reworkOrderId]);
       if (existing.rowCount) error("该返工单已经完成整单审核", 409, "CONFLICT");
       const plans = await this.plans(client, reworkOrderId);
@@ -370,11 +370,11 @@ export class WholeOrderReviewService {
         entityId: order.rework_order_id,
         recipientUserId: row.submitted_by,
         sourceActorEventId: originalSubmissionEventId,
-        permittedCapabilities: ["work:report", "work:report_for_worker"],
+        permittedCapabilities: ["work:report", "work:report_for_worker", "tail_inspection:report"],
         route: {
           routeName: "rework_detail",
           entityId: order.rework_order_id,
-          tab: "whole_order_review",
+          tab: "work_reporting",
         },
         policyKey: "general",
         dedupeKey: `work-report-return:${workReportId}`,
@@ -542,16 +542,17 @@ export class WholeOrderReviewService {
     configurationItemId?: string,
   ): Promise<WholeOrderReviewResponse> {
     const plans = await this.plans(client, order.rework_order_id);
-    const [reports, reviews, temporaryWorkers] = await Promise.all([
+    const [reports, reviews, temporaryWorkers, unifiedExecutionRequired] = await Promise.all([
       this.reports(client, order.rework_order_id, configurationItemId),
       configurationItemId
         ? Promise.resolve({ rows: [] as Array<{ order_review_id: string }> })
         : client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
       this.temporaryWorkers(client, order.rework_order_id, configurationItemId),
+      this.unifiedExecutionRequired(client, order.rework_order_id),
     ]);
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
-      ...permissions,
+      ...permissions, unifiedExecutionRequired,
       processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity), countGap: numberValue(plan.tail_checked_quantity) - numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) <= numberValue(plan.tail_checked_quantity), finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price) })),
       reports,
       adjustments: [],
@@ -573,7 +574,8 @@ export class WholeOrderReviewService {
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.unit_price,
               item.planned_quantity::text AS planned_quantity,
               COALESCE(completed.quantity,0)::text AS completed_quantity,
-              COALESCE(tail_checked.quantity,0)::text AS tail_checked_quantity
+              COALESCE(CASE WHEN configuration.unified_execution_required
+                THEN unified_tail.quantity ELSE legacy_tail.quantity END,0)::text AS tail_checked_quantity
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
        LEFT JOIN LATERAL (
@@ -581,6 +583,15 @@ export class WholeOrderReviewService {
          WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted'
            AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
        ) completed ON true
+       LEFT JOIN LATERAL (
+         SELECT sum(report.actual_quantity) AS quantity
+         FROM rework_work_reports report
+         JOIN rework_process_configuration_items tail_item
+           ON tail_item.configuration_item_id=report.configuration_item_id
+          AND tail_item.execution_kind='tail_inspection'
+         WHERE report.rework_order_id=$1 AND report.status='submitted'
+           AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+       ) unified_tail ON true
        LEFT JOIN LATERAL (
          SELECT sum(report_item.inspected_quantity) AS quantity
          FROM rework_tail_inspection_report_items report_item
@@ -592,8 +603,9 @@ export class WholeOrderReviewService {
           AND assignment.revoked_at IS NULL
          WHERE report.rework_order_id=$1
            AND report_item.configuration_item_id=item.configuration_item_id
-       ) tail_checked ON true
+       ) legacy_tail ON true
        WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+         AND item.execution_kind='worker'
        ORDER BY item.position,item.configuration_item_id`,
       [reworkOrderId],
     );
@@ -602,7 +614,21 @@ export class WholeOrderReviewService {
 
   private async assertTailReconciliation(client: PoolClient, reworkOrderId: string): Promise<void> {
     const pending = await client.query<{ issue: string }>(
-      `SELECT 'worker'::text AS issue
+      `WITH active_configuration AS (
+         SELECT configuration_id,unified_execution_required
+         FROM rework_process_configurations
+         WHERE rework_order_id=$1 AND status='approved'
+         LIMIT 1
+       ), unified_tail AS (
+         SELECT COALESCE(sum(report.actual_quantity),0) AS quantity
+         FROM rework_work_reports report
+         JOIN rework_process_configuration_items item
+           ON item.configuration_item_id=report.configuration_item_id
+          AND item.execution_kind='tail_inspection'
+         WHERE report.rework_order_id=$1 AND report.status='submitted'
+           AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+       )
+       SELECT 'execution'::text AS issue
        WHERE EXISTS(
          SELECT 1 FROM rework_work_tasks task
          WHERE task.rework_order_id=$1 AND task.status='active'
@@ -616,50 +642,47 @@ export class WholeOrderReviewService {
            )
        )
        UNION ALL
-       SELECT 'tail'::text AS issue
-       WHERE EXISTS(
-         SELECT 1 FROM rework_tail_inspection_assignments assignment
-         WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
-           AND NOT EXISTS(
-             SELECT 1 FROM rework_tail_inspection_reports report
-             WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
-               AND report.status='submitted'
-           )
-       )
+       SELECT 'legacy_tail'::text AS issue
+       WHERE COALESCE((SELECT unified_execution_required FROM active_configuration),false)=false
+         AND EXISTS(
+           SELECT 1 FROM rework_tail_inspection_assignments assignment
+           WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+             AND NOT EXISTS(
+               SELECT 1 FROM rework_tail_inspection_reports report
+               WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
+                 AND report.status='submitted'
+             )
+         )
        UNION ALL
        SELECT item.process_name
-       FROM rework_process_configurations configuration
-       JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
+       FROM active_configuration active
+       JOIN rework_process_configuration_items item ON item.configuration_id=active.configuration_id
        LEFT JOIN LATERAL (
          SELECT COALESCE(sum(report.actual_quantity),0) AS quantity
          FROM rework_work_reports report
          WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id
            AND report.status='submitted'
-           AND NOT EXISTS(
-             SELECT 1 FROM rework_work_report_rejections rejection
-             WHERE rejection.work_report_id=report.work_report_id
-           )
+           AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
        ) worker ON true
        LEFT JOIN LATERAL (
          SELECT COALESCE(sum(report_item.inspected_quantity),0) AS quantity
          FROM rework_tail_inspection_report_items report_item
          JOIN rework_tail_inspection_reports report
-           ON report.tail_inspection_report_id=report_item.tail_inspection_report_id
-          AND report.status='submitted'
+           ON report.tail_inspection_report_id=report_item.tail_inspection_report_id AND report.status='submitted'
          JOIN rework_tail_inspection_assignments assignment
-           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id
-          AND assignment.revoked_at IS NULL
-         WHERE report.rework_order_id=$1
-           AND report_item.configuration_item_id=item.configuration_item_id
-       ) tail_checked ON true
-       WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
-         AND worker.quantity>tail_checked.quantity`,
+           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id AND assignment.revoked_at IS NULL
+         WHERE report.rework_order_id=$1 AND report_item.configuration_item_id=item.configuration_item_id
+       ) legacy_tail ON true
+       CROSS JOIN unified_tail
+       WHERE item.execution_kind='worker'
+         AND worker.quantity > CASE WHEN active.unified_execution_required THEN unified_tail.quantity ELSE legacy_tail.quantity END`,
       [reworkOrderId],
     );
     const issues = pending.rows.map((row) => row.issue);
-    if (issues.includes("worker")) error("仍有工人完工上数未完成，不能整单确认", 409, "CONFLICT");
-    if (issues.includes("tail")) error("仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
-    if (issues.length > 0) error(`工人上数超过尾查数量：${issues.join("、")}；请驳回并调整上数或尾查报数`, 409, "CONFLICT");
+    if (issues.includes("execution")) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
+    if (issues.includes("legacy_tail")) error("历史订单仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
+    const processIssues = issues.filter((issue) => issue !== "execution" && issue !== "legacy_tail");
+    if (processIssues.length > 0) error(`返工上数超过尾查数量：${processIssues.join("、")}；请驳回并调整报数`, 409, "CONFLICT");
   }
 
   private async reports(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse["reports"]> {
@@ -667,9 +690,10 @@ export class WholeOrderReviewService {
       client.query<ReportRow>(
         `SELECT report.work_report_id,report.work_task_id,report.configuration_item_id,report.actual_quantity,
                 report.completed_at,report.submitted_by,report.resubmits_work_report_id,
-                task.assignment_mode,rejection.report_rejection_id,rejection.rejected_person_id,rejection.reason AS rejection_reason
+                task.assignment_mode,item.execution_kind,rejection.report_rejection_id,rejection.rejected_person_id,rejection.reason AS rejection_reason
          FROM rework_work_reports report
          JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+         JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
          LEFT JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
          WHERE report.rework_order_id=$1 AND ($2::uuid IS NULL OR report.configuration_item_id=$2) ORDER BY report.completed_at,report.work_report_id`,
         [reworkOrderId, configurationItemId ?? null],
@@ -693,10 +717,24 @@ export class WholeOrderReviewService {
     return reports.rows.map((report) => ({
       workReportId: report.work_report_id, workTaskId: report.work_task_id, configurationItemId: report.configuration_item_id,
       actualQuantity: numberValue(report.actual_quantity), completedAt: report.completed_at.toISOString(), submittedBy: report.submitted_by,
-      members: membersByReport.get(report.work_report_id) ?? [], assignmentMode: report.assignment_mode,
+      members: membersByReport.get(report.work_report_id) ?? [], assignmentMode: report.assignment_mode, executionKind: report.execution_kind,
       rejected: report.report_rejection_id !== null,
       rejectedPersonId: report.rejected_person_id, rejectionReason: report.rejection_reason, resubmitsWorkReportId: report.resubmits_work_report_id,
     }));
+  }
+
+  private async unifiedExecutionRequired(
+    client: Pick<Pool, "query"> | PoolClient,
+    reworkOrderId: string,
+  ): Promise<boolean> {
+    const result = await client.query<{ unified_execution_required: boolean }>(
+      `SELECT unified_execution_required
+       FROM rework_process_configurations
+       WHERE rework_order_id=$1 AND status='approved'
+       LIMIT 1`,
+      [reworkOrderId],
+    );
+    return result.rows[0]?.unified_execution_required === true;
   }
 
   private async adjustments(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<QuantityAdjustmentResponse[]> {
@@ -775,14 +813,16 @@ export class WholeOrderReviewService {
 
   private async item(client: PoolClient, reworkOrderId: string, configurationItemId: string): Promise<ItemRow> {
     const result = await client.query<ItemRow>(
-      `SELECT item.configuration_item_id,item.pricing_unit,item.planned_quantity
+      `SELECT item.configuration_item_id,item.execution_kind,item.pricing_unit,item.planned_quantity
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
        WHERE configuration.rework_order_id=$1 AND configuration.status='approved' AND item.configuration_item_id=$2
        FOR UPDATE OF item`,
       [reworkOrderId, configurationItemId],
     );
-    return result.rows[0] ?? error("工序不存在或尚未生效", 404, "NOT_FOUND");
+    const item = result.rows[0] ?? error("工序不存在或尚未生效", 404, "NOT_FOUND");
+    if (item.execution_kind === "tail_inspection") error("尾查工序使用实际报数，不参与计划数量调整", 409, "INVALID_STATE_TRANSITION");
+    return item;
   }
 
   private async quantityState(client: PoolClient, reworkOrderId: string, configurationItemId: string, basePlan: string): Promise<{ currentPlan: number; completedQuantity: number; nextVersion: number }> {

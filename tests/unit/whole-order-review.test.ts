@@ -36,7 +36,7 @@ describe("whole-order review contracts", () => {
     expect(() => transitionReworkOrder("pending_responsibility_determination", "in_progress")).toThrow();
   });
 
-  it("uses N03-approved prices and sends N07 directly to responsibility", async () => {
+  it("uses N03-approved prices and sends N05 directly to responsibility", async () => {
     const [panel, service, migration] = await Promise.all([
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
@@ -45,7 +45,7 @@ describe("whole-order review contracts", () => {
     expect(panel).toContain("data.processes.every((process) => process.finalUnitPrice !== null)");
     expect(panel).toContain("临时工实发系数");
     expect(panel).toContain("确认整单并进入责任判定");
-    expect(panel).toContain("工人上数与尾查汇总对照");
+    expect(panel).toContain("返工上数与尾查数量对照");
     expect(service).not.toContain("async submitTailPricing");
     expect(service).not.toContain("async reviewTailPricing");
     expect(service).toContain('this.orderAudit(order, "pending_responsibility_determination"');

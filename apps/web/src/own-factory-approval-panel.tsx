@@ -260,7 +260,7 @@ export function OwnFactoryApprovalPanel({
           />
           <div>
             <Button variant="primary" disabled={Boolean(busy)} onClick={() => void decide("approved")}>通过</Button>
-            <Button disabled={Boolean(busy) || !opinion.trim()} onClick={() => void decide("rejected")}>驳回并退回 N07</Button>
+            <Button disabled={Boolean(busy) || !opinion.trim()} onClick={() => void decide("rejected")}>驳回并退回责任判定</Button>
           </div>
         </div>
       )}

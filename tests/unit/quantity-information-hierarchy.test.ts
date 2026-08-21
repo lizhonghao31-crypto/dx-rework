@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
 
-describe("N05-N07 quantity information hierarchy", () => {
+describe("N04-N05 quantity information hierarchy", () => {
   it("keeps key work, tail-inspection and reconciliation quantities visually prominent", async () => {
     const [reportingCss, tailCss, review] = await Promise.all([
       read("apps/web/src/work-reporting-form.css"),

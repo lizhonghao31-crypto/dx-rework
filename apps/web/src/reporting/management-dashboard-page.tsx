@@ -16,7 +16,9 @@ const nodeTarget = (node: string): string => ({
   N01: "ui/tasks?status=draft",
   N02: "ui/process-configuration?queue=pending_process_configuration",
   N03: "ui/process-configuration?queue=pending_ie_review",
-  N04: "ui/work-reporting?queue=pending_task_assignment",
+  // Historical dashboard codes are kept by the reporting API for data
+  // compatibility. Present them using the current visible workflow.
+  N04: "ui/process-configuration?queue=pending_task_assignment",
   N05: "ui/work-reporting?queue=in_progress",
   N06: "ui/work-reporting?queue=pending_order_review",
   "N06-A": "ui/work-reporting?queue=pending_quantity_adjustment_ie_review",
@@ -26,15 +28,27 @@ const nodeTarget = (node: string): string => ({
   N11: "ui/wages",
 })[node] ?? "ui/tasks";
 
+const nodePresentation = (node: string, label: string): { node: string; label: string } => ({
+  N04: { node: "N02", label: "分配工序 &工人 · 启动恢复" },
+  N05: { node: "N04", label: "返工执行报数" },
+  N06: { node: "N05", label: "尾部主管整单确认" },
+  "N06-A": { node: "N05-A", label: "历史数量调整" },
+  N07: { node: "N06", label: "责任判定" },
+  N08: { node: "N07", label: "老板确认签字" },
+  N10: { node: "N08", label: "返工业务完成" },
+  N11: { node: "工资", label: "工资管理" },
+})[node] ?? { node, label };
+
 const NodeQueue = ({ items }: { items: ReadonlyArray<{ node: string; label: string; count: number }> }) => (
   <div className="queue workflow-dashboard-queue">
-    {items.map((item) => (
-      <a className="workflow-dashboard-node" href={reportingPageUrl(nodeTarget(item.node))} key={item.node}>
-        <span>{item.node === "N11" ? "N10" : item.node} · {item.label}</span>
+    {items.map((item) => {
+      const visible = nodePresentation(item.node, item.label);
+      return <a className="workflow-dashboard-node" href={reportingPageUrl(nodeTarget(item.node))} key={item.node}>
+        <span>{visible.node} · {visible.label}</span>
         <StatusBadge tone={item.count > 0 ? "info" : "success"}>{item.count} 单</StatusBadge>
         <small>进入节点工作台 →</small>
-      </a>
-    ))}
+      </a>;
+    })}
   </div>
 );
 
@@ -124,9 +138,9 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
         <>
           <div className="kpis">
             <KpiInstrument label="待配置工序" value={site.kpis.pendingConfiguration} detail="待处理" tone="info" />
-            <KpiInstrument label="待分工" value={site.kpis.pendingAssignment} detail="待处理" tone="info" />
-            <KpiInstrument label="完成登记中" value={site.kpis.inProgress} detail="进行中" tone="success" />
-            <KpiInstrument label="待整单审核" value={site.kpis.pendingOrderReview} detail="待处理" tone="warning" />
+            <KpiInstrument label="待启动恢复" value={site.kpis.pendingAssignment} detail="待处理" tone="info" />
+            <KpiInstrument label="执行报数中" value={site.kpis.inProgress} detail="进行中" tone="success" />
+            <KpiInstrument label="待整单确认" value={site.kpis.pendingOrderReview} detail="待处理" tone="warning" />
             <KpiInstrument label="待工资初核" value={site.kpis.pendingWageReview} detail="待处理" tone="info" />
             <KpiInstrument label="现场异常" value={site.kpis.siteExceptions} detail="待处理" tone="warning" />
           </div>

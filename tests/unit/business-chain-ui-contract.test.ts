@@ -44,14 +44,14 @@ describe("business-chain UI handoff contracts", () => {
   });
 
   it("lets tail inspectors and IE-review roles reach their actual workflow", async () => {
-    const [detail, tailPanel] = await Promise.all([
+    const [detail, reporting] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
+      readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
     ]);
     expect(detail).toContain('hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report")');
     expect(detail).toContain('hasRole(user, "ie_reviewer") && hasCapability(user, "process:review")');
-    expect(tailPanel).toContain("返件总数（件）");
-    expect(tailPanel).toContain("提交尾查报数");
+    expect(reporting).toContain('task.executionKind === "tail_inspection"');
+    expect(reporting).toContain("尾查完成&报数");
   });
 
   it("keeps responsibility party facts valid while the primary UI records the current actor automatically", async () => {
@@ -74,7 +74,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
-  it("keeps the merged nine-node workflow reachable from permitted primary entries", async () => {
+  it("keeps the merged eight-node workflow reachable from permitted primary entries", async () => {
     const [app, shell, detail] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
@@ -94,12 +94,12 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('node("initiation", "01"');
     expect(detail).toContain('node("process_configuration", "02", "分配工序 &工人"');
     expect(detail).toContain('node("ie_review", "03", "IE 核价"');
-    expect(detail).toContain('node("work_reporting", "04", "工人完工上数"');
-    expect(detail).toContain('node("tail_inspection", "05", "尾查报数"');
-    expect(detail).toContain('node("whole_order_review", "06", "尾部主管整单确认"');
-    expect(detail).toContain('node("responsibility", "07", "责任判定"');
-    expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
-    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
+    expect(detail).toContain('node("work_reporting", "04", "返工执行报数"');
+    expect(detail).not.toContain('node("tail_inspection"');
+    expect(detail).toContain('node("whole_order_review", "05", "尾部主管整单确认"');
+    expect(detail).toContain('node("responsibility", "06", "责任判定"');
+    expect(detail).toContain('node("owner_signature", "07", "老板确认签字"');
+    expect(detail).toContain('node("settlement_followup", "08", "返工业务完成"');
     expect(detail).not.toContain('node("task_assignment", "04", "分配返工人员"');
     expect(detail).toContain('pending_task_assignment: "process_configuration"');
     expect(detail).toContain('if (value === "task_assignment") return "process_configuration";');
@@ -108,7 +108,6 @@ describe("business-chain UI handoff contracts", () => {
       "process_configuration",
       "ie_review",
       "work_reporting",
-      "tail_inspection",
       "whole_order_review",
       "responsibility",
       "owner_signature",
@@ -117,7 +116,7 @@ describe("business-chain UI handoff contracts", () => {
     const workflowNodePositions = workflowKeys.map((key, index) =>
       detail.indexOf(`node("${key}", "${String(index + 1).padStart(2, "0")}"`),
     );
-    expect(workflowNodePositions).toHaveLength(9);
+    expect(workflowNodePositions).toHaveLength(8);
     expect(workflowNodePositions.every((position) => position >= 0)).toBe(true);
     expect(workflowNodePositions).toEqual([...workflowNodePositions].sort((left, right) => left - right));
   });

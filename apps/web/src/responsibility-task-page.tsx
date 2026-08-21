@@ -33,7 +33,7 @@ const workflowNodeByRoute: Record<OrderTaskRouteName, WorkflowNodeKey> = {
   whole_order_review: "whole_order_review",
   responsibility_detail: "responsibility",
   // Kept only so historic, completed todo links remain readable.  New orders
-  // never create these approval steps; N09 is the owner signature node.
+  // never create these approval steps; N07 is the owner signature node.
   own_factory_approval: "settlement_ledger",
   external_responsibility_detail: "settlement_followup",
 };

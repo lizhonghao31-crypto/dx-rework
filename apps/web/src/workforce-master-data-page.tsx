@@ -169,7 +169,7 @@ export function WorkforceMasterDataPage() {
             <h1>作业人员与临时工</h1>
             <p>内部工人来自权限管理的“工人”角色；临时工在这里单独建档，不提供登录账号。</p>
           </div>
-          <StatusBadge tone="info">N04 / N05 人员来源</StatusBadge>
+          <StatusBadge tone="info">N02 / 执行人员来源</StatusBadge>
         </header>
 
         {message ? <Surface className="workforce-message"><p role="status">{message}</p></Surface> : null}

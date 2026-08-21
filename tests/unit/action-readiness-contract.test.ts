@@ -21,7 +21,7 @@ describe("business action readiness contract", () => {
     const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
     expect(source).toContain("const itemIssue = validateItems(items);");
     expect(source).toContain("const workerIssue = items.findIndex");
-    expect(source).toContain("const submitReady = saveReady && tailInspectors.length > 0;");
+    expect(source).toContain("const submitReady = saveReady;");
     expect(source).toContain('disabled={busy || !saveReady}');
     expect(source).toContain('disabled={busy || !submitReady}');
     expect(source).toContain('还需完成：{readinessIssues.join("；")}');
@@ -31,7 +31,7 @@ describe("business action readiness contract", () => {
     expect(source).toContain('disabled={busy || !reviewReason.trim()}');
   });
 
-  it("gates N04 assignment and N05 reporting before the user can trigger a no-op", async () => {
+  it("keeps historical assignment gated and N04 reporting ready before the user can trigger a no-op", async () => {
     const source = await readFile("apps/web/src/work-reporting-form.tsx", "utf8");
     expect(source).toContain("const selectedPeopleCount =");
     expect(source).toContain('disabled={busy || selectedPeopleCount === 0}');
@@ -39,16 +39,8 @@ describe("business action readiness contract", () => {
     expect(source).toContain('disabled={busy || !reportsReady}');
   });
 
-  it("gates N06 and N07 final actions and keeps readiness text below those actions", async () => {
-    const [tail, wholeOrder] = await Promise.all([
-      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
-      readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
-    ]);
-    expect(tail).toContain("const tailSubmitReady = Boolean(");
-    expect(tail).toContain('disabled={busy || !tailSubmitReady}');
-    expect(tail.indexOf('className="mobile-actions tail-inspection-actions"')).toBeLessThan(
-      tail.indexOf('className="tail-inspection-readiness" role="status"'),
-    );
+  it("gates the N05 final action below deterministic readiness text", async () => {
+    const wholeOrder = await readFile("apps/web/src/whole-order-review-panel.tsx", "utf8");
     expect(wholeOrder).toContain("const temporaryCoefficientIssue =");
     expect(wholeOrder).toContain("const wholeOrderReady = allComplete && temporaryCoefficientIssue === \"\";");
     expect(wholeOrder).toContain('disabled={busy || !wholeOrderReady}');

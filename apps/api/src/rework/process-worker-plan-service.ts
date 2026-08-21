@@ -37,8 +37,13 @@ type ConfigurationRow = Readonly<{
   configuration_version: number;
   status: "draft" | "pending_ie_review" | "approved" | "rejected" | "superseded";
   worker_preassignment_required: boolean;
+  unified_execution_required: boolean;
 }>;
-type ItemRow = Readonly<{ configuration_item_id: string; process_name: string }>;
+type ItemRow = Readonly<{
+  configuration_item_id: string;
+  process_name: string;
+  execution_kind: "worker" | "tail_inspection";
+}>;
 type PersonRow = Readonly<{
   person_id: string;
   person_type: "internal" | "temporary";
@@ -111,14 +116,24 @@ export class ProcessWorkerPlanService {
       if (
         input.assignments.length !== items.length
         || input.assignments.some((assignment) => !itemIds.has(assignment.configurationItemId))
-      ) fail("每道返工工序都必须分配至少一名工人", 400, "VALIDATION_ERROR");
+      ) fail("每道执行工序都必须分配至少一名人员", 400, "VALIDATION_ERROR");
 
-      const requestedPersonIds = [...new Set(input.assignments.flatMap((assignment) => assignment.memberIds))];
-      const people = await this.people(client, requestedPersonIds);
-      if (people.length !== requestedPersonIds.length) {
-        fail("存在无效、停用或未获工人上数资格的人员", 400, "VALIDATION_ERROR");
+      const itemsById = new Map(items.map((item) => [item.configuration_item_id, item]));
+      const peopleById = new Map<string, PersonRow>();
+      for (const assignment of input.assignments) {
+        const item = itemsById.get(assignment.configurationItemId)!;
+        const eligible = await this.people(client, assignment.memberIds, item.execution_kind);
+        if (eligible.length !== assignment.memberIds.length) {
+          fail(
+            item.execution_kind === "tail_inspection"
+              ? "尾查特殊工序只能分配已启用且已授权的尾查人员"
+              : "存在无效、停用或未获工人上数资格的人员",
+            400,
+            "VALIDATION_ERROR",
+          );
+        }
+        for (const person of eligible) peopleById.set(person.person_id, person);
       }
-      const peopleById = new Map(people.map((person) => [person.person_id, person]));
 
       const existing = await this.plan(client, configuration.configuration_id, true);
       if (existing) {
@@ -186,7 +201,7 @@ export class ProcessWorkerPlanService {
     if (!requiredConfiguration.worker_preassignment_required) return false;
     const order = await this.order(this.database, reworkOrderId, false);
     const response = await this.dto(this.database, order, requiredConfiguration);
-    if (!response.complete) fail("请先为每道返工工序分配至少一名工人", 400, "VALIDATION_ERROR");
+    if (!response.complete) fail("请先为每道执行工序分配至少一名人员", 400, "VALIDATION_ERROR");
     return true;
   }
 
@@ -335,25 +350,42 @@ export class ProcessWorkerPlanService {
     };
   }
 
-  private async people(client: PoolClient, personIds: readonly string[]): Promise<PersonRow[]> {
+  private async people(
+    client: PoolClient,
+    personIds: readonly string[],
+    executionKind: "worker" | "tail_inspection",
+  ): Promise<PersonRow[]> {
     if (personIds.length === 0) return [];
     const result = await client.query<PersonRow>(
       `SELECT person.person_id,person.person_type,person.display_name,person.app_user_id
        FROM business_people person
        WHERE person.active=true AND person.person_id=ANY($1::uuid[]) AND (
-         person.person_type='temporary' OR EXISTS (
+         ($2='worker' AND (
+           person.person_type='temporary' OR EXISTS (
+             SELECT 1 FROM user_role_assignments assignment
+             JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+             JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
+             JOIN identity_mappings identity ON identity.user_id=app_user.id
+               AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
+             JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+             WHERE assignment.user_id=person.app_user_id
+               AND assignment.role_code='worker' AND assignment.revoked_at IS NULL
+           )
+         )) OR ($2='tail_inspection' AND person.person_type='internal' AND EXISTS (
            SELECT 1 FROM user_role_assignments assignment
            JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+           JOIN role_capabilities capability ON capability.role_code=assignment.role_code
+             AND capability.capability='tail_inspection:report'
            JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
            JOIN identity_mappings identity ON identity.user_id=app_user.id
              AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
            JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
            WHERE assignment.user_id=person.app_user_id
-             AND assignment.role_code='worker' AND assignment.revoked_at IS NULL
-         )
+             AND assignment.role_code='tail_inspector' AND assignment.revoked_at IS NULL
+         ))
        )
        ORDER BY person.person_id FOR SHARE`,
-      [personIds],
+      [personIds, executionKind],
     );
     return result.rows;
   }
@@ -376,7 +408,7 @@ export class ProcessWorkerPlanService {
     locked: boolean,
   ): Promise<ConfigurationRow> {
     const result = await client.query<ConfigurationRow>(
-      `SELECT configuration_id,configuration_version,status,worker_preassignment_required
+      `SELECT configuration_id,configuration_version,status,worker_preassignment_required,unified_execution_required
        FROM rework_process_configurations
        WHERE rework_order_id=$1 AND configuration_id=$2${locked ? " FOR UPDATE" : ""}`,
       [orderId, configurationId],
@@ -390,7 +422,7 @@ export class ProcessWorkerPlanService {
     locked: boolean,
   ): Promise<ConfigurationRow | null> {
     const result = await client.query<ConfigurationRow>(
-      `SELECT configuration_id,configuration_version,status,worker_preassignment_required
+      `SELECT configuration_id,configuration_version,status,worker_preassignment_required,unified_execution_required
        FROM rework_process_configurations
        WHERE rework_order_id=$1 AND status<>'superseded'
        ORDER BY configuration_version DESC LIMIT 1${locked ? " FOR UPDATE" : ""}`,
@@ -401,7 +433,7 @@ export class ProcessWorkerPlanService {
 
   private async items(client: Pick<Pool, "query"> | PoolClient, configurationId: string): Promise<ItemRow[]> {
     return (await client.query<ItemRow>(
-      `SELECT configuration_item_id,process_name
+      `SELECT configuration_item_id,process_name,execution_kind
        FROM rework_process_configuration_items
        WHERE configuration_id=$1 ORDER BY position,configuration_item_id`,
       [configurationId],
@@ -437,6 +469,7 @@ export class ProcessWorkerPlanService {
     const assignments = items.map((item) => ({
       configurationItemId: item.configuration_item_id,
       processName: item.process_name,
+      executionKind: item.execution_kind,
       members: members.filter((member) => member.configuration_item_id === item.configuration_item_id).map((member) => ({
         personId: member.person_id,
         displayName: member.display_name_snapshot,

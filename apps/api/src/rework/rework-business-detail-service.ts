@@ -382,6 +382,15 @@ export class ReworkBusinessDetailService {
     ) {
       const assignment = await this.database.query(
         `SELECT 1
+         FROM rework_work_tasks task
+         JOIN rework_process_configuration_items item
+           ON item.configuration_item_id=task.configuration_item_id
+          AND item.execution_kind='tail_inspection'
+         JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
+         JOIN business_people person ON person.person_id=member.person_id
+         WHERE task.rework_order_id=$2 AND task.status='active' AND person.app_user_id=$1
+         UNION ALL
+         SELECT 1
          FROM rework_tail_inspection_assignments assignment
          WHERE assignment.rework_order_id=$2
            AND assignment.tail_inspector_user_id=$1
