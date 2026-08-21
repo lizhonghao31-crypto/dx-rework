@@ -51,13 +51,13 @@ describe("system dialog automation contract", () => {
   it("uses the shared dialog in the unattended acceptance workflow", async () => {
     const sources = await Promise.all([
       readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
-      readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
     ]);
 
     expect(sources[0]).toContain('await confirmInApp("确认提交返工单？")');
-    expect(sources[1]).toContain('await confirmInApp("确认提交当前工序与候选单价给 IE 核价，并立即分配尾查？")');
+    expect(sources[1]).toContain('await confirmInApp("确认提交当前工序、候选单价和预分配工人给 IE 核价？")');
     expect(sources[2]).toContain("await confirmInApp");
     expect(sources[2]).toContain("await promptInApp");
     expect(sources[3]).toContain("await confirmInApp");
