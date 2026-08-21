@@ -191,10 +191,10 @@ export function TailInspectionPanel({
           <InsetField label="本次工序数量（件）" type="number" min="0" step="1" inputMode="numeric" value={processQuantities[process.configurationItemId] ?? ""} disabled={busy} onChange={(event) => setProcessQuantities((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} />
         </div>)}
       </div>
-      {tailReadinessMessage && <p className="tail-inspection-readiness" role="status">{tailReadinessMessage}</p>}
       <div className="mobile-actions tail-inspection-actions">
         <Button variant="primary" disabled={busy || !tailSubmitReady} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "代报尾查数量" : "提交尾查报数"}</Button>
       </div>
+      {tailReadinessMessage && <p className="tail-inspection-readiness" role="status">{tailReadinessMessage}</p>}
     </Surface>}
 
     {data && !actionableAssignment && submittedAssignments.length === 0 ? <Surface>{isRoot ? "本单暂无可代报的尾查任务。" : "本单尚未分配到您的尾查任务。"}</Surface> : null}
