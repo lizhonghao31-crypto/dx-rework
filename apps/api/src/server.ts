@@ -115,7 +115,6 @@ const reworkSupplyContextService = new ReworkSupplyContextService(
 const reworkV2SubmissionService = new ReworkV2SubmissionService(
   database,
   config.dingtalk.corpId,
-  reworkService,
   undefined,
   undefined,
   undefined,
