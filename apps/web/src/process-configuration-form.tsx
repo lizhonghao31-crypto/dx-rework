@@ -10,5 +10,8 @@ export function ProcessConfigurationForm({
   const resolvedOrderId = reworkOrderId
     ?? new URLSearchParams(window.location.search).get("rework");
   if (!resolvedOrderId) return null;
-  return <ProcessWorkerAssignmentForm reworkOrderId={resolvedOrderId} onOrderChanged={onOrderChanged} />;
+  return <ProcessWorkerAssignmentForm
+    reworkOrderId={resolvedOrderId}
+    {...(onOrderChanged ? { onOrderChanged } : {})}
+  />;
 }
