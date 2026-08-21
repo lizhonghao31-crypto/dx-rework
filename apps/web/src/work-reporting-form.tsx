@@ -224,7 +224,7 @@ export function WorkReportingForm({
         body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(text) }),
       });
       const loaded = await reload(); setReportTasks(null);
-      if (loaded?.reworkStatus === "pending_order_review") { setMessage("工人上数与尾查报数均已完成，已流转至 N07 · 尾部主管整单确认。"); await onOrderChanged?.(); }
+      if (loaded?.reworkStatus === "pending_order_review") { setMessage("工人上数与尾查报数均已完成，已流转至 N06 · 尾部主管整单确认。"); await onOrderChanged?.(); }
       else setMessage("工人完工件数已确认；系统继续并行等待其他工人或尾查完成报数。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完工上数失败"); } finally { setBusy(false); }
   };
@@ -250,7 +250,7 @@ export function WorkReportingForm({
   </div>;
 
   return <div className="mobile-page work-reporting-page">
-    <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "分配返工人员" : "工人完工上数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "N04" : "N05"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "每名人员独立分配。全部分完后统一开始返工。" : "只填实际整数件数；尾查报数与本节点并行，不以计划数作为上数依据。"}</p></div>
+    <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "历史人员分配" : "工人完工上数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "历史流程" : "N04"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "仅用于兼容旧订单；新订单已在节点02完成返工人员预分配。" : "只填实际整数件数；尾查报数与本节点并行，不以计划数作为上数依据。"}</p></div>
     {message && <p className="work-reporting-feedback" role="status">{message}</p>}
     {effectiveTaskMode === "task_assignment" && data && <>
       {data.tasks.length > 0 && <Surface><h2>已分配人员</h2>{data.tasks.map((task) => <div className="section-title whole-order-row n04-assignment-row" key={task.workTaskId}><div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")}</p></div><div className="n04-assignment-controls"><StatusBadge tone={assignmentWritable ? "info" : "success"}>{assignmentWritable ? "待开工" : "已处理"}</StatusBadge>{canAssign && assignmentWritable && task.mode === "individual" && task.members.length === 1 && <Button onClick={() => setRemovalTask(task)} disabled={busy}>移除</Button>}</div></div>)}</Surface>}
