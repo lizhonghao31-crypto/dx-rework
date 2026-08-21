@@ -1,0 +1,32 @@
+name: PR-04 source export
+
+on:
+  push:
+    branches:
+      - feat/rework-v2-pr04-execution-model
+    paths:
+      - .github/workflows/pr04-source-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr04-source
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            apps/api/src/rework
+            apps/api/src/access
+            apps/api/src/platform/migration-manifest.json
+            apps/api/migrations
+            apps/web/src
+            packages/contracts/src
+            tests/unit
+            tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts
+            tests/integration/full-business-chain-postgres.test.ts
