@@ -144,6 +144,13 @@ describe("business-chain UI handoff contracts", () => {
     expect(processConfiguration).toContain("processOptions.map");
     expect(processConfigurationCss).toContain(".process-worker-picker>.search-select input");
     expect(processConfigurationCss).toContain("border:1px solid var(--dx-v2-color-border)");
+    expect(processConfiguration).toContain("已分配人员");
+    expect(processConfiguration).toContain('{ label: "正式工"');
+    expect(processConfiguration).toContain('{ label: "临时工"');
+    expect(processConfiguration).toContain("plan?.assignments");
+    expect(processConfiguration).toContain("process-worker-line__body");
+    expect(processConfigurationCss).toContain("grid-template-columns:minmax(250px,.82fr) minmax(380px,1.18fr)");
+    expect(processConfigurationCss).toContain(".process-worker-people-groups");
     expect(workReporting).toContain('peopleType === "internal" ? "正式工" : "临时工"');
     expect(workReporting).toContain("filteredPeople");
     expect(externalResponsibility).toContain("输入供应商名称搜索");
