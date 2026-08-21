@@ -206,7 +206,10 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     if (!(await confirmInApp(decision === "approved" ? "确认核价通过？通过后预分配工人自动生效并开始返工。" : "确认驳回并退回尾部主管修改？"))) return;
     setBusy(true);
     try {
-      const reviewed = await request(`rework-orders/${reworkOrderId}/process-configuration/review`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: configuration.configurationVersion, decision, reason: reviewReason.trim() || undefined }) });
+      const reviewBody = { expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: configuration.configurationVersion, decision, reason: reviewReason.trim() || undefined };
+      const reviewSignature = `review:${JSON.stringify(reviewBody)}`;
+      const reviewed = await request(`rework-orders/${reworkOrderId}/process-configuration/review`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": mutationKey(reviewSignature) }, body: JSON.stringify(reviewBody) });
+      delete pendingKeys.current[reviewSignature];
       const latestPlan = await request(`rework-orders/${reworkOrderId}/process-worker-plan`, ProcessWorkerPlanResponseSchema.parse); hydrate(reviewed, latestPlan);
       setMessage(decision === "approved" ? reviewed.reworkStatus === "in_progress" ? "IE 已通过；预分配工人已自动生效，返工开始。" : "IE 已通过；自动启动未完成，尾部主管可在本节点重试启动。" : "IE 已驳回，等待尾部主管重新配置工序与工人。");
       await onOrderChanged?.();
