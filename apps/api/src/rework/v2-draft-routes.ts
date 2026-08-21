@@ -1,4 +1,4 @@
-import { ReworkOrderResponseSchema } from "@dx-rework/contracts";
+import { IdempotencyKeySchema, ReworkOrderResponseSchema } from "@dx-rework/contracts";
 import { SaveReworkV2DraftSchema } from "@dx-rework/contracts/rework-supply-context";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -20,6 +20,11 @@ const reworkOrderId = (request: FastifyRequest<{ Params: { reworkOrderId: string
   const value = request.params.reworkOrderId;
   if (!UUID.test(value)) throw new ApplicationError("VALIDATION_ERROR", "返工单编号格式无效", 400);
   return value;
+};
+const idempotencyKey = (request: FastifyRequest): string => {
+  const parsed = IdempotencyKeySchema.safeParse(request.headers["idempotency-key"]);
+  if (!parsed.success) throw new ApplicationError("VALIDATION_ERROR", "Idempotency-Key 无效", 400);
+  return parsed.data;
 };
 
 export type ReworkV2DraftHttpDependencies = Readonly<{
@@ -74,7 +79,7 @@ export function registerReworkV2DraftRoutes(
         await actor(request),
         reworkOrderId(request),
         SaveReworkV2DraftSchema.parse(request.body),
-        String(request.headers["idempotency-key"] ?? ""),
+        idempotencyKey(request),
       );
       if (result.reused) void reply.header("idempotency-replayed", "true");
       return ReworkOrderResponseSchema.parse(result.value);
