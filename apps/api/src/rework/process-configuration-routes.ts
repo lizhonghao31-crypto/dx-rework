@@ -6,6 +6,12 @@ import {
   ReviewProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
+import {
+  ActivateProcessWorkerPlanSchema,
+  ProcessWorkerPlanActivationResponseSchema,
+  ProcessWorkerPlanResponseSchema,
+  SaveProcessWorkerPlanSchema,
+} from "@dx-rework/contracts/process-worker-plan";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
@@ -19,6 +25,7 @@ import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ProcessConfigurationService } from "./process-configuration-service.js";
+import type { ProcessWorkerPlanService } from "./process-worker-plan-service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -50,18 +57,10 @@ const PracticalProcessItemSchema = z.discriminatedUnion("source", [
   }).strict(),
 ]).superRefine((value, context) => {
   if (!Number.isInteger(value.plannedQuantity)) {
-    context.addIssue({
-      code: "custom",
-      path: ["plannedQuantity"],
-      message: "返工计件数量只能使用整数件数",
-    });
+    context.addIssue({ code: "custom", path: ["plannedQuantity"], message: "返工计件数量只能使用整数件数" });
   }
   if (decimalPlaces(value.unitPrice) > 3) {
-    context.addIssue({
-      code: "custom",
-      path: ["unitPrice"],
-      message: "单价最多保留三位小数",
-    });
+    context.addIssue({ code: "custom", path: ["unitPrice"], message: "单价最多保留三位小数" });
   }
 });
 
@@ -77,11 +76,7 @@ const parse = <T>(
 ): T => {
   const result = schema.safeParse(value);
   if (!result.success) {
-    throw new ApplicationError(
-      "VALIDATION_ERROR",
-      "工序配置参数不完整或格式不正确，请检查工序、计件单位和单价",
-      400,
-    );
+    throw new ApplicationError("VALIDATION_ERROR", "工序配置参数不完整或格式不正确，请检查工序、计件单位和单价", 400);
   }
   return result.data;
 };
@@ -92,6 +87,7 @@ const idempotencyKey = (request: FastifyRequest): string =>
 export type ProcessConfigurationHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ProcessConfigurationService;
+  workerPlan?: ProcessWorkerPlanService;
   root?: RootAuthority;
 }>;
 
@@ -101,7 +97,7 @@ export function registerProcessConfigurationRoutes(
 ): void {
   const actor = async (
     request: FastifyRequest,
-    mode: "read" | "configure" | "review",
+    mode: "read" | "configure" | "review" | "assign",
   ): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await isRootUser(dependencies.root, user.id);
@@ -109,66 +105,78 @@ export function registerProcessConfigurationRoutes(
       && user.capabilities.includes(BUSINESS_READ_ALL_CAPABILITY);
     const isSupervisor = user.businessRoles?.includes("tail_supervisor") === true
       && user.capabilities.includes("process:configure");
+    const canAssign = user.businessRoles?.includes("tail_supervisor") === true
+      && user.capabilities.includes("work:assign");
     const isReviewer = user.businessRoles?.includes("ie_reviewer") === true
       && user.capabilities.includes("process:review");
 
     if (mode === "configure") {
-      if (!isRoot && !isSupervisor) {
-        throw new ApplicationError("FORBIDDEN", "当前角色无权配置返工工序", 403);
-      }
-      return businessActor(
-        dependencies.root,
-        user,
-        request.id,
-        "process:configure",
-        isRoot ? "tail_supervisor" : undefined,
-      );
+      if (!isRoot && !isSupervisor) throw new ApplicationError("FORBIDDEN", "当前角色无权配置返工工序", 403);
+      return businessActor(dependencies.root, user, request.id, "process:configure", isRoot ? "tail_supervisor" : undefined);
+    }
+    if (mode === "assign") {
+      if (!isRoot && !canAssign) throw new ApplicationError("FORBIDDEN", "当前角色无权分配返工人员", 403);
+      return businessActor(dependencies.root, user, request.id, "work:assign", isRoot ? "tail_supervisor" : undefined);
     }
     if (mode === "review") {
-      if (!isRoot && !isReviewer) {
-        throw new ApplicationError("FORBIDDEN", "当前角色无权审核返工工序", 403);
-      }
-      return businessActor(
-        dependencies.root,
-        user,
-        request.id,
-        "process:review",
-        isRoot ? "ie_reviewer" : undefined,
-      );
+      if (!isRoot && !isReviewer) throw new ApplicationError("FORBIDDEN", "当前角色无权审核返工工序", 403);
+      return businessActor(dependencies.root, user, request.id, "process:review", isRoot ? "ie_reviewer" : undefined);
     }
     if (isRoot || isOwnerReader) {
-      return businessActor(
-        dependencies.root,
-        user,
-        request.id,
-        "process:configure",
-        "tail_supervisor",
-        true,
-      );
+      return businessActor(dependencies.root, user, request.id, "process:configure", "tail_supervisor", true);
     }
-    if (isSupervisor) {
-      return businessActor(dependencies.root, user, request.id, "process:configure");
-    }
-    if (isReviewer) {
-      return businessActor(dependencies.root, user, request.id, "process:review");
-    }
+    if (isSupervisor) return businessActor(dependencies.root, user, request.id, "process:configure");
+    if (canAssign) return businessActor(dependencies.root, user, request.id, "work:assign");
+    if (isReviewer) return businessActor(dependencies.root, user, request.id, "process:review");
     throw new ApplicationError("FORBIDDEN", "当前角色无权查看工序配置", 403);
   };
 
   app.get("/rework-process-configurations/options", async (request) =>
-    ProcessConfigurationOptionsResponseSchema.parse(
-      await dependencies.service.options(await actor(request, "configure")),
-    ));
+    ProcessConfigurationOptionsResponseSchema.parse(await dependencies.service.options(await actor(request, "configure"))));
 
   app.get<{ Params: { reworkOrderId: string } }>(
     "/rework-orders/:reworkOrderId/process-configuration",
-    async (request) => ProcessConfigurationResponseSchema.parse(
-      await dependencies.service.get(
+    async (request) => ProcessConfigurationResponseSchema.parse(await dependencies.service.get(
+      await actor(request, "read"),
+      parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
+    )),
+  );
+
+  if (dependencies.workerPlan) {
+    app.get<{ Params: { reworkOrderId: string } }>(
+      "/rework-orders/:reworkOrderId/process-worker-plan",
+      async (request) => ProcessWorkerPlanResponseSchema.parse(await dependencies.workerPlan!.get(
         await actor(request, "read"),
         parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
-      ),
-    ),
-  );
+      )),
+    );
+    app.put<{ Params: { reworkOrderId: string } }>(
+      "/rework-orders/:reworkOrderId/process-worker-plan",
+      async (request, reply) => {
+        const result = await dependencies.workerPlan!.save(
+          await actor(request, "assign"),
+          parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
+          parse(SaveProcessWorkerPlanSchema, request.body),
+          idempotencyKey(request),
+        );
+        if (result.reused) void reply.header("idempotency-replayed", "true");
+        return reply.code(201).send(ProcessWorkerPlanResponseSchema.parse(result.value));
+      },
+    );
+    app.post<{ Params: { reworkOrderId: string } }>(
+      "/rework-orders/:reworkOrderId/process-worker-plan/activate",
+      async (request, reply) => {
+        const result = await dependencies.workerPlan!.activate(
+          await actor(request, "assign"),
+          parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
+          parse(ActivateProcessWorkerPlanSchema, request.body),
+          idempotencyKey(request),
+        );
+        if (result.reused) void reply.header("idempotency-replayed", "true");
+        return ProcessWorkerPlanActivationResponseSchema.parse(result.value);
+      },
+    );
+  }
 
   app.put<{ Params: { reworkOrderId: string } }>(
     "/rework-orders/:reworkOrderId/process-configuration/draft",
@@ -187,11 +195,11 @@ export function registerProcessConfigurationRoutes(
   app.post<{ Params: { reworkOrderId: string } }>(
     "/rework-orders/:reworkOrderId/process-configuration/submit",
     async (request, reply) => {
+      const reworkOrderId = parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId;
+      const input = parse(SubmitProcessConfigurationSchema, request.body);
+      await dependencies.workerPlan?.assertReadyForSubmit(reworkOrderId, input.expectedConfigurationVersion);
       const result = await dependencies.service.submit(
-        await actor(request, "configure"),
-        parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
-        parse(SubmitProcessConfigurationSchema, request.body),
-        idempotencyKey(request),
+        await actor(request, "configure"), reworkOrderId, input, idempotencyKey(request),
       );
       if (result.reused) void reply.header("idempotency-replayed", "true");
       return ProcessConfigurationResponseSchema.parse(result.value);
@@ -201,13 +209,29 @@ export function registerProcessConfigurationRoutes(
   app.post<{ Params: { reworkOrderId: string } }>(
     "/rework-orders/:reworkOrderId/process-configuration/review",
     async (request, reply) => {
+      const reworkOrderId = parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId;
+      const input = parse(ReviewProcessConfigurationSchema, request.body);
       const result = await dependencies.service.review(
-        await actor(request, "review"),
-        parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
-        parse(ReviewProcessConfigurationSchema, request.body),
-        idempotencyKey(request),
+        await actor(request, "review"), reworkOrderId, input, idempotencyKey(request),
       );
       if (result.reused) void reply.header("idempotency-replayed", "true");
+      if (input.decision === "approved" && dependencies.workerPlan) {
+        try {
+          const activation = await dependencies.workerPlan.activateAfterIeApproval(
+            reworkOrderId, input.expectedConfigurationVersion, request.id,
+          );
+          if (activation) {
+            return ProcessConfigurationResponseSchema.parse({
+              ...result.value,
+              reworkStatus: activation.reworkStatus,
+              orderVersion: activation.orderVersion,
+            });
+          }
+        } catch {
+          // IE review is already durable. Keep the legacy pending-task-assignment
+          // state visible so a tail supervisor can use the recovery activation.
+        }
+      }
       return ProcessConfigurationResponseSchema.parse(result.value);
     },
   );

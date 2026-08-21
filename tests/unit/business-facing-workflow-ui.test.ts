@@ -109,12 +109,13 @@ describe("business-facing workflow UI", () => {
   });
 
   it("keeps N04, N05 and N06 on isolated pages with server-backed state boundaries", async () => {
-    const [detail, reporting, reportingService, reviewService, processConfiguration] = await Promise.all([
+    const [detail, reporting, reportingService, reviewService, processConfiguration, mergedProcess] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/work-reporting-form.tsx"),
       read("apps/api/src/rework/work-reporting-service.ts"),
       read("apps/api/src/rework/whole-order-review-service.ts"),
       read("apps/web/src/process-configuration-form.tsx"),
+      read("apps/web/src/process-worker-assignment-form.tsx"),
     ]);
 
     expect(detail).toContain("taskMode={selected.key}");
@@ -122,14 +123,15 @@ describe("business-facing workflow UI", () => {
     expect(detail).toContain('url.searchParams.set("node", nextNode)');
     expect(detail).toMatch(/<ProcessConfigurationForm[\s\S]*?reworkOrderId=\{detail\.reworkOrderId\}[\s\S]*?onOrderChanged=\{syncAfterNodeAction\}[\s\S]*?\/>/);
     expect(processConfiguration).toContain("onOrderChanged?: () => Promise<void> | void;");
-    expect(processConfiguration.match(/await onOrderChanged\?\.\(\);/g)).toHaveLength(2);
+    expect(processConfiguration).toContain("ProcessWorkerAssignmentForm");
+    expect((mergedProcess.match(/await onOrderChanged\?\.\(\);/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(reporting).toContain('effectiveTaskMode === "task_assignment"');
     expect(reporting).toContain('effectiveTaskMode === "work_reporting"');
     expect(reporting).toContain('effectiveTaskMode === "whole_order_review"');
     expect(reporting).not.toContain("N04–N06");
     expect(reporting).not.toContain("当前处理说明");
     expect(reporting).not.toContain("全部完成剩余");
-    expect(processConfiguration).not.toContain("当前处理说明");
+    expect(mergedProcess).not.toContain("当前处理说明");
     expect(reportingService).toContain('order.status !== "in_progress"');
     expect(reportingService).toContain('order.status !== "pending_task_assignment"');
     expect(reportingService).toContain("rework.work_task.assignment_confirm");

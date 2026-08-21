@@ -191,9 +191,10 @@ if (hasDatabase) {
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
     "tests/integration/receiving-postgres.test.ts",
     "tests/integration/rework-v2-n01-postgres.test.ts",
+    "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
   );
   process.stdout.write(
-    "BUSINESS_CHAIN_GATE_START: receiving + N01 v2 + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
+    "BUSINESS_CHAIN_GATE_START: receiving + N01 v2 + PR-03 process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
   );
 } else {
   process.stdout.write(
@@ -243,7 +244,7 @@ if (exitCode !== 0) {
 
 process.stdout.write(
   hasDatabase
-    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: receiving + N01 v2 + N01-N11 + two fresh Root single-account passes\n"
+    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: receiving + N01 v2 + PR-03 process-worker preassignment + N01-N11 + two fresh Root single-account passes\n"
     : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
 );
 

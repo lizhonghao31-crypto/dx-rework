@@ -24,6 +24,10 @@
       "types": "./src/rework-supply-context.ts",
       "import": "./dist/rework-supply-context.js"
     },
+    "./process-worker-plan": {
+      "types": "./src/process-worker-plan.ts",
+      "import": "./dist/process-worker-plan.js"
+    },
     "./wages": {
       "types": "./src/wages.ts",
       "import": "./dist/wages.js"

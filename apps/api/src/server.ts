@@ -24,6 +24,7 @@ import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-wh
 import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
 import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
+import { ProcessWorkerPlanService } from "./rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
 import { ReworkBusinessDetailService } from "./rework/rework-business-detail-service.js";
 import { InspectionImageExtractionService } from "./rework/inspection-image-extraction-service.js";
@@ -145,6 +146,7 @@ const processConfigurationService = new ProcessConfigurationService(
   undefined,
   todoProjection,
 );
+const processWorkerPlanService = new ProcessWorkerPlanService(database);
 const workReportingService = new WorkReportingService(
   database,
   undefined,
@@ -247,6 +249,7 @@ const app = buildApp({
   processConfiguration: {
     authenticate: (token) => auth.authenticate(token),
     service: processConfigurationService,
+    workerPlan: processWorkerPlanService,
     root: rootAuthority,
   },
   workReporting: {

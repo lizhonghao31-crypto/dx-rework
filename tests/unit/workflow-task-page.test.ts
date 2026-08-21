@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 
 describe("workflow task page", () => {
   it("opens production and wage actions as focused personal tasks", async () => {
-    const [list, task, detail, configuration, reporting] = await Promise.all([
+    const [list, task, detail, configuration, mergedProcess, reporting] = await Promise.all([
       readFile("apps/web/src/my-todos-page.tsx", "utf8"),
       readFile("apps/web/src/responsibility-task-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
     ]);
 
@@ -19,7 +20,10 @@ describe("workflow task page", () => {
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
     expect(detail).toContain('taskMode="whole_order_review"');
     expect(task).toContain("<WagePeriodDetailPage periodId={route.entityId} />");
-    expect(configuration).toContain("reworkOrderId: providedReworkOrderId");
+    expect(configuration).toContain("reworkOrderId?: string;");
+    expect(configuration).toContain("reworkOrderId={resolvedOrderId}");
+    expect(configuration).toContain("<ProcessWorkerAssignmentForm");
+    expect(mergedProcess).toContain("reworkOrderId: string;");
     expect(reporting).toContain('taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review"');
     expect(reporting).toContain('if (effectiveTaskMode === "whole_order_review")');
   });
