@@ -2,21 +2,22 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("business-chain UI handoff contracts", () => {
-  it("persists N02 processes and candidate prices before IE review, without estimating quantity", async () => {
+  it("persists N02 processes, candidate prices and workers before IE review, without estimating quantity", async () => {
     const source = await readFile(
-      "apps/web/src/process-configuration-form.tsx",
+      "apps/web/src/process-worker-assignment-form.tsx",
       "utf8",
     );
     expect(source).toContain("/business-detail");
-    expect(source).toContain("validateItemForms");
-    expect(source).toContain("const saved = await persistCurrentDraft()");
+    expect(source).toContain("validateItems");
+    expect(source).toContain("const saved = await persistMergedDraft()");
     expect(source).toContain("expectedOrderVersion: saved.orderVersion");
     expect(source).toContain(
       "expectedConfigurationVersion: savedConfiguration.configurationVersion",
     );
-    expect(source).toContain("已提交 IE 审核");
-    expect(source).toContain("确认提交当前工序与候选单价给 IE 核价，并立即分配尾查");
-    expect(source).toContain("候选单价（元 / 件）");
+    expect(source).toContain("process-worker-plan");
+    expect(source).toContain("已提交 IE 核价");
+    expect(source).toContain("确认提交当前工序、候选单价和预分配工人给 IE 核价");
+    expect(source).toContain("候选单价（元/件）");
     expect(source).toContain("plannedQuantity: 1");
   });
 
@@ -31,12 +32,13 @@ describe("business-chain UI handoff contracts", () => {
 
   it("keeps IE review as the explicit N03 gate and leaves its business detail facts readable", async () => {
     const [form, detail] = await Promise.all([
-      readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
     ]);
-    expect(form).toContain("审核通过并生效");
-    expect(form).toContain("候选单价（元 / 件）");
-    expect(form).toContain("工序与候选单价");
+    expect(form).toContain("核价通过");
+    expect(form).toContain("候选单价（元/件）");
+    expect(form).toContain("工序、单价与预分配人员");
+    expect(form).toContain("人员已经由尾部主管预分配；IE 只核准工序与单价，不修改分工。");
     expect(detail).toContain("processConfigurationCreatedBy");
     expect(detail).toContain("latest_configuration.created_by");
   });
@@ -127,15 +129,16 @@ describe("business-chain UI handoff contracts", () => {
   it("keeps high-frequency business selectors searchable without exposing internal IDs", async () => {
     const [initiation, processConfiguration, workReporting, externalResponsibility] = await Promise.all([
       readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
-      readFile("apps/web/src/process-configuration-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
     ]);
     expect(initiation).toContain("<SearchSelect");
     expect(initiation).toContain('placeholder="搜索订单跟单"');
     expect(initiation).toContain("<FactorySearch");
-    expect(processConfiguration).toContain("输入工序名称搜索");
-    expect(processConfiguration).toContain("selectCatalogProcess");
+    expect(processConfiguration).toContain('placeholder="搜索工序"');
+    expect(processConfiguration).toContain("<SearchSelect");
+    expect(processConfiguration).toContain("processOptions.map");
     expect(workReporting).toContain('peopleType === "internal" ? "正式工" : "临时工"');
     expect(workReporting).toContain("filteredPeople");
     expect(externalResponsibility).toContain("输入供应商名称搜索");
