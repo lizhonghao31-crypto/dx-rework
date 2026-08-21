@@ -76,6 +76,26 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).not.toContain('...(isRoot ? ["超级用户"] : [])');
   });
 
+  it("keeps Root on the N00-to-N01 v2 path without an ordinary QC assignment", async () => {
+    const [board, routes, supplyRoutes, submission] = await Promise.all([
+      readFile(new URL("../../apps/web/src/order-board-page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/routes.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/supply-context-routes.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/v2-submission-service.ts", import.meta.url), "utf8"),
+    ]);
+
+    expect(board).toContain("setCanInitiate(isRoot || roles.includes(\"owner_group\") || qualityControl)");
+    expect(board).toContain('pageUrl("ui/qc/new")');
+    expect(routes).toContain('actorRoles.push("root_superuser")');
+    expect(routes).toContain('actorRoles.push("quality_control")');
+    expect(routes).toContain('authorizationCapabilities.push("rework:initiate")');
+    expect(supplyRoutes).toContain('actorRoles.push("root_superuser")');
+    expect(supplyRoutes).toContain('actorRoles.push("quality_control")');
+    expect(submission).toContain('actor.actorRoles.includes("root_superuser")');
+    expect(submission).toContain('const expectedUploader = actor.actorRoles.includes("root_superuser") ? null : actor.actorId;');
+    expect(submission).toContain('($2::uuid IS NULL OR uploaded_by=$2)');
+  });
+
   it("does not mask Root workflow actions behind ordinary-role-only UI gates", async () => {
     const [process, work, tail, review, responsibility, external, detail] = await Promise.all([
       readFile(new URL("../../apps/web/src/process-configuration-form.tsx", import.meta.url), "utf8"),
