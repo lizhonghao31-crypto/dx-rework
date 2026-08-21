@@ -13,7 +13,7 @@ const components = read("../../packages/ui/src/components.css");
 const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
 const reworkV2Form = read("../../apps/web/src/rework-v2-form.tsx");
-const legacyReworkForm = read("../../apps/web/src/rework-form.tsx");
+const reworkDetail = read("../../apps/web/src/rework-detail-page.tsx");
 const attachmentUpload = read("../../apps/web/src/attachment-upload.ts");
 const processConfigurationForm = read("../../apps/web/src/process-configuration-form.tsx");
 const landingTarget = read("../../apps/web/src/landing-target.ts");
@@ -84,6 +84,7 @@ describe("PR-01A UI prototype contract", () => {
     expect(app).toContain('const owner = { requiredRole: "owner_group" } as const');
     expect(reworkV2Form).toContain('"rework-orders/initiation-options"');
     expect(reworkV2Form).toContain('"idempotency-key"');
+    expect(reworkV2Form).toContain("executeReworkSubmit");
     expect(reworkV2Form).toContain("submit-v2");
     expect(reworkV2Form).toContain("sha256Hex");
     expect(attachmentUpload).toContain("crypto.subtle.digest");
@@ -93,8 +94,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkV2Form).toContain("订单跟单 <b>*</b>");
     expect(reworkV2Form).toContain("现场图片 <b>*</b>");
     expect(reworkV2Form).not.toContain("styleNos");
-    expect(legacyReworkForm).toContain("撤回修改");
-    expect(legacyReworkForm).toContain("取消返工单");
+    expect(reworkDetail).toContain("撤回修改");
+    expect(reworkDetail).toContain("取消返工单");
     expect(webCss).not.toContain("--dx-v2-color-primary:");
   });
   it("adds the PR-06 process page without replacing the established layout", () => {
