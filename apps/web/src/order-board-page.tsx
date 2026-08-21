@@ -139,7 +139,12 @@ export function OrderBoardPage() {
         return <Surface className={`order-board-row is-${tone}`} key={row.styleNo}>
           <div className="order-board-row__style">
             <span>款号</span>
-            <strong>{row.styleNo}</strong>
+            <div className="order-board-row__style-line">
+              <strong>{row.styleNo}</strong>
+              <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
+                {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
+              </StatusBadge>
+            </div>
           </div>
           <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
           <div><span>实收</span><strong>{row.actualQuantity}件</strong></div>
@@ -147,9 +152,6 @@ export function OrderBoardPage() {
           <div><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
           <div><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
           <div><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
-          <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
-            {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
-          </StatusBadge>
         </Surface>;
       })}
     </div>
