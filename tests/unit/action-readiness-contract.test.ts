@@ -18,14 +18,15 @@ describe("business action readiness contract", () => {
   });
 
   it("gates N02 save, submit and IE rejection with deterministic prerequisites", async () => {
-    const source = await readFile("apps/web/src/process-configuration-form.tsx", "utf8");
-    expect(source).toContain("const itemValidationError = validateItemForms(items);");
-    expect(source).toContain("const submitReady = editable && submitReadinessIssues.length === 0;");
+    const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
+    expect(source).toContain("const itemIssue = validateItems(items);");
+    expect(source).toContain("const workerIssue = items.findIndex");
+    expect(source).toContain("const submitReady = saveReady && tailInspectors.length > 0;");
     expect(source).toContain('disabled={busy || !saveReady}');
     expect(source).toContain('disabled={busy || !submitReady}');
-    expect(source).toContain('还需完成：{submitReadinessIssues.join("；")}');
-    expect(source.indexOf('className="mobile-actions process-configuration-actions"')).toBeLessThan(
-      source.indexOf('className="process-readiness" role="status"'),
+    expect(source).toContain('还需完成：{readinessIssues.join("；")}');
+    expect(source.indexOf('className="process-worker-actions"')).toBeLessThan(
+      source.indexOf('readinessIssues.length ? <p role="status">'),
     );
     expect(source).toContain('disabled={busy || !reviewReason.trim()}');
   });
