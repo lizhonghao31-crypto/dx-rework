@@ -24,6 +24,8 @@ import type { InspectionImageExtractionService } from "./inspection-image-extrac
 import type { ReworkInitiationService } from "./service.js";
 import { registerReworkSupplyContextRoutes } from "./supply-context-routes.js";
 import type { ReworkSupplyContextService } from "./supply-context-service.js";
+import { registerReworkV2DraftRoutes } from "./v2-draft-routes.js";
+import type { ReworkV2DraftService } from "./v2-draft-service.js";
 import type { ReworkV2SubmissionService } from "./v2-submission-service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
@@ -53,6 +55,7 @@ const translateTodoRoutingError = (error: unknown): never => {
 export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
+  v2DraftService?: ReworkV2DraftService;
   v2SubmissionService?: ReworkV2SubmissionService;
   businessDetailService?: ReworkBusinessDetailService;
   supplyContextService?: ReworkSupplyContextService;
@@ -226,6 +229,13 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     return dependencies.service.listOwn(await actor(request), query.status);
   });
 
+  if (dependencies.v2DraftService) {
+    registerReworkV2DraftRoutes(app, {
+      authenticate: dependencies.authenticate,
+      service: dependencies.v2DraftService,
+      ...(dependencies.root ? { root: dependencies.root } : {}),
+    });
+  }
   if (dependencies.supplyContextService) {
     registerReworkSupplyContextRoutes(app, {
       authenticate: dependencies.authenticate,
