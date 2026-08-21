@@ -11,12 +11,11 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
-import type { ReworkInitiationService } from "./service.js";
 
 type OrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
-  status: string;
+  status: ReworkOrderResponse["status"];
   source_system: string;
   style_no: string | null;
   customer_supply_code: string | null;
@@ -32,10 +31,16 @@ type OrderRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
-  inspection_report: unknown;
+  inspection_report: ReworkOrderResponse["inspectionReport"];
   created_by: string;
   updated_by: string;
   version: number;
+  created_at: Date;
+  updated_at: Date;
+  submitted_at: Date | null;
+  cancelled_at: Date | null;
+  cancel_reason: string | null;
+  has_other_open_style_order?: boolean;
 }>;
 type DatabaseError = Readonly<{ code?: string }>;
 
@@ -87,7 +92,6 @@ export class ReworkV2SubmissionService {
   constructor(
     private readonly database: Pool,
     private readonly corporationId: string,
-    private readonly initiation: ReworkInitiationService,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
@@ -196,9 +200,19 @@ export class ReworkV2SubmissionService {
       dedupeKey: `process-config:${reworkOrderId}:${nextVersion}`,
     });
 
-    // Reuse the existing response mapper and ownership semantics after the
-    // controlled write instead of duplicating response-shaping logic here.
-    return this.initiation.getOwn(actor, reworkOrderId);
+    const saved = await client.query<OrderRow>(
+      `SELECT orders.*,
+         EXISTS (
+           SELECT 1 FROM rework_orders other
+           WHERE other.rework_order_id<>orders.rework_order_id
+             AND other.style_no=orders.style_no
+             AND other.status NOT IN ('completed','cancelled','deleted')
+         ) AS has_other_open_style_order
+       FROM rework_orders orders
+       WHERE orders.rework_order_id=$1`,
+      [reworkOrderId],
+    );
+    return this.dto(saved.rows[0]!, attachmentIds);
   }
 
   private async lockOwnedDraft(
@@ -314,6 +328,44 @@ export class ReworkV2SubmissionService {
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
+    };
+  }
+
+  private dto(row: OrderRow, attachmentIds: readonly string[]): ReworkOrderResponse {
+    const factory = factoryFromRow(row);
+    return {
+      reworkOrderId: row.rework_order_id,
+      reworkNo: row.rework_no,
+      status: row.status,
+      styleNo: row.style_no,
+      customerSupplyCode: row.customer_supply_code,
+      factoryStyleNo: row.factory_style_no,
+      orderNo: row.order_no,
+      orderQuantity: row.order_quantity,
+      merchandiserUserId: row.merchandiser_user_id,
+      processingFactory: factory?.type === "supplier"
+        ? {
+            type: "supplier",
+            supplierId: factory.supplierId!,
+            supplierVersion: factory.supplierVersion!,
+          }
+        : factory?.type === "own_factory"
+          ? { type: "own_factory" }
+          : null,
+      reworkReason: row.rework_reason,
+      reworkProcess: row.rework_process,
+      problemPart: row.problem_part,
+      problemDescription: row.problem_description,
+      reworkQuantity: row.rework_quantity,
+      inspectionReport: row.inspection_report,
+      attachmentIds: [...attachmentIds],
+      hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
+      version: row.version,
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+      submittedAt: row.submitted_at?.toISOString() ?? null,
+      cancelledAt: row.cancelled_at?.toISOString() ?? null,
+      cancelReason: row.cancel_reason,
     };
   }
 
