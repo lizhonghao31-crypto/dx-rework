@@ -98,7 +98,7 @@ describe("zero-role Root UI entry contract", () => {
 
   it("does not mask Root workflow actions behind ordinary-role-only UI gates", async () => {
     const [process, work, tail, review, responsibility, external, detail] = await Promise.all([
-      readFile(new URL("../../apps/web/src/process-configuration-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/process-worker-assignment-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/tail-inspection-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
