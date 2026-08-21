@@ -11,6 +11,7 @@ import type { AuthUser } from "../../apps/api/src/auth/service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { completeInspectionReport } from "../inspection-report-fixture.js";
 
@@ -25,6 +26,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const access = new AccessMasterDataService(database, "corp");
   const initiation = new ReworkInitiationService(database, "corp");
+  const v2Submission = new ReworkV2SubmissionService(database, "corp");
   const configuration = new ProcessConfigurationService(database);
   const workerPlan = new ProcessWorkerPlanService(database);
 
@@ -163,7 +165,7 @@ runWithPostgres("PR-03 process-worker preassignment PostgreSQL", () => {
       inspectionReport: completeInspectionReport(),
       attachmentIds: [attachmentId],
     }, randomUUID());
-    return initiation.submit(qc(), draft.value.reworkOrderId, {
+    return v2Submission.submit(qc(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,
     }, randomUUID());
   };
