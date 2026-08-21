@@ -9,7 +9,7 @@ const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
 const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
 const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32})$/;
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32})$/;
 const RUNTIME_ENV_KEYS = new Set([
   "TEST_DATABASE_URL",
   "DATABASE_URL",
@@ -159,7 +159,8 @@ async function cleanupIsolatedGateSchemas() {
        FROM pg_namespace
        WHERE nspname LIKE 'full_chain_%'
           OR nspname LIKE 'root_http_%'
-          OR nspname LIKE 'receiving_%'`,
+          OR nspname LIKE 'receiving_%'
+          OR nspname LIKE 'rework_v2_%'`,
     );
     for (const row of result.rows) {
       const schema = String(row.nspname);
@@ -182,15 +183,17 @@ const tests = [
   "tests/unit/root-global-business-bypass.test.ts",
   "tests/unit/root-ui-entry-contract.test.ts",
   "tests/unit/receiving-pr01-contract.test.ts",
+  "tests/unit/n01-paper-report-entry.test.ts",
 ];
 if (hasDatabase) {
   tests.push(
     "tests/integration/full-business-chain-postgres.test.ts",
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
     "tests/integration/receiving-postgres.test.ts",
+    "tests/integration/rework-v2-n01-postgres.test.ts",
   );
   process.stdout.write(
-    "BUSINESS_CHAIN_GATE_START: receiving + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
+    "BUSINESS_CHAIN_GATE_START: receiving + N01 v2 + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
   );
 } else {
   process.stdout.write(
@@ -240,7 +243,7 @@ if (exitCode !== 0) {
 
 process.stdout.write(
   hasDatabase
-    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: receiving + N01-N11 + two fresh Root single-account passes\n"
+    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: receiving + N01 v2 + N01-N11 + two fresh Root single-account passes\n"
     : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
 );
 
