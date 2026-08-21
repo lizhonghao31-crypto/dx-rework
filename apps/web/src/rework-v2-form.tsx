@@ -37,6 +37,7 @@ import { confirmInApp } from "./system-dialog.js";
 import "./rework-v2-form.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const LOCAL_N01_DRAFT_KEY = "dx-rework:n01-local-draft:v1";
 
 type ApiSchema<T> = Readonly<{ parse(value: unknown): T }>;
 type PendingSave = Readonly<{ fingerprint: string; key: string }>;
@@ -45,6 +46,11 @@ type UploadedImage = Readonly<{
   filename: string;
   mimeType: string;
   previewUrl: string;
+}>;
+type StoredImage = Readonly<{
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
 }>;
 type ReworkInitiationV2FormProps = Readonly<{
   reworkOrderId?: string;
@@ -62,6 +68,12 @@ type V2FormState = Readonly<{
   fabricSupplierId: string;
   embroideryMerchandiserUserId: string;
 }>;
+type LocalN01Draft = Readonly<{
+  schemaVersion: 1;
+  form: V2FormState;
+  images: readonly StoredImage[];
+  savedAt: string;
+}>;
 
 const initialStyleNo = (): string => {
   if (typeof window === "undefined") return "";
@@ -76,6 +88,70 @@ const emptyForm = (useUrlStyle = true): V2FormState => ({
   embroiderySupplierId: "",
   fabricSupplierId: "",
   embroideryMerchandiserUserId: "",
+});
+
+const isFormState = (value: unknown): value is V2FormState => {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return [
+    "styleNo",
+    "factory",
+    "merchandiserUserId",
+    "washingSupplierId",
+    "embroiderySupplierId",
+    "fabricSupplierId",
+    "embroideryMerchandiserUserId",
+  ].every((key) => typeof row[key] === "string");
+};
+
+const isStoredImage = (value: unknown): value is StoredImage => {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.attachmentId === "string"
+    && typeof row.filename === "string"
+    && typeof row.mimeType === "string";
+};
+
+const readLocalN01Draft = (): LocalN01Draft | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_N01_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      parsed.schemaVersion !== 1
+      || !isFormState(parsed.form)
+      || !Array.isArray(parsed.images)
+      || !parsed.images.every(isStoredImage)
+      || typeof parsed.savedAt !== "string"
+    ) return null;
+    const requestedStyle = initialStyleNo();
+    if (requestedStyle && parsed.form.styleNo.trim() !== requestedStyle) return null;
+    return parsed as LocalN01Draft;
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalN01Draft = (form: V2FormState, images: readonly UploadedImage[]): void => {
+  if (typeof window === "undefined") return;
+  const draft: LocalN01Draft = {
+    schemaVersion: 1,
+    form,
+    images: images.map(({ attachmentId, filename, mimeType }) => ({ attachmentId, filename, mimeType })),
+    savedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(LOCAL_N01_DRAFT_KEY, JSON.stringify(draft));
+};
+
+const clearLocalN01Draft = (): void => {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(LOCAL_N01_DRAFT_KEY);
+};
+
+const restoredImage = (image: StoredImage): UploadedImage => ({
+  ...image,
+  previewUrl: apiUrl(`tools/attachments/${image.attachmentId}/download?mode=preview`),
 });
 
 const factoryValue = (order: ReworkOrderResponse): string => {
@@ -117,7 +193,8 @@ export function ReworkInitiationV2Form({
   existingAttachmentCount = 0,
   onOrderChanged,
 }: ReworkInitiationV2FormProps = {}) {
-  const [form, setForm] = useState<V2FormState>(() => emptyForm(!reworkOrderId));
+  const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
+  const [form, setForm] = useState<V2FormState>(() => localDraftSeed?.form ?? emptyForm(!reworkOrderId));
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({ merchandisers: [], factories: [] });
   const [supplyOptions, setSupplyOptions] = useState<ReworkSupplyContextOptionsResponse>({
     embroideryWashingMerchandisers: [],
@@ -125,15 +202,17 @@ export function ReworkInitiationV2Form({
     fabricSuppliers: [],
   });
   const [order, setOrder] = useState<ReworkOrderResponse | null>(null);
-  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [images, setImages] = useState<UploadedImage[]>(() => localDraftSeed?.images.map(restoredImage) ?? []);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(
     reworkOrderId
       ? "正在读取返工草稿…"
-      : initialStyleNo()
-        ? "已从订单看板带入款号，请补充返工资料"
-        : "填写三项核心资料并上传报告",
+      : localDraftSeed
+        ? "已恢复本机保存资料；尚未创建返工单"
+        : initialStyleNo()
+          ? "已从订单看板带入款号，请补充返工资料"
+          : "填写三项核心资料并上传报告",
   );
   const pendingSave = useRef<PendingSave | null>(null);
   const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
@@ -255,7 +334,7 @@ export function ReworkInitiationV2Form({
     );
   };
 
-  const persistDraft = async (clearPendingSubmit = true): Promise<ReworkOrderResponse> => {
+  const persistServerDraft = async (clearPendingSubmit = true): Promise<ReworkOrderResponse> => {
     const processingFactory = coreFactory();
     const key = saveKey();
     let saved: ReworkOrderResponse;
@@ -314,9 +393,14 @@ export function ReworkInitiationV2Form({
   const save = async (): Promise<void> => {
     if (busy || uploading) return;
     setBusy(true);
-    setMessage("正在保存草稿…");
     try {
-      const saved = await persistDraft();
+      if (!reworkOrderId && !order) {
+        writeLocalN01Draft(form, images);
+        pendingSubmit.current = null;
+        setMessage("已保存到本机；尚未创建返工单");
+        return;
+      }
+      const saved = await persistServerDraft();
       setMessage(saved.hasOtherOpenStyleOrder
         ? "同款号存在其他未完结单；系统仅提示，不会自动合并"
         : `草稿已保存 · ${saved.styleNo ?? "未填款号"}`);
@@ -336,7 +420,7 @@ export function ReworkInitiationV2Form({
       const submitted = await executeReworkSubmit(
         order,
         pendingSubmit.current,
-        () => persistDraft(false),
+        () => persistServerDraft(false),
         (saved) => {
           const attempt: PendingSubmitAttempt = {
             reworkOrderId: saved.reworkOrderId,
@@ -358,6 +442,7 @@ export function ReworkInitiationV2Form({
       );
       pendingSubmit.current = null;
       setOrder(submitted);
+      clearLocalN01Draft();
       if (embedded) {
         setMessage(`已提交 ${submitted.reworkNo ?? "返工单"}`);
         await onOrderChanged?.();
@@ -469,7 +554,7 @@ export function ReworkInitiationV2Form({
   const removeImage = (attachmentId: string): void => {
     setImages((current) => {
       const removed = current.find((image) => image.attachmentId === attachmentId);
-      if (removed) {
+      if (removed && previewUrls.current.includes(removed.previewUrl)) {
         URL.revokeObjectURL(removed.previewUrl);
         previewUrls.current = previewUrls.current.filter((url) => url !== removed.previewUrl);
       }

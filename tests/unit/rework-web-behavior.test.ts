@@ -85,14 +85,14 @@ describe("PR-05 web behavior", () => {
     expect(send).toHaveBeenCalledWith(attempt);
   });
 
-  it("keeps the submit idempotency attempt after the draft save that precedes it", async () => {
+  it("keeps the submit idempotency attempt after the server draft staging that precedes real submit", async () => {
     const form = await readFile("apps/web/src/rework-v2-form.tsx", "utf8");
 
     expect(form).toContain("const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);");
-    expect(form).toContain("const persistDraft = async (clearPendingSubmit = true)");
+    expect(form).toContain("const persistServerDraft = async (clearPendingSubmit = true)");
     expect(form).toContain("if (clearPendingSubmit) pendingSubmit.current = null;");
     expect(form).toContain("executeReworkSubmit(");
-    expect(form).toContain("() => persistDraft(false)");
+    expect(form).toContain("() => persistServerDraft(false)");
     expect(form).toContain("pendingSubmit.current = attempt;");
     expect(form).toContain('headers: { "idempotency-key": attempt.key }');
   });
