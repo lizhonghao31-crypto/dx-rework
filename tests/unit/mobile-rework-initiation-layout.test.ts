@@ -19,8 +19,9 @@ describe("mobile rework initiation layout", () => {
     expect(source).not.toContain("InspectionReportStepTwo");
     expect(source).not.toContain("InspectionReportStepThree");
     expect(source).not.toContain("formStep");
-    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain("@media(max-width:600px)");
     expect(css).toContain("grid-template-columns:1fr");
+    expect(css).toContain("env(safe-area-inset-bottom,0px)");
   });
 
   it("keeps optional relationships on the same page and preserves the simple save-submit path", async () => {
