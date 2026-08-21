@@ -16,7 +16,8 @@ describe("N01 v2 streamlined initiation", () => {
       expect(form).toContain(label);
     }
     expect(form).toContain("现场图片 <b>*</b>");
-    expect(form).toContain("images.length > 0");
+    expect(form).toContain("availableImageCount > 0");
+    expect(form).toContain("order?.attachmentIds.length ?? existingAttachmentCount");
     expect(form).toContain("仅支持 JPEG / PNG / WebP 图片");
     expect(form).not.toContain("验货阶段（必填）");
     expect(form).not.toContain("订单数量（必填）");
