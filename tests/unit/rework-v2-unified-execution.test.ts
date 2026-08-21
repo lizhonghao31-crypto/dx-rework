@@ -56,10 +56,11 @@ describe("PR-04 unified rework execution", () => {
   });
 
   it("uses work tasks and work reports as the execution quantity fact chain", async () => {
-    const [reviewService, reviewPanel, reporting] = await Promise.all([
+    const [reviewService, reviewPanel, reporting, responsibility] = await Promise.all([
       read("apps/api/src/rework/whole-order-review-service.ts"),
       read("apps/web/src/whole-order-review-panel.tsx"),
       read("apps/api/src/rework/work-reporting-service.ts"),
+      read("apps/api/src/rework/responsibility-determination-service.ts"),
     ]);
     expect(reviewService).toContain("tail_item.execution_kind='tail_inspection'");
     expect(reviewService).toContain("item.execution_kind='worker'");
@@ -67,5 +68,6 @@ describe("PR-04 unified rework execution", () => {
     expect(reviewPanel).toContain('report.executionKind === "tail_inspection"');
     expect(reporting).toContain('task.execution_kind === "tail_inspection"');
     expect(reporting).toContain("rework_work_reports");
+    expect(responsibility).toContain("item.execution_kind='worker'");
   });
 });
