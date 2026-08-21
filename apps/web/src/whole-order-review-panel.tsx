@@ -171,7 +171,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     <Surface>
       <div className="section-title">
         <div>
-          <h2>{data.reworkStatus === "pending_order_review" ? "N07 · 尾部主管整单确认" : "返工完成进度"}</h2>
+          <h2>{data.reworkStatus === "pending_order_review" ? "N06 · 尾部主管整单确认" : "返工完成进度"}</h2>
           {message && <p>{message}</p>}
         </div>
         <StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : allComplete ? "success" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge>
