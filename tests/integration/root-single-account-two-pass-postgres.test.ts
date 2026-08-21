@@ -7,10 +7,8 @@ import type {
   ResponsibilityDeterminationResponse,
   ReworkOrderResponse,
   ReworkWorkTasksResponse,
-  TailInspectionResponse,
   WholeOrderReviewResponse,
   WorkReportResponse,
-  WorkTaskResponse,
 } from "@dx-rework/contracts";
 import type {
   ExternalResponsibilityBatchResponse,
@@ -30,10 +28,10 @@ import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/
 import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
 import { OwnFactoryApprovalApplicationService } from "../../apps/api/src/rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
+import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
-import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
@@ -86,6 +84,7 @@ type PassFixture = Readonly<{
   businessDetail: ReworkBusinessDetailService;
   merchandiserUserId: string;
   tailInspectorUserId: string;
+  tailPersonId: string;
   workerPersonIds: string[];
   supplierId: string;
   processId: string;
@@ -233,6 +232,9 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       expect(person).toBeDefined();
       return person!.personId;
     });
+    const tailPerson = people.find((candidate) => candidate.appUserId === tailInspectorUserId);
+    expect(tailPerson).toBeDefined();
+    const tailPersonId = tailPerson!.personId;
 
     const masterDataActor = await rootActor("master_data:manage");
     if (pass === 2) {
@@ -264,7 +266,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const initiation = new ReworkInitiationService(database, "corp", undefined, undefined, undefined, todoProjection);
     const businessDetail = new ReworkBusinessDetailService(database);
     const configuration = new ProcessConfigurationService(database, undefined, undefined, undefined, todoProjection);
-    const tailInspection = new TailInspectionService(database, undefined, undefined, todoProjection);
+    const workerPlan = new ProcessWorkerPlanService(database);
     const work = new WorkReportingService(database, undefined, undefined, todoProjection);
     const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
     const responsibility = new ResponsibilityDeterminationApplicationService(database, todoProjection);
@@ -298,8 +300,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         businessDetailService: businessDetail,
         root,
       },
-      processConfiguration: { authenticate, service: configuration, root },
-      tailInspection: { authenticate, service: tailInspection, root },
+      processConfiguration: { authenticate, service: configuration, workerPlan, root },
       workReporting: { authenticate, service: work, root },
       wholeOrderReview: { authenticate, service: wholeOrder, root },
       responsibilityDetermination: { authenticate, service: responsibility, root },
@@ -320,6 +321,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       businessDetail,
       merchandiserUserId,
       tailInspectorUserId,
+      tailPersonId,
       workerPersonIds,
       supplierId,
       processId,
@@ -435,13 +437,38 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           items: [{
             source: "catalog",
             processId: fixture.processId,
+            executionKind: "worker",
             plannedQuantity: fixture.plannedQuantity,
             pricingUnit: fixture.pricingUnit,
             unitPrice: fixture.unitPrice,
+          }, {
+            source: "custom",
+            customProcessName: "尾查",
+            executionKind: "tail_inspection",
+            plannedQuantity: 1,
+            pricingUnit: "piece",
+            unitPrice: 0.2,
           }],
         },
       );
     const saved = await save(supplemented.version);
+    const workerItem = saved.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const tailItem = saved.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
+    const plan = await http<{ complete: boolean }>(
+      fixture.app,
+      "PUT",
+      `/rework-orders/${draft.reworkOrderId}/process-worker-plan`,
+      {
+        expectedOrderVersion: saved.orderVersion,
+        configurationId: saved.configuration!.configurationId,
+        expectedConfigurationVersion: saved.configuration!.configurationVersion,
+        assignments: [
+          { configurationItemId: workerItem.configurationItemId, memberIds: [fixture.workerPersonIds[0]!] },
+          { configurationItemId: tailItem.configurationItemId, memberIds: [fixture.tailPersonId] },
+        ],
+      },
+    );
+    expect(plan.complete).toBe(true);
     const submittedConfiguration = await http<ProcessConfigurationResponse>(
       fixture.app,
       "POST",
@@ -449,7 +476,6 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       {
         expectedOrderVersion: saved.orderVersion,
         expectedConfigurationVersion: saved.configuration!.configurationVersion,
-        tailInspectors: [{ userId: fixture.tailInspectorUserId, boxScope: `Root 第 ${pass} 遍` }],
       },
     );
     expect(submittedConfiguration.reworkStatus).toBe("pending_ie_review");
@@ -463,15 +489,16 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         decision: "approved",
       },
     );
-    expect(approved.reworkStatus).toBe("pending_task_assignment");
-    expect(approved.configuration!.items[0]).toMatchObject({
+    expect(approved.reworkStatus).toBe("in_progress");
+    const approvedWorkerItem = approved.configuration!.items.find((item) => item.executionKind === "worker")!;
+    expect(approvedWorkerItem).toMatchObject({
       plannedQuantity: fixture.plannedQuantity,
       unitPrice: fixture.unitPrice,
     });
     return {
       draft,
       approved,
-      item: approved.configuration!.items[0]!,
+      item: approvedWorkerItem,
     };
   }
 
@@ -628,6 +655,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   ): Promise<void> {
     const result = await fixture.database.query<{
       reportTotal: string;
+      workerReportTotal: string;
       responsibilityTotal: string;
       externalTotal: string;
       wageTotal: string;
@@ -640,6 +668,16 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
               SELECT 1 FROM rework_work_report_rejections rejection
               WHERE rejection.work_report_id=report.work_report_id
             )) AS "reportTotal",
+         (SELECT COALESCE(sum(report.group_amount),0)::numeric(18,2)::text
+          FROM rework_work_reports report
+          JOIN rework_process_configuration_items item
+            ON item.configuration_item_id=report.configuration_item_id
+           AND item.execution_kind='worker'
+          WHERE report.rework_order_id=$1
+            AND NOT EXISTS(
+              SELECT 1 FROM rework_work_report_rejections rejection
+              WHERE rejection.work_report_id=report.work_report_id
+            )) AS "workerReportTotal",
          (SELECT calculation_total::numeric(18,2)::text
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
@@ -653,39 +691,27 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     );
     const totals = result.rows[0]!;
     expect(totals.reportTotal).toBe(totals.wageTotal);
-    expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.reportTotal) * 1.2, 2);
+    expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.workerReportTotal) * 1.2, 2);
     expect(totals.externalTotal).toBe(totals.responsibilityTotal);
   }
 
   async function runPass(pass: 1 | 2): Promise<void> {
     const fixture = await setup(pass);
     try {
-      const { draft, approved, item } = await startOrder(pass, fixture);
-      const task = await http<WorkTaskResponse>(
-        fixture.app,
-        "POST",
-        `/rework-orders/${draft.reworkOrderId}/work-tasks`,
-        {
-          expectedOrderVersion: approved.orderVersion,
-          configurationItemId: item.configurationItemId,
-          mode: "individual",
-          members: [{ personId: fixture.workerPersonIds[0]! }],
-        },
-      );
-      const assignments = await http<ReworkWorkTasksResponse>(
+      const { draft, item } = await startOrder(pass, fixture);
+      const started = await http<ReworkWorkTasksResponse>(
         fixture.app,
         "GET",
         `/rework-orders/${draft.reworkOrderId}/work-tasks`,
       );
-      const started = await http<ReworkWorkTasksResponse>(
-        fixture.app,
-        "POST",
-        `/rework-orders/${draft.reworkOrderId}/work-tasks/confirm`,
-        { expectedOrderVersion: assignments.orderVersion },
-      );
       expect(started.reworkStatus).toBe("in_progress");
+      const task = started.tasks.find((candidate) => candidate.executionKind === "worker")!;
+      const tailTask = started.tasks.find((candidate) => candidate.executionKind === "tail_inspection")!;
+      expect(task).toBeDefined();
+      expect(tailTask).toBeDefined();
 
       const submitReport = async (
+        workTaskId: string,
         resubmitsWorkReportId?: string,
       ): Promise<WorkReportResponse> => {
         const view = await http<ReworkWorkTasksResponse>(
@@ -696,7 +722,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         return http<WorkReportResponse>(
           fixture.app,
           "POST",
-          `/work-tasks/${task.workTaskId}/reports`,
+          `/work-tasks/${workTaskId}/reports`,
           {
             expectedOrderVersion: view.orderVersion,
             actualQuantity: fixture.plannedQuantity,
@@ -706,31 +732,12 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         );
       };
 
-      let report = await submitReport();
-      const tailView = await http<TailInspectionResponse>(
-        fixture.app,
-        "GET",
-        `/rework-orders/${draft.reworkOrderId}/tail-inspection`,
-      );
-      const tailAssignment = tailView.assignments[0];
-      expect(tailAssignment).toMatchObject({
-        tailInspectorUserId: fixture.tailInspectorUserId,
-        status: "active",
-        canSubmit: true,
+      let report = await submitReport(task.workTaskId);
+      const tailReported = await submitReport(tailTask.workTaskId);
+      expect(tailReported).toMatchObject({
+        workTaskId: tailTask.workTaskId,
+        status: "submitted",
       });
-      const tailReported = await http<TailInspectionResponse>(
-        fixture.app,
-        "POST",
-        `/tail-inspection-assignments/${tailAssignment!.assignmentId}/reports`,
-        {
-          returnedQuantity: fixture.plannedQuantity,
-          items: [{
-            configurationItemId: item.configurationItemId,
-            inspectedQuantity: fixture.plannedQuantity,
-          }],
-        },
-      );
-      expect(tailReported.reworkStatus).toBe("pending_order_review");
       if (pass === 2) {
         const review = await http<WholeOrderReviewResponse>(
           fixture.app,
@@ -748,7 +755,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           },
         );
         expect(returned.reworkStatus).toBe("in_progress");
-        report = await submitReport(report.workReportId);
+        report = await submitReport(task.workTaskId, report.workReportId);
       }
       expect(report.status).toBe("submitted");
 
