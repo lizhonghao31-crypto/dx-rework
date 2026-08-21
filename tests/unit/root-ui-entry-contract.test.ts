@@ -27,8 +27,8 @@ describe("zero-role Root UI entry contract", () => {
       requiredCapability: "work:report",
     })).toBe(true);
     expect(hasPageAccess(zeroRoleRoot, {
-      requiredRole: "administrative_clerk",
-      requiredCapability: "wage:administrative_review",
+      requiredRole: "warehouse_receiver",
+      requiredCapability: "receiving:create",
     })).toBe(true);
   });
 
@@ -68,7 +68,7 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).toContain("const initiationAccess = isRoot ||");
     expect(source).toContain("const reportAccess = isRoot || isOwner");
     expect(source).toContain("const systemManagementAccess = auditAccess || technicalAdminAccess");
-    for (const entry of ["发起返工", "全部订单", "系统管理", "财务报表", "工资管理"]) {
+    for (const entry of ["订单看板", "发起返工", "返工单看板", "系统管理", "财务报表", "工资管理"]) {
       expect(source).toContain(`name: "${entry}"`);
     }
     expect(source).not.toContain('name: "返工上数"');
