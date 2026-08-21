@@ -29,6 +29,7 @@ import { ReworkBusinessDetailService } from "./rework/rework-business-detail-ser
 import { InspectionImageExtractionService } from "./rework/inspection-image-extraction-service.js";
 import { ReworkInitiationService } from "./rework/service.js";
 import { ReworkSupplyContextService } from "./rework/supply-context-service.js";
+import { ReworkV2SubmissionService } from "./rework/v2-submission-service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { TailInspectionService } from "./rework/tail-inspection-service.js";
 import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
@@ -110,6 +111,15 @@ const reworkService = new ReworkInitiationService(
 const reworkSupplyContextService = new ReworkSupplyContextService(
   database,
   config.dingtalk.corpId,
+);
+const reworkV2SubmissionService = new ReworkV2SubmissionService(
+  database,
+  config.dingtalk.corpId,
+  reworkService,
+  undefined,
+  undefined,
+  undefined,
+  todoProjection,
 );
 const reworkBusinessDetailService = new ReworkBusinessDetailService(database);
 const inspectionImageExtractor = new InspectionImageExtractionService({
@@ -196,6 +206,7 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    v2SubmissionService: reworkV2SubmissionService,
     businessDetailService: reworkBusinessDetailService,
     supplyContextService: reworkSupplyContextService,
     root: rootAuthority,
