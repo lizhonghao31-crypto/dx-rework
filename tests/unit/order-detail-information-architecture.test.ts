@@ -61,9 +61,15 @@ describe("order detail information architecture", () => {
   it("keeps real workflow numbering and existing node workspaces instead of copying mock data", async () => {
     const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
     expect(detail).toContain('node("initiation", "01", "发起返工"');
-    expect(detail).toContain('node("work_reporting", "05", "工人完工上数"');
-    expect(detail).toContain('node("tail_inspection", "06", "尾查报数"');
-    expect(detail).toContain('node("settlement_followup", "10", "返工业务完成"');
+    expect(detail).toContain('node("process_configuration", "02", "分配工序 &工人"');
+    expect(detail).toContain('node("ie_review", "03", "IE 核价"');
+    expect(detail).toContain('node("work_reporting", "04", "工人完工上数"');
+    expect(detail).toContain('node("tail_inspection", "05", "尾查报数"');
+    expect(detail).toContain('node("whole_order_review", "06", "尾部主管整单确认"');
+    expect(detail).toContain('node("responsibility", "07", "责任判定"');
+    expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
+    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
+    expect(detail).not.toContain('node("task_assignment", "04", "分配返工人员"');
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
     expect(detail).toContain("<WorkReportingForm reworkOrderId={detail.reworkOrderId}");
     expect(detail).toContain("<TailInspectionPanel reworkOrderId={detail.reworkOrderId}");

@@ -99,7 +99,7 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("返回返工");
     expect(source).toContain("临时工代上数");
     expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
-    expect(source).toContain("已流转至 N07 · 尾部主管整单确认");
+    expect(source).toContain("已流转至 N06 · 尾部主管整单确认");
     expect(source).toContain("canReviewOrder(me.user)");
     expect(source).not.toContain("登记本次完成数量");
     expect(source).not.toContain('label="实际完成时间"');
@@ -108,7 +108,7 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("result.groupAmount.toFixed(8)");
   });
 
-  it("keeps N04, N05 and N06 on isolated pages with server-backed state boundaries", async () => {
+  it("keeps execution workspaces on isolated pages with server-backed state boundaries", async () => {
     const [detail, reporting, reportingService, reviewService, processConfiguration, mergedProcess] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/work-reporting-form.tsx"),

@@ -74,7 +74,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(routes).toContain("responsibility-determinations/transfer-options");
   });
 
-  it("keeps process, execution, wage work and the N07–N10 workflow reachable from permitted primary entries", async () => {
+  it("keeps the merged nine-node workflow reachable from permitted primary entries", async () => {
     const [app, shell, detail] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
@@ -89,47 +89,51 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).not.toContain('name: "返工上数"');
     expect(shell).not.toContain("flow-navigation__arrow");
     expect(detail).toContain('title: "发起、配置与核价"');
-    expect(detail).toContain('title: "分工与返工执行"');
+    expect(detail).toContain('title: "返工执行"');
     expect(detail).toContain('title: "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
-    expect(detail).toContain('node("process_configuration", "02", "工序与候选单价"');
+    expect(detail).toContain('node("process_configuration", "02", "分配工序 &工人"');
     expect(detail).toContain('node("ie_review", "03", "IE 核价"');
-    expect(detail).toContain('node("task_assignment", "04", "分配返工人员"');
-    expect(detail).toContain('node("work_reporting", "05", "工人完工上数"');
-    expect(detail).toContain('node("tail_inspection", "06", "尾查报数"');
-    expect(detail).toContain('node("whole_order_review", "07", "尾部主管整单确认"');
-    expect(detail).toContain('node("responsibility", "08", "责任判定"');
-    expect(detail).toContain('node("owner_signature", "09", "老板确认签字"');
-    expect(detail).toContain('node("settlement_followup", "10", "返工业务完成"');
-    const workflowNodePositions = Array.from({ length: 10 }, (_, index) =>
-      detail.indexOf(`node("${[
-        "initiation",
-        "process_configuration",
-        "ie_review",
-        "task_assignment",
-        "work_reporting",
-        "tail_inspection",
-        "whole_order_review",
-        "responsibility",
-        "owner_signature",
-        "settlement_followup",
-      ][index]}", "${String(index + 1).padStart(2, "0")}"`),
+    expect(detail).toContain('node("work_reporting", "04", "工人完工上数"');
+    expect(detail).toContain('node("tail_inspection", "05", "尾查报数"');
+    expect(detail).toContain('node("whole_order_review", "06", "尾部主管整单确认"');
+    expect(detail).toContain('node("responsibility", "07", "责任判定"');
+    expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
+    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
+    expect(detail).not.toContain('node("task_assignment", "04", "分配返工人员"');
+    expect(detail).toContain('pending_task_assignment: "process_configuration"');
+    expect(detail).toContain('if (value === "task_assignment") return "process_configuration";');
+    const workflowKeys = [
+      "initiation",
+      "process_configuration",
+      "ie_review",
+      "work_reporting",
+      "tail_inspection",
+      "whole_order_review",
+      "responsibility",
+      "owner_signature",
+      "settlement_followup",
+    ];
+    const workflowNodePositions = workflowKeys.map((key, index) =>
+      detail.indexOf(`node("${key}", "${String(index + 1).padStart(2, "0")}"`),
     );
+    expect(workflowNodePositions).toHaveLength(9);
     expect(workflowNodePositions.every((position) => position >= 0)).toBe(true);
     expect(workflowNodePositions).toEqual([...workflowNodePositions].sort((left, right) => left - right));
   });
 
-  it("routes the removed collective mock URL into the real N04-N06 workflow with the same authorization", async () => {
+  it("routes the removed collective mock URL into the real execution workflow with the same authorization", async () => {
     const app = await readFile("apps/web/src/App.tsx", "utf8");
     expect(app).toContain('path === "/ui/work-reporting" || path === "/ui/piecework/collective"');
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
     expect(app).not.toContain("<MobileForm piecework />");
   });
 
-  it("keeps high-frequency business selectors searchable without exposing internal IDs", async () => {
-    const [initiation, processConfiguration, workReporting, externalResponsibility] = await Promise.all([
+  it("keeps high-frequency business selectors searchable with a visible N02 worker-search boundary", async () => {
+    const [initiation, processConfiguration, processConfigurationCss, workReporting, externalResponsibility] = await Promise.all([
       readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.css", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
     ]);
@@ -139,12 +143,14 @@ describe("business-chain UI handoff contracts", () => {
     expect(processConfiguration).toContain('placeholder="搜索工序"');
     expect(processConfiguration).toContain("<SearchSelect");
     expect(processConfiguration).toContain("processOptions.map");
+    expect(processConfigurationCss).toContain(".process-worker-picker>.search-select input");
+    expect(processConfigurationCss).toContain("border:1px solid var(--dx-v2-color-border)");
     expect(workReporting).toContain('peopleType === "internal" ? "正式工" : "临时工"');
     expect(workReporting).toContain("filteredPeople");
     expect(externalResponsibility).toContain("输入供应商名称搜索");
   });
 
-  it("keeps N04 people sourced from worker eligibility and explicit temporary-worker records", async () => {
+  it("keeps legacy assignment people sourced from worker eligibility and explicit temporary-worker records", async () => {
     const [server, workerAware, workReportingRoutes, workReportingService, migration, app, shell] = await Promise.all([
       readFile("apps/api/src/server.ts", "utf8"),
       readFile("apps/api/src/access/worker-aware-access-service.ts", "utf8"),
@@ -199,7 +205,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(externalQueue).not.toContain('actionHref="/ui/responsibility"');
   });
 
-  it("keeps N09 owner signature retry-safe, with only agree and direct reject actions", async () => {
+  it("keeps N08 owner signature retry-safe, with only agree and direct reject actions", async () => {
     const source = await readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8");
     expect(source).toContain("pendingMutationKeys");
     expect(source).toContain("responsibility-owner-signature/${decision}");

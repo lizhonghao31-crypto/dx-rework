@@ -115,9 +115,9 @@ type WorkflowStage = Readonly<{ key: string; title: string; nodes: readonly Work
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
-  pending_process_configuration: { label: "待工序与候选单价", next: "下一步由尾部主管配置工序、候选单价并分配尾查" },
-  pending_ie_review: { label: "待 IE 核价", next: "尾查已可并行清点；IE 通过工序与单价后，进入人员分配" },
-  pending_task_assignment: { label: "待分配人员", next: "工序与单价已核准，下一步由尾部主管分配返工人员" },
+  pending_process_configuration: { label: "待分配工序 &工人", next: "下一步由尾部主管一次完成工序、候选单价、返工人员与尾查分配" },
+  pending_ie_review: { label: "待 IE 核价", next: "尾查已可并行清点；IE 通过后预分配工人自动生效并进入返工执行" },
+  pending_task_assignment: { label: "待启动预分配工人", next: "IE 已通过；预分配工人等待自动启动，可在节点02重试启动" },
   in_progress: { label: "返工执行中", next: "工人登记个人完成数量，全部完成后由尾部主管核量" },
   pending_order_review: { label: "待尾部主管整单确认", next: "核对工人上数不超过尾查汇总，并确认临时工实发系数" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
@@ -146,7 +146,7 @@ const currentNodeByStatus: Partial<Record<ReworkStatus, WorkflowNodeKey>> = {
   draft: "initiation",
   pending_process_configuration: "process_configuration",
   pending_ie_review: "ie_review",
-  pending_task_assignment: "task_assignment",
+  pending_task_assignment: "process_configuration",
   in_progress: "work_reporting",
   pending_order_review: "whole_order_review",
   pending_quantity_adjustment_ie_review: "whole_order_review",
@@ -189,6 +189,7 @@ const orderIdFromLocation = (): string | null => {
 const workflowNodeFromSearch = (): WorkflowNodeKey | null => {
   const value = new URLSearchParams(window.location.search).get("node");
   if (value === "archive") return "settlement_followup";
+  if (value === "task_assignment") return "process_configuration";
   return value && nodeKeys.has(value as WorkflowNodeKey) ? value as WorkflowNodeKey : null;
 };
 
@@ -279,27 +280,26 @@ const buildWorkflow = (
       title: "发起、配置与核价",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "工序与候选单价", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、候选单价并分配尾查；不再预估返工数量。"),
-        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后才能分配返工人员。"),
+        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "一次完成返工工序、候选单价、返工人员与尾查分配；不再设置独立人员分配节点。"),
+        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后预分配工人自动生效并进入返工执行。"),
       ],
     },
     {
       key: "execution",
-      title: "分工与返工执行",
+      title: "返工执行",
       nodes: [
-        node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按 IE 核准的工序为正式工或临时工分配任务。"),
-        node("work_reporting", "05", "工人完工上数", "返工人员", "待人员分配", "工人一次提交本人最终完工件数；临时工由尾部主管代录。"),
-        node("tail_inspection", "06", "尾查报数", "尾查", "待尾部主管分配", "N02 分配后即可开始；多人清点结果按工序汇总。"),
+        node("work_reporting", "04", "工人完工上数", "返工人员", "待 IE 核价通过并自动激活人员", "工人一次提交本人最终完工件数；临时工由尾部主管代录。"),
+        node("tail_inspection", "05", "尾查报数", "尾查", "待尾部主管分配", "N02 分配后即可开始；多人清点结果按工序汇总。"),
       ],
     },
     {
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("whole_order_review", "07", "尾部主管整单确认", "尾部主管", "待工人上数与尾查报数完成", "逐工序核对工人上数不得超过尾查汇总；临时工实发系数在此确认。"),
-        node("responsibility", "08", "责任判定", "生产管理", "待 N07 提交", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
-        node("owner_signature", "09", "老板确认签字", "老板", "待 N08 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
-        node("settlement_followup", "10", "返工业务完成", "系统", "N09 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
+        node("whole_order_review", "06", "尾部主管整单确认", "尾部主管", "待工人上数与尾查报数完成", "逐工序核对工人上数不得超过尾查汇总；临时工实发系数在此确认。"),
+        node("responsibility", "07", "责任判定", "生产管理", "待 N06 提交", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
+        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
       ],
     },
   ];
@@ -336,9 +336,8 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action === "rework.attachments.supplement") return "initiation";
   if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
-  if (action.includes("process_configuration")) return "process_configuration";
+  if (action.includes("process_configuration") || action.includes("process_worker_plan") || action.includes("work_task")) return "process_configuration";
   if (action.includes("tail_inspection")) return "tail_inspection";
-  if (action.includes("work_task")) return "task_assignment";
   if (action.includes("work_report")) return "work_reporting";
   if (action.includes("whole_order")) return "whole_order_review";
   if (action.includes("quantity.")) return "quantity_adjustment";
@@ -353,6 +352,7 @@ const historyActionLabel = (action: string): string => {
   if (action === "rework.attachments.supplement") return "补充订单图片";
   if (action === "rework.submit") return "提交返工单";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
+  if (action.includes("process_worker_plan")) return "返工人员预分配";
   if (action.includes("process_configuration")) return "工序配置处理";
   if (action.includes("tail_inspection")) return "尾查报数";
   if (action.includes("work_task")) return "返工人员分配";
@@ -655,7 +655,7 @@ export function ReworkDetailPage({
             <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
               {workflowNodes.map(renderWorkflowNode)}
             </div>
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N08 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
+            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
           </section>
         </div>
 
@@ -760,7 +760,7 @@ function SettlementLedgerNotice({ detail }: { detail: ReworkBusinessDetail }) {
       ? "所有供应商扣款台账已终结。"
       : detail.settlementStatus === "revision_in_progress"
         ? "存在责任调整，待重新确认后自动生成新的责任结算台账。"
-        : "责任结算台账已自动生成；供应商实际扣款在 N10 的后续结算区跟进，不阻塞订单完成。";
+        : "责任结算台账已自动生成；供应商实际扣款在 N09 的后续结算区跟进，不阻塞订单完成。";
   return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">系统自动生成 · 只读</StatusBadge><h2>09 · 责任结算台账</h2><p>{text}</p></Surface>;
 }
 
@@ -768,7 +768,7 @@ function OrderCompletionAndSettlementSummary({ detail }: { detail: ReworkBusines
   const orderCompleted = detail.status === "completed";
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone={orderCompleted ? "success" : "info"}>{orderCompleted ? "订单已完成" : "责任结算中"}</StatusBadge>
-    <h2>10 · 订单完成与后续结算</h2>
+    <h2>09 · 订单完成与后续结算</h2>
     <p>{orderCompleted
       ? "返工生产和责任判定已经结束；工资月结与供应商实际扣款继续独立跟进，不会重新打开订单。"
       : "责任结算台账已生成，正在完成后续责任结算。"}</p>
@@ -780,7 +780,7 @@ function WageSettlementFollowUp({ periods }: { periods: ReworkBusinessDetail["un
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone="info">已计入工资批次</StatusBadge>
     <h2>工资结算进度</h2>
-    <p>订单已经完成；工资在 N10 内按月份独立核对，不会重新打开订单主流程。</p>
+    <p>订单已经完成；工资在 N09 内按月份独立核对，不会重新打开订单主流程。</p>
     <div className="rework-detail-wage-links">
       {periods.map((period) => <a key={period.periodId} href={pageUrl(`ui/wages/${period.periodId}`)}>
         {period.periodMonth.slice(0, 7)} · {wageStatusLabel(period.status)} · 进入处理
