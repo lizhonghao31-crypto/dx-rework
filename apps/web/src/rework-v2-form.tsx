@@ -144,9 +144,7 @@ export function ReworkInitiationV2Form() {
     if (!form.factory.startsWith("supplier:")) return undefined;
     const supplierId = form.factory.slice("supplier:".length);
     const selected = options.factories.find((factory) => factory.supplierId === supplierId);
-    return selected
-      ? { type: "supplier", supplierId: selected.supplierId, supplierVersion: selected.supplierVersion }
-      : undefined;
+    return selected ? { type: "supplier", supplierId: selected.supplierId } : undefined;
   };
 
   const fingerprint = (): string => JSON.stringify({
