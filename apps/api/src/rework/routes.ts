@@ -230,7 +230,7 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     registerReworkSupplyContextRoutes(app, {
       authenticate: dependencies.authenticate,
       service: dependencies.supplyContextService,
-      root: dependencies.root,
+      ...(dependencies.root ? { root: dependencies.root } : {}),
     });
   }
   if (dependencies.erp) registerErpIntegrationRoutes(app, { authenticateSession: dependencies.authenticate, ...dependencies.erp });
