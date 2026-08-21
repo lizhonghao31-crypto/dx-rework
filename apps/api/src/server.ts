@@ -29,6 +29,7 @@ import { ReworkBusinessDetailService } from "./rework/rework-business-detail-ser
 import { InspectionImageExtractionService } from "./rework/inspection-image-extraction-service.js";
 import { ReworkInitiationService } from "./rework/service.js";
 import { ReworkSupplyContextService } from "./rework/supply-context-service.js";
+import { ReworkV2DraftService } from "./rework/v2-draft-service.js";
 import { ReworkV2SubmissionService } from "./rework/v2-submission-service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { TailInspectionService } from "./rework/tail-inspection-service.js";
@@ -109,6 +110,10 @@ const reworkService = new ReworkInitiationService(
   todoService,
 );
 const reworkSupplyContextService = new ReworkSupplyContextService(
+  database,
+  config.dingtalk.corpId,
+);
+const reworkV2DraftService = new ReworkV2DraftService(
   database,
   config.dingtalk.corpId,
 );
@@ -205,6 +210,7 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    v2DraftService: reworkV2DraftService,
     v2SubmissionService: reworkV2SubmissionService,
     businessDetailService: reworkBusinessDetailService,
     supplyContextService: reworkSupplyContextService,
