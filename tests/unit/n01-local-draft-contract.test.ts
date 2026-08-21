@@ -6,12 +6,19 @@ describe("N01 local-only draft contract", () => {
   it("never creates a rework order when the user presses save on the new-order page", async () => {
     const source = await readFile("apps/web/src/rework-v2-form.tsx", "utf8");
     const saveBlock = source.match(/const save = async \(\): Promise<void> => \{[\s\S]*?\n {2}const submit = async/);
+    const saveSource = saveBlock?.[0] ?? "";
+    const localBranchStart = saveSource.indexOf("if (!reworkOrderId && !order) {");
+    const serverDraftStart = saveSource.indexOf("const saved = await persistServerDraft();");
 
-    expect(saveBlock?.[0]).toBeTruthy();
-    expect(saveBlock?.[0]).toContain("writeLocalN01Draft(form, images)");
-    expect(saveBlock?.[0]).toContain("已保存到本机；尚未创建返工单");
-    expect(saveBlock?.[0]).not.toContain("persistServerDraft");
-    expect(saveBlock?.[0]).not.toContain("rework-orders/drafts");
+    expect(saveSource).toBeTruthy();
+    expect(localBranchStart).toBeGreaterThanOrEqual(0);
+    expect(serverDraftStart).toBeGreaterThan(localBranchStart);
+    const freshOrderSaveBranch = saveSource.slice(localBranchStart, serverDraftStart);
+    expect(freshOrderSaveBranch).toContain("writeLocalN01Draft(form, images)");
+    expect(freshOrderSaveBranch).toContain("已保存到本机；尚未创建返工单");
+    expect(freshOrderSaveBranch).toContain("return;");
+    expect(freshOrderSaveBranch).not.toContain("persistServerDraft");
+    expect(freshOrderSaveBranch).not.toContain("rework-orders/drafts");
     expect(source).toContain('const LOCAL_N01_DRAFT_KEY = "dx-rework:n01-local-draft:v1";');
     expect(source).toContain("window.localStorage.setItem(LOCAL_N01_DRAFT_KEY");
   });
