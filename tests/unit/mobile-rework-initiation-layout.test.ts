@@ -26,7 +26,7 @@ describe("mobile rework initiation layout", () => {
     expect(css).toContain("background:#fff");
   });
 
-  it("folds optional relationships under more info and keeps draft save on the current page", async () => {
+  it("folds optional relationships under more info and makes draft save navigation-proof", async () => {
     const source = await read("apps/web/src/rework-v2-form.tsx");
 
     expect(source).toContain('<details className="rework-v2-more">');
@@ -42,7 +42,25 @@ describe("mobile rework initiation layout", () => {
     expect(saveBlock?.[0]).toBeTruthy();
     expect(saveBlock?.[0]).not.toContain("onOrderChanged");
     expect(saveBlock?.[0]).not.toContain("window.location");
+    expect(source).toContain('type="button"');
+    expect(source).toContain("event.preventDefault();");
+    expect(source).toContain("event.stopPropagation();");
     expect(source).not.toContain("更多订单资料（可补充）");
     expect(source).not.toContain("验货报告步骤");
+  });
+
+  it("places N01 feedback with the submit actions instead of a standalone surface", async () => {
+    const [source, css] = await Promise.all([
+      read("apps/web/src/rework-v2-form.tsx"),
+      read("apps/web/src/rework-v2-form.css"),
+    ]);
+    expect(source).not.toContain('className="rework-v2-status"');
+    expect(source).toContain('className="rework-v2-action-area"');
+    expect(source).toContain('className="rework-v2-action-feedback" role="status"');
+    expect(source.indexOf('className="rework-v2-actions"')).toBeLessThan(
+      source.indexOf('className="rework-v2-action-feedback"'),
+    );
+    expect(css).toContain(".rework-v2-action-feedback");
+    expect(css).not.toContain(".rework-v2-status");
   });
 });

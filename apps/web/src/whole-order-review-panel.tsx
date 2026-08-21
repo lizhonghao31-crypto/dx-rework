@@ -251,10 +251,10 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     {data.canReview && data.reworkStatus === "pending_order_review" && data.processes.every((process) => process.finalUnitPrice !== null) && <Surface>
       <h2>确认整单并生成工资</h2>
       <p className="whole-order-confirmation-copy">确认后生成工资并进入责任判定。</p>
-      {temporaryCoefficientIssue && <p role="status">{temporaryCoefficientIssue}</p>}
       <div className="mobile-actions">
         <Button variant="primary" onClick={() => void approve()} disabled={busy || !wholeOrderReady}>{busy ? "确认中…" : "确认整单并进入责任判定"}</Button>
       </div>
+      {temporaryCoefficientIssue && <p role="status">{temporaryCoefficientIssue}</p>}
     </Surface>}
   </div>;
 }
