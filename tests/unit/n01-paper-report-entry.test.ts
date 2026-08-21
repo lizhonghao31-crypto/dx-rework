@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("N01 v2 streamlined initiation", () => {
-  it("keeps only the three routing facts and one image as the primary required contract", async () => {
+  it("keeps only the three routing facts and one report as the primary required contract", async () => {
     const [form, app, migration, submission] = await Promise.all([
       readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/App.tsx", "utf8"),
@@ -15,10 +15,11 @@ describe("N01 v2 streamlined initiation", () => {
     for (const label of ["款号 <b>*</b>", "加工厂 <b>*</b>", "订单跟单 <b>*</b>"]) {
       expect(form).toContain(label);
     }
-    expect(form).toContain("现场图片 <b>*</b>");
+    expect(form).toContain("上传报告 <b>*</b>");
+    expect(form).toContain("＋ 上传报告");
     expect(form).toContain("availableImageCount > 0");
     expect(form).toContain("order?.attachmentIds.length ?? existingAttachmentCount");
-    expect(form).toContain("仅支持 JPEG / PNG / WebP 图片");
+    expect(form).toContain("报告仅支持 JPEG / PNG / WebP 图片格式");
     expect(form).not.toContain("验货阶段（必填）");
     expect(form).not.toContain("订单数量（必填）");
     expect(migration).toContain("rework_orders_n01_v2_submission_complete_check");
@@ -27,13 +28,15 @@ describe("N01 v2 streamlined initiation", () => {
     expect(submission).toContain("REWORK_IMAGE_REQUIRED");
   });
 
-  it("keeps optional supplier relationships searchable and outside the core rework row", async () => {
+  it("keeps optional supplier relationships searchable, folded and outside the core rework row", async () => {
     const [form, migration, contracts] = await Promise.all([
       readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/api/migrations/0077_rework_v2_n01_supply_context.sql", "utf8"),
       readFile("packages/contracts/src/rework-supply-context.ts", "utf8"),
     ]);
 
+    expect(form).toContain('<details className="rework-v2-more">');
+    expect(form).toContain("<summary>更多信息</summary>");
     for (const label of ["洗水厂", "印绣花厂", "面辅料供应商", "印绣花跟单"]) {
       expect(form).toContain(label);
     }
