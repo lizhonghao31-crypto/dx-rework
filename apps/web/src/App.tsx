@@ -31,6 +31,8 @@ import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { landingTarget } from "./landing-target.js";
 import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
+import { ReceivingPage } from "./receiving-page.js";
+import { OrderBoardPage } from "./order-board-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -182,6 +184,8 @@ export function App() {
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
   else if (path.startsWith("/ui/my-tasks/")) page = <ResponsibilityTaskPage />;
+  else if (path === "/ui/receiving") page = <ReceivingPage />;
+  else if (path === "/ui/orders") page = <Shell active="订单看板"><OrderBoardPage /></Shell>;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
@@ -192,16 +196,21 @@ export function App() {
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
   else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationForm /></Shell>;
   else if (path === "/ui/process-configuration") page = hasReworkContext
-    ? <Shell active="全部订单" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
-    : <WorkflowQueuePage active="全部订单" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
+    ? <Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
+    : <WorkflowQueuePage active="返工单看板" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
   else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
-    ? <Shell active="全部订单" mobileNavigation="transaction"><WorkReportingForm /></Shell>
-    : <WorkflowQueuePage active="全部订单" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
+    ? <Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>
+    : <WorkflowQueuePage active="返工单看板" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
 
   const owner = { requiredRole: "owner_group" } as const;
 
+  if (path === "/ui/receiving") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+    ]}>{page}</AuthGate>;
+  }
   if (path === "/ui/qc/new") {
     return <AuthGate requiredAnyOf={[
       owner,

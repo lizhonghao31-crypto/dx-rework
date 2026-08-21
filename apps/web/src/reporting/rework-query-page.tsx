@@ -70,8 +70,8 @@ export function ReworkQueryPage() {
       .finally(() => setDeletingOrderId(""));
   };
   const items = state.kind === "ready" ? state.value.items : [];
-  return <Shell active="全部订单">
-    <Header title="全部订单" subtitle="查看权限范围内订单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "查询中"} />
+  return <Shell active="返工单看板">
+    <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "查询中"} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
