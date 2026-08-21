@@ -2,7 +2,7 @@
   "migrations": [
     { "version": "0001_platform_foundation", "checksum": "c9f69f74ef47ef8b1bc54db28a6b91c81614949a1e9ee40b8a91212b1fb0b9fe" },
     { "version": "0002_dingtalk_identity_access", "checksum": "155fd00415e4a15c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f" },
-    { "version": "0003_identity_union_continuity", "checksum": "44def9af2f392049de30b77206ec41f40b238991979724498cf24655c23a5b68" },
+    { "version": "0003_identity_union_continuity", "checksum": "44def9f74ef47ef8b1bc54db28a6b91c81614949a1e9ee40b8a91212b1fb0b9fe" },
     { "version": "0004_public_tools_foundation", "checksum": "d1bd3c09355e3737f3587583f8d2a9d0c78d73c8099b6d785dc1d887efbeb600" },
     { "version": "0005_access_master_data", "checksum": "13a8fff97ce6fd21ca5da835a4378576a5d28b8e4148b8115c9ac1cf97a51d47" },
     { "version": "0006_rework_initiation", "checksum": "290c5dfba0f67c0c1d3c20cd2cc3d6dd4b086bbec6c499e7f01fbaaeff5e4fd6" },
@@ -74,6 +74,7 @@
     { "version": "0072_tail_inspection_rejection", "checksum": "238984ca539ab697871b35836825d3cf9c62b7f5b86883aadef67326ab58573f" },
     { "version": "0073_wage_direct_month_close_guard", "checksum": "c6e4ebc9c7eb4ee15b0da9b02a186a42a5e29e3d53528cd50df5815081819189" },
     { "version": "0074_wage_review_adjustment_retirement", "checksum": "37c93954349fad851bfe2b813c2113271b5e8c355d4abc7223488d990167bbfc" },
-    { "version": "0075_root_delete_wage_cleanup", "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018" }
+    { "version": "0075_root_delete_wage_cleanup", "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018" },
+    { "version": "0076_receiving_fact_layer", "checksum": "cc01d08c793638f6290df825f126e554ffd1c485fa79739f9920a251b4142f79" }
   ]
 }
