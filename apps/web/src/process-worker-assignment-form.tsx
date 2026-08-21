@@ -29,6 +29,7 @@ type Detail = Readonly<{
   processConfigurationCreatedBy: { userId: string; displayName: string } | null;
 }>;
 type Person = WorkTaskAssignablePeopleResponse["people"][number];
+type PersonIdentity = Pick<Person, "personId" | "displayName" | "personType">;
 type ItemForm = Readonly<{ source: "catalog" | "custom"; processId: string; customProcessName: string; unitPrice: string }>;
 type PendingSubmit = Readonly<{
   reworkOrderId: string;
@@ -82,6 +83,8 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
   const [workerIds, setWorkerIds] = useState<Record<string, string[]>>({});
   const [tailPersonIds, setTailPersonIds] = useState<string[]>([]);
   const [tailUnitPrice, setTailUnitPrice] = useState("");
+  const [workerSearches, setWorkerSearches] = useState<Record<string, string>>({});
+  const [tailSearch, setTailSearch] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载分配工序与工人…");
   const [busy, setBusy] = useState(false);
@@ -174,6 +177,12 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     pendingSubmit.current = null;
   };
   const removeWorker = (index: number, personId: string) => { setWorkerIds((current) => ({ ...current, [String(index)]: (current[String(index)] ?? []).filter((id) => id !== personId) })); pendingSubmit.current = null; };
+  const toggleTailPerson = (personId: string, selected: boolean) => {
+    setTailPersonIds((current) => selected
+      ? current.includes(personId) ? current : [...current, personId]
+      : current.filter((id) => id !== personId));
+    pendingSubmit.current = null;
+  };
 
   const persistMergedDraft = async (): Promise<ProcessConfigurationResponse> => {
     if (!response || !editable || itemIssue || workerIssue >= 0) {
@@ -268,9 +277,16 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "临时工添加失败"); } finally { setBusy(false); }
   };
 
-  const peopleOptions = useMemo(() => people.filter((person) => person.eligibleExecutionKinds.includes("worker")).map((person) => ({ value: person.personId, label: `${person.displayName}${person.personType === "temporary" ? " · 临时工" : ""}`, keywords: `${person.displayName} ${person.personType === "temporary" ? "临时工" : "正式工"}` })), [people]);
+  const workerOptions = useMemo(() => people.filter((person) => person.eligibleExecutionKinds.includes("worker")), [people]);
   const tailOptions = useMemo(() => people.filter((person) => person.eligibleExecutionKinds.includes("tail_inspection")), [people]);
-  const peopleById = useMemo(() => new Map(people.map((person) => [person.personId, person])), [people]);
+  const peopleById = useMemo(() => {
+    const identities = new Map<string, PersonIdentity>();
+    for (const assignment of plan?.assignments ?? []) {
+      for (const member of assignment.members) identities.set(member.personId, member);
+    }
+    for (const person of people) identities.set(person.personId, person);
+    return identities;
+  }, [people, plan]);
   const changedProps = onOrderChanged ? { onOrderChanged } : {};
 
   if (!response || !plan) return <Surface>{message || "正在加载…"}</Surface>;
@@ -285,20 +301,51 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     return <div className="process-worker-page">
       <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。</p></div>
       <Surface>
-        <div className="section-title"><div><h2>工序与人员</h2><p>不填计划数量；每道工序至少 1 人，可多人。</p></div><Button disabled={busy} onClick={() => { setItems((current) => [...current, emptyItem()]); setWorkerIds((current) => ({ ...current, [String(items.length)]: [] })); }}>增加工序</Button></div>
-        <div className="process-worker-lines">{items.map((item, index) => { const selectedIds = workerIds[String(index)] ?? []; return <section className="process-worker-line" key={index}>
-          <div className="process-worker-line__heading"><b>工序 {index + 1}</b>{items.length > 1 ? <Button disabled={busy} onClick={() => { setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)); setWorkerIds((current) => Object.fromEntries(items.filter((_, itemIndex) => itemIndex !== index).map((_, newIndex) => { const oldIndex = newIndex >= index ? newIndex + 1 : newIndex; return [String(newIndex), current[String(oldIndex)] ?? []]; }))); }}>删除</Button> : null}</div>
-          <div className="process-worker-fields"><div className="process-worker-source"><label><input type="radio" checked={item.source === "catalog"} disabled={busy} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} /> 公共工序</label><label><input type="radio" checked={item.source === "custom"} disabled={busy} onChange={() => setItem(index, { source: "custom", processId: "" })} /> 自定义工序</label></div>
-            {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => setItem(index, { processId })} /></span></label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
-            <InsetField label="候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} disabled={busy} onChange={(event) => setItem(index, { unitPrice: event.target.value })} />
-          </div>
-          <div className="process-worker-picker"><div><b>返工人员 *</b><small>{selectedIds.length ? `已选 ${selectedIds.length} 人` : "至少选择 1 人"}</small></div><div className="process-worker-chips">{selectedIds.map((personId) => { const person = peopleById.get(personId); return <span key={personId}>{person?.displayName ?? "人员"}{person?.personType === "temporary" ? " · 临时工" : ""}<button type="button" disabled={busy} onClick={() => removeWorker(index, personId)}>×</button></span>; })}</div><SearchSelect options={peopleOptions.filter((option) => !selectedIds.includes(option.value))} value="" placeholder="搜索并添加工人" emptyText="没有匹配人员" disabled={busy} onChange={(personId) => addWorker(index, personId)} /></div>
-        </section>; })}</div>
-        {canCreateTemporary ? <div className="process-worker-temp-entry"><Button disabled={busy} onClick={() => setTemporaryDialogOpen(true)}>＋ 新增临时工</Button></div> : null}
+        <div className="section-title"><div><h2>工序与人员</h2><p>左侧设置工序与价格，右侧快速分配正式工或临时工；每道工序至少 1 人。</p></div><Button disabled={busy} onClick={() => { setItems((current) => [...current, emptyItem()]); setWorkerIds((current) => ({ ...current, [String(items.length)]: [] })); }}>增加工序</Button></div>
+        <div className="process-worker-lines">{items.map((item, index) => {
+          const key = String(index);
+          const selectedIds = workerIds[key] ?? [];
+          const query = (workerSearches[key] ?? "").trim().toLocaleLowerCase();
+          const filteredWorkers = workerOptions.filter((person) => {
+            const personType = person.personType === "temporary" ? "临时工" : "正式工";
+            return !query || `${person.displayName} ${personType}`.toLocaleLowerCase().includes(query);
+          });
+          const workerGroups = [
+            { label: "正式工", people: filteredWorkers.filter((person) => person.personType === "internal") },
+            { label: "临时工", people: filteredWorkers.filter((person) => person.personType === "temporary") },
+          ] as const;
+          return <section className="process-worker-line" key={index}>
+            <div className="process-worker-line__heading"><b>工序 {index + 1}</b>{items.length > 1 ? <Button disabled={busy} onClick={() => { setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)); setWorkerIds((current) => Object.fromEntries(items.filter((_, itemIndex) => itemIndex !== index).map((_, newIndex) => { const oldIndex = newIndex >= index ? newIndex + 1 : newIndex; return [String(newIndex), current[String(oldIndex)] ?? []]; }))); }}>删除</Button> : null}</div>
+            <div className="process-worker-line__body">
+              <div className="process-worker-fields">
+                <div className="process-worker-source"><label><input type="radio" checked={item.source === "catalog"} disabled={busy} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} /> 公共工序</label><label><input type="radio" checked={item.source === "custom"} disabled={busy} onChange={() => setItem(index, { source: "custom", processId: "" })} /> 自定义工序</label></div>
+                {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => setItem(index, { processId })} /></span></label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
+                <InsetField label="候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} disabled={busy} onChange={(event) => setItem(index, { unitPrice: event.target.value })} />
+              </div>
+              <div className="process-worker-picker">
+                <div className="process-worker-picker__heading"><b>返工人员 *</b><small>{selectedIds.length ? `已分配 ${selectedIds.length} 人` : "至少选择 1 人"}</small></div>
+                <div className="process-worker-selected"><span>已分配人员</span><div className="process-worker-chips">{selectedIds.length ? selectedIds.map((personId) => { const person = peopleById.get(personId); return <span key={personId}>{person?.displayName ?? "已分配人员"}{person?.personType === "temporary" ? " · 临时工" : ""}<button type="button" aria-label={`移除 ${person?.displayName ?? "已分配人员"}`} disabled={busy} onClick={() => removeWorker(index, personId)}>×</button></span>; }) : <small>暂未分配</small>}</div></div>
+                <input className="process-worker-people-search" type="search" value={workerSearches[key] ?? ""} placeholder="搜索正式工或临时工" disabled={busy} onChange={(event) => setWorkerSearches((current) => ({ ...current, [key]: event.target.value }))} />
+                <div className="process-worker-people-groups">{workerGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}>
+                  <legend><span>{group.label}</span><small>{group.people.length} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={() => setTemporaryDialogOpen(true)}>＋新增</button> : null}</legend>
+                  <div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={selectedIds.includes(person.personId)} disabled={busy} onChange={(event) => event.target.checked ? addWorker(index, person.personId) : removeWorker(index, person.personId)} /><span>{person.displayName}</span></label>) : <p>没有匹配人员</p>}</div>
+                </fieldset>)}</div>
+              </div>
+            </div>
+          </section>;
+        })}</div>
       </Surface>
-      <Surface><div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已选 ${tailPersonIds.length} 人` : "至少 1 人"}</StatusBadge></div>
-        <InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} />
-        <div className="process-worker-tail-list">{tailOptions.map((inspector) => { const personId = inspector.personId; const selected = tailPersonIds.includes(personId); return <div key={personId}><label><input type="checkbox" checked={selected} disabled={busy} onChange={(event) => { setTailPersonIds((current) => event.target.checked ? [...current, personId] : current.filter((id) => id !== personId)); pendingSubmit.current = null; }} /> {inspector.displayName}</label></div>; })}</div>
+      <Surface className="process-worker-tail-card">
+        <div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少 1 人"}</StatusBadge></div>
+        <div className="process-worker-tail-body">
+          <div className="process-worker-tail-work"><b>尾查</b><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
+          <div className="process-worker-picker">
+            <div className="process-worker-picker__heading"><b>尾查人员 *</b><small>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少选择 1 人"}</small></div>
+            <div className="process-worker-selected"><span>已分配人员</span><div className="process-worker-chips">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); return <span key={personId}>{person?.displayName ?? "已分配尾查"}<button type="button" aria-label={`移除 ${person?.displayName ?? "已分配尾查"}`} disabled={busy} onClick={() => toggleTailPerson(personId, false)}>×</button></span>; }) : <small>暂未分配</small>}</div></div>
+            <input className="process-worker-people-search" type="search" value={tailSearch} placeholder="搜索尾查人员" disabled={busy} onChange={(event) => setTailSearch(event.target.value)} />
+            <fieldset className="process-worker-people-group process-worker-people-group--tail"><legend><span>尾查人员</span><small>{tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).length} 人</small></legend><div>{tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).map((person) => <label key={person.personId}><input type="checkbox" checked={tailPersonIds.includes(person.personId)} disabled={busy} onChange={(event) => toggleTailPerson(person.personId, event.target.checked)} /><span>{person.displayName}</span></label>)}</div></fieldset>
+          </div>
+        </div>
       </Surface>
       <div className="process-worker-actions"><Button disabled={busy || !saveReady} onClick={() => void save()}>{busy ? "处理中…" : "保存工序&工人"}</Button><Button variant="primary" disabled={busy || !submitReady} onClick={() => void submit()}>{busy ? "提交中…" : "提交 IE 核价"}</Button>{readinessIssues.length ? <p role="status">还需完成：{readinessIssues.join("；")}</p> : <p role="status">{message}</p>}</div>
       {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={() => setTemporaryDialogOpen(false)}><div role="dialog" aria-modal="true" aria-label="新增临时工" onMouseDown={(event) => event.stopPropagation()}><Surface><h2>新增临时工</h2><InsetField label="姓名" value={temporaryName} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="备注（可选）" value={temporaryRemark} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={() => setTemporaryDialogOpen(false)}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void createTemporaryWorker()}>添加临时工</Button></div></Surface></div></div> : null}
