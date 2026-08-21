@@ -24,6 +24,9 @@ describe("business action readiness contract", () => {
     expect(source).toContain('disabled={busy || !saveReady}');
     expect(source).toContain('disabled={busy || !submitReady}');
     expect(source).toContain('还需完成：{submitReadinessIssues.join("；")}');
+    expect(source.indexOf('className="mobile-actions process-configuration-actions"')).toBeLessThan(
+      source.indexOf('className="process-readiness" role="status"'),
+    );
     expect(source).toContain('disabled={busy || !reviewReason.trim()}');
   });
 
@@ -35,16 +38,22 @@ describe("business action readiness contract", () => {
     expect(source).toContain('disabled={busy || !reportsReady}');
   });
 
-  it("gates N06 and N07 final actions with the same validation rules used on click", async () => {
+  it("gates N06 and N07 final actions and keeps readiness text below those actions", async () => {
     const [tail, wholeOrder] = await Promise.all([
       readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
     ]);
     expect(tail).toContain("const tailSubmitReady = Boolean(");
     expect(tail).toContain('disabled={busy || !tailSubmitReady}');
+    expect(tail.indexOf('className="mobile-actions tail-inspection-actions"')).toBeLessThan(
+      tail.indexOf('className="tail-inspection-readiness" role="status"'),
+    );
     expect(wholeOrder).toContain("const temporaryCoefficientIssue =");
     expect(wholeOrder).toContain("const wholeOrderReady = allComplete && temporaryCoefficientIssue === \"\";");
     expect(wholeOrder).toContain('disabled={busy || !wholeOrderReady}');
+    expect(wholeOrder.lastIndexOf('className="mobile-actions"')).toBeLessThan(
+      wholeOrder.lastIndexOf('{temporaryCoefficientIssue && <p role="status">'),
+    );
   });
 
   it("requires a rejection reason before the N09 own-factory rejection action is enabled", async () => {
@@ -61,6 +70,9 @@ describe("business action readiness contract", () => {
     expect(source).toContain("&& inputCents <= remainingCents;");
     expect(source).toContain('disabled={busy || !deductionReady}');
     expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(source.indexOf('className="external-case-actions"')).toBeLessThan(
+      source.indexOf('<small role="status">请输入大于 0、最多两位小数且不超过剩余金额的本次扣款。</small>'),
+    );
     expect(source).toContain("requestRevision(caseItem)");
   });
 
