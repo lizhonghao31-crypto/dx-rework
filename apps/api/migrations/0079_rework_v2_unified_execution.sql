@@ -510,3 +510,136 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM operation_events event WHERE event.event_id=audit_event_id::uuid AND event.request_id=audit_request_id AND event.actor_id=audit_actor_id AND event.entity_type='rework_order' AND event.entity_id=NEW.rework_order_id::text AND ((event.action=expected_action AND (event.authorization_capability=expected_capability OR (expected_action='rework.work_report.submit' AND event.authorization_capability IN ('work:report','work:report_for_worker','tail_inspection:report')))) OR (alternative_action IS NOT NULL AND event.action=alternative_action AND event.authorization_capability=alternative_capability) OR (alternative_action_two IS NOT NULL AND event.action=alternative_action_two AND event.authorization_capability=alternative_capability_two) OR (alternative_action_three IS NOT NULL AND event.action=alternative_action_three AND event.authorization_capability=alternative_capability_three)) AND event.after_state @> jsonb_build_object('reworkOrderId',NEW.rework_order_id,'reworkNo',NEW.rework_no,'status',NEW.status,'styleNo',NEW.style_no,'orderNo',NEW.order_no,'merchandiserUserId',NEW.merchandiser_user_id,'processingFactory',CASE WHEN NEW.processing_factory_type IS NULL THEN NULL WHEN NEW.processing_factory_type='own_factory' THEN jsonb_build_object('type','own_factory') ELSE jsonb_build_object('type','supplier','supplierId',NEW.processing_factory_supplier_id,'supplierVersion',NEW.processing_factory_supplier_version) END,'problemPart',NEW.problem_part,'problemDescription',NEW.problem_description,'reworkQuantity',NEW.rework_quantity,'version',NEW.version) AND (NEW.status<>'cancelled' OR (event.after_state->>'cancelReason'=NEW.cancel_reason AND NEW.cancelled_by=audit_actor_id)) AND (NEW.status<>'deleted' OR (event.after_state->>'deletedBy'=NEW.deleted_by::text AND NEW.deleted_by=audit_actor_id))) THEN RAISE EXCEPTION 'rework order audit event does not match the write' USING ERRCODE='55000'; END IF;
   RETURN NEW;
 END $$;
+
+-- Tail inspection is an execution/wage fact, not a repair responsibility line.
+-- Keep the existing responsibility invariant, scoped to ordinary worker processes.
+CREATE OR REPLACE FUNCTION validate_responsibility_version(version_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  determination rework_responsibility_determinations%ROWTYPE;
+  approved_count integer;
+  process_count integer;
+  high_count integer;
+BEGIN
+  SELECT *
+  INTO determination
+  FROM rework_responsibility_determinations
+  WHERE determination_id = version_id;
+
+  IF determination.determination_id IS NULL THEN
+    RETURN;
+  END IF;
+
+  SELECT count(*)
+  INTO approved_count
+  FROM rework_process_configurations configuration
+  JOIN rework_process_configuration_items item USING(configuration_id)
+  WHERE configuration.rework_order_id = determination.rework_order_id
+    AND configuration.status = 'approved'
+    AND item.execution_kind = 'worker';
+
+  SELECT count(*)
+  INTO process_count
+  FROM rework_responsibility_processes
+  WHERE determination_id = version_id;
+
+  IF process_count <> approved_count THEN
+    RAISE EXCEPTION 'responsibility processes must exactly cover approved configuration'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM rework_responsibility_processes process
+    WHERE process.determination_id = version_id
+      AND (
+        NOT EXISTS (
+          SELECT 1
+          FROM rework_responsibility_allocations allocation
+          WHERE allocation.determination_id = process.determination_id
+            AND allocation.configuration_item_id = process.configuration_item_id
+        )
+        OR (
+          SELECT sum(allocation.share_bps)
+          FROM rework_responsibility_allocations allocation
+          WHERE allocation.determination_id = process.determination_id
+            AND allocation.configuration_item_id = process.configuration_item_id
+        ) <> 10000
+      )
+  ) THEN
+    RAISE EXCEPTION 'responsibility allocations must total 10000 bps'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM rework_responsibility_allocations allocation
+    WHERE allocation.determination_id = version_id
+      AND allocation.rounded_amount IS DISTINCT FROM (
+        SELECT coalesce(sum(line.rounded_amount), 0)
+        FROM rework_responsibility_amount_lines line
+        WHERE line.determination_id = allocation.determination_id
+          AND line.configuration_item_id = allocation.configuration_item_id
+          AND line.responsibility_type = allocation.responsibility_type
+      )
+  ) THEN
+    RAISE EXCEPTION 'allocation total differs from amount lines'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM rework_responsibility_processes process
+    WHERE process.determination_id = version_id
+      AND (
+        process.responsibility_amount IS DISTINCT FROM (
+          SELECT coalesce(sum(line.rounded_amount), 0)
+          FROM rework_responsibility_amount_lines line
+          WHERE line.determination_id = process.determination_id
+            AND line.configuration_item_id = process.configuration_item_id
+        )
+        OR process.base_amount IS DISTINCT FROM (
+          SELECT coalesce(sum(source.base_member_share_amount), 0)
+          FROM (
+            SELECT DISTINCT
+                   line.work_report_id,
+                   line.person_id,
+                   line.base_member_share_amount
+            FROM rework_responsibility_amount_lines line
+            WHERE line.determination_id = process.determination_id
+              AND line.configuration_item_id = process.configuration_item_id
+          ) source
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION 'process totals differ from source lines'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF determination.calculation_total IS DISTINCT FROM (
+    SELECT coalesce(sum(process.responsibility_amount), 0)
+    FROM rework_responsibility_processes process
+    WHERE process.determination_id = version_id
+  ) THEN
+    RAISE EXCEPTION 'determination total differs from processes'
+      USING ERRCODE = '23514';
+  END IF;
+
+  SELECT count(*)
+  INTO high_count
+  FROM rework_responsibility_processes
+  WHERE determination_id = version_id
+    AND multiplier > 2;
+
+  IF determination.stage = 'finalized'
+     AND (
+       (high_count = 0 AND determination.source_high_multiplier_confirmation_id IS NOT NULL)
+       OR (high_count > 0 AND determination.source_high_multiplier_confirmation_id IS NULL)
+     ) THEN
+    RAISE EXCEPTION 'finalized high multiplier confirmation is invalid'
+      USING ERRCODE = '23514';
+  END IF;
+END
+$$;

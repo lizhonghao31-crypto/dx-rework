@@ -10,6 +10,8 @@ describe("PR-04 unified rework execution", () => {
     expect(migration).toContain("ADD COLUMN execution_kind text NOT NULL DEFAULT 'worker'");
     expect(migration).toContain("execution_kind IN ('worker','tail_inspection')");
     expect(migration).toContain("rework_process_configuration_one_tail_execution_idx");
+    expect(migration).toContain("CREATE OR REPLACE FUNCTION validate_responsibility_version");
+    expect(migration).toContain("item.execution_kind = 'worker'");
   });
 
   it("keeps tail inspectors as their real role while using unified work reports", async () => {
