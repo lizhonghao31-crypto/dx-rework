@@ -22,6 +22,8 @@ import type { AttachmentService } from "../tools/attachments.js";
 import type { ReworkBusinessDetailService } from "./rework-business-detail-service.js";
 import type { InspectionImageExtractionService } from "./inspection-image-extraction-service.js";
 import type { ReworkInitiationService } from "./service.js";
+import { registerReworkSupplyContextRoutes } from "./supply-context-routes.js";
+import type { ReworkSupplyContextService } from "./supply-context-service.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -51,6 +53,7 @@ export type ReworkHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: ReworkInitiationService;
   businessDetailService?: ReworkBusinessDetailService;
+  supplyContextService?: ReworkSupplyContextService;
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
@@ -203,5 +206,13 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     const query = parse(ReworkOrdersQuerySchema, request.query);
     return dependencies.service.listOwn(await actor(request), query.status);
   });
+
+  if (dependencies.supplyContextService) {
+    registerReworkSupplyContextRoutes(app, {
+      authenticate: dependencies.authenticate,
+      service: dependencies.supplyContextService,
+      root: dependencies.root,
+    });
+  }
   if (dependencies.erp) registerErpIntegrationRoutes(app, { authenticateSession: dependencies.authenticate, ...dependencies.erp });
 }
