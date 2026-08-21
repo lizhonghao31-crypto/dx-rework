@@ -182,9 +182,10 @@ export class ProcessWorkerPlanService {
     if (!configuration || configuration.configuration_version !== expectedConfigurationVersion) {
       fail("工序配置已更新，请刷新后重新提交");
     }
-    if (!configuration.worker_preassignment_required) return false;
+    const requiredConfiguration = configuration!;
+    if (!requiredConfiguration.worker_preassignment_required) return false;
     const order = await this.order(this.database, reworkOrderId, false);
-    const response = await this.dto(this.database, order, configuration);
+    const response = await this.dto(this.database, order, requiredConfiguration);
     if (!response.complete) fail("请先为每道返工工序分配至少一名工人", 400, "VALIDATION_ERROR");
     return true;
   }
@@ -199,7 +200,8 @@ export class ProcessWorkerPlanService {
     if (!configuration.worker_preassignment_required) return null;
     const plan = await this.plan(this.database, configuration.configuration_id, false);
     if (!plan) fail("IE 已通过，但预分配人员方案不存在，请联系尾部主管", 409, "CONFLICT");
-    const actor = await this.plannerActor(plan.planned_by, requestId);
+    const requiredPlan = plan!;
+    const actor = await this.plannerActor(requiredPlan.planned_by, requestId);
     const order = await this.order(this.database, reworkOrderId, false);
     return (await this.activate(actor, reworkOrderId, {
       expectedOrderVersion: order.version,
@@ -230,10 +232,12 @@ export class ProcessWorkerPlanService {
         || configuration.configuration_version !== input.expectedConfigurationVersion
         || !configuration.worker_preassignment_required
       ) fail("IE 核准的工序版本与预分配方案不一致");
-      const plan = await this.plan(client, configuration.configuration_id, true);
+      const requiredConfiguration = configuration!;
+      const plan = await this.plan(client, requiredConfiguration.configuration_id, true);
       if (!plan) fail("预分配人员方案不存在");
-      const items = await this.items(client, configuration.configuration_id);
-      const members = await this.planMembers(client, plan.plan_id);
+      const requiredPlan = plan!;
+      const items = await this.items(client, requiredConfiguration.configuration_id);
+      const members = await this.planMembers(client, requiredPlan.plan_id);
       if (items.length === 0 || items.some((item) => !members.some((member) => member.configuration_item_id === item.configuration_item_id))) {
         fail("预分配人员方案不完整", 400, "VALIDATION_ERROR");
       }
@@ -251,7 +255,7 @@ export class ProcessWorkerPlanService {
         after: {
           ...this.orderAudit(order, order.status, order.version),
           source: "process_worker_preassignment",
-          configurationVersion: configuration.configuration_version,
+          configurationVersion: requiredConfiguration.configuration_version,
           assignments: members.map((member) => ({
             configurationItemId: member.configuration_item_id,
             personId: member.person_id,
@@ -321,9 +325,10 @@ export class ProcessWorkerPlanService {
     );
     const roles = result.rows[0]?.roles;
     if (!roles?.length) fail("原分配人员已无返工分配权限，请由尾部主管重新处理", 403, "FORBIDDEN");
+    const authorizedRoles = roles!;
     return {
       actorId,
-      actorRoles: roles,
+      actorRoles: authorizedRoles,
       authorizationCapability: "work:assign",
       authorizationCapabilities: ["work:assign"],
       requestId,
@@ -453,23 +458,12 @@ export class ProcessWorkerPlanService {
 
   private orderAudit(order: OrderRow, status: string, version: number): Record<string, unknown> {
     return {
-      reworkOrderId: order.rework_order_id,
-      reworkNo: order.rework_no,
-      status,
-      styleNo: order.style_no,
-      orderNo: order.order_no,
+      reworkOrderId: order.rework_order_id, reworkNo: order.rework_no, status, styleNo: order.style_no, orderNo: order.order_no,
       merchandiserUserId: order.merchandiser_user_id,
       processingFactory: order.processing_factory_type === null ? null : order.processing_factory_type === "own_factory"
         ? { type: "own_factory" }
-        : {
-            type: "supplier",
-            supplierId: order.processing_factory_supplier_id,
-            supplierVersion: order.processing_factory_supplier_version,
-          },
-      problemPart: order.problem_part,
-      problemDescription: order.problem_description,
-      reworkQuantity: order.rework_quantity,
-      version,
+        : { type: "supplier", supplierId: order.processing_factory_supplier_id, supplierVersion: order.processing_factory_supplier_version },
+      problemPart: order.problem_part, problemDescription: order.problem_description, reworkQuantity: order.rework_quantity, version,
     };
   }
 
