@@ -54,6 +54,9 @@ describe("PR-06 responsibility 2.0", () => {
     expect(service).toContain("await maybeCompleteResponsibilityAction(client, actor, actionOrder)");
     expect(migration).toContain("WHEN 'rework.responsibility.submit_owner_signature'");
     expect(migration).toContain("THEN 'rework.responsibility.finalize'");
+    expect(migration).toContain("CREATE CONSTRAINT TRIGGER responsibility_allocation_total_deferred");
+    expect(migration).toContain("DEFERRABLE INITIALLY DEFERRED");
+    expect(migration).toContain("total_share<>10000");
     expect(panel).toContain("跳过老板确认");
     expect(panel).toContain("生成供应商扣款台账");
   });

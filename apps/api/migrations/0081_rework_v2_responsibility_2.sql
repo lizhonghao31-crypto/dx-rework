@@ -47,3 +47,78 @@ BEGIN
   RETURN event_record;
 END $$;
 
+-- Replace the retired PR-05 single-party rule with PR-06 allocation rules.
+-- Per-row shape is checked before insert, while the percentage total is a
+-- deferred constraint so a process can be inserted as several rows inside one
+-- transaction and must still finish with exactly 100 percent.
+CREATE OR REPLACE FUNCTION guard_responsibility_allocation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE schema_version smallint;
+BEGIN
+  SELECT determination.settlement_schema_version INTO schema_version
+  FROM rework_responsibility_determinations determination
+  WHERE determination.determination_id=NEW.determination_id;
+  IF schema_version=2 THEN
+    IF NEW.share_bps<=0 THEN
+      RAISE EXCEPTION 'V2 responsibility share must be positive'
+        USING ERRCODE='23514';
+    END IF;
+    IF NEW.responsibility_type='own_factory' AND (
+      NEW.multiplier IS DISTINCT FROM 1.000 OR NEW.supplier_id IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'own-factory responsibility cannot carry an external multiplier or supplier'
+        USING ERRCODE='23514';
+    END IF;
+    IF NEW.responsibility_type<>'own_factory' AND (
+      NEW.multiplier IS NULL OR NEW.multiplier<1.200 OR NEW.supplier_id IS NULL
+    ) THEN
+      RAISE EXCEPTION 'external responsibility requires a supplier and multiplier of at least 1.2'
+        USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS responsibility_single_party_insert
+  ON rework_responsibility_allocations;
+DROP TRIGGER IF EXISTS responsibility_allocation_validate_insert
+  ON rework_responsibility_allocations;
+CREATE TRIGGER responsibility_allocation_validate_insert
+  BEFORE INSERT ON rework_responsibility_allocations
+  FOR EACH ROW EXECUTE FUNCTION guard_responsibility_allocation();
+
+CREATE OR REPLACE FUNCTION guard_responsibility_allocation_total()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  target_determination_id uuid:=COALESCE(NEW.determination_id,OLD.determination_id);
+  target_configuration_item_id uuid:=COALESCE(NEW.configuration_item_id,OLD.configuration_item_id);
+  schema_version smallint;
+  allocation_count integer;
+  responsibility_type_count integer;
+  total_share integer;
+BEGIN
+  SELECT determination.settlement_schema_version INTO schema_version
+  FROM rework_responsibility_determinations determination
+  WHERE determination.determination_id=target_determination_id;
+  IF schema_version=2 THEN
+    SELECT count(*),count(DISTINCT responsibility_type),COALESCE(sum(share_bps),0)
+      INTO allocation_count,responsibility_type_count,total_share
+    FROM rework_responsibility_allocations
+    WHERE determination_id=target_determination_id
+      AND configuration_item_id=target_configuration_item_id;
+    IF allocation_count<1 OR allocation_count>5
+       OR allocation_count<>responsibility_type_count
+       OR total_share<>10000 THEN
+      RAISE EXCEPTION 'V2 process requires 1 to 5 unique responsibility parties totaling 100 percent'
+        USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS responsibility_allocation_total_deferred
+  ON rework_responsibility_allocations;
+CREATE CONSTRAINT TRIGGER responsibility_allocation_total_deferred
+  AFTER INSERT OR UPDATE OR DELETE ON rework_responsibility_allocations
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION guard_responsibility_allocation_total();

@@ -539,23 +539,10 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedCurrentDeterminationVersion: determination.determination!.version,
       },
     );
-    expect(finalized.reworkStatus).toBe("pending_owner_signature");
-    const signed = await http<ResponsibilityDeterminationResponse>(
-      fixture.app,
-      "POST",
-      `/rework-orders/${reworkOrderId}/responsibility-owner-signature/approve`,
-      {
-        expectedOrderVersion: finalized.orderVersion,
-      },
-    );
-    expect(signed).toMatchObject({
+    expect(finalized).toMatchObject({
       reworkStatus: "completed",
-      ownerSignature: {
-        decision: "approved",
-        signedBy: fixture.rootUserId,
-      },
+      ownerSignature: null,
     });
-    expect(signed.ownerSignature?.multiplierAdjustments).toEqual([]);
     const batch = await http<ExternalResponsibilityBatchResponse | null>(
       fixture.app,
       "GET",
