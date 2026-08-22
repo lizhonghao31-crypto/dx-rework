@@ -18,7 +18,7 @@ import { WholeOrderReviewService } from "./whole-order-review-service.js";
 export class BusinessAwareWholeOrderReviewService extends WholeOrderReviewService {
   private readonly completion: CompletionReviewService;
 
-  constructor(private readonly database: Pool, todos?: TodoProjectionService) {
+  constructor(database: Pool, todos?: TodoProjectionService) {
     super(database, undefined, undefined, undefined, todos);
     this.completion = new CompletionReviewService(database);
   }
