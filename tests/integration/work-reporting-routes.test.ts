@@ -19,6 +19,7 @@ const config = loadConfig({
 const apps: FastifyInstance[] = [];
 const orderId = "00000000-0000-4000-8000-000000000010";
 const taskId = "00000000-0000-4000-8000-000000000011";
+const migratedTailPersonId = "850e82b5-fc66-94fd-203f-a708fe72a9d0";
 
 afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 
@@ -28,7 +29,7 @@ const create = (
 ) => {
   const service = {
     list: vi.fn(async () => ({ reworkOrderId: orderId, reworkStatus: "in_progress", orderVersion: 2, tasks: [] })),
-    listAssignablePeople: vi.fn(async () => [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" as const, eligibleExecutionKinds: ["worker"] as const }]),
+    listAssignablePeople: vi.fn(async () => [{ personId: migratedTailPersonId, displayName: "尾查人员", personType: "internal" as const, eligibleExecutionKinds: ["tail_inspection"] as const }]),
     createTask: vi.fn(),
     submitReport: vi.fn(async (_actor, submittedTaskId) => ({
       value: {
@@ -39,7 +40,7 @@ const create = (
         completedAt: "2026-08-02T12:00:00.000Z",
         status: "submitted" as const,
         groupAmount: null,
-        memberShares: [{ personId: "00000000-0000-4000-8000-000000000013", amount: 1 }],
+        memberShares: [{ personId: migratedTailPersonId, amount: 1 }],
       },
       reused: false,
     })),
@@ -61,12 +62,12 @@ const create = (
 };
 
 describe("work reporting routes", () => {
-  it("exposes only server-filtered assignees to a supervisor", async () => {
+  it("returns a migration-0079 tail inspector instead of failing the whole personnel response", async () => {
     const { app, service } = create(["tail_supervisor"], ["work:assign"]);
     const response = await app.inject({ method: "GET", url: "/work-task-options", headers: { cookie: "dx_rework_session=trusted" } });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ people: [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal", eligibleExecutionKinds: ["worker"] }] });
+    expect(response.json()).toEqual({ people: [{ personId: migratedTailPersonId, displayName: "尾查人员", personType: "internal", eligibleExecutionKinds: ["tail_inspection"] }] });
     expect(service.listAssignablePeople).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "work:assign" }));
   });
 
