@@ -12,6 +12,10 @@
       "types": "./src/business-person-id.ts",
       "import": "./dist/business-person-id.js"
     },
+    "./completion-review": {
+      "types": "./src/completion-review.ts",
+      "import": "./dist/completion-review.js"
+    },
     "./responsibility-queue": {
       "types": "./src/responsibility-queue.ts",
       "import": "./dist/responsibility-queue.js"
