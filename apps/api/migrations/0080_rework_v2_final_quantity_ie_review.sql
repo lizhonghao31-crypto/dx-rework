@@ -811,7 +811,7 @@ BEGIN
         report.rework_order_id,
         report.configuration_item_id,
         report.work_task_id,
-        COALESCE(report.settlement_quantity,report.actual_quantity),
+        COALESCE(report.settlement_quantity,report.actual_quantity) AS actual_quantity,
         report.completed_at,
         report.submitted_by,
         report.group_amount,
