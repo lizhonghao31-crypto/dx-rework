@@ -192,7 +192,7 @@ export class ExternalResponsibilityCloseService {
               processing_factory_supplier_version,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
-       WHERE rework_order_id=$1
+       WHERE rework_order_id=$1 AND status<>'deleted'
        FOR UPDATE`,
       [current.rework_order_id],
     );
@@ -307,6 +307,18 @@ export class ExternalResponsibilityCloseService {
       client,
       actor,
       `deduction-follow-up:${caseId}:`,
+      "External deduction case was closed",
+    );
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `deduction-overdue:${caseId}:`,
+      "External deduction case was closed",
+    );
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `external-deduction:${caseId}:`,
       "External deduction case was closed",
     );
     return this.reader.getCase(actor, caseId, client);

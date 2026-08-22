@@ -2,22 +2,22 @@ import {
   ExternalResponsibilityQueueResponseSchema,
   type ExternalResponsibilityQueueResponse,
 } from "@dx-rework/contracts/external-responsibility";
-import { StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState } from "react";
+import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell, TaskCard } from "./components.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const queueRefreshMilliseconds = 15_000;
 type State = { kind: "loading" } | { kind: "ready"; value: ExternalResponsibilityQueueResponse } | { kind: "unavailable"; message: string };
 const statusLabel: Record<ExternalResponsibilityQueueResponse["items"][number]["status"], string> = {
-  pending_business_signoff: "待业务签收", pending_payables_confirmation: "待应付确认", deduction_follow_up: "扣款跟进中", pending_special_approval: "待财务总监特批", returned: "已退回", pending_responsibility_revision: "待责任变更", closed: "已关闭", superseded: "已替代",
+  pending_business_signoff: "待交财务", pending_payables_confirmation: "待扣款", deduction_follow_up: "扣款中", pending_special_approval: "待财务总监特批", returned: "资料退回", pending_responsibility_revision: "待重判", closed: "扣款完成", superseded: "历史台账",
 };
 
 export function ExternalResponsibilityQueuePage() {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [q, setQ] = useState("");
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   useEffect(() => {
     const controller = new AbortController(); let requestInFlight = false;
@@ -31,16 +31,22 @@ export function ExternalResponsibilityQueuePage() {
         if (!(error instanceof DOMException && error.name === "AbortError") && initial) setState({ kind: "unavailable", message: error instanceof Error ? error.message : "外部责任队列加载失败" });
       } finally { requestInFlight = false; }
     };
-    const refresh = (): void => { void load(false); };
-    void load(true); const intervalId = window.setInterval(refresh, queueRefreshMilliseconds); window.addEventListener("focus", refresh);
-    return () => { controller.abort(); window.clearInterval(intervalId); window.removeEventListener("focus", refresh); };
+    void load(true);
+    return () => controller.abort();
   }, []);
-  const items = state.kind === "ready" ? state.value.items : [];
-  return <Shell active="外部扣款"><Header title="外部责任签收与扣款" subtitle="N08-B 签收与应付确认完成后，生产返工可完结；N10-B 实扣继续独立跟进" badge={state.kind === "ready" ? `${items.length} 条 · 实时队列` : "实时队列"} action="返回责任处理" />
-    <Surface className="external-queue-summary"><div><h2>外部责任双阶段台账</h2><p>拟扣对象和金额均由服务端正式责任快照生成；实际扣款流水不覆盖原始责任，也不阻塞生产完结。</p></div><StatusBadge tone="info">N08-B / N10-B</StatusBadge></Surface>
+  const allItems = state.kind === "ready" ? state.value.items : [];
+  const items = useMemo(() => {
+    const needle = q.trim().toLocaleLowerCase("zh-CN");
+    if (!needle) return allItems;
+    return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.supplierName, statusLabel[item.status]]
+      .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
+  }, [allItems, q]);
+  return <Shell active="外部扣款"><Header title="供应商扣款处理" subtitle="记录每次实际扣款；扣足后系统自动完成" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"} />
+    <Surface className="external-queue-summary"><div><h2>供应商扣款工作台</h2><p>查看应扣、累计已扣和剩余金额，录入本次扣款即可。</p></div><StatusBadge tone="info">扣款台账</StatusBadge></Surface>
+    <Surface className="reporting-filters"><InsetField label="搜索当前节点事项" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 供应商 / 状态" /></Surface>
     {state.kind === "loading" && <Surface className="external-state">正在加载外部责任队列…</Surface>}
     {state.kind === "unavailable" && <Surface className="external-state">{state.message}</Surface>}
-    {state.kind === "ready" && items.length === 0 && <Surface className="external-state">当前没有你可查看的外部责任事项。</Surface>}
-    {state.kind === "ready" && <div className="task-grid external-queue-grid">{items.map((item) => <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.caseId}><TaskCard task={{ id: item.reworkNo ?? item.reworkOrderId, title: `${statusLabel[item.status]} · ${item.supplierName}`, meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", `拟扣 ¥${item.proposedDeductionAmount}`, `实扣 ¥${item.actualDeductedAmount}`, `差额 ¥${item.remainingAmount}`, item.overdue ? "已逾期" : item.canAct ? "可处理" : "仅查看"].join(" · "), tone: item.overdue ? "danger" : item.canAct ? "warning" : "info" }} /><span>打开服务端锁定台账 →</span></a>)}</div>}
+    {state.kind === "ready" && items.length === 0 && <Surface className="external-state">当前没有符合条件的外部责任事项。</Surface>}
+    {state.kind === "ready" && <div className="task-grid external-queue-grid">{items.map((item) => <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.caseId}><TaskCard task={{ id: item.reworkNo ?? "返工单", title: `${statusLabel[item.status]} · ${item.supplierName}`, meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", `应扣 ¥${item.proposedDeductionAmount}`, `累计已扣 ¥${item.actualDeductedAmount}`, `剩余 ¥${item.remainingAmount}`, item.overdue ? "已逾期" : item.canAct ? "可处理" : "仅查看"].join(" · "), tone: item.overdue ? "danger" : item.canAct ? "warning" : "info", stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看" }} /><span>打开扣款台账 →</span></a>)}</div>}
   </Shell>;
 }

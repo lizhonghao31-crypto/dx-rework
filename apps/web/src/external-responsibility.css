@@ -37,7 +37,7 @@
 .external-history-list > div,
 .external-evidence-list > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   align-items: start;
   border: 1px solid var(--color-border);
@@ -61,21 +61,66 @@
 }
 
 .external-case-actions > * {
-  min-width: 0;
+  flex: 0 1 auto;
+  min-width: 9rem;
+}
+
+.external-finance-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.external-finance-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.external-finance-summary span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.external-finance-summary strong {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.external-finance-operation {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 
 .external-special-approval {
   display: grid;
-  gap: var(--space-1);
-  margin-top: var(--space-3);
+  gap: 4px;
   padding: var(--space-3);
-  border: 1px solid var(--color-warning);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  background: var(--color-bg-subtle);
 }
 
 .external-special-approval span {
   color: var(--color-muted);
+}
+
+.external-deduction-history {
+  margin-top: var(--space-2);
+}
+
+.external-deduction-history h4 {
+  margin: 0;
+}
+
+.external-deduction-history > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .external-amount {
@@ -119,7 +164,8 @@
   margin-top: var(--space-4);
 }
 
-.external-overdue {
+.external-overdue,
+.external-upload-error {
   color: var(--color-danger);
   font-weight: 700;
 }
@@ -140,6 +186,12 @@
 
   .external-case-actions > * {
     flex: 1 1 9rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .external-finance-summary {
+    grid-template-columns: 1fr;
   }
 }
 

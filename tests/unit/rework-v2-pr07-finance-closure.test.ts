@@ -38,7 +38,7 @@ describe("PR-07 finance closure", () => {
       readFile("apps/api/src/rework/external-responsibility-service.ts", "utf8"),
       readFile("apps/api/src/rework/production-external-responsibility-service.ts", "utf8"),
     ]);
-    expect(panel).toContain("确认扣款完成");
+    expect(panel).toContain("完成扣款");
     expect(panel).toContain("转财务总监特批");
     expect(panel).toContain("特批确认");
     expect(panel).not.toContain('operation(caseItem, "close-partial")');
