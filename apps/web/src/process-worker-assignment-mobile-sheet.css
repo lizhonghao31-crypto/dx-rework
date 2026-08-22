@@ -62,15 +62,29 @@
   .process-worker-mobile-sheet__selected{border:1px solid #aebdcc;box-shadow:none}
 }
 
-/* N02 desktop geometry lock: ordinary process and tail inspection share one grid, one title scale and one control footprint. */
-@media(min-width:641px){
-  .process-worker-line{grid-template-columns:340px minmax(0,1fr);column-gap:16px;padding:10px 0 12px;border:0;border-radius:0;background:transparent}
-  .process-worker-line+.process-worker-line{margin-top:2px;padding-top:14px;border-top:1px solid var(--dx-v2-color-border)}
-  .process-worker-tail-body{grid-template-columns:340px minmax(0,1fr);gap:16px}
-  .process-worker-fields,.process-worker-tail-work{width:340px;max-width:340px}
-  .process-worker-fields>.dx-field,.process-worker-tail-work>.dx-field{width:340px;max-width:340px}
-  .process-worker-fields .dx-field__control,.process-worker-tail-work .dx-field__control,.process-worker-line>.process-worker-picker>.process-worker-people-search,.process-worker-tail-body>.process-worker-picker>.process-worker-people-search{width:340px;min-width:340px;max-width:340px;height:38px;min-height:38px;border-radius:10px}
-  .process-worker-fields .search-select input{height:36px;min-height:36px}
-  .process-worker-heading-primary>b,.process-worker-picker__heading>b,.process-worker-tail-title-row>b{font-size:15px;line-height:1.25;font-weight:700}
-  .process-worker-line__heading,.process-worker-picker__heading,.process-worker-tail-title-row{min-height:28px;align-items:center}
+/* N02 desktop shared-row grid: the two columns use the same rows, not independent vertical stacks. */
+@media(min-width:981px){
+  .process-worker-line{display:grid;grid-template-areas:none;grid-template-columns:340px minmax(0,1fr);grid-template-rows:28px 30px 58px minmax(58px,auto);column-gap:24px;row-gap:8px;padding:14px 16px;border:1px solid var(--dx-v2-color-border);border-radius:12px;background:var(--dx-v2-color-surface)}
+  .process-worker-line+.process-worker-line{margin-top:0}
+  .process-worker-line__heading{grid-column:1;grid-row:1;min-height:28px;align-items:center}
+  .process-worker-line__body,.process-worker-fields,.process-worker-line .process-worker-picker{display:contents}
+  .process-worker-source{grid-column:1;grid-row:2;align-self:center}
+  .process-worker-fields>.dx-field:nth-child(2){grid-column:1;grid-row:3;align-self:stretch}
+  .process-worker-fields>.dx-field:nth-child(3){grid-column:1;grid-row:4;align-self:start}
+  .process-worker-line .process-worker-picker>.process-worker-picker__heading{grid-column:2;grid-row:1;min-height:28px;align-items:center}
+  .process-worker-line .process-worker-picker>.process-worker-selected{grid-column:2;grid-row:2;align-self:center;min-height:30px}
+  .process-worker-line .process-worker-picker>.process-worker-people-search{grid-column:2;grid-row:3;align-self:end;width:340px;min-width:340px;max-width:340px;height:38px;min-height:38px;margin:0}
+  .process-worker-line .process-worker-picker>.process-worker-people-groups{grid-column:2;grid-row:4;align-self:start;margin:0}
+
+  .process-worker-tail-body{display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:28px 30px 58px auto;column-gap:24px;row-gap:8px;align-items:start}
+  .process-worker-tail-work,.process-worker-tail-body>.process-worker-picker{display:contents}
+  .process-worker-tail-title-row{grid-column:1;grid-row:1;min-height:28px;align-items:center}
+  .process-worker-tail-work>.dx-field{grid-column:1;grid-row:3;align-self:stretch;width:340px;max-width:340px}
+  .process-worker-tail-body>.process-worker-picker>.process-worker-picker__heading{grid-column:2;grid-row:1;min-height:28px;align-items:center}
+  .process-worker-tail-body>.process-worker-picker>.process-worker-selected{grid-column:2;grid-row:2;align-self:center;min-height:30px}
+  .process-worker-tail-body>.process-worker-picker>.process-worker-people-search{grid-column:2;grid-row:3;align-self:end;width:340px;min-width:340px;max-width:340px;height:38px;min-height:38px;margin:0}
+  .process-worker-tail-body>.process-worker-picker>.process-worker-people-group--tail{grid-column:2;grid-row:4;align-self:start;margin:0}
+
+  .process-worker-fields .dx-field__control,.process-worker-tail-work .dx-field__control{width:340px;min-width:340px;max-width:340px;height:38px;min-height:38px;border-radius:10px}
+  .process-worker-heading-primary>b,.process-worker-line .process-worker-picker__heading>b,.process-worker-tail-title-row>b,.process-worker-tail-body>.process-worker-picker>.process-worker-picker__heading>b{font-size:15px!important;font-weight:700!important;line-height:1.25!important;letter-spacing:0!important}
 }
