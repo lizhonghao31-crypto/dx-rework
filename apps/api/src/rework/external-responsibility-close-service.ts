@@ -192,7 +192,7 @@ export class ExternalResponsibilityCloseService {
               processing_factory_supplier_version,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
-       WHERE rework_order_id=$1 AND status<>'deleted'
+       WHERE rework_order_id=$1
        FOR UPDATE`,
       [current.rework_order_id],
     );
@@ -202,11 +202,9 @@ export class ExternalResponsibilityCloseService {
     const ledger = await client.query<{
       actual: string;
       is_full: boolean;
-      is_zero: boolean;
     }>(
       `SELECT COALESCE(sum(entry.amount),0)::text actual,
-              COALESCE(sum(entry.amount),0)=case_record.proposed_deduction_amount is_full,
-              COALESCE(sum(entry.amount),0)=0 is_zero
+              COALESCE(sum(entry.amount),0)=case_record.proposed_deduction_amount is_full
        FROM rework_external_responsibility_cases case_record
        LEFT JOIN rework_external_deduction_entries entry
          ON entry.case_id=case_record.case_id
@@ -216,12 +214,12 @@ export class ExternalResponsibilityCloseService {
     );
     const totals = ledger.rows[0]
       ?? fail("扣款台账缺少服务器金额", 409, "CONFLICT");
-    if (
-      (input.result === "full" && !totals.is_full)
-      || (input.result === "not_deducted" && !totals.is_zero)
-      || (input.result === "partial" && (totals.is_zero || totals.is_full))
-    ) {
-      fail("扣款关闭结果与服务器累计金额不一致", 400, "VALIDATION_ERROR");
+    if (input.result !== "full" || !totals.is_full) {
+      fail(
+        "实际扣款未达到拟扣金额时必须转财务总监特批",
+        400,
+        "VALIDATION_ERROR",
+      );
     }
 
     const eventId = await this.events.append(
@@ -309,18 +307,6 @@ export class ExternalResponsibilityCloseService {
       client,
       actor,
       `deduction-follow-up:${caseId}:`,
-      "External deduction case was closed",
-    );
-    await this.todos?.completeOpenByDedupePrefix(
-      client,
-      actor,
-      `deduction-overdue:${caseId}:`,
-      "External deduction case was closed",
-    );
-    await this.todos?.completeOpenByDedupePrefix(
-      client,
-      actor,
-      `external-deduction:${caseId}:`,
       "External deduction case was closed",
     );
     return this.reader.getCase(actor, caseId, client);

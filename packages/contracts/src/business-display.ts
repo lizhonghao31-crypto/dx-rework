@@ -28,6 +28,7 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   pending_business_signoff: "待业务签收",
   pending_payables_confirmation: "待应付确认",
   deduction_follow_up: "扣款跟进中",
+  pending_special_approval: "待财务总监特批",
   pending_responsibility_revision: "责任变更中",
   own_factory: "本厂承担",
   processing_factory: "加工厂",

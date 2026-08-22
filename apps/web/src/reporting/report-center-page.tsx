@@ -13,7 +13,7 @@ const statuses:Record<ReportType,readonly (readonly [string,string])[]>={
   wages:[["","全部状态"],["ready_to_lock","可月结"],["locked","已月结"]],
   responsibilities:[["","全部责任"],["own_factory","本厂承担"],["processing_factory","加工厂"],["embroidery_factory","印绣花厂"],["washing_factory","洗水厂"],["fabric_supplier","面料商"]],
   own_factory:[["","全部状态"],["pending","待审批"],["approved","已通过"],["rejected","已驳回"]],
-  external_deductions:[["","全部状态"],["pending_business_signoff","待业务签收"],["pending_payables_confirmation","待应付确认"],["deduction_follow_up","扣款跟进"],["returned","已退回"],["pending_responsibility_revision","责任变更中"],["closed","已关闭"],["superseded","已被新版本替代"],["full","全额"],["partial","部分"],["not_deducted","未扣"]],
+  external_deductions:[["","全部状态"],["pending_business_signoff","待业务签收"],["pending_payables_confirmation","待应付确认"],["deduction_follow_up","扣款跟进"],["pending_special_approval","待财务总监特批"],["returned","已退回"],["pending_responsibility_revision","责任变更中"],["closed","已关闭"],["superseded","已被新版本替代"],["full","全额"],["partial","部分"],["not_deducted","未扣"]],
   exceptions:[["","全部异常"],["overdue_todo","待办逾期"],["blocked_recipient","接收人失效"],["todo_delivery_failed","投递失败"],["deduction_follow_up_overdue","扣款跟进逾期"]],
 };
 type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse}|{kind:"unavailable";message:string};

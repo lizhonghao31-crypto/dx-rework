@@ -3,15 +3,13 @@ import {
   ExternalResponsibilityCaseResponseSchema,
   type ExternalResponsibilityBatchResponse,
   type ExternalResponsibilityCaseResponse,
+  type ExternalResponsibilityRequestedChange,
 } from "@dx-rework/contracts/external-responsibility";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { shanghaiBusinessDate } from "./business-date.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
-import { SearchSelect } from "./search-select.js";
-import { confirmInApp, promptInApp } from "./system-dialog.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -26,51 +24,30 @@ type Supplier = {
   supplierType: "factory" | "embroidery_washing" | "fabric" | "other";
   supplierName: string;
 };
-type CaseStatus = NonNullable<ExternalResponsibilityBatchResponse>["cases"][number]["status"];
-type ResponsibilityType = NonNullable<ExternalResponsibilityBatchResponse>["items"][number]["responsibilityType"];
-type DeductionEntryType = ExternalResponsibilityCaseResponse["deductions"][number]["entryType"];
+type CaseStatus =
+  NonNullable<ExternalResponsibilityBatchResponse>["cases"][number]["status"];
 
 const caseLabel: Record<CaseStatus, string> = {
-  pending_business_signoff: "待交财务",
-  pending_payables_confirmation: "待扣款",
-  deduction_follow_up: "扣款中",
-  returned: "资料退回",
-  pending_responsibility_revision: "待重判",
-  closed: "扣款完成",
-  superseded: "历史台账",
+  pending_business_signoff: "待业务签收",
+  pending_payables_confirmation: "待应付确认",
+  deduction_follow_up: "扣款跟进中",
+  pending_special_approval: "待财务总监特批",
+  returned: "应付已退回",
+  pending_responsibility_revision: "待责任变更审核",
+  closed: "扣款已关闭",
+  superseded: "已由新责任版本替代",
 };
 
-const responsibilityTypeLabel: Record<ResponsibilityType, string> = {
-  processing_factory: "加工厂",
-  embroidery_factory: "印绣花厂",
-  washing_factory: "洗水厂",
-  fabric_supplier: "面料供应商",
-};
-
-const deductionEntryLabel: Record<DeductionEntryType, string> = {
-  deduction: "扣款",
-  adjustment: "调整",
-  reversal: "冲销",
-};
-
-const processName = (snapshot: Record<string, unknown>): string => {
-  const value = snapshot.processName;
-  return typeof value === "string" && value.trim() ? value.trim() : "工序";
-};
-
-const requiredSupplierType = (type: ResponsibilityType): Supplier["supplierType"] =>
+const requiredSupplierType = (
+  type: NonNullable<
+    ExternalResponsibilityBatchResponse
+  >["items"][number]["responsibilityType"],
+): Supplier["supplierType"] =>
   type === "processing_factory"
     ? "factory"
     : type === "fabric_supplier"
       ? "fabric"
       : "embroidery_washing";
-
-const parseMoneyToCents = (value: string): bigint | null => {
-  const normalized = value.trim();
-  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
-  const [whole = "0", fraction = ""] = normalized.split(".");
-  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
-};
 
 const requestError = async (response: Response): Promise<string> => {
   try {
@@ -83,38 +60,42 @@ const requestError = async (response: Response): Promise<string> => {
 
 export function ExternalResponsibilityPanel({
   reworkOrderId,
-  focusCaseId,
-  readOnly = false,
 }: {
   reworkOrderId: string | null;
-  focusCaseId?: string;
-  readOnly?: boolean;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selection, setSelection] = useState<Record<string, string>>({});
-  const [temporarySupplierName, setTemporarySupplierName] = useState<Partial<Record<ResponsibilityType, string>>>({});
   const [processingOverrideReason, setProcessingOverrideReason] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [remark, setRemark] = useState<Record<string, string>>({});
   const [amount, setAmount] = useState<Record<string, string>>({});
-  const [attachments, setAttachments] = useState<Record<string, string[]>>({});
-  const pendingMutationKeys = useRef<Record<string, string>>({});
+  const [attachments, setAttachments] =
+    useState<Record<string, string[]>>({});
+  const [differenceDisposition, setDifferenceDisposition] =
+    useState<Record<string, string>>({});
 
-  const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
-    if (!reworkOrderId) return null;
+  const load = async (): Promise<void> => {
+    if (!reworkOrderId) return;
     const response = await fetch(
       apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities`),
-      { credentials: "include", headers: { accept: "application/json" } },
+      {
+        credentials: "include",
+        headers: { accept: "application/json" },
+      },
     );
     if (response.status === 403) {
       setState({ kind: "hidden" });
-      return null;
+      return;
     }
     if (!response.ok) throw new Error(await requestError(response));
-    const value = ExternalResponsibilityBatchResponseSchema.parse(await response.json());
-    setState({ kind: "ready", value });
-    return value;
+    setState({
+      kind: "ready",
+      value: ExternalResponsibilityBatchResponseSchema.parse(
+        await response.json(),
+      ),
+    });
   };
 
   useEffect(() => {
@@ -123,70 +104,64 @@ export function ExternalResponsibilityPanel({
       return;
     }
     const controller = new AbortController();
-    void load().then(async (batch) => {
-      if (readOnly) return [] as Supplier[];
-      const hasUnassigned = batch?.items.some(
-        (item) => !batch.cases.some((entry) =>
-          entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
-        ),
-      ) ?? false;
-      if (!batch || !hasUnassigned) return [] as Supplier[];
-      const response = await fetch(
-        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
-        { credentials: "include", signal: controller.signal, headers: { accept: "application/json" } },
-      );
-      if (response.status === 403) return [] as Supplier[];
-      if (!response.ok) throw new Error(await requestError(response));
-      return await response.json() as Supplier[];
-    }).then(setSuppliers).catch((error: unknown) => {
+    void Promise.all([
+      load(),
+      fetch(apiUrl("master-data/suppliers"), {
+        credentials: "include",
+        signal: controller.signal,
+        headers: { accept: "application/json" },
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(await requestError(response));
+        return await response.json() as Supplier[];
+      }),
+    ]).then(([, catalog]) => {
+      setSuppliers(catalog);
+    }).catch((error: unknown) => {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         setState({
           kind: "unavailable",
-          message: error instanceof Error ? error.message : "外部责任台账加载失败",
+          message: error instanceof Error
+            ? error.message
+            : "外部责任台账加载失败",
         });
       }
     });
     return () => controller.abort();
-  }, [readOnly, reworkOrderId]);
+  }, [reworkOrderId]);
 
   const unassigned = useMemo(
-    () => state.kind === "ready" && state.value
-      ? state.value.items.filter(
-          (item) => !state.value!.cases.some((entry) =>
-            entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
-          ),
-        )
-      : [],
+    () =>
+      state.kind === "ready" && state.value
+        ? state.value.items.filter(
+            (item) =>
+              !state.value!.cases.some((entry) =>
+                entry.items.some(
+                  (mapped) => mapped.externalItemId === item.externalItemId,
+                )
+              ),
+          )
+        : [],
     [state],
   );
-
-  const mutationKey = (signature: string): string => {
-    const existing = pendingMutationKeys.current[signature];
-    if (existing) return existing;
-    const next = crypto.randomUUID();
-    pendingMutationKeys.current[signature] = next;
-    return next;
-  };
 
   const send = async (
     path: string,
     body: unknown,
   ): Promise<ExternalResponsibilityCaseResponse> => {
-    const signature = `case:${path}:${JSON.stringify(body)}`;
     const response = await fetch(apiUrl(path), {
       method: "POST",
       credentials: "include",
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        "idempotency-key": mutationKey(signature),
+        "idempotency-key": crypto.randomUUID(),
       },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(await requestError(response));
-    const result = ExternalResponsibilityCaseResponseSchema.parse(await response.json());
-    delete pendingMutationKeys.current[signature];
-    return result;
+    return ExternalResponsibilityCaseResponseSchema.parse(
+      await response.json(),
+    );
   };
 
   const refresh = async (success: string): Promise<void> => {
@@ -194,61 +169,13 @@ export function ExternalResponsibilityPanel({
     setMessage(success);
   };
 
-  const createTemporarySupplier = async (
-    item: NonNullable<ExternalResponsibilityBatchResponse>["items"][number],
-  ): Promise<void> => {
-    const supplierName = temporarySupplierName[item.responsibilityType]?.trim() ?? "";
-    if (!supplierName) {
-      setMessage(`请先填写${responsibilityTypeLabel[item.responsibilityType]}名称。`);
-      return;
-    }
-    const supplierType = requiredSupplierType(item.responsibilityType);
-    const signature = `temporary-supplier:${reworkOrderId}:${supplierType}:${supplierName}`;
-    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
-    pendingMutationKeys.current[signature] = idempotencyKey;
-    setBusy(true);
-    setMessage("");
-    try {
-      const createResponse = await fetch(
-        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/temporary-suppliers`),
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            accept: "application/json",
-            "content-type": "application/json",
-            "idempotency-key": idempotencyKey,
-          },
-          body: JSON.stringify({ supplierType, supplierName }),
-        },
-      );
-      if (!createResponse.ok) throw new Error(await requestError(createResponse));
-      const created = await createResponse.json() as Supplier;
-      const optionsResponse = await fetch(
-        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
-        { credentials: "include", headers: { accept: "application/json" } },
-      );
-      if (!optionsResponse.ok) throw new Error(await requestError(optionsResponse));
-      const catalog = await optionsResponse.json() as Supplier[];
-      if (!catalog.some((supplier) => supplier.supplierId === created.supplierId)) {
-        throw new Error("供应商已新增，但未能重新读取可选名录，请刷新后重试。");
-      }
-      delete pendingMutationKeys.current[signature];
-      setSuppliers(catalog);
-      setSelection((current) => ({ ...current, [item.externalItemId]: created.supplierId }));
-      setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: "" }));
-      setMessage(`${supplierName} 已新增到供应商名录并自动选中。`);
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "新增供应商失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const allocate = async (): Promise<void> => {
     if (state.kind !== "ready" || !state.value || busy) return;
     const grouped = new Map<string, {
-      responsibilityType: ResponsibilityType;
+      responsibilityType:
+        NonNullable<
+          ExternalResponsibilityBatchResponse
+        >["items"][number]["responsibilityType"];
       supplierId: string;
       externalItemIds: string[];
       processingFactoryOverrideReason?: string;
@@ -262,7 +189,11 @@ export function ExternalResponsibilityPanel({
       const key = `${item.responsibilityType}:${supplierId}`;
       let current = grouped.get(key);
       if (!current) {
-        current = { responsibilityType: item.responsibilityType, supplierId, externalItemIds: [] };
+        current = {
+          responsibilityType: item.responsibilityType,
+          supplierId,
+          externalItemIds: [],
+        };
         const reason = processingOverrideReason.trim();
         if (item.responsibilityType === "processing_factory" && reason) {
           current.processingFactoryOverrideReason = reason;
@@ -271,319 +202,593 @@ export function ExternalResponsibilityPanel({
       }
       current.externalItemIds.push(item.externalItemId);
     }
-    const path = `external-responsibility-batches/${state.value.batchId}/allocate-suppliers`;
-    const body = { expectedBatchVersion: state.value.batchVersion, allocations: [...grouped.values()] };
-    const signature = `batch:${path}:${JSON.stringify(body)}`;
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(apiUrl(path), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          "idempotency-key": mutationKey(signature),
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) throw new Error(await requestError(response));
-      const value = ExternalResponsibilityBatchResponseSchema.parse(await response.json());
-      delete pendingMutationKeys.current[signature];
-      setState({ kind: "ready", value });
-      setMessage("供应商已锁定，可进入扣款。 ");
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "供应商分配失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const closeFull = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
-    const closed = await send(
-      `external-responsibility-cases/${caseItem.caseId}/close`,
-      {
-        expectedCaseVersion: caseItem.caseVersion,
-        result: "full",
-        evidenceAttachmentIds: [],
-      },
-    );
-    if (closed.status !== "closed") throw new Error("扣款已足额，但自动结案未完成");
-  };
-
-  const recordDeduction = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
-    if (busy) return;
-    const text = amount[caseItem.caseId]?.trim() ?? "";
-    const cents = parseMoneyToCents(text);
-    const remainingCents = parseMoneyToCents(caseItem.remainingAmount);
-    if (cents === null || cents <= 0n) {
-      setMessage("本次扣款金额必须大于 0，最多两位小数。");
-      return;
-    }
-    if (remainingCents === null || cents > remainingCents) {
-      setMessage("本次扣款金额不能超过当前剩余应扣金额。");
-      return;
-    }
-    const files = attachments[caseItem.caseId] ?? [];
-    setBusy(true);
-    setMessage("");
-    try {
-      const recorded = await send(
-        `external-responsibility-cases/${caseItem.caseId}/deductions`,
+      const response = await fetch(
+        apiUrl(
+          `external-responsibility-batches/${state.value.batchId}/allocate-suppliers`,
+        ),
         {
-          expectedCaseVersion: caseItem.caseVersion,
-          entryType: "deduction",
-          amount: text,
-          deductedOn: shanghaiBusinessDate(),
-          attachmentIds: files,
-        },
-      );
-      setAmount((current) => ({ ...current, [caseItem.caseId]: "" }));
-      setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
-      if (recorded.remainingAmount === "0.00" && recorded.canClose) {
-        try {
-          await closeFull(recorded);
-          await refresh("本次扣款已记录，累计金额已达到应扣金额，扣款已自动完成。");
-        } catch {
-          await refresh("本次扣款已记录且已足额，但自动完成未成功，请点击“完成扣款”。");
-        }
-        return;
-      }
-      await refresh("本次扣款已记录，累计金额已更新。");
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "扣款记录失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const finishDeduction = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
-    if (busy || caseItem.remainingAmount !== "0.00" || !caseItem.canClose) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await closeFull(caseItem);
-      await refresh("扣款已完成。");
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "扣款完成失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const requestRevision = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
-    if (busy || !caseItem.canRequestRevision) return;
-    const reason = (await promptInApp("请输入重判责任原因"))?.trim() ?? "";
-    if (!reason) return;
-    const files = attachments[caseItem.caseId] ?? [];
-    setBusy(true);
-    setMessage("");
-    try {
-      await send(
-        `external-responsibility-cases/${caseItem.caseId}/revision-requests`,
-        {
-          expectedCaseVersion: caseItem.caseVersion,
-          requestedChange: {
-            kind: "other",
-            configurationItemIds: caseItem.items.map((item) => item.configurationItemId),
-            summary: reason,
+          method: "POST",
+          credentials: "include",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            "idempotency-key": crypto.randomUUID(),
           },
-          reason,
-          attachmentIds: files,
+          body: JSON.stringify({
+            expectedBatchVersion: state.value.batchVersion,
+            allocations: [...grouped.values()],
+          }),
         },
       );
-      setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
-      await refresh("已申请重判责任。");
+      if (!response.ok) throw new Error(await requestError(response));
+      setState({
+        kind: "ready",
+        value: ExternalResponsibilityBatchResponseSchema.parse(
+          await response.json(),
+        ),
+      });
+      setMessage(
+        "供应商与拟扣台账已由服务端锁定，下一步由业务经办人提交签收。",
+      );
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "重判责任申请失败");
+      setMessage(
+        error instanceof Error ? error.message : "供应商分配失败",
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  const decideRevision = async (
+  const requestedChange = (
     caseItem: ExternalResponsibilityCaseResponse,
-    approved: boolean,
+    note: string,
+  ): ExternalResponsibilityRequestedChange => {
+    const configurationItemIds = caseItem.items.map(
+      (item) => item.configurationItemId,
+    );
+    if (
+      caseItem.closure
+      && caseItem.closure.remainingAmount !== "0.00"
+      && (
+        caseItem.closure.remainingDifferenceDisposition?.includes("本厂")
+        || differenceDisposition[caseItem.caseId]?.includes("本厂")
+      )
+    ) {
+      return {
+        kind: "remaining_difference_to_own_factory",
+        configurationItemIds,
+      };
+    }
+    return {
+      kind: "other",
+      configurationItemIds,
+      summary: note,
+    };
+  };
+
+  const operation = async (
+    caseItem: ExternalResponsibilityCaseResponse,
+    kind:
+      | "submit"
+      | "accept"
+      | "return"
+      | "follow"
+      | "deduct"
+      | "close-full"
+      | "special-request"
+      | "special-approve"
+      | "special-return"
+      | "revision"
+      | "revision-approve"
+      | "revision-reject",
   ): Promise<void> => {
     if (busy) return;
-    const pending = caseItem.revisionRequests.find((request) => request.status === "pending");
-    if (!pending) return;
-    if (approved && !(await confirmInApp("确认通过重判责任？通过后重新进入 N08 判责。"))) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await send(
-        `external-responsibility-revision-requests/${pending.revisionRequestId}/${approved ? "approve" : "reject"}`,
-        {
-          expectedCaseVersion: caseItem.caseVersion,
-          expectedRevisionVersion: pending.revisionVersion,
-        },
-      );
-      await refresh(approved ? "重判责任已通过，已重新进入 N08。" : "重判责任已驳回。");
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "重判责任处理失败");
-    } finally {
-      setBusy(false);
+    const note = remark[caseItem.caseId]?.trim() ?? "";
+    const files = attachments[caseItem.caseId] ?? [];
+    if (
+      ["return", "follow", "special-request", "special-return", "revision"]
+        .includes(kind)
+      && !note
+    ) {
+      setMessage("当前操作必须填写原因或跟进内容。");
+      return;
     }
-  };
-
-  const submitLegacyCase = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
-    if (busy) return;
     setBusy(true);
     setMessage("");
     try {
-      await send(
-        `external-responsibility-cases/${caseItem.caseId}/submit`,
-        {
-          expectedCaseVersion: caseItem.caseVersion,
-          attachmentIds: attachments[caseItem.caseId] ?? [],
-        },
+      if (kind === "submit") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/submit`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            remark: note || undefined,
+            attachmentIds: files,
+          },
+        );
+      }
+      if (kind === "accept") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/payables-accept`,
+          { expectedCaseVersion: caseItem.caseVersion },
+        );
+      }
+      if (kind === "return") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/payables-return`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            reason: note,
+            attachmentIds: files,
+          },
+        );
+      }
+      if (kind === "follow") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/follow-ups`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            content: note,
+            attachmentIds: files,
+          },
+        );
+      }
+      if (kind === "deduct") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/deductions`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            entryType: "deduction",
+            amount: amount[caseItem.caseId],
+            deductedOn: new Date().toISOString().slice(0, 10),
+            attachmentIds: files,
+          },
+        );
+      }
+      if (kind.startsWith("close")) {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/close`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            result: "full",
+            evidenceAttachmentIds: [],
+          },
+        );
+      }
+      if (kind === "special-request") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/special-approval-requests`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            reason: note,
+            attachmentIds: files,
+          },
+        );
+      }
+      if (kind === "special-approve" || kind === "special-return") {
+        const request = caseItem.specialApproval;
+        if (!request || request.decision) throw new Error("当前扣款特批已被处理");
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/special-approval/${
+            kind === "special-approve" ? "approve" : "return"
+          }`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            expectedRequestVersion: request.requestVersion,
+            reason: note || undefined,
+          },
+        );
+      }
+      if (kind === "revision") {
+        await send(
+          `external-responsibility-cases/${caseItem.caseId}/revision-requests`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            requestedChange: requestedChange(caseItem, note),
+            reason: note,
+            attachmentIds: files,
+          },
+        );
+      }
+      if (
+        kind === "revision-approve"
+        || kind === "revision-reject"
+      ) {
+        const pending = caseItem.revisionRequests.find(
+          (request) => request.status === "pending",
+        );
+        if (!pending) throw new Error("当前责任变更申请已被处理");
+        await send(
+          `external-responsibility-revision-requests/${pending.revisionRequestId}/${
+            kind === "revision-approve" ? "approve" : "reject"
+          }`,
+          {
+            expectedCaseVersion: caseItem.caseVersion,
+            expectedRevisionVersion: pending.revisionVersion,
+            reason: note || undefined,
+          },
+        );
+      }
+      setAttachments((current) => ({
+        ...current,
+        [caseItem.caseId]: [],
+      }));
+      await refresh(
+        kind === "revision-approve"
+          ? "责任变更已批准，并已生成可继续编辑的 N07 判责草稿。"
+          : "操作已写入服务端台账；金额、权限与当前责任版本已重新核验。",
       );
-      setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
-      await refresh("已交财务扣款。");
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "提交财务失败");
+      setMessage(error instanceof Error ? error.message : "操作失败");
     } finally {
       setBusy(false);
     }
   };
 
   if (state.kind === "hidden") return null;
-  if (state.kind === "loading") return <Surface className="external-state">正在加载扣款台账…</Surface>;
-  if (state.kind === "unavailable") return <Surface className="external-state">{state.message}</Surface>;
-  if (!state.value) return <Surface className="external-state">本单没有供应商责任金额，无需供应商扣款。</Surface>;
-
-  const batch = state.value;
-  const visibleCases = focusCaseId
-    ? batch.cases.filter((caseItem) => caseItem.caseId === focusCaseId)
-    : batch.cases;
-  const visibleUnassigned = readOnly || focusCaseId ? [] : unassigned;
-  const supplierAllocationReady = visibleUnassigned.length > 0
-    && visibleUnassigned.every((item) => Boolean(selection[item.externalItemId]));
-
-  if (focusCaseId && visibleCases.length === 0) {
-    return <Surface className="external-state">该供应商扣款任务不在当前有效台账中。</Surface>;
+  if (state.kind === "loading") {
+    return (
+      <Surface className="external-state">
+        正在核验外部责任台账权限…
+      </Surface>
+    );
+  }
+  if (state.kind === "unavailable") {
+    return <Surface className="external-state">{state.message}</Surface>;
+  }
+  if (!state.value) {
+    return (
+      <Surface className="external-state">
+        当前正式责任版本不存在外部责任金额，因此不创建 N08-B 台账。
+      </Surface>
+    );
   }
 
-  return <Surface className="external-responsibility-panel">
-    <div className="section-title">
-      <div>
-        <h2>{readOnly ? "责任结算台账" : "供应商扣款"}</h2>
-        <p>{readOnly ? "查看供应商实际扣款记录。" : "只记录本次扣款金额；系统自动累计，扣足后自动完成。"}</p>
+  const batch = state.value;
+  return (
+    <Surface className="external-responsibility-panel">
+      <div className="section-title">
+        <div>
+          <h2>外部责任签收与扣款跟进</h2>
+          <p>
+            N08-B · 正式责任版本 V{batch.finalizedDeterminationVersion}；
+            拟扣、实扣和差额均为独立的服务端事实。
+          </p>
+        </div>
+        <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>
+          {batch.status === "active" ? "当前责任版本" : "已替代历史"}
+        </StatusBadge>
       </div>
-      <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>{batch.status === "active" ? "当前台账" : "历史台账"}</StatusBadge>
-    </div>
-    {message && <div className="own-factory-approval-message" role="status">{message}</div>}
+      {message && (
+        <div className="own-factory-approval-message" role="status">
+          {message}
+        </div>
+      )}
 
-    {visibleUnassigned.length > 0 && <section className="external-operation">
-      <h3>待补充供应商</h3>
-      {visibleUnassigned.map((item) => {
-        const matchingSuppliers = suppliers.filter(
-          (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
-        );
-        const temporaryNameReady = Boolean(temporarySupplierName[item.responsibilityType]?.trim());
-        return <div className="external-operation-grid" key={item.externalItemId}>
-          <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 应扣 ¥{item.proposedAmount}</span>
-          <SearchSelect
-            options={matchingSuppliers.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))}
-            value={selection[item.externalItemId] ?? ""}
-            placeholder={matchingSuppliers.length ? "输入供应商名称搜索" : "没有匹配类型的供应商"}
-            emptyText="没有匹配的供应商"
-            ariaLabel={`供应商 ${processName(item.processSnapshot)}`}
-            disabled={busy || matchingSuppliers.length === 0}
-            onChange={(supplierId) => setSelection((current) => ({ ...current, [item.externalItemId]: supplierId }))}
-          />
-          {matchingSuppliers.length === 0 && <div className="external-temporary-supplier">
-            <InsetField
-              label={`新增${responsibilityTypeLabel[item.responsibilityType]}名称`}
-              value={temporarySupplierName[item.responsibilityType] ?? ""}
-              disabled={busy}
-              onChange={(event) => setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: event.target.value }))}
-            />
-            <Button disabled={busy || !temporaryNameReady} onClick={() => void createTemporarySupplier(item)}>新增并选择</Button>
-          </div>}
-        </div>;
-      })}
-      {visibleUnassigned.some((item) => item.responsibilityType === "processing_factory") && <InsetField
-        label="加工厂改选原因"
-        value={processingOverrideReason}
-        onChange={(event) => setProcessingOverrideReason(event.target.value)}
-        placeholder="仅改选加工厂时填写"
-      />}
-      <Button variant="primary" disabled={busy || !supplierAllocationReady} onClick={() => void allocate()}>确认供应商</Button>
-    </section>}
-
-    {visibleCases.length === 0 && visibleUnassigned.length === 0 && <StatusBadge tone="info">当前外部责任金额为 0，无需扣款。</StatusBadge>}
-
-    <section className="external-case-list">
-      {visibleCases.map((caseItem) => {
-        const evidence = attachments[caseItem.caseId] ?? [];
-        const inputCents = parseMoneyToCents(amount[caseItem.caseId] ?? "");
-        const remainingCents = parseMoneyToCents(caseItem.remainingAmount);
-        const deductionReady = inputCents !== null
-          && inputCents > 0n
-          && remainingCents !== null
-          && inputCents <= remainingCents;
-        const canRecordDeduction = !readOnly && caseItem.canRecordDeduction;
-        const canRequestRevision = !readOnly && caseItem.canRequestRevision;
-        const canApproveRevision = !readOnly && caseItem.canApproveRevision;
-        const canLegacySubmit = !readOnly && caseItem.canSign;
-        const recoveryClose = !readOnly && caseItem.canClose && caseItem.remainingAmount === "0.00";
-        const canAttachEvidence = canRecordDeduction || canRequestRevision || canLegacySubmit;
-        const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
-        return <article className="external-case" key={caseItem.caseId}>
-          <div className="section-title">
-            <div><b>{caseItem.supplier.name}</b><p>{caseLabel[caseItem.status]} · {responsibilityTypeLabel[caseItem.responsibilityType]}</p></div>
-            <StatusBadge tone={caseItem.status === "closed" ? "success" : caseItem.status === "pending_responsibility_revision" ? "warning" : "info"}>{caseLabel[caseItem.status]}</StatusBadge>
-          </div>
-
-          <div className="external-finance-summary">
-            <div><span>应扣金额</span><strong>¥{caseItem.proposedDeductionAmount}</strong></div>
-            <div><span>累计已扣</span><strong>¥{caseItem.actualDeductedAmount}</strong></div>
-            <div><span>剩余</span><strong>¥{caseItem.remainingAmount}</strong></div>
-          </div>
-
-          {!readOnly && (canRecordDeduction || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
-            {canRecordDeduction && <InsetField
-              label="本次扣款金额"
-              inputMode="decimal"
-              value={amount[caseItem.caseId] ?? ""}
-              onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-              placeholder={`最多 ¥${caseItem.remainingAmount}`}
-            />}
-            {canAttachEvidence && <ExternalEvidenceUploader
-              attachmentIds={evidence}
-              disabled={busy}
-              onChange={(value) => setAttachments((current) => ({ ...current, [caseItem.caseId]: value }))}
-              onMessage={setMessage}
-            />}
-            <div className="external-case-actions">
-              {canRecordDeduction && <Button variant="primary" disabled={busy || !deductionReady} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
-              {recoveryClose && <Button variant="primary" disabled={busy} onClick={() => void finishDeduction(caseItem)}>完成扣款</Button>}
-              {canRequestRevision && <Button disabled={busy} onClick={() => void requestRevision(caseItem)}>重判责任</Button>}
-              {canLegacySubmit && <Button disabled={busy} onClick={() => void submitLegacyCase(caseItem)}>交财务扣款</Button>}
-              {canApproveRevision && pendingRevision && <>
-                <Button disabled={busy} onClick={() => void decideRevision(caseItem, true)}>通过重判</Button>
-                <Button disabled={busy} onClick={() => void decideRevision(caseItem, false)}>驳回重判</Button>
-              </>}
+      {unassigned.length > 0 && (
+        <section className="external-operation">
+          <h3>选择实际拟扣供应商</h3>
+          <p>
+            每个正式责任项目只能覆盖到一个有效供应商台账；
+            系统不接受浏览器传入的拟扣金额。
+          </p>
+          {unassigned.map((item) => (
+            <div
+              className="external-operation-grid"
+              key={item.externalItemId}
+            >
+              <span>
+                {String(
+                  item.processSnapshot.processName
+                    ?? item.configurationItemId,
+                )} · {item.responsibilityType} · 服务端拟扣
+                ¥{item.proposedAmount}
+              </span>
+              <select
+                aria-label={`供应商 ${item.externalItemId}`}
+                value={selection[item.externalItemId] ?? ""}
+                onChange={(event) =>
+                  setSelection((current) => ({
+                    ...current,
+                    [item.externalItemId]: event.target.value,
+                  }))}
+              >
+                <option value="">选择匹配供应商</option>
+                {suppliers
+                  .filter(
+                    (supplier) =>
+                      supplier.supplierType
+                      === requiredSupplierType(item.responsibilityType),
+                  )
+                  .map((supplier) => (
+                    <option
+                      key={supplier.supplierId}
+                      value={supplier.supplierId}
+                    >
+                      {supplier.supplierName}
+                    </option>
+                  ))}
+              </select>
             </div>
-            {canRecordDeduction && !deductionReady && amount[caseItem.caseId]?.trim() && <small role="status">请输入大于 0、最多两位小数且不超过剩余金额的本次扣款。</small>}
-          </div>}
-
-          {caseItem.deductions.length > 0 && <div className="external-ledger-list external-deduction-history">
-            <h4>扣款记录</h4>
-            {caseItem.deductions.map((entry) => <div key={entry.deductionEntryId}>
-              <span>{entry.deductedOn} · {deductionEntryLabel[entry.entryType]}</span>
-              <b>¥{entry.amount}</b>
-            </div>)}
-          </div>}
-
-          {caseItem.closure?.result === "full" && <StatusBadge tone="success">已足额扣款</StatusBadge>}
-          {caseItem.revisionRequests.filter((item) => item.seededDeterminationId).map((item) => (
-            <StatusBadge key={item.revisionRequestId} tone="success">已进入 N08 重新判责</StatusBadge>
           ))}
-        </article>;
-      })}
-    </section>
-  </Surface>;
+          {unassigned.some(
+            (item) => item.responsibilityType === "processing_factory",
+          ) && (
+            <InsetField
+              label="加工厂改选原因"
+              value={processingOverrideReason}
+              onChange={(event) =>
+                setProcessingOverrideReason(event.target.value)}
+              placeholder="仅当实际拟扣加工厂不同于返工单加工厂时必填"
+            />
+          )}
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => void allocate()}
+          >
+            锁定供应商与拟扣台账
+          </Button>
+        </section>
+      )}
+
+      {batch.cases.length === 0 && unassigned.length === 0 && (
+        <StatusBadge tone="info">
+          当前外部责任项目金额均为 0.00，不创建无意义扣款台账。
+        </StatusBadge>
+      )}
+
+      <section className="external-case-list">
+        {batch.cases.map((caseItem) => {
+          const pendingRevision = caseItem.revisionRequests.find(
+            (request) => request.status === "pending",
+          );
+          const evidence = attachments[caseItem.caseId] ?? [];
+          return (
+            <article className="external-case" key={caseItem.caseId}>
+              <div>
+                <div className="section-title">
+                  <b>
+                    {caseLabel[caseItem.status]} · {caseItem.supplier.name}
+                  </b>
+                  <StatusBadge
+                    tone={
+                      caseItem.status === "returned"
+                        ? "danger"
+                        : caseItem.status === "deduction_follow_up"
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {caseItem.responsibilityType}
+                  </StatusBadge>
+                </div>
+                <small>
+                  拟扣 ¥{caseItem.proposedDeductionAmount} · 累计实扣
+                  ¥{caseItem.actualDeductedAmount} · 未扣差额
+                  ¥{caseItem.remainingAmount} · 版本 {caseItem.caseVersion}
+                </small>
+                <div className="external-ledger-list">
+                  {caseItem.items.map((item) => (
+                    <div key={item.externalItemId}>
+                      <span>
+                        {String(
+                          item.processSnapshot.processName
+                            ?? item.configurationItemId,
+                        )} · 倍率 {item.multiplierSnapshot} ·
+                        {" "}{item.shareBpsSnapshot} bps
+                      </span>
+                      <b>¥{item.proposedAmount}</b>
+                    </div>
+                  ))}
+                </div>
+                {caseItem.specialApproval && (
+                  <div className="external-special-approval">
+                    <b>财务特批：{caseItem.specialApproval.reason}</b>
+                    <span>
+                      申请时实扣 ¥{caseItem.specialApproval.actualDeductedAmount}
+                      ，差额 ¥{caseItem.specialApproval.remainingAmount}
+                    </span>
+                    {caseItem.specialApproval.decision && (
+                      <span>
+                        结果：{caseItem.specialApproval.decision.decision === "approved"
+                          ? "已确认（不可修改）"
+                          : "已退回"}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="external-case-actions">
+                {caseItem.canSign && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void operation(caseItem, "submit")}
+                  >
+                    提交业务签收
+                  </Button>
+                )}
+                {caseItem.canPayablesConfirm && (
+                  <>
+                    <Button
+                      disabled={busy}
+                      onClick={() => void operation(caseItem, "accept")}
+                    >
+                      应付接受
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      onClick={() => void operation(caseItem, "return")}
+                    >
+                      退回业务经办
+                    </Button>
+                  </>
+                )}
+                {caseItem.canFollowUp && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void operation(caseItem, "follow")}
+                  >
+                    新增跟进
+                  </Button>
+                )}
+                {caseItem.canRecordDeduction && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void operation(caseItem, "deduct")}
+                  >
+                    记录实际扣款
+                  </Button>
+                )}
+                {caseItem.canClose && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void operation(caseItem, "close-full")}
+                  >
+                    确认扣款完成
+                  </Button>
+                )}
+                {caseItem.canRequestSpecialApproval && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void operation(caseItem, "special-request")}
+                  >
+                    转财务总监特批
+                  </Button>
+                )}
+                {caseItem.canDecideSpecialApproval && (
+                  <>
+                    <Button
+                      disabled={busy}
+                      onClick={() => void operation(caseItem, "special-approve")}
+                    >
+                      特批确认
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      onClick={() => void operation(caseItem, "special-return")}
+                    >
+                      退回
+                    </Button>
+                  </>
+                )}
+                {caseItem.canRequestRevision && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void operation(caseItem, "revision")}
+                  >
+                    申请责任变更
+                  </Button>
+                )}
+                {caseItem.canApproveRevision && pendingRevision && (
+                  <>
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void operation(caseItem, "revision-approve")}
+                    >
+                      通过责任变更
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void operation(caseItem, "revision-reject")}
+                    >
+                      驳回责任变更
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              <div className="external-operation">
+                <InsetField
+                  label="原因 / 退回、特批、变更或审核意见"
+                  value={remark[caseItem.caseId] ?? ""}
+                  onChange={(event) =>
+                    setRemark((current) => ({
+                      ...current,
+                      [caseItem.caseId]: event.target.value,
+                    }))}
+                  placeholder="退回、扣款异常特批、责任变更时必填；确认意见可选"
+                />
+                <InsetField
+                  label="未扣差额最终处理"
+                  value={
+                    differenceDisposition[caseItem.caseId]
+                    ?? caseItem.closure?.remainingDifferenceDisposition
+                    ?? ""
+                  }
+                  onChange={(event) =>
+                    setDifferenceDisposition((current) => ({
+                      ...current,
+                      [caseItem.caseId]: event.target.value,
+                    }))}
+                  placeholder="部分/未扣关闭时必填，例如：申请转本厂承担并进入责任重判"
+                />
+                <InsetField
+                  label="实际扣款金额（仅应付会计）"
+                  value={amount[caseItem.caseId] ?? ""}
+                  onChange={(event) =>
+                    setAmount((current) => ({
+                      ...current,
+                      [caseItem.caseId]: event.target.value,
+                    }))}
+                  placeholder="仅记录单笔实际扣款；不计算累计"
+                />
+                <ExternalEvidenceUploader
+                  attachmentIds={evidence}
+                  disabled={busy}
+                  onChange={(value) =>
+                    setAttachments((current) => ({
+                      ...current,
+                      [caseItem.caseId]: value,
+                    }))}
+                  onMessage={setMessage}
+                />
+              </div>
+
+              {caseItem.deductions.length > 0 && (
+                <div className="external-ledger-list">
+                  {caseItem.deductions.map((entry) => (
+                    <div key={entry.deductionEntryId}>
+                      <span>
+                        {entry.entryType} · {entry.deductedOn} ·
+                        {" "}{entry.referenceNo ?? "无凭证号"}
+                      </span>
+                      <b>¥{entry.amount}</b>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {caseItem.closure && (
+                <StatusBadge
+                  tone={
+                    caseItem.closure.result === "full"
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  关闭结果：{caseItem.closure.result} · 剩余
+                  ¥{caseItem.closure.remainingAmount}
+                </StatusBadge>
+              )}
+              {caseItem.revisionRequests
+                .filter((item) => item.seededDeterminationId)
+                .map((item) => (
+                  <StatusBadge
+                    key={item.revisionRequestId}
+                    tone="success"
+                  >
+                    已生成 N07 草稿 {item.seededDeterminationId}
+                  </StatusBadge>
+                ))}
+            </article>
+          );
+        })}
+      </section>
+    </Surface>
+  );
 }

@@ -1,6 +1,6 @@
 import type {
   AllocateExternalSuppliers,
-  CreateExternalTemporarySupplier,
+  ApproveExternalDeductionSpecialApproval,
   CloseExternalDeductionCase,
   CreateExternalDeductionEntry,
   CreateExternalDeductionFollowUp,
@@ -8,6 +8,8 @@ import type {
   DecideExternalResponsibilityRevision,
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
+  RequestExternalDeductionSpecialApproval,
+  ReturnExternalDeductionSpecialApproval,
   SubmitExternalResponsibilityCase,
 } from "@dx-rework/contracts/external-responsibility";
 import type { Pool } from "pg";
@@ -32,15 +34,6 @@ export class ExternalResponsibilityApplicationService {
     ...args: Parameters<ProductionExternalResponsibilityService["listSupplierOptions"]>
   ) {
     return this.service.listSupplierOptions(...args);
-  }
-
-  createTemporarySupplier(
-    actor: TrustedActorContext,
-    orderId: string,
-    input: CreateExternalTemporarySupplier,
-    key: string,
-  ) {
-    return this.service.createTemporarySupplier(actor, orderId, input, key);
   }
 
   get(...args: Parameters<ProductionExternalResponsibilityService["get"]>) {
@@ -112,6 +105,33 @@ export class ExternalResponsibilityApplicationService {
     key: string,
   ) {
     return this.service.close(actor, caseId, input, key);
+  }
+
+  requestSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: RequestExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    return this.service.requestSpecialApproval(actor, caseId, input, key);
+  }
+
+  approveSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: ApproveExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    return this.service.approveSpecialApproval(actor, caseId, input, key);
+  }
+
+  returnSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: ReturnExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    return this.service.returnSpecialApproval(actor, caseId, input, key);
   }
 
   requestRevision(

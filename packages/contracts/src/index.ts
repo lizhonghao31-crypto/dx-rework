@@ -1123,6 +1123,7 @@ export const ExternalResponsibilityCaseStatusSchema = z.enum([
   "pending_business_signoff",
   "pending_payables_confirmation",
   "deduction_follow_up",
+  "pending_special_approval",
   "returned",
   "pending_responsibility_revision",
   "closed",
@@ -1192,6 +1193,9 @@ export const CloseExternalDeductionCaseSchema = z.object({
   if (value.result === "full" && (value.reason !== undefined || value.evidenceAttachmentIds.length !== 0 || value.remainingDifferenceDisposition !== undefined)) context.addIssue({ code: "custom", message: "A full deduction cannot provide failure evidence or a remaining-difference disposition" });
   if (value.result !== "full" && (value.reason === undefined || value.evidenceAttachmentIds.length === 0 || value.remainingDifferenceDisposition === undefined)) context.addIssue({ code: "custom", message: "Partial and failed deductions require a reason, ready evidence, and a remaining-difference disposition" });
 });
+export const RequestExternalDeductionSpecialApprovalSchema = z.object({ expectedCaseVersion: z.number().int().positive(), reason: ReasonSchema, attachmentIds: AttachmentIdsSchema }).strict();
+export const ApproveExternalDeductionSpecialApprovalSchema = z.object({ expectedCaseVersion: z.number().int().positive(), expectedRequestVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(2000).optional() }).strict();
+export const ReturnExternalDeductionSpecialApprovalSchema = z.object({ expectedCaseVersion: z.number().int().positive(), expectedRequestVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict();
 export const CreateExternalResponsibilityRevisionSchema = z.object({
   expectedCaseVersion: z.number().int().positive(),
   requestedChange: z.record(z.string(), z.unknown()).refine((value) => Object.keys(value).length > 0, "requestedChange is required"),
@@ -1245,11 +1249,14 @@ const ExternalCaseResponseSchema = z.object({
   canFollowUp: z.boolean(),
   canRecordDeduction: z.boolean(),
   canClose: z.boolean(),
+  canRequestSpecialApproval: z.boolean(),
+  canDecideSpecialApproval: z.boolean(),
   canRequestRevision: z.boolean(),
   items: z.array(ExternalItemResponseSchema),
   deductions: z.array(ExternalDeductionEntryResponseSchema),
   followUps: z.array(z.object({ followUpId: IdSchema, content: z.string(), supplierFeedback: z.string().nullable(), nextFollowUpAt: z.string().datetime().nullable(), attachmentIds: z.array(IdSchema), createdBy: IdSchema, createdAt: z.string().datetime() }).strict()),
   closure: z.object({ result: z.enum(["full", "partial", "not_deducted"]), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), reason: z.string().nullable(), evidenceAttachmentIds: z.array(IdSchema), remainingDifferenceDisposition: z.string().nullable(), closedBy: IdSchema, closedAt: z.string().datetime() }).strict().nullable(),
+  specialApproval: z.object({ requestId: IdSchema, requestVersion: z.number().int().positive(), reason: z.string(), attachmentIds: z.array(IdSchema), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), requestedBy: IdSchema, requestedAt: z.string().datetime(), decision: z.object({ decision: z.enum(["approved", "returned"]), reason: z.string().nullable(), decidedBy: IdSchema, decidedAt: z.string().datetime() }).strict().nullable() }).strict().nullable(),
   canApproveRevision: z.boolean(),
   revisionRequests: z.array(z.object({ revisionRequestId: IdSchema, revisionVersion: z.number().int().positive(), status: z.enum(["pending", "approved", "rejected"]), reason: z.string(), requestedChange: z.record(z.string(), z.unknown()), requestedBy: IdSchema, decidedBy: IdSchema.nullable(), decisionReason: z.string().nullable(), createdAt: z.string().datetime(), decidedAt: z.string().datetime().nullable() }).strict()),
 }).strict();
@@ -1278,6 +1285,9 @@ export type PayablesReturnExternalResponsibilityCase = z.infer<typeof PayablesRe
 export type CreateExternalDeductionFollowUp = z.infer<typeof CreateExternalDeductionFollowUpSchema>;
 export type CreateExternalDeductionEntry = z.infer<typeof CreateExternalDeductionEntrySchema>;
 export type CloseExternalDeductionCase = z.infer<typeof CloseExternalDeductionCaseSchema>;
+export type RequestExternalDeductionSpecialApproval = z.infer<typeof RequestExternalDeductionSpecialApprovalSchema>;
+export type ApproveExternalDeductionSpecialApproval = z.infer<typeof ApproveExternalDeductionSpecialApprovalSchema>;
+export type ReturnExternalDeductionSpecialApproval = z.infer<typeof ReturnExternalDeductionSpecialApprovalSchema>;
 export type CreateExternalResponsibilityRevision = z.infer<typeof CreateExternalResponsibilityRevisionSchema>;
 export type DecideExternalResponsibilityRevision = z.infer<typeof DecideExternalResponsibilityRevisionSchema>;
 export type ExternalResponsibilityCaseResponse = z.infer<typeof ExternalResponsibilityCaseResponseSchema>;

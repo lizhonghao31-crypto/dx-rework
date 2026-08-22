@@ -40,6 +40,7 @@ export const ExternalResponsibilityCaseStatusSchema = z.enum([
   "pending_business_signoff",
   "pending_payables_confirmation",
   "deduction_follow_up",
+  "pending_special_approval",
   "returned",
   "pending_responsibility_revision",
   "closed",
@@ -57,11 +58,6 @@ export const ExternalResponsibilityRevisionParamsSchema = z.object({
 }).strict();
 export const ExternalResponsibilityOrderParamsSchema = z.object({
   reworkOrderId: IdSchema,
-}).strict();
-
-export const CreateExternalTemporarySupplierSchema = z.object({
-  supplierType: z.enum(["factory", "embroidery_washing", "fabric"]),
-  supplierName: z.string().trim().min(1).max(200),
 }).strict();
 
 export const AllocateExternalSuppliersSchema = z.object({
@@ -169,6 +165,24 @@ export const CloseExternalDeductionCaseSchema = z.object({
     });
   }
 });
+
+export const RequestExternalDeductionSpecialApprovalSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  reason: ReasonSchema,
+  attachmentIds: AttachmentIdsSchema,
+}).strict();
+
+export const ApproveExternalDeductionSpecialApprovalSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  expectedRequestVersion: z.number().int().positive(),
+  reason: z.string().trim().min(1).max(2000).optional(),
+}).strict();
+
+export const ReturnExternalDeductionSpecialApprovalSchema = z.object({
+  expectedCaseVersion: z.number().int().positive(),
+  expectedRequestVersion: z.number().int().positive(),
+  reason: z.string().trim().min(1).max(2000),
+}).strict();
 
 const AllocationChangeSchema = z.object({
   responsibilityType: FullResponsibilityTypeSchema,
@@ -298,6 +312,8 @@ export const ExternalResponsibilityCaseResponseSchema = z.object({
   canFollowUp: z.boolean(),
   canRecordDeduction: z.boolean(),
   canClose: z.boolean(),
+  canRequestSpecialApproval: z.boolean(),
+  canDecideSpecialApproval: z.boolean(),
   canRequestRevision: z.boolean(),
   canApproveRevision: z.boolean(),
   items: z.array(ExternalItemResponseSchema),
@@ -321,6 +337,23 @@ export const ExternalResponsibilityCaseResponseSchema = z.object({
     remainingDifferenceDisposition: z.string().nullable(),
     closedBy: IdSchema,
     closedAt: z.string().datetime(),
+  }).strict().nullable(),
+  specialApproval: z.object({
+    requestId: IdSchema,
+    requestVersion: z.number().int().positive(),
+    reason: z.string(),
+    attachmentIds: z.array(IdSchema),
+    proposedAmount: z.string(),
+    actualDeductedAmount: z.string(),
+    remainingAmount: z.string(),
+    requestedBy: IdSchema,
+    requestedAt: z.string().datetime(),
+    decision: z.object({
+      decision: z.enum(["approved", "returned"]),
+      reason: z.string().nullable(),
+      decidedBy: IdSchema,
+      decidedAt: z.string().datetime(),
+    }).strict().nullable(),
   }).strict().nullable(),
   revisionRequests: z.array(ExternalRevisionResponseSchema),
 }).strict();
@@ -357,8 +390,6 @@ export const ExternalResponsibilityQueueResponseSchema = z.object({
   }).strict()),
 }).strict();
 
-export type CreateExternalTemporarySupplier =
-  z.infer<typeof CreateExternalTemporarySupplierSchema>;
 export type AllocateExternalSuppliers =
   z.infer<typeof AllocateExternalSuppliersSchema>;
 export type SubmitExternalResponsibilityCase =
@@ -373,6 +404,12 @@ export type CreateExternalDeductionEntry =
   z.infer<typeof CreateExternalDeductionEntrySchema>;
 export type CloseExternalDeductionCase =
   z.infer<typeof CloseExternalDeductionCaseSchema>;
+export type RequestExternalDeductionSpecialApproval =
+  z.infer<typeof RequestExternalDeductionSpecialApprovalSchema>;
+export type ApproveExternalDeductionSpecialApproval =
+  z.infer<typeof ApproveExternalDeductionSpecialApprovalSchema>;
+export type ReturnExternalDeductionSpecialApproval =
+  z.infer<typeof ReturnExternalDeductionSpecialApprovalSchema>;
 export type CreateExternalResponsibilityRevision =
   z.infer<typeof CreateExternalResponsibilityRevisionSchema>;
 export type DecideExternalResponsibilityRevision =

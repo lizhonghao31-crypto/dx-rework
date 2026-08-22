@@ -106,7 +106,7 @@ export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>
   responsibilities: new Set(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
   own_factory: new Set(["pending", "approved", "rejected"]),
   external_deductions: new Set([
-    "pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up",
+    "pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up", "pending_special_approval",
     "returned", "pending_responsibility_revision", "closed", "superseded",
     "full", "partial", "not_deducted",
   ]),

@@ -8,11 +8,19 @@ import {
   SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
+import {
+  ApproveExternalDeductionSpecialApprovalSchema,
+  CloseExternalDeductionCaseSchema,
+  CreateExternalDeductionEntrySchema,
+  RequestExternalDeductionSpecialApprovalSchema,
+  ReturnExternalDeductionSpecialApprovalSchema,
+} from "@dx-rework/contracts/external-responsibility";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
+import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
@@ -102,6 +110,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     database,
     todoProjection,
   );
+  const external = new ExternalResponsibilityApplicationService(database, todoProjection);
   const wages = new WageService(database, undefined, undefined, todoProjection);
 
   const ids = {
@@ -116,6 +125,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     production: randomUUID(),
     factoryPayables: randomUUID(),
     fabricPayables: randomUUID(),
+    financeDirector: randomUUID(),
     embroideryMerchandiser: randomUUID(),
     embroideryPayables: randomUUID(),
     administrative: randomUUID(),
@@ -180,6 +190,21 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ["production_management"],
     "responsibility:determine",
   );
+  const factoryPayables = (capability: string) => actor(
+    ids.factoryPayables,
+    ["factory_payables"],
+    capability,
+  );
+  const fabricPayables = (capability: string) => actor(
+    ids.fabricPayables,
+    ["fabric_payables"],
+    capability,
+  );
+  const financeDirector = () => actor(
+    ids.financeDirector,
+    ["finance_director"],
+    "external_deduction:special_approve",
+  );
   const wageView = () => actor(
     ids.tail,
     ["tail_supervisor"],
@@ -232,6 +257,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.production, "生产管理", "production_management"],
       [ids.factoryPayables, "加工厂应付", "factory_payables"],
       [ids.fabricPayables, "面料应付", "fabric_payables"],
+      [ids.financeDirector, "财务总监", "finance_director"],
       [ids.embroideryMerchandiser, "印绣花跟单", "embroidery_washing_merchandiser"],
       [ids.embroideryPayables, "印绣花应付", "embroidery_washing_payables"],
       [ids.administrative, "行政文员", "administrative_clerk"],
@@ -647,12 +673,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(n07Final.value.ownerSignature).toBeNull();
 
     const externalCases = await database.query<{
+      caseId: string;
       responsibilityType: string;
       supplierId: string;
       proposedAmount: string;
       status: string;
     }>(
-      `SELECT responsibility_type AS "responsibilityType",
+      `SELECT case_id AS "caseId",
+              responsibility_type AS "responsibilityType",
               supplier_id AS "supplierId",
               proposed_deduction_amount::text AS "proposedAmount",
               status
@@ -661,7 +689,12 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        ORDER BY responsibility_type`,
       [submitted.value.reworkOrderId],
     );
-    expect(externalCases.rows).toEqual([
+    expect(externalCases.rows.map((item) => ({
+      responsibilityType: item.responsibilityType,
+      supplierId: item.supplierId,
+      proposedAmount: item.proposedAmount,
+      status: item.status,
+    }))).toEqual([
       {
         responsibilityType: "fabric_supplier",
         supplierId: fabricSupplierId,
@@ -679,6 +712,165 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
+
+    // N11 / PR-07 - exact deductions close normally; partial or failed
+    // deductions require one append-only finance-director decision.
+    const processingCaseId = externalCases.rows.find(
+      (item) => item.responsibilityType === "processing_factory",
+    )!.caseId;
+    const fabricCaseId = externalCases.rows.find(
+      (item) => item.responsibilityType === "fabric_supplier",
+    )!.caseId;
+    const initialProcessingCase = await external.getCase(
+      factoryPayables("external_deduction:record"),
+      processingCaseId,
+    );
+    const partialDeduction = await external.recordDeduction(
+      factoryPayables("external_deduction:record"),
+      processingCaseId,
+      CreateExternalDeductionEntrySchema.parse({
+        expectedCaseVersion: initialProcessingCase.caseVersion,
+        entryType: "deduction",
+        amount: "80.00",
+        deductedOn: new Date().toISOString().slice(0, 10),
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    await expect(external.close(
+      factoryPayables("external_deduction:close"),
+      processingCaseId,
+      CloseExternalDeductionCaseSchema.parse({
+        expectedCaseVersion: partialDeduction.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      }),
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const firstRequest = await external.requestSpecialApproval(
+      factoryPayables("external_deduction:close"),
+      processingCaseId,
+      RequestExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: partialDeduction.value.caseVersion,
+        reason: "供应商只确认扣款 80 元",
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    expect(firstRequest.value).toMatchObject({
+      status: "pending_special_approval",
+      canRequestSpecialApproval: false,
+      specialApproval: {
+        requestVersion: 1,
+        proposedAmount: "92.40",
+        actualDeductedAmount: "80.00",
+        remainingAmount: "12.40",
+        decision: null,
+      },
+    });
+    expect((await database.query<{
+      recipientUserId: string;
+      provider: string;
+      outcome: string;
+    }>(
+      `SELECT todo.recipient_user_id AS "recipientUserId",
+              attempt.provider,attempt.outcome
+       FROM rework_todos todo
+       JOIN todo_delivery_attempts attempt USING(todo_id)
+       WHERE todo.category='external_deduction_special_approval'
+         AND todo.entity_id=$1
+       ORDER BY attempt.attempted_at DESC LIMIT 1`,
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({
+      recipientUserId: ids.financeDirector,
+      provider: "dingtalk",
+      outcome: "queued",
+    });
+
+    const returned = await external.returnSpecialApproval(
+      financeDirector(),
+      processingCaseId,
+      ReturnExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: firstRequest.value.caseVersion,
+        expectedRequestVersion: 1,
+        reason: "请继续与供应商核对差额",
+      }),
+      randomUUID(),
+    );
+    expect(returned.value).toMatchObject({
+      status: "deduction_follow_up",
+      specialApproval: { decision: { decision: "returned" } },
+    });
+    const secondRequest = await external.requestSpecialApproval(
+      factoryPayables("external_deduction:close"),
+      processingCaseId,
+      RequestExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: returned.value.caseVersion,
+        reason: "供应商确认最终只能扣款 80 元",
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    expect(secondRequest.value.specialApproval).toMatchObject({
+      requestVersion: 2,
+      decision: null,
+    });
+    const speciallyClosed = await external.approveSpecialApproval(
+      financeDirector(),
+      processingCaseId,
+      ApproveExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: secondRequest.value.caseVersion,
+        expectedRequestVersion: 2,
+        reason: "确认按实际扣款关闭",
+      }),
+      randomUUID(),
+    );
+    expect(speciallyClosed.value).toMatchObject({
+      status: "closed",
+      closure: {
+        result: "partial",
+        proposedAmount: "92.40",
+        actualDeductedAmount: "80.00",
+        remainingAmount: "12.40",
+      },
+      specialApproval: { decision: { decision: "approved" } },
+    });
+    await expect(database.query(
+      "UPDATE rework_external_deduction_special_decisions SET reason='tampered' WHERE special_request_id=$1",
+      [speciallyClosed.value.specialApproval!.requestId],
+    )).rejects.toThrow();
+
+    const initialFabricCase = await external.getCase(
+      fabricPayables("external_deduction:record"),
+      fabricCaseId,
+    );
+    const fullDeduction = await external.recordDeduction(
+      fabricPayables("external_deduction:record"),
+      fabricCaseId,
+      CreateExternalDeductionEntrySchema.parse({
+        expectedCaseVersion: initialFabricCase.caseVersion,
+        entryType: "deduction",
+        amount: "39.60",
+        deductedOn: new Date().toISOString().slice(0, 10),
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    const normallyClosed = await external.close(
+      fabricPayables("external_deduction:close"),
+      fabricCaseId,
+      CloseExternalDeductionCaseSchema.parse({
+        expectedCaseVersion: fullDeduction.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    expect(normallyClosed.value).toMatchObject({
+      status: "closed",
+      closure: { result: "full", remainingAmount: "0.00" },
+    });
 
     /* Historical N08-B scenario retained below as reference only. Current V2
        N09/N11 execution is covered by the active assertions and Root double pass.
@@ -899,11 +1091,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
          AND status IN ('pending','blocked_recipient')
        ORDER BY category,todo_id`,
     );
-    expect(openBusinessTodos.rows).toEqual([
-      { category: "external_deduction_follow_up" },
-      { category: "external_deduction_follow_up" },
-      { category: "wage_month_close" },
-    ]);
+    expect(openBusinessTodos.rows).toEqual([{ category: "wage_month_close" }]);
   });
 
   it("submits simplified N01 without retired manual-entry facts", async () => {
