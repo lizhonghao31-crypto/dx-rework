@@ -18,8 +18,7 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(tailCss).toContain(".tail-inspection-entry > .dx-field input");
     expect(review).toContain('className="whole-order-metric-label">工人原报');
     expect(review).toContain('className="whole-order-metric-label">尾查报数');
-    expect(review).toContain("whole-order-gap-value");
+    expect(review).toContain("whole-order-metric-value");
     expect(review).toContain("whole-order-report-value");
   });
 });
-
