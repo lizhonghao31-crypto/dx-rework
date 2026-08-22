@@ -14,7 +14,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 import { CompletionReviewService } from "./completion-review-service.js";
 import { WholeOrderReviewService } from "./whole-order-review-service.js";
 
-/** Owner gets complete business visibility without inheriting tail/IE write flags. */
+/** Owner and IE get the required read projection without inheriting N07 write authority. */
 export class BusinessAwareWholeOrderReviewService extends WholeOrderReviewService {
   private readonly completion: CompletionReviewService;
 
@@ -29,10 +29,15 @@ export class BusinessAwareWholeOrderReviewService extends WholeOrderReviewServic
     configurationItemId?: string,
   ): Promise<WholeOrderReviewResponse> {
     const capabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
-    const ieReader = !isRootActor(actor)
+    const root = isRootActor(actor);
+    const ieReader = !root
       && actor.actorRoles.includes("ie_reviewer")
       && capabilities.includes("process:review");
-    const businessReader = canReadAllBusiness(actor) && !isRootActor(actor);
+    const businessReader = canReadAllBusiness(actor) && !root;
+    const canTailConfirm = root || (
+      actor.actorRoles.includes("tail_supervisor")
+      && capabilities.includes("submission:audit")
+    );
     const readActor: TrustedActorContext = ieReader || businessReader
       ? {
           ...actor,
@@ -46,9 +51,9 @@ export class BusinessAwareWholeOrderReviewService extends WholeOrderReviewServic
     const status = value.reworkStatus as string;
     return {
       ...value,
-      canReview: businessReader ? false : value.canReview && status === "pending_order_review",
-      canAdjustQuantity: businessReader ? false : value.canAdjustQuantity,
-      canConfirmQuantity: businessReader ? false : value.canConfirmQuantity,
+      canReview: canTailConfirm && value.canReview && status === "pending_order_review",
+      canAdjustQuantity: businessReader || ieReader ? false : value.canAdjustQuantity,
+      canConfirmQuantity: businessReader || ieReader ? false : value.canConfirmQuantity,
       canReviewQuantityIncrease: businessReader ? false : value.canReviewQuantityIncrease,
       canCompletionIeReview: status === "pending_completion_ie_review" && this.completion.canIeReview(actor),
       completionConfirmation,
