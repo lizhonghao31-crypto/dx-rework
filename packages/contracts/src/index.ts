@@ -128,6 +128,10 @@ export const CreateProcessSchema = z.object({
 }).strict();
 export const ReviseProcessSchema = CreateProcessSchema.omit({ processCode: true });
 export const ProcessParamsSchema = z.object({ processId: IdSchema }).strict();
+export const ReplaceProcessDefaultWorkersSchema = z.object({
+  personIds: z.array(IdSchema).max(200).refine((value) => new Set(value).size === value.length, "人员不能重复"),
+  changeReason: ReasonSchema,
+}).strict();
 
 export const CreateSupplierSchema = z.object({
   supplierCode: CatalogCodeSchema,
@@ -173,6 +177,7 @@ export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
 export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
 export type CreateProcess = z.infer<typeof CreateProcessSchema>;
 export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
+export type ReplaceProcessDefaultWorkers = z.infer<typeof ReplaceProcessDefaultWorkersSchema>;
 export type CreateSupplier = z.infer<typeof CreateSupplierSchema>;
 export type ReviseSupplier = z.infer<typeof ReviseSupplierSchema>;
 export type CreateDelegation = z.infer<typeof CreateDelegationSchema>;
@@ -581,6 +586,7 @@ export const ProcessConfigurationOptionsResponseSchema = z.object({
     version: z.number().int().positive(),
     processName: z.string().min(1),
     pricingUnit: ProcessPricingUnitSchema,
+    defaultWorkerPersonIds: z.array(IdSchema),
   }).strict()),
 });
 

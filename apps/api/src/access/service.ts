@@ -7,6 +7,7 @@ import type {
   CreatePersonAlias,
   CreateProcess,
   CreateSupplier,
+  ReplaceProcessDefaultWorkers,
   ReviseProcess,
   ReviseSupplier,
 } from "@dx-rework/contracts";
@@ -295,6 +296,7 @@ export class AccessMasterDataService {
     processName: string;
     pricingUnit: string;
     active: boolean;
+    defaultWorkerPersonIds: string[];
   }>> {
     const result = await this.database.query<{
       process_id: string;
@@ -303,9 +305,16 @@ export class AccessMasterDataService {
       process_name: string;
       pricing_unit: string;
       active: boolean;
+      default_worker_person_ids: string[];
     }>(
-      `SELECT process_id,process_code,version,process_name,pricing_unit,active
-       FROM current_process_catalog
+      `SELECT catalog.process_id,catalog.process_code,catalog.version,catalog.process_name,catalog.pricing_unit,catalog.active,
+              COALESCE(roster.person_ids,'{}'::uuid[]) AS default_worker_person_ids
+       FROM current_process_catalog catalog
+       LEFT JOIN LATERAL (
+         SELECT person_ids FROM process_default_worker_roster_versions roster_version
+         WHERE roster_version.process_id=catalog.process_id
+         ORDER BY roster_version.roster_version DESC LIMIT 1
+       ) roster ON true
        WHERE ($1::boolean OR active=true)
        ORDER BY process_name,process_code`,
       [includeInactive],
@@ -317,6 +326,40 @@ export class AccessMasterDataService {
       processName: row.process_name,
       pricingUnit: row.pricing_unit,
       active: row.active,
+      defaultWorkerPersonIds: row.default_worker_person_ids,
+    }));
+  }
+
+  async listProcessDefaultWorkerCandidates(): Promise<Array<{
+    personId: string;
+    personType: "internal" | "temporary";
+    displayName: string;
+    temporaryRemark: string | null;
+  }>> {
+    const result = await this.database.query<{
+      person_id: string;
+      person_type: "internal" | "temporary";
+      display_name: string;
+      temporary_remark: string | null;
+    }>(
+      `SELECT p.person_id,p.person_type,p.display_name,p.temporary_remark
+       FROM business_people p
+       WHERE p.active=true AND (
+         p.person_type='temporary'
+         OR EXISTS (
+           SELECT 1 FROM user_role_assignments assignment
+           WHERE assignment.user_id=p.app_user_id
+             AND assignment.role_code='worker'
+             AND assignment.revoked_at IS NULL
+         )
+       )
+       ORDER BY p.person_type,p.display_name,p.person_id`,
+    );
+    return result.rows.map((row) => ({
+      personId: row.person_id,
+      personType: row.person_type,
+      displayName: row.display_name,
+      temporaryRemark: row.temporary_remark,
     }));
   }
 
@@ -600,6 +643,60 @@ export class AccessMasterDataService {
       const version = previous.version + 1;
       await this.insertProcessVersion(client, actor, processId, version, input);
       return { processId, version };
+    });
+  }
+
+  async replaceProcessDefaultWorkers(
+    actor: TrustedActorContext,
+    processId: string,
+    input: ReplaceProcessDefaultWorkers,
+  ): Promise<{ processId: string; rosterVersion: number; personIds: string[] }> {
+    return this.transaction(async (client) => {
+      const process = await client.query(
+        "SELECT process_id FROM process_catalog_items WHERE process_id=$1 FOR UPDATE",
+        [processId],
+      );
+      if (!process.rows[0]) throw new ApplicationError("NOT_FOUND", "工序不存在", 404);
+      const personIds = [...input.personIds].sort();
+      if (personIds.length > 0) {
+        const eligible = await client.query<{ person_id: string }>(
+          `SELECT p.person_id
+           FROM business_people p
+           WHERE p.person_id=ANY($1::uuid[]) AND p.active=true AND (
+             p.person_type='temporary'
+             OR EXISTS (
+               SELECT 1 FROM user_role_assignments assignment
+               WHERE assignment.user_id=p.app_user_id
+                 AND assignment.role_code='worker'
+                 AND assignment.revoked_at IS NULL
+             )
+           )`,
+          [personIds],
+        );
+        if (eligible.rowCount !== personIds.length) {
+          throw new ApplicationError("VALIDATION_ERROR", "默认名单只能包含当前有效的正式工或临时工", 400);
+        }
+      }
+      const latest = await client.query<{ roster_version: number }>(
+        `SELECT roster_version FROM process_default_worker_roster_versions
+         WHERE process_id=$1 ORDER BY roster_version DESC LIMIT 1`,
+        [processId],
+      );
+      const rosterVersion = (latest.rows[0]?.roster_version ?? 0) + 1;
+      const operationEventId = await this.events.append(client, actor, {
+        action: "master_data.process_default_workers.replace",
+        entityType: "process_default_worker_roster",
+        entityId: processId,
+        after: { processId, rosterVersion, personIds },
+        reason: input.changeReason,
+      });
+      await client.query(
+        `INSERT INTO process_default_worker_roster_versions(
+           process_id,roster_version,person_ids,change_reason,changed_by,operation_event_id
+         ) VALUES($1,$2,$3,$4,$5,$6)`,
+        [processId, rosterVersion, personIds, input.changeReason, actor.actorId, operationEventId],
+      );
+      return { processId, rosterVersion, personIds };
     });
   }
 

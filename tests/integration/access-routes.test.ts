@@ -37,6 +37,7 @@ const create = (
     listDelegations: vi.fn(async () => []),
     listPeople: vi.fn(async () => []),
     listProcesses: vi.fn(async () => []),
+    listProcessDefaultWorkerCandidates: vi.fn(async () => []),
     listSuppliers: vi.fn(async () => []),
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
     revokeRole: vi.fn(),
@@ -46,6 +47,7 @@ const create = (
     deactivatePerson: vi.fn(),
     createProcess: vi.fn(),
     reviseProcess: vi.fn(),
+    replaceProcessDefaultWorkers: vi.fn(async () => ({ processId: "00000000-0000-4000-8000-000000000020", rosterVersion: 1, personIds: [] })),
     createSupplier: vi.fn(),
     reviseSupplier: vi.fn(),
     createDelegation: vi.fn(),
@@ -262,6 +264,30 @@ describe("access routes", () => {
       url: "/master-data/people",
       headers: { cookie: "dx_rework_session=trusted" },
     })).statusCode).toBe(403);
+  });
+
+  it("maintains process default workers through the master-data authority", async () => {
+    const { app, service } = create(["master_data:manage"], ["system_admin"]);
+    expect((await app.inject({
+      method: "GET",
+      url: "/master-data/process-default-worker-candidates",
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(200);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/master-data/processes/00000000-0000-4000-8000-000000000020/default-workers",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        personIds: ["00000000-0000-4000-8000-000000000021"],
+        changeReason: "维护工序默认人员",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(service.replaceProcessDefaultWorkers).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "master_data:manage" }),
+      "00000000-0000-4000-8000-000000000020",
+      { personIds: ["00000000-0000-4000-8000-000000000021"], changeReason: "维护工序默认人员" },
+    );
   });
 
   it("exposes revoked alias history only when explicitly requested", async () => {

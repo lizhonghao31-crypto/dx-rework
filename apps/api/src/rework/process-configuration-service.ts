@@ -186,9 +186,18 @@ export class ProcessConfigurationService {
   async options(actor: TrustedActorContext): Promise<ProcessConfigurationOptionsResponse> {
     this.ensureConfigure(actor);
     const result = await this.database.query<{
-      process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour";
+      process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour"; default_worker_person_ids: string[];
     }>(
-      "SELECT process_id,version,process_name,pricing_unit FROM current_process_catalog WHERE active=true AND pricing_unit='piece' ORDER BY process_name,process_id",
+      `SELECT catalog.process_id,catalog.version,catalog.process_name,catalog.pricing_unit,
+              COALESCE(roster.person_ids,'{}'::uuid[]) AS default_worker_person_ids
+       FROM current_process_catalog catalog
+       LEFT JOIN LATERAL (
+         SELECT person_ids FROM process_default_worker_roster_versions roster_version
+         WHERE roster_version.process_id=catalog.process_id
+         ORDER BY roster_version.roster_version DESC LIMIT 1
+       ) roster ON true
+       WHERE catalog.active=true AND catalog.pricing_unit='piece'
+       ORDER BY catalog.process_name,catalog.process_id`,
     );
     return {
       processes: result.rows.map((row) => ({
@@ -196,6 +205,7 @@ export class ProcessConfigurationService {
         version: row.version,
         processName: row.process_name,
         pricingUnit: row.pricing_unit,
+        defaultWorkerPersonIds: row.default_worker_person_ids,
       })),
     };
   }
