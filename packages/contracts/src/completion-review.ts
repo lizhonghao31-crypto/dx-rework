@@ -112,31 +112,38 @@ export type CompletionReviewResponse = Omit<BaseWholeOrderReviewResponse, "rewor
   completionConfirmation: z.infer<typeof CompletionConfirmationSummarySchema> | null;
 }>;
 
+const parseFailure = (
+  context: z.RefinementCtx,
+  path: readonly PropertyKey[],
+  message: string,
+): never => {
+  context.addIssue({ code: "custom", path: [...path], message });
+  return z.NEVER as never;
+};
+
 export const CompletionReviewResponseSchema = z.unknown().transform((value, context): CompletionReviewResponse => {
   if (!value || typeof value !== "object") {
-    context.addIssue({ code: "custom", message: "Expected completion review response object" });
-    return z.NEVER as never;
+    return parseFailure(context, [], "Expected completion review response object");
   }
   const input = value as Record<string, unknown>;
   const status = CompletionStatusSchema.safeParse(input.reworkStatus);
   if (!status.success) {
-    for (const issue of status.error.issues) context.addIssue(issue);
-    return z.NEVER as never;
+    return parseFailure(context, ["reworkStatus"], "Invalid completion review status");
   }
   const masked = status.data === "pending_completion_ie_review"
     ? { ...input, reworkStatus: "pending_order_review" }
     : input;
   const base = BaseWholeOrderReviewResponseSchema.safeParse(masked);
   if (!base.success) {
-    for (const issue of base.error.issues) context.addIssue(issue);
-    return z.NEVER as never;
+    return parseFailure(context, [], "Invalid whole-order review response");
   }
   const canCompletionIeReview = z.boolean().safeParse(input.canCompletionIeReview ?? false);
+  if (!canCompletionIeReview.success) {
+    return parseFailure(context, ["canCompletionIeReview"], "Invalid IE completion review permission");
+  }
   const confirmation = z.union([CompletionConfirmationSummarySchema, z.null()]).safeParse(input.completionConfirmation ?? null);
-  if (!canCompletionIeReview.success || !confirmation.success) {
-    for (const issue of canCompletionIeReview.success ? [] : canCompletionIeReview.error.issues) context.addIssue(issue);
-    for (const issue of confirmation.success ? [] : confirmation.error.issues) context.addIssue(issue);
-    return z.NEVER as never;
+  if (!confirmation.success) {
+    return parseFailure(context, ["completionConfirmation"], "Invalid completion confirmation summary");
   }
   return {
     ...base.data,
