@@ -57,6 +57,8 @@ describe("PR-06 responsibility 2.0", () => {
     expect(migration).toContain("CREATE CONSTRAINT TRIGGER responsibility_allocation_total_deferred");
     expect(migration).toContain("DEFERRABLE INITIALLY DEFERRED");
     expect(migration).toContain("total_share<>10000");
+    expect(migration).toContain("wage.actual_quantity_snapshot*wage.unit_price_snapshot");
+    expect(migration).toContain("wage.invalidated_at IS NULL");
     expect(panel).toContain("跳过老板确认");
     expect(panel).toContain("生成供应商扣款台账");
   });

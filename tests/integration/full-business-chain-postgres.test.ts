@@ -620,14 +620,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         responsibilityAmount: "132.00",
         allocations: [
           expect.objectContaining({
-            responsibilityType: "processing_factory",
-            shareBps: 7000,
-            roundedAmount: "92.40",
-          }),
-          expect.objectContaining({
             responsibilityType: "fabric_supplier",
             shareBps: 3000,
             roundedAmount: "39.60",
+          }),
+          expect.objectContaining({
+            responsibilityType: "processing_factory",
+            shareBps: 7000,
+            roundedAmount: "92.40",
           }),
         ],
       }],

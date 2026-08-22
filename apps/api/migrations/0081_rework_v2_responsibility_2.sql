@@ -122,3 +122,65 @@ CREATE CONSTRAINT TRIGGER responsibility_allocation_total_deferred
   AFTER INSERT OR UPDATE OR DELETE ON rework_responsibility_allocations
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION guard_responsibility_allocation_total();
+
+-- A V2 responsibility line snapshots the unadjusted final quantity and IE
+-- price.  Temporary-worker coefficients remain solely in payable_amount and
+-- must never increase a supplier deduction base.
+CREATE OR REPLACE FUNCTION guard_responsibility_line()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS(
+    SELECT 1
+    FROM rework_work_reports report
+    JOIN rework_responsibility_determinations determination
+      ON determination.determination_id=NEW.determination_id
+    LEFT JOIN rework_work_report_rejections rejection
+      ON rejection.work_report_id=report.work_report_id
+    WHERE report.work_report_id=NEW.work_report_id
+      AND report.status='submitted'
+      AND rejection.work_report_id IS NULL
+      AND report.rework_order_id=determination.rework_order_id
+      AND report.configuration_item_id=NEW.configuration_item_id
+      AND (
+        (
+          determination.settlement_schema_version=2
+          AND EXISTS(
+            SELECT 1
+            FROM rework_wage_items wage
+            WHERE wage.work_report_id=report.work_report_id
+              AND wage.person_id=NEW.person_id
+              AND wage.invalidated_at IS NULL
+              AND round(
+                wage.actual_quantity_snapshot*wage.unit_price_snapshot*
+                CASE WHEN wage.assignment_mode='collective'
+                  THEN 1::numeric/NULLIF(wage.member_count,0)
+                  ELSE 1
+                END,
+                8
+              )=NEW.base_member_share_amount
+          )
+        )
+        OR (
+          determination.settlement_schema_version IS DISTINCT FROM 2
+          AND EXISTS(
+            SELECT 1
+            FROM rework_work_report_member_shares share
+            WHERE share.work_report_id=report.work_report_id
+              AND share.person_id=NEW.person_id
+              AND share.amount=NEW.base_member_share_amount
+          )
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION 'amount line does not match the immutable responsibility base snapshot'
+      USING ERRCODE='23514';
+  END IF;
+  PERFORM require_responsibility_event(
+    NEW.operation_event_id,
+    NEW.request_id,
+    (SELECT rework_order_id FROM rework_responsibility_determinations
+     WHERE determination_id=NEW.determination_id),
+    (SELECT actor_id FROM operation_events WHERE event_id=NEW.operation_event_id)
+  );
+  RETURN NEW;
+END $$;

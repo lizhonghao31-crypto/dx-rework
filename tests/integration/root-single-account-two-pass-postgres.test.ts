@@ -792,7 +792,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         draft.reworkOrderId,
         item.configurationItemId,
         n06Approved.orderVersion,
-        pass === 2 ? "28.08" : "7.20",
+        pass === 2 ? "21.60" : "7.20",
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",
