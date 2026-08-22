@@ -112,6 +112,7 @@ export type ReworkOrderStatus =
   | "in_progress"
   | "pending_order_review"
   | "pending_quantity_adjustment_ie_review"
+  | "pending_completion_ie_review"
   | "pending_responsibility_determination"
   | "pending_owner_signature"
   | "pending_responsibility_action"
@@ -129,8 +130,9 @@ export const transitionReworkOrder = (
     pending_ie_review: ["pending_process_configuration", "pending_task_assignment"],
     pending_task_assignment: ["pending_ie_review", "in_progress"],
     in_progress: ["in_progress", "pending_order_review"],
-    pending_order_review: ["in_progress", "pending_order_review", "pending_quantity_adjustment_ie_review", "pending_responsibility_determination"],
+    pending_order_review: ["in_progress", "pending_order_review", "pending_quantity_adjustment_ie_review", "pending_completion_ie_review"],
     pending_quantity_adjustment_ie_review: ["in_progress", "pending_order_review"],
+    pending_completion_ie_review: ["pending_order_review", "pending_responsibility_determination"],
     pending_responsibility_determination: ["pending_owner_signature", "pending_responsibility_action"],
     pending_owner_signature: ["pending_responsibility_determination", "completed"],
     pending_responsibility_action: ["pending_responsibility_determination", "completed"],
