@@ -20,6 +20,7 @@ import { confirmInApp } from "./system-dialog.js";
 import { parseWorkTaskOptions } from "./work-task-options.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./process-worker-assignment-form.css";
+import "./process-worker-assignment-mobile-sheet.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -36,6 +37,9 @@ type PendingSubmit = Readonly<{
   body: { expectedOrderVersion: number; expectedConfigurationVersion: number };
   key: string;
 }>;
+type MobileAssignmentDraft =
+  | Readonly<{ kind: "worker"; index: number; selectedIds: readonly string[] }>
+  | Readonly<{ kind: "tail"; selectedIds: readonly string[] }>;
 
 const emptyItem = (): ItemForm => ({ source: "catalog", processId: "", customProcessName: "", unitPrice: "" });
 const formatPrice = (value: number | null): string => value === null ? "" : value.toFixed(3).replace(/\.?0+$/, "");
@@ -85,6 +89,8 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
   const [tailUnitPrice, setTailUnitPrice] = useState("");
   const [workerSearches, setWorkerSearches] = useState<Record<string, string>>({});
   const [tailSearch, setTailSearch] = useState("");
+  const [mobileAssignment, setMobileAssignment] = useState<MobileAssignmentDraft | null>(null);
+  const [mobileAssignmentSearch, setMobileAssignmentSearch] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载分配工序与工人…");
   const [optionLoadIssue, setOptionLoadIssue] = useState("");
@@ -197,6 +203,42 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
       : current.filter((id) => id !== personId));
     pendingSubmit.current = null;
   };
+  const openMobileWorkerAssignment = (index: number) => {
+    setMobileAssignment({ kind: "worker", index, selectedIds: [...(workerIds[String(index)] ?? [])] });
+    setMobileAssignmentSearch("");
+  };
+  const openMobileTailAssignment = () => {
+    setMobileAssignment({ kind: "tail", selectedIds: [...tailPersonIds] });
+    setMobileAssignmentSearch("");
+  };
+  const toggleMobileAssignmentPerson = (personId: string) => {
+    setMobileAssignment((current) => {
+      if (!current) return current;
+      const selectedIds = current.selectedIds.includes(personId)
+        ? current.selectedIds.filter((id) => id !== personId)
+        : [...current.selectedIds, personId];
+      return current.kind === "worker"
+        ? { kind: "worker", index: current.index, selectedIds }
+        : { kind: "tail", selectedIds };
+    });
+  };
+  const cancelMobileAssignment = () => {
+    setMobileAssignment(null);
+    setMobileAssignmentSearch("");
+  };
+  const confirmMobileAssignment = () => {
+    if (!mobileAssignment) return;
+    const selectedIds = [...mobileAssignment.selectedIds];
+    if (mobileAssignment.kind === "worker") {
+      const key = String(mobileAssignment.index);
+      setWorkerIds((current) => ({ ...current, [key]: selectedIds }));
+    } else {
+      setTailPersonIds(selectedIds);
+    }
+    pendingSubmit.current = null;
+    setMobileAssignment(null);
+    setMobileAssignmentSearch("");
+  };
 
   const persistMergedDraft = async (): Promise<ProcessConfigurationResponse> => {
     if (!response || !editable || itemIssue || workerIssue >= 0) {
@@ -307,6 +349,18 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     for (const person of people) identities.set(person.personId, person);
     return identities;
   }, [people, plan]);
+  const mobileAssignmentOptions = mobileAssignment?.kind === "tail" ? tailOptions : workerOptions;
+  const mobileAssignmentNeedle = mobileAssignmentSearch.trim().toLocaleLowerCase();
+  const mobileFilteredOptions = mobileAssignmentOptions.filter((person) => {
+    const personType = person.personType === "temporary" ? "临时工" : "正式工";
+    return !mobileAssignmentNeedle || `${person.displayName} ${personType}`.toLocaleLowerCase().includes(mobileAssignmentNeedle);
+  });
+  const mobileAssignmentGroups = mobileAssignment?.kind === "tail"
+    ? [{ label: "尾查人员", people: mobileFilteredOptions }]
+    : [
+        { label: "正式工", people: mobileFilteredOptions.filter((person) => person.personType === "internal") },
+        { label: "临时工", people: mobileFilteredOptions.filter((person) => person.personType === "temporary") },
+      ];
   const changedProps = onOrderChanged ? { onOrderChanged } : {};
 
   if (!response || !plan) return <Surface>{message || "正在加载…"}</Surface>;
@@ -335,13 +389,15 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
             { label: "正式工", people: filteredWorkers.filter((person) => person.personType === "internal") },
             { label: "临时工", people: filteredWorkers.filter((person) => person.personType === "temporary") },
           ] as const;
+          const assignedNames = selectedIds.map((personId) => peopleById.get(personId)?.displayName ?? "已分配人员");
           return <section className="process-worker-line" key={index}>
-            <div className="process-worker-line__heading"><b>工序 {index + 1}</b>{items.length > 1 ? <Button disabled={busy} onClick={() => { setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)); setWorkerIds((current) => Object.fromEntries(items.filter((_, itemIndex) => itemIndex !== index).map((_, newIndex) => { const oldIndex = newIndex >= index ? newIndex + 1 : newIndex; return [String(newIndex), current[String(oldIndex)] ?? []]; }))); }}>删除</Button> : null}</div>
+            <div className="process-worker-line__heading"><div className="process-worker-heading-primary"><b>工序 {index + 1}</b><Button className="process-worker-mobile-assign" disabled={busy} onClick={() => openMobileWorkerAssignment(index)}>{selectedIds.length ? `分配人员 · ${selectedIds.length}` : "分配人员"}</Button></div>{items.length > 1 ? <Button disabled={busy} onClick={() => { setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)); setWorkerIds((current) => Object.fromEntries(items.filter((_, itemIndex) => itemIndex !== index).map((_, newIndex) => { const oldIndex = newIndex >= index ? newIndex + 1 : newIndex; return [String(newIndex), current[String(oldIndex)] ?? []]; }))); }}>删除</Button> : null}</div>
             <div className="process-worker-line__body">
               <div className="process-worker-fields">
                 <div className="process-worker-source"><label><input type="radio" checked={item.source === "catalog"} disabled={busy} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} /> 公共工序</label><label><input type="radio" checked={item.source === "custom"} disabled={busy} onChange={() => setItem(index, { source: "custom", processId: "" })} /> 自定义工序</label></div>
                 {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => setItem(index, { processId })} /></span></label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
                 <InsetField label="候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} disabled={busy} onChange={(event) => setItem(index, { unitPrice: event.target.value })} />
+                <div className="process-worker-mobile-assigned-summary"><small>已分配人员</small><span>{assignedNames.length ? assignedNames.join("、") : "暂未分配"}</span></div>
               </div>
               <div className="process-worker-picker">
                 <div className="process-worker-picker__heading"><b>返工人员 *</b><small>{selectedIds.length ? `已分配 ${selectedIds.length} 人` : "至少选择 1 人"}</small></div>
@@ -359,7 +415,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
       <Surface className="process-worker-tail-card">
         <div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少 1 人"}</StatusBadge></div>
         <div className="process-worker-tail-body">
-          <div className="process-worker-tail-work"><b>尾查</b><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
+          <div className="process-worker-tail-work"><div className="process-worker-tail-title-row"><b>尾查</b><Button className="process-worker-mobile-assign" disabled={busy} onClick={openMobileTailAssignment}>{tailPersonIds.length ? `分配人员 · ${tailPersonIds.length}` : "分配人员"}</Button></div><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /><div className="process-worker-mobile-assigned-summary"><small>已分配人员</small><span>{tailPersonIds.length ? tailPersonIds.map((personId) => peopleById.get(personId)?.displayName ?? "尾查人员").join("、") : "暂未分配"}</span></div></div>
           <div className="process-worker-picker">
             <div className="process-worker-picker__heading"><b>尾查人员 *</b><small>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少选择 1 人"}</small></div>
             <div className="process-worker-selected"><span>已分配人员</span><div className="process-worker-chips">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); return <span key={personId}>{person?.displayName ?? "尾查人员"}<button type="button" aria-label={`移除 ${person?.displayName ?? "尾查人员"}`} disabled={busy} onClick={() => toggleTailPerson(personId, false)}>×</button></span>; }) : <small>暂未分配</small>}</div></div>
@@ -369,6 +425,13 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
         </div>
       </Surface>
       <div className="process-worker-actions"><Button disabled={busy || !saveReady} onClick={() => void save()}>{busy ? "处理中…" : "保存工序&工人"}</Button><Button variant="primary" disabled={busy || !submitReady} onClick={() => void submit()}>{busy ? "提交中…" : "提交 IE 核价"}</Button>{readinessIssues.length ? <p role="status">还需完成：{readinessIssues.join("；")}</p> : <p role="status">{message}</p>}</div>
+      {mobileAssignment ? <div className="process-worker-mobile-sheet-backdrop" role="presentation" onMouseDown={cancelMobileAssignment}><section className="process-worker-mobile-sheet" role="dialog" aria-modal="true" aria-label={mobileAssignment.kind === "tail" ? "选择尾查人员" : `分配工序 ${mobileAssignment.index + 1} 人员`} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="process-worker-mobile-sheet__heading"><div><h2>{mobileAssignment.kind === "tail" ? "选择尾查人员" : "分配返工人员"}</h2><small>已选择 {mobileAssignment.selectedIds.length} 人</small></div></div>
+        <input className="process-worker-people-search" type="search" value={mobileAssignmentSearch} placeholder={mobileAssignment.kind === "tail" ? "搜索尾查人员" : "搜索正式工或临时工"} disabled={busy} autoFocus onChange={(event) => setMobileAssignmentSearch(event.target.value)} />
+        <div className="process-worker-mobile-sheet__selected"><small>当前选择</small><span>{mobileAssignment.selectedIds.length ? mobileAssignment.selectedIds.map((personId) => peopleById.get(personId)?.displayName ?? "已选人员").join("、") : "暂未选择"}</span></div>
+        <div className="process-worker-mobile-sheet__groups">{mobileAssignmentGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}><legend><span>{group.label}</span><small>{group.people.length} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={() => setTemporaryDialogOpen(true)}>＋新增</button> : null}</legend><div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={mobileAssignment.selectedIds.includes(person.personId)} disabled={busy} onChange={() => toggleMobileAssignmentPerson(person.personId)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "人员目录暂不可用" : "没有匹配人员"}</p>}</div></fieldset>)}</div>
+        <div className="process-worker-mobile-sheet__actions"><Button disabled={busy} onClick={cancelMobileAssignment}>取消</Button><Button variant="primary" disabled={busy || mobileAssignment.selectedIds.length === 0} onClick={confirmMobileAssignment}>确认分配</Button></div>
+      </section></div> : null}
       {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={() => setTemporaryDialogOpen(false)}><div role="dialog" aria-modal="true" aria-label="新增临时工" onMouseDown={(event) => event.stopPropagation()}><Surface><h2>新增临时工</h2><InsetField label="姓名" value={temporaryName} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="备注（可选）" value={temporaryRemark} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={() => setTemporaryDialogOpen(false)}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void createTemporaryWorker()}>添加临时工</Button></div></Surface></div></div> : null}
     </div>;
   }
