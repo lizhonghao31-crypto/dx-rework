@@ -317,8 +317,11 @@ export class CompletionReviewService {
          LIMIT 1 FOR UPDATE OF confirmation`,
         [reworkOrderId],
       );
-      const current = confirmation.rows[0];
-      if (!current) error("没有待 IE 复核的尾部最终确认记录", 409, "INVALID_STATE_TRANSITION");
+      const current = confirmation.rows[0] ?? error(
+        "没有待 IE 复核的尾部最终确认记录",
+        409,
+        "INVALID_STATE_TRANSITION",
+      );
       const ieReviewId = randomUUID();
       const nextStatus = input.decision === "approved"
         ? "pending_responsibility_determination"
