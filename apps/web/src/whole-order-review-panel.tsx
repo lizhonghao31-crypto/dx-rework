@@ -2,8 +2,13 @@ import {
   TailInspectionResponseSchema,
   WholeOrderReviewResponseSchema,
   type TailInspectionResponse,
-  type WholeOrderReviewResponse,
 } from "@dx-rework/contracts";
+import {
+  CompletionConfirmationMutationResponseSchema,
+  CompletionIeReviewMutationResponseSchema,
+  CompletionReviewResponseSchema,
+  type CompletionReviewResponse,
+} from "@dx-rework/contracts/completion-review";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,14 +22,15 @@ const request = async <T,>(path: string, parse: (value: unknown) => T, init?: Re
   return parse(await response.json());
 };
 
-const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): string => ({
+const reworkStatusLabel = (status: CompletionReviewResponse["reworkStatus"]): string => ({
   draft: "草稿",
   pending_process_configuration: "待配置工序",
-  pending_ie_review: "待 IE 审核",
+  pending_ie_review: "待 IE 核价",
   pending_task_assignment: "待分工",
   in_progress: "返工执行中",
-  pending_order_review: "待尾部核量",
+  pending_order_review: "待尾部确认",
   pending_quantity_adjustment_ie_review: "历史订单数量调整待 IE",
+  pending_completion_ie_review: "待 IE 复核",
   pending_responsibility_determination: "待责任判定",
   pending_owner_signature: "待老板确认签字",
   pending_responsibility_action: "责任处理中",
@@ -34,17 +40,20 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
 })[status] ?? status;
 
 export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrderId: string; onChanged: () => Promise<void> }) {
-  const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
+  const [data, setData] = useState<CompletionReviewResponse | null>(null);
   const [tailData, setTailData] = useState<TailInspectionResponse | null>(null);
-  const [message, setMessage] = useState("正在加载整单完成状态…");
+  const [message, setMessage] = useState("正在加载返工完成状态…");
   const [busy, setBusy] = useState(false);
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
+  const [finalQuantities, setFinalQuantities] = useState<Record<string, string>>({});
+  const [ieReviewReason, setIeReviewReason] = useState("");
   const attempts = useRef<Record<string, string>>({});
+
   const load = async () => {
     const overview = await request(
       "rework-orders/" + reworkOrderId + "/whole-order-review",
-      WholeOrderReviewResponseSchema.parse,
+      CompletionReviewResponseSchema.parse,
     );
     const tail = overview.unifiedExecutionRequired
       ? null
@@ -52,8 +61,16 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
         "rework-orders/" + reworkOrderId + "/tail-inspection",
         TailInspectionResponseSchema.parse,
       );
+    const confirmedByProcess = new Map(
+      (overview.completionConfirmation?.processes ?? []).map((process) => [process.configurationItemId, process.finalConfirmedQuantity]),
+    );
     setData(overview);
     setTailData(tail);
+    setFinalQuantities((current) => Object.fromEntries(overview.processes.map((process) => [
+      process.configurationItemId,
+      current[process.configurationItemId]
+        ?? String(confirmedByProcess.get(process.configurationItemId) ?? process.completedQuantity),
+    ])));
     setMultipliers((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
       const id = `${worker.configurationItemId}:${worker.personId}`;
       return [id, current[id] ?? String(worker.multiplier)];
@@ -62,16 +79,22 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       const id = `${worker.configurationItemId}:${worker.personId}`;
       return [id, current[id] ?? worker.reason ?? ""];
     })));
-    if (overview.reviewId) {
-      setMessage("本单已完成整单确认并进入责任判定。");
+    if (overview.reviewId || overview.reworkStatus === "pending_responsibility_determination") {
+      setMessage("IE 已复核通过；最终数量已锁定并进入责任判定。");
+    } else if (overview.reworkStatus === "pending_completion_ie_review") {
+      setMessage("尾部最终数量已确认；等待 IE 复核数量与质量，工资尚未正式生成。");
     } else if (overview.reworkStatus === "pending_order_review") {
-      setMessage("请核对返工人员上数不超过尾查数量；数据有误可直接驳回对应执行记录重报。");
+      setMessage(overview.completionConfirmation?.ieReview?.decision === "rejected"
+        ? "IE 已退回上一版最终确认；请重新核对最终数量后再次提交。"
+        : "请核对工人申报、尾查数量和最终确认数量；原始报数始终保留。",
+      );
     } else if (overview.reworkStatus === "in_progress") {
-      setMessage("返工人员与尾查的执行报数全部完成后进入整单确认。");
+      setMessage("返工人员与尾查执行报数全部完成后进入尾部确认。");
     } else {
       setMessage("");
     }
   };
+
   useEffect(() => {
     let requestInFlight = false;
     let hasLoaded = false;
@@ -105,14 +128,14 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   };
 
   const reject = async (reportId: string, personId: string | null, executionKind: "worker" | "tail_inspection" = "worker") => {
-    if (!data) return;
+    if (!data || data.reworkStatus !== "pending_order_review") return;
     const reason = await promptInApp(executionKind === "tail_inspection" ? "请填写驳回这条尾查报数的原因" : "请填写驳回这条完成记录的原因");
     if (!reason?.trim()) return;
     try {
       await call("work-reports/" + reportId + "/reject", WholeOrderReviewResponseSchema.parse, { expectedOrderVersion: data.orderVersion, rejectedPersonId: personId, reason });
       setMessage(executionKind === "tail_inspection"
-        ? "已驳回该尾查报数；原记录保留，尾查可在 N04 重新报数。"
-        : personId ? "已驳回该人员的完成记录；订单将按有效完成数量重新判断是否补齐。" : "已驳回整条集体完成记录；订单将按有效完成数量重新判断是否补齐。");
+        ? "已驳回该尾查报数；原记录保留，尾查可重新报数。"
+        : personId ? "已驳回该人员的完成记录；原记录保留，等待重新上数。" : "已驳回整条集体完成记录；原记录保留，等待重新上数。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完成记录驳回失败"); }
   };
 
@@ -132,11 +155,22 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     }
   };
 
-  const approve = async () => {
-    if (!data) return;
+  const coefficientPayload = () => data?.temporaryWorkers.map((worker) => {
+    const id = `${worker.configurationItemId}:${worker.personId}`;
+    const reason = multiplierReasons[id]?.trim() ?? "";
+    return {
+      configurationItemId: worker.configurationItemId,
+      personId: worker.personId,
+      multiplier: Number(multipliers[id]?.trim() ?? ""),
+      ...(reason ? { reason } : {}),
+    };
+  }) ?? [];
+
+  const confirmCompletion = async () => {
+    if (!data || data.reworkStatus !== "pending_order_review") return;
     const coefficientRows = data.temporaryWorkers.map((worker) => {
       const id = `${worker.configurationItemId}:${worker.personId}`;
-      return { worker, text: multipliers[id]?.trim() ?? "", reason: multiplierReasons[id]?.trim() ?? "" };
+      return { text: multipliers[id]?.trim() ?? "", reason: multiplierReasons[id]?.trim() ?? "" };
     });
     if (coefficientRows.some((row) => !/^\d+(?:\.\d{1,3})?$/.test(row.text) || Number(row.text) <= 0 || Number(row.text) > 10)) {
       setMessage("临时工实发系数必须大于 0 且不超过 10，最多三位小数。");
@@ -146,19 +180,58 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       setMessage("临时工实发系数不是 1.0 时，必须填写调整原因。");
       return;
     }
-    if (!(await confirmInApp("确认本单有效上数和临时工实发系数无误，并进入责任判定？"))) return;
+    const finalRows = data.processes.map((process) => ({
+      process,
+      text: finalQuantities[process.configurationItemId]?.trim() ?? "",
+    }));
+    if (finalRows.some(({ text }) => !/^\d+(?:\.\d{1,2})?$/.test(text) || Number(text) <= 0)) {
+      setMessage("最终确认数量必须大于 0，最多两位小数。");
+      return;
+    }
+    if (finalRows.some(({ process, text }) => Number(text) > process.tailCheckedQuantity)) {
+      setMessage("最终确认数量不能超过对应尾查数量。");
+      return;
+    }
+    if (!(await confirmInApp("确认当前最终数量并提交 IE 复核？IE 通过前不会正式生成工资。"))) return;
     try {
-      await call("rework-orders/" + reworkOrderId + "/whole-order-review/approve", WholeOrderReviewResponseSchema.parse, {
-        expectedOrderVersion: data.orderVersion,
-        temporaryCoefficients: coefficientRows.map(({ worker, text, reason }) => ({
-          configurationItemId: worker.configurationItemId,
-          personId: worker.personId,
-          multiplier: Number(text),
-          ...(reason ? { reason } : {}),
-        })),
-      });
-      setMessage("整单确认已完成，进入责任判定。");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "整单完成确认失败"); }
+      await call(
+        "rework-orders/" + reworkOrderId + "/completion-confirmation",
+        CompletionConfirmationMutationResponseSchema.parse,
+        {
+          expectedOrderVersion: data.orderVersion,
+          finalQuantities: finalRows.map(({ process, text }) => ({
+            configurationItemId: process.configurationItemId,
+            finalConfirmedQuantity: Number(text),
+          })),
+          temporaryCoefficients: coefficientPayload(),
+        },
+      );
+      setMessage("最终数量已提交 IE 复核；原始上数与本次修改记录均已保留。");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "最终数量确认失败"); }
+  };
+
+  const reviewCompletion = async (decision: "approved" | "rejected") => {
+    if (!data || data.reworkStatus !== "pending_completion_ie_review" || !data.canCompletionIeReview) return;
+    const approved = decision === "approved";
+    if (!(await confirmInApp(approved
+      ? "确认数量与质量复核通过？通过后按最终确认数量生成工资，并进入责任判定。"
+      : "确认退回尾部主管重新确认最终数量？"))) return;
+    try {
+      await call(
+        "rework-orders/" + reworkOrderId + "/completion-ie-review",
+        CompletionIeReviewMutationResponseSchema.parse,
+        {
+          expectedOrderVersion: data.orderVersion,
+          decision,
+          ...(ieReviewReason.trim() ? { reason: ieReviewReason.trim() } : {}),
+        },
+      );
+      setIeReviewReason("");
+      setMessage(approved
+        ? "IE 复核通过；工资已按最终确认数量生成并进入责任判定。"
+        : "已退回尾部确认；历史确认与退回记录均保留。",
+      );
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "IE 复核提交失败"); }
   };
 
   if (!data || ["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
@@ -174,47 +247,73 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     : temporaryCoefficientRows.some((row) => Number(row.text) !== 1 && !row.reason)
       ? "还需完成：非 1.0 的临时工实发系数必须填写调整原因"
       : "";
-  const wholeOrderReady = allComplete && temporaryCoefficientIssue === "";
+  const finalQuantityIssue = data.reworkStatus === "pending_order_review" && data.processes.some((process) => {
+    const text = finalQuantities[process.configurationItemId]?.trim() ?? "";
+    return !/^\d+(?:\.\d{1,2})?$/.test(text) || Number(text) <= 0 || Number(text) > process.tailCheckedQuantity;
+  }) ? "还需完成：最终确认数量须大于 0 且不超过尾查数量" : "";
+  const wholeOrderReady = allComplete && temporaryCoefficientIssue === "" && finalQuantityIssue === "";
+  const confirmationByProcess = new Map(
+    (data.completionConfirmation?.processes ?? []).map((process) => [process.configurationItemId, process]),
+  );
+  const isTailConfirmation = data.reworkStatus === "pending_order_review";
+  const isIeCompletionReview = data.reworkStatus === "pending_completion_ie_review";
+
   return <div className="whole-order-review-flow">
     <Surface>
       <div className="section-title">
         <div>
-          <h2>{data.reworkStatus === "pending_order_review" ? "N05 · 尾部主管整单确认" : "返工完成进度"}</h2>
+          <h2>{isTailConfirmation ? "N07 · 尾部确认" : isIeCompletionReview ? "N08 · IE 复核" : "返工完成进度"}</h2>
           {message && <p>{message}</p>}
         </div>
-        <StatusBadge tone={data.reworkStatus === "pending_order_review" ? "warning" : allComplete ? "success" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge>
+        <StatusBadge tone={isTailConfirmation || isIeCompletionReview ? "warning" : allComplete ? "success" : "info"}>{reworkStatusLabel(data.reworkStatus)}</StatusBadge>
       </div>
     </Surface>
 
+    {data.completionConfirmation?.ieReview?.decision === "rejected" && isTailConfirmation && <Surface>
+      <StatusBadge tone="warning">上一版被 IE 退回</StatusBadge>
+      <p>{data.completionConfirmation.ieReview.reason || "IE 未填写退回说明；请重新核对最终生产数量。"}</p>
+    </Surface>}
+
     <Surface>
-      <h2>{data.reworkStatus === "pending_order_review" ? "返工上数与尾查数量对照" : "统一执行报数状态"}</h2>
-      <p>{data.reworkStatus === "pending_order_review" ? "每道返工工序的有效上数不得超过尾查件数；报数有误可直接驳回对应执行记录。" : "返工人员与尾查的执行报数全部完成后进入整单确认。"}</p>
-      {data.processes.map((process) => <div className="section-title whole-order-row" key={process.configurationItemId}>
-        <div className="whole-order-process-main">
-          <b className="whole-order-process-name">{process.processName}</b>
-          <div className="whole-order-metrics">
-            <span className="whole-order-metric"><span className="whole-order-metric-label">工人上数</span><strong className="whole-order-metric-value">{process.completedQuantity} 件</strong></span>
-            <span className="whole-order-metric"><span className="whole-order-metric-label">尾查汇总</span><strong className="whole-order-metric-value">{process.tailCheckedQuantity} 件</strong></span>
-            <span className={`whole-order-gap${process.countGap < 0 ? " is-danger" : ""}`}><span className="whole-order-gap-label">{process.countGap >= 0 ? "差额" : "超出"}</span><strong className="whole-order-gap-value">{Math.abs(process.countGap)} 件</strong></span>
+      <h2>{isTailConfirmation || isIeCompletionReview ? "生产数量事实" : "统一执行报数状态"}</h2>
+      <p>{isTailConfirmation
+        ? "工人申报和尾查数量保持原始事实；尾部主管只确认最终生产数量，修改会记录修改人和时间。"
+        : isIeCompletionReview
+          ? "请复核数量真实性与质量真实性；本节点不重新核价。"
+          : "返工人员与尾查的执行报数全部完成后进入尾部确认。"}</p>
+      {data.processes.map((process) => {
+        const confirmed = confirmationByProcess.get(process.configurationItemId);
+        const finalValue = confirmed?.finalConfirmedQuantity ?? process.completedQuantity;
+        return <div className="section-title whole-order-row" key={process.configurationItemId}>
+          <div className="whole-order-process-main">
+            <b className="whole-order-process-name">{process.processName}</b>
+            <div className="whole-order-metrics">
+              <span className="whole-order-metric"><span className="whole-order-metric-label">工人申报</span><strong className="whole-order-metric-value">{process.completedQuantity} 件</strong></span>
+              <span className="whole-order-metric"><span className="whole-order-metric-label">尾查数量</span><strong className="whole-order-metric-value">{process.tailCheckedQuantity} 件</strong></span>
+              {isTailConfirmation && data.canReview
+                ? <InsetField label="最终确认数量" type="number" min="0.01" step="0.01" inputMode="decimal" value={finalQuantities[process.configurationItemId] ?? String(finalValue)} disabled={busy} onChange={(event) => setFinalQuantities((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} />
+                : <span className="whole-order-metric"><span className="whole-order-metric-label">最终确认</span><strong className="whole-order-metric-value">{finalValue} 件</strong></span>}
+              {confirmed?.modified && <span className="whole-order-gap"><span className="whole-order-gap-label">已调整</span><strong className="whole-order-gap-value">原 {confirmed.originalQuantity} 件</strong></span>}
+            </div>
           </div>
-        </div>
-        <StatusBadge tone={process.complete ? "success" : "danger"}>{process.complete ? data.reworkStatus === "pending_order_review" ? "可确认" : "待两项完成" : "需驳回调整"}</StatusBadge>
-      </div>)}
+          <StatusBadge tone={process.complete ? "success" : "danger"}>{process.complete ? isTailConfirmation ? "待确认" : isIeCompletionReview ? "待 IE 复核" : "已完成" : "需驳回调整"}</StatusBadge>
+        </div>;
+      })}
     </Surface>
 
-    {(data.canReview || data.reports.length > 0) && <Surface>
-      <h2>{data.unifiedExecutionRequired ? "返工执行报数记录" : "工人上数记录"}</h2>
-      <p>{data.unifiedExecutionRequired ? "返工人员与尾查都使用同一报数事实；有误时直接驳回对应记录。" : "工人上数有误时驳回；正常记录无需重复确认。"}</p>
+    {(data.canReview || data.canCompletionIeReview || data.reports.length > 0) && <Surface>
+      <h2>{data.unifiedExecutionRequired ? "执行原始报数" : "工人原始上数"}</h2>
+      <p>{isIeCompletionReview ? "IE 在这里核对原始执行事实；如整体事实不可信，请退回尾部确认，不在本节点改数或改价。" : "原始上数永久保留；尾部确认前发现单条错误，可驳回对应记录重报。"}</p>
       {data.reports.map((report) => <div className="section-title whole-order-row" key={report.workReportId}>
         <div className="whole-order-report-main">
           <b className="whole-order-person-name">{report.executionKind === "tail_inspection" ? "尾查 · " : ""}{report.members.map((member) => member.displayName).join("、")}</b>
           <div className="whole-order-report-meta">
-            <span className="whole-order-report-label">上数</span>
+            <span className="whole-order-report-label">申报</span>
             <strong className="whole-order-report-value">{report.actualQuantity} 件</strong>
             <span className={`whole-order-report-state${report.rejected ? " is-danger" : ""}`}>{report.rejected ? "已驳回：" + report.rejectionReason : "当前有效"}</span>
           </div>
         </div>
-        {data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">
+        {isTailConfirmation && data.canReview && !report.rejected && <div className="mobile-actions whole-order-actions">
           {report.assignmentMode === "collective"
             ? <Button onClick={() => void reject(report.workReportId, null, report.executionKind)} disabled={busy}>驳回整条集体记录</Button>
             : report.members.map((member) => <Button key={member.personId} onClick={() => void reject(report.workReportId, member.personId, report.executionKind)} disabled={busy}>驳回 {report.executionKind === "tail_inspection" ? "尾查 " : ""}{member.displayName}</Button>)}
@@ -223,7 +322,7 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       {data.reports.length === 0 && <p>尚无执行报数记录。</p>}
     </Surface>}
 
-    {!data.unifiedExecutionRequired && data.reworkStatus === "pending_order_review" && submittedTailAssignments.length > 0 && <Surface>
+    {!data.unifiedExecutionRequired && isTailConfirmation && submittedTailAssignments.length > 0 && <Surface>
       <h2>尾查报数记录</h2>
       <p>尾查数量有误时驳回，原记录保留，尾查重新报数后自动回到本节点核对。</p>
       {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>
@@ -241,9 +340,9 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       </div>)}
     </Surface>}
 
-    {data.canReview && data.reworkStatus === "pending_order_review" && data.temporaryWorkers.length > 0 && <Surface>
+    {isTailConfirmation && data.canReview && data.temporaryWorkers.length > 0 && <Surface>
       <h2>临时工实发系数</h2>
-      <p>默认 1.0；非 1.0 必须填写调整原因。</p>
+      <p>默认 1.0；非 1.0 必须填写调整原因。该系数随本次最终确认一起锁定。</p>
       {data.temporaryWorkers.map((worker) => {
         const id = `${worker.configurationItemId}:${worker.personId}`;
         return <div className="section-title whole-order-row" key={id}>
@@ -256,13 +355,23 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
       })}
     </Surface>}
 
-    {data.canReview && data.reworkStatus === "pending_order_review" && data.processes.every((process) => process.finalUnitPrice !== null) && <Surface>
-      <h2>确认整单并生成工资</h2>
-      <p className="whole-order-confirmation-copy">确认后生成工资并进入责任判定。</p>
+    {isTailConfirmation && data.canReview && data.processes.every((process) => process.finalUnitPrice !== null) && <Surface>
+      <h2>提交最终生产数量</h2>
+      <p className="whole-order-confirmation-copy">本次只形成最终生产事实并提交 IE 复核；IE 通过后才按最终确认数量生成正式工资。</p>
       <div className="mobile-actions">
-        <Button variant="primary" onClick={() => void approve()} disabled={busy || !wholeOrderReady}>{busy ? "确认中…" : "确认整单并进入责任判定"}</Button>
+        <Button variant="primary" onClick={() => void confirmCompletion()} disabled={busy || !wholeOrderReady}>{busy ? "提交中…" : "确认最终数量并提交 IE"}</Button>
       </div>
-      {temporaryCoefficientIssue && <p role="status">{temporaryCoefficientIssue}</p>}
+      {(temporaryCoefficientIssue || finalQuantityIssue) && <p role="status">{temporaryCoefficientIssue || finalQuantityIssue}</p>}
+    </Surface>}
+
+    {isIeCompletionReview && data.canCompletionIeReview && <Surface>
+      <h2>IE 数量与质量复核</h2>
+      <p>只确认数量真实性与质量真实性，不重新核价。退回后返回尾部确认，所有历史数量和操作记录继续保留。</p>
+      <InsetField label="复核备注（可选）" value={ieReviewReason} disabled={busy} onChange={(event) => setIeReviewReason(event.target.value)} placeholder="通过或退回都可补充说明" />
+      <div className="mobile-actions">
+        <Button disabled={busy} onClick={() => void reviewCompletion("rejected")}>退回尾部确认</Button>
+        <Button variant="primary" disabled={busy} onClick={() => void reviewCompletion("approved")}>数量与质量复核通过</Button>
+      </div>
     </Surface>}
   </div>;
 }
