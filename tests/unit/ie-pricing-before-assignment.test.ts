@@ -40,6 +40,7 @@ describe("IE pricing before assignment invariants", () => {
   it("keeps temporary wages and external deductions as two separate layers", () => {
     expect(ReviewWholeOrderSchema.safeParse({
       expectedOrderVersion: 8,
+      finalQuantities: [{ configurationItemId: id, finalConfirmedQuantity: 10 }],
       temporaryCoefficients: [{
         configurationItemId: id,
         personId: id,
@@ -48,6 +49,7 @@ describe("IE pricing before assignment invariants", () => {
     }).success).toBe(true);
     expect(ReviewWholeOrderSchema.safeParse({
       expectedOrderVersion: 8,
+      finalQuantities: [{ configurationItemId: id, finalConfirmedQuantity: 10 }],
       temporaryCoefficients: [{
         configurationItemId: id,
         personId: id,
@@ -99,3 +101,4 @@ describe("IE pricing before assignment invariants", () => {
     expect(migration).toContain("OLD.status='pending_order_review' AND NEW.status='pending_responsibility_determination'");
   });
 });
+

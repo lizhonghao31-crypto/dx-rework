@@ -43,9 +43,13 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
   const attempts = useRef<Record<string, string>>({});
+  const requestInFlight = useRef(false);
 
   const load = async () => {
-    const overview = await request("rework-orders/" + reworkOrderId + "/whole-order-review", WholeOrderReviewResponseSchema.parse);
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    try {
+      const overview = await request("rework-orders/" + reworkOrderId + "/whole-order-review", WholeOrderReviewResponseSchema.parse);
     const tail = overview.unifiedExecutionRequired
       ? null
       : await request("rework-orders/" + reworkOrderId + "/tail-inspection", TailInspectionResponseSchema.parse);
@@ -69,8 +73,11 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     else if (overview.reworkStatus === "pending_order_review") {
       const rejected = overview.finalConfirmation?.status === "rejected" ? overview.finalConfirmation.reviewReason : null;
       setMessage(rejected ? `IE 已退回上一版：${rejected}。请修正最终数量后重新提交。` : "请核对工人上数和尾查数量，并填写每道工序的最终确认数量。");
-    } else if (overview.reworkStatus === "in_progress") setMessage("返工人员与尾查全部完成报数后进入最终数量确认。");
-    else setMessage("");
+      } else if (overview.reworkStatus === "in_progress") setMessage("返工人员与尾查全部完成报数后进入最终数量确认。");
+      else setMessage("");
+    } finally {
+      requestInFlight.current = false;
+    }
   };
 
   useEffect(() => { void load().catch((cause) => setMessage(cause instanceof Error ? cause.message : "读取失败")); }, [reworkOrderId]);
@@ -262,3 +269,4 @@ export function WholeOrderReviewPanel({ reworkOrderId, onChanged }: { reworkOrde
     </Surface>}
   </div>;
 }
+

@@ -649,7 +649,7 @@ export function ReworkDetailPage({
             <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
               {workflowNodes.map(renderWorkflowNode)}
             </div>
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N06 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
+            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
           </section>
         </div>
 
@@ -782,3 +782,4 @@ function WageSettlementFollowUp({ periods }: { periods: ReworkBusinessDetail["un
     </div>
   </Surface>;
 }
+
