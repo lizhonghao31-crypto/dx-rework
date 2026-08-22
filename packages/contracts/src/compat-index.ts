@@ -1,0 +1,30 @@
+export * from "./index.js";
+
+import {
+  CreateWorkTaskSchema as StrictCreateWorkTaskSchema,
+  OwnFactoryApprovalResponseSchema as StrictOwnFactoryApprovalResponseSchema,
+  PersonParamsSchema as StrictPersonParamsSchema,
+  RejectWorkReportSchema as StrictRejectWorkReportSchema,
+  ReviewWholeOrderSchema as StrictReviewWholeOrderSchema,
+  ReworkWorkTasksResponseSchema as StrictReworkWorkTasksResponseSchema,
+  TailInspectionOptionsResponseSchema as StrictTailInspectionOptionsResponseSchema,
+  WholeOrderReviewResponseSchema as StrictWholeOrderReviewResponseSchema,
+  WorkReportResponseSchema as StrictWorkReportResponseSchema,
+  WorkTaskAssignablePeopleResponseSchema as StrictWorkTaskAssignablePeopleResponseSchema,
+  WorkTaskMemberSchema as StrictWorkTaskMemberSchema,
+  WorkTaskResponseSchema as StrictWorkTaskResponseSchema,
+} from "./index.js";
+import { businessPersonCompatibleSchema } from "./business-person-id.js";
+
+export const PersonParamsSchema = businessPersonCompatibleSchema(StrictPersonParamsSchema);
+export const TailInspectionOptionsResponseSchema = businessPersonCompatibleSchema(StrictTailInspectionOptionsResponseSchema);
+export const WorkTaskMemberSchema = businessPersonCompatibleSchema(StrictWorkTaskMemberSchema);
+export const CreateWorkTaskSchema = businessPersonCompatibleSchema(StrictCreateWorkTaskSchema);
+export const WorkTaskAssignablePeopleResponseSchema = businessPersonCompatibleSchema(StrictWorkTaskAssignablePeopleResponseSchema);
+export const WorkTaskResponseSchema = businessPersonCompatibleSchema(StrictWorkTaskResponseSchema);
+export const WorkReportResponseSchema = businessPersonCompatibleSchema(StrictWorkReportResponseSchema);
+export const ReworkWorkTasksResponseSchema = businessPersonCompatibleSchema(StrictReworkWorkTasksResponseSchema);
+export const RejectWorkReportSchema = businessPersonCompatibleSchema(StrictRejectWorkReportSchema);
+export const ReviewWholeOrderSchema = businessPersonCompatibleSchema(StrictReviewWholeOrderSchema);
+export const WholeOrderReviewResponseSchema = businessPersonCompatibleSchema(StrictWholeOrderReviewResponseSchema);
+export const OwnFactoryApprovalResponseSchema = businessPersonCompatibleSchema(StrictOwnFactoryApprovalResponseSchema);
