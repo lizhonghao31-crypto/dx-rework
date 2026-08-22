@@ -29,6 +29,23 @@ describe("order detail information architecture", () => {
     expect(styles).not.toContain("display: contents");
   });
 
+  it("shows only populated optional order fields in a responsive dynamic information section", async () => {
+    const [detail, styles] = await Promise.all([
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail-compact.css", "utf8"),
+    ]);
+    expect(detail).toContain("const dynamicFacts = [");
+    expect(detail).toContain('{ label: "客供款号", value: detail.customerSupplyCode }');
+    expect(detail).toContain('{ label: "工厂款号", value: detail.factoryStyleNo }');
+    expect(detail).toContain('{ label: "订单号", value: detail.orderNo }');
+    expect(detail).toContain('{ label: "问题描述", value: detail.problemDescription }');
+    expect(detail).toContain("Boolean(fact.value)");
+    expect(detail).toContain('className="rework-detail-dynamic-information"');
+    expect(detail).toContain("仅展示本单已填写的业务字段");
+    expect(styles).toContain(".rework-detail-dynamic-facts");
+    expect(styles).toContain("repeat(auto-fit, minmax(180px, 1fr))");
+  });
+
   it("uses the confirmed desktop overview, five-column two-row workflow and mobile horizontal rail", async () => {
     const [detail, styles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),

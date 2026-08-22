@@ -458,6 +458,16 @@ export function ReworkDetailPage({
   const detail = state.value;
   const orderAttachments = detail.attachments.filter((attachment) => attachment.entityType === "rework_order");
   const imageAttachments = orderAttachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
+  const dynamicFacts = [
+    { label: "客供款号", value: detail.customerSupplyCode },
+    { label: "工厂款号", value: detail.factoryStyleNo },
+    { label: "订单号", value: detail.orderNo },
+    { label: "订单数量", value: detail.orderQuantity === null ? null : `${detail.orderQuantity} 件` },
+    { label: "返工原因", value: detail.reworkReason },
+    { label: "问题部位", value: detail.problemPart },
+    { label: "问题描述", value: detail.problemDescription },
+    { label: "返工数量", value: detail.reworkQuantity === null ? null : `${detail.reworkQuantity} 件` },
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
@@ -577,6 +587,18 @@ export function ReworkDetailPage({
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--attachments"><dt>附件</dt><dd>{orderAttachments.length} 份</dd></div>
         </dl>
+
+        {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
+          <div className="section-title rework-detail-panel-title">
+            <div><h2>订单补充信息</h2><p>仅展示本单已填写的业务字段。</p></div>
+            <StatusBadge tone="info">{dynamicFacts.length} 项</StatusBadge>
+          </div>
+          <dl className="rework-detail-dynamic-facts">
+            {dynamicFacts.map((fact) => <div key={fact.label}>
+              <dt>{fact.label}</dt><dd>{fact.value}</dd>
+            </div>)}
+          </dl>
+        </Surface> : null}
 
         {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
 
@@ -782,4 +804,3 @@ function WageSettlementFollowUp({ periods }: { periods: ReworkBusinessDetail["un
     </div>
   </Surface>;
 }
-

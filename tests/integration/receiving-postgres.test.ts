@@ -93,6 +93,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receiptCount: 1,
       lastReceiverName: "仓管测试",
     });
+    expect(shortageBoard.kpis.abnormalOrderCount).toBe(1);
 
     const second = await service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
@@ -112,6 +113,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     });
     expect(balancedBoard.kpis.orderCount).toBe(1);
     expect(balancedBoard.kpis.receivedQuantity).toBe(200);
+    expect(balancedBoard.kpis.abnormalOrderCount).toBe(0);
     expect(balancedBoard.kpis.differenceQuantity).toBe(0);
     expect(balancedBoard.kpis.differenceRate).toBe(0);
 

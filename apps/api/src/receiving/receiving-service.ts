@@ -40,6 +40,7 @@ type BoardResult = Readonly<{
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
+    abnormalOrderCount: number;
     differenceQuantity: number;
     differenceRate: number;
   }>;
@@ -245,12 +246,14 @@ export class ReceivingService {
       [date, needle],
     );
     const differenceQuantity = rows.reduce((sum, row) => sum + Math.abs(row.differenceQuantity), 0);
+    const abnormalOrderCount = rows.filter((row) => row.differenceQuantity !== 0).length;
     const documentQuantity = rows.reduce((sum, row) => sum + row.documentQuantity, 0);
     return {
       date,
       kpis: {
         orderCount: rows.length,
         receivedQuantity: Number(dayStats.rows[0]?.received_quantity ?? 0),
+        abnormalOrderCount,
         differenceQuantity,
         differenceRate: documentQuantity === 0 ? 0 : Number(((differenceQuantity / documentQuantity) * 100).toFixed(2)),
       },
