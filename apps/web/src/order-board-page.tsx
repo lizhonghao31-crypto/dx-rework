@@ -134,7 +134,7 @@ export function OrderBoardPage() {
 
     <div className="order-board-kpis">
       <KpiInstrument label="今日收货订单数" value={kpis.orderCount} detail={date} tone="info" />
-      <KpiInstrument label="今日收货数量" value={`${kpis.receivedQuantity}件`} detail={date} tone="info" />
+      <KpiInstrument label="今日收货数量" value={`${kpis.receivedQuantity}件`} detail={`${date} · 实际收货`} tone="info" />
       <KpiInstrument label="异常订单数量" value={kpis.abnormalOrderCount} detail="累计收货与单据数量不一致" tone={kpis.abnormalOrderCount ? "warning" : "success"} />
       <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail={`绝对差异 ${kpis.differenceQuantity} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
     </div>
