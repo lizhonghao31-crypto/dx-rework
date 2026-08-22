@@ -79,6 +79,7 @@
     { "version": "0077_rework_v2_n01_supply_context", "checksum": "bda0d654533c6c6020a1d725206a13116f44f817636842dc60117ea82ede621d" },
     { "version": "0078_rework_v2_process_worker_preassignment", "checksum": "2927c98cb9e28f76d3a3e4e9cab6293c7876a7ea77daf45f22b94d65727c7ec3" },
     { "version": "0079_rework_v2_unified_execution", "checksum": "59385d69f030de279de4b8006f08b40e5da7cdb81fd2008be7012d1ace387a57" },
-    { "version": "0080_rework_v2_final_quantity_ie_review", "checksum": "2240e68a516d1483863e3ba40eba2ed70ea6e03670ccb88a70858e50cd97fd53" }
+    { "version": "0080_rework_v2_final_quantity_ie_review", "checksum": "2240e68a516d1483863e3ba40eba2ed70ea6e03670ccb88a70858e50cd97fd53" },
+    { "version": "0081_rework_v2_responsibility_2", "checksum": "7a5c7393197e90d713081c32aa2c92ab50dfd2d0a6bcd4352aa9bffab8cc1ae3" }
   ]
 }
