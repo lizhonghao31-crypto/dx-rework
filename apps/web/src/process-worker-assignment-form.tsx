@@ -1,7 +1,6 @@
 import {
   ProcessConfigurationOptionsResponseSchema,
   ProcessConfigurationResponseSchema,
-  WorkTaskAssignablePeopleResponseSchema,
   type ProcessConfigurationOptionsResponse,
   type ProcessConfigurationResponse,
   type WorkTaskAssignablePeopleResponse,
