@@ -1,7 +1,6 @@
 import {
   ProcessConfigurationOptionsResponseSchema,
   ProcessConfigurationResponseSchema,
-  WorkTaskAssignablePeopleResponseSchema,
   type ProcessConfigurationOptionsResponse,
   type ProcessConfigurationResponse,
   type WorkTaskAssignablePeopleResponse,
@@ -18,6 +17,7 @@ import { createWebUrls } from "../url-contract.js";
 import { LegacyProcessConfigurationForm } from "./legacy-process-configuration-form.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
+import { parseWorkTaskOptions } from "./work-task-options.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./process-worker-assignment-form.css";
 
@@ -87,6 +87,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
   const [tailSearch, setTailSearch] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载分配工序与工人…");
+  const [optionLoadIssue, setOptionLoadIssue] = useState("");
   const [busy, setBusy] = useState(false);
   const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
   const [temporaryName, setTemporaryName] = useState("");
@@ -160,11 +161,24 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     setUser(me.user); setDetail(loadedDetail); hydrate(config, workerPlan);
     const configurable = me.user.isRoot === true || Boolean(me.user.businessRoles?.includes("tail_supervisor") && me.user.capabilities.includes("process:configure") && me.user.capabilities.includes("work:assign"));
     if (configurable && config.reworkStatus === "pending_process_configuration") {
-      const [processes, workers] = await Promise.all([
+      const [processResult, peopleResult] = await Promise.allSettled([
         request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema.parse),
-        request("work-task-options", WorkTaskAssignablePeopleResponseSchema.parse),
+        request("work-task-options", parseWorkTaskOptions),
       ]);
-      setProcessOptions(processes.processes); setPeople(workers.people);
+      const issues: string[] = [];
+      if (processResult.status === "fulfilled") setProcessOptions(processResult.value.processes);
+      else issues.push(`工序目录加载失败：${processResult.reason instanceof Error ? processResult.reason.message : "请刷新重试"}`);
+      if (peopleResult.status === "fulfilled") {
+        setPeople(peopleResult.value.response.people);
+        if (peopleResult.value.compatibilityMode) {
+          issues.push("当前 API 仍是上一版本：正式工和临时工已恢复，尾查人员需完成后端版本切换后加载");
+        } else if (peopleResult.value.response.people.length === 0) {
+          issues.push("没有读取到可分配人员，请检查员工权限中的工人和尾查角色");
+        }
+      } else {
+        issues.push(`人员加载失败：${peopleResult.reason instanceof Error ? peopleResult.reason.message : "请刷新重试"}`);
+      }
+      setOptionLoadIssue(issues.join("；"));
     }
     setMessage("");
   };
@@ -267,7 +281,13 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
       setMessage("返工人员与尾查任务已生效，返工开始。"); await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "返工启动失败"); } finally { setBusy(false); }
   };
-  const reloadPeople = async () => { const workers = await request("work-task-options", WorkTaskAssignablePeopleResponseSchema.parse); setPeople(workers.people); };
+  const reloadPeople = async () => {
+    const workers = await request("work-task-options", parseWorkTaskOptions);
+    setPeople(workers.response.people);
+    setOptionLoadIssue(workers.compatibilityMode
+      ? "当前 API 仍是上一版本：正式工和临时工已恢复，尾查人员需完成后端版本切换后加载"
+      : "");
+  };
   const createTemporaryWorker = async () => {
     const name = temporaryName.trim(); const remark = temporaryRemark.trim(); if (!canCreateTemporary || busy || !name) return;
     setBusy(true);
@@ -302,6 +322,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
       <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。</p></div>
       <Surface>
         <div className="section-title"><div><h2>工序与人员</h2><p>左侧设置工序与价格，右侧快速分配正式工或临时工；每道工序至少 1 人。</p></div><Button disabled={busy} onClick={() => { setItems((current) => [...current, emptyItem()]); setWorkerIds((current) => ({ ...current, [String(items.length)]: [] })); }}>增加工序</Button></div>
+        {optionLoadIssue ? <p className="process-worker-option-alert" role="alert">{optionLoadIssue}</p> : null}
         <div className="process-worker-lines">{items.map((item, index) => {
           const key = String(index);
           const selectedIds = workerIds[key] ?? [];
@@ -328,7 +349,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
                 <input className="process-worker-people-search" type="search" value={workerSearches[key] ?? ""} placeholder="搜索正式工或临时工" disabled={busy} onChange={(event) => setWorkerSearches((current) => ({ ...current, [key]: event.target.value }))} />
                 <div className="process-worker-people-groups">{workerGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}>
                   <legend><span>{group.label}</span><small>{group.people.length} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={() => setTemporaryDialogOpen(true)}>＋新增</button> : null}</legend>
-                  <div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={selectedIds.includes(person.personId)} disabled={busy} onChange={(event) => event.target.checked ? addWorker(index, person.personId) : removeWorker(index, person.personId)} /><span>{person.displayName}</span></label>) : <p>没有匹配人员</p>}</div>
+                  <div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={selectedIds.includes(person.personId)} disabled={busy} onChange={(event) => event.target.checked ? addWorker(index, person.personId) : removeWorker(index, person.personId)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "人员目录暂不可用" : "没有匹配人员"}</p>}</div>
                 </fieldset>)}</div>
               </div>
             </div>
@@ -343,7 +364,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
             <div className="process-worker-picker__heading"><b>尾查人员 *</b><small>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少选择 1 人"}</small></div>
             <div className="process-worker-selected"><span>已分配人员</span><div className="process-worker-chips">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); return <span key={personId}>{person?.displayName ?? "尾查人员"}<button type="button" aria-label={`移除 ${person?.displayName ?? "尾查人员"}`} disabled={busy} onClick={() => toggleTailPerson(personId, false)}>×</button></span>; }) : <small>暂未分配</small>}</div></div>
             <input className="process-worker-people-search" type="search" value={tailSearch} placeholder="搜索尾查人员" disabled={busy} onChange={(event) => setTailSearch(event.target.value)} />
-            <fieldset className="process-worker-people-group process-worker-people-group--tail"><legend><span>尾查人员</span><small>{tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).length} 人</small></legend><div>{tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).map((person) => <label key={person.personId}><input type="checkbox" checked={tailPersonIds.includes(person.personId)} disabled={busy} onChange={(event) => toggleTailPerson(person.personId, event.target.checked)} /><span>{person.displayName}</span></label>)}</div></fieldset>
+            <fieldset className="process-worker-people-group process-worker-people-group--tail"><legend><span>尾查人员</span><small>{tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).length} 人</small></legend><div>{tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).length ? tailOptions.filter((person) => !tailSearch.trim() || person.displayName.toLocaleLowerCase().includes(tailSearch.trim().toLocaleLowerCase())).map((person) => <label key={person.personId}><input type="checkbox" checked={tailPersonIds.includes(person.personId)} disabled={busy} onChange={(event) => toggleTailPerson(person.personId, event.target.checked)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "尾查目录暂不可用" : "没有匹配人员"}</p>}</div></fieldset>
           </div>
         </div>
       </Surface>

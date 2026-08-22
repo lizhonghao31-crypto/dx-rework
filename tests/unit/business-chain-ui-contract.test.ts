@@ -149,7 +149,10 @@ describe("business-chain UI handoff contracts", () => {
     expect(processConfiguration).toContain('{ label: "临时工"');
     expect(processConfiguration).toContain("plan?.assignments");
     expect(processConfiguration).toContain("process-worker-line__body");
-    expect(processConfigurationCss).toContain("grid-template-columns:minmax(250px,.82fr) minmax(380px,1.18fr)");
+    expect(processConfigurationCss).toContain("grid-template-columns:minmax(220px,.56fr) minmax(560px,1.44fr)");
+    expect(processConfiguration).toContain("parseWorkTaskOptions");
+    expect(processConfiguration).toContain("optionLoadIssue");
+    expect(processConfiguration).toContain("人员目录暂不可用");
     expect(processConfigurationCss).toContain(".process-worker-people-groups");
     expect(workReporting).toContain('peopleType === "internal" ? "正式工" : "临时工"');
     expect(workReporting).toContain("filteredPeople");
