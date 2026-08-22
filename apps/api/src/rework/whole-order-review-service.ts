@@ -6,6 +6,7 @@ import type {
   CreateQuantityIncrease,
   QuantityAdjustmentResponse,
   RejectWorkReport,
+  ReviewFinalQuantity,
   ReviewQuantityIncrease,
   ReviewWholeOrder,
   WholeOrderReviewResponse,
@@ -57,6 +58,15 @@ type AdjustmentForUpdate = AdjustmentRow & Readonly<{
   rework_order_id: string; confirmation_reason: string | null;
 }>;
 type ItemRow = Readonly<{ configuration_item_id: string; execution_kind: "worker" | "tail_inspection"; pricing_unit: "piece" | "hour"; planned_quantity: string }>;
+type FinalConfirmationRow = Readonly<{
+  confirmation_id: string; confirmation_version: number; confirmed_by: string; confirmed_at: Date;
+  workflow_stage: "approved" | "pending_ie_review"; decision: "approved" | "rejected" | null;
+  reviewed_by: string | null; reviewed_at: Date | null; review_reason: string | null;
+}>;
+type FinalQuantityRow = Readonly<{
+  configuration_item_id: string; worker_reported_quantity: string;
+  tail_reported_quantity: string; final_confirmed_quantity: string;
+}>;
 
 const numberValue = (value: string | number): number => Number(value);
 const hash = (scope: string, payload: unknown): string =>
@@ -85,16 +95,270 @@ export class WholeOrderReviewService {
         [reworkOrderId, configurationItemId],
       );
       if (!scopedItem.rowCount) error("工序不存在或不属于该返工单当前生效配置", 404, "NOT_FOUND");
-      const canReview = await this.can(actor, "tail_supervisor", "submission:audit", order, configurationItemId);
-      if (!canReview) error("当前用户无权读取整单确认信息", 403, "FORBIDDEN");
-      return this.dto(this.database, order, { canReview, canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false }, configurationItemId);
     }
-    const canReview = await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order);
-    if (!canReview) error("当前用户无权读取整单确认信息", 403, "FORBIDDEN");
-    return this.dto(this.database, order, { canReview, canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false });
+    const ieStage = order.status === "pending_final_quantity_ie_review";
+    const canReview = await this.can(actor, "tail_supervisor", "submission:audit", order, configurationItemId);
+    const canIeReview = await this.can(actor, "ie_reviewer", "process:review", order, configurationItemId);
+    if (!(ieStage ? canIeReview : canReview)) error("当前用户无权读取最终数量确认信息", 403, "FORBIDDEN");
+    return this.dto(this.database, order, {
+      canReview, canIeReview, canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false,
+    }, configurationItemId);
   }
 
   async approve(actor: TrustedActorContext, reworkOrderId: string, input: ReviewWholeOrder, key: string): Promise<Result<WholeOrderReviewResponse>> {
+    if (!await this.finalQuantityReviewAvailable(this.database)) return this.approveLegacy(actor, reworkOrderId, input, key);
+    return this.mutate(actor, "rework.tail_completion.confirm", key, { reworkOrderId, ...input }, 200, async (client) => {
+      const order = await this.order(client, reworkOrderId, true);
+      await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
+      this.ensureOrderVersion(order, input.expectedOrderVersion);
+      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N05 尾部最终数量确认节点", 409, "INVALID_STATE_TRANSITION");
+      const plans = await this.plans(client, reworkOrderId);
+      if (plans.length === 0 || plans.some((plan) => plan.unit_price === null)) {
+        error("每道工序必须完成 IE 核价后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
+      }
+      if (plans.some((plan) => numberValue(plan.completed_quantity) < numberValue(plan.planned_quantity))) {
+        error("每道返工工序必须完成有效上数后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
+      }
+      await this.assertTailReconciliation(client, reworkOrderId);
+      const expectedProcessIds = new Set(plans.map((plan) => plan.configuration_item_id));
+      const submittedProcessIds = new Set(input.finalQuantities.map((item) => item.configurationItemId));
+      if (submittedProcessIds.size !== expectedProcessIds.size
+        || [...expectedProcessIds].some((value) => !submittedProcessIds.has(value))) {
+        error("每道返工工序都必须填写最终确认数量", 400, "VALIDATION_ERROR");
+      }
+      const planById = new Map(plans.map((plan) => [plan.configuration_item_id, plan]));
+      for (const quantity of input.finalQuantities) {
+        const plan = planById.get(quantity.configurationItemId)!;
+        if (!Number.isInteger(quantity.finalConfirmedQuantity) || quantity.finalConfirmedQuantity <= 0) {
+          error("最终确认数量必须为正整数；无有效完成量时请驳回对应上数", 400, "VALIDATION_ERROR");
+        }
+        if (quantity.finalConfirmedQuantity > numberValue(plan.tail_checked_quantity)) {
+          error(`${plan.process_name} 的最终确认数量不能超过尾查数量`, 409, "CONFLICT");
+        }
+      }
+      const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
+      const submittedCoefficientKeys = new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`));
+      const expectedCoefficientKeys = new Set(temporaryWorkers.map((worker) => `${worker.configuration_item_id}:${worker.person_id}`));
+      if (submittedCoefficientKeys.size !== expectedCoefficientKeys.size
+        || [...expectedCoefficientKeys].some((value) => !submittedCoefficientKeys.has(value))) {
+        error("每名临时工每道工序都必须保留一个实发系数；默认填 1.0", 400, "VALIDATION_ERROR");
+      }
+      const active = await client.query(
+        `SELECT 1 FROM rework_tail_completion_confirmations confirmation
+         WHERE confirmation.rework_order_id=$1 AND confirmation.workflow_stage='pending_ie_review'
+           AND NOT EXISTS(SELECT 1 FROM rework_tail_completion_reviews review WHERE review.confirmation_id=confirmation.confirmation_id)
+         LIMIT 1 FOR SHARE`,
+        [reworkOrderId],
+      );
+      if (active.rowCount) error("本单已有一版最终数量等待 IE 复核", 409, "CONFLICT");
+      const version = await client.query<{ next_version: number }>(
+        "SELECT COALESCE(max(confirmation_version),0)::int+1 AS next_version FROM rework_tail_completion_confirmations WHERE rework_order_id=$1",
+        [reworkOrderId],
+      );
+      const confirmationVersion = version.rows[0]?.next_version ?? 1;
+      const confirmationId = randomUUID();
+      const eventId = await this.events.append(client, this.withCapability(actor, "submission:audit"), {
+        action: "rework.tail_completion.confirm", entityType: "rework_order", entityId: reworkOrderId,
+        before: this.orderAudit(order),
+        after: {
+          ...this.orderAudit(order, "pending_final_quantity_ie_review", order.version + 1),
+          confirmationId, confirmationVersion, finalQuantities: input.finalQuantities,
+          temporaryCoefficients: input.temporaryCoefficients,
+        },
+      });
+      await this.context(client, eventId, actor.requestId, "whole_order_review");
+      await client.query(
+        `INSERT INTO rework_tail_completion_confirmations(
+           confirmation_id,rework_order_id,confirmation_version,workflow_stage,confirmed_by,operation_event_id,request_id
+         ) VALUES($1,$2,$3,'pending_ie_review',$4,$5,$6)`,
+        [confirmationId, reworkOrderId, confirmationVersion, actor.actorId, eventId, actor.requestId],
+      );
+      for (const quantity of input.finalQuantities) {
+        const plan = planById.get(quantity.configurationItemId)!;
+        await client.query(
+          `INSERT INTO rework_tail_completion_quantities(
+             confirmation_id,configuration_item_id,worker_reported_quantity,tail_reported_quantity,final_confirmed_quantity
+           ) VALUES($1,$2,$3,$4,$5)`,
+          [confirmationId, quantity.configurationItemId, numberValue(plan.completed_quantity), numberValue(plan.tail_checked_quantity), quantity.finalConfirmedQuantity],
+        );
+      }
+      for (const coefficient of input.temporaryCoefficients) {
+        await client.query(
+          `INSERT INTO rework_tail_completion_coefficients(
+             confirmation_id,configuration_item_id,person_id,multiplier,reason
+           ) VALUES($1,$2,$3,$4,$5)`,
+          [confirmationId, coefficient.configurationItemId, coefficient.personId, coefficient.multiplier, coefficient.reason ?? null],
+        );
+      }
+      await client.query(
+        "UPDATE rework_orders SET status='pending_final_quantity_ie_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
+        [reworkOrderId, actor.actorId],
+      );
+      await this.todos?.completeOpenByDedupePrefix(client, actor, `whole-order-review:${reworkOrderId}:`, "Final quantities were submitted");
+      await this.todos?.actionableForUniqueDirectRole(client, actor, {
+        category: "final_quantity_ie_review",
+        sourceEventId: eventId,
+        sourceAction: "rework.tail_completion.confirm",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        requiredRole: "ie_reviewer",
+        requiredCapability: "process:review",
+        route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "final_quantity_ie_review" },
+        policyKey: "general",
+        dedupeKey: `final-quantity-ie-review:${reworkOrderId}:${confirmationVersion}`,
+      });
+      await this.outbox.enqueue(client, {
+        topic: "rework.final_quantity.pending_ie_review", aggregateType: "rework_order", aggregateId: reworkOrderId,
+        payload: { reworkOrderId, reworkNo: order.rework_no, confirmationId, confirmationVersion },
+        recipientKey: "role:ie_reviewer", idempotencyKey: `${reworkOrderId}:final-quantity:${confirmationId}`,
+      });
+      return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
+    });
+  }
+
+  async reviewFinalQuantity(actor: TrustedActorContext, reworkOrderId: string, input: ReviewFinalQuantity, key: string): Promise<Result<WholeOrderReviewResponse>> {
+    return this.mutate(actor, "rework.final_quantity.ie_review", key, { reworkOrderId, ...input }, 200, async (client) => {
+      const order = await this.order(client, reworkOrderId, true);
+      await this.ensureOrderWide(actor, "ie_reviewer", "process:review", order);
+      this.ensureOrderVersion(order, input.expectedOrderVersion);
+      if (order.status !== "pending_final_quantity_ie_review") error("当前返工单不在 N06 IE 最终数量复核节点", 409, "INVALID_STATE_TRANSITION");
+      const confirmation = await this.currentConfirmation(client, reworkOrderId, true);
+      const pendingConfirmation = confirmation ?? error("没有等待 IE 复核的最终数量确认版本", 409, "CONFLICT");
+      if (pendingConfirmation.decision !== null) error("该最终数量确认版本已经完成 IE 复核", 409, "CONFLICT");
+      const approved = input.decision === "approved";
+      const nextStatus = approved ? "pending_responsibility_determination" : "pending_order_review";
+      const reviewId = randomUUID();
+      const orderReviewId = approved ? randomUUID() : null;
+      const eventId = await this.events.append(client, this.withCapability(actor, "process:review"), {
+        action: "rework.final_quantity.ie_review", entityType: "rework_order", entityId: reworkOrderId,
+        before: { ...this.orderAudit(order), confirmationId: pendingConfirmation.confirmation_id, confirmationVersion: pendingConfirmation.confirmation_version },
+        after: {
+          ...this.orderAudit(order, nextStatus, order.version + 1),
+          confirmationId: pendingConfirmation.confirmation_id, confirmationVersion: pendingConfirmation.confirmation_version,
+          decision: input.decision, orderReviewId,
+        },
+        ...(input.reason ? { reason: input.reason } : {}),
+      });
+      await this.context(client, eventId, actor.requestId, "whole_order_review");
+      await client.query(
+        `INSERT INTO rework_tail_completion_reviews(
+           completion_review_id,confirmation_id,decision,reviewed_by,reason,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [reviewId, pendingConfirmation.confirmation_id, input.decision, actor.actorId, input.reason ?? null, eventId, actor.requestId],
+      );
+      if (!approved) {
+        await client.query(
+          "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
+          [reworkOrderId, actor.actorId],
+        );
+        await this.todos?.completeOpenByDedupePrefix(client, actor, `final-quantity-ie-review:${reworkOrderId}:`, "IE returned the final quantity confirmation");
+        await this.todos?.actionableForUniqueDirectRole(client, actor, {
+          category: "whole_order_review",
+          sourceEventId: eventId,
+          sourceAction: "rework.final_quantity.ie_review",
+          entityType: "rework_order",
+          entityId: reworkOrderId,
+          requiredRole: "tail_supervisor",
+          requiredCapability: "submission:audit",
+          route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "whole_order_review" },
+          policyKey: "general",
+          dedupeKey: `whole-order-review:${reworkOrderId}:${order.version + 1}`,
+        });
+        await this.outbox.enqueue(client, {
+          topic: "rework.final_quantity.returned", aggregateType: "rework_order", aggregateId: reworkOrderId,
+          payload: { reworkOrderId, reworkNo: order.rework_no, confirmationId: pendingConfirmation.confirmation_id, reason: input.reason },
+          recipientKey: "role:tail_supervisor", idempotencyKey: `${reworkOrderId}:final-quantity:${reviewId}:rejected`,
+        });
+        return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
+      }
+      await client.query(
+        `WITH amounts AS (
+           SELECT share.work_report_id,share.person_id,
+                  round(
+                    COALESCE(quantity.final_confirmed_quantity,report.actual_quantity)*item.unit_price*
+                    CASE WHEN task.assignment_mode='collective'
+                      THEN 1::numeric / NULLIF(count(*) OVER(PARTITION BY share.work_report_id),0)
+                      ELSE 1
+                    END *
+                    CASE WHEN member.person_type_snapshot='temporary'
+                      THEN COALESCE(coefficient.multiplier,1)
+                      ELSE 1
+                    END,
+                    8
+                  ) AS amount
+           FROM rework_work_report_member_shares share
+           JOIN rework_work_reports report ON report.work_report_id=share.work_report_id
+           JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+           JOIN rework_work_task_members member
+             ON member.work_task_id=task.work_task_id AND member.person_id=share.person_id
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=report.configuration_item_id
+           LEFT JOIN rework_tail_completion_quantities quantity
+             ON quantity.confirmation_id=$1 AND quantity.configuration_item_id=report.configuration_item_id
+           LEFT JOIN rework_tail_completion_coefficients coefficient
+             ON coefficient.confirmation_id=$1
+            AND coefficient.configuration_item_id=report.configuration_item_id
+            AND coefficient.person_id=share.person_id
+           WHERE report.rework_order_id=$2 AND share.amount=0
+             AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+         )
+         UPDATE rework_work_report_member_shares share SET amount=amounts.amount
+         FROM amounts WHERE share.work_report_id=amounts.work_report_id AND share.person_id=amounts.person_id`,
+        [pendingConfirmation.confirmation_id, reworkOrderId],
+      );
+      await client.query(
+        `WITH amounts AS (
+           SELECT report.work_report_id,COALESCE(quantity.final_confirmed_quantity,report.actual_quantity) settlement_quantity,
+                  sum(share.amount) group_amount
+           FROM rework_work_reports report
+           JOIN rework_work_report_member_shares share ON share.work_report_id=report.work_report_id
+           LEFT JOIN rework_tail_completion_quantities quantity
+             ON quantity.confirmation_id=$1 AND quantity.configuration_item_id=report.configuration_item_id
+           WHERE report.rework_order_id=$2 AND report.group_amount=0 AND report.settlement_quantity IS NULL
+             AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+           GROUP BY report.work_report_id,quantity.final_confirmed_quantity,report.actual_quantity
+         )
+         UPDATE rework_work_reports report
+         SET settlement_quantity=amounts.settlement_quantity,group_amount=amounts.group_amount
+         FROM amounts WHERE report.work_report_id=amounts.work_report_id`,
+        [pendingConfirmation.confirmation_id, reworkOrderId],
+      );
+      const plans = await this.plans(client, reworkOrderId);
+      const snapshot = await this.snapshot(client, order, plans, pendingConfirmation);
+      await client.query(
+        "INSERT INTO rework_order_reviews(order_review_id,rework_order_id,reviewed_by,review_snapshot) VALUES($1,$2,$3,$4)",
+        [orderReviewId, reworkOrderId, actor.actorId, snapshot],
+      );
+      await client.query(
+        "UPDATE rework_orders SET status='pending_responsibility_determination',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
+        [reworkOrderId, actor.actorId],
+      );
+      await this.todos?.completeOpenByDedupePrefix(client, actor, `final-quantity-ie-review:${reworkOrderId}:`, "IE approved the final quantities");
+      const wagePeriods = await client.query<{ period_id: string; period_version: number }>(
+        `SELECT DISTINCT period.period_id,period.period_version
+         FROM rework_wage_periods period JOIN rework_wage_items item ON item.period_id=period.period_id
+         WHERE item.order_review_id=$1 AND period.status='ready_to_lock' ORDER BY period.period_id`,
+        [orderReviewId],
+      );
+      for (const wagePeriod of wagePeriods.rows) {
+        await this.todos?.actionableForUniqueDirectRole(client, actor, {
+          category: "wage_month_close", sourceEventId: eventId, sourceAction: "rework.final_quantity.ie_review",
+          entityType: "rework_order", entityId: reworkOrderId, requiredRole: "wage_month_close_accountant",
+          requiredCapability: "wage:month_close", route: { routeName: "wage_period_detail", entityId: wagePeriod.period_id },
+          policyKey: "finance_return_or_wage_review",
+          dedupeKey: `wage-month-lock:${wagePeriod.period_id}:${wagePeriod.period_version}`,
+        });
+      }
+      await this.outbox.enqueue(client, {
+        topic: "rework.pending_responsibility_determination", aggregateType: "rework_order", aggregateId: reworkOrderId,
+        payload: { reworkOrderId, reworkNo: order.rework_no, orderReviewId, confirmationId: pendingConfirmation.confirmation_id },
+        recipientKey: "role:production_management", idempotencyKey: `${reworkOrderId}:final-quantity:${reviewId}:approved`,
+      });
+      return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
+    });
+  }
+
+  private async approveLegacy(actor: TrustedActorContext, reworkOrderId: string, input: ReviewWholeOrder, key: string): Promise<Result<WholeOrderReviewResponse>> {
     return this.mutate(actor, "rework.whole_order.approve", key, { reworkOrderId, ...input }, 200, async (client) => {
       const order = await this.order(client, reworkOrderId, true);
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
@@ -295,6 +559,15 @@ export class WholeOrderReviewService {
   ): Promise<boolean> {
     const result = await client.query<{ available: boolean }>(
       "SELECT to_regclass('rework_tail_completion_confirmations') IS NOT NULL AS available",
+    );
+    return result.rows[0]?.available === true;
+  }
+
+  private async finalQuantityReviewAvailable(
+    client: Pick<Pool, "query"> | PoolClient,
+  ): Promise<boolean> {
+    const result = await client.query<{ available: boolean }>(
+      "SELECT to_regclass('rework_tail_completion_quantities') IS NOT NULL AS available",
     );
     return result.rows[0]?.available === true;
   }
@@ -538,17 +811,18 @@ export class WholeOrderReviewService {
   private async dto(
     client: Pick<Pool, "query"> | PoolClient,
     order: OrderRow,
-    permissions: Readonly<{ canReview: boolean; canAdjustQuantity: boolean; canConfirmQuantity: boolean; canReviewQuantityIncrease: boolean }>,
+    permissions: Readonly<{ canReview: boolean; canIeReview: boolean; canAdjustQuantity: boolean; canConfirmQuantity: boolean; canReviewQuantityIncrease: boolean }>,
     configurationItemId?: string,
   ): Promise<WholeOrderReviewResponse> {
     const plans = await this.plans(client, order.rework_order_id);
-    const [reports, reviews, temporaryWorkers, unifiedExecutionRequired] = await Promise.all([
+    const [reports, reviews, temporaryWorkers, unifiedExecutionRequired, finalConfirmation] = await Promise.all([
       this.reports(client, order.rework_order_id, configurationItemId),
       configurationItemId
         ? Promise.resolve({ rows: [] as Array<{ order_review_id: string }> })
         : client.query<{ order_review_id: string }>("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1", [order.rework_order_id]),
       this.temporaryWorkers(client, order.rework_order_id, configurationItemId),
       this.unifiedExecutionRequired(client, order.rework_order_id),
+      configurationItemId ? Promise.resolve(null) : this.finalQuantityReviewAvailable(client).then((available) => available ? this.currentConfirmation(client, order.rework_order_id, false) : null),
     ]);
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
@@ -558,14 +832,55 @@ export class WholeOrderReviewService {
       adjustments: [],
       temporaryWorkers: temporaryWorkers.map((worker) => ({ configurationItemId: worker.configuration_item_id, processName: worker.process_name, personId: worker.person_id, displayName: worker.display_name, multiplier: numberValue(worker.multiplier ?? "1"), reason: worker.reason })),
       reviewId: reviews.rows[0]?.order_review_id ?? null,
+      finalConfirmation: finalConfirmation ? await this.confirmationDto(client, finalConfirmation) : null,
     };
   }
 
-  private async snapshot(client: PoolClient, order: OrderRow, plans: readonly PlanRow[]): Promise<Record<string, unknown>> {
+  private async snapshot(client: PoolClient, order: OrderRow, plans: readonly PlanRow[], confirmation?: FinalConfirmationRow): Promise<Record<string, unknown>> {
     return {
       order: this.orderAudit(order),
       processes: plans.map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, workerReportedQuantity: numberValue(plan.completed_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity) })),
+      finalConfirmation: confirmation ? await this.confirmationDto(client, confirmation) : null,
       reports: await this.reports(client, order.rework_order_id),
+    };
+  }
+
+  private async currentConfirmation(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<FinalConfirmationRow | null> {
+    const result = await client.query<FinalConfirmationRow>(
+      `SELECT confirmation.confirmation_id,confirmation.confirmation_version,confirmation.confirmed_by,confirmation.confirmed_at,
+              confirmation.workflow_stage,review.decision,review.reviewed_by,review.reviewed_at,review.reason AS review_reason
+       FROM rework_tail_completion_confirmations confirmation
+       LEFT JOIN rework_tail_completion_reviews review ON review.confirmation_id=confirmation.confirmation_id
+       WHERE confirmation.rework_order_id=$1
+       ORDER BY confirmation.confirmation_version DESC
+       LIMIT 1${locked ? " FOR UPDATE OF confirmation" : ""}`,
+      [reworkOrderId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  private async confirmationDto(client: Pick<Pool, "query"> | PoolClient, confirmation: FinalConfirmationRow): Promise<NonNullable<WholeOrderReviewResponse["finalConfirmation"]>> {
+    const quantities = await client.query<FinalQuantityRow>(
+      `SELECT configuration_item_id,worker_reported_quantity::text,tail_reported_quantity::text,final_confirmed_quantity::text
+       FROM rework_tail_completion_quantities WHERE confirmation_id=$1 ORDER BY configuration_item_id`,
+      [confirmation.confirmation_id],
+    );
+    return {
+      confirmationId: confirmation.confirmation_id,
+      confirmationVersion: confirmation.confirmation_version,
+      status: confirmation.decision ?? (confirmation.workflow_stage === "approved" ? "approved" : "pending_ie_review"),
+      confirmedBy: confirmation.confirmed_by,
+      confirmedAt: confirmation.confirmed_at.toISOString(),
+      reviewedBy: confirmation.reviewed_by,
+      reviewedAt: iso(confirmation.reviewed_at),
+      reviewReason: confirmation.review_reason,
+      quantities: quantities.rows.map((quantity) => ({
+        configurationItemId: quantity.configuration_item_id,
+        workerReportedQuantity: numberValue(quantity.worker_reported_quantity),
+        tailReportedQuantity: numberValue(quantity.tail_reported_quantity),
+        finalConfirmedQuantity: numberValue(quantity.final_confirmed_quantity),
+        changed: numberValue(quantity.worker_reported_quantity) !== numberValue(quantity.final_confirmed_quantity),
+      })),
     };
   }
 
@@ -870,6 +1185,7 @@ export class WholeOrderReviewService {
   private async permissions(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, order: OrderRow) {
     return {
       canReview: await this.canOrderWide(actor, "tail_supervisor", "submission:audit", order, client),
+      canIeReview: await this.canOrderWide(actor, "ie_reviewer", "process:review", order, client),
       canAdjustQuantity: false,
       canConfirmQuantity: false,
       canReviewQuantityIncrease: false,

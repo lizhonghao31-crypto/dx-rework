@@ -446,7 +446,7 @@ runWithPostgres("wage reconciliation reviewed workflow", () => {
     await orderReview.approve(
       tailActor("submission:audit"),
       orderId,
-      { expectedOrderVersion: view.orderVersion },
+      { expectedOrderVersion: view.orderVersion, finalQuantities: view.processes.map((process) => ({ configurationItemId: process.configurationItemId, finalConfirmedQuantity: process.completedQuantity })), temporaryCoefficients: [] },
       randomUUID(),
     );
     const currentMonth = new Date().toISOString().slice(0, 7);

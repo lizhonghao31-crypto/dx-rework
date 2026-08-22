@@ -66,6 +66,7 @@ describe("business person id contract", () => {
   it("keeps the whole-order personnel chain compatible with the same id", () => {
     expect(ReviewWholeOrderSchema.parse({
       expectedOrderVersion: 2,
+      finalQuantities: [{ configurationItemId, finalConfirmedQuantity: 1 }],
       temporaryCoefficients: [{
         configurationItemId,
         personId: migratedTailPersonId,
@@ -94,3 +95,4 @@ describe("business person id contract", () => {
     })).toThrow();
   });
 });
+

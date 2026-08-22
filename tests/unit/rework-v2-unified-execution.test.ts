@@ -51,10 +51,11 @@ describe("PR-04 unified rework execution", () => {
     expect(detail).not.toContain('node("tail_inspection"');
     expect(detail).not.toContain("<TailInspectionPanel");
     expect(detail).not.toContain('if (value === "tail_inspection")');
-    expect(detail).toContain('node("whole_order_review", "05", "尾部主管整单确认"');
-    expect(detail).toContain('node("responsibility", "06", "责任判定"');
-    expect(detail).toContain('node("owner_signature", "07", "老板确认签字"');
-    expect(detail).toContain('node("settlement_followup", "08", "返工业务完成"');
+    expect(detail).toContain('node("whole_order_review", "05", "尾部最终数量确认"');
+    expect(detail).toContain('node("final_quantity_ie_review", "06", "IE 最终数量复核"');
+    expect(detail).toContain('node("responsibility", "07", "责任判定"');
+    expect(detail).toContain('node("owner_signature", "08", "老板确认签字"');
+    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
   });
 
   it("uses work tasks and work reports as the execution quantity fact chain", async () => {
@@ -66,7 +67,7 @@ describe("PR-04 unified rework execution", () => {
     ]);
     expect(reviewService).toContain("tail_item.execution_kind='tail_inspection'");
     expect(reviewService).toContain("item.execution_kind='worker'");
-    expect(reviewPanel).toContain("返工执行报数记录");
+    expect(reviewPanel).toContain("执行报数原始记录");
     expect(reviewPanel).toContain('report.executionKind === "tail_inspection"');
     expect(reporting).toContain('task.execution_kind === "tail_inspection"');
     expect(reporting).toContain("rework_work_reports");

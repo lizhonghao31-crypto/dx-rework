@@ -543,17 +543,35 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       })],
     });
 
-    // N07 confirms worker counts against tail-inspection facts and creates wages.
-    const n07Approved = await wholeOrder.approve(
+    // N05 records versioned final quantities without materializing wages.
+    const n05Confirmed = await wholeOrder.approve(
       tailAudit(),
       submitted.value.reworkOrderId,
       {
         expectedOrderVersion: n07View.orderVersion,
+        finalQuantities: n07View.processes.map((process) => ({
+          configurationItemId: process.configurationItemId,
+          finalConfirmedQuantity: process.completedQuantity,
+        })),
         temporaryCoefficients: [],
       },
       randomUUID(),
     );
-    expect(n07Approved.value).toMatchObject({
+    expect(n05Confirmed.value.reworkStatus).toBe("pending_final_quantity_ie_review");
+    expect((await database.query(
+      "SELECT count(*)::int count FROM rework_wage_items WHERE rework_order_id=$1",
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({ count: 0 });
+
+    // N06 IE approval locks settlement quantities, creates wages, then enters responsibility.
+    const n06View = await wholeOrder.get(ie(), submitted.value.reworkOrderId);
+    const n06Approved = await wholeOrder.reviewFinalQuantity(
+      ie(),
+      submitted.value.reworkOrderId,
+      { expectedOrderVersion: n06View.orderVersion, decision: "approved" },
+      randomUUID(),
+    );
+    expect(n06Approved.value).toMatchObject({
       reworkStatus: "pending_responsibility_determination",
       processes: [expect.objectContaining({
         configurationItemId: approvedItem.configurationItemId,
@@ -567,7 +585,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       production(),
       submitted.value.reworkOrderId,
       CreateResponsibilityDraftSchema.parse({
-        expectedOrderVersion: n07Approved.value.orderVersion,
+        expectedOrderVersion: n06Approved.value.orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
         processes: [{

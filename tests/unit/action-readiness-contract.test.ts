@@ -41,11 +41,11 @@ describe("business action readiness contract", () => {
 
   it("gates the N05 final action below deterministic readiness text", async () => {
     const wholeOrder = await readFile("apps/web/src/whole-order-review-panel.tsx", "utf8");
-    expect(wholeOrder).toContain("const temporaryCoefficientIssue =");
-    expect(wholeOrder).toContain("const wholeOrderReady = allComplete && temporaryCoefficientIssue === \"\";");
-    expect(wholeOrder).toContain('disabled={busy || !wholeOrderReady}');
-    expect(wholeOrder.lastIndexOf('className="mobile-actions"')).toBeLessThan(
-      wholeOrder.lastIndexOf('{temporaryCoefficientIssue && <p role="status">'),
+    expect(wholeOrder).toContain("const coefficientIssue =");
+    expect(wholeOrder).toContain("const ready = allComplete && !quantityIssue && !coefficientIssue;");
+    expect(wholeOrder).toContain('disabled={busy || !ready}');
+    expect(wholeOrder.indexOf('disabled={busy || !ready}')).toBeLessThan(
+      wholeOrder.indexOf('{!ready && <p role="status">'),
     );
   });
 
@@ -80,3 +80,4 @@ describe("business action readiness contract", () => {
     expect(masterData).toContain('previewSummary.error > 0 || !importReason.trim() || previewSummary.create + previewSummary.update === 0');
   });
 });
+

@@ -44,6 +44,7 @@ const WORK_QUEUE_STATUSES = [
   "pending_task_assignment",
   "in_progress",
   "pending_order_review",
+  "pending_final_quantity_ie_review",
   "pending_quantity_adjustment_ie_review",
 ] as const;
 

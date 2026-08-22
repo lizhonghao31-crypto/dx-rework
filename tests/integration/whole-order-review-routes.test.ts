@@ -16,9 +16,10 @@ const orderId = "00000000-0000-4000-8000-000000000010";
 const reportId = "00000000-0000-4000-8000-000000000011";
 const response = {
   reworkOrderId: orderId, reworkStatus: "pending_order_review", orderVersion: 2,
-  canReview: true,
+  canReview: true, canIeReview: false, unifiedExecutionRequired: true,
   canAdjustQuantity: false, canConfirmQuantity: false, canReviewQuantityIncrease: false,
   processes: [], reports: [], adjustments: [], temporaryWorkers: [], reviewId: null,
+  finalConfirmation: null,
 };
 
 afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
@@ -72,3 +73,4 @@ describe("whole order review routes", () => {
     expect(result.statusCode).toBe(404);
   });
 });
+

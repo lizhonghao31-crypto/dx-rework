@@ -86,16 +86,17 @@ export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; lab
   draft: { node: "N01", label: "发起返工 / 草稿" },
   pending_process_configuration: { node: "N02", label: "待配置工序" },
   pending_ie_review: { node: "N03", label: "待 IE 审核" },
-  pending_task_assignment: { node: "N04", label: "待分配人员" },
-  in_progress: { node: "N05", label: "返工执行中" },
-  pending_order_review: { node: "N06", label: "待整单审核" },
+  pending_task_assignment: { node: "N02-R", label: "待启动预分配任务" },
+  in_progress: { node: "N04", label: "返工执行中" },
+  pending_order_review: { node: "N05", label: "待尾部确认最终数量" },
+  pending_final_quantity_ie_review: { node: "N06", label: "最终数量待 IE 复核" },
   pending_quantity_adjustment_ie_review: { node: "N06-A", label: "数量调整待 IE" },
   pending_responsibility_determination: { node: "N07", label: "责任判定与资料核验" },
   pending_owner_signature: { node: "N08", label: "待老板确认签字" },
   // Only legacy records remain on this status. New orders complete their main
   // chain at N10 and keep actual deductions in the independent N11 ledger.
   pending_responsibility_action: { node: "N-LEGACY", label: "旧责任处理" },
-  completed: { node: "N10", label: "订单已完成" },
+  completed: { node: "N09", label: "订单已完成" },
   cancelled: { node: "N-C", label: "已取消" },
 };
 
