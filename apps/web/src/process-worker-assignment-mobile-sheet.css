@@ -64,7 +64,7 @@
 
 /* N02 desktop shared-row grid: the two columns use the same rows, not independent vertical stacks. */
 @media(min-width:981px){
-  .process-worker-line{display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:28px 30px 58px minmax(58px,auto);column-gap:24px;row-gap:8px;padding:14px 16px;border:1px solid var(--dx-v2-color-border);border-radius:12px;background:var(--dx-v2-color-surface)}
+  .process-worker-line{display:grid;grid-template-areas:none;grid-template-columns:340px minmax(0,1fr);grid-template-rows:28px 30px 58px minmax(58px,auto);column-gap:24px;row-gap:8px;padding:14px 16px;border:1px solid var(--dx-v2-color-border);border-radius:12px;background:var(--dx-v2-color-surface)}
   .process-worker-line+.process-worker-line{margin-top:0}
   .process-worker-line__heading{grid-column:1;grid-row:1;min-height:28px;align-items:center}
   .process-worker-line__body,.process-worker-fields,.process-worker-line .process-worker-picker{display:contents}
