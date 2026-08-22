@@ -193,6 +193,12 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
   useEffect(() => { void loadCore().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "当前节点加载失败")); }, [reworkOrderId]);
 
   const setItem = (index: number, next: Partial<ItemForm>) => { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...next } : item)); pendingSubmit.current = null; };
+  const selectCatalogProcess = (index: number, processId: string): void => {
+    setItem(index, { processId });
+    const defaults = processOptions.find((process) => process.processId === processId)?.defaultWorkerPersonIds ?? [];
+    const eligibleIds = new Set(people.filter((person) => person.eligibleExecutionKinds.includes("worker")).map((person) => person.personId));
+    setWorkerIds((current) => ({ ...current, [String(index)]: defaults.filter((personId) => eligibleIds.has(personId)) }));
+  };
   const addWorker = (index: number, personId: string) => {
     if (!personId) return;
     setWorkerIds((current) => { const key = String(index); const existing = current[key] ?? []; return existing.includes(personId) ? current : { ...current, [key]: [...existing, personId] }; });
@@ -400,7 +406,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
             <div className="process-worker-line__body">
               <div className="process-worker-fields">
                 <div className="process-worker-source"><label><input type="radio" checked={item.source === "catalog"} disabled={busy} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} /> 公共工序</label><label><input type="radio" checked={item.source === "custom"} disabled={busy} onChange={() => setItem(index, { source: "custom", processId: "" })} /> 自定义工序</label></div>
-                {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => setItem(index, { processId })} /></span></label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
+                {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => selectCatalogProcess(index, processId)} /></span></label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
                 <InsetField label="候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} disabled={busy} onChange={(event) => setItem(index, { unitPrice: event.target.value })} />
                 <div className="process-worker-mobile-assigned-summary"><small>已分配人员</small><span>{assignedNames.length ? assignedNames.join("、") : "暂未分配"}</span></div>
               </div>

@@ -12,6 +12,7 @@ import {
   IdempotencyKeySchema,
   PeopleListQuerySchema,
   ProcessParamsSchema,
+  ReplaceProcessDefaultWorkersSchema,
   PersonAliasParamsSchema,
   PersonParamsSchema,
   ReviseProcessSchema,
@@ -164,6 +165,11 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     return dependencies.service.listProcesses(query.includeInactive === "true");
   });
 
+  app.get("/master-data/process-default-worker-candidates", async (request) => {
+    await actor(request, "master_data:manage");
+    return dependencies.service.listProcessDefaultWorkerCandidates();
+  });
+
   app.get("/master-data/suppliers", async (request) => {
     await actor(request, "supplier_catalog:read");
     const query = parse(CatalogListQuerySchema, request.query);
@@ -259,6 +265,13 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
         parse(ProcessParamsSchema, request.params).processId,
         parse(ReviseProcessSchema, request.body),
       ),
+    ));
+
+  app.put<{ Params: { processId: string } }>("/master-data/processes/:processId/default-workers", async (request) =>
+    dependencies.service.replaceProcessDefaultWorkers(
+      await actor(request, "master_data:manage"),
+      parse(ProcessParamsSchema, request.params).processId,
+      parse(ReplaceProcessDefaultWorkersSchema, request.body),
     ));
 
   app.post("/master-data/suppliers", async (request, reply) =>

@@ -78,6 +78,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
       "0083_rework_v2_temporary_worker_private_profile.sql",
+      "0084_rework_v2_process_default_worker_roster.sql",
     ]) {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url), "utf8");
       await database.query(sql);
@@ -594,6 +595,33 @@ runWithPostgres("role permissions and versioned master data", () => {
       before_state: expect.objectContaining({ version: 1, processName: "返查", pricingUnit: "piece", active: true }),
       after_state: expect.objectContaining({ version: 2, processName: "成品返查", pricingUnit: "piece", active: true }),
     });
+    const defaultWorker = await service.createPerson(masterDataActor, {
+      personType: "temporary",
+      displayName: "返查默认临时工",
+      aliases: [],
+      reason: "验证工序默认名单",
+    });
+    expect(await service.listProcessDefaultWorkerCandidates()).toContainEqual(expect.objectContaining({
+      personId: defaultWorker.personId,
+      personType: "temporary",
+      displayName: "返查默认临时工",
+    }));
+    await service.replaceProcessDefaultWorkers(masterDataActor, process.processId, {
+      personIds: [defaultWorker.personId],
+      changeReason: "设定返查默认人员",
+    });
+    await service.replaceProcessDefaultWorkers(masterDataActor, process.processId, {
+      personIds: [],
+      changeReason: "清空返查默认人员",
+    });
+    expect(await database.query(
+      "SELECT 1 FROM process_default_worker_roster_versions WHERE process_id=$1",
+      [process.processId],
+    )).toHaveProperty("rowCount", 2);
+    await expect(database.query(
+      "DELETE FROM process_default_worker_roster_versions WHERE process_id=$1",
+      [process.processId],
+    )).rejects.toMatchObject({ code: "55000" });
 
     const supplier = await service.createSupplier(masterDataActor, {
       supplierCode: "FACTORY_01",
@@ -627,7 +655,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       after_state: expect.objectContaining({ version: 2, supplierName: "加工厂一号", active: true }),
     });
     expect(await service.listProcesses()).toEqual([
-      expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2 }),
+      expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2, defaultWorkerPersonIds: [] }),
     ]);
     expect(await service.listSuppliers()).toEqual([
       expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 2 }),
