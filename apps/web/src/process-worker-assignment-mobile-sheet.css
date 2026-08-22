@@ -61,3 +61,16 @@
   .process-worker-mobile-sheet>.process-worker-people-search{font-size:16px}
   .process-worker-mobile-sheet__selected{border:1px solid #aebdcc;box-shadow:none}
 }
+
+/* N02 desktop geometry lock: ordinary process and tail inspection share one grid, one title scale and one control footprint. */
+@media(min-width:641px){
+  .process-worker-line{grid-template-columns:340px minmax(0,1fr);column-gap:16px;padding:10px 0 12px;border:0;border-radius:0;background:transparent}
+  .process-worker-line+.process-worker-line{margin-top:2px;padding-top:14px;border-top:1px solid var(--dx-v2-color-border)}
+  .process-worker-tail-body{grid-template-columns:340px minmax(0,1fr);gap:16px}
+  .process-worker-fields,.process-worker-tail-work{width:340px;max-width:340px}
+  .process-worker-fields>.dx-field,.process-worker-tail-work>.dx-field{width:340px;max-width:340px}
+  .process-worker-fields .dx-field__control,.process-worker-tail-work .dx-field__control,.process-worker-line>.process-worker-picker>.process-worker-people-search,.process-worker-tail-body>.process-worker-picker>.process-worker-people-search{width:340px;min-width:340px;max-width:340px;height:38px;min-height:38px;border-radius:10px}
+  .process-worker-fields .search-select input{height:36px;min-height:36px}
+  .process-worker-heading-primary>b,.process-worker-picker__heading>b,.process-worker-tail-title-row>b{font-size:15px;line-height:1.25;font-weight:700}
+  .process-worker-line__heading,.process-worker-picker__heading,.process-worker-tail-title-row{min-height:28px;align-items:center}
+}
