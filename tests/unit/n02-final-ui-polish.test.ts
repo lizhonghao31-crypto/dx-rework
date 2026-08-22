@@ -20,8 +20,11 @@ describe("N02 final UI polish", () => {
 
   it("does not autofocus the mobile personnel search when the sheet opens", async () => {
     const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
-    const sheetSearch = source.match(/<input className="process-worker-people-search" type="search" value=\{mobileAssignmentSearch\}[^>]+\/>/)?.[0] ?? "";
-    expect(sheetSearch).not.toContain("autoFocus");
+    const marker = 'value={mobileAssignmentSearch}';
+    const start = source.indexOf(marker);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const sheetSearch = source.slice(start, start + 520);
     expect(sheetSearch).toContain("onChange");
+    expect(sheetSearch).not.toContain("autoFocus");
   });
 });
