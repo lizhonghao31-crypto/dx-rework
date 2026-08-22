@@ -7,6 +7,15 @@ import {
   WholeOrderReviewResponseSchema,
   WorkReportRejectionParamsSchema,
 } from "@dx-rework/contracts";
+import {
+  CompletionConfirmationMutationResponseSchema,
+  CompletionIeReviewMutationResponseSchema,
+  CompletionReviewResponseSchema,
+  CreateCompletionConfirmationSchema,
+  ReviewCompletionIeSchema,
+  type CreateCompletionConfirmation,
+  type ReviewCompletionIe,
+} from "@dx-rework/contracts/completion-review";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import {
@@ -28,9 +37,24 @@ const parse = <T>(schema: { safeParse(input: unknown): { success: true; data: T 
 };
 const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
+type Pr05WholeOrderReviewService = WholeOrderReviewService & Readonly<{
+  confirmCompletion(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: CreateCompletionConfirmation,
+    key: string,
+  ): Promise<{ value: unknown; reused: boolean }>;
+  reviewCompletion(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: ReviewCompletionIe,
+    key: string,
+  ): Promise<{ value: unknown; reused: boolean }>;
+}>;
+
 export type WholeOrderReviewHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
-  service: WholeOrderReviewService;
+  service: Pr05WholeOrderReviewService;
   root?: RootAuthority;
 }>;
 
@@ -106,10 +130,35 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
     const query = parse(WholeOrderReviewQuerySchema, request.query);
     const serviceActor = await readActor(request);
     const orderId = parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId;
-    return WholeOrderReviewResponseSchema.parse(query.configurationItemId
+    return CompletionReviewResponseSchema.parse(query.configurationItemId
       ? await dependencies.service.get(serviceActor, orderId, query.configurationItemId)
       : await dependencies.service.get(serviceActor, orderId));
   });
+
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/completion-confirmation", async (request, reply) => {
+    const result = await dependencies.service.confirmCompletion(
+      await actor(request, "submission:audit", "tail_supervisor"),
+      parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId,
+      parse(CreateCompletionConfirmationSchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return CompletionConfirmationMutationResponseSchema.parse(result.value);
+  });
+
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/completion-ie-review", async (request, reply) => {
+    const result = await dependencies.service.reviewCompletion(
+      await actor(request, "process:review", "ie_reviewer"),
+      parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId,
+      parse(ReviewCompletionIeSchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return CompletionIeReviewMutationResponseSchema.parse(result.value);
+  });
+
+  // Legacy endpoint stays for historical-schema replay. Migration 0080 blocks it
+  // from skipping the new N08 IE review on current production schemas.
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/whole-order-review/approve", async (request, reply) => {
     const result = await dependencies.service.approve(await actor(request, "submission:audit", "tail_supervisor"), parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId, parse(ReviewWholeOrderSchema, request.body), key(request));
     if (result.reused) void reply.header("idempotency-replayed", "true");
