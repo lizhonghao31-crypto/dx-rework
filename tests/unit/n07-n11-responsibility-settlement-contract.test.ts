@@ -11,13 +11,21 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("N07–N11 responsibility settlement contract", () => {
-  it("allows the main-order N07 → N08 → N10 path and rejects a skipped owner signature", () => {
+  it("keeps owner confirmation for own-factory responsibility and permits the external-only settlement path", () => {
     expect(transitionReworkOrder(
       "pending_responsibility_determination",
       "pending_owner_signature",
     )).toBe("pending_owner_signature");
     expect(transitionReworkOrder(
       "pending_owner_signature",
+      "completed",
+    )).toBe("completed");
+    expect(transitionReworkOrder(
+      "pending_responsibility_determination",
+      "pending_responsibility_action",
+    )).toBe("pending_responsibility_action");
+    expect(transitionReworkOrder(
+      "pending_responsibility_action",
       "completed",
     )).toBe("completed");
 

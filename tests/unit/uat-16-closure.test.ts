@@ -47,14 +47,16 @@ describe("UAT 1.6 closure regressions", () => {
     expect(v2Form).not.toContain("返工原因");
   });
 
-  it("uses settled wage cents and allows an absent external supplier to be added at the handling point", async () => {
+  it("uses the reviewed pre-uplift responsibility base and allows an absent supplier to be added at the handling point", async () => {
     const [responsibility, external, access] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
       readFile("apps/api/src/access/routes.ts", "utf8"),
     ]);
-    expect(responsibility).toContain("wage.payable_amount::text amount");
-    expect(responsibility).toContain("sum(wage.payable_amount)");
+    expect(responsibility).toContain("wage.actual_quantity_snapshot*wage.unit_price_snapshot");
+    expect(responsibility).toContain("1::numeric/NULLIF(wage.member_count,0)");
+    expect(responsibility).not.toContain("wage.payable_amount::text amount");
+    expect(responsibility).not.toContain("sum(wage.payable_amount)");
     expect(responsibility).not.toContain("round(share.amount,2)::text amount");
     expect(external).toContain("新增并选择");
     expect(external).toContain("external-responsibilities/temporary-suppliers");

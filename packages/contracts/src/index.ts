@@ -902,7 +902,7 @@ export const ResponsibilitySupplierOptionsResponseSchema = z.object({
 }).strict();
 export const ResponsibilityAllocationInputSchema = z.object({
   responsibilityType: ResponsibilityTypeSchema,
-  shareBps: z.number().int().min(0).max(10_000),
+  shareBps: z.number().int().min(1).max(10_000),
   // V2 keeps the commercial rule on the responsible party rather than on the
   // process.  The two fields stay optional at the wire level so old, immutable
   // snapshots can still be read; a V2 submission is validated by the service.
@@ -913,7 +913,7 @@ export const ResponsibilityProcessInputSchema = z.object({
   configurationItemId: IdSchema,
   multiplier: ResponsibilityMultiplierSchema,
   highMultiplierReason: ReasonSchema.optional(),
-  allocations: z.array(ResponsibilityAllocationInputSchema).length(1),
+  allocations: z.array(ResponsibilityAllocationInputSchema).min(1).max(5),
 }).strict().superRefine((value, context) => {
   if (responsibilityMultiplierScaled(value.multiplier) !== 1_000n) {
     context.addIssue({ code: "custom", path: ["multiplier"], message: "The retired responsibility coefficient must remain 1" });
@@ -921,16 +921,25 @@ export const ResponsibilityProcessInputSchema = z.object({
   if (value.highMultiplierReason !== undefined) {
     context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: "The retired responsibility coefficient reason is not accepted" });
   }
-  const allocation = value.allocations[0]!;
-  if (allocation.shareBps !== 10_000) context.addIssue({ code: "custom", path: ["allocations", 0, "shareBps"], message: "The selected responsible party must bear 100%" });
-  const multiplier = responsibilityMultiplierScaled(allocation.multiplier ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"));
-  if (allocation.responsibilityType === "own_factory") {
-    if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", 0, "multiplier"], message: "Own-factory responsibility multiplier must be 1" });
-    if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", 0, "supplierId"], message: "Own-factory responsibility cannot carry a supplier" });
-  } else {
-    if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", 0, "multiplier"], message: "External deduction multiplier cannot be lower than 1.2" });
-    if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", 0, "supplierId"], message: "External responsibility requires the actual supplier" });
+  const totalShareBps = value.allocations.reduce((sum, allocation) => sum + allocation.shareBps, 0);
+  if (totalShareBps !== 10_000) {
+    context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility shares must total 100%" });
   }
+  const seenTypes = new Set<string>();
+  value.allocations.forEach((allocation, index) => {
+    if (seenTypes.has(allocation.responsibilityType)) {
+      context.addIssue({ code: "custom", path: ["allocations", index, "responsibilityType"], message: "A responsibility type can only be selected once per process" });
+    }
+    seenTypes.add(allocation.responsibilityType);
+    const multiplier = responsibilityMultiplierScaled(allocation.multiplier ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"));
+    if (allocation.responsibilityType === "own_factory") {
+      if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: "Own-factory responsibility multiplier must be 1" });
+      if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: "Own-factory responsibility cannot carry a supplier" });
+    } else {
+      if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: "External deduction multiplier cannot be lower than 1.2" });
+      if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: "External responsibility requires the actual supplier" });
+    }
+  });
 });
 export const CreateResponsibilityDraftSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),

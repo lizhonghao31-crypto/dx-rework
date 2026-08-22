@@ -47,15 +47,17 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("formatBusinessTime(approval.decision.decidedAt)");
   });
 
-  it("lets N08 users select exactly one party and set the external deduction multiplier", async () => {
+  it("lets N09 users add multiple parties, split percentages and set external deduction facts", async () => {
     const source = await read("apps/web/src/responsibility-determination-panel.tsx");
-    expect(source).toContain("主责任方");
+    expect(source).toContain("+ 添加责任方");
+    expect(source).toContain("removeAllocation");
     expect(source).toContain("parsePercentToBps(allocation.sharePercent)");
     expect(source).toContain("shareBps: Number(allocation.shareBps)");
-    expect(source).toContain("外部扣款倍率（最低 1.2）");
+    expect(source).toContain("扣款倍率（最低 1.2）");
     expect(source).toContain("责任供应商");
-    expect(source).not.toContain('label="承担比例（%）"');
+    expect(source).toContain('label="承担比例（%）"');
     expect(source).not.toContain('label="承担比例（bps）"');
+    expect(source).not.toContain("主责任方");
     expect(source).not.toContain("返工单：{response?.reworkOrderId");
   });
 

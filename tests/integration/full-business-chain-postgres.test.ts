@@ -126,6 +126,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   let workerPersonId = "";
   let tailPersonId = "";
   let factorySupplierId = "";
+  let fabricSupplierId = "";
   let publicProcessId = "";
 
   const actor = (
@@ -178,11 +179,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ids.production,
     ["production_management"],
     "responsibility:determine",
-  );
-  const ownerApproval = () => actor(
-    ids.ownerOne,
-    ["owner_group"],
-    "responsibility:owner_sign",
   );
   const wageView = () => actor(
     ids.tail,
@@ -283,6 +279,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       supplierName: "全链测试加工厂",
       active: true,
       changeReason: "全链验收加工厂",
+    })).supplierId;
+    fabricSupplierId = (await access.createSupplier(ownerMasterData(), {
+      supplierCode: "UATFAB01",
+      supplierType: "fabric",
+      supplierName: "全链测试面料商",
+      active: true,
+      changeReason: "全链验收面料商",
     })).supplierId;
     publicProcessId = (await access.createProcess(ownerMasterData(), {
       processCode: "UATPROC01",
@@ -579,8 +582,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       })],
     });
 
-    // N07 records one primary responsibility for each process. Shared
-    // responsibility remains explanatory text and does not split money.
+    // N09 splits one process between two external responsible parties. Because
+    // no own-factory share exists, finalization must skip owner confirmation.
     const n07Draft = await responsibility.saveDraft(
       production(),
       submitted.value.reworkOrderId,
@@ -591,12 +594,20 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         processes: [{
           configurationItemId: approvedItem.configurationItemId,
           multiplier: "1.000",
-          allocations: [{
-            responsibilityType: "processing_factory",
-            shareBps: 10000,
-            multiplier: "1.200",
-            supplierId: factorySupplierId,
-          }],
+          allocations: [
+            {
+              responsibilityType: "processing_factory",
+              shareBps: 7000,
+              multiplier: "1.200",
+              supplierId: factorySupplierId,
+            },
+            {
+              responsibilityType: "fabric_supplier",
+              shareBps: 3000,
+              multiplier: "1.200",
+              supplierId: fabricSupplierId,
+            },
+          ],
         }],
       }),
       randomUUID(),
@@ -607,10 +618,18 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       processes: [{
         baseAmount: "110.00",
         responsibilityAmount: "132.00",
-        allocations: [expect.objectContaining({
-          responsibilityType: "processing_factory",
-          roundedAmount: "132.00",
-        })],
+        allocations: [
+          expect.objectContaining({
+            responsibilityType: "fabric_supplier",
+            shareBps: 3000,
+            roundedAmount: "39.60",
+          }),
+          expect.objectContaining({
+            responsibilityType: "processing_factory",
+            shareBps: 7000,
+            roundedAmount: "92.40",
+          }),
+        ],
       }],
     });
     const n07Final = await responsibility.finalize(
@@ -623,26 +642,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       },
       randomUUID(),
     );
-    expect(n07Final.value.reworkStatus).toBe("pending_owner_signature");
+    expect(n07Final.value.reworkStatus).toBe("completed");
     expect(n07Final.value.canOwnerSign).toBe(false);
-
-    // N08 completes the production flow and atomically materializes the N09
-    // supplier ledger from the immutable N07 responsibility facts.
-    const ownerSigned = await responsibility.approveOwnerSignature(
-      ownerApproval(),
-      submitted.value.reworkOrderId,
-      {
-        expectedOrderVersion: n07Final.value.orderVersion,
-      },
-      randomUUID(),
-    );
-    expect(ownerSigned.value).toMatchObject({
-      reworkStatus: "completed",
-      ownerSignature: {
-        decision: "approved", signedBy: ids.ownerOne,
-        multiplierAdjustments: [],
-      },
-    });
+    expect(n07Final.value.ownerSignature).toBeNull();
 
     const externalCases = await database.query<{
       responsibilityType: string;
@@ -655,15 +657,24 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
               proposed_deduction_amount::text AS "proposedAmount",
               status
        FROM rework_external_responsibility_cases
-       WHERE rework_order_id=$1`,
+       WHERE rework_order_id=$1
+       ORDER BY responsibility_type`,
       [submitted.value.reworkOrderId],
     );
-    expect(externalCases.rows).toEqual([{
-      responsibilityType: "processing_factory",
-      supplierId: factorySupplierId,
-      proposedAmount: "132.00",
-      status: "deduction_follow_up",
-    }]);
+    expect(externalCases.rows).toEqual([
+      {
+        responsibilityType: "fabric_supplier",
+        supplierId: fabricSupplierId,
+        proposedAmount: "39.60",
+        status: "deduction_follow_up",
+      },
+      {
+        responsibilityType: "processing_factory",
+        supplierId: factorySupplierId,
+        proposedAmount: "92.40",
+        status: "deduction_follow_up",
+      },
+    ]);
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
@@ -889,6 +900,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        ORDER BY category,todo_id`,
     );
     expect(openBusinessTodos.rows).toEqual([
+      { category: "external_deduction_follow_up" },
       { category: "external_deduction_follow_up" },
       { category: "wage_month_close" },
     ]);

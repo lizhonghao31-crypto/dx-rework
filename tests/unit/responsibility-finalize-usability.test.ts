@@ -11,7 +11,7 @@ describe("N08 responsibility submission UX", () => {
     expect(panel).toContain('const needsSave = determination === null || determination.stage === "finalized" || hasUnsavedChanges');
     expect(panel).toContain('"save-before-submit"');
     expect(panel).toContain('"finalize"');
-    expect(panel).toContain("提交老板签字");
+    expect(panel).toContain("提交责任判定");
     expect(panel).not.toContain("请先保存草稿");
     expect(panel).not.toContain(">保存草稿<");
   });
@@ -35,13 +35,15 @@ describe("N08 responsibility submission UX", () => {
     expect(panel).not.toContain("takeoverReason");
   });
 
-  it("keeps external supplier and multiplier prerequisites before the owner-signature handoff", async () => {
+  it("keeps external supplier and multiplier prerequisites before the conditional handoff", async () => {
     const panel = await read("apps/web/src/responsibility-determination-panel.tsx");
     const migration = await read("apps/api/migrations/0054_n07_n11_responsibility_settlement.sql");
+    const pr06Migration = await read("apps/api/migrations/0081_rework_v2_responsibility_2.sql");
 
     expect(panel).toContain("multiplier >= 1200n && allocation.supplierId.length > 0");
     expect(panel).toContain("责任供应商");
-    expect(panel).toContain("外部扣款倍率（最低 1.2）");
+    expect(panel).toContain("扣款倍率（最低 1.2）");
     expect(migration).toContain("'pending_responsibility_determination' AND NEW.status='pending_owner_signature'");
+    expect(pr06Migration).toContain("THEN 'rework.responsibility.finalize'");
   });
 });

@@ -162,16 +162,26 @@ export class AuthorizedResponsibilityDeterminationService {
           [current.determination_id],
         );
         if (incomplete.rowCount) {
-          fail("提交老板签字前必须填写全部责任方、外部供应商及合规倍率", 400, "VALIDATION_ERROR");
+          fail("提交责任判定前必须填写全部责任方、外部供应商及合规倍率", 400, "VALIDATION_ERROR");
         }
       }
-      const nextStatus = current.settlement_schema_version === 2
+      const hasOwnFactory = ((await client.query(
+        `SELECT 1
+         FROM rework_responsibility_allocations
+         WHERE determination_id=$1
+           AND responsibility_type='own_factory'
+           AND share_bps>0
+         LIMIT 1`,
+        [current.determination_id],
+      )).rowCount ?? 0) > 0;
+      const requiresOwnerSignature = current.settlement_schema_version === 2 && hasOwnFactory;
+      const nextStatus = requiresOwnerSignature
         ? "pending_owner_signature" as const
         : "pending_responsibility_action" as const;
       const eventId = await this.event(
         client,
         actor,
-        current.settlement_schema_version === 2
+        requiresOwnerSignature
           ? "rework.responsibility.submit_owner_signature"
           : "rework.responsibility.finalize",
         "responsibility:determine",
@@ -225,7 +235,7 @@ export class AuthorizedResponsibilityDeterminationService {
          ) permitted`,
         [actor.actorId],
       )).rows[0]?.permitted === true;
-      if (current.settlement_schema_version === 2) {
+      if (requiresOwnerSignature) {
         await this.advance(client, orderId, actor.actorId, nextStatus);
         await this.todos?.completeOpenByDedupePrefix(
           client,

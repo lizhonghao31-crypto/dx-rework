@@ -539,23 +539,10 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedCurrentDeterminationVersion: determination.determination!.version,
       },
     );
-    expect(finalized.reworkStatus).toBe("pending_owner_signature");
-    const signed = await http<ResponsibilityDeterminationResponse>(
-      fixture.app,
-      "POST",
-      `/rework-orders/${reworkOrderId}/responsibility-owner-signature/approve`,
-      {
-        expectedOrderVersion: finalized.orderVersion,
-      },
-    );
-    expect(signed).toMatchObject({
+    expect(finalized).toMatchObject({
       reworkStatus: "completed",
-      ownerSignature: {
-        decision: "approved",
-        signedBy: fixture.rootUserId,
-      },
+      ownerSignature: null,
     });
-    expect(signed.ownerSignature?.multiplierAdjustments).toEqual([]);
     const batch = await http<ExternalResponsibilityBatchResponse | null>(
       fixture.app,
       "GET",
@@ -655,7 +642,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   ): Promise<void> {
     const result = await fixture.database.query<{
       reportTotal: string;
-      workerReportTotal: string;
+      responsibilityBaseTotal: string;
       responsibilityTotal: string;
       externalTotal: string;
       wageTotal: string;
@@ -668,16 +655,20 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
               SELECT 1 FROM rework_work_report_rejections rejection
               WHERE rejection.work_report_id=report.work_report_id
             )) AS "reportTotal",
-         (SELECT COALESCE(sum(report.group_amount),0)::numeric(18,2)::text
-          FROM rework_work_reports report
+         (SELECT COALESCE(sum(round(
+                    wage.actual_quantity_snapshot*wage.unit_price_snapshot*
+                    CASE WHEN wage.assignment_mode='collective'
+                      THEN 1::numeric/NULLIF(wage.member_count,0)
+                      ELSE 1
+                    END,
+                    8
+                  )),0)::numeric(18,2)::text
+          FROM rework_wage_items wage
           JOIN rework_process_configuration_items item
-            ON item.configuration_item_id=report.configuration_item_id
+            ON item.configuration_item_id=wage.configuration_item_id
            AND item.execution_kind='worker'
-          WHERE report.rework_order_id=$1
-            AND NOT EXISTS(
-              SELECT 1 FROM rework_work_report_rejections rejection
-              WHERE rejection.work_report_id=report.work_report_id
-            )) AS "workerReportTotal",
+          WHERE wage.rework_order_id=$1
+            AND wage.invalidated_at IS NULL) AS "responsibilityBaseTotal",
          (SELECT calculation_total::numeric(18,2)::text
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
@@ -691,7 +682,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     );
     const totals = result.rows[0]!;
     expect(totals.reportTotal).toBe(totals.wageTotal);
-    expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.workerReportTotal) * 1.2, 2);
+    expect(Number(totals.responsibilityTotal)).toBeCloseTo(Number(totals.responsibilityBaseTotal) * 1.2, 2);
     expect(totals.externalTotal).toBe(totals.responsibilityTotal);
   }
 
@@ -805,7 +796,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         draft.reworkOrderId,
         item.configurationItemId,
         n06Approved.orderVersion,
-        pass === 2 ? "28.08" : "7.20",
+        pass === 2 ? "21.60" : "7.20",
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",
