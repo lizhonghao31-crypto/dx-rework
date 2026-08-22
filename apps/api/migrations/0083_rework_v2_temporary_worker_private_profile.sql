@@ -13,7 +13,7 @@ ALTER TABLE business_people
     temporary_phone_number IS NULL
     OR temporary_phone_number ~ '^\+?[0-9]{6,20}$'
   ),
-  ADD CONSTRAINT business_people_temporary_identity_check CHECK (
+  ADD CONSTRAINT business_people_temporary_identity_number_check CHECK (
     temporary_identity_number IS NULL
     OR temporary_identity_number ~ '^([0-9]{15}|[0-9]{17}[0-9X])$'
   );
