@@ -99,7 +99,7 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("返回返工");
     expect(source).toContain("临时工完工上数");
     expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
-    expect(source).toContain("已流转至 N05 · 尾部主管整单确认");
+    expect(source).toContain("已流转至 N05 · 尾部最终数量确认");
     expect(source).toContain("canReviewOrder(me.user)");
     expect(source).not.toContain("登记本次完成数量");
     expect(source).not.toContain('label="实际完成时间"');
@@ -150,10 +150,10 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/whole-order-review-panel.tsx"),
       read("apps/web/src/work-reporting-form.css"),
     ]);
-    expect(source).toContain("返工上数与尾查数量对照");
-    expect(source).toContain("确认整单并进入责任判定");
-    expect(source).toContain("每道返工工序的有效上数不得超过尾查件数");
-    expect(source).toContain("countGap");
+    expect(source).toContain("工人上数、尾查数与最终确认数");
+    expect(source).toContain("确认最终数量并提交 IE");
+    expect(source).toContain("最终确认数可修正工人原报数，但不得超过尾查数");
+    expect(source).toContain("finalQuantities");
     expect(source).not.toContain("quantity-adjustments");
     expect(source).not.toContain("oneDecimalQuantity");
     expect(source).toContain('className="mobile-actions whole-order-actions"');

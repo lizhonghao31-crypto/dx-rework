@@ -5,8 +5,9 @@ import {
   CreateQuantityDecreaseSchema,
   CreateQuantityIncreaseSchema,
   RejectWorkReportSchema,
-  ReviewWholeOrderSchema,
+  ReviewFinalQuantitySchema,
   ReviewQuantityIncreaseSchema,
+  ReviewWholeOrderSchema,
   WholeOrderReviewResponseSchema,
 } from "../../packages/contracts/src/index.js";
 import { transitionReworkOrder } from "../../packages/domain/src/index.js";
@@ -23,32 +24,36 @@ describe("whole-order review contracts", () => {
     expect(ConfirmQuantityIncreaseSchema.safeParse({ expectedOrderVersion: 2, expectedAdjustmentVersion: 1, decision: "rejected", actualCutQuantity: 3, actualReturnQuantity: 3, allowedMaximumQuantity: 3 }).success).toBe(false);
     expect(ReviewQuantityIncreaseSchema.safeParse({ expectedOrderVersion: 2, expectedAdjustmentVersion: 1, decision: "rejected" }).success).toBe(false);
     const report = { workReportId: id, workTaskId: id, configurationItemId: id, actualQuantity: 1, completedAt: "2026-08-03T00:00:00.000Z", submittedBy: id, assignmentMode: "collective", members: [{ personId: id, displayName: "成员" }], rejected: true, rejectedPersonId: null, rejectionReason: "整条驳回", resubmitsWorkReportId: null };
-    const response = { reworkOrderId: id, reworkStatus: "pending_order_review", orderVersion: 2, canReview: true, canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false, processes: [], reports: [report], adjustments: [], temporaryWorkers: [], reviewId: null };
+    const response = { reworkOrderId: id, reworkStatus: "pending_order_review", orderVersion: 2, canReview: true, canIeReview: false, canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false, processes: [], reports: [report], adjustments: [], temporaryWorkers: [], reviewId: null, finalConfirmation: null };
     expect(WholeOrderReviewResponseSchema.safeParse(response).success).toBe(true);
     expect(WholeOrderReviewResponseSchema.safeParse({ ...response, reports: [{ ...report, assignmentMode: undefined }] }).success).toBe(false);
-    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2, reason: "旺季临时工加价" }] }).success).toBe(true);
-    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2 }] }).success).toBe(false);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, finalQuantities: [{ configurationItemId: id, finalConfirmedQuantity: 1 }], temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2, reason: "旺季临时工加价" }] }).success).toBe(true);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, finalQuantities: [{ configurationItemId: id, finalConfirmedQuantity: 1 }], temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2 }] }).success).toBe(false);
   });
 
   it("keeps whole-order transitions explicit and terminal responsibility work out of PR-08", () => {
-    expect(transitionReworkOrder("pending_order_review", "pending_responsibility_determination")).toBe("pending_responsibility_determination");
+    expect(transitionReworkOrder("pending_order_review", "pending_final_quantity_ie_review")).toBe("pending_final_quantity_ie_review");
+    expect(transitionReworkOrder("pending_final_quantity_ie_review", "pending_responsibility_determination")).toBe("pending_responsibility_determination");
+    expect(transitionReworkOrder("pending_final_quantity_ie_review", "pending_order_review")).toBe("pending_order_review");
     expect(transitionReworkOrder("pending_order_review", "pending_quantity_adjustment_ie_review")).toBe("pending_quantity_adjustment_ie_review");
     expect(() => transitionReworkOrder("pending_responsibility_determination", "in_progress")).toThrow();
   });
 
-  it("uses N03-approved prices and sends N05 directly to responsibility", async () => {
+  it("uses N03-approved prices and requires N06 IE review before responsibility", async () => {
     const [panel, service, migration] = await Promise.all([
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/migrations/0065_ie_pricing_before_assignment.sql", import.meta.url), "utf8"),
     ]);
-    expect(panel).toContain("data.processes.every((process) => process.finalUnitPrice !== null)");
+    expect(panel).toContain("确认最终数量并提交 IE");
     expect(panel).toContain("临时工实发系数");
-    expect(panel).toContain("确认整单并进入责任判定");
-    expect(panel).toContain("返工上数与尾查数量对照");
+    expect(panel).toContain("通过并进入责任判定");
+    expect(panel).toContain("工人上数、尾查数与最终确认数");
     expect(service).not.toContain("async submitTailPricing");
     expect(service).not.toContain("async reviewTailPricing");
-    expect(service).toContain('this.orderAudit(order, "pending_responsibility_determination"');
+    expect(service).toContain('this.orderAudit(order, "pending_final_quantity_ie_review"');
+    expect(service).toContain("async reviewFinalQuantity");
+    expect(ReviewFinalQuantitySchema.safeParse({ expectedOrderVersion: 2, decision: "rejected" }).success).toBe(false);
     expect(migration).toContain("rework_tail_completion_coefficients");
     expect(migration).toContain("rework.whole_order.approve");
     expect(migration).not.toContain("rework.tail_pricing.ie_approve");

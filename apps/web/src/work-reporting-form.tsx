@@ -225,13 +225,13 @@ export function WorkReportingForm({
         body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(text) }),
       });
       const loaded = await reload(); setReportTasks(null);
-      if (loaded?.reworkStatus === "pending_order_review") { setMessage("返工执行报数已全部完成，已流转至 N05 · 尾部主管整单确认。"); await onOrderChanged?.(); }
+      if (loaded?.reworkStatus === "pending_order_review") { setMessage("返工执行报数已全部完成，已流转至 N05 · 尾部最终数量确认。"); await onOrderChanged?.(); }
       else setMessage("本次执行报数已确认；系统继续等待其他返工人员或尾查完成。");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完工上数失败"); } finally { setBusy(false); }
   };
 
   const effectiveTaskMode = taskMode === "workspace"
-    ? data?.reworkStatus === "pending_task_assignment" ? "task_assignment" : data?.reworkStatus === "pending_order_review" ? "whole_order_review" : "work_reporting"
+    ? data?.reworkStatus === "pending_task_assignment" ? "task_assignment" : ["pending_order_review", "pending_final_quantity_ie_review"].includes(data?.reworkStatus ?? "") ? "whole_order_review" : "work_reporting"
     : taskMode;
   const assignmentWritable = data?.reworkStatus === "pending_task_assignment";
   const workReportingWritable = data?.reworkStatus === "in_progress";

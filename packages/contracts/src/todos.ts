@@ -21,6 +21,7 @@ export const TodoRouteDescriptorSchema = z.object({
     "work_reporting",
     "tail_inspection",
     "whole_order_review",
+    "final_quantity_ie_review",
     "responsibility",
     "own_factory_approval",
     "external_responsibility",

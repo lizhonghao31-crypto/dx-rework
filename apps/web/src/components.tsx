@@ -396,11 +396,11 @@ export function Queue({ supervisor = false }: { supervisor?: boolean }) {
   const rows = supervisor
     ? [
         "N02　工序与候选单价",
-        "N04　分配返工人员",
-        "N05　工人完工上数",
-        "N06　尾查报数",
-        "N07　尾部主管整单确认",
-        "N08　责任判定",
+        "N04　返工执行报数",
+        "N05　尾部最终数量确认",
+        "N06　IE 最终数量复核",
+        "N07　责任判定",
+        "N08　老板确认签字",
       ]
     : [
         "N01　发起返工",

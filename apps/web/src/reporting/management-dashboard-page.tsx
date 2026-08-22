@@ -18,24 +18,26 @@ const nodeTarget = (node: string): string => ({
   N03: "ui/process-configuration?queue=pending_ie_review",
   // Historical dashboard codes are kept by the reporting API for data
   // compatibility. Present them using the current visible workflow.
-  N04: "ui/process-configuration?queue=pending_task_assignment",
-  N05: "ui/work-reporting?queue=in_progress",
-  N06: "ui/work-reporting?queue=pending_order_review",
-  "N06-A": "ui/work-reporting?queue=pending_quantity_adjustment_ie_review",
+  "N02-R": "ui/process-configuration?queue=pending_task_assignment",
+  N04: "ui/work-reporting?queue=in_progress",
+  N05: "ui/work-reporting?queue=pending_order_review",
+  N06: "ui/work-reporting?queue=pending_final_quantity_ie_review",
+  "N05-A": "ui/work-reporting?queue=pending_quantity_adjustment_ie_review",
   N07: "ui/tasks?status=pending_responsibility_determination",
   N08: "ui/tasks?status=pending_owner_signature",
-  N10: "ui/tasks?status=completed",
+  N09: "ui/tasks?status=completed",
   N11: "ui/wages",
 })[node] ?? "ui/tasks";
 
 const nodePresentation = (node: string, label: string): { node: string; label: string } => ({
-  N04: { node: "N02", label: "分配工序 &工人 · 启动恢复" },
-  N05: { node: "N04", label: "返工执行报数" },
-  N06: { node: "N05", label: "尾部主管整单确认" },
-  "N06-A": { node: "N05-A", label: "历史数量调整" },
-  N07: { node: "N06", label: "责任判定" },
-  N08: { node: "N07", label: "老板确认签字" },
-  N10: { node: "N08", label: "返工业务完成" },
+  "N02-R": { node: "N02", label: "分配工序 &工人 · 启动恢复" },
+  N04: { node: "N04", label: "返工执行报数" },
+  N05: { node: "N05", label: "尾部最终数量确认" },
+  N06: { node: "N06", label: "IE 最终数量复核" },
+  "N05-A": { node: "N05-A", label: "历史数量调整" },
+  N07: { node: "N07", label: "责任判定" },
+  N08: { node: "N08", label: "老板确认签字" },
+  N09: { node: "N09", label: "返工业务完成" },
   N11: { node: "工资", label: "工资管理" },
 })[node] ?? { node, label };
 
@@ -140,7 +142,7 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
             <KpiInstrument label="待配置工序" value={site.kpis.pendingConfiguration} detail="待处理" tone="info" />
             <KpiInstrument label="待启动恢复" value={site.kpis.pendingAssignment} detail="待处理" tone="info" />
             <KpiInstrument label="执行报数中" value={site.kpis.inProgress} detail="进行中" tone="success" />
-            <KpiInstrument label="待整单确认" value={site.kpis.pendingOrderReview} detail="待处理" tone="warning" />
+            <KpiInstrument label="待最终数量确认 / IE 复核" value={site.kpis.pendingOrderReview} detail="待处理" tone="warning" />
             <KpiInstrument label="待工资初核" value={site.kpis.pendingWageReview} detail="待处理" tone="info" />
             <KpiInstrument label="现场异常" value={site.kpis.siteExceptions} detail="待处理" tone="warning" />
           </div>

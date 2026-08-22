@@ -216,7 +216,7 @@ runWithPostgres("external responsibility reviewed workflow", () => {
     const reviewed = await review.approve(
       actor(ids.tail, ["tail_supervisor"], "submission:audit"),
       created.value.reworkOrderId,
-      { expectedOrderVersion: reviewView.orderVersion, temporaryCoefficients: [] },
+      { expectedOrderVersion: reviewView.orderVersion, finalQuantities: reviewView.processes.map((process) => ({ configurationItemId: process.configurationItemId, finalConfirmedQuantity: process.completedQuantity })), temporaryCoefficients: [] },
       randomUUID(),
     );
     return {

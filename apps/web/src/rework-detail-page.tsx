@@ -25,6 +25,7 @@ type ReworkStatus =
   | "pending_task_assignment"
   | "in_progress"
   | "pending_order_review"
+  | "pending_final_quantity_ie_review"
   | "pending_quantity_adjustment_ie_review"
   | "pending_responsibility_determination"
   | "pending_owner_signature"
@@ -39,6 +40,7 @@ export type WorkflowNodeKey =
   | "task_assignment"
   | "work_reporting"
   | "whole_order_review"
+  | "final_quantity_ie_review"
   | "quantity_adjustment"
   | "responsibility"
   | "owner_signature"
@@ -117,7 +119,8 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_ie_review: { label: "待 IE 核价", next: "IE 通过后返工人员与尾查任务统一生效并进入执行" },
   pending_task_assignment: { label: "待启动执行任务", next: "IE 已通过；预分配执行任务等待自动启动，可在节点02重试启动" },
   in_progress: { label: "返工执行中", next: "返工人员与尾查统一登记实际完成数量，全部完成后由尾部主管核量" },
-  pending_order_review: { label: "待尾部主管整单确认", next: "核对返工上数不超过尾查数量，并确认临时工实发系数" },
+  pending_order_review: { label: "待尾部确认最终数量", next: "核对工人上数与尾查数量，提交每道工序最终确认数量" },
+  pending_final_quantity_ie_review: { label: "最终数量待 IE 复核", next: "IE 核对数量与质量事实；通过后生成正式工资并进入责任判定" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
   pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
@@ -133,10 +136,11 @@ const statusRank: Record<Exclude<ReworkStatus, "cancelled">, number> = {
   pending_task_assignment: 3,
   in_progress: 4,
   pending_order_review: 5,
+  pending_final_quantity_ie_review: 6,
   pending_quantity_adjustment_ie_review: 5,
-  pending_responsibility_determination: 6,
-  pending_owner_signature: 7,
-  pending_responsibility_action: 8,
+  pending_responsibility_determination: 7,
+  pending_owner_signature: 8,
+  pending_responsibility_action: 9,
   completed: 10,
 };
 
@@ -147,6 +151,7 @@ const currentNodeByStatus: Partial<Record<ReworkStatus, WorkflowNodeKey>> = {
   pending_task_assignment: "process_configuration",
   in_progress: "work_reporting",
   pending_order_review: "whole_order_review",
+  pending_final_quantity_ie_review: "final_quantity_ie_review",
   pending_quantity_adjustment_ie_review: "whole_order_review",
   pending_responsibility_determination: "responsibility",
   pending_owner_signature: "owner_signature",
@@ -161,17 +166,18 @@ const nodeRank: Record<WorkflowNodeKey, number> = {
   task_assignment: 3,
   work_reporting: 4,
   whole_order_review: 5,
+  final_quantity_ie_review: 6,
   quantity_adjustment: 5,
-  responsibility: 6,
-  owner_signature: 7,
-  settlement_ledger: 7,
-  archive: 8,
-  settlement_followup: 8,
+  responsibility: 7,
+  owner_signature: 8,
+  settlement_ledger: 8,
+  archive: 9,
+  settlement_followup: 9,
 };
 
 const nodeKeys = new Set<WorkflowNodeKey>([
   "initiation", "process_configuration", "ie_review", "task_assignment", "work_reporting",
-  "whole_order_review", "quantity_adjustment", "responsibility", "owner_signature", "settlement_ledger", "archive", "settlement_followup",
+  "whole_order_review", "final_quantity_ie_review", "quantity_adjustment", "responsibility", "owner_signature", "settlement_ledger", "archive", "settlement_followup",
 ]);
 
 const orderIdFromLocation = (): string | null => {
@@ -283,10 +289,11 @@ const buildWorkflow = (
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("whole_order_review", "05", "尾部主管整单确认", "尾部主管", "待全部执行报数完成", "逐工序核对返工上数不得超过尾查数量；临时工实发系数在此确认。"),
-        node("responsibility", "06", "责任判定", "生产管理", "待 N05 提交", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
-        node("owner_signature", "07", "老板确认签字", "老板", "待 N06 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
-        node("settlement_followup", "08", "返工业务完成", "系统", "N07 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
+        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", "逐工序对照工人原报数与尾查数，提交最终确认数量并保留每版审计。"),
+        node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
+        node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
+        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
       ],
     },
   ];
@@ -322,6 +329,8 @@ const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`
 const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action === "rework.attachments.supplement") return "initiation";
   if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
+  if (action.startsWith("rework.final_quantity.")) return "final_quantity_ie_review";
+  if (action === "rework.tail_completion.confirm") return "whole_order_review";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
   if (action.includes("process_configuration") || action.includes("process_worker_plan") || action.includes("work_task")) return "process_configuration";
   if (action.includes("tail_inspection")) return "work_reporting";
@@ -338,6 +347,8 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
 const historyActionLabel = (action: string): string => {
   if (action === "rework.attachments.supplement") return "补充订单图片";
   if (action === "rework.submit") return "提交返工单";
+  if (action === "rework.tail_completion.confirm") return "尾部确认最终数量";
+  if (action.startsWith("rework.final_quantity.")) return "IE 复核最终数量";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
   if (action.includes("process_worker_plan")) return "返工人员预分配";
   if (action.includes("process_configuration")) return "工序配置处理";
@@ -521,7 +532,7 @@ export function ReworkDetailPage({
       if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "quantity_adjustment")) {
+    if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review" || selected.key === "quantity_adjustment")) {
       if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }

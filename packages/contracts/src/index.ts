@@ -182,6 +182,7 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_task_assignment",
   "in_progress",
   "pending_order_review",
+  "pending_final_quantity_ie_review",
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
   "pending_owner_signature",
@@ -719,6 +720,10 @@ export const RejectWorkReportSchema = z.object({
 }).strict();
 export const ReviewWholeOrderSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
+  finalQuantities: z.array(z.object({
+    configurationItemId: IdSchema,
+    finalConfirmedQuantity: z.number().int().positive(),
+  }).strict()).min(1),
   temporaryCoefficients: z.array(z.object({
     configurationItemId: IdSchema,
     personId: IdSchema,
@@ -730,9 +735,22 @@ export const ReviewWholeOrderSchema = z.object({
     }
   })),
 }).strict().superRefine((value, context) => {
-  const keys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
-  if (new Set(keys).size !== keys.length) {
+  const coefficientKeys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
+  if (new Set(coefficientKeys).size !== coefficientKeys.length) {
     context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
+  }
+  const quantityKeys = value.finalQuantities.map((item) => item.configurationItemId);
+  if (new Set(quantityKeys).size !== quantityKeys.length) {
+    context.addIssue({ code: "custom", path: ["finalQuantities"], message: "Final quantities cannot contain duplicates" });
+  }
+});
+export const ReviewFinalQuantitySchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
   }
 });
 export const CreateQuantityDecreaseSchema = z.object({
@@ -796,6 +814,7 @@ export const WholeOrderReviewResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   canReview: z.boolean(),
+  canIeReview: z.boolean(),
   canAdjustQuantity: z.boolean(),
   canConfirmQuantity: z.boolean(),
   canReviewQuantityIncrease: z.boolean(),
@@ -836,9 +855,27 @@ export const WholeOrderReviewResponseSchema = z.object({
     reason: z.string().nullable(),
   }).strict()),
   reviewId: IdSchema.nullable(),
+  finalConfirmation: z.object({
+    confirmationId: IdSchema,
+    confirmationVersion: z.number().int().positive(),
+    status: z.enum(["pending_ie_review", "approved", "rejected"]),
+    confirmedBy: IdSchema,
+    confirmedAt: z.string().datetime(),
+    reviewedBy: IdSchema.nullable(),
+    reviewedAt: z.string().datetime().nullable(),
+    reviewReason: z.string().nullable(),
+    quantities: z.array(z.object({
+      configurationItemId: IdSchema,
+      workerReportedQuantity: z.number().int().nonnegative(),
+      tailReportedQuantity: z.number().int().nonnegative(),
+      finalConfirmedQuantity: z.number().int().positive(),
+      changed: z.boolean(),
+    }).strict()),
+  }).strict().nullable(),
 });
 export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
 export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
+export type ReviewFinalQuantity = z.infer<typeof ReviewFinalQuantitySchema>;
 export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;
 export type CreateQuantityIncrease = z.infer<typeof CreateQuantityIncreaseSchema>;
 export type ConfirmQuantityIncrease = z.infer<typeof ConfirmQuantityIncreaseSchema>;

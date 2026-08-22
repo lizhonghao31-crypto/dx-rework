@@ -9,7 +9,7 @@ import "./reporting.css";
 
 const names: Record<ReportType,string>={rework_overview:"返工总览",wages:"工资明细",responsibilities:"责任明细",own_factory:"本厂承担",external_deductions:"外部扣款",exceptions:"异常明细"};
 const statuses:Record<ReportType,readonly (readonly [string,string])[]>={
-  rework_overview:[["","全部状态"],["draft","草稿"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],["pending_task_assignment","待分工"],["in_progress","上数中"],["pending_order_review","待整单审核"],["pending_quantity_adjustment_ie_review","数量调整待 IE"],["pending_responsibility_determination","责任判定与资料核验"],["pending_owner_signature","待老板确认签字"],["pending_responsibility_action","责任结算中"],["completed","订单已完成"],["cancelled","已取消"]],
+  rework_overview:[["","全部状态"],["draft","草稿"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],["pending_task_assignment","待分工"],["in_progress","上数中"],["pending_order_review","待尾部确认最终数量"],["pending_final_quantity_ie_review","最终数量待 IE 复核"],["pending_quantity_adjustment_ie_review","数量调整待 IE"],["pending_responsibility_determination","责任判定与资料核验"],["pending_owner_signature","待老板确认签字"],["pending_responsibility_action","责任结算中"],["completed","订单已完成"],["cancelled","已取消"]],
   wages:[["","全部状态"],["ready_to_lock","可月结"],["locked","已月结"]],
   responsibilities:[["","全部责任"],["own_factory","本厂承担"],["processing_factory","加工厂"],["embroidery_factory","印绣花厂"],["washing_factory","洗水厂"],["fabric_supplier","面料商"]],
   own_factory:[["","全部状态"],["pending","待审批"],["approved","已通过"],["rejected","已驳回"]],

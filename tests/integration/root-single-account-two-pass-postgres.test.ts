@@ -773,6 +773,10 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         `/rework-orders/${draft.reworkOrderId}/whole-order-review/approve`,
         {
           expectedOrderVersion: n05.orderVersion,
+          finalQuantities: n05.processes.map((process: { configurationItemId: string; completedQuantity: number }) => ({
+            configurationItemId: process.configurationItemId,
+            finalConfirmedQuantity: process.completedQuantity,
+          })),
           temporaryCoefficients: pass === 2 ? [{
             configurationItemId: item.configurationItemId,
             personId: fixture.workerPersonIds[0]!,
@@ -781,7 +785,14 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           }] : [],
         },
       );
-      expect(n06Confirmed.reworkStatus).toBe("pending_responsibility_determination");
+      expect(n06Confirmed.reworkStatus).toBe("pending_final_quantity_ie_review");
+      const n06Approved = await http<WholeOrderReviewResponse>(
+        fixture.app,
+        "POST",
+        `/rework-orders/${draft.reworkOrderId}/whole-order-review/ie-review`,
+        { expectedOrderVersion: n06Confirmed.orderVersion, decision: "approved" },
+      );
+      expect(n06Approved.reworkStatus).toBe("pending_responsibility_determination");
       const generatedWage = (await fixture.database.query<{ payable_amount: string }>(
         `SELECT payable_amount::text FROM rework_wage_items
          WHERE rework_order_id=$1 AND person_id=$2`,
@@ -793,7 +804,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         fixture,
         draft.reworkOrderId,
         item.configurationItemId,
-        n06Confirmed.orderVersion,
+        n06Approved.orderVersion,
         pass === 2 ? "28.08" : "7.20",
       );
       expect((await fixture.database.query<{ status: string }>(

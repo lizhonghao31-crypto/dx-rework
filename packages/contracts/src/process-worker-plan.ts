@@ -10,6 +10,7 @@ const ReworkStatusSchema = z.enum([
   "pending_task_assignment",
   "in_progress",
   "pending_order_review",
+  "pending_final_quantity_ie_review",
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
   "pending_owner_signature",

@@ -13,6 +13,7 @@ type WorkflowStatus = Extract<
   | "pending_task_assignment"
   | "in_progress"
   | "pending_order_review"
+  | "pending_final_quantity_ie_review"
   | "pending_quantity_adjustment_ie_review"
 >;
 
@@ -51,14 +52,21 @@ const queueMeta: Record<WorkflowStatus, QueueMeta> = {
     label: "返工执行报数",
     owner: "返工人员 / 尾查 / 已授权代录人",
     action: "按本人执行任务登记实际完成数量",
-    next: "全部执行报数完成后自动流转到 N05 · 尾部主管整单确认",
+    next: "全部执行报数完成后自动流转到 N05 · 尾部确认最终数量",
   },
   pending_order_review: {
     node: "N05",
-    label: "待整单确认",
+    label: "待最终数量确认",
     owner: "尾部主管",
-    action: "核对返工人员与尾查的统一数量事实，确认本单执行完成",
-    next: "确认后流转到 N06 · 待责任判定",
+    action: "核对工人上数与尾查数量，填写每道工序最终确认数量",
+    next: "确认后流转到 N06 · IE 复核",
+  },
+  pending_final_quantity_ie_review: {
+    node: "N06",
+    label: "最终数量待 IE 复核",
+    owner: "IE",
+    action: "核对最终确认数量与质量事实，只作通过或退回",
+    next: "通过后流转到 N07 · 责任判定；退回则回到 N05",
   },
   pending_quantity_adjustment_ie_review: {
     node: "N05-A",
