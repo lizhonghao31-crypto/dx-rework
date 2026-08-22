@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { BusinessPersonIdSchema } from "./business-person-id.js";
+
 const IdSchema = z.string().uuid();
 const ReworkStatusSchema = z.enum([
   "draft",
@@ -19,7 +21,7 @@ const ReworkStatusSchema = z.enum([
 
 const ProcessWorkerAssignmentSchema = z.object({
   configurationItemId: IdSchema,
-  memberIds: z.array(IdSchema).min(1).max(40),
+  memberIds: z.array(BusinessPersonIdSchema).min(1).max(40),
 }).strict().superRefine((value, context) => {
   if (new Set(value.memberIds).size !== value.memberIds.length) {
     context.addIssue({ code: "custom", path: ["memberIds"], message: "Workers cannot contain duplicates" });
@@ -44,7 +46,7 @@ export const ActivateProcessWorkerPlanSchema = z.object({
 }).strict();
 
 export const ProcessWorkerPlanMemberSchema = z.object({
-  personId: IdSchema,
+  personId: BusinessPersonIdSchema,
   displayName: z.string().min(1),
   personType: z.enum(["internal", "temporary"]),
 }).strict();
