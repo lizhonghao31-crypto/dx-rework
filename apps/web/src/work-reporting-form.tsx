@@ -72,6 +72,8 @@ export function WorkReportingForm({
   const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
   const [temporaryName, setTemporaryName] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
+  const [temporaryPhoneNumber, setTemporaryPhoneNumber] = useState("");
+  const [temporaryIdentityNumber, setTemporaryIdentityNumber] = useState("");
   const [reportTasks, setReportTasks] = useState<Task[] | null>(null);
   const [reportQuantities, setReportQuantities] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -171,6 +173,8 @@ export function WorkReportingForm({
     if (!canCreateTemporary || busy) return;
     const displayName = temporaryName.trim();
     const remark = temporaryRemark.trim();
+    const phoneNumber = temporaryPhoneNumber.trim().replace(/[\s-]/g, "");
+    const identityNumber = temporaryIdentityNumber.trim().toUpperCase();
     if (!displayName) { setMessage("请填写临时工姓名。"); return; }
     setBusy(true);
     try {
@@ -182,6 +186,8 @@ export function WorkReportingForm({
           aliases: [],
           reason: "N04 现场新增临时工",
           ...(remark ? { temporaryRemark: remark } : {}),
+          ...(phoneNumber ? { temporaryPhoneNumber: phoneNumber } : {}),
+          ...(identityNumber ? { temporaryIdentityNumber: identityNumber } : {}),
         }),
       });
       await reloadPeople();
@@ -190,6 +196,8 @@ export function WorkReportingForm({
       setSelected({});
       setTemporaryName("");
       setTemporaryRemark("");
+      setTemporaryPhoneNumber("");
+      setTemporaryIdentityNumber("");
       setTemporaryDialogOpen(false);
       setMessage(`临时工 ${displayName} 已添加，可直接选择分配。`);
     } catch (cause) {
@@ -278,7 +286,7 @@ export function WorkReportingForm({
       {data?.tasks.length === 0 && <Surface>当前暂无返工任务。</Surface>}
     </>}
     {removalTask && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”分配？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}
-    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
+    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
     {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? "请输入您的实际尾查件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;
 }

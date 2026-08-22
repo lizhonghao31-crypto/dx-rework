@@ -98,6 +98,8 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
   const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
   const [temporaryName, setTemporaryName] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
+  const [temporaryPhoneNumber, setTemporaryPhoneNumber] = useState("");
+  const [temporaryIdentityNumber, setTemporaryIdentityNumber] = useState("");
   const pendingKeys = useRef<Record<string, string>>({});
   const pendingSubmit = useRef<PendingSubmit | null>(null);
 
@@ -331,11 +333,14 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
       : "");
   };
   const createTemporaryWorker = async () => {
-    const name = temporaryName.trim(); const remark = temporaryRemark.trim(); if (!canCreateTemporary || busy || !name) return;
+    const name = temporaryName.trim(); const remark = temporaryRemark.trim();
+    const phoneNumber = temporaryPhoneNumber.trim().replace(/[\s-]/g, "");
+    const identityNumber = temporaryIdentityNumber.trim().toUpperCase();
+    if (!canCreateTemporary || busy || !name) return;
     setBusy(true);
     try {
-      await request("master-data/temporary-workers", (value) => value as { personId: string }, { method: "POST", body: JSON.stringify({ personType: "temporary", displayName: name, aliases: [], reason: "N02 分配工序&工人现场新增临时工", ...(remark ? { temporaryRemark: remark } : {}) }) });
-      await reloadPeople(); setTemporaryName(""); setTemporaryRemark(""); setTemporaryDialogOpen(false); setMessage(`临时工 ${name} 已添加，可直接分配。`);
+      await request("master-data/temporary-workers", (value) => value as { personId: string }, { method: "POST", body: JSON.stringify({ personType: "temporary", displayName: name, aliases: [], reason: "N02 分配工序&工人现场新增临时工", ...(remark ? { temporaryRemark: remark } : {}), ...(phoneNumber ? { temporaryPhoneNumber: phoneNumber } : {}), ...(identityNumber ? { temporaryIdentityNumber: identityNumber } : {}) }) });
+      await reloadPeople(); setTemporaryName(""); setTemporaryRemark(""); setTemporaryPhoneNumber(""); setTemporaryIdentityNumber(""); setTemporaryDialogOpen(false); setMessage(`临时工 ${name} 已添加，可直接分配。`);
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "临时工添加失败"); } finally { setBusy(false); }
   };
 
@@ -432,7 +437,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
         <div className="process-worker-mobile-sheet__groups">{mobileAssignmentGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}><legend><span>{group.label}</span><small>{group.people.length} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={() => setTemporaryDialogOpen(true)}>＋新增</button> : null}</legend><div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={mobileAssignment.selectedIds.includes(person.personId)} disabled={busy} onChange={() => toggleMobileAssignmentPerson(person.personId)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "人员目录暂不可用" : "没有匹配人员"}</p>}</div></fieldset>)}</div>
         <div className="process-worker-mobile-sheet__actions"><Button disabled={busy} onClick={cancelMobileAssignment}>取消</Button><Button variant="primary" disabled={busy || mobileAssignment.selectedIds.length === 0} onClick={confirmMobileAssignment}>确认分配</Button></div>
       </section></div> : null}
-      {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={() => setTemporaryDialogOpen(false)}><div role="dialog" aria-modal="true" aria-label="新增临时工" onMouseDown={(event) => event.stopPropagation()}><Surface><h2>新增临时工</h2><InsetField label="姓名" value={temporaryName} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="备注（可选）" value={temporaryRemark} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={() => setTemporaryDialogOpen(false)}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void createTemporaryWorker()}>添加临时工</Button></div></Surface></div></div> : null}
+      {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={() => setTemporaryDialogOpen(false)}><div role="dialog" aria-modal="true" aria-label="新增临时工" onMouseDown={(event) => event.stopPropagation()}><Surface><h2>新增临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={() => setTemporaryDialogOpen(false)}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void createTemporaryWorker()}>添加临时工</Button></div></Surface></div></div> : null}
     </div>;
   }
   if (response.reworkStatus === "pending_ie_review") {

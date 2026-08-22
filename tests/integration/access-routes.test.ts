@@ -275,7 +275,10 @@ describe("access routes", () => {
     expect(service.listPeople).toHaveBeenCalledWith({
       includeInactive: true,
       includeRevokedAliases: true,
-    });
+    }, expect.objectContaining({
+      actorRoles: ["system_admin"],
+      authorizationCapability: "people:read",
+    }));
   });
 
   it("rejects empty roles, missing capabilities and untrusted sessions", async () => {
