@@ -150,12 +150,12 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   });
 
   app.get("/master-data/people", async (request) => {
-    await actor(request, "people:read");
+    const peopleActor = await actor(request, "people:read");
     const query = parse(PeopleListQuerySchema, request.query);
     return dependencies.service.listPeople({
       includeInactive: query.includeInactive === "true",
       includeRevokedAliases: query.includeRevokedAliases === "true",
-    });
+    }, peopleActor);
   });
 
   app.get("/master-data/processes", async (request) => {

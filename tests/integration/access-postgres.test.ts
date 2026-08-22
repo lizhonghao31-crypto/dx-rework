@@ -46,6 +46,11 @@ runWithPostgres("role permissions and versioned master data", () => {
     ...adminActor,
     authorizationCapability: "master_data:manage",
   };
+  const ownerPrivateProfileActor: TrustedActorContext = {
+    ...ownerActor,
+    authorizationCapability: "people:read",
+    authorizationCapabilities: ["people:read", "temporary_worker_private:read"],
+  };
   const delegationActor: TrustedActorContext = {
     ...ownerActor,
     authorizationCapability: "delegation:manage",
@@ -72,6 +77,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
+      "0083_rework_v2_temporary_worker_private_profile.sql",
     ]) {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url), "utf8");
       await database.query(sql);
@@ -251,6 +257,8 @@ runWithPostgres("role permissions and versioned master data", () => {
       personType: "temporary",
       displayName: "临时工甲",
       aliases: ["临工甲"],
+      temporaryPhoneNumber: "13800138000",
+      temporaryIdentityNumber: "44010619900101123X",
       reason: "临时人员建档",
     });
     const canonicalAuditPerson = await service.createPerson(masterDataActor, {
@@ -358,6 +366,28 @@ runWithPostgres("role permissions and versioned master data", () => {
       [temporary.personId],
     );
     expect(temp.rows[0]).toEqual({ app_user_id: null, person_type: "temporary" });
+    expect(await service.listPeople()).toContainEqual(expect.objectContaining({
+      personId: temporary.personId,
+      temporaryPhoneNumber: "138****8000",
+      temporaryIdentityNumber: "440***********123X",
+      privateProfileMasked: true,
+    }));
+    expect(await service.listPeople({}, ownerPrivateProfileActor)).toContainEqual(expect.objectContaining({
+      personId: temporary.personId,
+      temporaryPhoneNumber: "13800138000",
+      temporaryIdentityNumber: "44010619900101123X",
+      privateProfileMasked: false,
+    }));
+    const temporaryAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      "SELECT after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.person.create'",
+      [temporary.personId],
+    );
+    expect(temporaryAudit.rows[0]?.after_state).toEqual(expect.objectContaining({
+      hasTemporaryPhoneNumber: true,
+      hasTemporaryIdentityNumber: true,
+    }));
+    expect(JSON.stringify(temporaryAudit.rows[0]?.after_state)).not.toContain("13800138000");
+    expect(JSON.stringify(temporaryAudit.rows[0]?.after_state)).not.toContain("44010619900101123X");
     const correctedTemporary = await service.createPerson(masterDataActor, {
       personType: "temporary",
       displayName: "临时工乙",

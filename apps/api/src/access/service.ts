@@ -46,6 +46,23 @@ const ensureProtectedRoleAuthority = (actor: TrustedActorContext, roleCode: stri
   }
 };
 
+const canReadTemporaryWorkerPrivateProfile = (actor?: TrustedActorContext): boolean =>
+  actor !== undefined && (
+    isRootActor(actor)
+    || actor.authorizationCapabilities?.includes("temporary_worker_private:read") === true
+  );
+
+const maskPhoneNumber = (value: string | null): string | null => {
+  if (!value) return null;
+  if (value.length <= 7) return `${value.slice(0, 2)}***${value.slice(-2)}`;
+  return `${value.slice(0, 3)}****${value.slice(-4)}`;
+};
+
+const maskIdentityNumber = (value: string | null): string | null => {
+  if (!value) return null;
+  return `${value.slice(0, 3)}${"*".repeat(Math.max(4, value.length - 7))}${value.slice(-4)}`;
+};
+
 const ensureActiveOrganizationUser = async (
   client: PoolClient,
   userId: string,
@@ -203,13 +220,19 @@ export class AccessMasterDataService {
     }));
   }
 
-  async listPeople(input: { includeInactive?: boolean; includeRevokedAliases?: boolean } = {}): Promise<Array<{
+  async listPeople(
+    input: { includeInactive?: boolean; includeRevokedAliases?: boolean } = {},
+    actor?: TrustedActorContext,
+  ): Promise<Array<{
     personId: string;
     personType: string;
     appUserId: string | null;
     displayName: string;
     temporaryCode: string | null;
     temporaryRemark: string | null;
+    temporaryPhoneNumber: string | null;
+    temporaryIdentityNumber: string | null;
+    privateProfileMasked: boolean;
     active: boolean;
     aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
   }>> {
@@ -220,10 +243,13 @@ export class AccessMasterDataService {
       display_name: string;
       temporary_code: string | null;
       temporary_remark: string | null;
+      temporary_phone_number: string | null;
+      temporary_identity_number: string | null;
       active: boolean;
       aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
     }>(
-      `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.temporary_code,p.temporary_remark,p.active,
+      `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.temporary_code,p.temporary_remark,
+              p.temporary_phone_number,p.temporary_identity_number,p.active,
               COALESCE(
                 jsonb_agg(
                   jsonb_build_object(
@@ -245,6 +271,7 @@ export class AccessMasterDataService {
        ORDER BY p.display_name,p.person_id`,
       [input.includeInactive ?? false, input.includeRevokedAliases ?? false],
     );
+    const canReadPrivateProfile = canReadTemporaryWorkerPrivateProfile(actor);
     return result.rows.map((row) => ({
       personId: row.person_id,
       personType: row.person_type,
@@ -252,6 +279,10 @@ export class AccessMasterDataService {
       displayName: row.display_name,
       temporaryCode: row.temporary_code,
       temporaryRemark: row.temporary_remark,
+      temporaryPhoneNumber: canReadPrivateProfile ? row.temporary_phone_number : maskPhoneNumber(row.temporary_phone_number),
+      temporaryIdentityNumber: canReadPrivateProfile ? row.temporary_identity_number : maskIdentityNumber(row.temporary_identity_number),
+      privateProfileMasked: !canReadPrivateProfile
+        && (row.temporary_phone_number !== null || row.temporary_identity_number !== null),
       active: row.active,
       aliases: row.aliases,
     }));
@@ -422,6 +453,8 @@ export class AccessMasterDataService {
         ? `TMP-${personId.replace(/-/g, "").slice(0, 8).toUpperCase()}`
         : null;
       const temporaryRemark = input.personType === "temporary" ? input.temporaryRemark ?? null : null;
+      const temporaryPhoneNumber = input.personType === "temporary" ? input.temporaryPhoneNumber ?? null : null;
+      const temporaryIdentityNumber = input.personType === "temporary" ? input.temporaryIdentityNumber ?? null : null;
       const aliases = input.aliases.map((alias, index) => ({
         aliasId: randomUUID(),
         alias,
@@ -435,7 +468,10 @@ export class AccessMasterDataService {
         action: "master_data.person.create",
         entityType: "business_person",
         entityId: personId,
-        after: { personType: input.personType, appUserId, displayName: input.displayName, temporaryCode, temporaryRemark, active: true, aliases },
+        after: { personType: input.personType, appUserId, displayName: input.displayName, temporaryCode, temporaryRemark,
+          hasTemporaryPhoneNumber: temporaryPhoneNumber !== null,
+          hasTemporaryIdentityNumber: temporaryIdentityNumber !== null,
+          active: true, aliases },
         reason: input.reason,
       });
       await client.query(
@@ -445,8 +481,12 @@ export class AccessMasterDataService {
         [personEventId, actor.requestId],
       );
       await client.query(
-        "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,temporary_code,temporary_remark,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
-        [personId, input.personType, appUserId, input.displayName, temporaryCode, temporaryRemark, actor.actorId],
+        `INSERT INTO business_people(
+           person_id,person_type,app_user_id,display_name,temporary_code,temporary_remark,
+           temporary_phone_number,temporary_identity_number,created_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [personId, input.personType, appUserId, input.displayName, temporaryCode, temporaryRemark,
+          temporaryPhoneNumber, temporaryIdentityNumber, actor.actorId],
       );
       for (const alias of aliases) {
         await client.query(

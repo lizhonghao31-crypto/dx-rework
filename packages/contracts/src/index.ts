@@ -108,6 +108,8 @@ export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
   PersonBaseSchema.extend({
     personType: z.literal("temporary"),
     temporaryRemark: z.string().trim().min(1).max(100).optional(),
+    temporaryPhoneNumber: z.string().trim().regex(/^\+?[0-9]{6,20}$/).optional(),
+    temporaryIdentityNumber: z.string().trim().toUpperCase().regex(/^(?:[0-9]{15}|[0-9]{17}[0-9X])$/).optional(),
   }).strict(),
 ]);
 export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
