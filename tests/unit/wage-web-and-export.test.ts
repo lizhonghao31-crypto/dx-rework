@@ -42,5 +42,7 @@ describe("wage web and xlsx delivery", () => {
     expect(routes).toContain('app.post("/wage-periods/:periodId/lock"');
     expect(exportService).not.toContain("adjustment_amount");
     expect(exportService).not.toContain("rework_wage_adjustments");
+    expect(exportService).toContain('"工资月份","供应商"');
+    expect(exportService).toContain("line.supplier_name");
   });
 });

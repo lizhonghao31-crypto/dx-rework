@@ -21,6 +21,7 @@ type BoardResult = Readonly<{
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
+    abnormalOrderCount: number;
     differenceQuantity: number;
     differenceRate: number;
   }>;
@@ -111,6 +112,7 @@ export function OrderBoardPage() {
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
     receivedQuantity: 0,
+    abnormalOrderCount: 0,
     differenceQuantity: 0,
     differenceRate: 0,
   }, [data]);
@@ -131,10 +133,10 @@ export function OrderBoardPage() {
     </div>
 
     <div className="order-board-kpis">
-      <KpiInstrument label="收货订单" value={kpis.orderCount} detail="所选日期涉及款号" tone="info" />
-      <KpiInstrument label="实际收货" value={`${kpis.receivedQuantity}件`} detail="所选日期收货总数" tone="info" />
-      <KpiInstrument label="当前差异" value={`${kpis.differenceQuantity}件`} detail="按订单净差异绝对值汇总" tone={kpis.differenceQuantity ? "warning" : "success"} />
-      <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail="同款多次收货可互相抵消" tone={kpis.differenceRate ? "warning" : "success"} />
+      <KpiInstrument label="今日收货订单数" value={kpis.orderCount} detail={date} tone="info" />
+      <KpiInstrument label="今日收货数量" value={`${kpis.receivedQuantity}件`} detail={`${date} · 实际收货`} tone="info" />
+      <KpiInstrument label="异常订单数量" value={kpis.abnormalOrderCount} detail="累计收货与单据数量不一致" tone={kpis.abnormalOrderCount ? "warning" : "success"} />
+      <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail={`绝对差异 ${kpis.differenceQuantity} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
     </div>
 
     <div className="order-board-legend" aria-label="差异颜色说明">
