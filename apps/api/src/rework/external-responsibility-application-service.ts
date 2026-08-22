@@ -1,5 +1,6 @@
 import type {
   AllocateExternalSuppliers,
+  ApproveExternalDeductionSpecialApproval,
   CreateExternalTemporarySupplier,
   CloseExternalDeductionCase,
   CreateExternalDeductionEntry,
@@ -8,6 +9,8 @@ import type {
   DecideExternalResponsibilityRevision,
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
+  RequestExternalDeductionSpecialApproval,
+  ReturnExternalDeductionSpecialApproval,
   SubmitExternalResponsibilityCase,
 } from "@dx-rework/contracts/external-responsibility";
 import type { Pool } from "pg";
@@ -112,6 +115,33 @@ export class ExternalResponsibilityApplicationService {
     key: string,
   ) {
     return this.service.close(actor, caseId, input, key);
+  }
+
+  requestSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: RequestExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    return this.service.requestSpecialApproval(actor, caseId, input, key);
+  }
+
+  approveSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: ApproveExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    return this.service.approveSpecialApproval(actor, caseId, input, key);
+  }
+
+  returnSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: ReturnExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    return this.service.returnSpecialApproval(actor, caseId, input, key);
   }
 
   requestRevision(

@@ -12,7 +12,7 @@ import "./external-responsibility.css";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type State = { kind: "loading" } | { kind: "ready"; value: ExternalResponsibilityQueueResponse } | { kind: "unavailable"; message: string };
 const statusLabel: Record<ExternalResponsibilityQueueResponse["items"][number]["status"], string> = {
-  pending_business_signoff: "待交财务", pending_payables_confirmation: "待扣款", deduction_follow_up: "扣款中", returned: "资料退回", pending_responsibility_revision: "待重判", closed: "扣款完成", superseded: "历史台账",
+  pending_business_signoff: "待交财务", pending_payables_confirmation: "待扣款", deduction_follow_up: "扣款中", pending_special_approval: "待财务总监特批", returned: "资料退回", pending_responsibility_revision: "待重判", closed: "扣款完成", superseded: "历史台账",
 };
 
 export function ExternalResponsibilityQueuePage() {

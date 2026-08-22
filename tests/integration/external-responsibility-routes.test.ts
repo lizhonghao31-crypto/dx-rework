@@ -60,6 +60,8 @@ const caseResponse: ExternalResponsibilityCaseResponse = {
   canFollowUp: false,
   canRecordDeduction: false,
   canClose: false,
+  canRequestSpecialApproval: false,
+  canDecideSpecialApproval: false,
   canRequestRevision: false,
   canApproveRevision: true,
   items: [{
@@ -75,6 +77,7 @@ const caseResponse: ExternalResponsibilityCaseResponse = {
   deductions: [],
   followUps: [],
   closure: null,
+  specialApproval: null,
   revisionRequests: [{
     revisionRequestId: ids.revision,
     revisionVersion: 1,
@@ -145,6 +148,9 @@ function service() {
     followUp: vi.fn().mockResolvedValue(response),
     recordDeduction: vi.fn().mockResolvedValue(response),
     close: vi.fn().mockResolvedValue(response),
+    requestSpecialApproval: vi.fn().mockResolvedValue(response),
+    approveSpecialApproval: vi.fn().mockResolvedValue(response),
+    returnSpecialApproval: vi.fn().mockResolvedValue(response),
     requestRevision: vi.fn().mockResolvedValue(response),
     approveRevision: vi.fn().mockResolvedValue(response),
     rejectRevision: vi.fn().mockResolvedValue(response),

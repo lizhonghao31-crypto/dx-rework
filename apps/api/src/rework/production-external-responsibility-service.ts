@@ -11,6 +11,7 @@ import type {
   ExternalResponsibilityQueueResponse,
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
+  RequestExternalDeductionSpecialApproval,
 } from "@dx-rework/contracts/external-responsibility";
 import type { Pool, PoolClient } from "pg";
 
@@ -214,6 +215,20 @@ export class ProductionExternalResponsibilityService
       "external_deduction:close",
     );
     return this.closeService.close(actor, caseId, input, key);
+  }
+
+  override async requestSpecialApproval(
+    actor: TrustedActorContext,
+    caseId: string,
+    input: RequestExternalDeductionSpecialApproval,
+    key: string,
+  ) {
+    await this.requirePayablesCapability(
+      actor,
+      caseId,
+      "external_deduction:close",
+    );
+    return super.requestSpecialApproval(actor, caseId, input, key);
   }
 
   override async get(
@@ -502,7 +517,9 @@ export class ProductionExternalResponsibilityService
         followUp
         && (permission.can_sign || permission.can_payables_follow_up),
       canRecordDeduction: recordable && permission.can_record,
-      canClose: followUp && permission.can_close,
+      canClose: value.canClose && followUp && permission.can_close,
+      canRequestSpecialApproval:
+        value.canRequestSpecialApproval && followUp && permission.can_close,
     };
   }
 }

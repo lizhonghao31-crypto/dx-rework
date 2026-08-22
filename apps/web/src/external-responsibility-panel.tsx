@@ -34,6 +34,7 @@ const caseLabel: Record<CaseStatus, string> = {
   pending_business_signoff: "待交财务",
   pending_payables_confirmation: "待扣款",
   deduction_follow_up: "扣款中",
+  pending_special_approval: "待财务总监特批",
   returned: "资料退回",
   pending_responsibility_revision: "待重判",
   closed: "扣款完成",
@@ -371,6 +372,58 @@ export function ExternalResponsibilityPanel({
     }
   };
 
+  const requestSpecialApproval = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
+    if (busy || !caseItem.canRequestSpecialApproval) return;
+    const reason = (await promptInApp("请填写部分扣款或未扣原因"))?.trim() ?? "";
+    if (!reason) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await send(
+        `external-responsibility-cases/${caseItem.caseId}/special-approval-requests`,
+        {
+          expectedCaseVersion: caseItem.caseVersion,
+          reason,
+          attachmentIds: attachments[caseItem.caseId] ?? [],
+        },
+      );
+      setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
+      await refresh("已转财务总监特批。");
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "扣款特批申请失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const decideSpecialApproval = async (
+    caseItem: ExternalResponsibilityCaseResponse,
+    approved: boolean,
+  ): Promise<void> => {
+    if (busy || !caseItem.canDecideSpecialApproval || !caseItem.specialApproval) return;
+    const reason = approved
+      ? (await promptInApp("特批确认意见（可留空）"))?.trim()
+      : (await promptInApp("请输入退回原因"))?.trim();
+    if (!approved && !reason) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await send(
+        `external-responsibility-cases/${caseItem.caseId}/special-approval/${approved ? "approve" : "return"}`,
+        {
+          expectedCaseVersion: caseItem.caseVersion,
+          expectedRequestVersion: caseItem.specialApproval.requestVersion,
+          reason: reason || undefined,
+        },
+      );
+      await refresh(approved ? "扣款特批已确认并关闭台账。" : "扣款特批已退回应付继续处理。");
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "扣款特批处理失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const requestRevision = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
     if (busy || !caseItem.canRequestRevision) return;
     const reason = (await promptInApp("请输入重判责任原因"))?.trim() ?? "";
@@ -527,9 +580,11 @@ export function ExternalResponsibilityPanel({
         const canRecordDeduction = !readOnly && caseItem.canRecordDeduction;
         const canRequestRevision = !readOnly && caseItem.canRequestRevision;
         const canApproveRevision = !readOnly && caseItem.canApproveRevision;
+        const canRequestSpecialApproval = !readOnly && caseItem.canRequestSpecialApproval;
+        const canDecideSpecialApproval = !readOnly && caseItem.canDecideSpecialApproval;
         const canLegacySubmit = !readOnly && caseItem.canSign;
         const recoveryClose = !readOnly && caseItem.canClose && caseItem.remainingAmount === "0.00";
-        const canAttachEvidence = canRecordDeduction || canRequestRevision || canLegacySubmit;
+        const canAttachEvidence = canRecordDeduction || canRequestSpecialApproval || canRequestRevision || canLegacySubmit;
         const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
         return <article className="external-case" key={caseItem.caseId}>
           <div className="section-title">
@@ -543,7 +598,7 @@ export function ExternalResponsibilityPanel({
             <div><span>剩余</span><strong>¥{caseItem.remainingAmount}</strong></div>
           </div>
 
-          {!readOnly && (canRecordDeduction || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
+          {!readOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
             {canRecordDeduction && <InsetField
               label="本次扣款金额"
               inputMode="decimal"
@@ -560,6 +615,11 @@ export function ExternalResponsibilityPanel({
             <div className="external-case-actions">
               {canRecordDeduction && <Button variant="primary" disabled={busy || !deductionReady} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
               {recoveryClose && <Button variant="primary" disabled={busy} onClick={() => void finishDeduction(caseItem)}>完成扣款</Button>}
+              {canRequestSpecialApproval && <Button disabled={busy} onClick={() => void requestSpecialApproval(caseItem)}>转财务总监特批</Button>}
+              {canDecideSpecialApproval && <>
+                <Button variant="primary" disabled={busy} onClick={() => void decideSpecialApproval(caseItem, true)}>特批确认</Button>
+                <Button disabled={busy} onClick={() => void decideSpecialApproval(caseItem, false)}>退回</Button>
+              </>}
               {canRequestRevision && <Button disabled={busy} onClick={() => void requestRevision(caseItem)}>重判责任</Button>}
               {canLegacySubmit && <Button disabled={busy} onClick={() => void submitLegacyCase(caseItem)}>交财务扣款</Button>}
               {canApproveRevision && pendingRevision && <>
@@ -576,6 +636,12 @@ export function ExternalResponsibilityPanel({
               <span>{entry.deductedOn} · {deductionEntryLabel[entry.entryType]}</span>
               <b>¥{entry.amount}</b>
             </div>)}
+          </div>}
+
+          {caseItem.specialApproval && <div className="external-special-approval">
+            <b>财务特批：{caseItem.specialApproval.reason}</b>
+            <span>申请时实扣 ¥{caseItem.specialApproval.actualDeductedAmount}，差额 ¥{caseItem.specialApproval.remainingAmount}</span>
+            {caseItem.specialApproval.decision && <span>结果：{caseItem.specialApproval.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
           </div>}
 
           {caseItem.closure?.result === "full" && <StatusBadge tone="success">已足额扣款</StatusBadge>}
