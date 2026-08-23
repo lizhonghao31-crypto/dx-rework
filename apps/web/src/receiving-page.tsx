@@ -31,7 +31,7 @@ const errorMessage = async (response: Response): Promise<string> => {
   return body?.error?.message ?? "提交失败，请稍后重试";
 };
 
-const requestJson = async <T>(path: string, init: RequestInit): Promise<T> => {
+const requestJson = async <T,>(path: string, init: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), {
     credentials: "include",
     ...init,
