@@ -209,8 +209,10 @@ export function ReworkInitiationV2Form({
   existingAttachmentCount = 0,
   onOrderChanged,
 }: ReworkInitiationV2FormProps = {}) {
-  const receivingBatchId = reworkOrderId ? undefined : initialReceivingBatchId();
   const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
+  const receivingBatchId = reworkOrderId
+    ? undefined
+    : initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined;
   const [form, setForm] = useState<V2FormState>(() => localDraftSeed?.form ?? emptyForm(!reworkOrderId));
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({ merchandisers: [], factories: [] });
   const [supplyOptions, setSupplyOptions] = useState<ReworkSupplyContextOptionsResponse>({

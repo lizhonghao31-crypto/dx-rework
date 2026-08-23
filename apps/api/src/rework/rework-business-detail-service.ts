@@ -331,35 +331,33 @@ export class ReworkBusinessDetailService {
     actor: TrustedActorContext,
     binding: Readonly<{ entityType: string; entityId: string }>,
   ): Promise<boolean> {
-    let reworkOrderId: string | null = null;
+    let reworkOrderIds: readonly string[] = [];
     if (binding.entityType === "rework_order") {
-      reworkOrderId = binding.entityId;
+      reworkOrderIds = [binding.entityId];
     } else if (binding.entityType === "receiving_batch") {
       const receiving = await this.database.query<{ rework_order_id: string }>(
         `SELECT rework_order_id
          FROM rework_orders
-         WHERE source_receiving_batch_id::text=$1 AND status<>'deleted'
-         ORDER BY updated_at DESC,rework_order_id DESC
-         LIMIT 1`,
+         WHERE source_receiving_batch_id::text=$1 AND status<>'deleted'`,
         [binding.entityId],
       );
-      reworkOrderId = receiving.rows[0]?.rework_order_id ?? null;
+      reworkOrderIds = receiving.rows.map((row) => row.rework_order_id);
     } else if (binding.entityType === "external_responsibility_case") {
       const externalCase = await this.database.query<{ rework_order_id: string }>(
         "SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
         [binding.entityId],
       );
-      reworkOrderId = externalCase.rows[0]?.rework_order_id ?? null;
+      reworkOrderIds = externalCase.rows[0] ? [externalCase.rows[0].rework_order_id] : [];
     }
-    if (!reworkOrderId) return false;
-
-    try {
-      await this.get(actor, reworkOrderId);
-      return true;
-    } catch (error) {
-      if (error instanceof ApplicationError && [403, 404].includes(error.statusCode)) return false;
-      throw error;
+    for (const reworkOrderId of reworkOrderIds) {
+      try {
+        await this.get(actor, reworkOrderId);
+        return true;
+      } catch (error) {
+        if (!(error instanceof ApplicationError) || ![403, 404].includes(error.statusCode)) throw error;
+      }
     }
+    return false;
   }
 
   private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {

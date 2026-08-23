@@ -32,6 +32,7 @@ describe("N01 local-only draft contract", () => {
     expect(source).toContain("localDraftSeed?.images.map(restoredImage) ?? []");
     expect(source).toContain("tools/attachments/${image.attachmentId}/download?mode=preview");
     expect(source).toContain("已恢复本机保存资料；尚未创建返工单");
+    expect(source).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
   });
 
   it("creates the server rework order only from the real submit path and clears the local copy after success", async () => {

@@ -5,6 +5,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
+import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const { Pool } = pg;
@@ -23,6 +24,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const service = new ReceivingService(database);
+  const reworkService = new ReworkInitiationService(database, "corp");
   const receiverId = randomUUID();
 
   const receiver = (): TrustedActorContext => ({
@@ -333,6 +335,38 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       [secondDraftId],
     );
     expect(secondLink.rows[0]?.source_receiving_batch_id).toBe(receipt.value.receivingBatchId);
+  });
+
+  it("records the database-selected batch in the legacy style-only draft audit event", async () => {
+    const image = await readyImage();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
+      documentQuantity: 12,
+      actualQuantity: 12,
+      attachmentIds: [image],
+    }, randomUUID());
+
+    const draft = await reworkService.createDraft(receiver(), {
+      styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
+    }, randomUUID());
+    const stored = await database.query<{
+      source_receiving_batch_id: string;
+      audited_receiving_batch_id: string;
+    }>(
+      `SELECT orders.source_receiving_batch_id,
+              event.after_state->>'receivingBatchId' audited_receiving_batch_id
+       FROM rework_orders orders
+       JOIN operation_events event
+         ON event.entity_type='rework_order'
+        AND event.entity_id=orders.rework_order_id::text
+        AND event.action='rework.draft.create'
+       WHERE orders.rework_order_id=$1`,
+      [draft.value.reworkOrderId],
+    );
+    expect(stored.rows[0]).toEqual({
+      source_receiving_batch_id: receipt.value.receivingBatchId,
+      audited_receiving_batch_id: receipt.value.receivingBatchId,
+    });
   });
 
   it("searches known style numbers without forcing a second manual spelling", async () => {

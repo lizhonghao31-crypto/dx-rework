@@ -14,6 +14,7 @@ describe("PR-01 stable receiving batch propagation", () => {
     expect(board).toContain("receivingBatchId: row.receivingBatchId");
     expect(form).toContain('get("receivingBatchId")');
     expect(form).toContain("parsed.receivingBatchId !== requestedBatchId");
+    expect(form).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
     expect(form).toContain("receivingBatchId: receivingBatchId ?? null");
     expect(form).toContain("writeLocalN01Draft(form, images, receivingBatchId)");
     expect(form).toContain("...(receivingBatchId ? { receivingBatchId } : {})");
@@ -36,5 +37,6 @@ describe("PR-01 stable receiving batch propagation", () => {
     expect(service).toContain("source_receiving_batch_id,created_by,updated_by");
     expect(service).toContain("收货批次与款号不一致");
     expect(service).toContain("已完成返工的收货批次不能再次发起返工");
+    expect(service).toContain("return fallback.rows[0]?.receiving_batch_id ?? null");
   });
 });

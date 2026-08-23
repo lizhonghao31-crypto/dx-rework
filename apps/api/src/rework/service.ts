@@ -218,8 +218,25 @@ export class ReworkInitiationService {
     receivingBatchId: string | undefined,
     styleNo: string | null,
   ): Promise<string | null> {
-    if (!receivingBatchId) return null;
     const normalizedStyleNo = styleNo?.trim();
+    if (!receivingBatchId) {
+      if (!normalizedStyleNo) return null;
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
+      const fallback = await client.query<{ receiving_batch_id: string }>(
+        `SELECT batch.receiving_batch_id
+         FROM receiving_batches batch
+         WHERE batch.style_no=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM rework_orders completed_order
+             WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
+               AND completed_order.status='completed'
+           )
+         ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+         LIMIT 1`,
+        [normalizedStyleNo],
+      );
+      return fallback.rows[0]?.receiving_batch_id ?? null;
+    }
     if (!normalizedStyleNo) {
       throw new ApplicationError("VALIDATION_ERROR", "收货批次要求同时提供款号", 400);
     }
