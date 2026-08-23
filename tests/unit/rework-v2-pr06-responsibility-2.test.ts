@@ -69,4 +69,13 @@ describe("PR-06 responsibility 2.0", () => {
     expect(engine).toContain("1::numeric/NULLIF(wage.member_count,0)");
     expect(engine).not.toContain("wage.payable_amount::text amount");
   });
+
+  it("excludes tail-check execution from the N07 source-process payload", async () => {
+    const engine = await readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8");
+    const sourceRows = engine.slice(
+      engine.indexOf("const sourceRows"),
+      engine.indexOf("const actorCapabilities"),
+    );
+    expect(sourceRows.match(/AND item\.execution_kind='worker'/g)).toHaveLength(2);
+  });
 });
