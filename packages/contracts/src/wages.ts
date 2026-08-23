@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { businessPersonCompatibleSchema } from "./business-person-id.js";
+
 const Id = z.string().uuid();
 const Version = z.number().int().positive();
 const Money = z.string().regex(/^-?(?:0|[1-9]\d*)\.\d{2}$/);
@@ -37,7 +39,7 @@ export const WagePeriodSchema = z.object({
 });
 export type WagePeriod = z.infer<typeof WagePeriodSchema>;
 
-export const WageItemSchema = z.object({
+export const WageItemSchema = businessPersonCompatibleSchema(z.object({
   wageItemId: Id,
   periodId: Id,
   orderReviewId: Id,
@@ -70,7 +72,7 @@ export const WageItemSchema = z.object({
       personType: z.enum(["internal", "temporary"]),
     }),
   ),
-});
+}));
 export type WageItem = z.infer<typeof WageItemSchema>;
 
 export const WagePeriodDetailSchema = z.object({
