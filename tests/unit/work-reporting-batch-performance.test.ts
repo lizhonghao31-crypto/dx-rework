@@ -87,7 +87,7 @@ const createHarness = (input: {
     if (sql.includes("FROM rework_work_task_members member") && sql.includes("work_task_id=ANY")) {
       return { rowCount: members.length, rows: members };
     }
-    if (sql.includes("FROM rework_work_reports report") && sql.includes("work_task_id=ANY")) {
+    if (sql.includes("SELECT report.work_report_id,report.work_task_id") && sql.includes("work_task_id=ANY")) {
       return { rowCount: 0, rows: [] };
     }
     if (sql.includes(") AS ready")) return { rowCount: 1, rows: [{ ready: true }] };
