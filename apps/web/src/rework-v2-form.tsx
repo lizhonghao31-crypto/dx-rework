@@ -70,6 +70,7 @@ type V2FormState = Readonly<{
 }>;
 type LocalN01Draft = Readonly<{
   schemaVersion: 1;
+  receivingBatchId?: string | null;
   form: V2FormState;
   images: readonly StoredImage[];
   savedAt: string;
@@ -78,6 +79,11 @@ type LocalN01Draft = Readonly<{
 const initialStyleNo = (): string => {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("styleNo")?.trim() ?? "";
+};
+
+const initialReceivingBatchId = (): string | undefined => {
+  if (typeof window === "undefined") return undefined;
+  return new URLSearchParams(window.location.search).get("receivingBatchId")?.trim() || undefined;
 };
 
 const emptyForm = (useUrlStyle = true): V2FormState => ({
@@ -124,19 +130,29 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
       || !Array.isArray(parsed.images)
       || !parsed.images.every(isStoredImage)
       || typeof parsed.savedAt !== "string"
+      || (parsed.receivingBatchId !== undefined
+        && parsed.receivingBatchId !== null
+        && typeof parsed.receivingBatchId !== "string")
     ) return null;
     const requestedStyle = initialStyleNo();
     if (requestedStyle && parsed.form.styleNo.trim() !== requestedStyle) return null;
+    const requestedBatchId = initialReceivingBatchId();
+    if (requestedBatchId && parsed.receivingBatchId !== requestedBatchId) return null;
     return parsed as LocalN01Draft;
   } catch {
     return null;
   }
 };
 
-const writeLocalN01Draft = (form: V2FormState, images: readonly UploadedImage[]): void => {
+const writeLocalN01Draft = (
+  form: V2FormState,
+  images: readonly UploadedImage[],
+  receivingBatchId?: string,
+): void => {
   if (typeof window === "undefined") return;
   const draft: LocalN01Draft = {
     schemaVersion: 1,
+    receivingBatchId: receivingBatchId ?? null,
     form,
     images: images.map(({ attachmentId, filename, mimeType }) => ({ attachmentId, filename, mimeType })),
     savedAt: new Date().toISOString(),
@@ -193,6 +209,7 @@ export function ReworkInitiationV2Form({
   existingAttachmentCount = 0,
   onOrderChanged,
 }: ReworkInitiationV2FormProps = {}) {
+  const receivingBatchId = reworkOrderId ? undefined : initialReceivingBatchId();
   const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
   const [form, setForm] = useState<V2FormState>(() => localDraftSeed?.form ?? emptyForm(!reworkOrderId));
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({ merchandisers: [], factories: [] });
@@ -304,6 +321,7 @@ export function ReworkInitiationV2Form({
 
   const fingerprint = (): string => JSON.stringify({
     reworkOrderId: reworkOrderId ?? null,
+    receivingBatchId: receivingBatchId ?? null,
     styleNo: form.styleNo.trim(),
     factory: form.factory,
     merchandiserUserId: form.merchandiserUserId,
@@ -378,7 +396,10 @@ export function ReworkInitiationV2Form({
             {
               method: "POST",
               headers: { "idempotency-key": key },
-              body: JSON.stringify(payload),
+              body: JSON.stringify({
+                ...(receivingBatchId ? { receivingBatchId } : {}),
+                ...payload,
+              }),
             },
           );
     }
@@ -395,7 +416,7 @@ export function ReworkInitiationV2Form({
     setBusy(true);
     try {
       if (!reworkOrderId && !order) {
-        writeLocalN01Draft(form, images);
+        writeLocalN01Draft(form, images, receivingBatchId);
         pendingSubmit.current = null;
         setMessage("已保存到本机；尚未创建返工单");
         return;
