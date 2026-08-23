@@ -35,6 +35,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     requestId: randomUUID(),
   });
 
+  const initiator = (): TrustedActorContext => ({
+    actorId: receiverId,
+    actorRoles: ["quality_control"],
+    authorizationCapability: "rework:initiate",
+    authorizationCapabilities: ["rework:initiate"],
+    requestId: randomUUID(),
+  });
+
   const migration = async (name: string): Promise<void> => {
     await database.query(await readFile(
       new URL(`../../apps/api/migrations/${name}`, import.meta.url),
@@ -184,6 +192,8 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
       "0006_rework_initiation.sql",
+      "0044_uat_initiation_context.sql",
+      "0056_n01_digital_inspection_report.sql",
       "0076_receiving_fact_layer.sql",
     ]) await migration(name);
 
@@ -346,7 +356,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       attachmentIds: [image],
     }, randomUUID());
 
-    const draft = await reworkService.createDraft(receiver(), {
+    const draft = await reworkService.createDraft(initiator(), {
       styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
     }, randomUUID());
     const stored = await database.query<{
