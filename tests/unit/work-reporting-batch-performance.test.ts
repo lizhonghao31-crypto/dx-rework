@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { WorkReportsBatchResponseSchema } from "@dx-rework/contracts";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
@@ -155,6 +156,7 @@ describe("work report batch set-based persistence", () => {
     const second = await harness.service.submitReportsBatch(root(actorId), harness.orderId, request, "batch-50");
 
     expect(first.value.reports).toHaveLength(50);
+    expect(WorkReportsBatchResponseSchema.parse(first.value)).toEqual(first.value);
     expect(first.value).toMatchObject({ reworkStatus: "pending_order_review", orderVersion: 3 });
     expect(first.value.reports.every((report) => report.memberShares.length === 8)).toBe(true);
     expect(harness.insertedEvents()).toBe(50);
