@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply-review-patch:
-    if: github.event.head_commit.message == 'chore: apply PR-01 review patch once'
+    if: github.event.head_commit.message == 'chore: retry PR-01 review patch once'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "885a5e44539aa9383be06ec7e3d7b3f882692dd3"
+          test "$(git rev-parse HEAD^)" = "d8bbd1354eebdd4acd679d0a55e0217ffb152243"
           cat > /tmp/pr01-review.patch <<'PATCH'
           diff --git a/apps/api/src/rework/rework-business-detail-service.ts b/apps/api/src/rework/rework-business-detail-service.ts
           index 6825445..d05e398 100644
@@ -259,7 +259,6 @@ jobs:
              });
            });
           PATCH
-          sed -i 's/^          //' /tmp/pr01-review.patch
           git apply --check /tmp/pr01-review.patch
           git apply /tmp/pr01-review.patch
           rm -f .github/workflows/zz-pr01-review-patch-once.yml
