@@ -312,7 +312,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   return <Surface className="responsibility-panel">
     <div className="section-title responsibility-heading">
       <div>
-        <h2>{ownerSigning ? "N07 · 老板签字" : "N06 · 责任判定"}</h2>
+        <h2>{ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"}</h2>
         <p>{ownerSigning ? "仅包含本厂责任时需要老板确认；核对后同意或驳回。" : "每道工序可添加多个责任方，比例合计必须为 100%；金额由工资基础、比例和倍率自动计算。"}</p>
       </div>
       <StatusBadge tone={ownerSigning || determination?.stage === "finalized" ? "success" : "warning"}>{statusText}</StatusBadge>
