@@ -15,8 +15,9 @@ describe("PR-04 unified rework execution", () => {
   });
 
   it("keeps tail inspectors as their real role while using unified work reports", async () => {
-    const [migration, plan, reporting, routes] = await Promise.all([
+    const [migration, auditGuard, plan, reporting, routes] = await Promise.all([
       read("apps/api/migrations/0079_rework_v2_unified_execution.sql"),
+      read("apps/api/migrations/0085_n04_tail_work_report_audit_guard.sql"),
       read("apps/api/src/rework/process-worker-plan-service.ts"),
       read("apps/api/src/rework/work-reporting-service.ts"),
       read("apps/api/src/rework/work-reporting-routes.ts"),
@@ -26,6 +27,9 @@ describe("PR-04 unified rework execution", () => {
     expect(reporting).toContain('return "tail_inspection:report"');
     expect(routes).toContain('user.businessRoles?.includes("tail_inspector")');
     expect(migration).toContain("tail inspection task member must be an active eligible tail inspector");
+    expect(auditGuard.match(/'tail_inspection:report'/g)).toHaveLength(2);
+    expect(auditGuard).toContain("event.action='rework.work_report.submit'");
+    expect(auditGuard).toContain("event.entity_id=NEW.rework_order_id::text");
   });
 
   it("creates one explicit tail special process in N02 and never writes the retired tail-assignment path", async () => {
