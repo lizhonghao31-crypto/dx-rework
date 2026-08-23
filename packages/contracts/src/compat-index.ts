@@ -10,6 +10,7 @@ import {
   TailInspectionOptionsResponseSchema as StrictTailInspectionOptionsResponseSchema,
   WholeOrderReviewResponseSchema as StrictWholeOrderReviewResponseSchema,
   WorkReportResponseSchema as StrictWorkReportResponseSchema,
+  WorkReportsBatchResponseSchema as StrictWorkReportsBatchResponseSchema,
   WorkTaskAssignablePeopleResponseSchema as StrictWorkTaskAssignablePeopleResponseSchema,
   WorkTaskMemberSchema as StrictWorkTaskMemberSchema,
   WorkTaskResponseSchema as StrictWorkTaskResponseSchema,
@@ -23,6 +24,7 @@ export const CreateWorkTaskSchema = businessPersonCompatibleSchema(StrictCreateW
 export const WorkTaskAssignablePeopleResponseSchema = businessPersonCompatibleSchema(StrictWorkTaskAssignablePeopleResponseSchema);
 export const WorkTaskResponseSchema = businessPersonCompatibleSchema(StrictWorkTaskResponseSchema);
 export const WorkReportResponseSchema = businessPersonCompatibleSchema(StrictWorkReportResponseSchema);
+export const WorkReportsBatchResponseSchema = businessPersonCompatibleSchema(StrictWorkReportsBatchResponseSchema);
 export const ReworkWorkTasksResponseSchema = businessPersonCompatibleSchema(StrictReworkWorkTasksResponseSchema);
 export const RejectWorkReportSchema = businessPersonCompatibleSchema(StrictRejectWorkReportSchema);
 export const ReviewWholeOrderSchema = businessPersonCompatibleSchema(StrictReviewWholeOrderSchema);
