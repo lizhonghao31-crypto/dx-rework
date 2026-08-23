@@ -7,6 +7,7 @@ import {
   type InspectionReportDraft,
   MAX_REWORK_ATTACHMENTS,
   CreateWorkReportSchema,
+  CreateWorkReportsBatchSchema,
   CreateWorkTaskSchema,
   ReviewProcessConfigurationSchema,
   SaveProcessConfigurationSchema,
@@ -215,6 +216,22 @@ describe("rework initiation contracts", () => {
     expect(CreateWorkTaskSchema.safeParse({ expectedOrderVersion: 1, configurationItemId: itemId, mode: "collective", members: [{ personId }, { personId }] }).success).toBe(false);
     expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.2, completedAt: "2026-08-02T12:00:00.000Z" }).success).toBe(true);
     expect(CreateWorkReportSchema.safeParse({ expectedOrderVersion: 1, actualQuantity: 1.2, completedAt: "2026-08-02T12:00:00.000Z", remark: "   " }).success).toBe(false);
+    const reports = Array.from({ length: 50 }, (_, index) => ({
+      workTaskId: `00000000-0000-4000-8000-${String(index + 20).padStart(12, "0")}`,
+      actualQuantity: 5_000 + index,
+    }));
+    expect(CreateWorkReportsBatchSchema.safeParse({ expectedOrderVersion: 1, reports }).success).toBe(true);
+    expect(CreateWorkReportsBatchSchema.safeParse({
+      expectedOrderVersion: 1,
+      reports: [reports[0], reports[0]],
+    }).success).toBe(false);
+    expect(CreateWorkReportsBatchSchema.safeParse({
+      expectedOrderVersion: 1,
+      reports: Array.from({ length: 201 }, (_, index) => ({
+        workTaskId: `00000000-0000-4000-8001-${String(index + 20).padStart(12, "0")}`,
+        actualQuantity: 5_000,
+      })),
+    }).success).toBe(false);
   });
 
   it("keeps historical PR-07 storage intact while the practical precision migration governs new writes", async () => {

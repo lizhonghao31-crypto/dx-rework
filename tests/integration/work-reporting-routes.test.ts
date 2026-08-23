@@ -44,6 +44,24 @@ const create = (
       },
       reused: false,
     })),
+    submitReportsBatch: vi.fn(async (_actor, submittedOrderId, input) => ({
+      value: {
+        reworkOrderId: submittedOrderId,
+        reworkStatus: "pending_order_review" as const,
+        orderVersion: input.expectedOrderVersion + 1,
+        reports: input.reports.map((report, index) => ({
+          workReportId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          workTaskId: report.workTaskId,
+          reworkOrderId: submittedOrderId,
+          actualQuantity: report.actualQuantity,
+          completedAt: "2026-08-02T12:00:00.000Z",
+          status: "submitted" as const,
+          groupAmount: 0,
+          memberShares: [{ personId: "00000000-0000-4000-8000-000000000013", amount: 0 }],
+        })),
+      },
+      reused: false,
+    })),
   };
   const app = buildApp({
     config,
@@ -94,6 +112,43 @@ describe("work reporting routes", () => {
       expect.objectContaining({ actualQuantity: 1 }),
       "proxy-report-1",
     );
+  });
+
+  it("submits a 50-item proxy-report payload through one atomic batch service call", async () => {
+    const { app, service } = create(
+      ["tail_supervisor", "worker"],
+      ["work:assign", "work:report", "work:report_for_worker"],
+    );
+    const reports = Array.from({ length: 50 }, (_, index) => ({
+      workTaskId: `00000000-0000-4000-8000-${String(index + 20).padStart(12, "0")}`,
+      actualQuantity: 5_000 + index,
+    }));
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-reports/batch`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "proxy-report-batch-50" },
+      payload: { expectedOrderVersion: 2, reports },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      reworkOrderId: orderId,
+      reworkStatus: "pending_order_review",
+      orderVersion: 3,
+    });
+    expect(response.json().reports).toHaveLength(50);
+    expect(service.submitReportsBatch).toHaveBeenCalledTimes(1);
+    expect(service.submitReportsBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["tail_supervisor", "worker"],
+        authorizationCapability: "work:report",
+        authorizationCapabilities: ["work:assign", "work:report", "work:report_for_worker"],
+      }),
+      orderId,
+      { expectedOrderVersion: 2, reports },
+      "proxy-report-batch-50",
+    );
+    expect(service.submitReport).not.toHaveBeenCalled();
   });
 
   it("rejects work-report quantities beyond one decimal place", async () => {
