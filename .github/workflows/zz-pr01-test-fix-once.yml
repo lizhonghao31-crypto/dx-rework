@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22.22.2
           cache: npm
-      - name: Patch authorization fixture, run real PostgreSQL regression, and push
+      - name: Patch the new regression fixture against current schema, prove it on PostgreSQL, and push
         shell: bash
         run: |
           set -euo pipefail
@@ -39,6 +39,11 @@ jobs:
           if s.count(call_anchor) != 1:
               raise SystemExit(f'expected exactly one legacy createDraft(receiver) call, found {s.count(call_anchor)}')
           s = s.replace(call_anchor, 'reworkService.createDraft(initiator(), {', 1)
+          schema_anchor = '      "0006_rework_initiation.sql",\n      "0076_receiving_fact_layer.sql",'
+          schema_replacement = '      "0006_rework_initiation.sql",\n      "0044_uat_initiation_context.sql",\n      "0056_n01_digital_inspection_report.sql",\n      "0076_receiving_fact_layer.sql",'
+          if schema_anchor not in s:
+              raise SystemExit('receiving migration list anchor not found')
+          s = s.replace(schema_anchor, schema_replacement, 1)
           p.write_text(s)
           PY
           rm -f .github/workflows/zz-pr01-test-fix-once.yml
@@ -63,5 +68,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tests/integration/receiving-postgres.test.ts .github/workflows/zz-pr01-test-fix-once.yml
-          git commit -m "test: use QC actor for legacy draft audit regression"
+          git commit -m "test: align receiving audit regression fixture with current rework schema"
           git push origin HEAD:feat/v1-receiving-rework-link
