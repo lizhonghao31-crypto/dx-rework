@@ -88,29 +88,58 @@ CREATE UNIQUE INDEX rework_orders_active_receiving_batch_idx
   WHERE source_receiving_batch_id IS NOT NULL
     AND status NOT IN ('completed','cancelled','deleted');
 
--- A real server draft created after receiving automatically binds only to the
--- latest batch for that style, and only while that latest batch is unfinished.
--- Local browser-only drafts never touch this trigger.
+-- Server drafts bind to the latest unfinished receiving batch for their style.
+-- The advisory lock is shared with receiving writes and completion so the batch
+-- lifecycle cannot race across transactions.
 CREATE OR REPLACE FUNCTION bind_rework_receiving_batch_on_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  batch_style text;
 BEGIN
-  IF NEW.source_receiving_batch_id IS NULL AND NEW.style_no IS NOT NULL THEN
-    SELECT candidate.receiving_batch_id
-    INTO NEW.source_receiving_batch_id
-    FROM (
-      SELECT batch.receiving_batch_id
-      FROM receiving_batches batch
-      WHERE batch.style_no=NEW.style_no
-      ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
-      LIMIT 1
-    ) candidate
-    WHERE NOT EXISTS (
+  IF NEW.source_receiving_batch_id IS NOT NULL THEN
+    SELECT style_no
+    INTO batch_style
+    FROM receiving_batches
+    WHERE receiving_batch_id=NEW.source_receiving_batch_id;
+
+    IF batch_style IS NULL THEN
+      RAISE EXCEPTION 'source receiving batch does not exist'
+        USING ERRCODE='23503';
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(hashtext(batch_style));
+
+    IF NEW.style_no IS NULL OR NEW.style_no<>batch_style THEN
+      RAISE EXCEPTION 'source receiving batch style mismatch'
+        USING ERRCODE='23514';
+    END IF;
+
+    IF EXISTS (
       SELECT 1
       FROM rework_orders completed_order
-      WHERE completed_order.source_receiving_batch_id=candidate.receiving_batch_id
+      WHERE completed_order.source_receiving_batch_id=NEW.source_receiving_batch_id
         AND completed_order.status='completed'
-    );
+    ) THEN
+      RAISE EXCEPTION 'source receiving batch is already completed'
+        USING ERRCODE='55000';
+    END IF;
+  ELSIF NEW.style_no IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtext(NEW.style_no));
+
+    SELECT batch.receiving_batch_id
+    INTO NEW.source_receiving_batch_id
+    FROM receiving_batches batch
+    WHERE batch.style_no=NEW.style_no
+      AND NOT EXISTS (
+        SELECT 1
+        FROM rework_orders completed_order
+        WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
+          AND completed_order.status='completed'
+      )
+    ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+    LIMIT 1;
   END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -119,13 +148,76 @@ CREATE TRIGGER rework_orders_00_bind_receiving_batch
   BEFORE INSERT ON rework_orders
   FOR EACH ROW EXECUTE FUNCTION bind_rework_receiving_batch_on_insert();
 
+-- Once a draft is bound, both its batch identity and style are immutable.
+-- An unbound server draft that later receives a style is bound at that update.
 CREATE OR REPLACE FUNCTION guard_rework_receiving_batch_identity()
 RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  batch_style text;
 BEGIN
-  IF NEW.source_receiving_batch_id IS DISTINCT FROM OLD.source_receiving_batch_id THEN
-    RAISE EXCEPTION 'source receiving batch is immutable'
-      USING ERRCODE='55000';
+  IF OLD.source_receiving_batch_id IS NOT NULL THEN
+    IF NEW.source_receiving_batch_id IS DISTINCT FROM OLD.source_receiving_batch_id THEN
+      RAISE EXCEPTION 'source receiving batch is immutable'
+        USING ERRCODE='55000';
+    END IF;
+
+    SELECT style_no
+    INTO batch_style
+    FROM receiving_batches
+    WHERE receiving_batch_id=OLD.source_receiving_batch_id;
+
+    IF NEW.style_no IS NULL OR NEW.style_no<>batch_style THEN
+      RAISE EXCEPTION 'bound rework style is immutable'
+        USING ERRCODE='55000';
+    END IF;
+
+    RETURN NEW;
   END IF;
+
+  IF NEW.source_receiving_batch_id IS NOT NULL THEN
+    SELECT style_no
+    INTO batch_style
+    FROM receiving_batches
+    WHERE receiving_batch_id=NEW.source_receiving_batch_id;
+
+    IF batch_style IS NULL THEN
+      RAISE EXCEPTION 'source receiving batch does not exist'
+        USING ERRCODE='23503';
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(hashtext(batch_style));
+
+    IF NEW.style_no IS NULL OR NEW.style_no<>batch_style THEN
+      RAISE EXCEPTION 'source receiving batch style mismatch'
+        USING ERRCODE='23514';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM rework_orders completed_order
+      WHERE completed_order.source_receiving_batch_id=NEW.source_receiving_batch_id
+        AND completed_order.status='completed'
+    ) THEN
+      RAISE EXCEPTION 'source receiving batch is already completed'
+        USING ERRCODE='55000';
+    END IF;
+  ELSIF NEW.style_no IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtext(NEW.style_no));
+
+    SELECT batch.receiving_batch_id
+    INTO NEW.source_receiving_batch_id
+    FROM receiving_batches batch
+    WHERE batch.style_no=NEW.style_no
+      AND NOT EXISTS (
+        SELECT 1
+        FROM rework_orders completed_order
+        WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
+          AND completed_order.status='completed'
+      )
+    ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+    LIMIT 1;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -133,3 +225,32 @@ $$;
 CREATE TRIGGER rework_orders_receiving_batch_no_update
   BEFORE UPDATE ON rework_orders
   FOR EACH ROW EXECUTE FUNCTION guard_rework_receiving_batch_identity();
+
+-- Completion and same-style receiving use the same advisory lock. If receiving
+-- acquires it first, that receipt belongs to the batch before it closes. If
+-- completion commits first, the receiving transaction re-checks and opens a new batch.
+CREATE OR REPLACE FUNCTION lock_receiving_batch_on_rework_completion()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  batch_style text;
+BEGIN
+  IF NEW.status='completed'
+     AND OLD.status IS DISTINCT FROM 'completed'
+     AND NEW.source_receiving_batch_id IS NOT NULL THEN
+    SELECT style_no
+    INTO batch_style
+    FROM receiving_batches
+    WHERE receiving_batch_id=NEW.source_receiving_batch_id;
+
+    IF batch_style IS NOT NULL THEN
+      PERFORM pg_advisory_xact_lock(hashtext(batch_style));
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER rework_orders_01_lock_receiving_batch_completion
+  BEFORE UPDATE ON rework_orders
+  FOR EACH ROW EXECUTE FUNCTION lock_receiving_batch_on_rework_completion();

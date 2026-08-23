@@ -60,6 +60,26 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(service).toContain("reworkStatus");
   });
 
+  it("keeps a bound draft on the same style and serializes completion with same-style receiving", async () => {
+    const migration = await read("apps/api/migrations/0086_receiving_rework_evidence_link.sql");
+    expect(migration).toContain("bound rework style is immutable");
+    expect(migration).toContain("pg_advisory_xact_lock(hashtext(NEW.style_no))");
+    expect(migration).toContain("lock_receiving_batch_on_rework_completion");
+    expect(migration).toContain("rework_orders_01_lock_receiving_batch_completion");
+  });
+
+  it("renders linked receiving evidence in rework detail without copying the attachment", async () => {
+    const [detailService, detailPage] = await Promise.all([
+      read("apps/api/src/rework/rework-business-detail-service.ts"),
+      read("apps/web/src/rework-detail-page.tsx"),
+    ]);
+    expect(detailService).toContain("attachment.entity_type='receiving_batch'");
+    expect(detailService).toContain("source_receiving_batch_id::text=attachment.entity_id");
+    expect(detailPage).toContain('entityType: "rework_order" | "external_responsibility_case" | "receiving_batch"');
+    expect(detailPage).toContain('attachment.entityType === "rework_order" || attachment.entityType === "receiving_batch"');
+    expect(detailPage).toContain("收货凭证 · ");
+  });
+
   it("removes only the order-board KPI meter decoration without changing the shared KPI component", async () => {
     const css = await read("apps/web/src/order-board-page.css");
     expect(css).toContain(".order-board-kpis");
