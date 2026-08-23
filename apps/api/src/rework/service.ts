@@ -287,12 +287,16 @@ export class ReworkInitiationService {
       const factory = input.processingFactory === undefined
         ? factoryFromRow(current)
         : await this.resolveFactory(client, input.processingFactory);
+      const nextStyleNo = input.styleNo === undefined ? current.style_no : input.styleNo;
+      const sourceReceivingBatchId = current.source_receiving_batch_id
+        ?? await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
       const nextVersion = current.version + 1;
       const next = {
         reworkOrderId,
         reworkNo: current.rework_no,
         status: "draft" as const,
-        styleNo: input.styleNo === undefined ? current.style_no : input.styleNo,
+        receivingBatchId: sourceReceivingBatchId,
+        styleNo: nextStyleNo,
         customerSupplyCode: input.customerSupplyCode === undefined
           ? current.customer_supply_code
           : input.customerSupplyCode,
@@ -340,7 +344,7 @@ export class ReworkInitiationService {
              processing_factory_supplier_version=$10,rework_reason=$11,
              rework_process=$12,problem_part=$13,problem_description=$14,
              rework_quantity=$15,inspection_report=$16,updated_by=$17,version=$18,
-             updated_at=CURRENT_TIMESTAMP
+             source_receiving_batch_id=$19,updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
           reworkOrderId,
@@ -361,6 +365,7 @@ export class ReworkInitiationService {
           next.inspectionReport,
           actor.actorId,
           nextVersion,
+          sourceReceivingBatchId,
         ],
       );
       if (input.attachmentIds !== undefined) {
