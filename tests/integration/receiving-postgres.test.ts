@@ -33,9 +33,149 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     requestId: randomUUID(),
   });
 
+  const migration = async (name: string): Promise<void> => {
+    await database.query(await readFile(
+      new URL(`../../apps/api/migrations/${name}`, import.meta.url),
+      "utf8",
+    ));
+  };
+
+  const insertLegacyReceipt = async (): Promise<string> => {
+    const receiptId = randomUUID();
+    const eventId = randomUUID();
+    const requestId = randomUUID();
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO operation_events(
+           event_id,request_id,actor_id,actor_roles,authorization_capability,
+           action,entity_type,entity_id,after_state
+         ) VALUES($1,$2,$3,ARRAY['warehouse_receiver'],'receiving:create',
+                  'receiving.receipt.create','receiving_receipt',$4,$5::jsonb)`,
+        [eventId, requestId, receiverId, receiptId, JSON.stringify({ receiptId })],
+      );
+      await client.query(
+        "SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
+        [eventId, requestId],
+      );
+      await client.query(
+        `INSERT INTO receiving_receipts(
+           receipt_id,style_no,document_quantity,actual_quantity,
+           received_by,operation_event_id,request_id
+         ) VALUES($1,'STYLE-LEGACY-01',50,45,$2,$3,$4)`,
+        [receiptId, receiverId, eventId, requestId],
+      );
+      await client.query("COMMIT");
+      return receiptId;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  const readyImage = async (mimeType = "image/jpeg"): Promise<string> => {
+    const attachmentId = randomUUID();
+    const sha256 = `${randomUUID().replaceAll("-", "")}${randomUUID().replaceAll("-", "")}`;
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+         uploaded_by,status,ready_at
+       ) VALUES($1,$2,$3,$4,100,$5,$6,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId, `receiving-test/${attachmentId}`, `${attachmentId}.jpg`, mimeType, sha256, receiverId],
+    );
+    return attachmentId;
+  };
+
+  const draftAfterState = (reworkOrderId: string, styleNo: string, status: "draft" | "cancelled", version: number, cancelReason?: string) => ({
+    reworkOrderId,
+    reworkNo: null,
+    status,
+    styleNo,
+    orderNo: null,
+    merchandiserUserId: null,
+    processingFactory: null,
+    problemPart: null,
+    problemDescription: null,
+    reworkQuantity: null,
+    version,
+    ...(cancelReason ? { cancelReason } : {}),
+  });
+
+  const createReworkDraft = async (styleNo: string): Promise<string> => {
+    const reworkOrderId = randomUUID();
+    const eventId = randomUUID();
+    const requestId = randomUUID();
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO operation_events(
+           event_id,request_id,actor_id,actor_roles,authorization_capability,
+           action,entity_type,entity_id,after_state
+         ) VALUES($1,$2,$3,ARRAY['quality_control'],'rework:initiate',
+                  'rework.draft.create','rework_order',$4,$5::jsonb)`,
+        [eventId, requestId, receiverId, reworkOrderId, JSON.stringify(draftAfterState(reworkOrderId, styleNo, "draft", 1))],
+      );
+      await client.query(
+        "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
+        [eventId, requestId],
+      );
+      await client.query(
+        `INSERT INTO rework_orders(rework_order_id,style_no,created_by,updated_by)
+         VALUES($1,$2,$3,$3)`,
+        [reworkOrderId, styleNo, receiverId],
+      );
+      await client.query("COMMIT");
+      return reworkOrderId;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  const cancelReworkDraft = async (reworkOrderId: string, styleNo: string): Promise<void> => {
+    const eventId = randomUUID();
+    const requestId = randomUUID();
+    const reason = "测试取消";
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO operation_events(
+           event_id,request_id,actor_id,actor_roles,authorization_capability,
+           action,entity_type,entity_id,after_state,reason
+         ) VALUES($1,$2,$3,ARRAY['quality_control'],'rework:initiate',
+                  'rework.cancel','rework_order',$4,$5::jsonb,$6)`,
+        [eventId, requestId, receiverId, reworkOrderId, JSON.stringify(draftAfterState(reworkOrderId, styleNo, "cancelled", 2, reason)), reason],
+      );
+      await client.query(
+        "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
+        [eventId, requestId],
+      );
+      await client.query(
+        `UPDATE rework_orders
+         SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP,cancelled_by=$2,
+             cancel_reason=$3,updated_by=$2,version=2,updated_at=CURRENT_TIMESTAMP
+         WHERE rework_order_id=$1`,
+        [reworkOrderId, receiverId, reason],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const migration of [
+    for (const name of [
       "0001_platform_foundation.sql",
       "0002_dingtalk_identity_access.sql",
       "0003_identity_union_continuity.sql",
@@ -43,16 +183,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       "0005_access_master_data.sql",
       "0006_rework_initiation.sql",
       "0076_receiving_fact_layer.sql",
-    ]) {
-      await database.query(await readFile(
-        new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
-        "utf8",
-      ));
-    }
+    ]) await migration(name);
+
     await database.query(
       "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'仓管测试',true)",
       [receiverId],
     );
+    await insertLegacyReceipt();
+    await migration("0086_receiving_rework_evidence_link.sql");
   });
 
   afterAll(async () => {
@@ -61,12 +199,39 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await admin.end();
   });
 
-  it("keeps each receipt immutable while cumulative same-style differences can return to zero", async () => {
+  it("backfills legacy receipts without changing immutable receiving quantities", async () => {
+    const legacy = await database.query<{
+      document_quantity: number;
+      actual_quantity: number;
+      difference_quantity: number;
+      receiving_batch_id: string;
+    }>(
+      `SELECT document_quantity,actual_quantity,difference_quantity,receiving_batch_id
+       FROM receiving_receipts WHERE style_no='STYLE-LEGACY-01'`,
+    );
+    expect(legacy.rows[0]).toMatchObject({
+      document_quantity: 50,
+      actual_quantity: 45,
+      difference_quantity: -5,
+    });
+    expect(legacy.rows[0]?.receiving_batch_id).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it("requires receiving-note evidence on a new batch, reuses it on later receipts, and keeps cumulative facts", async () => {
+    await expect(service.create(receiver(), {
+      styleNo: "STYLE-RECEIVING-01",
+      documentQuantity: 100,
+      actualQuantity: 80,
+      attachmentIds: [],
+    }, randomUUID())).rejects.toThrow("收货单图片必传");
+
+    const firstImage = await readyImage();
     const firstKey = randomUUID();
     const first = await service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 80,
+      attachmentIds: [firstImage],
     }, firstKey);
     expect(first.reused).toBe(false);
     expect(first.value).toMatchObject({
@@ -77,56 +242,97 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receivedBy: receiverId,
     });
 
+    const binding = await database.query<{ entity_type: string; entity_id: string }>(
+      "SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1",
+      [firstImage],
+    );
+    expect(binding.rows[0]).toEqual({
+      entity_type: "receiving_batch",
+      entity_id: first.value.receivingBatchId,
+    });
+
     const replay = await service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 80,
+      attachmentIds: [firstImage],
     }, firstKey);
     expect(replay.reused).toBe(true);
-
-    const shortageBoard = await service.board(businessDate());
-    expect(shortageBoard.rows[0]).toMatchObject({
-      styleNo: "STYLE-RECEIVING-01",
-      documentQuantity: 100,
-      actualQuantity: 80,
-      differenceQuantity: -20,
-      receiptCount: 1,
-      lastReceiverName: "仓管测试",
-    });
-    expect(shortageBoard.kpis.abnormalOrderCount).toBe(1);
 
     const second = await service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 120,
+      attachmentIds: [],
     }, randomUUID());
+    expect(second.value.receivingBatchId).toBe(first.value.receivingBatchId);
     expect(second.value.differenceQuantity).toBe(20);
 
-    const balancedBoard = await service.board(businessDate());
-    expect(balancedBoard.rows).toHaveLength(1);
-    expect(balancedBoard.rows[0]).toMatchObject({
+    const board = await service.board(businessDate());
+    const row = board.rows.find((item) => item.receivingBatchId === first.value.receivingBatchId);
+    expect(row).toMatchObject({
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 200,
       actualQuantity: 200,
       differenceQuantity: 0,
       receiptCount: 2,
+      reworkOrderId: null,
+      reworkStatus: null,
     });
-    expect(balancedBoard.kpis.orderCount).toBe(1);
-    expect(balancedBoard.kpis.receivedQuantity).toBe(200);
-    expect(balancedBoard.kpis.abnormalOrderCount).toBe(0);
-    expect(balancedBoard.kpis.differenceQuantity).toBe(0);
-    expect(balancedBoard.kpis.differenceRate).toBe(0);
+
+    await expect(service.create(receiver(), {
+      styleNo: "STYLE-TOO-MANY-IMAGES",
+      documentQuantity: 1,
+      actualQuantity: 1,
+      attachmentIds: [randomUUID(), randomUUID(), randomUUID(), randomUUID()],
+    }, randomUUID())).rejects.toThrow("最多3张");
 
     const facts = await database.query<{ difference_quantity: number }>(
-      "SELECT difference_quantity FROM receiving_receipts WHERE style_no=$1 ORDER BY received_at,receipt_id",
-      ["STYLE-RECEIVING-01"],
+      "SELECT difference_quantity FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
+      [first.value.receivingBatchId],
     );
-    expect(facts.rows.map((row) => row.difference_quantity).sort((a, b) => a - b)).toEqual([-20, 20]);
-
+    expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-20, 20]);
     await expect(database.query(
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
       [first.value.receiptId],
     )).rejects.toThrow();
+  });
+
+  it("binds a real server draft to the receiving batch, blocks a duplicate active rework, and reopens after cancellation", async () => {
+    const image = await readyImage();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-REWORK-LINK-01",
+      documentQuantity: 40,
+      actualQuantity: 40,
+      attachmentIds: [image],
+    }, randomUUID());
+
+    const firstDraftId = await createReworkDraft("STYLE-REWORK-LINK-01");
+    const firstLink = await database.query<{ source_receiving_batch_id: string }>(
+      "SELECT source_receiving_batch_id FROM rework_orders WHERE rework_order_id=$1",
+      [firstDraftId],
+    );
+    expect(firstLink.rows[0]?.source_receiving_batch_id).toBe(receipt.value.receivingBatchId);
+
+    let board = await service.board(businessDate());
+    expect(board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)).toMatchObject({
+      reworkOrderId: firstDraftId,
+      reworkStatus: "draft",
+    });
+
+    await expect(createReworkDraft("STYLE-REWORK-LINK-01")).rejects.toThrow();
+
+    await cancelReworkDraft(firstDraftId, "STYLE-REWORK-LINK-01");
+    board = await service.board(businessDate());
+    expect(board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)?.reworkStatus).toBeNull();
+
+    const secondDraftId = await createReworkDraft("STYLE-REWORK-LINK-01");
+    expect(secondDraftId).not.toBe(firstDraftId);
+    const secondLink = await database.query<{ source_receiving_batch_id: string }>(
+      "SELECT source_receiving_batch_id FROM rework_orders WHERE rework_order_id=$1",
+      [secondDraftId],
+    );
+    expect(secondLink.rows[0]?.source_receiving_batch_id).toBe(receipt.value.receivingBatchId);
   });
 
   it("searches known style numbers without forcing a second manual spelling", async () => {

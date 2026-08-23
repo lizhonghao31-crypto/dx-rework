@@ -47,7 +47,7 @@ export type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
-    entityType: "rework_order" | "external_responsibility_case";
+    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -61,7 +61,7 @@ type AttachmentRow = Readonly<{
   attachment_id: string;
   original_filename: string;
   mime_type: string;
-  entity_type: "rework_order" | "external_responsibility_case";
+  entity_type: "rework_order" | "external_responsibility_case" | "receiving_batch";
 }>;
 
 type WorkflowHistoryRow = Readonly<{
@@ -176,6 +176,15 @@ export class ReworkBusinessDetailService {
        WHERE attachment.status='ready'
          AND (
            (attachment.entity_type='rework_order' AND attachment.entity_id=$1::text)
+           OR (
+             attachment.entity_type='receiving_batch'
+             AND EXISTS (
+               SELECT 1
+               FROM rework_orders source_order
+               WHERE source_order.rework_order_id=$1::uuid
+                 AND source_order.source_receiving_batch_id::text=attachment.entity_id
+             )
+           )
            OR (
              attachment.entity_type='external_responsibility_case'
              AND EXISTS (
@@ -325,6 +334,16 @@ export class ReworkBusinessDetailService {
     let reworkOrderId: string | null = null;
     if (binding.entityType === "rework_order") {
       reworkOrderId = binding.entityId;
+    } else if (binding.entityType === "receiving_batch") {
+      const receiving = await this.database.query<{ rework_order_id: string }>(
+        `SELECT rework_order_id
+         FROM rework_orders
+         WHERE source_receiving_batch_id::text=$1 AND status<>'deleted'
+         ORDER BY updated_at DESC,rework_order_id DESC
+         LIMIT 1`,
+        [binding.entityId],
+      );
+      reworkOrderId = receiving.rows[0]?.rework_order_id ?? null;
     } else if (binding.entityType === "external_responsibility_case") {
       const externalCase = await this.database.query<{ rework_order_id: string }>(
         "SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
