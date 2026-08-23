@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
+import { reportsArePersisted } from "./work-reporting-submission.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
 import "./work-reporting-form.css";
 
@@ -267,6 +268,20 @@ export function WorkReportingForm({
         setMessage(`${quantities.length} 项报数已确认；系统继续等待其他返工人员或尾查完成。`);
       }
     } catch (cause) {
+      const loaded = quantities.length > 1 ? await reload().catch(() => null) : null;
+      if (loaded && reportsArePersisted(
+        loaded.tasks,
+        quantities.map(({ task, text }) => ({ workTaskId: task.workTaskId, actualQuantity: Number(text) })),
+      )) {
+        setReportTasks(null);
+        if (loaded.reworkStatus === "pending_order_review") {
+          setMessage(`${quantities.length} 项返工执行报数已保存，已流转至 N05 · 尾部最终数量确认。`);
+          try { await onOrderChanged?.(); } catch { /* The committed batch remains successful even if the surrounding page refresh fails. */ }
+        } else {
+          setMessage(`${quantities.length} 项报数已保存；系统继续等待其他返工人员或尾查完成。`);
+        }
+        return;
+      }
       setMessage(cause instanceof Error ? cause.message : "完工上数失败");
     } finally {
       setBusy(false);

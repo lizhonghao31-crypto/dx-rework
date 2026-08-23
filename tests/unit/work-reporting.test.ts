@@ -5,7 +5,7 @@ import {
   splitAmount,
 } from "../../apps/api/src/rework/work-reporting-service.js";
 import { canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
-import { localDateTimeValue, reportAttempt, taskAttempt, workReportDraft } from "../../apps/web/src/work-reporting-submission.js";
+import { localDateTimeValue, reportAttempt, reportsArePersisted, taskAttempt, workReportDraft } from "../../apps/web/src/work-reporting-submission.js";
 import { describe, expect, it } from "vitest";
 
 describe("work reporting monetary snapshots", () => {
@@ -66,6 +66,21 @@ describe("work reporting monetary snapshots", () => {
       signature: JSON.stringify({ ...payload, actualQuantity: 2 }),
       key: "changed-key",
     });
+  });
+
+  it("recognizes a committed batch from its refreshed task facts without sending another POST", () => {
+    const reports = [
+      { workTaskId: "task-a", actualQuantity: 5_000 },
+      { workTaskId: "task-b", actualQuantity: 6_000 },
+    ];
+    expect(reportsArePersisted([
+      { workTaskId: "task-a", submittedQuantity: 5_000 },
+      { workTaskId: "task-b", submittedQuantity: 6_000 },
+    ], reports)).toBe(true);
+    expect(reportsArePersisted([
+      { workTaskId: "task-a", submittedQuantity: 5_000 },
+      { workTaskId: "task-b", submittedQuantity: 0 },
+    ], reports)).toBe(false);
   });
 
   it("invokes the real Web Crypto randomUUID method with its required receiver", () => {

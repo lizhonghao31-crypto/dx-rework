@@ -1,14 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import type {
-  CreateWorkReport,
-  CreateWorkReportsBatch,
-  CreateWorkTask,
-  ConfirmWorkAssignments,
-  ReworkWorkTasksResponse,
-  WorkReportResponse,
-  WorkReportsBatchResponse,
-  WorkTaskResponse,
+import {
+  WorkReportsBatchResponseSchema,
+  type CreateWorkReport,
+  type CreateWorkReportsBatch,
+  type CreateWorkTask,
+  type ConfirmWorkAssignments,
+  type ReworkWorkTasksResponse,
+  type WorkReportResponse,
+  type WorkReportsBatchResponse,
+  type WorkTaskResponse,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
@@ -666,12 +667,12 @@ export class WorkReportingService {
           );
         }
 
-        return {
+        return WorkReportsBatchResponseSchema.parse({
           reworkOrderId,
           reworkStatus: completedOrder ? "pending_order_review" : "in_progress",
           orderVersion: completedOrder ? order.version + 1 : order.version,
           reports,
-        };
+        });
       },
     );
   }
