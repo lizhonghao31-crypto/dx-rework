@@ -1,0 +1,85 @@
+name: PR-01 Full Gate test fix once
+
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-test:
+    if: github.head_ref == 'feat/v1-receiving-rework-link'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+      - name: Patch authorization fixture, run real PostgreSQL regression, and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/integration/receiving-postgres.test.ts')
+          s = p.read_text()
+          old = '''  const receiver = (): TrustedActorContext => ({
+            actorId: receiverId,
+            actorRoles: ["warehouse_receiver"],
+            authorizationCapability: "receiving:create",
+            authorizationCapabilities: ["receiving:create"],
+            requestId: randomUUID(),
+          });
+          '''
+          new = old + '''
+          const initiator = (): TrustedActorContext => ({
+            actorId: receiverId,
+            actorRoles: ["quality_control"],
+            authorizationCapability: "rework:initiate",
+            authorizationCapabilities: ["rework:initiate"],
+            requestId: randomUUID(),
+          });
+          '''
+          if old not in s:
+              raise SystemExit('receiver fixture anchor not found')
+          s = s.replace(old, new, 1)
+          old_call = '''    const draft = await reworkService.createDraft(receiver(), {
+                styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
+              }, randomUUID());'''
+          new_call = '''    const draft = await reworkService.createDraft(initiator(), {
+                styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
+              }, randomUUID());'''
+          if old_call not in s:
+              raise SystemExit('createDraft test anchor not found')
+          s = s.replace(old_call, new_call, 1)
+          p.write_text(s)
+          PY
+          rm -f .github/workflows/zz-pr01-test-fix-once.yml
+          git diff --check
+          npm ci
+          npm run build:packages
+          docker run --rm -d --name dx-rework-pr01-testfix-pg \
+            -e POSTGRES_USER=dx_rework \
+            -e POSTGRES_PASSWORD=dx_rework_ci \
+            -e POSTGRES_DB=dx_rework_ci \
+            -p 5432:5432 postgres:16-alpine
+          trap 'docker rm -f dx-rework-pr01-testfix-pg >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 60); do
+            if docker exec dx-rework-pr01-testfix-pg pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          export TEST_DATABASE_URL='postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
+          export DATABASE_URL="$TEST_DATABASE_URL"
+          npx vitest run tests/integration/receiving-postgres.test.ts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/integration/receiving-postgres.test.ts .github/workflows/zz-pr01-test-fix-once.yml
+          git commit -m "test: use QC actor for legacy draft audit regression"
+          git push origin HEAD:feat/v1-receiving-rework-link
