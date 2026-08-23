@@ -379,6 +379,43 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     });
   });
 
+  it("records the resolved batch when an unbound server draft first receives its style", async () => {
+    const image = await readyImage();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-DRAFT-UPDATE-AUDIT",
+      documentQuantity: 18,
+      actualQuantity: 18,
+      attachmentIds: [image],
+    }, randomUUID());
+
+    const draft = await reworkService.createDraft(initiator(), {}, randomUUID());
+    expect(draft.value.styleNo).toBeNull();
+
+    await reworkService.updateDraft(initiator(), draft.value.reworkOrderId, {
+      expectedVersion: draft.value.version,
+      styleNo: "STYLE-DRAFT-UPDATE-AUDIT",
+    }, randomUUID());
+
+    const stored = await database.query<{
+      source_receiving_batch_id: string;
+      audited_receiving_batch_id: string;
+    }>(
+      `SELECT orders.source_receiving_batch_id,
+              event.after_state->>'receivingBatchId' audited_receiving_batch_id
+       FROM rework_orders orders
+       JOIN operation_events event
+         ON event.entity_type='rework_order'
+        AND event.entity_id=orders.rework_order_id::text
+        AND event.action='rework.draft.update'
+       WHERE orders.rework_order_id=$1`,
+      [draft.value.reworkOrderId],
+    );
+    expect(stored.rows[0]).toEqual({
+      source_receiving_batch_id: receipt.value.receivingBatchId,
+      audited_receiving_batch_id: receipt.value.receivingBatchId,
+    });
+  });
+
   it("searches known style numbers without forcing a second manual spelling", async () => {
     const options = await service.listStyleOptions("RECEIVING");
     expect(options).toContain("STYLE-RECEIVING-01");
