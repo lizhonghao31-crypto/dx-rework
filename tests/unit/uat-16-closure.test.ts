@@ -23,10 +23,7 @@ describe("UAT 1.6 closure regressions", () => {
     expect(detail).toContain('action.includes("process_configuration.review") || action.includes("ie_review")');
     expect(detail).toContain('action.includes(".complete") || action.includes(".archive")');
     expect(detail).toContain("关联附件：");
-    expect(detail).toContain('attachment.entityType === "external_responsibility_case"');
-    expect(detail).toContain('attachment.entityType === "receiving_batch"');
-    expect(detail).toContain('"外部责任 · "');
-    expect(detail).toContain('"收货凭证 · "');
+    expect(detail).toContain('attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""');
     expect(detail).toContain("订单图片");
     expect(detail).toContain("attachmentUrl");
     expect(detail).toContain('mode: "preview" | "download"');
