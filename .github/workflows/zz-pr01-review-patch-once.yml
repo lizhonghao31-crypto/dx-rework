@@ -1,270 +1,54 @@
-name: PR-01 review patch once
+name: PR-01 patch bridge
 
 on:
-  push:
-    branches:
-      - feat/v1-receiving-rework-link
+  pull_request:
+    types: [opened, reopened]
 
 permissions:
   contents: write
+  issues: read
+  pull-requests: read
 
 jobs:
-  apply-review-patch:
-    if: github.event.head_commit.message == 'chore: retry PR-01 review patch once'
+  apply-reviewed-patch:
+    if: github.head_ref == 'automation/pr01-review-patch-bridge'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
           persist-credentials: true
-      - name: Apply exact review patch and remove helper
+      - name: Apply reviewed patch, verify, and push PR-01 branch
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "d8bbd1354eebdd4acd679d0a55e0217ffb152243"
-          cat > /tmp/pr01-review.patch <<'PATCH'
-          diff --git a/apps/api/src/rework/rework-business-detail-service.ts b/apps/api/src/rework/rework-business-detail-service.ts
-          index 6825445..d05e398 100644
-          --- a/apps/api/src/rework/rework-business-detail-service.ts
-          +++ b/apps/api/src/rework/rework-business-detail-service.ts
-          @@ -331,35 +331,33 @@ export class ReworkBusinessDetailService {
-               actor: TrustedActorContext,
-               binding: Readonly<{ entityType: string; entityId: string }>,
-             ): Promise<boolean> {
-          -    let reworkOrderId: string | null = null;
-          +    let reworkOrderIds: readonly string[] = [];
-               if (binding.entityType === "rework_order") {
-          -      reworkOrderId = binding.entityId;
-          +      reworkOrderIds = [binding.entityId];
-               } else if (binding.entityType === "receiving_batch") {
-                 const receiving = await this.database.query<{ rework_order_id: string }>(
-                   `SELECT rework_order_id
-                    FROM rework_orders
-          -         WHERE source_receiving_batch_id::text=$1 AND status<>'deleted'
-          -         ORDER BY updated_at DESC,rework_order_id DESC
-          -         LIMIT 1`,
-          +         WHERE source_receiving_batch_id::text=$1 AND status<>'deleted'`,
-                   [binding.entityId],
-                 );
-          -      reworkOrderId = receiving.rows[0]?.rework_order_id ?? null;
-          +      reworkOrderIds = receiving.rows.map((row) => row.rework_order_id);
-               } else if (binding.entityType === "external_responsibility_case") {
-                 const externalCase = await this.database.query<{ rework_order_id: string }>(
-                   "SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
-                   [binding.entityId],
-                 );
-          -      reworkOrderId = externalCase.rows[0]?.rework_order_id ?? null;
-          +      reworkOrderIds = externalCase.rows[0] ? [externalCase.rows[0].rework_order_id] : [];
-               }
-          -    if (!reworkOrderId) return false;
-          -
-          -    try {
-          -      await this.get(actor, reworkOrderId);
-          -      return true;
-          -    } catch (error) {
-          -      if (error instanceof ApplicationError && [403, 404].includes(error.statusCode)) return false;
-          -      throw error;
-          +    for (const reworkOrderId of reworkOrderIds) {
-          +      try {
-          +        await this.get(actor, reworkOrderId);
-          +        return true;
-          +      } catch (error) {
-          +        if (!(error instanceof ApplicationError) || ![403, 404].includes(error.statusCode)) throw error;
-          +      }
-               }
-          +    return false;
-             }
-          
-             private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
-          diff --git a/apps/api/src/rework/service.ts b/apps/api/src/rework/service.ts
-          index 2321c97..65ffab0 100644
-          --- a/apps/api/src/rework/service.ts
-          +++ b/apps/api/src/rework/service.ts
-          @@ -218,8 +218,25 @@ export class ReworkInitiationService {
-               receivingBatchId: string | undefined,
-               styleNo: string | null,
-             ): Promise<string | null> {
-          -    if (!receivingBatchId) return null;
-               const normalizedStyleNo = styleNo?.trim();
-          +    if (!receivingBatchId) {
-          +      if (!normalizedStyleNo) return null;
-          +      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
-          +      const fallback = await client.query<{ receiving_batch_id: string }>(
-          +        `SELECT batch.receiving_batch_id
-          +         FROM receiving_batches batch
-          +         WHERE batch.style_no=$1
-          +           AND NOT EXISTS (
-          +             SELECT 1 FROM rework_orders completed_order
-          +             WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
-          +               AND completed_order.status='completed'
-          +           )
-          +         ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
-          +         LIMIT 1`,
-          +        [normalizedStyleNo],
-          +      );
-          +      return fallback.rows[0]?.receiving_batch_id ?? null;
-          +    }
-               if (!normalizedStyleNo) {
-                 throw new ApplicationError("VALIDATION_ERROR", "收货批次要求同时提供款号", 400);
-               }
-          diff --git a/apps/web/src/rework-v2-form.tsx b/apps/web/src/rework-v2-form.tsx
-          index 5d6ac3b..8022859 100644
-          --- a/apps/web/src/rework-v2-form.tsx
-          +++ b/apps/web/src/rework-v2-form.tsx
-          @@ -209,8 +209,10 @@ export function ReworkInitiationV2Form({
-             existingAttachmentCount = 0,
-             onOrderChanged,
-           }: ReworkInitiationV2FormProps = {}) {
-          -  const receivingBatchId = reworkOrderId ? undefined : initialReceivingBatchId();
-             const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
-          +  const receivingBatchId = reworkOrderId
-          +    ? undefined
-          +    : initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined;
-             const [form, setForm] = useState<V2FormState>(() => localDraftSeed?.form ?? emptyForm(!reworkOrderId));
-             const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({ merchandisers: [], factories: [] });
-             const [supplyOptions, setSupplyOptions] = useState<ReworkSupplyContextOptionsResponse>({
-          diff --git a/tests/integration/receiving-postgres.test.ts b/tests/integration/receiving-postgres.test.ts
-          index 50920db..da87122 100644
-          --- a/tests/integration/receiving-postgres.test.ts
-          +++ b/tests/integration/receiving-postgres.test.ts
-          @@ -5,6 +5,7 @@ import pg from "pg";
-           import { afterAll, beforeAll, describe, expect, it } from "vitest";
-          
-           import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
-          +import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
-           import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
-          
-           const { Pool } = pg;
-          @@ -23,6 +24,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
-             const admin = new Pool({ connectionString: databaseUrl! });
-             const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
-             const service = new ReceivingService(database);
-          +  const reworkService = new ReworkInitiationService(database, "corp");
-             const receiverId = randomUUID();
-          
-             const receiver = (): TrustedActorContext => ({
-          @@ -335,6 +337,38 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
-               expect(secondLink.rows[0]?.source_receiving_batch_id).toBe(receipt.value.receivingBatchId);
-             });
-          
-          +  it("records the database-selected batch in the legacy style-only draft audit event", async () => {
-          +    const image = await readyImage();
-          +    const receipt = await service.create(receiver(), {
-          +      styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
-          +      documentQuantity: 12,
-          +      actualQuantity: 12,
-          +      attachmentIds: [image],
-          +    }, randomUUID());
-          +
-          +    const draft = await reworkService.createDraft(receiver(), {
-          +      styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
-          +    }, randomUUID());
-          +    const stored = await database.query<{
-          +      source_receiving_batch_id: string;
-          +      audited_receiving_batch_id: string;
-          +    }>(
-          +      `SELECT orders.source_receiving_batch_id,
-          +              event.after_state->>'receivingBatchId' audited_receiving_batch_id
-          +       FROM rework_orders orders
-          +       JOIN operation_events event
-          +         ON event.entity_type='rework_order'
-          +        AND event.entity_id=orders.rework_order_id::text
-          +        AND event.action='rework.draft.create'
-          +       WHERE orders.rework_order_id=$1`,
-          +      [draft.value.reworkOrderId],
-          +    );
-          +    expect(stored.rows[0]).toEqual({
-          +      source_receiving_batch_id: receipt.value.receivingBatchId,
-          +      audited_receiving_batch_id: receipt.value.receivingBatchId,
-          +    });
-          +  });
-          +
-             it("searches known style numbers without forcing a second manual spelling", async () => {
-               const options = await service.listStyleOptions("RECEIVING");
-               expect(options).toContain("STYLE-RECEIVING-01");
-          diff --git a/tests/unit/n01-local-draft-contract.test.ts b/tests/unit/n01-local-draft-contract.test.ts
-          index cfefdef..ed14955 100644
-          --- a/tests/unit/n01-local-draft-contract.test.ts
-          +++ b/tests/unit/n01-local-draft-contract.test.ts
-          @@ -32,6 +32,7 @@ describe("N01 local-only draft contract", () => {
-               expect(source).toContain("localDraftSeed?.images.map(restoredImage) ?? []");
-               expect(source).toContain("tools/attachments/${image.attachmentId}/download?mode=preview");
-               expect(source).toContain("已恢复本机保存资料；尚未创建返工单");
-          +    expect(source).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
-             });
-          
-             it("creates the server rework order only from the real submit path and clears the local copy after success", async () => {
-          diff --git a/tests/unit/rework-business-detail-attachment-authorization.test.ts b/tests/unit/rework-business-detail-attachment-authorization.test.ts
-          new file mode 100644
-          index 0000000..b19a092
-          --- /dev/null
-          +++ b/tests/unit/rework-business-detail-attachment-authorization.test.ts
-          @@ -0,0 +1,39 @@
-          +import { randomUUID } from "node:crypto";
-          +
-          +import type { Pool } from "pg";
-          +import { describe, expect, it, vi } from "vitest";
-          +
-          +import { ApplicationError } from "../../apps/api/src/platform/errors.js";
-          +import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
-          +import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
-          +
-          +const actor: TrustedActorContext = {
-          +  actorId: randomUUID(),
-          +  actorRoles: ["quality_control"],
-          +  authorizationCapability: "rework:view",
-          +  authorizationCapabilities: ["rework:view"],
-          +  requestId: randomUUID(),
-          +};
-          +
-          +describe("receiving attachment authorization", () => {
-          +  it("allows access when the actor can view any non-deleted rework linked to the batch", async () => {
-          +    const olderOrderId = randomUUID();
-          +    const newerOrderId = randomUUID();
-          +    const database = {
-          +      query: vi.fn(async () => ({
-          +        rows: [{ rework_order_id: newerOrderId }, { rework_order_id: olderOrderId }],
-          +      })),
-          +    } as unknown as Pool;
-          +    const service = new ReworkBusinessDetailService(database);
-          +    const get = vi.spyOn(service, "get")
-          +      .mockRejectedValueOnce(new ApplicationError("FORBIDDEN", "forbidden", 403))
-          +      .mockResolvedValueOnce({} as Awaited<ReturnType<ReworkBusinessDetailService["get"]>>);
-          +
-          +    await expect(service.canDownloadBoundAttachment(actor, {
-          +      entityType: "receiving_batch",
-          +      entityId: randomUUID(),
-          +    })).resolves.toBe(true);
-          +    expect(get).toHaveBeenCalledTimes(2);
-          +    expect(get).toHaveBeenLastCalledWith(actor, olderOrderId);
-          +  });
-          +});
-          diff --git a/tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts b/tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts
-          index ff4e997..e2bc2ec 100644
-          --- a/tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts
-          +++ b/tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts
-          @@ -14,6 +14,7 @@ describe("PR-01 stable receiving batch propagation", () => {
-               expect(board).toContain("receivingBatchId: row.receivingBatchId");
-               expect(form).toContain('get("receivingBatchId")');
-               expect(form).toContain("parsed.receivingBatchId !== requestedBatchId");
-          +    expect(form).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
-               expect(form).toContain("receivingBatchId: receivingBatchId ?? null");
-               expect(form).toContain("writeLocalN01Draft(form, images, receivingBatchId)");
-               expect(form).toContain("...(receivingBatchId ? { receivingBatchId } : {})");
-          @@ -36,5 +37,6 @@ describe("PR-01 stable receiving batch propagation", () => {
-               expect(service).toContain("source_receiving_batch_id,created_by,updated_by");
-               expect(service).toContain("收货批次与款号不一致");
-               expect(service).toContain("已完成返工的收货批次不能再次发起返工");
-          +    expect(service).toContain("return fallback.rows[0]?.receiving_batch_id ?? null");
-             });
-           });
-          PATCH
-          git apply --check /tmp/pr01-review.patch
-          git apply /tmp/pr01-review.patch
+          gh api repos/lizhonghao31-crypto/dx-rework/issues/comments/5387765162 --jq .body > /tmp/comment.md
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          body = Path('/tmp/comment.md').read_text()
+          m = re.search(r"```(?:diff|patch)\n(.*?)```", body, re.S)
+          if not m:
+              raise SystemExit('unified diff fence not found')
+          Path('/tmp/pr01.patch').write_text(m.group(1))
+          PY
+          git apply --check /tmp/pr01.patch
+          git apply /tmp/pr01.patch
           rm -f .github/workflows/zz-pr01-review-patch-once.yml
+          git diff --check
+          npm ci
+          npm run build:packages
+          npx vitest run tests/unit/n01-local-draft-contract.test.ts tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts
+          npx vitest run tests/integration/receiving-postgres.test.ts tests/integration/rework-postgres.test.ts tests/integration/rework-v2-n01-postgres.test.ts
+          npm run lint
+          npm run typecheck
+          npm run build
+          npm run db:migrate:lint
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/api/src/rework/rework-business-detail-service.ts apps/api/src/rework/service.ts apps/web/src/rework-v2-form.tsx tests/integration/receiving-postgres.test.ts tests/unit/n01-local-draft-contract.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts .github/workflows/zz-pr01-review-patch-once.yml
-          git diff --cached --check
+          git add -A
           git commit -m "fix: close receiving batch review gaps"
           git push origin HEAD:feat/v1-receiving-rework-link
