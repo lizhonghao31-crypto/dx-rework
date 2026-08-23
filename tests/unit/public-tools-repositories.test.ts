@@ -42,7 +42,43 @@ describe("public tools repository guards", () => {
       authorizationCapability: "tools:user",
       requestId: "request",
     }, input)).rejects.toMatchObject({ code: "NO_BUSINESS_ROLE", statusCode: 403 });
+    await expect(repository.appendMany(client as never, [{
+      actor: {
+        actorId: "00000000-0000-4000-8000-000000000099",
+        actorRoles: ["worker"],
+        authorizationCapability: "bad capability",
+        requestId: "request",
+      },
+      input,
+    }])).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     expect(client.query).not.toHaveBeenCalled();
+  });
+
+  it("appends many independently attributable audit events in one SQL statement", async () => {
+    const client = { query: vi.fn(async () => ({ rowCount: 2, rows: [] })) };
+    const repository = new OperationEventRepository();
+    const actor = {
+      actorId: "00000000-0000-4000-8000-000000000099",
+      actorRoles: ["worker", "worker"],
+      authorizationCapability: "work:report",
+      requestId: "batch-request",
+    };
+
+    const eventIds = await repository.appendMany(client as never, [
+      { actor, input: { action: "report", entityType: "order", entityId: "1", after: { report: 1 } } },
+      { actor, input: { action: "report", entityType: "order", entityId: "1", after: { report: 2 } } },
+    ]);
+
+    expect(eventIds).toHaveLength(2);
+    expect(new Set(eventIds).size).toBe(2);
+    expect(client.query).toHaveBeenCalledTimes(1);
+    expect(client.query.mock.calls[0]![0]).toContain("jsonb_to_recordset");
+    const rows = JSON.parse(client.query.mock.calls[0]![1][0] as string) as Array<{
+      actor_roles: string[];
+      after_state: { report: number };
+    }>;
+    expect(rows.map((row) => row.after_state.report)).toEqual([1, 2]);
+    expect(rows.every((row) => row.actor_roles.join(",") === "worker")).toBe(true);
   });
 
   it("rejects invalid retry delays before issuing SQL", async () => {

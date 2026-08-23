@@ -373,25 +373,97 @@ export class WorkReportingService {
           error("同一返工任务不能在一批中重复上数", 400, "VALIDATION_ERROR");
         }
 
-        const lockedTasks: Array<{
-          input: CreateWorkReportsBatch["reports"][number];
-          task: WorkTaskRow;
-          inputIndex: number;
-        }> = [];
-        const lockOrder = input.reports
-          .map((reportInput, inputIndex) => ({ reportInput, inputIndex }))
-          .sort((left, right) => left.reportInput.workTaskId.localeCompare(right.reportInput.workTaskId));
-        for (const { reportInput, inputIndex } of lockOrder) {
-          const task = await this.task(client, reportInput.workTaskId, true);
+        const taskIds = input.reports.map((report) => report.workTaskId);
+        const lockedTasksResult = await client.query<WorkTaskRow>(
+          `SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,
+                  task.task_version,task.assignment_mode,task.status,item.process_name,
+                  item.execution_kind,item.pricing_unit,
+                  COALESCE((
+                    SELECT adjustment.requested_planned_quantity
+                    FROM rework_process_quantity_adjustments adjustment
+                    WHERE adjustment.configuration_item_id=item.configuration_item_id
+                      AND adjustment.status='effective'
+                    ORDER BY adjustment.adjustment_version DESC LIMIT 1
+                  ),item.planned_quantity) AS planned_quantity,item.unit_price
+           FROM rework_work_tasks task
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=task.configuration_item_id
+           WHERE task.work_task_id=ANY($1::uuid[])
+           ORDER BY task.work_task_id
+           FOR UPDATE OF task`,
+          [[...taskIds].sort()],
+        );
+        const tasksById = new Map(lockedTasksResult.rows.map((task) => [task.work_task_id, task]));
+        const lockedTasks = input.reports.map((reportInput) => {
+          const task = tasksById.get(reportInput.workTaskId)
+            ?? error("返工任务不存在", 404, "NOT_FOUND");
           if (task.rework_order_id !== reworkOrderId) error("批量报数包含不属于当前返工单的任务", 400, "VALIDATION_ERROR");
           if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
-          lockedTasks.push({ input: reportInput, task, inputIndex });
-        }
-        lockedTasks.sort((left, right) => left.inputIndex - right.inputIndex);
+          return { input: reportInput, task };
+        });
 
         const order = await this.order(client, reworkOrderId, true);
         if (order.status !== "in_progress") error("当前返工单不在完成数量登记节点", 409, "INVALID_STATE_TRANSITION");
         if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
+
+        const membersResult = await client.query<PersonRow & { work_task_id: string }>(
+          `SELECT member.work_task_id,member.person_id,
+                  member.person_type_snapshot AS person_type,
+                  member.display_name_snapshot AS display_name,person.app_user_id
+           FROM rework_work_task_members member
+           JOIN business_people person ON person.person_id=member.person_id
+           WHERE member.work_task_id=ANY($1::uuid[])
+           ORDER BY member.work_task_id,member.person_id`,
+          [taskIds],
+        );
+        const membersByTask = new Map<string, PersonRow[]>();
+        for (const member of membersResult.rows) {
+          const members = membersByTask.get(member.work_task_id) ?? [];
+          members.push(member);
+          membersByTask.set(member.work_task_id, members);
+        }
+
+        const existingResult = await client.query<{ work_report_id: string; work_task_id: string }>(
+          `SELECT report.work_report_id,report.work_task_id
+           FROM rework_work_reports report
+           WHERE report.work_task_id=ANY($1::uuid[]) AND report.status='submitted'
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_report_rejections rejection
+               WHERE rejection.work_report_id=report.work_report_id
+             )
+           ORDER BY report.work_report_id
+           FOR UPDATE OF report`,
+          [taskIds],
+        );
+        const submittedTaskIds = new Set(existingResult.rows.map((report) => report.work_task_id));
+
+        const resubmissionIds = input.reports.flatMap((report) => (
+          report.resubmitsWorkReportId ? [report.resubmitsWorkReportId] : []
+        ));
+        const rejectedResult = resubmissionIds.length === 0
+          ? { rows: [] as Array<{
+            work_report_id: string;
+            work_task_id: string;
+            rework_order_id: string;
+            configuration_item_id: string;
+          }> }
+          : await client.query<{
+            work_report_id: string;
+            work_task_id: string;
+            rework_order_id: string;
+            configuration_item_id: string;
+          }>(
+            `SELECT report.work_report_id,report.work_task_id,
+                    report.rework_order_id,report.configuration_item_id
+             FROM rework_work_reports report
+             JOIN rework_work_report_rejections rejection
+               ON rejection.work_report_id=report.work_report_id
+             WHERE report.work_report_id=ANY($1::uuid[])
+             ORDER BY report.work_report_id
+             FOR SHARE OF report`,
+            [resubmissionIds],
+          );
+        const rejectedById = new Map(rejectedResult.rows.map((report) => [report.work_report_id, report]));
 
         const prepared: Array<{
           input: CreateWorkReportsBatch["reports"][number];
@@ -403,39 +475,24 @@ export class WorkReportingService {
           shares: number[];
         }> = [];
         for (const { input: reportInput, task } of lockedTasks) {
-          const members = await this.members(client, task.work_task_id);
+          const members = membersByTask.get(task.work_task_id) ?? [];
           const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
           const reportingCapability = this.reportCapability(actor, task, members);
           if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
           if (!Number.isInteger(reportInput.actualQuantity)) {
             error("返工执行报数只能填写整数件数", 400, "VALIDATION_ERROR");
           }
-          const existing = await client.query<{ work_report_id: string }>(
-            `SELECT report.work_report_id
-             FROM rework_work_reports report
-             WHERE report.work_task_id=$1 AND report.status='submitted'
-               AND NOT EXISTS (
-                 SELECT 1 FROM rework_work_report_rejections rejection
-                 WHERE rejection.work_report_id=report.work_report_id
-               )
-             FOR UPDATE`,
-            [task.work_task_id],
-          );
-          if (existing.rows[0]) error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
+          if (submittedTaskIds.has(task.work_task_id)) {
+            error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
+          }
           if (reportInput.resubmitsWorkReportId) {
-            const rejected = await client.query<{ work_report_id: string }>(
-              `SELECT report.work_report_id FROM rework_work_reports report
-               JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
-               WHERE report.work_report_id=$1 AND report.work_task_id=$2 AND report.rework_order_id=$3
-                 AND report.configuration_item_id=$4 FOR SHARE`,
-              [
-                reportInput.resubmitsWorkReportId,
-                task.work_task_id,
-                reworkOrderId,
-                task.configuration_item_id,
-              ],
-            );
-            if (!rejected.rows[0]) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
+            const rejected = rejectedById.get(reportInput.resubmitsWorkReportId);
+            if (
+              !rejected
+              || rejected.work_task_id !== task.work_task_id
+              || rejected.rework_order_id !== reworkOrderId
+              || rejected.configuration_item_id !== task.configuration_item_id
+            ) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
           }
           prepared.push({
             input: reportInput,
@@ -453,52 +510,100 @@ export class WorkReportingService {
           reworkOrderId,
           prepared.map(({ task }) => task.work_task_id),
         );
-        const reports: WorkReportResponse[] = [];
-        let completionEventId: string | undefined;
-        let completionActor: TrustedActorContext | undefined;
-        for (const [index, item] of prepared.entries()) {
+        const eventIds = await this.events.appendMany(client, prepared.map((item, index) => {
           const completesOrder = completedOrder && index === prepared.length - 1;
           const groupAmount = 0;
-          const eventId = await this.events.append(client, item.reportingActor, {
-            action: "rework.work_report.submit",
-            entityType: "rework_order",
-            entityId: reworkOrderId,
-            before: {
-              submittedQuantity: 0,
-              plannedQuantity: numberValue(item.task.planned_quantity),
+          return {
+            actor: item.reportingActor,
+            input: {
+              action: "rework.work_report.submit",
+              entityType: "rework_order",
+              entityId: reworkOrderId,
+              before: {
+                submittedQuantity: 0,
+                plannedQuantity: numberValue(item.task.planned_quantity),
+              },
+              after: {
+                ...this.orderAuditState(
+                  order,
+                  completesOrder ? "pending_order_review" : order.status,
+                  completesOrder ? order.version + 1 : order.version,
+                ),
+                workReportId: item.reportId,
+                workTaskId: item.task.work_task_id,
+                actualQuantity: item.input.actualQuantity,
+                groupAmount,
+                memberIds: item.members.map((member) => member.person_id),
+                resubmitsWorkReportId: item.input.resubmitsWorkReportId ?? null,
+              },
+              ...(item.input.remark ? { reason: item.input.remark } : {}),
             },
-            after: {
-              ...this.orderAuditState(
-                order,
-                completesOrder ? "pending_order_review" : order.status,
-                completesOrder ? order.version + 1 : order.version,
-              ),
-              workReportId: item.reportId,
-              workTaskId: item.task.work_task_id,
-              actualQuantity: item.input.actualQuantity,
-              groupAmount,
-              memberIds: item.members.map((member) => member.person_id),
-              resubmitsWorkReportId: item.input.resubmitsWorkReportId ?? null,
-            },
-            ...(item.input.remark ? { reason: item.input.remark } : {}),
-          });
-          await this.context(client, eventId, actor.requestId);
-          const reportInsert = await client.query<{ completed_at: Date }>(
-            "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP,$6,$7,$8,$9) RETURNING completed_at",
-            [
-              item.reportId,
-              item.task.work_task_id,
-              reworkOrderId,
-              item.task.configuration_item_id,
-              item.input.actualQuantity,
-              item.input.remark ?? null,
-              groupAmount,
-              actor.actorId,
-              item.input.resubmitsWorkReportId ?? null,
-            ],
+          };
+        }));
+        const audited = prepared.map((item, index) => ({
+          ...item,
+          eventId: eventIds[index] ?? error("批量报数审计事件缺失", 500, "INTERNAL_ERROR"),
+        }));
+        const byCapability = new Map<string, typeof audited>();
+        for (const item of audited) {
+          const group = byCapability.get(item.reportingActor.authorizationCapability) ?? [];
+          group.push(item);
+          byCapability.set(item.reportingActor.authorizationCapability, group);
+        }
+
+        const completedAtByReport = new Map<string, Date>();
+        for (const group of byCapability.values()) {
+          await this.context(client, group[0]!.eventId, actor.requestId);
+          const inserted = await client.query<{ work_report_id: string; completed_at: Date }>(
+            `INSERT INTO rework_work_reports(
+               work_report_id,work_task_id,rework_order_id,configuration_item_id,
+               actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id
+             )
+             SELECT report.work_report_id::uuid,report.work_task_id::uuid,report.rework_order_id::uuid,
+                    report.configuration_item_id::uuid,report.actual_quantity,CURRENT_TIMESTAMP,
+                    report.remark,report.group_amount,report.submitted_by::uuid,
+                    report.resubmits_work_report_id::uuid
+             FROM jsonb_to_recordset($1::jsonb) AS report(
+               work_report_id text,work_task_id text,rework_order_id text,configuration_item_id text,
+               actual_quantity numeric,remark text,group_amount numeric,submitted_by text,
+               resubmits_work_report_id text
+             )
+             ORDER BY report.work_report_id
+             RETURNING work_report_id,completed_at`,
+            [JSON.stringify(group.map((item) => ({
+              work_report_id: item.reportId,
+              work_task_id: item.task.work_task_id,
+              rework_order_id: reworkOrderId,
+              configuration_item_id: item.task.configuration_item_id,
+              actual_quantity: item.input.actualQuantity,
+              remark: item.input.remark ?? null,
+              group_amount: 0,
+              submitted_by: actor.actorId,
+              resubmits_work_report_id: item.input.resubmitsWorkReportId ?? null,
+            })))],
           );
-          const completedAt = reportInsert.rows[0]?.completed_at
-            ?? error("完工时间记录失败", 500, "INTERNAL_ERROR");
+          if (inserted.rows.length !== group.length) {
+            error("批量报数记录不完整", 500, "INTERNAL_ERROR");
+          }
+          for (const report of inserted.rows) {
+            completedAtByReport.set(report.work_report_id, report.completed_at);
+          }
+          await client.query(
+            `INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount)
+             SELECT share.work_report_id::uuid,share.person_id::uuid,share.amount
+             FROM jsonb_to_recordset($1::jsonb) AS share(
+               work_report_id text,person_id text,amount numeric
+             )
+             ORDER BY share.work_report_id,share.person_id`,
+            [JSON.stringify(group.flatMap((item) => item.members.map((member, memberIndex) => ({
+              work_report_id: item.reportId,
+              person_id: member.person_id,
+              amount: item.shares[memberIndex],
+            }))))],
+          );
+        }
+
+        for (const item of audited) {
           if (item.input.resubmitsWorkReportId) {
             await this.todos?.completeOpenByDedupeKey(
               client,
@@ -507,12 +612,12 @@ export class WorkReportingService {
               "Returned work report was corrected and resubmitted",
             );
           }
-          for (const [memberIndex, member] of item.members.entries()) {
-            await client.query(
-              "INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)",
-              [item.reportId, member.person_id, item.shares[memberIndex]],
-            );
-          }
+        }
+
+        const reports: WorkReportResponse[] = audited.map((item) => {
+          const completedAt = completedAtByReport.get(item.reportId)
+            ?? error("完工时间记录失败", 500, "INTERNAL_ERROR");
+          const groupAmount = 0;
           const workerView = item.reportingActor.authorizationCapability !== "work:report_for_worker"
             && !this.isSupervisor(actor)
             && !isRootActor(actor);
@@ -522,7 +627,7 @@ export class WorkReportingService {
               amount: item.shares[memberIndex]!,
             }))
             .filter((share) => !workerView || share.personId === item.ownPerson?.person_id);
-          reports.push({
+          return {
             workReportId: item.reportId,
             workTaskId: item.task.work_task_id,
             reworkOrderId,
@@ -531,25 +636,24 @@ export class WorkReportingService {
             status: "submitted",
             groupAmount: workerView ? null : groupAmount,
             memberShares: visibleShares,
-          });
-          if (completesOrder) {
-            completionEventId = eventId;
-            completionActor = item.reportingActor;
-          }
-        }
+          };
+        });
+
+        const completion = audited[audited.length - 1]
+          ?? error("批量报数完工事件缺失", 500, "INTERNAL_ERROR");
 
         if (completedOrder) {
+          await this.context(client, completion.eventId, actor.requestId);
           await client.query(
             "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$3",
             [reworkOrderId, actor.actorId, order.version],
           );
           await this.todos?.actionableForUniqueDirectRole(
             client,
-            completionActor ?? error("批量报数完工授权上下文缺失", 500, "INTERNAL_ERROR"),
+            completion.reportingActor,
             {
               category: "whole_order_review",
-              sourceEventId: completionEventId
-                ?? error("批量报数完工事件缺失", 500, "INTERNAL_ERROR"),
+              sourceEventId: completion.eventId,
               sourceAction: "rework.work_report.submit",
               entityType: "rework_order",
               entityId: reworkOrderId,

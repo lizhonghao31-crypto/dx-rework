@@ -6,6 +6,14 @@ import { ApplicationError } from "../platform/errors.js";
 
 export type SqlClient = Pick<PoolClient, "query">;
 export type TrustedActorContext = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string; authorizationCapabilities?: readonly string[]; requestId: string }>;
+export type OperationEventInput = Readonly<{
+  action: string;
+  entityType: string;
+  entityId: string;
+  before?: unknown;
+  after?: unknown;
+  reason?: string;
+}>;
 
 const validateClaimOptions = (limit: number, leaseSeconds: number): void => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
@@ -80,7 +88,7 @@ export class IdempotencyService {
 }
 
 export class OperationEventRepository {
-  async append(client: SqlClient, actor: TrustedActorContext, input: { action: string; entityType: string; entityId: string; before?: unknown; after?: unknown; reason?: string }): Promise<string> {
+  private actorRoles(actor: TrustedActorContext): string[] {
     const actorRoles = [...new Set(actor.actorRoles)].sort();
     const safeCode = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
     if (actorRoles.length === 0 || actorRoles.some((role) => !safeCode.test(role))) {
@@ -89,6 +97,11 @@ export class OperationEventRepository {
     if (!safeCode.test(actor.authorizationCapability)) {
       throw new ApplicationError("FORBIDDEN", "A trusted authorization capability is required", 403);
     }
+    return actorRoles;
+  }
+
+  async append(client: SqlClient, actor: TrustedActorContext, input: OperationEventInput): Promise<string> {
+    const actorRoles = this.actorRoles(actor);
     const eventId = randomUUID();
     await client.query(
       `INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,before_state,after_state,reason)
@@ -96,6 +109,42 @@ export class OperationEventRepository {
       [eventId, actor.requestId, actor.actorId, actorRoles, actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
     );
     return eventId;
+  }
+
+  async appendMany(
+    client: SqlClient,
+    entries: readonly Readonly<{ actor: TrustedActorContext; input: OperationEventInput }>[],
+  ): Promise<string[]> {
+    if (entries.length === 0) return [];
+    const rows = entries.map(({ actor, input }) => ({
+      event_id: randomUUID(),
+      request_id: actor.requestId,
+      actor_id: actor.actorId,
+      actor_roles: this.actorRoles(actor),
+      authorization_capability: actor.authorizationCapability,
+      action: input.action,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      before_state: input.before ?? null,
+      after_state: input.after ?? null,
+      reason: input.reason ?? null,
+    }));
+    await client.query(
+      `INSERT INTO operation_events(
+         event_id,request_id,actor_id,actor_roles,authorization_capability,
+         action,entity_type,entity_id,before_state,after_state,reason
+       )
+       SELECT event.event_id::uuid,event.request_id,event.actor_id::uuid,event.actor_roles,
+              event.authorization_capability,event.action,event.entity_type,event.entity_id,
+              event.before_state,event.after_state,event.reason
+       FROM jsonb_to_recordset($1::jsonb) AS event(
+         event_id text,request_id text,actor_id text,actor_roles text[],
+         authorization_capability text,action text,entity_type text,entity_id text,
+         before_state jsonb,after_state jsonb,reason text
+       )`,
+      [JSON.stringify(rows)],
+    );
+    return rows.map((row) => row.event_id);
   }
 }
 
