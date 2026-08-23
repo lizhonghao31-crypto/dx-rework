@@ -297,7 +297,7 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
     )).rejects.toMatchObject({ code: "55000" });
   });
 
-  it("lets Root save a worker plan without any ordinary business-role assignment", async () => {
+  it("lets Root save and batch-report a mixed worker and tail plan without ordinary role assignments", async () => {
     const order = await createSubmittedOrder("PR04-PG-ROOT");
     const saved = await saveConfiguration(order.value.reworkOrderId, order.value.version);
     const rootUser: AuthUser = { id: ids.root, displayName: "Root", capabilities: [], businessRoles: [] };
@@ -325,5 +325,50 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
       "SELECT planned_by FROM rework_process_worker_plans WHERE configuration_id=$1",
       [saved.value.configuration!.configurationId],
     )).rows[0]?.planned_by).toBe(ids.root);
+
+    const submitted = await configuration.submit(tailConfigure(), order.value.reworkOrderId, {
+      expectedOrderVersion: saved.value.orderVersion,
+      expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      tailInspectors: [],
+    }, randomUUID());
+    const approved = await configuration.review(ie(), order.value.reworkOrderId, {
+      expectedOrderVersion: submitted.value.orderVersion,
+      expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      decision: "approved",
+    }, randomUUID());
+    await workerPlan.activateAfterIeApproval(
+      order.value.reworkOrderId,
+      approved.value.configuration!.configurationVersion,
+      randomUUID(),
+    );
+    const rootReport = await businessActor(
+      rootAuthority,
+      rootUser,
+      randomUUID(),
+      "work:report_for_worker",
+      "tail_supervisor",
+    );
+    const reportingView = await workReporting.list(rootReport, order.value.reworkOrderId);
+    expect(reportingView.tasks.map((task) => task.executionKind).sort()).toEqual([
+      "tail_inspection",
+      "worker",
+    ]);
+
+    const batch = await workReporting.submitReportsBatch(rootReport, order.value.reworkOrderId, {
+      expectedOrderVersion: reportingView.orderVersion,
+      reports: reportingView.tasks.map((task) => ({
+        workTaskId: task.workTaskId,
+        actualQuantity: 5_500,
+      })),
+    }, randomUUID());
+    expect(batch.value).toMatchObject({
+      reworkOrderId: order.value.reworkOrderId,
+      reworkStatus: "pending_order_review",
+    });
+    expect(batch.value.reports).toHaveLength(2);
+    expect((await database.query(
+      "SELECT count(*)::int AS count FROM rework_work_reports WHERE rework_order_id=$1",
+      [order.value.reworkOrderId],
+    )).rows[0]?.count).toBe(2);
   });
 });
