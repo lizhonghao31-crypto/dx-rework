@@ -346,6 +346,7 @@ export class ResponsibilityDeterminationService {
             AND wage.invalidated_at IS NULL
            WHERE configuration.rework_order_id=$1
              AND configuration.status='approved'
+             AND item.execution_kind='worker'
            GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit
            ORDER BY item.configuration_item_id`
         : `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
@@ -363,6 +364,7 @@ export class ResponsibilityDeterminationService {
            LEFT JOIN rework_work_report_member_shares share USING(work_report_id)
            WHERE configuration.rework_order_id=$1
              AND configuration.status='approved'
+             AND item.execution_kind='worker'
            GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit
            ORDER BY item.configuration_item_id`,
       [orderId],
