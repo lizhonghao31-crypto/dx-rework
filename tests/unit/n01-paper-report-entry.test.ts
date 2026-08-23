@@ -57,10 +57,11 @@ describe("N01 v2 streamlined initiation", () => {
     ]);
 
     expect(board).toContain('pageUrl("ui/qc/new")');
-    expect(board).toContain("styleNo=${encodeURIComponent(row.styleNo)}");
+    expect(board).toContain("new URLSearchParams({ styleNo: row.styleNo, receivingBatchId: row.receivingBatchId })");
     expect(board).toContain("发起返工");
     expect(navigation).toContain('name: "发起返工"');
     expect(form).toContain('get("styleNo")');
+    expect(form).toContain('get("receivingBatchId")');
     expect(form).not.toContain("differenceQuantity");
     expect(form).not.toContain("lastReceiverName");
     expect(form).not.toContain("receivedAt");
