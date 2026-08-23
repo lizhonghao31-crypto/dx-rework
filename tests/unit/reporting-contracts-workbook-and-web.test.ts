@@ -122,8 +122,9 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
       },
     } as never, {} as never, { from: "2026-08-01", to: "2026-08-31" } as never, 100);
 
-    expect(api).toContain("COALESCE(allocation.multiplier,process.multiplier)::text multiplier");
-    expect(statement).toContain("COALESCE(allocation.multiplier,process.multiplier)::text multiplier");
+    expect(api).toContain("JOIN rework_responsibility_allocations responsibility_allocation");
+    expect(api).toContain("COALESCE(responsibility_allocation.multiplier,process.multiplier)::text multiplier");
+    expect(statement).toContain("COALESCE(responsibility_allocation.multiplier,process.multiplier)::text multiplier");
     expect(report.rows).toMatchObject([{ multiplier: "1.200", amount: "12.00" }]);
   });
 });
