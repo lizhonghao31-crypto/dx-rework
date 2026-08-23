@@ -29,6 +29,7 @@ const createHarness = (input: {
   membersPerTask: number;
   actorId: string;
   memberAppUserId?: (taskIndex: number, memberIndex: number) => string | null;
+  executionKind?: (taskIndex: number) => "worker" | "tail_inspection";
   failShares?: boolean;
 }) => {
   const orderId = uuid(1);
@@ -41,7 +42,7 @@ const createHarness = (input: {
     assignment_mode: "individual" as const,
     status: "active" as const,
     process_name: `极端工序${index + 1}`,
-    execution_kind: "worker" as const,
+    execution_kind: input.executionKind?.(index) ?? "worker",
     pricing_unit: "piece" as const,
     planned_quantity: "5000",
     unit_price: "1",
@@ -180,6 +181,31 @@ describe("work report batch set-based persistence", () => {
 
     expect(harness.commands).toContain("ROLLBACK");
     expect(harness.commands).not.toContain("COMMIT");
+  });
+
+  it("returns one valid response for 48 worker and 2 tail-inspection reports in the same 50-item Root batch", async () => {
+    const actorId = uuid(2);
+    const harness = createHarness({
+      taskCount: 50,
+      membersPerTask: 1,
+      actorId,
+      executionKind: (taskIndex) => taskIndex < 48 ? "worker" : "tail_inspection",
+    });
+    const result = await harness.service.submitReportsBatch(root(actorId), harness.orderId, {
+      expectedOrderVersion: 2,
+      reports: harness.taskIds.map((workTaskId) => ({ workTaskId, actualQuantity: 5_500 })),
+    }, "batch-48-workers-2-tail");
+
+    expect(WorkReportsBatchResponseSchema.parse(result.value)).toEqual(result.value);
+    expect(result.value).toMatchObject({
+      reworkStatus: "pending_order_review",
+      orderVersion: 3,
+    });
+    expect(result.value.reports).toHaveLength(50);
+    expect(harness.insertedEvents()).toBe(50);
+    expect(harness.insertedShares()).toBe(50);
+    expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_reports("))).toHaveLength(2);
+    expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_report_member_shares"))).toHaveLength(2);
   });
 
   it("rejects an ordinary worker batch containing another worker's task before any audit or report write", async () => {
