@@ -516,11 +516,9 @@ export function ReworkDetailPage({
             </div>
           )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
           {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
-            {attachment.entityType === "external_responsibility_case"
-              ? "外部责任 · "
-              : attachment.entityType === "receiving_batch"
-                ? "收货凭证 · "
-                : ""}{attachment.filename}{" "}
+            {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}
+            {attachment.entityType === "receiving_batch" ? "收货凭证 · " : ""}
+            {attachment.filename}{" "}
             <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
             <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
           </span>)}</p>}
@@ -617,7 +615,7 @@ export function ReworkDetailPage({
               <OrderImageSupplementUploader
                 reworkOrderId={detail.reworkOrderId}
                 expectedVersion={detail.version}
-                currentAttachmentCount={orderAttachments.length}
+                currentAttachmentCount={detail.attachments.filter((attachment) => attachment.entityType === "rework_order").length}
                 onUploaded={async () => { await load(); }}
               />
             )}
