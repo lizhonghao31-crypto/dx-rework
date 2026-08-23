@@ -30,35 +30,15 @@ jobs:
           from pathlib import Path
           p = Path('tests/integration/receiving-postgres.test.ts')
           s = p.read_text()
-          old = '''  const receiver = (): TrustedActorContext => ({
-            actorId: receiverId,
-            actorRoles: ["warehouse_receiver"],
-            authorizationCapability: "receiving:create",
-            authorizationCapabilities: ["receiving:create"],
-            requestId: randomUUID(),
-          });
-          '''
-          new = old + '''
-          const initiator = (): TrustedActorContext => ({
-            actorId: receiverId,
-            actorRoles: ["quality_control"],
-            authorizationCapability: "rework:initiate",
-            authorizationCapabilities: ["rework:initiate"],
-            requestId: randomUUID(),
-          });
-          '''
-          if old not in s:
-              raise SystemExit('receiver fixture anchor not found')
-          s = s.replace(old, new, 1)
-          old_call = '''    const draft = await reworkService.createDraft(receiver(), {
-                styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
-              }, randomUUID());'''
-          new_call = '''    const draft = await reworkService.createDraft(initiator(), {
-                styleNo: "STYLE-LEGACY-DRAFT-AUDIT",
-              }, randomUUID());'''
-          if old_call not in s:
-              raise SystemExit('createDraft test anchor not found')
-          s = s.replace(old_call, new_call, 1)
+          migration_anchor = '  const migration = async (name: string): Promise<void> => {'
+          initiator = '  const initiator = (): TrustedActorContext => ({\n    actorId: receiverId,\n    actorRoles: ["quality_control"],\n    authorizationCapability: "rework:initiate",\n    authorizationCapabilities: ["rework:initiate"],\n    requestId: randomUUID(),\n  });\n\n'
+          if migration_anchor not in s:
+              raise SystemExit('migration anchor not found')
+          s = s.replace(migration_anchor, initiator + migration_anchor, 1)
+          call_anchor = 'reworkService.createDraft(receiver(), {'
+          if s.count(call_anchor) != 1:
+              raise SystemExit(f'expected exactly one legacy createDraft(receiver) call, found {s.count(call_anchor)}')
+          s = s.replace(call_anchor, 'reworkService.createDraft(initiator(), {', 1)
           p.write_text(s)
           PY
           rm -f .github/workflows/zz-pr01-test-fix-once.yml
@@ -71,10 +51,12 @@ jobs:
             -e POSTGRES_DB=dx_rework_ci \
             -p 5432:5432 postgres:16-alpine
           trap 'docker rm -f dx-rework-pr01-testfix-pg >/dev/null 2>&1 || true' EXIT
+          ready=0
           for _ in $(seq 1 60); do
-            if docker exec dx-rework-pr01-testfix-pg pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then break; fi
+            if docker exec dx-rework-pr01-testfix-pg pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then ready=1; break; fi
             sleep 1
           done
+          test "$ready" = 1
           export TEST_DATABASE_URL='postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
           export DATABASE_URL="$TEST_DATABASE_URL"
           npx vitest run tests/integration/receiving-postgres.test.ts
