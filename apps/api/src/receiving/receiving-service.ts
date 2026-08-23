@@ -145,7 +145,15 @@ export class ReceivingService {
               EXISTS(
                 SELECT 1 FROM rework_orders rework
                 WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
-                  AND rework.status='completed'
+                  AND (
+                    rework.status='completed'
+                    OR EXISTS (
+                      SELECT 1 FROM operation_events event
+                      WHERE event.entity_type='rework_order'
+                        AND event.entity_id=rework.rework_order_id::text
+                        AND event.after_state->>'status'='completed'
+                    )
+                  )
               ) AS closed
        FROM receiving_batches batch
        WHERE batch.style_no=$1

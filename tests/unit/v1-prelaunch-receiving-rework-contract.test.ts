@@ -68,6 +68,14 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(migration).toContain("rework_orders_01_lock_receiving_batch_completion");
   });
 
+  it("keeps a receiving batch closed after responsibility reopens the current order status", async () => {
+    const service = await read("apps/api/src/receiving/receiving-service.ts");
+    expect(service).toContain("operation_events");
+    expect(service).toContain("event.entity_type='rework_order'");
+    expect(service).toContain("event.entity_id=rework.rework_order_id::text");
+    expect(service).toContain("event.after_state->>'status'='completed'");
+  });
+
   it("renders linked receiving evidence in rework detail without copying the attachment", async () => {
     const [detailService, detailPage] = await Promise.all([
       read("apps/api/src/rework/rework-business-detail-service.ts"),
