@@ -57,7 +57,12 @@ const create = (
           completedAt: "2026-08-02T12:00:00.000Z",
           status: "submitted" as const,
           groupAmount: 0,
-          memberShares: [{ personId: "00000000-0000-4000-8000-000000000013", amount: 0 }],
+          memberShares: [{
+            personId: index === 23 || index === 37
+              ? migratedTailPersonId
+              : "00000000-0000-4000-8000-000000000013",
+            amount: 0,
+          }],
         })),
       },
       reused: false,
@@ -137,6 +142,8 @@ describe("work reporting routes", () => {
       orderVersion: 3,
     });
     expect(response.json().reports).toHaveLength(50);
+    expect(response.json().reports[23].memberShares[0].personId).toBe(migratedTailPersonId);
+    expect(response.json().reports[37].memberShares[0].personId).toBe(migratedTailPersonId);
     expect(service.submitReportsBatch).toHaveBeenCalledTimes(1);
     expect(service.submitReportsBatch).toHaveBeenCalledWith(
       expect.objectContaining({
