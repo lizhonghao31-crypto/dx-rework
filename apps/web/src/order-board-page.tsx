@@ -6,7 +6,9 @@ import "./order-board-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
+type ReworkStatus = "draft" | "active" | "completed" | null;
 type BoardRow = Readonly<{
+  receivingBatchId: string;
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -14,6 +16,8 @@ type BoardRow = Readonly<{
   receiptCount: number;
   lastReceivedAt: string;
   lastReceiverName: string;
+  reworkOrderId: string | null;
+  reworkStatus: ReworkStatus;
 }>;
 
 type BoardResult = Readonly<{
@@ -52,6 +56,13 @@ const dateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   hour12: false,
 }).format(new Date(value));
+
+const reworkLabel = (status: ReworkStatus): string => {
+  if (status === "draft") return "继续填写";
+  if (status === "active") return "正在返工";
+  if (status === "completed") return "返工结束";
+  return "发起返工";
+};
 
 export function OrderBoardPage() {
   const [date, setDate] = useState(localDate);
@@ -117,6 +128,20 @@ export function OrderBoardPage() {
     differenceRate: 0,
   }, [data]);
 
+  const reworkControl = (row: BoardRow, mobile: boolean) => {
+    const className = `order-board-rework-link ${mobile ? "order-board-rework-link--mobile" : "order-board-rework-link--desktop"}`;
+    const label = reworkLabel(row.reworkStatus);
+    if (row.reworkStatus === null) {
+      if (!canInitiate) return null;
+      const params = new URLSearchParams({ styleNo: row.styleNo, receivingBatchId: row.receivingBatchId });
+      return <a className={className} href={`${pageUrl("ui/qc/new")}?${params.toString()}`}>{label}</a>;
+    }
+    if (row.reworkOrderId && canInitiate) {
+      return <a className={className} href={pageUrl(`ui/tasks/${row.reworkOrderId}`)}>{label}</a>;
+    }
+    return <span className={`${className} is-readonly`}>{label}</span>;
+  };
+
   return <div className="order-board-page">
     <div className="order-board-heading">
       <div className="order-board-heading__title">
@@ -149,8 +174,7 @@ export function OrderBoardPage() {
       {data?.rows.map((row) => {
         const tone = row.differenceQuantity < 0 ? "short" : row.differenceQuantity > 0 ? "extra" : "even";
         const signed = row.differenceQuantity > 0 ? `+${row.differenceQuantity}` : String(row.differenceQuantity);
-        const initiateHref = `${pageUrl("ui/qc/new")}?styleNo=${encodeURIComponent(row.styleNo)}`;
-        return <Surface className={`order-board-row is-${tone}`} key={row.styleNo}>
+        return <Surface className={`order-board-row is-${tone}`} key={row.receivingBatchId}>
           <div className="order-board-row__style">
             <span>款号</span>
             <div className="order-board-row__style-line">
@@ -158,7 +182,7 @@ export function OrderBoardPage() {
               <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
-              {canInitiate ? <a className="order-board-rework-link order-board-rework-link--desktop" href={initiateHref}>发起返工</a> : null}
+              {reworkControl(row, false)}
             </div>
           </div>
           <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
@@ -167,7 +191,7 @@ export function OrderBoardPage() {
           <div><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
           <div><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
           <div><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
-          {canInitiate ? <a className="order-board-rework-link order-board-rework-link--mobile" href={initiateHref}>发起返工</a> : null}
+          {reworkControl(row, true)}
         </Surface>;
       })}
     </div>

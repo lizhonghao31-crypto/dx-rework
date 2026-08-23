@@ -20,7 +20,12 @@ const idempotencyKey = (request: FastifyRequest): string => {
   return value;
 };
 
-const createBody = (input: unknown): { styleNo: string; documentQuantity: number; actualQuantity: number } => {
+const createBody = (input: unknown): {
+  styleNo: string;
+  documentQuantity: number;
+  actualQuantity: number;
+  attachmentIds: readonly string[];
+} => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "收货信息不完整", 400);
   }
@@ -28,10 +33,17 @@ const createBody = (input: unknown): { styleNo: string; documentQuantity: number
   if (typeof body.styleNo !== "string") {
     throw new ApplicationError("VALIDATION_ERROR", "请选择或填写款号", 400);
   }
+  if (body.attachmentIds !== undefined && (
+    !Array.isArray(body.attachmentIds)
+    || body.attachmentIds.some((value) => typeof value !== "string")
+  )) {
+    throw new ApplicationError("VALIDATION_ERROR", "收货单图片信息无效", 400);
+  }
   return {
     styleNo: body.styleNo,
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
+    attachmentIds: (body.attachmentIds as string[] | undefined) ?? [],
   };
 };
 
