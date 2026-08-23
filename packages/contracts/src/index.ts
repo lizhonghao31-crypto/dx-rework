@@ -669,6 +669,18 @@ export const CreateWorkReportSchema = z.object({
   remark: z.string().trim().min(1).max(500).optional(),
   resubmitsWorkReportId: IdSchema.optional(),
 }).strict();
+const WorkReportBatchItemSchema = CreateWorkReportSchema
+  .omit({ expectedOrderVersion: true })
+  .extend({ workTaskId: IdSchema })
+  .strict();
+export const CreateWorkReportsBatchSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  reports: z.array(WorkReportBatchItemSchema).min(1).max(200),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.reports.map((report) => report.workTaskId)).size !== value.reports.length) {
+    context.addIssue({ code: "custom", path: ["reports"], message: "Work tasks cannot be reported more than once per batch" });
+  }
+});
 export const WorkTaskAssignablePeopleResponseSchema = z.object({
   people: z.array(z.object({
     personId: IdSchema,
@@ -704,6 +716,12 @@ export const WorkReportResponseSchema = z.object({
   groupAmount: z.number().nonnegative().nullable(),
   memberShares: z.array(z.object({ personId: IdSchema, amount: z.number().nonnegative() }).strict()),
 });
+export const WorkReportsBatchResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkStatus: z.enum(["in_progress", "pending_order_review"]),
+  orderVersion: z.number().int().positive(),
+  reports: z.array(WorkReportResponseSchema).min(1).max(200),
+}).strict();
 export const ReworkWorkTasksResponseSchema = z.object({
   reworkOrderId: IdSchema,
   reworkStatus: ReworkOrderStatusSchema,
@@ -713,6 +731,8 @@ export const ReworkWorkTasksResponseSchema = z.object({
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
 export type ConfirmWorkAssignments = z.infer<typeof ConfirmWorkAssignmentsSchema>;
 export type CreateWorkReport = z.infer<typeof CreateWorkReportSchema>;
+export type CreateWorkReportsBatch = z.infer<typeof CreateWorkReportsBatchSchema>;
+export type WorkReportsBatchResponse = z.infer<typeof WorkReportsBatchResponseSchema>;
 export type WorkTaskAssignablePeopleResponse = z.infer<typeof WorkTaskAssignablePeopleResponseSchema>;
 export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;
 export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;

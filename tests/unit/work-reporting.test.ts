@@ -37,6 +37,9 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("我已完工&上数");
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportQuantities");
+    expect(form).toContain("work-reports/batch");
+    expect(form).toContain("正在批量提交");
+    expect(form).not.toContain("for (const { task, text } of quantities)");
     expect(form).toContain('step="1"');
     expect(form).toContain("大于 0 的整数件数");
     expect(form).toContain("当前岗位只处理尾部确认，不展示工人的个人上数");
@@ -49,6 +52,9 @@ describe("work reporting monetary snapshots", () => {
     expect(service).toContain("async confirmAssignments");
     expect(service).toContain("if (order.version !== input.expectedOrderVersion)");
     expect(service).toContain("rework.work_task.assignment_confirm");
+    expect(service).toContain("async submitReportsBatch");
+    expect(service).toContain("rework.work_report.batch_submit");
+    expect(service).toContain("submittedWorkTaskIds: readonly string[]");
     expect(service).toContain("该人员已经分配到这道工序");
   });
 

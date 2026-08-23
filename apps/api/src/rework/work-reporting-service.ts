@@ -2,10 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type {
   CreateWorkReport,
+  CreateWorkReportsBatch,
   CreateWorkTask,
   ConfirmWorkAssignments,
   ReworkWorkTasksResponse,
   WorkReportResponse,
+  WorkReportsBatchResponse,
   WorkTaskResponse,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
@@ -292,7 +294,7 @@ export class WorkReportingService {
       );
       if (existing.rows[0]) error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
       const groupAmount = 0;
-      const completedOrder = await this.readyForWholeOrderReview(client, task.rework_order_id, task.work_task_id);
+      const completedOrder = await this.readyForWholeOrderReview(client, task.rework_order_id, [task.work_task_id]);
       if (input.resubmitsWorkReportId) {
         const rejected = await client.query<{ work_report_id: string }>(
           `SELECT report.work_report_id FROM rework_work_reports report
@@ -349,6 +351,225 @@ export class WorkReportingService {
       const visibleShares = members.map((member, index) => ({ personId: member.person_id, amount: shares[index]! })).filter((share) => !workerView || share.personId === ownPerson?.person_id);
       return { workReportId: reportId, workTaskId, reworkOrderId: task.rework_order_id, actualQuantity: input.actualQuantity, completedAt: completedAt.toISOString(), status: "submitted", groupAmount: workerView ? null : groupAmount, memberShares: visibleShares };
     });
+  }
+
+  async submitReportsBatch(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: CreateWorkReportsBatch,
+    key: string,
+  ): Promise<Result<WorkReportsBatchResponse>> {
+    return this.mutate(
+      actor,
+      "rework.work_report.batch_submit",
+      key,
+      { reworkOrderId, ...input },
+      201,
+      async (client) => {
+        if (input.reports.length === 0) {
+          error("批量报数至少需要一项任务", 400, "VALIDATION_ERROR");
+        }
+        if (new Set(input.reports.map((report) => report.workTaskId)).size !== input.reports.length) {
+          error("同一返工任务不能在一批中重复上数", 400, "VALIDATION_ERROR");
+        }
+
+        const lockedTasks: Array<{
+          input: CreateWorkReportsBatch["reports"][number];
+          task: WorkTaskRow;
+          inputIndex: number;
+        }> = [];
+        const lockOrder = input.reports
+          .map((reportInput, inputIndex) => ({ reportInput, inputIndex }))
+          .sort((left, right) => left.reportInput.workTaskId.localeCompare(right.reportInput.workTaskId));
+        for (const { reportInput, inputIndex } of lockOrder) {
+          const task = await this.task(client, reportInput.workTaskId, true);
+          if (task.rework_order_id !== reworkOrderId) error("批量报数包含不属于当前返工单的任务", 400, "VALIDATION_ERROR");
+          if (task.status !== "active") error("该任务版本已被替换，请使用最新任务");
+          lockedTasks.push({ input: reportInput, task, inputIndex });
+        }
+        lockedTasks.sort((left, right) => left.inputIndex - right.inputIndex);
+
+        const order = await this.order(client, reworkOrderId, true);
+        if (order.status !== "in_progress") error("当前返工单不在完成数量登记节点", 409, "INVALID_STATE_TRANSITION");
+        if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
+
+        const prepared: Array<{
+          input: CreateWorkReportsBatch["reports"][number];
+          task: WorkTaskRow;
+          members: PersonRow[];
+          ownPerson: PersonRow | undefined;
+          reportingActor: TrustedActorContext;
+          reportId: string;
+          shares: number[];
+        }> = [];
+        for (const { input: reportInput, task } of lockedTasks) {
+          const members = await this.members(client, task.work_task_id);
+          const ownPerson = members.find((person) => person.app_user_id === actor.actorId);
+          const reportingCapability = this.reportCapability(actor, task, members);
+          if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
+          if (!Number.isInteger(reportInput.actualQuantity)) {
+            error("返工执行报数只能填写整数件数", 400, "VALIDATION_ERROR");
+          }
+          const existing = await client.query<{ work_report_id: string }>(
+            `SELECT report.work_report_id
+             FROM rework_work_reports report
+             WHERE report.work_task_id=$1 AND report.status='submitted'
+               AND NOT EXISTS (
+                 SELECT 1 FROM rework_work_report_rejections rejection
+                 WHERE rejection.work_report_id=report.work_report_id
+               )
+             FOR UPDATE`,
+            [task.work_task_id],
+          );
+          if (existing.rows[0]) error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
+          if (reportInput.resubmitsWorkReportId) {
+            const rejected = await client.query<{ work_report_id: string }>(
+              `SELECT report.work_report_id FROM rework_work_reports report
+               JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
+               WHERE report.work_report_id=$1 AND report.work_task_id=$2 AND report.rework_order_id=$3
+                 AND report.configuration_item_id=$4 FOR SHARE`,
+              [
+                reportInput.resubmitsWorkReportId,
+                task.work_task_id,
+                reworkOrderId,
+                task.configuration_item_id,
+              ],
+            );
+            if (!rejected.rows[0]) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
+          }
+          prepared.push({
+            input: reportInput,
+            task,
+            members,
+            ownPerson,
+            reportingActor: { ...actor, authorizationCapability: reportingCapability! },
+            reportId: randomUUID(),
+            shares: members.map(() => 0),
+          });
+        }
+
+        const completedOrder = await this.readyForWholeOrderReview(
+          client,
+          reworkOrderId,
+          prepared.map(({ task }) => task.work_task_id),
+        );
+        const reports: WorkReportResponse[] = [];
+        let completionEventId: string | undefined;
+        let completionActor: TrustedActorContext | undefined;
+        for (const [index, item] of prepared.entries()) {
+          const completesOrder = completedOrder && index === prepared.length - 1;
+          const groupAmount = 0;
+          const eventId = await this.events.append(client, item.reportingActor, {
+            action: "rework.work_report.submit",
+            entityType: "rework_order",
+            entityId: reworkOrderId,
+            before: {
+              submittedQuantity: 0,
+              plannedQuantity: numberValue(item.task.planned_quantity),
+            },
+            after: {
+              ...this.orderAuditState(
+                order,
+                completesOrder ? "pending_order_review" : order.status,
+                completesOrder ? order.version + 1 : order.version,
+              ),
+              workReportId: item.reportId,
+              workTaskId: item.task.work_task_id,
+              actualQuantity: item.input.actualQuantity,
+              groupAmount,
+              memberIds: item.members.map((member) => member.person_id),
+              resubmitsWorkReportId: item.input.resubmitsWorkReportId ?? null,
+            },
+            ...(item.input.remark ? { reason: item.input.remark } : {}),
+          });
+          await this.context(client, eventId, actor.requestId);
+          const reportInsert = await client.query<{ completed_at: Date }>(
+            "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP,$6,$7,$8,$9) RETURNING completed_at",
+            [
+              item.reportId,
+              item.task.work_task_id,
+              reworkOrderId,
+              item.task.configuration_item_id,
+              item.input.actualQuantity,
+              item.input.remark ?? null,
+              groupAmount,
+              actor.actorId,
+              item.input.resubmitsWorkReportId ?? null,
+            ],
+          );
+          const completedAt = reportInsert.rows[0]?.completed_at
+            ?? error("完工时间记录失败", 500, "INTERNAL_ERROR");
+          if (item.input.resubmitsWorkReportId) {
+            await this.todos?.completeOpenByDedupeKey(
+              client,
+              item.reportingActor,
+              `work-report-return:${item.input.resubmitsWorkReportId}`,
+              "Returned work report was corrected and resubmitted",
+            );
+          }
+          for (const [memberIndex, member] of item.members.entries()) {
+            await client.query(
+              "INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,$3)",
+              [item.reportId, member.person_id, item.shares[memberIndex]],
+            );
+          }
+          const workerView = item.reportingActor.authorizationCapability !== "work:report_for_worker"
+            && !this.isSupervisor(actor)
+            && !isRootActor(actor);
+          const visibleShares = item.members
+            .map((member, memberIndex) => ({
+              personId: member.person_id,
+              amount: item.shares[memberIndex]!,
+            }))
+            .filter((share) => !workerView || share.personId === item.ownPerson?.person_id);
+          reports.push({
+            workReportId: item.reportId,
+            workTaskId: item.task.work_task_id,
+            reworkOrderId,
+            actualQuantity: item.input.actualQuantity,
+            completedAt: completedAt.toISOString(),
+            status: "submitted",
+            groupAmount: workerView ? null : groupAmount,
+            memberShares: visibleShares,
+          });
+          if (completesOrder) {
+            completionEventId = eventId;
+            completionActor = item.reportingActor;
+          }
+        }
+
+        if (completedOrder) {
+          await client.query(
+            "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$3",
+            [reworkOrderId, actor.actorId, order.version],
+          );
+          await this.todos?.actionableForUniqueDirectRole(
+            client,
+            completionActor ?? error("批量报数完工授权上下文缺失", 500, "INTERNAL_ERROR"),
+            {
+              category: "whole_order_review",
+              sourceEventId: completionEventId
+                ?? error("批量报数完工事件缺失", 500, "INTERNAL_ERROR"),
+              sourceAction: "rework.work_report.submit",
+              entityType: "rework_order",
+              entityId: reworkOrderId,
+              requiredRole: "tail_supervisor",
+              requiredCapability: "submission:audit",
+              route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "whole_order_review" },
+              policyKey: "general",
+              dedupeKey: `whole-order-review:${reworkOrderId}:${order.version + 1}`,
+            },
+          );
+        }
+
+        return {
+          reworkOrderId,
+          reworkStatus: completedOrder ? "pending_order_review" : "in_progress",
+          orderVersion: completedOrder ? order.version + 1 : order.version,
+          reports,
+        };
+      },
+    );
   }
 
   private capabilities(actor: TrustedActorContext): readonly string[] {
@@ -433,7 +654,7 @@ export class WorkReportingService {
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
   }
 
-  private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskId: string): Promise<boolean> {
+  private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskIds: readonly string[]): Promise<boolean> {
     const result = await client.query<{ ready: boolean }>(
       `SELECT EXISTS(
          SELECT 1 FROM rework_work_tasks task
@@ -442,7 +663,7 @@ export class WorkReportingService {
        AND NOT EXISTS(
          SELECT 1 FROM rework_work_tasks task
          WHERE task.rework_order_id=$1 AND task.status='active'
-           AND task.work_task_id IS DISTINCT FROM $2::uuid
+           AND NOT (task.work_task_id=ANY($2::uuid[]))
            AND NOT EXISTS(
              SELECT 1 FROM rework_work_reports report
              WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
@@ -475,7 +696,7 @@ export class WorkReportingService {
            )
          )
        ) AS ready`,
-      [reworkOrderId, submittedWorkTaskId],
+      [reworkOrderId, submittedWorkTaskIds],
     );
     return result.rows[0]?.ready === true;
   }

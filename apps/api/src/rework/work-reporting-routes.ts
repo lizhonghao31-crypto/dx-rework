@@ -1,5 +1,6 @@
 import {
   CreateWorkReportSchema,
+  CreateWorkReportsBatchSchema,
   CreateWorkTaskSchema,
   ConfirmWorkAssignmentsSchema,
   IdempotencyKeySchema,
@@ -7,6 +8,7 @@ import {
   ReworkWorkTasksResponseSchema,
   WorkTaskAssignablePeopleResponseSchema,
   WorkReportResponseSchema,
+  WorkReportsBatchResponseSchema,
   WorkTaskParamsSchema,
   WorkTaskResponseSchema,
 } from "@dx-rework/contracts";
@@ -140,5 +142,28 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     );
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(WorkReportResponseSchema.parse(result.value));
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-reports/batch", async (request, reply) => {
+    const startedAt = Date.now();
+    const reworkOrderId = parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId;
+    const input = parse(CreateWorkReportsBatchSchema, request.body);
+    if (input.reports.some((report) => !Number.isInteger(report.actualQuantity))) {
+      throw new ApplicationError("VALIDATION_ERROR", "返工执行报数只能填写整数件数", 400);
+    }
+    const result = await dependencies.service.submitReportsBatch(
+      await actor(request, "report"),
+      reworkOrderId,
+      input,
+      key(request),
+    );
+    const response = WorkReportsBatchResponseSchema.parse(result.value);
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    request.log.info({
+      reworkOrderId,
+      reportCount: input.reports.length,
+      durationMs: Date.now() - startedAt,
+      idempotencyReplayed: result.reused,
+    }, "N04 batch work reports submitted");
+    return reply.code(201).send(response);
   });
 }
