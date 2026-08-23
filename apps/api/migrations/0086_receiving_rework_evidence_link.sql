@@ -90,7 +90,9 @@ CREATE UNIQUE INDEX rework_orders_active_receiving_batch_idx
 
 -- Server drafts bind to the latest unfinished receiving batch for their style.
 -- The advisory lock is shared with receiving writes and completion so the batch
--- lifecycle cannot race across transactions.
+-- lifecycle cannot race across transactions. Active rework is checked while
+-- holding that lock so insert/update never waits on the partial unique index
+-- while a completion transaction waits for the same advisory lock.
 CREATE OR REPLACE FUNCTION bind_rework_receiving_batch_on_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -123,6 +125,16 @@ BEGIN
       RAISE EXCEPTION 'source receiving batch is already completed'
         USING ERRCODE='55000';
     END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM rework_orders active_order
+      WHERE active_order.source_receiving_batch_id=NEW.source_receiving_batch_id
+        AND active_order.status NOT IN ('completed','cancelled','deleted')
+    ) THEN
+      RAISE EXCEPTION 'source receiving batch already has active rework'
+        USING ERRCODE='55000';
+    END IF;
   ELSIF NEW.style_no IS NOT NULL THEN
     PERFORM pg_advisory_xact_lock(hashtext(NEW.style_no));
 
@@ -138,6 +150,18 @@ BEGIN
       )
     ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
     LIMIT 1;
+
+    IF NEW.source_receiving_batch_id IS NOT NULL
+       AND EXISTS (
+         SELECT 1
+         FROM rework_orders active_order
+         WHERE active_order.source_receiving_batch_id=NEW.source_receiving_batch_id
+           AND active_order.status NOT IN ('completed','cancelled','deleted')
+       )
+    THEN
+      RAISE EXCEPTION 'source receiving batch already has active rework'
+        USING ERRCODE='55000';
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -201,6 +225,16 @@ BEGIN
       RAISE EXCEPTION 'source receiving batch is already completed'
         USING ERRCODE='55000';
     END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM rework_orders active_order
+      WHERE active_order.source_receiving_batch_id=NEW.source_receiving_batch_id
+        AND active_order.status NOT IN ('completed','cancelled','deleted')
+    ) THEN
+      RAISE EXCEPTION 'source receiving batch already has active rework'
+        USING ERRCODE='55000';
+    END IF;
   ELSIF NEW.style_no IS NOT NULL THEN
     PERFORM pg_advisory_xact_lock(hashtext(NEW.style_no));
 
@@ -216,6 +250,18 @@ BEGIN
       )
     ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
     LIMIT 1;
+
+    IF NEW.source_receiving_batch_id IS NOT NULL
+       AND EXISTS (
+         SELECT 1
+         FROM rework_orders active_order
+         WHERE active_order.source_receiving_batch_id=NEW.source_receiving_batch_id
+           AND active_order.status NOT IN ('completed','cancelled','deleted')
+       )
+    THEN
+      RAISE EXCEPTION 'source receiving batch already has active rework'
+        USING ERRCODE='55000';
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -254,3 +300,63 @@ $$;
 CREATE TRIGGER rework_orders_01_lock_receiving_batch_completion
   BEFORE UPDATE ON rework_orders
   FOR EACH ROW EXECUTE FUNCTION lock_receiving_batch_on_rework_completion();
+
+-- Receiving evidence is immutable once bound and every new receiving-batch
+-- binding must be covered by the same trusted receiving.receipt.create event
+-- that the service uses for the immutable receipt fact.
+CREATE OR REPLACE FUNCTION guard_receiving_attachment_binding()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.receiving_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.receiving_request_id', true), '');
+BEGIN
+  IF OLD.entity_type='receiving_batch' THEN
+    IF NEW IS DISTINCT FROM OLD THEN
+      RAISE EXCEPTION 'bound receiving evidence is immutable'
+        USING ERRCODE='55000';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.entity_type IS DISTINCT FROM 'receiving_batch' THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.entity_type IS NOT NULL OR OLD.entity_id IS NOT NULL OR NEW.entity_id IS NULL THEN
+    RAISE EXCEPTION 'receiving evidence cannot be moved directly between entities'
+      USING ERRCODE='23514';
+  END IF;
+
+  IF NEW.status<>'ready' THEN
+    RAISE EXCEPTION 'only ready receiving evidence can be bound'
+      USING ERRCODE='23514';
+  END IF;
+
+  IF audit_event_id IS NULL OR audit_request_id IS NULL THEN
+    RAISE EXCEPTION 'receiving attachment binding requires trusted audit context'
+      USING ERRCODE='55000';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM operation_events event
+    WHERE event.event_id=audit_event_id::uuid
+      AND event.request_id=audit_request_id
+      AND event.actor_id=NEW.uploaded_by
+      AND event.authorization_capability='receiving:create'
+      AND event.action='receiving.receipt.create'
+      AND event.entity_type='receiving_receipt'
+      AND event.after_state->>'receivingBatchId'=NEW.entity_id
+      AND event.after_state->'attachmentIds' ? NEW.attachment_id::text
+  ) THEN
+    RAISE EXCEPTION 'receiving attachment audit event does not match the binding'
+      USING ERRCODE='55000';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER attachments_receiving_binding_audit_guard
+  BEFORE UPDATE ON attachments
+  FOR EACH ROW EXECUTE FUNCTION guard_receiving_attachment_binding();

@@ -310,6 +310,27 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     )).rejects.toThrow();
   });
 
+  it("rejects unaudited receiving evidence rebinding", async () => {
+    const image = await readyImage();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-RECEIVING-AUDIT-GUARD",
+      documentQuantity: 10,
+      actualQuantity: 10,
+      attachmentIds: [image],
+    }, randomUUID());
+
+    await expect(database.query(
+      "UPDATE attachments SET entity_type=NULL,entity_id=NULL WHERE attachment_id=$1",
+      [image],
+    )).rejects.toThrow("bound receiving evidence is immutable");
+
+    const orphan = await readyImage();
+    await expect(database.query(
+      "UPDATE attachments SET entity_type='receiving_batch',entity_id=$2 WHERE attachment_id=$1",
+      [orphan, receipt.value.receivingBatchId],
+    )).rejects.toThrow("receiving attachment binding requires trusted audit context");
+  });
+
   it("binds a real server draft to the receiving batch, blocks a duplicate active rework, and reopens after cancellation", async () => {
     const image = await readyImage();
     const receipt = await service.create(receiver(), {
@@ -332,7 +353,8 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       reworkStatus: "draft",
     });
 
-    await expect(createReworkDraft("STYLE-REWORK-LINK-01")).rejects.toThrow();
+    await expect(createReworkDraft("STYLE-REWORK-LINK-01"))
+      .rejects.toThrow("source receiving batch already has active rework");
 
     await cancelReworkDraft(firstDraftId, "STYLE-REWORK-LINK-01");
     board = await service.board(businessDate());

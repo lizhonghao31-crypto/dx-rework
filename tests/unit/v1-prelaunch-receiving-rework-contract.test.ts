@@ -80,6 +80,21 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(detailPage).toContain("收货凭证 · ");
   });
 
+  it("locks batch-seeded N01 style and requires audited receiving evidence binding", async () => {
+    const [form, migration, service] = await Promise.all([
+      read("apps/web/src/rework-v2-form.tsx"),
+      read("apps/api/migrations/0086_receiving_rework_evidence_link.sql"),
+      read("apps/api/src/receiving/receiving-service.ts"),
+    ]);
+    expect(form).toContain("disabled={busy || Boolean(receivingBatchId)}");
+    expect(migration).toContain("source receiving batch already has active rework");
+    expect(migration).toContain("guard_receiving_attachment_binding");
+    expect(migration).toContain("receiving attachment binding requires trusted audit context");
+    expect(service.indexOf("const eventId = await this.events.append")).toBeLessThan(
+      service.indexOf("await this.bindReceivingImages"),
+    );
+  });
+
   it("removes only the order-board KPI meter decoration without changing the shared KPI component", async () => {
     const css = await read("apps/web/src/order-board-page.css");
     expect(css).toContain(".order-board-kpis");

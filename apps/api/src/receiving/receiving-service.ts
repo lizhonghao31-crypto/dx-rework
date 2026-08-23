@@ -226,8 +226,6 @@ export class ReceivingService {
     input: Required<CreateReceivingInput>,
   ): Promise<ReceivingReceipt> {
     const { receivingBatchId } = await this.resolveReceivingBatch(client, actor, input.styleNo);
-    await this.bindReceivingImages(client, actor, receivingBatchId, input.attachmentIds);
-
     const receiptId = randomUUID();
     const eventId = await this.events.append(client, actor, {
       action: "receiving.receipt.create",
@@ -247,6 +245,8 @@ export class ReceivingService {
       "SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
       [eventId, actor.requestId],
     );
+    await this.bindReceivingImages(client, actor, receivingBatchId, input.attachmentIds);
+
     const inserted = await client.query<{
       receipt_id: string;
       receiving_batch_id: string;

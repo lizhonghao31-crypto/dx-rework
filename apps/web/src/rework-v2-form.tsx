@@ -611,7 +611,7 @@ export function ReworkInitiationV2Form({
         {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{availableImageCount} 份报告</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
-        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
+        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
         <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory }); pendingSubmit.current = null; }} /></div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
       </div>
