@@ -30,6 +30,13 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(service).toContain("receiving_batch");
   });
 
+  it("does not label the bodyless attachment finalize request as JSON", async () => {
+    const page = await read("apps/web/src/receiving-page.tsx");
+    expect(page).toContain('...(init.body ? { "content-type": "application/json" } : {})');
+    expect(page).not.toContain('headers: { "content-type": "application/json", ...(init.headers ?? {}) }');
+    expect(page).toMatch(/tools\/attachments\/\$\{intent\.attachmentId\}\/finalize`[\s\S]{0,100}\{ method: "POST" \}/);
+  });
+
   it("keeps style number as the business key while giving the database an internal batch identity", async () => {
     const service = await read("apps/api/src/receiving/receiving-service.ts");
     expect(service).toContain("styleNo");
