@@ -3,6 +3,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
+import { useDebouncedValue } from "../use-debounced-value.js";
 import { loadReworkOrders, reportingPageUrl } from "./reporting-client.js";
 import "./reporting.css";
 
@@ -110,6 +111,7 @@ export function WorkflowQueuePage({
     requested && statuses.includes(requested) ? requested : statuses[0]!,
   );
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 180);
   const [overdue, setOverdue] = useState("");
   const [exception, setException] = useState("");
   const [from, setFrom] = useState("");
@@ -117,24 +119,23 @@ export function WorkflowQueuePage({
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const baseFilters = useMemo(() => ({
-    q: q.trim() || undefined,
+    q: debouncedQ.trim() || undefined,
     overdue: overdue || undefined,
     exception: exception || undefined,
     from: from || undefined,
     to: to || undefined,
     limit: "100",
-  }), [q, overdue, exception, from, to]);
+  }), [debouncedQ, overdue, exception, from, to]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setState({ kind: "loading" });
-      void Promise.allSettled(
-        statuses.map(async (status) => [
-          status,
-          await loadReworkOrders({ ...baseFilters, status }, controller.signal),
-        ] as const),
-      ).then((results) => {
+    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
+    void Promise.allSettled(
+      statuses.map(async (status) => [
+        status,
+        await loadReworkOrders({ ...baseFilters, status }, controller.signal),
+      ] as const),
+    ).then((results) => {
         if (controller.signal.aborted) return;
         const pages: Partial<Record<WorkflowStatus, ManagementReworkPage>> = {};
         const available: WorkflowStatus[] = [];
@@ -154,10 +155,8 @@ export function WorkflowQueuePage({
         }
         setState({ kind: "ready", pages, available });
         setSelected((current) => available.includes(current) ? current : available[0]!);
-      });
-    }, 180);
+    });
     return () => {
-      window.clearTimeout(timer);
       controller.abort();
     };
   }, [baseFilters, refresh, statuses]);
