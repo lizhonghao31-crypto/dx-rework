@@ -58,6 +58,13 @@ type ReworkBusinessDetail = Readonly<{
   factoryStyleNo: string | null;
   orderNo: string | null;
   orderQuantity: number | null;
+  sourceReceivingActualQuantity: number | null;
+  supplyContext: Readonly<{
+    washingSupplierName: string | null;
+    embroiderySupplierName: string | null;
+    fabricSupplierName: string | null;
+    embroideryMerchandiserName: string | null;
+  }>;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
@@ -468,7 +475,12 @@ export function ReworkDetailPage({
     { label: "问题部位", value: detail.problemPart },
     { label: "问题描述", value: detail.problemDescription },
     { label: "返工数量", value: detail.reworkQuantity === null ? null : `${detail.reworkQuantity} 件` },
+    { label: "洗水厂", value: detail.supplyContext.washingSupplierName },
+    { label: "印绣花厂", value: detail.supplyContext.embroiderySupplierName },
+    { label: "面辅料供应商", value: detail.supplyContext.fabricSupplierName },
+    { label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName },
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
+  const imageSlots = Array.from({ length: 6 }, (_, index) => imageAttachments[index] ?? null);
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
@@ -478,6 +490,14 @@ export function ReworkDetailPage({
   const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
   const selected = workflowNodes.find((node) => node.key === selectedNode);
   const activeStepIndex = Math.max(1, workflowNodes.findIndex((node) => node.key === activeNode) + 1);
+  const selectedImageIndex = selectedImage
+    ? imageAttachments.findIndex((attachment) => attachment.attachmentId === selectedImage.attachmentId)
+    : -1;
+  const showRelativeImage = (offset: number): void => {
+    if (selectedImageIndex < 0 || imageAttachments.length === 0) return;
+    const nextIndex = (selectedImageIndex + offset + imageAttachments.length) % imageAttachments.length;
+    setSelectedImage(imageAttachments[nextIndex] ?? null);
+  };
 
   const canSeeResponsibility = elevated(currentUser)
     || hasCapability(currentUser, "responsibility:determine")
@@ -583,12 +603,12 @@ export function ReworkDetailPage({
       <Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} {...backAction} />
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
-          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact rework-detail-core-fact--attachments"><dt>附件</dt><dd>{orderAttachments.length} 份</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${detail.sourceReceivingActualQuantity} 件`}</dd></div>
         </dl>
 
         {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
@@ -619,9 +639,8 @@ export function ReworkDetailPage({
                 onUploaded={async () => { await load(); }}
               />
             )}
-            {imageAttachments.length > 0 ? (
-              <div className="rework-detail-image-grid">
-                {imageAttachments.map((attachment) => (
+            <div className="rework-detail-image-grid">
+              {imageSlots.map((attachment, index) => attachment ? (
                   <button
                     className="rework-detail-image-card"
                     type="button"
@@ -630,11 +649,11 @@ export function ReworkDetailPage({
                     aria-label={`放大查看 ${attachment.filename}`}
                   >
                     <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
-                    <span>{attachment.filename}</span>
+                    <span className="rework-detail-image-card__filename">{attachment.filename}</span>
+                    {index === 5 && imageAttachments.length > 6 ? <strong className="rework-detail-image-card__overflow">+{imageAttachments.length - 5}</strong> : null}
                   </button>
-                ))}
-              </div>
-            ) : <p className="rework-detail-empty">暂无订单图片</p>}
+                ) : <div className="rework-detail-image-card rework-detail-image-card--empty" aria-hidden="true" key={`empty-${index}`}><span>暂无图片</span></div>)}
+            </div>
           </section>
 
           <section className="rework-workflow" key={detail.status} aria-label="订单流程">
@@ -701,7 +720,10 @@ export function ReworkDetailPage({
               <button type="button" onClick={() => setSelectedImage(null)}>关闭</button>
             </div>
             <img src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
-            <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
+            <div className="rework-image-modal__actions">
+              {imageAttachments.length > 1 ? <><button type="button" onClick={() => showRelativeImage(-1)}>上一张</button><span>{selectedImageIndex + 1} / {imageAttachments.length}</span><button type="button" onClick={() => showRelativeImage(1)}>下一张</button></> : null}
+              <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
+            </div>
           </section>
         </div>
       )}

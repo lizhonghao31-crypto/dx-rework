@@ -9,6 +9,7 @@ import { ManagementOrderCard } from "./management-order-card.js";
 import type { AuthorizedUser } from "../auth.js";
 import { createWebUrls } from "../../url-contract.js";
 import "./reporting.css";
+import "./rework-query-mobile.css";
 
 const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
   ["", "全部状态"],["draft","草稿"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],
@@ -72,15 +73,14 @@ export function ReworkQueryPage() {
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="返工单看板">
     <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "查询中"} />
-    <Surface className="reporting-filters">
+    <Surface className="reporting-filters reporting-filters--orders">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
       <label>责任<select value={responsibilityType} onChange={event=>{setResponsibilityType(event.target.value);resetPage();}}>{responsibilityTypes.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></label>
-      <label>开始日期<input type="date" value={from} onChange={event=>{setFrom(event.target.value);resetPage();}} /></label>
-      <label>结束日期<input type="date" value={to} onChange={event=>{setTo(event.target.value);resetPage();}} /></label>
+      <label className="reporting-date-range">日期范围<span><input aria-label="开始日期" type="date" value={from} onChange={event=>{setFrom(event.target.value);resetPage();}} /><i>至</i><input aria-label="结束日期" type="date" value={to} onChange={event=>{setTo(event.target.value);resetPage();}} /></span></label>
       <label>逾期<select value={overdue} onChange={(event) => {setOverdue(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅逾期</option><option value="false">未逾期</option></select></label>
       <label>异常<select value={exception} onChange={(event) => {setException(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅异常</option><option value="false">无异常</option></select></label>
-      <Button onClick={() => setRefresh((value) => value + 1)}>立即刷新</Button>
+      <Button className="reporting-filters__refresh" onClick={() => setRefresh((value) => value + 1)}>刷新</Button>
     </Surface>
     {state.kind === "loading" && <Surface className="reporting-state">正在查询…</Surface>}
     {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}

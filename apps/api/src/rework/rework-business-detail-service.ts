@@ -14,6 +14,13 @@ export type ReworkBusinessDetail = Readonly<{
   factoryStyleNo: string | null;
   orderNo: string | null;
   orderQuantity: number | null;
+  sourceReceivingActualQuantity: number | null;
+  supplyContext: Readonly<{
+    washingSupplierName: string | null;
+    embroiderySupplierName: string | null;
+    fabricSupplierName: string | null;
+    embroideryMerchandiserName: string | null;
+  }>;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
@@ -82,6 +89,11 @@ type DetailRow = Readonly<{
   factory_style_no: string | null;
   order_no: string | null;
   order_quantity: string | null;
+  source_receiving_actual_quantity: string | null;
+  washing_supplier_name: string | null;
+  embroidery_supplier_name: string | null;
+  fabric_supplier_name: string | null;
+  embroidery_merchandiser_name: string | null;
   merchandiser_user_id: string | null;
   merchandiser_name: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
@@ -130,6 +142,13 @@ export class ReworkBusinessDetailService {
          to_jsonb(orders)->>'factory_style_no' factory_style_no,
          orders.order_no,
          to_jsonb(orders)->>'order_quantity' order_quantity,
+         CASE WHEN orders.source_receiving_batch_id IS NULL THEN NULL
+           ELSE COALESCE(receiving.actual_quantity,0)::text
+         END source_receiving_actual_quantity,
+         washing_supplier.supplier_name washing_supplier_name,
+         embroidery_supplier.supplier_name embroidery_supplier_name,
+         fabric_supplier.supplier_name fabric_supplier_name,
+         embroidery_merchandiser.display_name embroidery_merchandiser_name,
          orders.merchandiser_user_id,merchandiser.display_name merchandiser_name,
          orders.processing_factory_type,orders.processing_factory_supplier_id,
          supplier.supplier_name,
@@ -144,6 +163,19 @@ export class ReworkBusinessDetailService {
        FROM rework_orders orders
        JOIN app_users creator ON creator.id=orders.created_by
        LEFT JOIN app_users merchandiser ON merchandiser.id=orders.merchandiser_user_id
+       LEFT JOIN rework_order_supply_context supply_context
+         ON supply_context.rework_order_id=orders.rework_order_id
+       LEFT JOIN supplier_catalog_versions washing_supplier
+         ON washing_supplier.supplier_id=supply_context.washing_supplier_id
+        AND washing_supplier.version=supply_context.washing_supplier_version
+       LEFT JOIN supplier_catalog_versions embroidery_supplier
+         ON embroidery_supplier.supplier_id=supply_context.embroidery_supplier_id
+        AND embroidery_supplier.version=supply_context.embroidery_supplier_version
+       LEFT JOIN supplier_catalog_versions fabric_supplier
+         ON fabric_supplier.supplier_id=supply_context.fabric_supplier_id
+        AND fabric_supplier.version=supply_context.fabric_supplier_version
+       LEFT JOIN app_users embroidery_merchandiser
+         ON embroidery_merchandiser.id=supply_context.embroidery_merchandiser_user_id
        LEFT JOIN supplier_catalog_versions supplier
          ON supplier.supplier_id=orders.processing_factory_supplier_id
         AND supplier.version=orders.processing_factory_supplier_version
@@ -161,6 +193,11 @@ export class ReworkBusinessDetailService {
        ) latest_configuration ON true
        LEFT JOIN app_users configuration_creator
          ON configuration_creator.id=latest_configuration.created_by
+       LEFT JOIN LATERAL (
+         SELECT sum(receipt.actual_quantity)::bigint actual_quantity
+         FROM receiving_receipts receipt
+         WHERE receipt.receiving_batch_id=orders.source_receiving_batch_id
+       ) receiving ON true
        WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
@@ -275,6 +312,15 @@ export class ReworkBusinessDetailService {
       factoryStyleNo: row.factory_style_no,
       orderNo: row.order_no,
       orderQuantity: row.order_quantity === null ? null : Number(row.order_quantity),
+      sourceReceivingActualQuantity: row.source_receiving_actual_quantity == null
+        ? null
+        : Number(row.source_receiving_actual_quantity),
+      supplyContext: {
+        washingSupplierName: row.washing_supplier_name ?? null,
+        embroiderySupplierName: row.embroidery_supplier_name ?? null,
+        fabricSupplierName: row.fabric_supplier_name ?? null,
+        embroideryMerchandiserName: row.embroidery_merchandiser_name ?? null,
+      },
       merchandiser: row.merchandiser_user_id && row.merchandiser_name
         ? { userId: row.merchandiser_user_id, displayName: row.merchandiser_name }
         : null,
