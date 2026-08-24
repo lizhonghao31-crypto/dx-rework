@@ -20,6 +20,13 @@ type CreateReceivingInput = Readonly<{
   attachmentIds?: readonly string[];
 }>;
 
+type CorrectReceivingBatchInput = Readonly<{
+  expectedVersion: number;
+  styleNo: string;
+  documentQuantity: number;
+  actualQuantity: number;
+}>;
+
 type ReceivingReceipt = Readonly<{
   receiptId: string;
   receivingBatchId: string;
@@ -44,6 +51,17 @@ type BoardRow = Readonly<{
   lastReceiverName: string;
   reworkOrderId: string | null;
   reworkStatus: ReworkStatus;
+  version: number;
+  rootMutable: boolean;
+}>;
+
+type ReceivingBatchSnapshot = Readonly<{
+  receivingBatchId: string;
+  styleNo: string;
+  documentQuantity: number;
+  actualQuantity: number;
+  differenceQuantity: number;
+  version: number;
 }>;
 
 type BoardResult = Readonly<{
@@ -134,6 +152,231 @@ export class ReceivingService {
     }
   }
 
+  private assertRootCorrector(actor: TrustedActorContext): void {
+    if (
+      actor.authorizationCapability !== "receiving:correct"
+      || !actor.actorRoles.includes("root_superuser")
+    ) {
+      fail("只有Root可以修改或删除收货订单", 403, "FORBIDDEN");
+    }
+  }
+
+  private validateExpectedVersion(value: number): number {
+    if (!Number.isInteger(value) || value < 1) fail("收货订单版本无效");
+    return value;
+  }
+
+  private async lockStyles(client: PoolClient, styles: readonly string[]): Promise<void> {
+    for (const style of [...new Set(styles)].sort()) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [style]);
+    }
+  }
+
+  private async mutableBatch(
+    client: PoolClient,
+    receivingBatchId: string,
+  ): Promise<Readonly<{
+    style_no: string;
+    version: number;
+    deleted_at: Date | null;
+    document_quantity: string;
+    actual_quantity: string;
+    has_rework_history: boolean;
+  }>> {
+    const result = await client.query<{
+      style_no: string;
+      version: number;
+      deleted_at: Date | null;
+      document_quantity: string;
+      actual_quantity: string;
+      has_rework_history: boolean;
+    }>(
+      `SELECT batch.style_no,batch.version,batch.deleted_at,
+              (totals.document_quantity+batch.document_quantity_adjustment)::bigint AS document_quantity,
+              (totals.actual_quantity+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
+              EXISTS(
+                SELECT 1 FROM rework_orders rework
+                WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+              ) AS has_rework_history
+       FROM receiving_batches batch
+       JOIN LATERAL (
+         SELECT sum(receipt.document_quantity)::bigint AS document_quantity,
+                sum(receipt.actual_quantity)::bigint AS actual_quantity
+         FROM receiving_receipts receipt
+         WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+       ) totals ON totals.document_quantity IS NOT NULL
+       WHERE batch.receiving_batch_id=$1
+       FOR UPDATE OF batch`,
+      [receivingBatchId],
+    );
+    const row = result.rows[0];
+    if (!row) return fail("收货订单不存在", 404, "NOT_FOUND");
+    if (row.deleted_at) return fail("收货订单不存在", 404, "NOT_FOUND");
+    if (row.has_rework_history) {
+      fail("该订单已经发起过返工，不能再修改或删除", 409, "INVALID_STATE_TRANSITION");
+    }
+    return row;
+  }
+
+  async correctBatch(
+    actor: TrustedActorContext,
+    receivingBatchId: string,
+    input: CorrectReceivingBatchInput,
+  ): Promise<ReceivingBatchSnapshot> {
+    this.assertRootCorrector(actor);
+    if (!UUID_PATTERN.test(receivingBatchId)) fail("收货订单标识无效");
+    const normalized = {
+      expectedVersion: this.validateExpectedVersion(input.expectedVersion),
+      styleNo: normalizeStyleNo(input.styleNo),
+      documentQuantity: validateQuantity(input.documentQuantity, "收货单数量", false),
+      actualQuantity: validateQuantity(input.actualQuantity, "实际收货数量", true),
+    };
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const currentStyle = await client.query<{ style_no: string }>(
+        "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1",
+        [receivingBatchId],
+      );
+      const styleRow = currentStyle.rows[0];
+      if (!styleRow) return fail("收货订单不存在", 404, "NOT_FOUND");
+      await this.lockStyles(client, [styleRow.style_no, normalized.styleNo]);
+      const current = await this.mutableBatch(client, receivingBatchId);
+      if (current.version !== normalized.expectedVersion) {
+        fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+      }
+      const before = {
+        receivingBatchId,
+        styleNo: current.style_no,
+        documentQuantity: Number(current.document_quantity),
+        actualQuantity: Number(current.actual_quantity),
+        differenceQuantity: Number(current.actual_quantity) - Number(current.document_quantity),
+        version: current.version,
+      };
+      const after: ReceivingBatchSnapshot = {
+        receivingBatchId,
+        styleNo: normalized.styleNo,
+        documentQuantity: normalized.documentQuantity,
+        actualQuantity: normalized.actualQuantity,
+        differenceQuantity: normalized.actualQuantity - normalized.documentQuantity,
+        version: current.version + 1,
+      };
+      const eventId = await this.events.append(client, actor, {
+        action: "receiving.batch.correct",
+        entityType: "receiving_batch",
+        entityId: receivingBatchId,
+        before,
+        after,
+      });
+      await client.query(
+        "SELECT set_config('dx_rework.receiving_root_action','correct',true)",
+      );
+      const updated = await client.query(
+        `UPDATE receiving_batches batch
+         SET style_no=$2,
+             document_quantity_adjustment=$3-(
+               SELECT sum(receipt.document_quantity)
+               FROM receiving_receipts receipt
+               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+             ),
+             actual_quantity_adjustment=$4-(
+               SELECT sum(receipt.actual_quantity)
+               FROM receiving_receipts receipt
+               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+             ),
+             version=batch.version+1,updated_by=$5,updated_at=clock_timestamp(),
+             last_operation_event_id=$6,last_request_id=$7
+         WHERE batch.receiving_batch_id=$1
+           AND batch.version=$8
+           AND batch.deleted_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_orders rework
+             WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+           )`,
+        [
+          receivingBatchId,
+          normalized.styleNo,
+          normalized.documentQuantity,
+          normalized.actualQuantity,
+          actor.actorId,
+          eventId,
+          actor.requestId,
+          normalized.expectedVersion,
+        ],
+      );
+      if (updated.rowCount !== 1) fail("收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+      await client.query("COMMIT");
+      return after;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteBatch(
+    actor: TrustedActorContext,
+    receivingBatchId: string,
+    expectedVersion: number,
+  ): Promise<Readonly<{ receivingBatchId: string; deleted: true }>> {
+    this.assertRootCorrector(actor);
+    if (!UUID_PATTERN.test(receivingBatchId)) fail("收货订单标识无效");
+    const version = this.validateExpectedVersion(expectedVersion);
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const currentStyle = await client.query<{ style_no: string }>(
+        "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1",
+        [receivingBatchId],
+      );
+      const styleRow = currentStyle.rows[0];
+      if (!styleRow) return fail("收货订单不存在", 404, "NOT_FOUND");
+      await this.lockStyles(client, [styleRow.style_no]);
+      const current = await this.mutableBatch(client, receivingBatchId);
+      if (current.version !== version) fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+      const before = {
+        receivingBatchId,
+        styleNo: current.style_no,
+        documentQuantity: Number(current.document_quantity),
+        actualQuantity: Number(current.actual_quantity),
+        differenceQuantity: Number(current.actual_quantity) - Number(current.document_quantity),
+        version: current.version,
+      };
+      const after = { ...before, version: current.version + 1, deleted: true as const };
+      const eventId = await this.events.append(client, actor, {
+        action: "receiving.batch.delete",
+        entityType: "receiving_batch",
+        entityId: receivingBatchId,
+        before,
+        after,
+      });
+      await client.query("SELECT set_config('dx_rework.receiving_root_action','delete',true)");
+      const updated = await client.query(
+        `UPDATE receiving_batches batch
+         SET deleted_at=clock_timestamp(),deleted_by=$2,version=batch.version+1,
+             updated_by=$2,updated_at=clock_timestamp(),
+             last_operation_event_id=$3,last_request_id=$4
+         WHERE batch.receiving_batch_id=$1
+           AND batch.version=$5
+           AND batch.deleted_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_orders rework
+             WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+           )`,
+        [receivingBatchId, actor.actorId, eventId, actor.requestId, version],
+      );
+      if (updated.rowCount !== 1) fail("收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+      await client.query("COMMIT");
+      return { receivingBatchId, deleted: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   private async resolveReceivingBatch(
     client: PoolClient,
     actor: TrustedActorContext,
@@ -157,6 +400,7 @@ export class ReceivingService {
               ) AS closed
        FROM receiving_batches batch
        WHERE batch.style_no=$1
+         AND batch.deleted_at IS NULL
        ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
        LIMIT 1`,
       [styleNo],
@@ -300,7 +544,7 @@ export class ReceivingService {
     const result = await this.database.query<{ style_no: string }>(
       `SELECT source.style_no
        FROM (
-         SELECT style_no FROM receiving_receipts
+         SELECT style_no FROM receiving_batches WHERE deleted_at IS NULL
          UNION
          SELECT style_no FROM rework_orders WHERE style_no IS NOT NULL AND status<>'deleted'
        ) source
@@ -326,29 +570,44 @@ export class ReceivingService {
       last_receiver_name: string;
       rework_order_id: string | null;
       rework_status: string | null;
+      version: number;
+      root_mutable: boolean;
     }>(
       `WITH scoped_batches AS (
-         SELECT DISTINCT receiving_batch_id
-         FROM receiving_receipts
-         WHERE (received_at AT TIME ZONE 'Asia/Shanghai')::date=$1::date
-           AND ($2::text='' OR style_no ILIKE '%' || $2 || '%')
+         SELECT DISTINCT receipt.receiving_batch_id
+         FROM receiving_receipts receipt
+         JOIN receiving_batches batch
+           ON batch.receiving_batch_id=receipt.receiving_batch_id
+          AND batch.deleted_at IS NULL
+         WHERE (receipt.received_at AT TIME ZONE 'Asia/Shanghai')::date=$1::date
+           AND ($2::text='' OR batch.style_no ILIKE '%' || $2 || '%')
        ), totals AS (
          SELECT r.receiving_batch_id,
-                max(r.style_no) AS style_no,
-                sum(r.document_quantity)::bigint AS document_quantity,
-                sum(r.actual_quantity)::bigint AS actual_quantity,
-                sum(r.difference_quantity)::bigint AS difference_quantity,
+                batch.style_no,
+                (sum(r.document_quantity)+batch.document_quantity_adjustment)::bigint AS document_quantity,
+                (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
+                (sum(r.actual_quantity)+batch.actual_quantity_adjustment
+                  -sum(r.document_quantity)-batch.document_quantity_adjustment)::bigint AS difference_quantity,
                 count(*)::bigint AS receipt_count,
-                max(r.received_at) AS last_received_at
+                max(r.received_at) AS last_received_at,
+                batch.version
          FROM receiving_receipts r
          JOIN scoped_batches scope ON scope.receiving_batch_id=r.receiving_batch_id
+         JOIN receiving_batches batch
+           ON batch.receiving_batch_id=r.receiving_batch_id
+          AND batch.deleted_at IS NULL
          WHERE (r.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date
-         GROUP BY r.receiving_batch_id
+         GROUP BY r.receiving_batch_id,batch.receiving_batch_id
        )
        SELECT totals.receiving_batch_id,totals.style_no,totals.document_quantity,
               totals.actual_quantity,totals.difference_quantity,totals.receipt_count,
               totals.last_received_at,receiver.display_name AS last_receiver_name,
-              rework.rework_order_id,rework.status AS rework_status
+              rework.rework_order_id,rework.status AS rework_status,
+              totals.version,
+              NOT EXISTS(
+                SELECT 1 FROM rework_orders history
+                WHERE history.source_receiving_batch_id=totals.receiving_batch_id
+              ) AS root_mutable
        FROM totals
        JOIN LATERAL (
          SELECT u.display_name
@@ -382,14 +641,9 @@ export class ReceivingService {
       lastReceiverName: row.last_receiver_name,
       reworkOrderId: row.rework_order_id,
       reworkStatus: lifecycle(row.rework_status),
+      version: row.version,
+      rootMutable: row.root_mutable,
     }));
-    const dayStats = await this.database.query<{ received_quantity: string }>(
-      `SELECT COALESCE(sum(actual_quantity),0)::bigint AS received_quantity
-       FROM receiving_receipts
-       WHERE (received_at AT TIME ZONE 'Asia/Shanghai')::date=$1::date
-         AND ($2::text='' OR style_no ILIKE '%' || $2 || '%')`,
-      [date, needle],
-    );
     const differenceQuantity = rows.reduce((sum, row) => sum + Math.abs(row.differenceQuantity), 0);
     const abnormalOrderCount = rows.filter((row) => row.differenceQuantity !== 0).length;
     const documentQuantity = rows.reduce((sum, row) => sum + row.documentQuantity, 0);
@@ -397,7 +651,7 @@ export class ReceivingService {
       date,
       kpis: {
         orderCount: rows.length,
-        receivedQuantity: Number(dayStats.rows[0]?.received_quantity ?? 0),
+        receivedQuantity: rows.reduce((sum, row) => sum + row.actualQuantity, 0),
         abnormalOrderCount,
         differenceQuantity,
         differenceRate: documentQuantity === 0 ? 0 : Number(((differenceQuantity / documentQuantity) * 100).toFixed(2)),
@@ -407,4 +661,10 @@ export class ReceivingService {
   }
 }
 
-export type { BoardResult, CreateReceivingInput, ReceivingReceipt };
+export type {
+  BoardResult,
+  CorrectReceivingBatchInput,
+  CreateReceivingInput,
+  ReceivingBatchSnapshot,
+  ReceivingReceipt,
+};

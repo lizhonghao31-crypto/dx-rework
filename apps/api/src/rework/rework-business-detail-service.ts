@@ -194,9 +194,12 @@ export class ReworkBusinessDetailService {
        LEFT JOIN app_users configuration_creator
          ON configuration_creator.id=latest_configuration.created_by
        LEFT JOIN LATERAL (
-         SELECT sum(receipt.actual_quantity)::bigint actual_quantity
-         FROM receiving_receipts receipt
-         WHERE receipt.receiving_batch_id=orders.source_receiving_batch_id
+         SELECT (sum(receipt.actual_quantity)+batch.actual_quantity_adjustment)::bigint actual_quantity
+         FROM receiving_batches batch
+         JOIN receiving_receipts receipt
+           ON receipt.receiving_batch_id=batch.receiving_batch_id
+         WHERE batch.receiving_batch_id=orders.source_receiving_batch_id
+         GROUP BY batch.receiving_batch_id
        ) receiving ON true
        WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
