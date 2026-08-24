@@ -130,7 +130,7 @@ const processValid = (process: ProcessForm): boolean => {
   });
 };
 
-export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged }: { reworkOrderId: string | null; onOrderChanged?: () => void }) {
+export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false }: { reworkOrderId: string | null; onOrderChanged?: () => void; embedded?: boolean }) {
   const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(null);
   const [processes, setProcesses] = useState<ProcessForm[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -310,13 +310,13 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const ownerSigning = response?.reworkStatus === "pending_owner_signature";
   const statusText = ownerSigning || determination?.stage === "finalized" ? "已提交" : editable ? "待提交" : "待处理";
   return <Surface className="responsibility-panel">
-    <div className="section-title responsibility-heading">
+    {!embedded && <div className="section-title responsibility-heading">
       <div>
         <h2>{ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"}</h2>
         <p>{ownerSigning ? "仅包含本厂责任时需要老板确认；核对后同意或驳回。" : "每道工序可添加多个责任方，比例合计必须为 100%；金额由工资基础、比例和倍率自动计算。"}</p>
       </div>
       <StatusBadge tone={ownerSigning || determination?.stage === "finalized" ? "success" : "warning"}>{statusText}</StatusBadge>
-    </div>
+    </div>}
     {message && <p className="responsibility-message" role="status">{message}</p>}
 
     {processes.map((process) => {

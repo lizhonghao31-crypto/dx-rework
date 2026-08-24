@@ -98,9 +98,10 @@ const payloadItems = (items: readonly ItemForm[]): SavePayloadItem[] => items.ma
   plannedQuantity: 1, pricingUnit: "piece", unitPrice: Number(item.unitPrice),
 }));
 
-export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOrderId, onOrderChanged }: {
+export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOrderId, onOrderChanged, embedded = false }: {
   reworkOrderId?: string;
   onOrderChanged?: () => Promise<void> | void;
+  embedded?: boolean;
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? new URLSearchParams(window.location.search).get("rework");
   const [user, setUser] = useState<User | null>(null);
@@ -211,8 +212,8 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "IE审核提交失败"); } finally { setBusy(false); }
   };
 
-  return <div className="mobile-page process-configuration-page">
-    <div className="mobile-hero"><div className="mobile-title"><h1>工序配置与 IE 审核</h1><StatusBadge tone={response?.reworkStatus === "pending_ie_review" ? "warning" : "info"}>{response ? statusLabel(response) : "加载中"}</StatusBadge></div><p>{response?.reworkNo ?? "返工单"}</p><StatusBadge tone="success">按件计价</StatusBadge></div>
+  return <div className={`mobile-page process-configuration-page${embedded ? " is-embedded" : ""}`}>
+    {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>工序配置与 IE 审核</h1><StatusBadge tone={response?.reworkStatus === "pending_ie_review" ? "warning" : "info"}>{response ? statusLabel(response) : "加载中"}</StatusBadge></div><p>{response?.reworkNo ?? "返工单"}</p><StatusBadge tone="success">按件计价</StatusBadge></div>}
     {message && <p className="process-feedback" role="status">{message}</p>}
     {configuration?.status === "rejected" && configuration.reviewReason && <div className="qc-warning"><b>IE 驳回原因：</b>{configuration.reviewReason}</div>}
     {configuration?.kind === "change" && <StatusBadge tone="warning">工序变更已留痕</StatusBadge>}

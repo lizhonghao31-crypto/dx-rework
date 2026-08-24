@@ -60,7 +60,8 @@ describe("order detail information architecture", () => {
     expect(detail).toContain('className="rework-workflow__desktop-grid"');
     expect(detail).toContain('className="rework-workflow__mobile-rail"');
     expect(detail).toContain("{workflowNodes.map(renderWorkflowNode)}");
-    expect(detail).toContain("当前工作区");
+    expect(detail).toContain('<div className="rework-detail-task__heading"><h2>办理区</h2></div>');
+    expect(detail).not.toContain("当前工作区");
     expect(detail).toContain("当前步骤 {activeStepIndex} / {workflowNodes.length}");
     expect(styles).toContain(".rework-detail-overview-grid");
     expect(styles).toContain("grid-template-columns: minmax(280px, .82fr) minmax(0, 1.48fr);");
