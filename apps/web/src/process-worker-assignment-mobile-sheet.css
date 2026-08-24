@@ -3,7 +3,7 @@
 @media(max-width:640px){
   .process-worker-page>.dx-surface>.section-title p{display:none}
   .process-worker-line{grid-template-areas:"heading" "fields";row-gap:7px}
-  .process-worker-line>.process-worker-line__body>.process-worker-picker,.process-worker-tail-body>.process-worker-picker{display:none}
+  .process-worker-tail-body>.process-worker-picker{display:none}
   .process-worker-line__heading{justify-content:flex-start;gap:8px}
   .process-worker-heading-primary{gap:6px;flex:0 1 auto}
   .process-worker-line__heading>.dx-button:not(.process-worker-mobile-assign){margin-left:auto}
@@ -87,4 +87,13 @@
 
   .process-worker-fields .dx-field__control,.process-worker-tail-work .dx-field__control{width:340px;min-width:340px;max-width:340px;height:38px;min-height:38px;border-radius:10px}
   .process-worker-heading-primary>b,.process-worker-line .process-worker-picker__heading>b,.process-worker-tail-title-row>b,.process-worker-tail-body>.process-worker-picker>.process-worker-picker__heading>b{font-size:15px!important;font-weight:700!important;line-height:1.25!important;letter-spacing:0!important}
+}
+
+/* The inline default-worker control also opens this picker on desktop. */
+@media(min-width:641px){
+  .process-worker-mobile-sheet-backdrop{position:fixed;inset:0;z-index:1080;display:grid;place-items:center;padding:20px;background:rgba(11,22,34,.42)}
+  .process-worker-mobile-sheet{box-sizing:border-box;display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:10px;width:min(560px,100%);max-height:min(78vh,720px);padding:18px;border:1px solid var(--dx-v2-color-border);border-radius:16px;background:var(--dx-v2-color-surface);box-shadow:var(--dx-v2-shadow-raised)}
+  .process-worker-mobile-sheet__heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.process-worker-mobile-sheet__heading h2{margin:0;font-size:18px}.process-worker-mobile-sheet__heading small{display:block;margin-top:2px;color:var(--dx-v2-color-text-secondary);font-size:12px}
+  .process-worker-mobile-sheet__selected{display:grid;gap:2px;padding:7px 9px;border-radius:8px;background:var(--dx-v2-color-inset)}.process-worker-mobile-sheet__selected small{color:var(--dx-v2-color-text-secondary);font-size:11px;font-weight:700}.process-worker-mobile-sheet__selected span{font-size:12px;line-height:1.45}
+  .process-worker-mobile-sheet__groups{display:grid;align-content:start;gap:10px;min-height:0;overflow:auto}.process-worker-mobile-sheet__actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.process-worker-mobile-sheet__actions .dx-button{width:100%;min-height:40px}
 }

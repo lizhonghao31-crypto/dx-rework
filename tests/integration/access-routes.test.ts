@@ -290,6 +290,47 @@ describe("access routes", () => {
     );
   });
 
+  it("lets only an authorized tail supervisor maintain defaults from N02", async () => {
+    const tailSupervisor = create(["process:configure", "work:assign"], ["tail_supervisor"]);
+    const allowed = await tailSupervisor.app.inject({
+      method: "PUT",
+      url: "/master-data/processes/00000000-0000-4000-8000-000000000020/default-workers",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "n02-default-workers" },
+      payload: {
+        personIds: ["00000000-0000-4000-8000-000000000021"],
+        changeReason: "尾部主管在工序分配区维护默认工人",
+      },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(tailSupervisor.service.replaceProcessDefaultWorkers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["tail_supervisor"],
+        authorizationCapability: "process:configure",
+        requestId: "n02-default-workers",
+      }),
+      "00000000-0000-4000-8000-000000000020",
+      expect.objectContaining({ personIds: ["00000000-0000-4000-8000-000000000021"] }),
+    );
+
+    const worker = create(["process:configure", "work:assign"], ["worker"]);
+    expect((await worker.app.inject({
+      method: "PUT",
+      url: "/master-data/processes/00000000-0000-4000-8000-000000000020/default-workers",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { personIds: [], changeReason: "越权尝试" },
+    })).statusCode).toBe(403);
+    expect(worker.service.replaceProcessDefaultWorkers).not.toHaveBeenCalled();
+
+    const incompleteTailSupervisor = create(["process:configure"], ["tail_supervisor"]);
+    expect((await incompleteTailSupervisor.app.inject({
+      method: "PUT",
+      url: "/master-data/processes/00000000-0000-4000-8000-000000000020/default-workers",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { personIds: [], changeReason: "缺少分配权限" },
+    })).statusCode).toBe(403);
+    expect(incompleteTailSupervisor.service.replaceProcessDefaultWorkers).not.toHaveBeenCalled();
+  });
+
   it("exposes revoked alias history only when explicitly requested", async () => {
     const { app, service } = create(["people:read"], ["system_admin"]);
     const response = await app.inject({

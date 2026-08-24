@@ -20,7 +20,7 @@ describe("N02 compact responsive layout", () => {
     expect(css).toContain("text-overflow:ellipsis;white-space:nowrap");
   });
 
-  it("keeps worker and tail searches visibly boxed and gives mobile personnel two columns", async () => {
+  it("keeps personnel search inside the picker and gives mobile results two columns", async () => {
     const [css, form] = await Promise.all([
       readFile("apps/web/src/process-worker-assignment-form.css", "utf8"),
       readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
@@ -31,7 +31,9 @@ describe("N02 compact responsive layout", () => {
     expect(css).toContain("@media(max-width:640px)");
     expect(css).toContain(".process-worker-people-group>div,.process-worker-people-group--tail>div{grid-template-columns:repeat(2,minmax(0,1fr));max-height:118px}");
     expect(css).toContain("@media(max-width:380px)");
-    expect(form).toContain('placeholder="搜索正式工或临时工"');
+    expect(form).toContain("mobileAssignmentSearch");
+    expect(form).toContain('"搜索正式工或临时工"');
     expect(form).toContain('placeholder="搜索尾查人员"');
+    expect(form).not.toContain("workerSearches");
   });
 });

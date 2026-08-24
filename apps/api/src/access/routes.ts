@@ -94,6 +94,32 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     };
   };
 
+  const defaultWorkerRosterActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    const managesMasterData = user.capabilities.includes("master_data:manage");
+    const configuresOrders = user.businessRoles?.includes("tail_supervisor") === true
+      && user.capabilities.includes("process:configure")
+      && user.capabilities.includes("work:assign");
+    if (!isRoot && !managesMasterData && !configuresOrders) {
+      throw new ApplicationError("FORBIDDEN", "仅尾部主管可在工序分配区维护默认工人", 403);
+    }
+    const authorizationCapability = managesMasterData ? "master_data:manage" : "process:configure";
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    const authorizationCapabilities = [...user.capabilities];
+    if (isRoot && !authorizationCapabilities.includes(authorizationCapability)) {
+      authorizationCapabilities.push(authorizationCapability);
+    }
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability,
+      authorizationCapabilities,
+      requestId: request.id,
+    };
+  };
+
   const roleManager = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
     const isRoot = await dependencies.root.isRootUser(user.id);
@@ -269,7 +295,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
 
   app.put<{ Params: { processId: string } }>("/master-data/processes/:processId/default-workers", async (request) =>
     dependencies.service.replaceProcessDefaultWorkers(
-      await actor(request, "master_data:manage"),
+      await defaultWorkerRosterActor(request),
       parse(ProcessParamsSchema, request.params).processId,
       parse(ReplaceProcessDefaultWorkersSchema, request.body),
     ));
