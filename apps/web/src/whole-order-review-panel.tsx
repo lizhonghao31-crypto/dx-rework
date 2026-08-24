@@ -62,6 +62,7 @@ export function WholeOrderReviewPanel({
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [tailExpanded, setTailExpanded] = useState(false);
+  const [coefficientSectionExpanded, setCoefficientSectionExpanded] = useState(false);
   const [coefficientExpanded, setCoefficientExpanded] = useState<Record<string, boolean>>({});
   const [correctionInputs, setCorrectionInputs] = useState<Record<string, string>>({});
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
@@ -407,11 +408,18 @@ export function WholeOrderReviewPanel({
     </Surface>}
 
     {tailStage && data.canReview && temporaryWorkerGroups.length > 0 && <Surface>
-      <div className="quantity-review-heading quantity-coefficient-heading">
-        <div><h2>临时工系数</h2><p>按工序展开；默认 1.0，非 1.0 必须填写原因。</p></div>
+      <button
+        className="quantity-coefficient-section-toggle"
+        type="button"
+        aria-controls="temporary-wage-adjustment-content"
+        aria-expanded={coefficientSectionExpanded}
+        onClick={() => setCoefficientSectionExpanded((value) => !value)}
+      >
+        <strong>临时工工资调整</strong>
         <StatusBadge tone={coefficientIssue ? "danger" : "success"}>{coefficientIssue ? "待完善" : `${data.temporaryWorkers.length} 人`}</StatusBadge>
-      </div>
-      <div className="quantity-process-list">
+        <b className="quantity-process-expander" aria-hidden="true">{coefficientSectionExpanded ? "−" : "+"}</b>
+      </button>
+      {coefficientSectionExpanded && <div className="quantity-process-list" id="temporary-wage-adjustment-content">
         {temporaryWorkerGroups.map((group) => {
           const open = coefficientExpanded[group.configurationItemId] === true;
           const groupIssue = group.workers.some((worker) => {
@@ -467,7 +475,7 @@ export function WholeOrderReviewPanel({
             </div>}
           </section>;
         })}
-      </div>
+      </div>}
     </Surface>}
 
     {tailStage && data.canReview && <Surface>
@@ -480,7 +488,7 @@ export function WholeOrderReviewPanel({
           {busy ? "提交中…" : "确认一致并提交 IE"}
         </Button>
       </div>
-      {!ready && <p role="status">还需完成：消除全部工序数量差异，并检查临时工系数。</p>}
+      {!ready && <p role="status">还需完成：消除全部工序数量差异，并检查临时工工资调整。</p>}
     </Surface>}
 
     {ieStage && data.canIeReview && <Surface>
