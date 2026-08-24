@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 import { createWebUrls } from "../../url-contract.js";
+import { useDebouncedValue } from "../use-debounced-value.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
 import {
   loadReport,
@@ -44,6 +45,7 @@ export function WagePeriodList() {
   const [from, setFrom] = useState(reportingBusinessMonthStart());
   const [to, setTo] = useState(today);
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 200);
   const [status, setStatus] = useState("");
   const [report, setReport] = useState<ReportState>({ kind: "loading" });
   const busy = useRef(false);
@@ -73,10 +75,10 @@ export function WagePeriodList() {
   const filters = useMemo(() => ({
     from,
     to,
-    q: q.trim() || undefined,
+    q: debouncedQ.trim() || undefined,
     status: status || undefined,
     limit: "500",
-  }), [from, to, q, status]);
+  }), [from, to, debouncedQ, status]);
 
   useEffect(() => {
     mounted.current = true;
@@ -86,18 +88,15 @@ export function WagePeriodList() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setReport({ kind: "loading" });
-      void loadReport("wages", filters, controller.signal)
-        .then((value) => setReport({ kind: "ready", value }))
-        .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setReport({ kind: "error", message: error instanceof Error ? error.message : "工资查询失败" });
-          }
-        });
-    }, 200);
+    setReport((current) => current.kind === "ready" ? current : { kind: "loading" });
+    void loadReport("wages", filters, controller.signal)
+      .then((value) => setReport({ kind: "ready", value }))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setReport({ kind: "error", message: error instanceof Error ? error.message : "工资查询失败" });
+        }
+      });
     return () => {
-      window.clearTimeout(timer);
       controller.abort();
     };
   }, [filters]);

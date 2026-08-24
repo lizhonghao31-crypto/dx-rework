@@ -6,19 +6,12 @@ import {
   StatusBadge,
   Surface,
 } from "@dx-rework/ui";
-import { createWebUrls } from "../url-contract.js";
-import { hasPageAccess, type AuthorizedUser } from "./auth.js";
+import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
-
-type ShellMe = Readonly<{
-  status?: string;
-  user?: AuthorizedUser;
-}>;
 
 type NavigationEntry = Readonly<{
   name: string;
@@ -47,12 +40,8 @@ const ROLE_LABELS: Record<string, string> = {
 
 const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
-let shellMeRequest: Promise<ShellMe | null> | undefined;
-function loadShellMe(): Promise<ShellMe | null> {
-  shellMeRequest ??= fetch(apiUrl("auth/me"), { credentials: "include" })
-    .then(async (response) => response.ok ? await response.json() as ShellMe : null)
-    .catch(() => null);
-  return shellMeRequest;
+function loadShellMe() {
+  return verifySession().then((session) => session === "denied" ? null : session);
 }
 
 let employeeAccessPermission: Promise<boolean> | undefined;
