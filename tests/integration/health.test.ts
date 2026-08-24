@@ -134,4 +134,19 @@ describe("platform health contract", () => {
     });
     expect(response.headers["x-request-id"]).toBe("uat-123");
   });
+
+  it("preserves framework client errors instead of reporting them as server failures", async () => {
+    const app = createApp();
+    app.post("/test/empty-json", async () => ({ ok: true }));
+    const response = await app.inject({
+      method: "POST",
+      url: "/test/empty-json",
+      headers: { "content-type": "application/json" },
+      payload: "",
+    });
+    expect(response.statusCode).toBe(400);
+    expect(ErrorResponseSchema.parse(response.json())).toMatchObject({
+      error: { code: "VALIDATION_ERROR", message: "Request validation failed" },
+    });
+  });
 });

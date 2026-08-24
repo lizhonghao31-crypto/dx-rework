@@ -35,7 +35,11 @@ const requestJson = async <T,>(path: string, init: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), {
     credentials: "include",
     ...init,
-    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
+    headers: {
+      accept: "application/json",
+      ...(init.body ? { "content-type": "application/json" } : {}),
+      ...(init.headers ?? {}),
+    },
   });
   if (!response.ok) throw new Error(await errorMessage(response));
   return response.json() as Promise<T>;

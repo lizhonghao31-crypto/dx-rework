@@ -202,14 +202,23 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   app.setErrorHandler(async (error, request, reply) => {
     const known = error instanceof ApplicationError;
     const denied = error instanceof AuthDeniedError;
-    const statusCode = known ? error.statusCode : denied ? 401 : 500;
+    const frameworkStatusCode = typeof error === "object"
+      && error !== null
+      && "statusCode" in error
+      && typeof error.statusCode === "number"
+      && error.statusCode >= 400
+      && error.statusCode < 500
+      ? error.statusCode
+      : null;
+    const frameworkClientError = !known && !denied && frameworkStatusCode !== null;
+    const statusCode = known ? error.statusCode : denied ? 401 : frameworkStatusCode ?? 500;
     if (statusCode >= 500) {
       request.log.error({ err: error }, "request failed");
     }
     const response: ErrorResponse = {
       error: {
-        code: known || denied ? error.code : "INTERNAL_ERROR",
-        message: known || denied ? error.message : "Internal server error",
+        code: known || denied ? error.code : frameworkClientError ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
+        message: known || denied ? error.message : frameworkClientError ? "Request validation failed" : "Internal server error",
         requestId: request.id,
       },
     };
