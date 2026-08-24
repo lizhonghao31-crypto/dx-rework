@@ -6,6 +6,8 @@ import {
   type CreateWorkReportsBatch,
   type CreateWorkTask,
   type ConfirmWorkAssignments,
+  type FrontlineTaskKind,
+  type FrontlineTasksResponse,
   type ReworkWorkTasksResponse,
   type WorkReportResponse,
   type WorkReportsBatchResponse,
@@ -34,6 +36,13 @@ type OrderRow = Readonly<{
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null; problem_part: string | null;
   problem_description: string | null; rework_quantity: number | null;
+}>;
+type FrontlineTaskRow = Readonly<{
+  rework_order_id: string;
+  rework_no: string | null;
+  style_no: string | null;
+  order_no: string | null;
+  process_names: string[];
 }>;
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 
@@ -106,6 +115,48 @@ export class WorkReportingService {
     const order = await this.order(this.database, reworkOrderId, false);
     const tasks = await this.tasks(this.database, reworkOrderId, actor);
     return { reworkOrderId, reworkStatus: order.status as ReworkWorkTasksResponse["reworkStatus"], orderVersion: order.version, tasks };
+  }
+
+  async listFrontlineTasks(actor: TrustedActorContext, kind: FrontlineTaskKind): Promise<FrontlineTasksResponse> {
+    const allowed = kind === "worker" ? this.isWorker(actor) : this.isTailInspector(actor);
+    if (!allowed && !isRootActor(actor)) {
+      error(kind === "worker" ? "当前账号没有本人返工任务权限" : "当前账号没有本人尾查任务权限", 403, "FORBIDDEN");
+    }
+    const result = await this.database.query<FrontlineTaskRow>(
+      `SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
+              array_agg(DISTINCT item.process_name ORDER BY item.process_name) AS process_names
+       FROM rework_orders order_record
+       JOIN rework_work_tasks task ON task.rework_order_id=order_record.rework_order_id AND task.status='active'
+       JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
+       JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
+       JOIN business_people person ON person.person_id=member.person_id
+       WHERE order_record.status='in_progress'
+         AND item.execution_kind=$2
+         AND person.app_user_id=$1::uuid
+         AND NOT EXISTS(
+           SELECT 1 FROM rework_work_reports report
+           WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
+             AND NOT EXISTS(
+               SELECT 1 FROM rework_work_report_rejections rejection
+               WHERE rejection.work_report_id=report.work_report_id
+             )
+         )
+       GROUP BY order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,order_record.updated_at
+       ORDER BY order_record.updated_at DESC,order_record.rework_order_id DESC
+       LIMIT 100`,
+      [actor.actorId, kind],
+    );
+    return {
+      kind,
+      items: result.rows.map((row) => ({
+        reworkOrderId: row.rework_order_id,
+        reworkNo: row.rework_no,
+        styleNo: row.style_no,
+        orderNo: row.order_no,
+        processNames: row.process_names,
+        status: "in_progress" as const,
+      })),
+    };
   }
 
   async listAssignablePeople(actor: TrustedActorContext): Promise<Array<{
