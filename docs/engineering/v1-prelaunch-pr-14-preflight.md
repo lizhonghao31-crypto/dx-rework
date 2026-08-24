@@ -1,0 +1,23 @@
+# V1 prelaunch PR-14 preflight
+
+- Repository: `lizhonghao31-crypto/dx-rework`
+- Base branch: `main`
+- Base SHA: `62e82b3a64daa70d1fed0be19a966e7433fb6614`
+- Working branch: `codex/v1-prelaunch-frontline-minimal-mobile-density`
+- Task scope: replace the worker/tail management queue with type-separated own-task pages, auto-open a single active task order, and compress mobile order-detail vertical containers so the current workspace appears sooner.
+- Allowed files:
+  - `packages/contracts/src/index.ts`
+  - `apps/api/src/rework/work-reporting-service.ts`
+  - `apps/api/src/rework/work-reporting-routes.ts`
+  - `apps/web/src/frontline-landing-page.tsx`
+  - `apps/web/src/frontline-task-page.tsx`
+  - `apps/web/src/frontline-task-page.css`
+  - `apps/web/src/App.tsx`
+  - `apps/web/src/work-reporting-form.tsx`
+  - `apps/web/src/rework-detail-page.tsx`
+  - `apps/web/src/rework-detail-compact.css`
+  - `tests/unit/v1-prelaunch-default-candidates-frontline.test.ts`
+  - `tests/unit/v1-prelaunch-frontline-minimal.test.ts`
+  - this preflight record
+- Forbidden scope: migrations, task/reporting state transitions, wage/quantity/responsibility rules, management dashboards, deployment, and DingTalk.
+- Verification: focused service/UI/mobile contracts, web/API/contracts typecheck, lint/build, exact-head Quick Gate and Full Gate.
