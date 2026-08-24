@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { verifySession } from "./auth.js";
+import { mapWithConcurrency } from "./concurrency.js";
 import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
 import { reportsArePersisted } from "./work-reporting-submission.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
@@ -85,7 +86,6 @@ export function WorkReportingForm({
   const [canAssign, setCanAssign] = useState(false);
   const [canCreateTemporary, setCanCreateTemporary] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
-  const [canReadTasks, setCanReadTasks] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
 
   const filteredPeople = useMemo(() => {
@@ -118,7 +118,7 @@ export function WorkReportingForm({
       const taskReadable = canReadWorkFacts(session.user);
       const orderReviewable = canReviewOrder(session.user);
       const temporaryManageable = root || session.user.capabilities.includes("temporary_worker:manage");
-      setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
+      setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
       const assignmentView = loaded?.reworkStatus === "pending_task_assignment"
@@ -145,12 +145,16 @@ export function WorkReportingForm({
     if (memberIds.length === 0) { setMessage("请至少选择一名返工人员。"); return; }
     setBusy(true);
     try {
-      for (const personId of memberIds) await request(`rework-orders/${data.reworkOrderId}/work-tasks`, WorkTaskResponseSchema.parse, {
+      const assigned = await mapWithConcurrency(memberIds, 3, (personId) => request(`rework-orders/${data.reworkOrderId}/work-tasks`, WorkTaskResponseSchema.parse, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ expectedOrderVersion: data.orderVersion, configurationItemId, mode: "individual", members: [{ personId }] }),
-      });
-      await reload(); setSelected({}); setMessage("人员已分配。各工序都分完后，再统一点击“开始返工”。");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "人员分配失败"); } finally { setBusy(false); }
+      }));
+      setData({ ...data, tasks: [...data.tasks, ...assigned] });
+      setSelected({}); setMessage("人员已分配。各工序都分完后，再统一点击“开始返工”。");
+    } catch (cause) {
+      await reload().catch(() => null);
+      setMessage(cause instanceof Error ? cause.message : "人员分配失败");
+    } finally { setBusy(false); }
   };
 
   const confirmRemoval = async () => {
@@ -215,10 +219,10 @@ export function WorkReportingForm({
     if (!data || data.reworkStatus !== "pending_task_assignment" || busy) return;
     setBusy(true);
     try {
-      await request(`rework-orders/${data.reworkOrderId}/work-tasks/confirm`, ReworkWorkTasksResponseSchema.parse, {
+      const confirmed = await request(`rework-orders/${data.reworkOrderId}/work-tasks/confirm`, ReworkWorkTasksResponseSchema.parse, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
       });
-      await reload(); setMessage("返工已开始。工人只需在真正完工后点击“我已完工&上数”。"); await onOrderChanged?.();
+      setData(confirmed); setMessage("返工已开始。工人只需在真正完工后点击“我已完工&上数”。"); await onOrderChanged?.();
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "无法开始返工"); } finally { setBusy(false); }
   };
 
@@ -307,7 +311,7 @@ export function WorkReportingForm({
 
   if (effectiveTaskMode === "whole_order_review") return <div className="mobile-page work-reporting-page">
     {!reviewEligible && <Surface>{message}</Surface>}
-    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { if (canReadTasks) await reload(); await onOrderChanged?.(); }} />}
+    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { await onOrderChanged?.(); }} />}
   </div>;
 
   return <div className={`mobile-page work-reporting-page${embedded ? " is-embedded" : ""}`}>
