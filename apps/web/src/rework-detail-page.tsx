@@ -3,7 +3,7 @@ import type { InspectionReportDraft } from "@dx-rework/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import type { AuthorizedUser } from "./auth.js";
+import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
@@ -48,7 +48,7 @@ export type WorkflowNodeKey =
   | "archive"
   | "settlement_followup";
 
-type ReworkBusinessDetail = Readonly<{
+export type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkStatus;
@@ -107,7 +107,6 @@ type ReworkBusinessDetail = Readonly<{
 
 type ReworkAttachment = ReworkBusinessDetail["attachments"][number];
 type LoadState = { kind: "loading" } | { kind: "ready"; value: ReworkBusinessDetail } | { kind: "error"; message: string };
-type AuthMe = Readonly<{ status: "authorized" | "no_role"; user: AuthorizedUser }>;
 type WorkflowNodeState = "completed" | "current" | "future" | "followup";
 type WorkflowNode = Readonly<{
   key: WorkflowNodeKey;
@@ -426,13 +425,11 @@ export function ReworkDetailPage({
   }, [load]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch(apiUrl("auth/me"), {
-      credentials: "include", signal: controller.signal, headers: { accept: "application/json" },
-    }).then(async (response) => response.ok ? await response.json() as AuthMe : null)
-      .then((body) => { if (body?.status === "authorized") setCurrentUser(body.user); })
-      .catch(() => undefined);
-    return () => controller.abort();
+    let mounted = true;
+    void verifySession().then((session) => {
+      if (mounted && session !== "denied" && session.status === "authorized") setCurrentUser(session.user);
+    });
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -561,7 +558,7 @@ export function ReworkDetailPage({
       return <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
-      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} embedded workspaceNode={selected.key} onOrderChanged={syncAfterNodeAction} />;
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} initialDetail={detail} embedded workspaceNode={selected.key} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
