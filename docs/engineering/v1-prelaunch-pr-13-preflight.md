@@ -9,6 +9,7 @@
   - `apps/api/src/access/routes.ts`
   - `apps/web/src/process-worker-assignment-form.tsx`
   - `apps/web/src/process-worker-assignment-form.css`
+  - `apps/web/src/process-worker-assignment-mobile-sheet.css`
   - `tests/integration/access-routes.test.ts`
   - `tests/unit/v1-prelaunch-default-candidates-frontline.test.ts`
   - this preflight record
