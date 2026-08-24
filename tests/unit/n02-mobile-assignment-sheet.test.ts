@@ -3,12 +3,16 @@ import { describe, expect, it } from "vitest";
 
 describe("N02 mobile personnel assignment", () => {
   it("puts the default-worker actions beside the personnel title and shows compact removable names", async () => {
-    const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
+    const [source, styles] = await Promise.all([
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.css", "utf8"),
+    ]);
     expect(source).toContain('<div className="process-worker-picker__heading"><b>返工人员 *</b>');
     expect(source).toContain('className="process-worker-add-default" variant="primary"');
     expect(source).toContain('className="process-worker-save-default"');
     expect(source).toContain('className="process-worker-default-list"');
-    expect(source).toContain('onClick={() => removeWorker(index, personId)}>−</button>');
+    expect(source).toContain('onClick={() => removeWorker(index, personId)}>−</button><small>{person?.displayName ?? "返工人员"}');
+    expect(styles).toContain(".process-worker-picker__heading{justify-content:flex-start}");
     expect(source).toContain('<div className="process-worker-tail-title-row"><b>尾查</b><Button className="process-worker-mobile-assign"');
   });
 
@@ -30,6 +34,10 @@ describe("N02 mobile personnel assignment", () => {
     expect(css).toContain(".process-worker-tail-body>.process-worker-picker{display:none}");
     expect(css).not.toContain(".process-worker-line>.process-worker-line__body>.process-worker-picker,.process-worker-tail-body>.process-worker-picker{display:none}");
     expect(css).toContain(".process-worker-fields{grid-template-columns:1fr");
+    expect(css).toContain('.process-worker-line{grid-template-areas:"heading" "fields" "picker";grid-template-columns:minmax(0,1fr)}');
+    expect(css).toContain(".process-worker-line .process-worker-picker{grid-area:picker;grid-column:1");
+    expect(css).toContain(".process-worker-source{display:grid;grid-template-columns:minmax(0,1fr)");
+    expect(css).toContain(".process-worker-source label{width:max-content;max-width:100%;white-space:nowrap}");
     expect(css).toContain(".process-worker-heading-primary{gap:6px");
     expect(css).toContain(".process-worker-mobile-sheet-backdrop{position:fixed;inset:0");
     expect(css).toContain("align-items:end");

@@ -97,3 +97,13 @@
   .process-worker-mobile-sheet__selected{display:grid;gap:2px;padding:7px 9px;border-radius:8px;background:var(--dx-v2-color-inset)}.process-worker-mobile-sheet__selected small{color:var(--dx-v2-color-text-secondary);font-size:11px;font-weight:700}.process-worker-mobile-sheet__selected span{font-size:12px;line-height:1.45}
   .process-worker-mobile-sheet__groups{display:grid;align-content:start;gap:10px;min-height:0;overflow:auto}.process-worker-mobile-sheet__actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.process-worker-mobile-sheet__actions .dx-button{width:100%;min-height:40px}
 }
+
+/* N02 phone grid correction: one real column, stacked source choices, horizontal labels. */
+@media(max-width:640px){
+  .process-worker-line{grid-template-areas:"heading" "fields" "picker";grid-template-columns:minmax(0,1fr)}
+  .process-worker-line .process-worker-picker{grid-area:picker;grid-column:1;grid-row:auto;justify-self:stretch;box-sizing:border-box;width:100%;min-width:0}
+  .process-worker-source{display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;gap:6px}
+  .process-worker-source label{width:max-content;max-width:100%;white-space:nowrap}
+  .process-worker-picker__heading{justify-content:flex-start;align-items:flex-start;flex-wrap:wrap}
+  .process-worker-roster-actions{justify-content:flex-start}
+}
