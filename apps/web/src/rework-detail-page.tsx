@@ -331,7 +331,7 @@ const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): stri
     ? `${detail.status === "completed" ? "订单已完成 · " : ""}${followUpStatusLabel(detail)}`
     : node.state === "completed" ? "已完成" : node.state === "current" ? "处理中" : "未开始";
 
-const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
+const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}#node-workspace`;
 
 const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action === "rework.attachments.supplement") return "initiation";
@@ -388,6 +388,8 @@ export function ReworkDetailPage({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
+  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false);
+  const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
     window.matchMedia("(max-width: 640px)").matches ? new Set(["planning", "execution", "responsibility"]) : new Set(),
   );
@@ -480,11 +482,12 @@ export function ReworkDetailPage({
     { label: "面辅料供应商", value: detail.supplyContext.fabricSupplierName },
     { label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName },
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
-  const imageSlots = Array.from({ length: 6 }, (_, index) => imageAttachments[index] ?? null);
+  const visibleImageAttachments = imageAttachments.slice(0, 6);
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
   const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key;
+  const activeWorkflowNode = workflowNodes.find((node) => node.key === activeNode);
   const selectedFromUrl = workflowNodeFromSearch();
   const defaultSelectedNode = activeNode ?? "settlement_followup";
   const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
@@ -558,7 +561,7 @@ export function ReworkDetailPage({
       return <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
-      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={syncAfterNodeAction} />;
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} embedded workspaceNode={selected.key} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
@@ -627,20 +630,31 @@ export function ReworkDetailPage({
 
         <div className="rework-detail-overview-grid">
           <section className="rework-detail-images" aria-label="订单图片">
-            <div className="section-title rework-detail-panel-title">
+            <div className="section-title rework-detail-panel-title rework-detail-desktop-panel-heading">
               <div><h2>订单图片</h2></div>
-              <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge>
+              {imageAttachments.length > 0 ? <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge> : null}
             </div>
-            {canSupplementOrderImages && (
-              <OrderImageSupplementUploader
-                reworkOrderId={detail.reworkOrderId}
-                expectedVersion={detail.version}
-                currentAttachmentCount={detail.attachments.filter((attachment) => attachment.entityType === "rework_order").length}
-                onUploaded={async () => { await load(); }}
-              />
-            )}
-            <div className="rework-detail-image-grid">
-              {imageSlots.map((attachment, index) => attachment ? (
+            <button
+              className="rework-detail-mobile-panel-toggle"
+              type="button"
+              aria-controls="order-images-content"
+              aria-expanded={mobileImagesExpanded}
+              onClick={() => setMobileImagesExpanded((value) => !value)}
+            >
+              <span><strong>订单图片</strong>{imageAttachments.length > 0 ? <small>{imageAttachments.length} 张</small> : null}</span>
+              <b aria-hidden="true">{mobileImagesExpanded ? "−" : "+"}</b>
+            </button>
+            <div id="order-images-content" className={`rework-detail-mobile-collapsible${mobileImagesExpanded ? " is-expanded" : ""}`}>
+              {canSupplementOrderImages && (
+                <OrderImageSupplementUploader
+                  reworkOrderId={detail.reworkOrderId}
+                  expectedVersion={detail.version}
+                  currentAttachmentCount={detail.attachments.filter((attachment) => attachment.entityType === "rework_order").length}
+                  onUploaded={async () => { await load(); }}
+                />
+              )}
+              {visibleImageAttachments.length > 0 ? <div className="rework-detail-image-grid">
+                {visibleImageAttachments.map((attachment, index) => (
                   <button
                     className="rework-detail-image-card"
                     type="button"
@@ -652,52 +666,68 @@ export function ReworkDetailPage({
                     <span className="rework-detail-image-card__filename">{attachment.filename}</span>
                     {index === 5 && imageAttachments.length > 6 ? <strong className="rework-detail-image-card__overflow">+{imageAttachments.length - 5}</strong> : null}
                   </button>
-                ) : <div className="rework-detail-image-card rework-detail-image-card--empty" aria-hidden="true" key={`empty-${index}`}><span>暂无图片</span></div>)}
+                ))}
+              </div> : null}
             </div>
           </section>
 
           <section className="rework-workflow" key={detail.status} aria-label="订单流程">
-            <div className="rework-workflow__heading rework-detail-panel-title">
+            <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
               <div><h2>订单流程</h2></div>
               <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
             </div>
-            <div className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
-              {workflowNodes.map(renderWorkflowNode)}
+            <button
+              className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle"
+              type="button"
+              aria-controls="order-workflow-content"
+              aria-expanded={mobileWorkflowExpanded}
+              onClick={() => setMobileWorkflowExpanded((value) => !value)}
+            >
+              <span>
+                <strong>订单流程</strong>
+                {activeWorkflowNode ? <small>{activeWorkflowNode.number} · {activeWorkflowNode.label} · {nodeStatusLabel(activeWorkflowNode, detail)}</small> : null}
+              </span>
+              <span><small>{activeStepIndex}/{workflowNodes.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
+            </button>
+            <div id="order-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
+              <div className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
+                {workflowNodes.map(renderWorkflowNode)}
+              </div>
+              <div className="rework-workflow__stages rework-workflow__desktop-stages">
+                {stages.map((stage) => {
+                  const state = stageState(stage);
+                  const isOpen = !collapsedStages.has(stage.key);
+                  return <details
+                    className={`rework-workflow__stage is-${state}`}
+                    key={stage.key}
+                    open={isOpen}
+                    onToggle={(event) => {
+                      const nextOpen = event.currentTarget.open;
+                      setCollapsedStages((current) => {
+                        const next = new Set(current);
+                        if (nextOpen) next.delete(stage.key);
+                        else next.add(stage.key);
+                        return next;
+                      });
+                    }}
+                  >
+                    <summary>
+                      <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
+                      <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
+                    </summary>
+                    <div className="rework-workflow__nodes">{stage.nodes.map(renderWorkflowNode)}</div>
+                  </details>;
+                })}
+              </div>
+              <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
+                {workflowNodes.map(renderWorkflowNode)}
+              </div>
+              {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
             </div>
-            <div className="rework-workflow__stages rework-workflow__desktop-stages">
-              {stages.map((stage) => {
-                const state = stageState(stage);
-                const isOpen = !collapsedStages.has(stage.key);
-                return <details
-                  className={`rework-workflow__stage is-${state}`}
-                  key={stage.key}
-                  open={isOpen}
-                  onToggle={(event) => {
-                    const nextOpen = event.currentTarget.open;
-                    setCollapsedStages((current) => {
-                      const next = new Set(current);
-                      if (nextOpen) next.delete(stage.key);
-                      else next.add(stage.key);
-                      return next;
-                    });
-                  }}
-                >
-                  <summary>
-                    <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
-                    <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
-                  </summary>
-                  <div className="rework-workflow__nodes">{stage.nodes.map(renderWorkflowNode)}</div>
-                </details>;
-              })}
-            </div>
-            <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
-              {workflowNodes.map(renderWorkflowNode)}
-            </div>
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
           </section>
         </div>
 
-        <section className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
+        <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
           <div className="rework-detail-task__heading"><h2>办理区</h2></div>
           {renderSelectedTask()}
         </section>

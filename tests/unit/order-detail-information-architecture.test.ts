@@ -75,12 +75,14 @@ describe("order detail information architecture", () => {
     expect(styles).toContain("flex: 0 0 126px");
   });
 
-  it("keeps a six-slot image gallery, overflow access and the full process on desktop hover", async () => {
+  it("renders only real images up to six while preserving overflow access and the full process on desktop hover", async () => {
     const [detail, styles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-compact.css", "utf8"),
     ]);
-    expect(detail).toContain("Array.from({ length: 6 }");
+    expect(detail).toContain("imageAttachments.slice(0, 6)");
+    expect(detail).not.toContain("暂无图片");
+    expect(detail).not.toContain("rework-detail-image-card--empty");
     expect(detail).toContain("imageAttachments.length - 5");
     expect(detail).toContain("showRelativeImage(1)");
     expect(detail).toContain("title={detail.reworkProcess ?? undefined}");

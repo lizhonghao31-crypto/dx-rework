@@ -169,6 +169,16 @@ details.inspection-readonly {
   line-height: 22px;
 }
 
+.rework-detail-mobile-panel-toggle {
+  display: none;
+}
+
+.rework-detail-mobile-collapsible {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+}
+
 .rework-detail-target-layout .rework-detail-image-upload {
   min-height: 0;
   margin: 2px 0 5px;
@@ -248,21 +258,22 @@ details.inspection-readonly {
 .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node {
   grid-template-columns: 22px minmax(0, 1fr);
   grid-template-rows: auto auto;
-  gap: 4px 6px;
+  gap: 2px 6px;
   align-content: center;
   min-height: 58px;
-  padding: 6px 8px;
+  padding: 7px 8px;
   border-radius: 9px;
 }
 
 .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node > b {
-  align-self: start;
+  align-self: center;
   font-size: 10px;
   line-height: 1.35;
 }
 
 .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node > span {
-  gap: 2px;
+  align-self: center;
+  gap: 1px;
 }
 
 .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node > span strong {
@@ -272,11 +283,13 @@ details.inspection-readonly {
 
 .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node > span small {
   font-size: 8px;
+  line-height: 1.25;
 }
 
 .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node > em {
   grid-column: 2;
   font-size: 8px;
+  line-height: 1.25;
 }
 
 @media (min-width: 761px) {
@@ -288,15 +301,23 @@ details.inspection-readonly {
   }
 
   .rework-detail-target-layout .rework-detail-images {
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .rework-detail-target-layout .rework-detail-images .rework-detail-mobile-collapsible {
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .rework-detail-target-layout .rework-detail-images .rework-detail-image-grid {
-    grid-row: 3;
+    min-height: 0;
   }
 
   .rework-detail-target-layout .rework-workflow {
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .rework-detail-target-layout .rework-workflow .rework-detail-mobile-collapsible {
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   .rework-workflow__desktop-grid {
@@ -370,6 +391,7 @@ details.inspection-readonly {
   display: grid;
   gap: 8px;
   padding-top: 11px;
+  scroll-margin-top: 12px;
   border-top: 1px solid #d5dee7;
 }
 
@@ -489,6 +511,79 @@ details.inspection-readonly {
     padding: 9px;
   }
 
+  .rework-detail-desktop-panel-heading {
+    display: none;
+  }
+
+  .rework-detail-mobile-panel-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 5px 2px;
+    color: var(--dx-v2-color-text);
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+
+  .rework-detail-mobile-panel-toggle > span {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .rework-detail-mobile-panel-toggle strong {
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .rework-detail-mobile-panel-toggle small {
+    overflow: hidden;
+    color: var(--dx-v2-color-text-secondary);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rework-detail-mobile-panel-toggle b {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    color: var(--dx-v2-color-primary-hover);
+    border: 1px solid var(--dx-v2-color-border);
+    border-radius: 50%;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .rework-detail-mobile-workflow-toggle > span:first-child {
+    display: grid;
+    gap: 1px;
+  }
+
+  .rework-detail-mobile-workflow-toggle > span:last-child {
+    flex: 0 0 auto;
+  }
+
+  .rework-detail-mobile-collapsible {
+    display: none;
+  }
+
+  .rework-detail-mobile-collapsible.is-expanded {
+    display: grid;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--dx-v2-color-border);
+  }
+
   .rework-detail-target-layout .rework-detail-image-upload {
     align-items: center;
     flex-direction: row;
@@ -569,6 +664,10 @@ details.inspection-readonly {
 
   .rework-detail-target-layout .rework-detail-task__heading {
     align-items: center;
+  }
+
+  .rework-detail-target-layout .rework-detail-workspace {
+    scroll-margin-top: 8px;
   }
 
   .rework-detail-target-layout .rework-detail-node-preview {

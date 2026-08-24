@@ -62,7 +62,7 @@ export function WholeOrderReviewPanel({
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [tailExpanded, setTailExpanded] = useState(false);
-  const [coefficientsExpanded, setCoefficientsExpanded] = useState(false);
+  const [coefficientExpanded, setCoefficientExpanded] = useState<Record<string, boolean>>({});
   const [correctionInputs, setCorrectionInputs] = useState<Record<string, string>>({});
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
@@ -269,6 +269,16 @@ export function WholeOrderReviewPanel({
   });
   const ready = allComplete && !coefficientIssue;
   const tailReports = data.reports.filter((report) => report.executionKind === "tail_inspection");
+  const temporaryWorkerGroups = data.temporaryWorkers.reduce<Array<{
+    configurationItemId: string;
+    processName: string;
+    workers: Array<(typeof data.temporaryWorkers)[number]>;
+  }>>((groups, worker) => {
+    const group = groups.find((candidate) => candidate.configurationItemId === worker.configurationItemId);
+    if (group) group.workers.push(worker);
+    else groups.push({ configurationItemId: worker.configurationItemId, processName: worker.processName, workers: [worker] });
+    return groups;
+  }, []);
 
   const reportRow = (report: ReviewReport) => {
     const canCorrect = tailStage
@@ -357,7 +367,7 @@ export function WholeOrderReviewPanel({
               <span><small>工人合计</small><strong>{process.completedQuantity}</strong></span>
               <span><small>尾查</small><strong>{process.tailCheckedQuantity}</strong></span>
               <span><small>差异</small><strong>{process.countGap}</strong></span>
-              <StatusBadge tone={process.complete ? "success" : "warning"}>
+              <StatusBadge tone={process.complete ? "success" : "danger"}>
                 {process.complete ? "✓ 一致" : "⚠ 不一致"}
               </StatusBadge>
               <b className="quantity-process-expander">{open ? "−" : "+"}</b>
@@ -396,44 +406,68 @@ export function WholeOrderReviewPanel({
       </div>)}
     </Surface>}
 
-    {tailStage && data.canReview && data.temporaryWorkers.length > 0 && <Surface>
-      <button
-        className="quantity-tail-toggle"
-        type="button"
-        aria-expanded={coefficientsExpanded}
-        onClick={() => setCoefficientsExpanded((value) => !value)}
-      >
-        <span><b>临时工系数</b><small>{data.temporaryWorkers.length} 人</small></span>
-        <small>默认 1.0；非 1.0 必须填写原因</small>
-        <b>{coefficientsExpanded ? "−" : "+"}</b>
-      </button>
-      {coefficientsExpanded && <div className="quantity-process-detail">
-        {data.temporaryWorkers.map((worker) => {
-          const id = `${worker.configurationItemId}:${worker.personId}`;
-          return <div className="section-title whole-order-row" key={id}>
-            <b>{worker.displayName} · {worker.processName}</b>
-            <div className="mobile-actions whole-order-actions">
-              <InsetField
-                label="实发系数"
-                type="number"
-                min="0.001"
-                max="10"
-                step="0.001"
-                inputMode="decimal"
-                value={multipliers[id] ?? "1"}
-                disabled={busy}
-                onChange={(event) => setMultipliers((current) => ({ ...current, [id]: event.target.value }))}
-              />
-              <InsetField
-                label="调整原因（非 1.0 必填）"
-                value={multiplierReasons[id] ?? ""}
-                disabled={busy}
-                onChange={(event) => setMultiplierReasons((current) => ({ ...current, [id]: event.target.value }))}
-              />
-            </div>
-          </div>;
+    {tailStage && data.canReview && temporaryWorkerGroups.length > 0 && <Surface>
+      <div className="quantity-review-heading quantity-coefficient-heading">
+        <div><h2>临时工系数</h2><p>按工序展开；默认 1.0，非 1.0 必须填写原因。</p></div>
+        <StatusBadge tone={coefficientIssue ? "danger" : "success"}>{coefficientIssue ? "待完善" : `${data.temporaryWorkers.length} 人`}</StatusBadge>
+      </div>
+      <div className="quantity-process-list">
+        {temporaryWorkerGroups.map((group) => {
+          const open = coefficientExpanded[group.configurationItemId] === true;
+          const groupIssue = group.workers.some((worker) => {
+            const id = `${worker.configurationItemId}:${worker.personId}`;
+            const value = multipliers[id]?.trim() ?? "";
+            const reason = multiplierReasons[id]?.trim() ?? "";
+            return !/^\d+(?:\.\d{1,3})?$/.test(value)
+              || Number(value) <= 0
+              || Number(value) > 10
+              || (Number(value) !== 1 && !reason);
+          });
+          return <section className={`quantity-process-card quantity-coefficient-card${groupIssue ? " is-mismatch" : " is-complete"}`} key={group.configurationItemId}>
+            <button
+              className="quantity-process-toggle quantity-coefficient-toggle"
+              type="button"
+              aria-expanded={open}
+              onClick={() => setCoefficientExpanded((current) => ({
+                ...current,
+                [group.configurationItemId]: !open,
+              }))}
+            >
+              <span className="quantity-process-name">{group.processName}</span>
+              <span><small>临时工</small><strong>{group.workers.length} 人</strong></span>
+              <StatusBadge tone={groupIssue ? "danger" : "success"}>{groupIssue ? "待完善" : "已完整"}</StatusBadge>
+              <b className="quantity-process-expander">{open ? "−" : "+"}</b>
+            </button>
+            {open && <div className="quantity-process-detail">
+              {group.workers.map((worker) => {
+                const id = `${worker.configurationItemId}:${worker.personId}`;
+                return <div className="quantity-report-row quantity-coefficient-row" key={id}>
+                  <div className="quantity-report-person"><b>{worker.displayName}</b><span>临时工</span></div>
+                  <div className="mobile-actions whole-order-actions">
+                    <InsetField
+                      label="实发系数"
+                      type="number"
+                      min="0.001"
+                      max="10"
+                      step="0.001"
+                      inputMode="decimal"
+                      value={multipliers[id] ?? "1"}
+                      disabled={busy}
+                      onChange={(event) => setMultipliers((current) => ({ ...current, [id]: event.target.value }))}
+                    />
+                    <InsetField
+                      label="调整原因（非 1.0 必填）"
+                      value={multiplierReasons[id] ?? ""}
+                      disabled={busy}
+                      onChange={(event) => setMultiplierReasons((current) => ({ ...current, [id]: event.target.value }))}
+                    />
+                  </div>
+                </div>;
+              })}
+            </div>}
+          </section>;
         })}
-      </div>}
+      </div>
     </Surface>}
 
     {tailStage && data.canReview && <Surface>
@@ -455,7 +489,7 @@ export function WholeOrderReviewPanel({
           <h2>IE 复核决定</h2>
           <p>通过后按每个人的有效数量生成工资；退回后保留本版审计记录。</p>
         </div>
-        <div className="mobile-actions">
+        <div className="quantity-review-actions">
           <Button onClick={() => void reviewQuantities("rejected")} disabled={busy}>退回</Button>
           <Button variant="primary" onClick={() => void reviewQuantities("approved")} disabled={busy}>通过</Button>
         </div>

@@ -74,10 +74,11 @@ const validateItems = (items: readonly ItemForm[]): string | null => {
   return null;
 };
 
-export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged, embedded = false }: {
+export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged, embedded = false, workspaceNode = "process_configuration" }: {
   reworkOrderId: string;
   onOrderChanged?: () => Promise<void> | void;
   embedded?: boolean;
+  workspaceNode?: "process_configuration" | "ie_review";
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -378,6 +379,14 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged, emb
   const changedProps = onOrderChanged ? { onOrderChanged } : {};
 
   if (!response || !plan) return <Surface>{message || "正在加载…"}</Surface>;
+  if (workspaceNode === "ie_review" && !["pending_process_configuration", "pending_ie_review"].includes(response.reworkStatus)) {
+    return <Surface className="process-worker-readonly process-worker-ie-review-readonly">
+      <StatusBadge tone="success">IE 核价已完成</StatusBadge>
+      <h2>IE 核价</h2>
+      <PlanReadonly plan={plan} configuration={configuration} />
+      <p>以下为 IE 已核准并锁定的工序单价与执行人员快照。</p>
+    </Surface>;
+  }
   if (configuration && plan.required === false) {
     if (response.reworkStatus === "pending_task_assignment") return <WorkReportingForm reworkOrderId={reworkOrderId} taskMode="task_assignment" embedded={embedded} {...changedProps} />;
     return <LegacyProcessConfigurationForm reworkOrderId={reworkOrderId} embedded={embedded} {...changedProps} />;
