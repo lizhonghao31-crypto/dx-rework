@@ -186,10 +186,13 @@ export class ResponsibilityDeterminationService {
     orderId: string,
     executor: Pool | PoolClient = this.database,
   ): Promise<ResponsibilityDeterminationResponse> {
-    const orderResult = await executor.query<{
-      status: ReworkStatus;
-      version: number;
-    }>("SELECT status,version FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'", [
+    const orderResult = await executor.query<OrderRow>(
+      `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
+              merchandiser_user_id,processing_factory_type,
+              processing_factory_supplier_id,processing_factory_supplier_version,
+              problem_part,problem_description,rework_quantity
+       FROM rework_orders
+       WHERE rework_order_id=$1 AND status<>'deleted'`, [
       orderId,
     ]);
     const order =
@@ -375,6 +378,16 @@ export class ResponsibilityDeterminationService {
       reworkOrderId: orderId,
       reworkStatus: order.status,
       orderVersion: order.version,
+      processingFactory: order.processing_factory_type === "own_factory"
+        ? { type: "own_factory" }
+        : order.processing_factory_type === "supplier"
+          && order.processing_factory_supplier_id
+          && order.processing_factory_supplier_version
+          ? {
+              type: "supplier",
+              supplierId: order.processing_factory_supplier_id,
+            }
+          : null,
       handlerUserId: determination?.handler_user_id ?? null,
       canDetermine: actorCapabilities.includes("responsibility:determine"),
       canTakeover: actorCapabilities.includes("responsibility:takeover"),
