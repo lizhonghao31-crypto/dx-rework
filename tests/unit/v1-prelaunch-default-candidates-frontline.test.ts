@@ -26,7 +26,7 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
     expect(tailEntries[0]?.href).toContain("ui/work-reporting?queue=in_progress");
   });
 
-  it("keeps N02 order-local changes separate from the global default roster", async () => {
+  it("keeps N02 edits order-local until the dedicated default-roster save", async () => {
     const [masterData, form, app, detail, reporting] = await Promise.all([
       readFile(new URL("../../apps/web/src/master-data-page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/process-worker-assignment-form.tsx", import.meta.url), "utf8"),
@@ -37,8 +37,11 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
 
     expect(masterData).toContain("默认候选人");
     expect(masterData).toContain("新订单选择该工序时自动带入，可在订单内调整。");
-    expect(form).toContain("已自动带入 {item.defaultCandidateCount} 名默认候选人");
-    expect(form).not.toContain("replaceProcessDefaultWorkers(");
+    expect(form).toContain("＋ 增加默认工人");
+    expect(form).toContain("saveDefaultWorkers(index)");
+    expect(form).toContain("当前订单已生效");
+    expect(form).toContain("点击“保存”后才会更新以后订单的默认工人");
+    expect(form).not.toContain('placeholder="搜索正式工或临时工" disabled={busy} onChange={(event) => setWorkerSearches');
     expect(app).toContain('path === "/ui/frontline"');
     expect(app).toContain('{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" }');
     expect(reporting).toContain('"work:report_for_worker", "tail_inspection:report"');
