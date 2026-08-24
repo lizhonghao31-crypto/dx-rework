@@ -29,10 +29,10 @@ export function frontlineEntries(user: AuthorizedUser): readonly Entry[] {
     entries.push({ label: "仓库收货", description: "登记返工订单的到货信息", href: pageUrl("ui/receiving") });
   }
   if (hasRole(user, "worker") && has(user, "work:report")) {
-    entries.push({ label: "本人返工任务", description: "查看本人任务并登记完成数量", href: pageUrl("ui/work-reporting?queue=in_progress") });
+    entries.push({ label: "本人返工任务", description: "查看本人任务并登记完成数量", href: pageUrl("ui/frontline/tasks?kind=worker") });
   }
   if (hasRole(user, "tail_inspector") && has(user, "tail_inspection:report")) {
-    entries.push({ label: "本人尾查任务", description: "进入统一任务工作台登记本人尾查结果", href: pageUrl("ui/work-reporting?queue=in_progress") });
+    entries.push({ label: "本人尾查任务", description: "进入统一任务工作台登记本人尾查结果", href: pageUrl("ui/frontline/tasks?kind=tail_inspection") });
   }
   if (has(user, "todo:view")) {
     entries.push({ label: "我的待办", description: "处理分配给本人的待办事项", href: pageUrl("ui/my-tasks") });
