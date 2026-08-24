@@ -104,8 +104,14 @@ function useInternalLocation(basePath: string): InternalLocation {
 
       event.preventDefault();
       window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
-      window.scrollTo({ top: 0, left: 0 });
       sync();
+      if (url.hash) {
+        window.requestAnimationFrame(() => {
+          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
+        });
+      } else {
+        window.scrollTo({ top: 0, left: 0 });
+      }
     };
 
     window.addEventListener("popstate", sync);
