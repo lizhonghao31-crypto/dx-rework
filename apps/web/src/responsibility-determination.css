@@ -97,17 +97,6 @@
   border-top: 1px solid var(--dx-v2-color-border);
 }
 
-.responsibility-supplier-field small {
-  margin-top: 2px;
-  color: var(--dx-v2-color-text-secondary);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.responsibility-supplier-field small.is-manual {
-  color: #a12b2b;
-}
-
 @media (min-width: 801px) {
   .responsibility-panel .dx-field {
     gap: 3px;
