@@ -35,9 +35,13 @@ describe("N02 mobile personnel assignment", () => {
     expect(css).toContain(".process-worker-tail-body>.process-worker-picker{display:none}");
     expect(css).not.toContain(".process-worker-line>.process-worker-line__body>.process-worker-picker,.process-worker-tail-body>.process-worker-picker{display:none}");
     expect(css).toContain(".process-worker-fields{grid-template-columns:1fr");
-    expect(css).toContain('.process-worker-line{grid-template-areas:"heading heading" "fields picker";grid-template-columns:minmax(120px,.82fr) minmax(0,1.18fr)');
+    expect(css).toContain('.process-worker-line{grid-template-areas:"heading picker" "fields picker";grid-template-columns:minmax(120px,.82fr) minmax(0,1.18fr)');
     expect(css).toContain(".process-worker-fields{grid-area:fields;grid-column:1;grid-row:2");
-    expect(css).toContain(".process-worker-line .process-worker-picker{grid-area:picker;grid-column:2;grid-row:2");
+    expect(css).toContain(".process-worker-line .process-worker-picker{grid-area:picker;grid-column:2;grid-row:1/3");
+    expect(css).toContain(".process-worker-line__heading>b,.process-worker-picker__heading>b{line-height:32px!important");
+    expect(css).toContain(".process-worker-picker__heading{display:flex;min-height:32px");
+    expect(css).toContain(".process-worker-roster-actions .dx-button{position:relative;min-height:32px!important");
+    expect(css).toContain('.process-worker-roster-actions .dx-button::after{content:"";position:absolute;inset:-6px 0}');
     expect(css).toContain(".process-worker-source{display:grid;grid-template-columns:minmax(0,1fr)");
     expect(css).toContain(".process-worker-source label{width:max-content;max-width:100%;white-space:nowrap}");
     expect(css).toContain(".process-worker-actions{position:static;bottom:auto;z-index:auto");
