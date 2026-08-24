@@ -274,7 +274,7 @@ export function MasterDataPage() {
         method: "PUT",
         body: JSON.stringify({
           personIds: processRosterDraft,
-          changeReason: "工序页面维护默认勾选人员",
+          changeReason: "工序页面维护默认候选人",
         }),
       });
       setEditingProcessRosterId("");
