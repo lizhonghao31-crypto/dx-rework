@@ -70,6 +70,22 @@ export function WholeOrderReviewPanel({
   const attempts = useRef<Record<string, string>>({});
   const requestInFlight = useRef(false);
 
+  const applyOverview = (overview: WholeOrderReviewResponse) => {
+    setData(overview);
+    setCorrectionInputs((current) => Object.fromEntries(overview.reports.map((report) => [
+      report.workReportId,
+      current[report.workReportId] ?? String(report.effectiveQuantity),
+    ])));
+    setMultipliers((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
+      const id = `${worker.configurationItemId}:${worker.personId}`;
+      return [id, current[id] ?? String(worker.multiplier)];
+    })));
+    setMultiplierReasons((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
+      const id = `${worker.configurationItemId}:${worker.personId}`;
+      return [id, current[id] ?? worker.reason ?? ""];
+    })));
+  };
+
   const load = async () => {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
@@ -84,20 +100,8 @@ export function WholeOrderReviewPanel({
           "rework-orders/" + reworkOrderId + "/tail-inspection",
           TailInspectionResponseSchema.parse,
         );
-      setData(overview);
+      applyOverview(overview);
       setTailData(tail);
-      setCorrectionInputs((current) => Object.fromEntries(overview.reports.map((report) => [
-        report.workReportId,
-        current[report.workReportId] ?? String(report.effectiveQuantity),
-      ])));
-      setMultipliers((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
-        const id = `${worker.configurationItemId}:${worker.personId}`;
-        return [id, current[id] ?? String(worker.multiplier)];
-      })));
-      setMultiplierReasons((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
-        const id = `${worker.configurationItemId}:${worker.personId}`;
-        return [id, current[id] ?? worker.reason ?? ""];
-      })));
       if (overview.reviewId) setMessage("IE 已复核通过，工资已按有效数量锁定并进入责任判定。");
       else if (overview.reworkStatus === "pending_final_quantity_ie_review") setMessage("请 IE 只读核对各工序数量；通过或退回，不在本节点修改。");
       else if (overview.reworkStatus === "pending_order_review") {
@@ -119,7 +123,12 @@ export function WholeOrderReviewPanel({
     void load().catch((cause) => setMessage(cause instanceof Error ? cause.message : "读取失败"));
   }, [reworkOrderId]);
 
-  const call = async <T,>(path: string, parse: (value: unknown) => T, body: unknown) => {
+  const call = async <T,>(
+    path: string,
+    parse: (value: unknown) => T,
+    body: unknown,
+    applyResult?: (result: T) => void,
+  ) => {
     const signature = path + JSON.stringify(body);
     const idempotencyKey = attempts.current[signature] ?? crypto.randomUUID();
     attempts.current[signature] = idempotencyKey;
@@ -131,7 +140,8 @@ export function WholeOrderReviewPanel({
         body: JSON.stringify(body),
       });
       delete attempts.current[signature];
-      await load();
+      if (applyResult) applyResult(result);
+      else await load();
       await onChanged();
       return result;
     } finally {
@@ -154,7 +164,7 @@ export function WholeOrderReviewPanel({
         expectedOrderVersion: data.orderVersion,
         rejectedPersonId: personId,
         reason: reason.trim(),
-      });
+      }, applyOverview);
       setMessage("已驳回该报数；原记录保留，执行人可在 N04 重新报数。");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "报数驳回失败");
@@ -177,6 +187,7 @@ export function WholeOrderReviewPanel({
         "work-reports/" + report.workReportId + "/effective-quantity",
         WholeOrderReviewResponseSchema.parse,
         { expectedOrderVersion: data.orderVersion, effectiveQuantity: Number(value) },
+        applyOverview,
       );
       setMessage(`已修正 ${report.members[0]?.displayName ?? "执行人"} 的有效数量；原值永久保留。`);
     } catch (cause) {
@@ -228,6 +239,7 @@ export function WholeOrderReviewPanel({
             ...(reason ? { reason } : {}),
           })),
         },
+        applyOverview,
       );
       setMessage("系统已生成最终数量，等待 IE 复核。");
     } catch (cause) {
@@ -245,6 +257,7 @@ export function WholeOrderReviewPanel({
         "rework-orders/" + reworkOrderId + "/whole-order-review/ie-review",
         WholeOrderReviewResponseSchema.parse,
         { expectedOrderVersion: data.orderVersion, decision, ...(reason?.trim() ? { reason: reason.trim() } : {}) },
+        applyOverview,
       );
       setMessage(decision === "approved"
         ? "IE 复核已通过，工资已按有效数量锁定并进入责任判定。"
