@@ -66,7 +66,8 @@ describe("1.0 prelaunch effective quantity", () => {
     expect(panel).toContain("IE 只读核对系统锁定的数量事实");
     expect(panel).toContain("确认一致并提交 IE");
     expect(panel).toContain("const [coefficientExpanded, setCoefficientExpanded] = useState<Record<string, boolean>>({})");
-    expect(panel).toContain("<h2>临时工系数</h2>");
+    expect(panel).toContain("const [coefficientSectionExpanded, setCoefficientSectionExpanded] = useState(false)");
+    expect(panel).toContain("<strong>临时工工资调整</strong>");
     expect(panel).toContain("temporaryWorkerGroups.map");
     expect(panel).not.toContain("finalQuantities");
   });
