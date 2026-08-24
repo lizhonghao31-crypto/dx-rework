@@ -659,6 +659,20 @@ export const CreateWorkTaskSchema = z.object({
 });
 export const WorkTaskParamsSchema = z.object({ workTaskId: IdSchema }).strict();
 export const ReworkWorkTasksParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const FrontlineTaskKindSchema = z.enum(["worker", "tail_inspection"]);
+export const FrontlineTasksQuerySchema = z.object({ kind: FrontlineTaskKindSchema }).strict();
+export const FrontlineTaskItemSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkNo: z.string().nullable(),
+  styleNo: z.string().nullable(),
+  orderNo: z.string().nullable(),
+  processNames: z.array(z.string().min(1)).min(1),
+  status: z.literal("in_progress"),
+}).strict();
+export const FrontlineTasksResponseSchema = z.object({
+  kind: FrontlineTaskKindSchema,
+  items: z.array(FrontlineTaskItemSchema),
+}).strict();
 export const ConfirmWorkAssignmentsSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
 }).strict();
@@ -737,6 +751,9 @@ export type WorkTaskAssignablePeopleResponse = z.infer<typeof WorkTaskAssignable
 export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;
 export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;
 export type ReworkWorkTasksResponse = z.infer<typeof ReworkWorkTasksResponseSchema>;
+export type FrontlineTaskKind = z.infer<typeof FrontlineTaskKindSchema>;
+export type FrontlineTaskItem = z.infer<typeof FrontlineTaskItemSchema>;
+export type FrontlineTasksResponse = z.infer<typeof FrontlineTasksResponseSchema>;
 
 export const WholeOrderReviewParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
 export const WholeOrderReviewQuerySchema = z.object({ configurationItemId: IdSchema.optional() }).strict();

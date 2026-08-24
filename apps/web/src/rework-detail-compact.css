@@ -687,3 +687,19 @@ details.inspection-readonly {
     flex-basis: 118px;
   }
 }
+
+/* Mobile task-first density: remove real container height so the current workspace reaches the first screen sooner. */
+@media (max-width: 760px) {
+  .rework-detail-header .page-heading{gap:5px;margin-bottom:6px}
+  .rework-detail-header .page-heading__subtitle-row{margin-top:2px}
+  .rework-detail-target-layout{gap:5px}
+  .rework-detail-core-facts{gap:5px}
+  .rework-detail-core-fact{min-height:52px;padding:6px 8px}
+  .rework-detail-core-fact dd{margin-top:2px}
+  .rework-detail-overview-grid{gap:5px}
+  .rework-detail-target-layout .rework-detail-images,.rework-detail-target-layout .rework-workflow{padding:2px 7px}
+  .rework-detail-mobile-panel-toggle{padding:0 2px}
+  .rework-detail-target-layout .rework-detail-workspace{gap:5px;padding:7px;scroll-margin-top:6px;border-top:1px solid #d5dee7}
+  .rework-detail-target-layout .rework-detail-task__heading{min-height:26px}
+  .rework-detail-target-layout .rework-detail-task__heading h2{font-size:15px;line-height:20px}
+}

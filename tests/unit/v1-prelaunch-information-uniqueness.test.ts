@@ -21,7 +21,7 @@ describe("v1 prelaunch business information uniqueness", () => {
     ]);
     for (const source of sources) {
       expect(source).toContain("embedded = false");
-      expect(source).toContain("!embedded && <div className=\"mobile-hero\"");
+      expect(source).toMatch(/!embedded(?: && !frontlineContext)? && <div className="mobile-hero"/);
     }
   });
 

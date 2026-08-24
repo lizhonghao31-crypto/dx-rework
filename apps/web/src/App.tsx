@@ -34,6 +34,7 @@ import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
 import { ReceivingPage } from "./receiving-page.js";
 import { OrderBoardPage } from "./order-board-page.js";
 import { FrontlineLandingPage } from "./frontline-landing-page.js";
+import { FrontlineTaskPage } from "./frontline-task-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -191,6 +192,7 @@ export function App() {
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
+  else if (path === "/ui/frontline/tasks") page = <FrontlineTaskPage />;
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
   else if (path.startsWith("/ui/my-tasks/")) page = <ResponsibilityTaskPage />;
   else if (path === "/ui/receiving") page = <ReceivingPage />;
@@ -215,7 +217,7 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
-  if (path === "/ui/frontline") {
+  if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
       { requiredRole: "worker", requiredCapability: "work:report" },

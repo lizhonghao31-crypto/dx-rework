@@ -3,6 +3,8 @@ import {
   CreateWorkReportsBatchSchema,
   CreateWorkTaskSchema,
   ConfirmWorkAssignmentsSchema,
+  FrontlineTasksQuerySchema,
+  FrontlineTasksResponseSchema,
   IdempotencyKeySchema,
   ReworkWorkTasksParamsSchema,
   ReworkWorkTasksResponseSchema,
@@ -111,6 +113,13 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     if (proxy) return businessActor(dependencies.root, user, request.id, "work:report_for_worker");
     throw new ApplicationError("FORBIDDEN", "当前角色无权查看返工执行任务或报数", 403);
   };
+
+  app.get("/frontline/work-tasks", async (request) => {
+    const query = parse(FrontlineTasksQuerySchema, request.query);
+    return FrontlineTasksResponseSchema.parse(
+      await dependencies.service.listFrontlineTasks(await actor(request, "read"), query.kind),
+    );
+  });
 
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request) => ReworkWorkTasksResponseSchema.parse(await dependencies.service.list(await actor(request, "read"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId)));
   app.get("/work-task-options", async (request) => {
