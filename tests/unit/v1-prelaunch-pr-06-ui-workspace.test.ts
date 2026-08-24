@@ -35,6 +35,8 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
     expect(compact).toContain(".rework-detail-mobile-collapsible {\n  display: grid;");
     expect(compact).toContain(".rework-detail-mobile-collapsible {\n    display: none;");
     expect(compact).toContain(".rework-detail-mobile-collapsible.is-expanded");
+    expect(compact).toContain(".rework-detail-target-layout .rework-detail-desktop-panel-heading");
+    expect(compact).toContain("display: none !important;");
   });
 
   it("selects and scrolls to N03 while keeping a distinct historical IE pricing view", async () => {
