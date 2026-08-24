@@ -33,6 +33,7 @@ import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
 import { ReceivingPage } from "./receiving-page.js";
 import { OrderBoardPage } from "./order-board-page.js";
+import { FrontlineLandingPage } from "./frontline-landing-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -183,6 +184,7 @@ export function App() {
   else if (path === "/ui/master-data") page = <MasterDataPage />;
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
+  else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
   else if (path.startsWith("/ui/my-tasks/")) page = <ResponsibilityTaskPage />;
   else if (path === "/ui/receiving") page = <ReceivingPage />;
@@ -207,6 +209,13 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
+  if (path === "/ui/frontline") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
+    ]}>{page}</AuthGate>;
+  }
   if (path === "/ui/receiving") {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
@@ -241,6 +250,7 @@ export function App() {
       { requiredRole: "tail_supervisor", requiredCapability: "submission:audit" },
       { requiredRole: "tail_supervisor", requiredCapability: "quantity:adjust" },
       { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
       { requiredCapability: "work:report_for_worker" },
       { requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" },
       { requiredRole: "ie_reviewer", requiredCapability: "process:review" },

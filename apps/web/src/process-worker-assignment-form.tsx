@@ -31,7 +31,7 @@ type Detail = Readonly<{
 }>;
 type Person = WorkTaskAssignablePeopleResponse["people"][number];
 type PersonIdentity = Pick<Person, "personId" | "displayName" | "personType">;
-type ItemForm = Readonly<{ source: "catalog" | "custom"; processId: string; customProcessName: string; unitPrice: string }>;
+type ItemForm = Readonly<{ source: "catalog" | "custom"; processId: string; customProcessName: string; unitPrice: string; defaultCandidateCount: number }>;
 type PendingSubmit = Readonly<{
   reworkOrderId: string;
   body: { expectedOrderVersion: number; expectedConfigurationVersion: number };
@@ -41,13 +41,14 @@ type MobileAssignmentDraft =
   | Readonly<{ kind: "worker"; index: number; selectedIds: readonly string[] }>
   | Readonly<{ kind: "tail"; selectedIds: readonly string[] }>;
 
-const emptyItem = (): ItemForm => ({ source: "catalog", processId: "", customProcessName: "", unitPrice: "" });
+const emptyItem = (): ItemForm => ({ source: "catalog", processId: "", customProcessName: "", unitPrice: "", defaultCandidateCount: 0 });
 const formatPrice = (value: number | null): string => value === null ? "" : value.toFixed(3).replace(/\.?0+$/, "");
 const toItem = (item: NonNullable<ProcessConfigurationResponse["configuration"]>["items"][number]): ItemForm => ({
   source: item.source,
   processId: item.processId ?? "",
   customProcessName: item.source === "custom" ? item.processName : "",
   unitPrice: formatPrice(item.unitPrice),
+  defaultCandidateCount: 0,
 });
 const threeDecimals = /^\d+(?:\.\d{1,3})?$/;
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
@@ -194,10 +195,11 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
 
   const setItem = (index: number, next: Partial<ItemForm>) => { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...next } : item)); pendingSubmit.current = null; };
   const selectCatalogProcess = (index: number, processId: string): void => {
-    setItem(index, { processId });
     const defaults = processOptions.find((process) => process.processId === processId)?.defaultWorkerPersonIds ?? [];
     const eligibleIds = new Set(people.filter((person) => person.eligibleExecutionKinds.includes("worker")).map((person) => person.personId));
-    setWorkerIds((current) => ({ ...current, [String(index)]: defaults.filter((personId) => eligibleIds.has(personId)) }));
+    const eligibleDefaults = defaults.filter((personId) => eligibleIds.has(personId));
+    setItem(index, { processId, defaultCandidateCount: eligibleDefaults.length });
+    setWorkerIds((current) => ({ ...current, [String(index)]: eligibleDefaults }));
   };
   const addWorker = (index: number, personId: string) => {
     if (!personId) return;
@@ -405,8 +407,8 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
             <div className="process-worker-line__heading"><div className="process-worker-heading-primary"><b>工序 {index + 1}</b><Button className="process-worker-mobile-assign" disabled={busy} onClick={() => openMobileWorkerAssignment(index)}>{selectedIds.length ? `分配人员 · ${selectedIds.length}` : "分配人员"}</Button></div>{items.length > 1 ? <Button disabled={busy} onClick={() => { setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)); setWorkerIds((current) => Object.fromEntries(items.filter((_, itemIndex) => itemIndex !== index).map((_, newIndex) => { const oldIndex = newIndex >= index ? newIndex + 1 : newIndex; return [String(newIndex), current[String(oldIndex)] ?? []]; }))); }}>删除</Button> : null}</div>
             <div className="process-worker-line__body">
               <div className="process-worker-fields">
-                <div className="process-worker-source"><label><input type="radio" checked={item.source === "catalog"} disabled={busy} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} /> 公共工序</label><label><input type="radio" checked={item.source === "custom"} disabled={busy} onChange={() => setItem(index, { source: "custom", processId: "" })} /> 自定义工序</label></div>
-                {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => selectCatalogProcess(index, processId)} /></span></label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
+                <div className="process-worker-source"><label><input type="radio" checked={item.source === "catalog"} disabled={busy} onChange={() => setItem(index, { source: "catalog", customProcessName: "" })} /> 公共工序</label><label><input type="radio" checked={item.source === "custom"} disabled={busy} onChange={() => setItem(index, { source: "custom", processId: "", defaultCandidateCount: 0 })} /> 自定义工序</label></div>
+                {item.source === "catalog" ? <label className="dx-field"><span>返工工序</span><span className="dx-field__control search-select-control"><SearchSelect options={processOptions.map((process) => ({ value: process.processId, label: process.processName }))} value={item.processId} placeholder="搜索工序" emptyText="没有匹配工序" disabled={busy} onChange={(processId) => selectCatalogProcess(index, processId)} /></span>{item.defaultCandidateCount > 0 ? <small className="process-worker-default-candidates">已自动带入 {item.defaultCandidateCount} 名默认候选人</small> : null}</label> : <InsetField label="自定义工序" value={item.customProcessName} disabled={busy} onChange={(event) => setItem(index, { customProcessName: event.target.value })} />}
                 <InsetField label="候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} disabled={busy} onChange={(event) => setItem(index, { unitPrice: event.target.value })} />
                 <div className="process-worker-mobile-assigned-summary"><small>已分配人员</small><span>{assignedNames.length ? assignedNames.join("、") : "暂未分配"}</span></div>
               </div>
