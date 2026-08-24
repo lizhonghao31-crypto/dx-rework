@@ -98,12 +98,15 @@
   .process-worker-mobile-sheet__groups{display:grid;align-content:start;gap:10px;min-height:0;overflow:auto}.process-worker-mobile-sheet__actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.process-worker-mobile-sheet__actions .dx-button{width:100%;min-height:40px}
 }
 
-/* N02 phone grid correction: one real column, stacked source choices, horizontal labels. */
+/* N02 phone card: compact process fields on the left and worker maintenance on the right. */
 @media(max-width:640px){
-  .process-worker-line{grid-template-areas:"heading" "fields" "picker";grid-template-columns:minmax(0,1fr)}
-  .process-worker-line .process-worker-picker{grid-area:picker;grid-column:1;grid-row:auto;justify-self:stretch;box-sizing:border-box;width:100%;min-width:0}
+  .process-worker-line{grid-template-areas:"heading heading" "fields picker";grid-template-columns:minmax(120px,.82fr) minmax(0,1.18fr);column-gap:8px;align-items:start}
+  .process-worker-fields{grid-area:fields;grid-column:1;grid-row:2;width:100%;min-width:0;grid-template-columns:minmax(0,1fr)}
+  .process-worker-line .process-worker-picker{grid-area:picker;grid-column:2;grid-row:2;justify-self:stretch;box-sizing:border-box;width:100%;min-width:0;padding:0 0 0 8px;border-top:0;border-left:1px solid var(--dx-v2-color-border)}
   .process-worker-source{display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;gap:6px}
   .process-worker-source label{width:max-content;max-width:100%;white-space:nowrap}
-  .process-worker-picker__heading{justify-content:flex-start;align-items:flex-start;flex-wrap:wrap}
-  .process-worker-roster-actions{justify-content:flex-start}
+  .process-worker-picker__heading{display:grid;grid-template-columns:minmax(0,1fr);justify-content:flex-start;align-items:start;gap:6px}
+  .process-worker-roster-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;justify-content:stretch;gap:5px}
+  .process-worker-add-default{width:100%}
+  .process-worker-actions{position:static;bottom:auto;z-index:auto;padding:7px 0 calc(7px + env(safe-area-inset-bottom,0px));background:transparent}
 }
