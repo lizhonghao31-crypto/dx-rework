@@ -11,6 +11,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
 import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
 import { reportsArePersisted } from "./work-reporting-submission.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
@@ -19,7 +20,6 @@ import "./work-reporting-form.css";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type Person = { personId: string; displayName: string; personType: "internal" | "temporary" };
 type Task = ReworkWorkTasksResponse["tasks"][number];
-type AuthMe = { status: "authorized" | "no_role"; user: WorkReportingUser };
 
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), {
@@ -111,13 +111,13 @@ export function WorkReportingForm({
   useEffect(() => {
     if (!reworkOrderId) { setMessage("请从当前节点工作台选择一张订单进入处理。"); return; }
     const load = async () => {
-      const me = await request("auth/me", (value) => value as AuthMe);
-      const assignable = me.status === "authorized" && canAssignWork(me.user);
-      const root = me.status === "authorized" && me.user.isRoot === true;
-      const taskReadable = me.status === "authorized" && canReadWorkFacts(me.user);
-      const orderReviewable = me.status === "authorized" && canReviewOrder(me.user);
-      const temporaryManageable = me.status === "authorized"
-        && (root || me.user.capabilities.includes("temporary_worker:manage"));
+      const session = await verifySession();
+      if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
+      const assignable = canAssignWork(session.user);
+      const root = session.user.isRoot === true;
+      const taskReadable = canReadWorkFacts(session.user);
+      const orderReviewable = canReviewOrder(session.user);
+      const temporaryManageable = root || session.user.capabilities.includes("temporary_worker:manage");
       setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");

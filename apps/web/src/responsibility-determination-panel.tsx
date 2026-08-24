@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
 
@@ -41,11 +42,9 @@ async function request(path: string, init: RequestInit = {}): Promise<Responsibi
   return ResponsibilityDeterminationResponseSchema.parse(await response.json());
 }
 const requestCurrentUserId = async (): Promise<string> => {
-  const response = await fetch(apiUrl("auth/me"), { credentials: "include", headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(await requestError(response));
-  const body = await response.json() as { user?: { id?: string } };
-  if (!body.user?.id) throw new Error("无法读取当前登录用户");
-  return body.user.id;
+  const session = await verifySession();
+  if (session === "denied" || session.status !== "authorized") throw new Error("无法读取当前登录用户");
+  return session.user.id;
 };
 const requestSuppliers = async (orderId: string): Promise<Supplier[]> => {
   const response = await fetch(apiUrl(`rework-orders/${orderId}/responsibility-determinations/supplier-options`), { credentials: "include", headers: { accept: "application/json" } });

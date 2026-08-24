@@ -14,6 +14,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
 import { LegacyProcessConfigurationForm } from "./legacy-process-configuration-form.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -25,7 +26,8 @@ import "./process-worker-assignment-mobile-sheet.css";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type User = Readonly<{ id: string; businessRoles?: readonly string[]; capabilities: readonly string[]; isRoot?: boolean }>;
-type Detail = Readonly<{
+export type ProcessWorkerAssignmentDetail = Readonly<{
+  reworkOrderId: string;
   createdBy: { userId: string; displayName: string };
   processConfigurationCreatedBy: { userId: string; displayName: string } | null;
 }>;
@@ -74,14 +76,15 @@ const validateItems = (items: readonly ItemForm[]): string | null => {
   return null;
 };
 
-export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged, embedded = false, workspaceNode = "process_configuration" }: {
+export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOrderChanged, embedded = false, workspaceNode = "process_configuration" }: {
   reworkOrderId: string;
+  initialDetail?: ProcessWorkerAssignmentDetail;
   onOrderChanged?: () => Promise<void> | void;
   embedded?: boolean;
   workspaceNode?: "process_configuration" | "ie_review";
 }) {
   const [user, setUser] = useState<User | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
+  const [detail, setDetail] = useState<ProcessWorkerAssignmentDetail | null>(initialDetail ?? null);
   const [response, setResponse] = useState<ProcessConfigurationResponse | null>(null);
   const [plan, setPlan] = useState<ProcessWorkerPlanResponse | null>(null);
   const [processOptions, setProcessOptions] = useState<ProcessConfigurationOptionsResponse["processes"]>([]);
@@ -163,14 +166,17 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged, emb
   };
 
   const loadCore = async () => {
-    const [me, config, workerPlan, loadedDetail] = await Promise.all([
-      request("auth/me", (value) => value as { status: string; user: User }),
+    const [session, config, workerPlan, loadedDetail] = await Promise.all([
+      verifySession(),
       request(`rework-orders/${reworkOrderId}/process-configuration`, ProcessConfigurationResponseSchema.parse),
       request(`rework-orders/${reworkOrderId}/process-worker-plan`, ProcessWorkerPlanResponseSchema.parse),
-      request(`rework-orders/${reworkOrderId}/business-detail`, (value) => value as Detail),
+      initialDetail?.reworkOrderId === reworkOrderId
+        ? Promise.resolve(initialDetail)
+        : request(`rework-orders/${reworkOrderId}/business-detail`, (value) => value as ProcessWorkerAssignmentDetail),
     ]);
-    setUser(me.user); setDetail(loadedDetail); hydrate(config, workerPlan);
-    const configurable = me.user.isRoot === true || Boolean(me.user.businessRoles?.includes("tail_supervisor") && me.user.capabilities.includes("process:configure") && me.user.capabilities.includes("work:assign"));
+    if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
+    setUser(session.user); setDetail(loadedDetail); hydrate(config, workerPlan);
+    const configurable = session.user.isRoot === true || Boolean(session.user.businessRoles?.includes("tail_supervisor") && session.user.capabilities.includes("process:configure") && session.user.capabilities.includes("work:assign"));
     if (configurable && config.reworkStatus === "pending_process_configuration") {
       const [processResult, peopleResult] = await Promise.allSettled([
         request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema.parse),

@@ -3,6 +3,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 
 export type AuthorizedUser = {
+  id: string;
   displayName: string;
   capabilities: readonly string[];
   businessRoles?: readonly string[];
