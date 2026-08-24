@@ -198,16 +198,52 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
   async head(name: string): Promise<{
     res: { headers: Record<string, string | number | undefined> };
   }> {
-    const response = await this.fetchImpl(
-      this.presign(name, { method: "HEAD", expires: INTERNAL_REQUEST_TTL_SECONDS }),
-      { method: "HEAD" },
-    );
-    this.ensureSuccess(response);
+    let headFailure: unknown;
+    try {
+      const response = await this.fetchImpl(
+        this.presign(name, { method: "HEAD", expires: INTERNAL_REQUEST_TTL_SECONDS }),
+        { method: "HEAD" },
+      );
+      if (response.ok) return { res: { headers: this.responseHeaders(response) } };
+      if (response.status === 404) this.ensureSuccess(response);
+      headFailure = new AliyunOssHttpError(response.status);
+    } catch (error) {
+      if (error instanceof AliyunOssHttpError && error.statusCode === 404) throw error;
+      headFailure = error;
+    }
+
+    // Some OSS gateways reject signed HEAD requests even though the object is
+    // readable. A one-byte GET preserves the same private, signed verification
+    // boundary without downloading the image body.
+    try {
+      const response = await this.fetchImpl(
+        this.presign(name, { method: "GET", expires: INTERNAL_REQUEST_TTL_SECONDS }),
+        { method: "GET", headers: { range: "bytes=0-0" } },
+      );
+      this.ensureSuccess(response);
+      const headers = this.responseHeaders(response);
+      const totalSize = this.contentRangeTotal(headers["content-range"]);
+      if (totalSize !== undefined) headers["content-length"] = String(totalSize);
+      await response.body?.cancel();
+      return { res: { headers } };
+    } catch (fallbackFailure) {
+      throw fallbackFailure ?? headFailure;
+    }
+  }
+
+  private responseHeaders(response: Response): Record<string, string> {
     const headers: Record<string, string> = {};
     response.headers.forEach((value, key) => {
       headers[key.toLowerCase()] = value;
     });
-    return { res: { headers } };
+    return headers;
+  }
+
+  private contentRangeTotal(value: string | undefined): number | undefined {
+    const match = value?.match(/^bytes\s+\d+-\d+\/(\d+)$/i);
+    if (!match) return undefined;
+    const total = Number(match[1]);
+    return Number.isSafeInteger(total) && total >= 0 ? total : undefined;
   }
 
   async createReadStream(name: string): Promise<AsyncIterable<Uint8Array>> {

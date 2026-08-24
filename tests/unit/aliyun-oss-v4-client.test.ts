@@ -149,6 +149,38 @@ describe("Aliyun OSS V4 REST client", () => {
     )).toBe(true);
   });
 
+  it("falls back to a one-byte signed GET when the gateway rejects HEAD", async () => {
+    const seen: Array<{ method: string | undefined; headers: HeadersInit | undefined }> = [];
+    const fakeFetch = (async (
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      seen.push({ method: init?.method, headers: init?.headers });
+      if (init?.method === "HEAD") return new Response(null, { status: 405 });
+      return new Response("x", {
+        status: 206,
+        headers: {
+          "content-length": "1",
+          "content-range": "bytes 0-0/24576",
+          "content-type": "image/webp",
+          "x-oss-meta-sha256": sha256,
+        },
+      });
+    }) as typeof fetch;
+    const client = new AliyunOssV4RestClient({ ...baseOptions, fetchImpl: fakeFetch });
+    const storage = new AliyunPrivateObjectStorage(client, fixedNow);
+
+    await expect(storage.head("private/photo.webp")).resolves.toEqual({
+      sizeBytes: 24576,
+      mimeType: "image/webp",
+      sha256,
+    });
+    expect(seen).toEqual([
+      { method: "HEAD", headers: undefined },
+      { method: "GET", headers: { range: "bytes=0-0" } },
+    ]);
+  });
+
   it("maps an OSS 404 into the storage not-found contract", async () => {
     const fakeFetch = (async (): Promise<Response> =>
       new Response(null, { status: 404 })) as typeof fetch;
