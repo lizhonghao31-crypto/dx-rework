@@ -11,6 +11,8 @@
   - `apps/web/src/process-worker-assignment-form.css`
   - `apps/web/src/process-worker-assignment-mobile-sheet.css`
   - `tests/integration/access-routes.test.ts`
+  - `tests/unit/n02-compact-responsive-layout.test.ts`
+  - `tests/unit/n02-mobile-assignment-sheet.test.ts`
   - `tests/unit/v1-prelaunch-default-candidates-frontline.test.ts`
   - this preflight record
 - Forbidden scope: database migrations, process state changes, wage or responsibility rules, deployment, DingTalk integration, and unrelated master-data UI changes.
