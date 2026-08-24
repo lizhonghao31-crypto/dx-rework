@@ -986,6 +986,7 @@ export const TakeoverResponsibilitySchema = z.object({ expectedOrderVersion: z.n
 export const ConfirmHighMultiplierSchema = z.object({ expectedOrderVersion: z.number().int().positive(), expectedCurrentDeterminationVersion: z.number().int().positive(), reason: ReasonSchema }).strict();
 export const ResponsibilityDeterminationResponseSchema = z.object({
   reworkOrderId: IdSchema, reworkStatus: ReworkOrderStatusSchema, orderVersion: z.number().int().positive(),
+  processingFactory: ReworkProcessingFactorySchema.nullable().optional(),
   handlerUserId: IdSchema.nullable(), canDetermine: z.boolean(), canTakeover: z.boolean(), canConfirmHighMultiplier: z.boolean(),
   canOwnerSign: z.boolean().default(false),
   ownerSignature: z.object({
