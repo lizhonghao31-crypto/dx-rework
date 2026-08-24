@@ -1029,12 +1029,57 @@ export class WholeOrderReviewService {
     );
     if (pending.rows[0]?.execution_pending) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
     if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
-    const issues = (await this.plans(client, reworkOrderId)).filter((plan) =>
+    const overLimit = await client.query<{ process_name: string }>(
+      `WITH active_configuration AS (
+         SELECT configuration_id,unified_execution_required
+         FROM rework_process_configurations
+         WHERE rework_order_id=$1 AND status='approved'
+         LIMIT 1
+       ), unified_tail AS (
+         SELECT COALESCE(sum(rework_work_report_effective_quantity(report.work_report_id)),0) AS quantity
+         FROM rework_work_reports report
+         JOIN rework_process_configuration_items item
+           ON item.configuration_item_id=report.configuration_item_id
+          AND item.execution_kind='tail_inspection'
+         WHERE report.rework_order_id=$1 AND report.status='submitted'
+           AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+       )
+       SELECT item.process_name
+       FROM active_configuration active
+       JOIN rework_process_configuration_items item ON item.configuration_id=active.configuration_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(sum(rework_work_report_effective_quantity(report.work_report_id)),0) AS quantity
+         FROM rework_work_reports report
+         WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id
+           AND report.status='submitted'
+           AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+       ) worker ON true
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(sum(report_item.inspected_quantity),0) AS quantity
+         FROM rework_tail_inspection_report_items report_item
+         JOIN rework_tail_inspection_reports report
+           ON report.tail_inspection_report_id=report_item.tail_inspection_report_id AND report.status='submitted'
+         JOIN rework_tail_inspection_assignments assignment
+           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id AND assignment.revoked_at IS NULL
+         WHERE report.rework_order_id=$1 AND report_item.configuration_item_id=item.configuration_item_id
+       ) legacy_tail ON true
+       CROSS JOIN unified_tail
+       WHERE item.execution_kind='worker'
+         AND worker.quantity > CASE WHEN active.unified_execution_required THEN unified_tail.quantity ELSE legacy_tail.quantity END`,
+      [reworkOrderId],
+    );
+    if (!(await this.unifiedExecutionRequired(client, reworkOrderId))) {
+      if (overLimit.rows.length > 0) {
+        error(`返工上数超过尾查数量：${overLimit.rows.map((row) => row.process_name).join("、")}；请驳回并调整报数`, 409, "CONFLICT");
+      }
+      return;
+    }
+    const mismatches = (await this.plans(client, reworkOrderId)).filter((plan) =>
       numberValue(plan.completed_quantity) <= 0
       || numberValue(plan.tail_checked_quantity) <= 0
       || numberValue(plan.completed_quantity) !== numberValue(plan.tail_checked_quantity));
-    if (issues.length > 0) {
-      error(`工人与尾查有效数量不一致：${issues.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
+    if (mismatches.length > 0) {
+      error(`工人与尾查有效数量不一致：${mismatches.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
     }
   }
 

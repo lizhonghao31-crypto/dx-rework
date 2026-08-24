@@ -191,7 +191,7 @@ export function WholeOrderReviewPanel({
         TailInspectionResponseSchema.parse,
         { expectedOrderVersion: data.orderVersion, reason: reason.trim() },
       );
-      setMessage(`已驳回 ${inspectorName} 的尾查报数；原记录保留。`);
+      setMessage(`已驳回 ${inspectorName} 的尾查报数；原记录保留，尾查可重新报数。`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "尾查报数驳回失败");
     }
