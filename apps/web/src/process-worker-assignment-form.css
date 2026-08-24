@@ -11,3 +11,5 @@
 
 /* N02 alignment root-cause correction: keep group titles clear of borders and prevent tail implicit-grid placement. */
 .process-worker-line .process-worker-picker{grid-area:picker}.process-worker-tail-body>.process-worker-picker{grid-area:auto;align-self:start}.process-worker-tail-body{align-items:start}.process-worker-people-group{border:0;padding:0;background:transparent;border-radius:0}.process-worker-people-group legend{margin:0 0 4px;padding:0 2px;line-height:24px}.process-worker-people-group>div{box-sizing:border-box;border:1px solid var(--dx-v2-color-border);border-radius:8px;background:var(--dx-v2-color-surface);padding:5px 6px}.process-worker-people-group--tail>div{padding:5px 6px}
+
+.process-worker-default-candidates{color:var(--dx-v2-color-primary);font-size:12px;font-weight:700}

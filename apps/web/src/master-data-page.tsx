@@ -618,23 +618,23 @@ export function MasterDataPage() {
                 <article key={process.processId} className="master-data-row">
                   <div>
                     <h3>{process.processName}</h3>
-                    <p>{process.processCode} · {process.pricingUnit === "piece" ? "按件" : "按小时"} · 版本 {process.version} · 默认 {process.defaultWorkerPersonIds.length} 人</p>
+                    <p>{process.processCode} · {process.pricingUnit === "piece" ? "按件" : "按小时"} · 版本 {process.version} · 默认候选人 {process.defaultWorkerPersonIds.length} 人</p>
                   </div>
                   <StatusBadge tone={process.active ? "success" : "warning"}>{process.active ? "启用" : "停用"}</StatusBadge>
                   <div className="master-data-actions">
-                    <Button disabled={Boolean(busy)} onClick={() => openProcessRoster(process)}>{editingProcessRosterId === process.processId ? "收起名单" : "固定人员名单"}</Button>
+                    <Button disabled={Boolean(busy)} onClick={() => openProcessRoster(process)}>{editingProcessRosterId === process.processId ? "收起候选人" : "默认候选人"}</Button>
                     <Button disabled={Boolean(busy)} onClick={() => void reviseProcess(process, "rename")}>修改名称</Button>
                     <Button disabled={Boolean(busy)} onClick={() => void reviseProcess(process, "toggle")}>{process.active ? "停用" : "恢复"}</Button>
                   </div>
                   {editingProcessRosterId === process.processId ? <div className="master-data-process-roster">
-                    <div className="master-data-process-roster__heading"><div><b>新订单默认勾选人员</b><p>只影响以后在 N02 新选择这道公共工序时的初始勾选；不会改动历史订单。</p></div><span>已选 {processRosterDraft.length} 人</span></div>
-                    <input type="search" value={processRosterSearch} placeholder="搜索正式工或临时工" aria-label={`${process.processName} 默认人员搜索`} onChange={(event) => setProcessRosterSearch(event.target.value)} />
+                    <div className="master-data-process-roster__heading"><div><b>默认候选人</b><p>新订单选择该工序时自动带入，可在订单内调整。不会改动历史订单。</p></div><span>已选 {processRosterDraft.length} 人</span></div>
+                    <input type="search" value={processRosterSearch} placeholder="搜索正式工或临时工" aria-label={`${process.processName} 默认候选人搜索`} onChange={(event) => setProcessRosterSearch(event.target.value)} />
                     <div className="master-data-process-roster__groups">{(["internal", "temporary"] as const).map((personType) => {
                       const query = processRosterSearch.trim().toLocaleLowerCase("zh-CN");
                       const candidates = processDefaultWorkerCandidates.filter((person) => person.personType === personType && (!query || `${person.displayName} ${person.temporaryRemark ?? ""}`.toLocaleLowerCase("zh-CN").includes(query)));
                       return <fieldset key={personType}><legend>{personType === "internal" ? "正式工" : "临时工"} · {candidates.length} 人</legend><div>{candidates.length ? candidates.map((person) => <label key={person.personId}><input type="checkbox" checked={processRosterDraft.includes(person.personId)} disabled={Boolean(busy)} onChange={(event) => toggleProcessRosterPerson(person.personId, event.target.checked)} /><span>{person.displayName}{person.temporaryRemark ? ` · ${person.temporaryRemark}` : ""}</span></label>) : <p>没有匹配人员</p>}</div></fieldset>;
                     })}</div>
-                    <div className="master-data-actions"><Button disabled={Boolean(busy)} onClick={() => setEditingProcessRosterId("")}>取消</Button><Button variant="primary" disabled={Boolean(busy)} onClick={() => saveProcessRoster(process)}>{busy === `process-roster:${process.processId}` ? "保存中…" : "保存固定名单"}</Button></div>
+                    <div className="master-data-actions"><Button disabled={Boolean(busy)} onClick={() => setEditingProcessRosterId("")}>取消</Button><Button variant="primary" disabled={Boolean(busy)} onClick={() => saveProcessRoster(process)}>{busy === `process-roster:${process.processId}` ? "保存中…" : "保存默认候选人"}</Button></div>
                   </div> : null}
                 </article>
               ))}
