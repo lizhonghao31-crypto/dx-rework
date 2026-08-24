@@ -6,7 +6,7 @@ base branch: main
 base SHA: 12af0b83fc53070bb4ac6c97e4270c767b53d9d1
 working branch: codex/v1-prelaunch-performance-pr11
 task scope: 收敛订单详情与节点工作区的重复读取，并减少详情服务的数据库往返
-allowed files: apps/web/src/auth.tsx; apps/web/src/rework-detail-page.tsx; apps/web/src/process-configuration-form.tsx; apps/web/src/process-worker-assignment-form.tsx; apps/web/src/work-reporting-form.tsx; apps/web/src/responsibility-determination-panel.tsx; apps/api/src/rework/rework-business-detail-service.ts; tests/unit/v1-prelaunch-performance-pr11.test.ts; docs/engineering/v1-prelaunch-performance-pr11-preflight.md
+allowed files: apps/web/src/auth.tsx; apps/web/src/rework-detail-page.tsx; apps/web/src/process-configuration-form.tsx; apps/web/src/process-worker-assignment-form.tsx; apps/web/src/work-reporting-form.tsx; apps/web/src/responsibility-determination-panel.tsx; apps/api/src/rework/rework-business-detail-service.ts; tests/unit/v1-prelaunch-performance-pr11.test.ts; tests/unit/business-facing-workflow-ui.test.ts; tests/unit/v1-prelaunch-information-uniqueness.test.ts; tests/unit/whole-order-review.test.ts; docs/engineering/v1-prelaunch-performance-pr11-preflight.md
 forbidden files: migrations/**; CSS/**; contracts/**; workflow state machine; write services; DingTalk provider/outbox; production configuration
 ```
 
