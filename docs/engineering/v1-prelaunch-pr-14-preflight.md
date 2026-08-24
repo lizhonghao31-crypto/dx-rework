@@ -18,6 +18,7 @@
   - `apps/web/src/rework-detail-compact.css`
   - `tests/unit/v1-prelaunch-default-candidates-frontline.test.ts`
   - `tests/unit/v1-prelaunch-frontline-minimal.test.ts`
+  - `tests/unit/v1-prelaunch-information-uniqueness.test.ts`
   - this preflight record
 - Forbidden scope: migrations, task/reporting state transitions, wage/quantity/responsibility rules, management dashboards, deployment, and DingTalk.
 - Verification: focused service/UI/mobile contracts, web/API/contracts typecheck, lint/build, exact-head Quick Gate and Full Gate.
