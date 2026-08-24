@@ -2,6 +2,8 @@ import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
+import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -32,15 +34,6 @@ type BoardResult = Readonly<{
   rows: readonly BoardRow[];
 }>;
 
-type BoardMe = Readonly<{
-  status: string;
-  user?: Readonly<{
-    isRoot?: boolean;
-    businessRoles?: readonly string[];
-    capabilities: readonly string[];
-  }>;
-}>;
-
 const localDate = (): string => {
   const now = new Date();
   const year = now.getFullYear();
@@ -67,6 +60,7 @@ const reworkLabel = (status: ReworkStatus): string => {
 export function OrderBoardPage() {
   const [date, setDate] = useState(localDate);
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query, 180);
   const [data, setData] = useState<BoardResult | null>(null);
   const [message, setMessage] = useState("正在加载订单看板…");
   const [canReceive, setCanReceive] = useState(false);
@@ -74,13 +68,12 @@ export function OrderBoardPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
-      .then(async (response) => response.ok ? await response.json() as BoardMe : null)
-      .then((body) => {
-        if (!active || body?.status !== "authorized" || !body.user) return;
-        const isRoot = body.user.isRoot === true;
-        const roles = body.user.businessRoles ?? [];
-        const capabilities = body.user.capabilities;
+    void verifySession()
+      .then((session) => {
+        if (!active || session === "denied" || session.status !== "authorized") return;
+        const isRoot = session.user.isRoot === true;
+        const roles = session.user.businessRoles ?? [];
+        const capabilities = session.user.capabilities;
         const warehouseReceiver = roles.includes("warehouse_receiver")
           && capabilities.includes("receiving:create");
         const qualityControl = roles.includes("quality_control")
@@ -98,27 +91,24 @@ export function OrderBoardPage() {
 
   useEffect(() => {
     let active = true;
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ date });
-      if (query.trim()) params.set("q", query.trim());
-      void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) throw new Error("订单看板加载失败");
-          return response.json() as Promise<BoardResult>;
-        })
-        .then((body) => {
-          if (!active) return;
-          setData(body);
-          setMessage(body.rows.length ? "" : "当天没有匹配的收货记录");
-        })
-        .catch(() => {
-          if (!active) return;
-          setData(null);
-          setMessage("订单看板加载失败，请刷新后重试");
-        });
-    }, 180);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [date, query]);
+    const params = new URLSearchParams({ date });
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("订单看板加载失败");
+        return response.json() as Promise<BoardResult>;
+      })
+      .then((body) => {
+        if (!active) return;
+        setData(body);
+        setMessage(body.rows.length ? "" : "当天没有匹配的收货记录");
+      })
+      .catch(() => {
+        if (!active) return;
+        setMessage("订单看板加载失败，请刷新后重试");
+      });
+    return () => { active = false; };
+  }, [date, debouncedQuery]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
