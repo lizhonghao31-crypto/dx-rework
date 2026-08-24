@@ -334,12 +334,14 @@ export function Header({
   title,
   subtitle,
   badge,
+  badgePlacement = "actions",
   action,
   actionHref,
 }: {
   title: string;
   subtitle?: string;
   badge: string;
+  badgePlacement?: "actions" | "subtitle";
   action?: string;
   actionHref?: string;
 }) {
@@ -349,10 +351,13 @@ export function Header({
     <header className="page-heading">
       <div className="page-heading__copy">
         <h1>{title}</h1>
-        {subtitle ? <p className="page-heading__subtitle">{subtitle}</p> : null}
+        {subtitle ? <div className="page-heading__subtitle-row">
+          <p className="page-heading__subtitle">{subtitle}</p>
+          {badgePlacement === "subtitle" ? <StatusBadge tone="info">{badge}</StatusBadge> : null}
+        </div> : null}
       </div>
       <div className="page-heading__actions header-actions">
-        <StatusBadge tone="info">{badge}</StatusBadge>
+        {badgePlacement === "actions" ? <StatusBadge tone="info">{badge}</StatusBadge> : null}
         {action ? (
           resolvedActionHref
             ? <a className="dx-button dx-button--secondary header-action-link" href={resolvedActionHref}>{action}</a>

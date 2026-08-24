@@ -43,9 +43,8 @@ describe("1.0 prelaunch PR-07 responsibility usability", () => {
 
     expect(panel).toContain("preferredProcessingFactoryId");
     expect(panel).toContain('nextType === "processing_factory"');
-    expect(panel).toContain("已带入订单加工厂，可重新选择");
-    expect(panel).toContain("订单加工厂当前不可用，请重新选择");
-    expect(panel).toContain("supplierOptionsLoaded");
+    expect(panel).not.toContain("已带入订单加工厂，可重新选择");
+    expect(panel).not.toContain("supplierOptionsLoaded");
     expect(panel).toContain("onChange={(supplierId: string) => setAllocation");
   });
 

@@ -511,8 +511,11 @@ details.inspection-readonly {
     padding: 9px;
   }
 
-  .rework-detail-desktop-panel-heading {
-    display: none;
+  .rework-detail-target-layout .rework-detail-desktop-panel-heading {
+    display: none !important;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
   }
 
   .rework-detail-mobile-panel-toggle {

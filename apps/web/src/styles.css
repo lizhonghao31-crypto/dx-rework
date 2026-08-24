@@ -39,6 +39,9 @@
 .quantity-tail-toggle { display: grid; grid-template-columns: minmax(0, 1fr) auto 24px; align-items: center; gap: var(--dx-v2-space-3); padding: var(--dx-v2-space-2); text-align: left; }
 .quantity-tail-toggle > span { display: flex; align-items: baseline; gap: var(--dx-v2-space-2); }
 .quantity-coefficient-toggle { grid-template-columns: minmax(120px, 1.4fr) minmax(90px, .65fr) auto 24px; }
+.quantity-coefficient-section-toggle { display: grid; grid-template-columns: minmax(0, 1fr) auto 24px; align-items: center; gap: var(--dx-v2-space-3); width: 100%; min-height: 44px; padding: 0; color: inherit; border: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }
+.quantity-coefficient-section-toggle > strong { font-size: 16px; }
+.quantity-coefficient-section-toggle:focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 3px; }
 .quantity-coefficient-row { grid-template-columns: minmax(130px, 1fr) minmax(420px, 1.8fr); }
 .quantity-coefficient-row .mobile-actions.whole-order-actions,
 .quantity-review-actions { position: static; bottom: auto; display: grid; grid-template-columns: minmax(110px, .55fr) minmax(240px, 1.45fr); gap: var(--dx-v2-space-2); width: 100%; padding: 0; background: transparent; }
@@ -122,8 +125,10 @@ small { font-size: 12px; }
 .app-shell > main { min-width: 0; padding: 32px; }
 .page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--dx-v2-space-4); margin: 0 0 28px; }
 .page-heading__copy { min-width: 0; }
-.page-heading__subtitle,
-.page-heading > div > p { margin: 6px 0 0; color: var(--dx-v2-color-primary); font-size: 13px; line-height: 20px; }
+.page-heading__subtitle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 6px; }
+.page-heading__subtitle { margin: 0; color: var(--dx-v2-color-primary); font-size: 13px; line-height: 20px; }
+.page-heading > div > p:not(.page-heading__subtitle) { margin: 6px 0 0; color: var(--dx-v2-color-primary); font-size: 13px; line-height: 20px; }
+.page-heading__subtitle-row .dx-badge { min-height: 24px; padding: 2px 8px; font-size: 11px; }
 .page-heading__actions,
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--dx-v2-space-3); }
 .header-action-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }

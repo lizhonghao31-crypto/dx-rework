@@ -603,7 +603,7 @@ export function ReworkDetailPage({
 
   return (
     <Shell active="全部订单">
-      <Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} {...backAction} />
+      <Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} />
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
           <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
