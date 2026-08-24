@@ -171,6 +171,26 @@ describe("AttachmentService failure consistency", () => {
     expect(pool.connect).not.toHaveBeenCalled();
   });
 
+  it("serializes a PostgreSQL timestamp string after finalize without returning 500", async () => {
+    const readyRow = {
+      ...row,
+      status: "ready" as const,
+      created_at: "2026-08-01T00:00:00.000Z",
+    };
+    const { pool } = poolWithOwnedRow(readyRow as never);
+    const storage = emptyStorage();
+    const service = new AttachmentService(pool as never, storage, {
+      prefix: "private",
+      ttlSeconds: 300,
+      maxUploadBytes: 100,
+    });
+
+    await expect(service.finalize(actor, row.attachment_id)).resolves.toMatchObject({
+      status: "ready",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    });
+  });
+
   it("returns the exact storage download expiry without recomputing it", async () => {
     const readyRow = { ...row, status: "ready" as const };
     const { pool, operations, client } = poolWithOwnedRow(readyRow);
