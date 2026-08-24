@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 describe("v1 prelaunch business information uniqueness", () => {
   it("uses embedded display modes for every standalone workspace inside order detail", async () => {
     const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
-    expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} embedded");
+    expect(detail).toMatch(/<ProcessConfigurationForm[\s\S]*?reworkOrderId=\{detail\.reworkOrderId\}[\s\S]*?embedded/);
     expect(detail).toContain("taskMode={selected.key} embedded");
     expect(detail).toContain('taskMode="whole_order_review" embedded');
     expect(detail).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} embedded");
