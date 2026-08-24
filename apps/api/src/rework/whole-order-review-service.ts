@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type {
   ConfirmQuantityIncrease,
+  CorrectWorkReportQuantity,
   CreateQuantityDecrease,
   CreateQuantityIncrease,
   QuantityAdjustmentResponse,
@@ -33,7 +34,8 @@ type OrderRow = Readonly<{
 }>;
 type PlanRow = Readonly<{
   configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour";
-  planned_quantity: string; completed_quantity: string; tail_checked_quantity: string; unit_price: string | null;
+  planned_quantity: string; original_completed_quantity: string; completed_quantity: string;
+  original_tail_checked_quantity: string; tail_checked_quantity: string; unit_price: string | null;
 }>;
 type TemporaryWorkerRow = Readonly<{
   configuration_item_id: string; process_name: string; person_id: string; display_name: string;
@@ -44,6 +46,7 @@ type ReportRow = Readonly<{
   completed_at: Date; submitted_by: string; resubmits_work_report_id: string | null;
   assignment_mode: "individual" | "collective"; execution_kind: "worker" | "tail_inspection"; report_rejection_id: string | null;
   rejected_person_id: string | null; rejection_reason: string | null;
+  effective_quantity: string; correction_version: number | null; corrected_by: string | null; corrected_at: Date | null;
 }>;
 type MemberRow = Readonly<{ work_report_id: string; person_id: string; display_name: string }>;
 type AdjustmentRow = Readonly<{
@@ -116,26 +119,11 @@ export class WholeOrderReviewService {
       if (plans.length === 0 || plans.some((plan) => plan.unit_price === null)) {
         error("每道工序必须完成 IE 核价后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
       }
-      if (plans.some((plan) => numberValue(plan.completed_quantity) < numberValue(plan.planned_quantity))) {
-        error("每道返工工序必须完成有效上数后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
-      }
       await this.assertTailReconciliation(client, reworkOrderId);
-      const expectedProcessIds = new Set(plans.map((plan) => plan.configuration_item_id));
-      const submittedProcessIds = new Set(input.finalQuantities.map((item) => item.configurationItemId));
-      if (submittedProcessIds.size !== expectedProcessIds.size
-        || [...expectedProcessIds].some((value) => !submittedProcessIds.has(value))) {
-        error("每道返工工序都必须填写最终确认数量", 400, "VALIDATION_ERROR");
-      }
-      const planById = new Map(plans.map((plan) => [plan.configuration_item_id, plan]));
-      for (const quantity of input.finalQuantities) {
-        const plan = planById.get(quantity.configurationItemId)!;
-        if (!Number.isInteger(quantity.finalConfirmedQuantity) || quantity.finalConfirmedQuantity <= 0) {
-          error("最终确认数量必须为正整数；无有效完成量时请驳回对应上数", 400, "VALIDATION_ERROR");
-        }
-        if (quantity.finalConfirmedQuantity > numberValue(plan.tail_checked_quantity)) {
-          error(`${plan.process_name} 的最终确认数量不能超过尾查数量`, 409, "CONFLICT");
-        }
-      }
+      const finalQuantities = plans.map((plan) => ({
+        configurationItemId: plan.configuration_item_id,
+        finalConfirmedQuantity: numberValue(plan.completed_quantity),
+      }));
       const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
       const submittedCoefficientKeys = new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`));
       const expectedCoefficientKeys = new Set(temporaryWorkers.map((worker) => `${worker.configuration_item_id}:${worker.person_id}`));
@@ -162,7 +150,7 @@ export class WholeOrderReviewService {
         before: this.orderAudit(order),
         after: {
           ...this.orderAudit(order, "pending_final_quantity_ie_review", order.version + 1),
-          confirmationId, confirmationVersion, finalQuantities: input.finalQuantities,
+          confirmationId, confirmationVersion, finalQuantities,
           temporaryCoefficients: input.temporaryCoefficients,
         },
       });
@@ -173,8 +161,8 @@ export class WholeOrderReviewService {
          ) VALUES($1,$2,$3,'pending_ie_review',$4,$5,$6)`,
         [confirmationId, reworkOrderId, confirmationVersion, actor.actorId, eventId, actor.requestId],
       );
-      for (const quantity of input.finalQuantities) {
-        const plan = planById.get(quantity.configurationItemId)!;
+      for (const quantity of finalQuantities) {
+        const plan = plans.find((candidate) => candidate.configuration_item_id === quantity.configurationItemId)!;
         await client.query(
           `INSERT INTO rework_tail_completion_quantities(
              confirmation_id,configuration_item_id,worker_reported_quantity,tail_reported_quantity,final_confirmed_quantity
@@ -275,7 +263,7 @@ export class WholeOrderReviewService {
         `WITH amounts AS (
            SELECT share.work_report_id,share.person_id,
                   round(
-                    COALESCE(quantity.final_confirmed_quantity,report.actual_quantity)*item.unit_price*
+                    rework_work_report_effective_quantity(report.work_report_id)*item.unit_price*
                     CASE WHEN task.assignment_mode='collective'
                       THEN 1::numeric / NULLIF(count(*) OVER(PARTITION BY share.work_report_id),0)
                       ELSE 1
@@ -293,8 +281,6 @@ export class WholeOrderReviewService {
              ON member.work_task_id=task.work_task_id AND member.person_id=share.person_id
            JOIN rework_process_configuration_items item
              ON item.configuration_item_id=report.configuration_item_id
-           LEFT JOIN rework_tail_completion_quantities quantity
-             ON quantity.confirmation_id=$1 AND quantity.configuration_item_id=report.configuration_item_id
            LEFT JOIN rework_tail_completion_coefficients coefficient
              ON coefficient.confirmation_id=$1
             AND coefficient.configuration_item_id=report.configuration_item_id
@@ -308,20 +294,18 @@ export class WholeOrderReviewService {
       );
       await client.query(
         `WITH amounts AS (
-           SELECT report.work_report_id,COALESCE(quantity.final_confirmed_quantity,report.actual_quantity) settlement_quantity,
+           SELECT report.work_report_id,rework_work_report_effective_quantity(report.work_report_id) settlement_quantity,
                   sum(share.amount) group_amount
            FROM rework_work_reports report
            JOIN rework_work_report_member_shares share ON share.work_report_id=report.work_report_id
-           LEFT JOIN rework_tail_completion_quantities quantity
-             ON quantity.confirmation_id=$1 AND quantity.configuration_item_id=report.configuration_item_id
-           WHERE report.rework_order_id=$2 AND report.group_amount=0 AND report.settlement_quantity IS NULL
+           WHERE report.rework_order_id=$1 AND report.group_amount=0 AND report.settlement_quantity IS NULL
              AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-           GROUP BY report.work_report_id,quantity.final_confirmed_quantity,report.actual_quantity
+           GROUP BY report.work_report_id
          )
          UPDATE rework_work_reports report
          SET settlement_quantity=amounts.settlement_quantity,group_amount=amounts.group_amount
          FROM amounts WHERE report.work_report_id=amounts.work_report_id`,
-        [pendingConfirmation.confirmation_id, reworkOrderId],
+        [reworkOrderId],
       );
       const plans = await this.plans(client, reworkOrderId);
       const snapshot = await this.snapshot(client, order, plans, pendingConfirmation);
@@ -570,6 +554,80 @@ export class WholeOrderReviewService {
       "SELECT to_regclass('rework_tail_completion_quantities') IS NOT NULL AS available",
     );
     return result.rows[0]?.available === true;
+  }
+
+  async correctReportQuantity(
+    actor: TrustedActorContext,
+    workReportId: string,
+    input: CorrectWorkReportQuantity,
+    key: string,
+  ): Promise<Result<WholeOrderReviewResponse>> {
+    return this.mutate(actor, "rework.work_report.quantity_correct", key, { workReportId, ...input }, 200, async (client) => {
+      const report = await client.query<{
+        work_report_id: string; work_task_id: string; rework_order_id: string; configuration_item_id: string;
+        actual_quantity: string; assignment_mode: "individual" | "collective";
+        rejected: boolean;
+      }>(
+        `SELECT report.work_report_id,report.work_task_id,report.rework_order_id,report.configuration_item_id,
+                report.actual_quantity::text,task.assignment_mode,
+                EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id) AS rejected
+         FROM rework_work_reports report
+         JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+         WHERE report.work_report_id=$1 AND report.status='submitted'`,
+        [workReportId],
+      );
+      const row = report.rows[0] ?? error("上数记录不存在", 404, "NOT_FOUND");
+      const order = await this.order(client, row.rework_order_id, true);
+      await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
+      this.ensureOrderVersion(order, input.expectedOrderVersion);
+      if (order.status !== "pending_order_review") error("只有 N05 尾部最终数量确认可以修正有效上数", 409, "INVALID_STATE_TRANSITION");
+      if (row.rejected) error("已驳回的上数记录不能再修正", 409, "CONFLICT");
+      const members = await client.query<{ person_id: string | null; member_count: number }>(
+        `SELECT (array_agg(member.person_id ORDER BY member.person_id))[1] AS person_id,
+                count(member.person_id)::int AS member_count
+         FROM rework_work_task_members member WHERE member.work_task_id=$1`,
+        [row.work_task_id],
+      );
+      const member = members.rows[0] ?? { person_id: null, member_count: 0 };
+      if (row.assignment_mode !== "individual" || member.member_count !== 1 || !member.person_id) {
+        error("历史集体报数无法拆分到个人，请使用原有驳回流程", 409, "CONFLICT");
+      }
+      const latestCorrection = (await client.query<{ revision_version: number; effective_quantity: string }>(
+        `SELECT revision_version,effective_quantity::text
+         FROM rework_work_report_quantity_revisions
+         WHERE work_report_id=$1 ORDER BY revision_version DESC LIMIT 1`,
+        [workReportId],
+      )).rows[0];
+      const previousEffectiveQuantity = numberValue(latestCorrection?.effective_quantity ?? row.actual_quantity);
+      if (previousEffectiveQuantity === input.effectiveQuantity) {
+        error("修正后的有效数量没有变化", 409, "CONFLICT");
+      }
+      const correctionVersion = (latestCorrection?.revision_version ?? 0) + 1;
+      const correctionId = randomUUID();
+      const eventId = await this.events.append(client, this.withCapability(actor, "submission:audit"), {
+        action: "rework.work_report.quantity_correct", entityType: "work_report", entityId: workReportId,
+        before: {
+          workReportId, reworkOrderId: row.rework_order_id, configurationItemId: row.configuration_item_id,
+          personId: member.person_id, originalQuantity: numberValue(row.actual_quantity),
+          effectiveQuantity: previousEffectiveQuantity, correctionVersion: latestCorrection?.revision_version ?? 0,
+        },
+        after: {
+          workReportId, reworkOrderId: row.rework_order_id, configurationItemId: row.configuration_item_id,
+          personId: member.person_id, originalQuantity: numberValue(row.actual_quantity),
+          effectiveQuantity: input.effectiveQuantity, correctionVersion,
+        },
+      });
+      await this.context(client, eventId, actor.requestId, "quantity_correction");
+      await client.query(
+        `INSERT INTO rework_work_report_quantity_revisions(
+           quantity_revision_id,work_report_id,rework_order_id,configuration_item_id,person_id,
+           revision_version,original_quantity,effective_quantity,corrected_by,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [correctionId, workReportId, row.rework_order_id, row.configuration_item_id, member.person_id,
+          correctionVersion, numberValue(row.actual_quantity), input.effectiveQuantity, actor.actorId, eventId, actor.requestId],
+      );
+      return this.dto(client, order, await this.permissions(client, actor, order));
+    });
   }
 
   async rejectReport(actor: TrustedActorContext, workReportId: string, input: RejectWorkReport, key: string): Promise<Result<WholeOrderReviewResponse>> {
@@ -827,7 +885,15 @@ export class WholeOrderReviewService {
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
       ...permissions, unifiedExecutionRequired,
-      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, plannedQuantity: numberValue(plan.planned_quantity), completedQuantity: numberValue(plan.completed_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity), countGap: numberValue(plan.tail_checked_quantity) - numberValue(plan.completed_quantity), complete: numberValue(plan.completed_quantity) <= numberValue(plan.tail_checked_quantity), finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price) })),
+      processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({
+        configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit,
+        plannedQuantity: numberValue(plan.planned_quantity),
+        originalCompletedQuantity: numberValue(plan.original_completed_quantity), completedQuantity: numberValue(plan.completed_quantity),
+        originalTailCheckedQuantity: numberValue(plan.original_tail_checked_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity),
+        countGap: numberValue(plan.completed_quantity) - numberValue(plan.tail_checked_quantity),
+        complete: numberValue(plan.completed_quantity) === numberValue(plan.tail_checked_quantity),
+        finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price),
+      })),
       reports,
       adjustments: [],
       temporaryWorkers: temporaryWorkers.map((worker) => ({ configurationItemId: worker.configuration_item_id, processName: worker.process_name, personId: worker.person_id, displayName: worker.display_name, multiplier: numberValue(worker.multiplier ?? "1"), reason: worker.reason })),
@@ -839,7 +905,11 @@ export class WholeOrderReviewService {
   private async snapshot(client: PoolClient, order: OrderRow, plans: readonly PlanRow[], confirmation?: FinalConfirmationRow): Promise<Record<string, unknown>> {
     return {
       order: this.orderAudit(order),
-      processes: plans.map((plan) => ({ configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit, workerReportedQuantity: numberValue(plan.completed_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity) })),
+      processes: plans.map((plan) => ({
+        configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit,
+        workerOriginalQuantity: numberValue(plan.original_completed_quantity), workerEffectiveQuantity: numberValue(plan.completed_quantity),
+        tailOriginalQuantity: numberValue(plan.original_tail_checked_quantity), tailEffectiveQuantity: numberValue(plan.tail_checked_quantity),
+      })),
       finalConfirmation: confirmation ? await this.confirmationDto(client, confirmation) : null,
       reports: await this.reports(client, order.rework_order_id),
     };
@@ -888,18 +958,24 @@ export class WholeOrderReviewService {
     const result = await client.query<PlanRow>(
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.unit_price,
               item.planned_quantity::text AS planned_quantity,
-              COALESCE(completed.quantity,0)::text AS completed_quantity,
+              COALESCE(completed.original_quantity,0)::text AS original_completed_quantity,
+              COALESCE(completed.effective_quantity,0)::text AS completed_quantity,
               COALESCE(CASE WHEN configuration.unified_execution_required
-                THEN unified_tail.quantity ELSE legacy_tail.quantity END,0)::text AS tail_checked_quantity
+                THEN unified_tail.original_quantity ELSE legacy_tail.quantity END,0)::text AS original_tail_checked_quantity,
+              COALESCE(CASE WHEN configuration.unified_execution_required
+                THEN unified_tail.effective_quantity ELSE legacy_tail.quantity END,0)::text AS tail_checked_quantity
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
        LEFT JOIN LATERAL (
-         SELECT sum(report.actual_quantity) AS quantity FROM rework_work_reports report
+         SELECT sum(report.actual_quantity) AS original_quantity,
+                sum(rework_work_report_effective_quantity(report.work_report_id)) AS effective_quantity
+         FROM rework_work_reports report
          WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted'
            AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
        ) completed ON true
        LEFT JOIN LATERAL (
-         SELECT sum(report.actual_quantity) AS quantity
+         SELECT sum(report.actual_quantity) AS original_quantity,
+                sum(rework_work_report_effective_quantity(report.work_report_id)) AS effective_quantity
          FROM rework_work_reports report
          JOIN rework_process_configuration_items tail_item
            ON tail_item.configuration_item_id=report.configuration_item_id
@@ -928,88 +1004,58 @@ export class WholeOrderReviewService {
   }
 
   private async assertTailReconciliation(client: PoolClient, reworkOrderId: string): Promise<void> {
-    const pending = await client.query<{ issue: string }>(
-      `WITH active_configuration AS (
-         SELECT configuration_id,unified_execution_required
-         FROM rework_process_configurations
-         WHERE rework_order_id=$1 AND status='approved'
-         LIMIT 1
-       ), unified_tail AS (
-         SELECT COALESCE(sum(report.actual_quantity),0) AS quantity
-         FROM rework_work_reports report
-         JOIN rework_process_configuration_items item
-           ON item.configuration_item_id=report.configuration_item_id
-          AND item.execution_kind='tail_inspection'
-         WHERE report.rework_order_id=$1 AND report.status='submitted'
-           AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-       )
-       SELECT 'execution'::text AS issue
-       WHERE EXISTS(
-         SELECT 1 FROM rework_work_tasks task
-         WHERE task.rework_order_id=$1 AND task.status='active'
-           AND NOT EXISTS(
-             SELECT 1 FROM rework_work_reports report
-             WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
-               AND NOT EXISTS(
-                 SELECT 1 FROM rework_work_report_rejections rejection
-                 WHERE rejection.work_report_id=report.work_report_id
-               )
-           )
-       )
-       UNION ALL
-       SELECT 'legacy_tail'::text AS issue
-       WHERE COALESCE((SELECT unified_execution_required FROM active_configuration),false)=false
-         AND EXISTS(
-           SELECT 1 FROM rework_tail_inspection_assignments assignment
-           WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+    const pending = await client.query<{ execution_pending: boolean; legacy_tail_pending: boolean }>(
+      `SELECT
+         EXISTS(
+           SELECT 1 FROM rework_work_tasks task
+           WHERE task.rework_order_id=$1 AND task.status='active'
+             AND NOT EXISTS(
+               SELECT 1 FROM rework_work_reports report
+               WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
+                 AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+             )
+         ) AS execution_pending,
+         EXISTS(
+           SELECT 1 FROM rework_process_configurations configuration
+           JOIN rework_tail_inspection_assignments assignment ON assignment.rework_order_id=configuration.rework_order_id
+           WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+             AND configuration.unified_execution_required=false AND assignment.revoked_at IS NULL
              AND NOT EXISTS(
                SELECT 1 FROM rework_tail_inspection_reports report
-               WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
-                 AND report.status='submitted'
+               WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id AND report.status='submitted'
              )
-         )
-       UNION ALL
-       SELECT item.process_name
-       FROM active_configuration active
-       JOIN rework_process_configuration_items item ON item.configuration_id=active.configuration_id
-       LEFT JOIN LATERAL (
-         SELECT COALESCE(sum(report.actual_quantity),0) AS quantity
-         FROM rework_work_reports report
-         WHERE report.rework_order_id=$1 AND report.configuration_item_id=item.configuration_item_id
-           AND report.status='submitted'
-           AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
-       ) worker ON true
-       LEFT JOIN LATERAL (
-         SELECT COALESCE(sum(report_item.inspected_quantity),0) AS quantity
-         FROM rework_tail_inspection_report_items report_item
-         JOIN rework_tail_inspection_reports report
-           ON report.tail_inspection_report_id=report_item.tail_inspection_report_id AND report.status='submitted'
-         JOIN rework_tail_inspection_assignments assignment
-           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id AND assignment.revoked_at IS NULL
-         WHERE report.rework_order_id=$1 AND report_item.configuration_item_id=item.configuration_item_id
-       ) legacy_tail ON true
-       CROSS JOIN unified_tail
-       WHERE item.execution_kind='worker'
-         AND worker.quantity > CASE WHEN active.unified_execution_required THEN unified_tail.quantity ELSE legacy_tail.quantity END`,
+         ) AS legacy_tail_pending`,
       [reworkOrderId],
     );
-    const issues = pending.rows.map((row) => row.issue);
-    if (issues.includes("execution")) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
-    if (issues.includes("legacy_tail")) error("历史订单仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
-    const processIssues = issues.filter((issue) => issue !== "execution" && issue !== "legacy_tail");
-    if (processIssues.length > 0) error(`返工上数超过尾查数量：${processIssues.join("、")}；请驳回并调整报数`, 409, "CONFLICT");
+    if (pending.rows[0]?.execution_pending) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
+    if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
+    const issues = (await this.plans(client, reworkOrderId)).filter((plan) =>
+      numberValue(plan.completed_quantity) <= 0
+      || numberValue(plan.tail_checked_quantity) <= 0
+      || numberValue(plan.completed_quantity) !== numberValue(plan.tail_checked_quantity));
+    if (issues.length > 0) {
+      error(`工人与尾查有效数量不一致：${issues.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
+    }
   }
 
   private async reports(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<WholeOrderReviewResponse["reports"]> {
     const [reports, members] = await Promise.all([
       client.query<ReportRow>(
         `SELECT report.work_report_id,report.work_task_id,report.configuration_item_id,report.actual_quantity,
+                COALESCE(correction.effective_quantity,report.actual_quantity)::text AS effective_quantity,
+                correction.revision_version AS correction_version,correction.corrected_by,correction.corrected_at,
                 report.completed_at,report.submitted_by,report.resubmits_work_report_id,
                 task.assignment_mode,item.execution_kind,rejection.report_rejection_id,rejection.rejected_person_id,rejection.reason AS rejection_reason
          FROM rework_work_reports report
          JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
          JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
          LEFT JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
+         LEFT JOIN LATERAL (
+           SELECT revision.effective_quantity,revision.revision_version,revision.corrected_by,revision.corrected_at
+           FROM rework_work_report_quantity_revisions revision
+           WHERE revision.work_report_id=report.work_report_id
+           ORDER BY revision.revision_version DESC LIMIT 1
+         ) correction ON true
          WHERE report.rework_order_id=$1 AND ($2::uuid IS NULL OR report.configuration_item_id=$2) ORDER BY report.completed_at,report.work_report_id`,
         [reworkOrderId, configurationItemId ?? null],
       ),
@@ -1031,7 +1077,10 @@ export class WholeOrderReviewService {
     }
     return reports.rows.map((report) => ({
       workReportId: report.work_report_id, workTaskId: report.work_task_id, configurationItemId: report.configuration_item_id,
-      actualQuantity: numberValue(report.actual_quantity), completedAt: report.completed_at.toISOString(), submittedBy: report.submitted_by,
+      actualQuantity: numberValue(report.actual_quantity), effectiveQuantity: numberValue(report.effective_quantity),
+      corrected: report.correction_version !== null, correctionVersion: report.correction_version,
+      correctedBy: report.corrected_by, correctedAt: iso(report.corrected_at),
+      completedAt: report.completed_at.toISOString(), submittedBy: report.submitted_by,
       members: membersByReport.get(report.work_report_id) ?? [], assignmentMode: report.assignment_mode, executionKind: report.execution_kind,
       rejected: report.report_rejection_id !== null,
       rejectedPersonId: report.rejected_person_id, rejectionReason: report.rejection_reason, resubmitsWorkReportId: report.resubmits_work_report_id,
@@ -1279,12 +1328,13 @@ export class WholeOrderReviewService {
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");
   }
 
-  private async context(client: PoolClient, eventId: string, requestId: string, kind: "whole_order_review" | "quantity_adjustment"): Promise<void> {
+  private async context(client: PoolClient, eventId: string, requestId: string, kind: "whole_order_review" | "quantity_adjustment" | "quantity_correction"): Promise<void> {
     const whole = kind === "whole_order_review" ? eventId : "";
     const quantity = kind === "quantity_adjustment" ? eventId : "";
+    const correction = kind === "quantity_correction" ? eventId : "";
     await client.query(
-      "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true),set_config('dx_rework.whole_order_review_event_id',$3,true),set_config('dx_rework.whole_order_review_request_id',$2,true),set_config('dx_rework.quantity_adjustment_event_id',$4,true),set_config('dx_rework.quantity_adjustment_request_id',$2,true)",
-      [eventId, requestId, whole, quantity],
+      "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true),set_config('dx_rework.whole_order_review_event_id',$3,true),set_config('dx_rework.whole_order_review_request_id',$2,true),set_config('dx_rework.quantity_adjustment_event_id',$4,true),set_config('dx_rework.quantity_adjustment_request_id',$2,true),set_config('dx_rework.quantity_correction_event_id',$5,true),set_config('dx_rework.quantity_correction_request_id',$2,true)",
+      [eventId, requestId, whole, quantity, correction],
     );
   }
 

@@ -1,4 +1,5 @@
 import {
+  CorrectWorkReportQuantitySchema,
   IdempotencyKeySchema,
   RejectWorkReportSchema,
   ReviewFinalQuantitySchema,
@@ -128,6 +129,16 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
   });
   app.post<{ Params: { workReportId: string } }>("/work-reports/:workReportId/reject", async (request, reply) => {
     const result = await dependencies.service.rejectReport(await actor(request, "submission:audit", "tail_supervisor"), parse(WorkReportRejectionParamsSchema, request.params).workReportId, parse(RejectWorkReportSchema, request.body), key(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return WholeOrderReviewResponseSchema.parse(result.value);
+  });
+  app.post<{ Params: { workReportId: string } }>("/work-reports/:workReportId/effective-quantity", async (request, reply) => {
+    const result = await dependencies.service.correctReportQuantity(
+      await actor(request, "submission:audit", "tail_supervisor"),
+      parse(WorkReportRejectionParamsSchema, request.params).workReportId,
+      parse(CorrectWorkReportQuantitySchema, request.body),
+      key(request),
+    );
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
   });

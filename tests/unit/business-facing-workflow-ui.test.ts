@@ -152,10 +152,10 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/whole-order-review-panel.tsx"),
       read("apps/web/src/work-reporting-form.css"),
     ]);
-    expect(source).toContain("工人上数、尾查数与最终确认数");
-    expect(source).toContain("确认最终数量并提交 IE");
-    expect(source).toContain("最终确认数可修正工人原报数，但不得超过尾查数");
-    expect(source).toContain("finalQuantities");
+    expect(source).toContain("工人合计");
+    expect(source).toContain("确认一致并提交 IE");
+    expect(source).toContain("主管可修正个人有效数量；原始上数始终保留");
+    expect(source).not.toContain("finalQuantities");
     expect(source).not.toContain("quantity-adjustments");
     expect(source).not.toContain("oneDecimalQuantity");
     expect(source).toContain('className="mobile-actions whole-order-actions"');

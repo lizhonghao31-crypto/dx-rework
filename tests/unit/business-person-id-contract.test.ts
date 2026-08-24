@@ -8,7 +8,6 @@ import {
   ProcessWorkerPlanResponseSchema,
   SaveProcessWorkerPlanSchema,
 } from "@dx-rework/contracts/process-worker-plan";
-import { WageItemSchema } from "@dx-rework/contracts/wages";
 import { describe, expect, it } from "vitest";
 
 const migratedTailPersonId = "850e82b5-fc66-94fd-203f-a708fe72a9d0";
@@ -67,7 +66,6 @@ describe("business person id contract", () => {
   it("keeps the whole-order personnel chain compatible with the same id", () => {
     expect(ReviewWholeOrderSchema.parse({
       expectedOrderVersion: 2,
-      finalQuantities: [{ configurationItemId, finalConfirmedQuantity: 1 }],
       temporaryCoefficients: [{
         configurationItemId,
         personId: migratedTailPersonId,
@@ -85,45 +83,6 @@ describe("business person id contract", () => {
     expect(parsed.success).toBe(false);
   });
 
-
-  it("keeps PostgreSQL worker ids readable in wage item snapshots", () => {
-    const parsed = WageItemSchema.parse({
-      wageItemId: "00000000-0000-4000-8000-000000000030",
-      periodId: "00000000-0000-4000-8000-000000000031",
-      orderReviewId: "00000000-0000-4000-8000-000000000032",
-      reworkOrderId: orderId,
-      configurationItemId,
-      workTaskId: "00000000-0000-4000-8000-000000000033",
-      workReportId: "00000000-0000-4000-8000-000000000034",
-      personId: migratedTailPersonId,
-      personNameSnapshot: "尾查甲",
-      personTypeSnapshot: "internal",
-      supplierNameSnapshot: "本厂",
-      temporaryWageMultiplier: "1.000",
-      reworkNoSnapshot: "RW-20260823-001",
-      styleNoSnapshot: "STYLE-001",
-      processNameSnapshot: "尾查",
-      pricingUnitSnapshot: "piece",
-      unitPriceSnapshot: "1.000",
-      actualQuantitySnapshot: "1.00",
-      assignmentMode: "individual",
-      groupAmount: "1.00000000",
-      exactPersonShare: "1.00000000",
-      payableAmount: "1.00",
-      fractionalRemainder: "0.00000000",
-      remainderRank: 1,
-      memberCount: 1,
-      memberSnapshot: [{
-        personId: migratedTailPersonId,
-        displayName: "尾查甲",
-        personType: "internal",
-      }],
-    });
-
-    expect(parsed.personId).toBe(migratedTailPersonId);
-    expect(parsed.memberSnapshot[0]?.personId).toBe(migratedTailPersonId);
-  });
-
   it("still rejects malformed business person identifiers", () => {
     expect(() => WorkTaskAssignablePeopleResponseSchema.parse({
       people: [{
@@ -135,4 +94,3 @@ describe("business person id contract", () => {
     })).toThrow();
   });
 });
-

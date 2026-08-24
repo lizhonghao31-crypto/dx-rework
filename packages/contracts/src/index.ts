@@ -746,12 +746,12 @@ export const RejectWorkReportSchema = z.object({
   rejectedPersonId: IdSchema.nullable(),
   reason: ReasonSchema,
 }).strict();
+export const CorrectWorkReportQuantitySchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  effectiveQuantity: z.number().int().positive(),
+}).strict();
 export const ReviewWholeOrderSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
-  finalQuantities: z.array(z.object({
-    configurationItemId: IdSchema,
-    finalConfirmedQuantity: z.number().int().positive(),
-  }).strict()).min(1),
   temporaryCoefficients: z.array(z.object({
     configurationItemId: IdSchema,
     personId: IdSchema,
@@ -766,10 +766,6 @@ export const ReviewWholeOrderSchema = z.object({
   const coefficientKeys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
   if (new Set(coefficientKeys).size !== coefficientKeys.length) {
     context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
-  }
-  const quantityKeys = value.finalQuantities.map((item) => item.configurationItemId);
-  if (new Set(quantityKeys).size !== quantityKeys.length) {
-    context.addIssue({ code: "custom", path: ["finalQuantities"], message: "Final quantities cannot contain duplicates" });
   }
 });
 export const ReviewFinalQuantitySchema = z.object({
@@ -852,7 +848,9 @@ export const WholeOrderReviewResponseSchema = z.object({
     processName: z.string().min(1),
     pricingUnit: ProcessPricingUnitSchema,
     plannedQuantity: z.number().positive(),
+    originalCompletedQuantity: z.number().nonnegative(),
     completedQuantity: z.number().nonnegative(),
+    originalTailCheckedQuantity: z.number().int().nonnegative(),
     tailCheckedQuantity: z.number().int().nonnegative(),
     countGap: z.number().int(),
     complete: z.boolean(),
@@ -863,6 +861,11 @@ export const WholeOrderReviewResponseSchema = z.object({
     workTaskId: IdSchema,
     configurationItemId: IdSchema,
     actualQuantity: z.number().positive(),
+    effectiveQuantity: z.number().int().positive(),
+    corrected: z.boolean(),
+    correctionVersion: z.number().int().positive().nullable(),
+    correctedBy: IdSchema.nullable(),
+    correctedAt: z.string().datetime().nullable(),
     completedAt: z.string().datetime(),
     submittedBy: IdSchema,
     assignmentMode: z.enum(["individual", "collective"]),
@@ -902,6 +905,7 @@ export const WholeOrderReviewResponseSchema = z.object({
   }).strict().nullable(),
 });
 export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
+export type CorrectWorkReportQuantity = z.infer<typeof CorrectWorkReportQuantitySchema>;
 export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
 export type ReviewFinalQuantity = z.infer<typeof ReviewFinalQuantitySchema>;
 export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;

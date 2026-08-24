@@ -750,7 +750,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       }
       expect(report.status).toBe("submitted");
 
-      const n05 = await http<WholeOrderReviewResponse>(
+      let n05 = await http<WholeOrderReviewResponse>(
         fixture.app,
         "GET",
         `/rework-orders/${draft.reworkOrderId}/whole-order-review`,
@@ -758,16 +758,34 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       expect(n05.processes).toEqual([
         expect.objectContaining({ complete: true, finalUnitPrice: fixture.unitPrice }),
       ]);
+      if (pass === 2) {
+        const workerCorrected = await http<WholeOrderReviewResponse>(
+          fixture.app,
+          "POST",
+          `/work-reports/${report.workReportId}/effective-quantity`,
+          { expectedOrderVersion: n05.orderVersion, effectiveQuantity: 1 },
+        );
+        expect(workerCorrected.reports.find((candidate) => candidate.workReportId === report.workReportId)).toMatchObject({
+          actualQuantity: 2,
+          effectiveQuantity: 1,
+          corrected: true,
+        });
+        n05 = await http<WholeOrderReviewResponse>(
+          fixture.app,
+          "POST",
+          `/work-reports/${tailReported.workReportId}/effective-quantity`,
+          { expectedOrderVersion: workerCorrected.orderVersion, effectiveQuantity: 1 },
+        );
+        expect(n05.processes).toEqual([
+          expect.objectContaining({ completedQuantity: 1, tailCheckedQuantity: 1, complete: true }),
+        ]);
+      }
       const n06Confirmed = await http<WholeOrderReviewResponse>(
         fixture.app,
         "POST",
         `/rework-orders/${draft.reworkOrderId}/whole-order-review/approve`,
         {
           expectedOrderVersion: n05.orderVersion,
-          finalQuantities: n05.processes.map((process: { configurationItemId: string; completedQuantity: number }) => ({
-            configurationItemId: process.configurationItemId,
-            finalConfirmedQuantity: process.completedQuantity,
-          })),
           temporaryCoefficients: pass === 2 ? [{
             configurationItemId: item.configurationItemId,
             personId: fixture.workerPersonIds[0]!,
@@ -789,14 +807,14 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
          WHERE rework_order_id=$1 AND person_id=$2`,
         [draft.reworkOrderId, fixture.workerPersonIds[0]],
       )).rows[0]?.payable_amount;
-      expect(generatedWage).toBe(pass === 2 ? "23.40" : "6.00");
+      expect(generatedWage).toBe(pass === 2 ? "11.70" : "6.00");
 
       await runResponsibilityToDeduction(
         fixture,
         draft.reworkOrderId,
         item.configurationItemId,
         n06Approved.orderVersion,
-        pass === 2 ? "21.60" : "7.20",
+        pass === 2 ? "10.80" : "7.20",
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",

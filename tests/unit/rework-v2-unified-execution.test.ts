@@ -71,7 +71,7 @@ describe("PR-04 unified rework execution", () => {
     ]);
     expect(reviewService).toContain("tail_item.execution_kind='tail_inspection'");
     expect(reviewService).toContain("item.execution_kind='worker'");
-    expect(reviewPanel).toContain("执行报数原始记录");
+    expect(reviewPanel).toContain("历史尾查报数记录");
     expect(reviewPanel).toContain('report.executionKind === "tail_inspection"');
     expect(reporting).toContain('task.execution_kind === "tail_inspection"');
     expect(reporting).toContain("rework_work_reports");
