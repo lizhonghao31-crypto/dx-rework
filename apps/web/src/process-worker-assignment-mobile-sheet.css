@@ -3,7 +3,7 @@
 @media(max-width:640px){
   .process-worker-page>.dx-surface>.section-title p{display:none}
   .process-worker-line{grid-template-areas:"heading" "fields";row-gap:7px}
-  .process-worker-line>.process-worker-line__body>.process-worker-picker,.process-worker-tail-body>.process-worker-picker{display:none}
+  .process-worker-tail-body>.process-worker-picker{display:none}
   .process-worker-line__heading{justify-content:flex-start;gap:8px}
   .process-worker-heading-primary{gap:6px;flex:0 1 auto}
   .process-worker-line__heading>.dx-button:not(.process-worker-mobile-assign){margin-left:auto}
