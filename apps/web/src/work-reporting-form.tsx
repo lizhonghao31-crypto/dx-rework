@@ -58,10 +58,12 @@ export function WorkReportingForm({
   reworkOrderId: providedReworkOrderId,
   taskMode = "workspace",
   onOrderChanged,
+  embedded = false,
 }: {
   reworkOrderId?: string;
   taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review";
   onOrderChanged?: () => Promise<void> | void;
+  embedded?: boolean;
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? new URLSearchParams(window.location.search).get("rework");
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
@@ -305,11 +307,11 @@ export function WorkReportingForm({
 
   if (effectiveTaskMode === "whole_order_review") return <div className="mobile-page work-reporting-page">
     {!reviewEligible && <Surface>{message}</Surface>}
-    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} onChanged={async () => { if (canReadTasks) await reload(); await onOrderChanged?.(); }} />}
+    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { if (canReadTasks) await reload(); await onOrderChanged?.(); }} />}
   </div>;
 
-  return <div className="mobile-page work-reporting-page">
-    <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "历史人员分配" : "返工执行报数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "历史流程" : "N04"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "仅用于兼容旧订单；新订单已在节点02完成返工人员预分配。" : "返工人员与尾查都在本节点按本人任务填写实际整数件数。"}</p></div>
+  return <div className={`mobile-page work-reporting-page${embedded ? " is-embedded" : ""}`}>
+    {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "历史人员分配" : "返工执行报数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "历史流程" : "N04"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "仅用于兼容旧订单；新订单已在节点02完成返工人员预分配。" : "返工人员与尾查都在本节点按本人任务填写实际整数件数。"}</p></div>}
     {message && <p className="work-reporting-feedback" role="status">{message}</p>}
     {effectiveTaskMode === "task_assignment" && data && <>
       {data.tasks.length > 0 && <Surface><h2>已分配人员</h2>{data.tasks.map((task) => <div className="section-title whole-order-row n04-assignment-row" key={task.workTaskId}><div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")}</p></div><div className="n04-assignment-controls"><StatusBadge tone={assignmentWritable ? "info" : "success"}>{assignmentWritable ? "待开工" : "已处理"}</StatusBadge>{canAssign && assignmentWritable && task.mode === "individual" && task.members.length === 1 && <Button onClick={() => setRemovalTask(task)} disabled={busy}>移除</Button>}</div></div>)}</Surface>}

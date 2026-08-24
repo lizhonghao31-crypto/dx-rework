@@ -382,6 +382,21 @@ details.inspection-readonly {
   padding: 10px;
 }
 
+.rework-detail-target-layout .rework-detail-workspace .is-embedded {
+  padding: 0;
+}
+
+.rework-detail-target-layout .rework-detail-node-history {
+  margin-top: 8px;
+  border-top: 1px solid #d5dee7;
+}
+
+.rework-detail-target-layout .rework-detail-node-history summary {
+  padding: 8px 0 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .rework-image-modal__actions {
   display: flex;
   align-items: center;

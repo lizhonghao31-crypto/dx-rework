@@ -74,9 +74,10 @@ const validateItems = (items: readonly ItemForm[]): string | null => {
   return null;
 };
 
-export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
+export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged, embedded = false }: {
   reworkOrderId: string;
   onOrderChanged?: () => Promise<void> | void;
+  embedded?: boolean;
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -378,15 +379,15 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
 
   if (!response || !plan) return <Surface>{message || "正在加载…"}</Surface>;
   if (configuration && plan.required === false) {
-    if (response.reworkStatus === "pending_task_assignment") return <WorkReportingForm reworkOrderId={reworkOrderId} taskMode="task_assignment" {...changedProps} />;
-    return <LegacyProcessConfigurationForm reworkOrderId={reworkOrderId} {...changedProps} />;
+    if (response.reworkStatus === "pending_task_assignment") return <WorkReportingForm reworkOrderId={reworkOrderId} taskMode="task_assignment" embedded={embedded} {...changedProps} />;
+    return <LegacyProcessConfigurationForm reworkOrderId={reworkOrderId} embedded={embedded} {...changedProps} />;
   }
   if (response.reworkStatus === "pending_task_assignment") {
     return <Surface className="process-worker-recovery"><StatusBadge tone="warning">IE 已通过</StatusBadge><h2>预分配人员等待启动</h2><p>正常情况下 IE 通过后会自动开始返工；本单未自动启动，可由尾部主管重试，不需要重新选人。</p><PlanReadonly plan={plan} />{canConfigure ? <Button variant="primary" disabled={busy} onClick={() => void recoverActivation()}>{busy ? "启动中…" : "重试开始返工"}</Button> : null}{message ? <p role="status">{message}</p> : null}</Surface>;
   }
   if (editable) {
-    return <div className="process-worker-page">
-      <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。</p></div>
+    return <div className={`process-worker-page${embedded ? " is-embedded" : ""}`}>
+      {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。</p></div>}
       <Surface>
         <div className="section-title"><div><h2>工序与人员</h2><p>左侧设置工序与价格，右侧快速分配正式工或临时工；每道工序至少 1 人。</p></div><Button disabled={busy} onClick={() => { setItems((current) => [...current, emptyItem()]); setWorkerIds((current) => ({ ...current, [String(items.length)]: [] })); }}>增加工序</Button></div>
         {optionLoadIssue ? <p className="process-worker-option-alert" role="alert">{optionLoadIssue}</p> : null}
@@ -449,7 +450,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, onOrderChanged }: {
     </div>;
   }
   if (response.reworkStatus === "pending_ie_review") {
-    return <div className="process-worker-page"><div className="mobile-hero"><div className="mobile-title"><h1>IE 核价</h1><StatusBadge tone="warning">N03</StatusBadge></div><p>人员已经由尾部主管预分配；IE 只核准工序与单价，不修改分工。</p></div><Surface><h2>工序、单价与预分配人员</h2><PlanReadonly plan={plan} configuration={configuration} /></Surface>{canReview && reviewBlocked ? <Surface><StatusBadge tone="warning">需其他 IE 审核</StatusBadge><p>当前账号参与了本单发起或工序配置，不能自审。</p></Surface> : null}{reviewable ? <Surface><h2>IE 核价</h2><InsetField label="审核意见 / 驳回原因" value={reviewReason} disabled={busy} onChange={(event) => setReviewReason(event.target.value)} placeholder="通过时可选；驳回时必填" /><div className="mobile-actions"><Button disabled={busy || !reviewReason.trim()} onClick={() => void review("rejected")}>驳回修改</Button><Button variant="primary" disabled={busy} onClick={() => void review("approved")}>核价通过</Button></div></Surface> : null}{message ? <p className="process-worker-feedback" role="status">{message}</p> : null}</div>;
+    return <div className={`process-worker-page${embedded ? " is-embedded" : ""}`}>{!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>IE 核价</h1><StatusBadge tone="warning">N03</StatusBadge></div><p>人员已经由尾部主管预分配；IE 只核准工序与单价，不修改分工。</p></div>}<Surface><h2>工序、单价与预分配人员</h2><PlanReadonly plan={plan} configuration={configuration} /></Surface>{canReview && reviewBlocked ? <Surface><StatusBadge tone="warning">需其他 IE 审核</StatusBadge><p>当前账号参与了本单发起或工序配置，不能自审。</p></Surface> : null}{reviewable ? <Surface><h2>IE 核价</h2><InsetField label="审核意见 / 驳回原因" value={reviewReason} disabled={busy} onChange={(event) => setReviewReason(event.target.value)} placeholder="通过时可选；驳回时必填" /><div className="mobile-actions"><Button disabled={busy || !reviewReason.trim()} onClick={() => void review("rejected")}>驳回修改</Button><Button variant="primary" disabled={busy} onClick={() => void review("approved")}>核价通过</Button></div></Surface> : null}{message ? <p className="process-worker-feedback" role="status">{message}</p> : null}</div>;
   }
   return <Surface className="process-worker-readonly"><StatusBadge tone="success">工序与人员已锁定</StatusBadge><h2>分配工序 &工人</h2><PlanReadonly plan={plan} configuration={configuration} />{message ? <p role="status">{message}</p> : null}</Surface>;
 }

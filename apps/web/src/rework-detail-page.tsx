@@ -526,8 +526,8 @@ export function ReworkDetailPage({
       <p>{selected.preview}</p>
       <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
       {selected.state === "completed" && (
-        <div className="rework-detail-node-history">
-          <h3>处理历史</h3>
+        <details className="rework-detail-node-history">
+          <summary>处理历史{nodeHistory.length ? ` · ${nodeHistory.length} 条` : ""}</summary>
           {nodeHistory.length ? nodeHistory.map((event, index) => (
             <div key={`${event.action}-${event.handledAt}-${index}`}>
               <b>{historyActionLabel(event.action)}</b>
@@ -542,7 +542,7 @@ export function ReworkDetailPage({
             <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
             <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
           </span>)}</p>}
-        </div>
+        </details>
       )}
     </Surface>;
   };
@@ -558,23 +558,23 @@ export function ReworkDetailPage({
       return <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
-      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} onOrderChanged={syncAfterNodeAction} />;
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
-      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} onOrderChanged={syncAfterNodeAction} />;
+      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review" || selected.key === "quantity_adjustment")) {
-      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" onOrderChanged={syncAfterNodeAction} />;
+      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "responsibility" || selected.key === "owner_signature")) {
-      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} onOrderChanged={syncAfterNodeAction} />;
+      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && selected.key === "settlement_ledger") {
-      if (canSeeExternal || elevated(currentUser)) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly />;
+      if (canSeeExternal || elevated(currentUser)) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly embedded />;
       return <SettlementLedgerNotice detail={detail} />;
     }
     if (selected.state !== "future" && selected.key === "settlement_followup") {
@@ -582,7 +582,7 @@ export function ReworkDetailPage({
       return <>
         <OrderCompletionAndSettlementSummary detail={detail} />
         {canSeeExternal || hasWageFollowUp ? <>
-          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
+          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
           {hasWageFollowUp ? <WageSettlementFollowUp periods={detail.unsettledWagePeriods} /> : null}
         </> : null}
       </>;
@@ -698,10 +698,7 @@ export function ReworkDetailPage({
         </div>
 
         <section className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-          <div className="rework-detail-task__heading">
-            <div><h2>当前工作区</h2><p>{selected?.number} · {selected?.label}</p></div>
-            <StatusBadge tone={selected?.state === "completed" ? "success" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge>
-          </div>
+          <div className="rework-detail-task__heading"><h2>办理区</h2></div>
           {renderSelectedTask()}
         </section>
       </div>

@@ -50,9 +50,11 @@ type ReviewReport = WholeOrderReviewResponse["reports"][number];
 export function WholeOrderReviewPanel({
   reworkOrderId,
   onChanged,
+  embedded = false,
 }: {
   reworkOrderId: string;
   onChanged: () => Promise<void>;
+  embedded?: boolean;
 }) {
   const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
   const [tailData, setTailData] = useState<TailInspectionResponse | null>(null);
@@ -313,7 +315,7 @@ export function WholeOrderReviewPanel({
   };
 
   return <div className="whole-order-review-flow">
-    <Surface>
+    {!embedded && <Surface>
       <div className="section-title">
         <div>
           <h2>{tailStage ? "N05 · 尾部最终数量确认" : ieStage ? "N06 · IE复核" : "返工完成进度"}</h2>
@@ -323,7 +325,7 @@ export function WholeOrderReviewPanel({
           {reworkStatusLabel(data.reworkStatus)}
         </StatusBadge>
       </div>
-    </Surface>
+    </Surface>}
 
     <Surface>
       <div className="quantity-review-heading">

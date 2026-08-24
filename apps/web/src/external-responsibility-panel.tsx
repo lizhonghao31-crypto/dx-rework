@@ -86,10 +86,12 @@ export function ExternalResponsibilityPanel({
   reworkOrderId,
   focusCaseId,
   readOnly = false,
+  embedded = false,
 }: {
   reworkOrderId: string | null;
   focusCaseId?: string;
   readOnly?: boolean;
+  embedded?: boolean;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -519,13 +521,13 @@ export function ExternalResponsibilityPanel({
   }
 
   return <Surface className="external-responsibility-panel">
-    <div className="section-title">
+    {!embedded && <div className="section-title">
       <div>
         <h2>{readOnly ? "责任结算台账" : "供应商扣款"}</h2>
         <p>{readOnly ? "查看供应商实际扣款记录。" : "只记录本次扣款金额；系统自动累计，扣足后自动完成。"}</p>
       </div>
       <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>{batch.status === "active" ? "当前台账" : "历史台账"}</StatusBadge>
-    </div>
+    </div>}
     {message && <div className="own-factory-approval-message" role="status">{message}</div>}
 
     {visibleUnassigned.length > 0 && <section className="external-operation">
