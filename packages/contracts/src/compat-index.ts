@@ -2,6 +2,7 @@ export * from "./index.js";
 
 import {
   CreateWorkTaskSchema as StrictCreateWorkTaskSchema,
+  CorrectWorkReportQuantitySchema as StrictCorrectWorkReportQuantitySchema,
   OwnFactoryApprovalResponseSchema as StrictOwnFactoryApprovalResponseSchema,
   PersonParamsSchema as StrictPersonParamsSchema,
   RejectWorkReportSchema as StrictRejectWorkReportSchema,
@@ -27,6 +28,7 @@ export const WorkReportResponseSchema = businessPersonCompatibleSchema(StrictWor
 export const WorkReportsBatchResponseSchema = businessPersonCompatibleSchema(StrictWorkReportsBatchResponseSchema);
 export const ReworkWorkTasksResponseSchema = businessPersonCompatibleSchema(StrictReworkWorkTasksResponseSchema);
 export const RejectWorkReportSchema = businessPersonCompatibleSchema(StrictRejectWorkReportSchema);
+export const CorrectWorkReportQuantitySchema = businessPersonCompatibleSchema(StrictCorrectWorkReportQuantitySchema);
 export const ReviewWholeOrderSchema = businessPersonCompatibleSchema(StrictReviewWholeOrderSchema);
 export const WholeOrderReviewResponseSchema = businessPersonCompatibleSchema(StrictWholeOrderReviewResponseSchema);
 export const OwnFactoryApprovalResponseSchema = businessPersonCompatibleSchema(StrictOwnFactoryApprovalResponseSchema);

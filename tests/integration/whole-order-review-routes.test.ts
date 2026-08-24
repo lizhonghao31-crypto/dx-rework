@@ -28,6 +28,7 @@ const create = (businessRoles: readonly string[] = ["tail_supervisor"], capabili
   const service = {
     get: vi.fn(async () => response), approve: vi.fn(async () => ({ value: response, reused: false })),
     rejectReport: vi.fn(async () => ({ value: response, reused: false })),
+    correctReportQuantity: vi.fn(async () => ({ value: response, reused: false })),
   };
   const app = buildApp({
     config, checkDatabase: async () => undefined, getAppliedSchemaHistory: async () => null,
@@ -65,6 +66,32 @@ describe("whole order review routes", () => {
     const valid = await app.inject({ method: "POST", url: "/work-reports/" + reportId + "/reject", headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "reject-2" }, payload: { expectedOrderVersion: 2, rejectedPersonId: orderId, reason: "漏检" } });
     expect(valid.statusCode).toBe(200);
     expect(service.rejectReport).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "submission:audit" }), reportId, expect.objectContaining({ reason: "漏检" }), "reject-2");
+  });
+
+  it("accepts a positive integer effective quantity and delegates with tail audit authority", async () => {
+    const { app, service } = create();
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/work-reports/" + reportId + "/effective-quantity",
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "correct-1" },
+      payload: { expectedOrderVersion: 2, effectiveQuantity: 4800.5 },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(service.correctReportQuantity).not.toHaveBeenCalled();
+
+    const valid = await app.inject({
+      method: "POST",
+      url: "/work-reports/" + reportId + "/effective-quantity",
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "correct-2" },
+      payload: { expectedOrderVersion: 2, effectiveQuantity: 4800 },
+    });
+    expect(valid.statusCode).toBe(200);
+    expect(service.correctReportQuantity).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "submission:audit" }),
+      reportId,
+      { expectedOrderVersion: 2, effectiveQuantity: 4800 },
+      "correct-2",
+    );
   });
 
   it("does not expose retired quantity-adjustment mutations", async () => {

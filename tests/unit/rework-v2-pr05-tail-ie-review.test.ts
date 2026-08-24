@@ -49,8 +49,9 @@ describe("PR-05 final quantity and IE review", () => {
     ]);
     expect(detail).toContain('node("whole_order_review", "05", "尾部最终数量确认"');
     expect(detail).toContain('node("final_quantity_ie_review", "06", "IE 最终数量复核"');
-    expect(panel).toContain("工人上数、尾查数与最终确认数");
-    expect(panel).toContain("退回尾部确认");
-    expect(panel).toContain("通过并进入责任判定");
+    expect(panel).toContain("工人合计");
+    expect(panel).toContain("尾查");
+    expect(panel).toContain("退回尾部主管");
+    expect(panel).toContain("IE 复核决定");
   });
 });
