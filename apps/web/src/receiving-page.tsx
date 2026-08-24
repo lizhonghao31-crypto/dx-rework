@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { isImageAttachment, prepareAttachmentForUpload, sha256Hex } from "./attachment-upload.js";
+import { mapWithConcurrency } from "./concurrency.js";
 import "./receiving-page.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -158,15 +159,14 @@ export function ReceivingPage() {
     setBusy(true);
     setMessage(images.length ? `正在上传 ${images.length} 张收货单图片…` : "正在提交收货…");
     try {
-      const attachmentIds: string[] = [];
-      for (const image of images) {
+      const attachmentIds = await mapWithConcurrency(images, 2, async (image) => {
         let attachmentId = uploadedIds.current.get(image.previewUrl);
         if (!attachmentId) {
           attachmentId = await uploadReceivingImage(image.file);
           uploadedIds.current.set(image.previewUrl, attachmentId);
         }
-        attachmentIds.push(attachmentId);
-      }
+        return attachmentId;
+      });
 
       const key = pendingKey.current ?? crypto.randomUUID();
       pendingKey.current = key;
