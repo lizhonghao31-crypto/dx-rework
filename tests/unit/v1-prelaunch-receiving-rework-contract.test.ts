@@ -14,6 +14,29 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(migration).not.toContain("DROP TABLE receiving_receipts");
   });
 
+  it("gives only Root an audited correction and logical-delete window before any rework initiation", async () => {
+    const [migration, routes, service, board] = await Promise.all([
+      read("apps/api/migrations/0088_root_receiving_correction.sql"),
+      read("apps/api/src/receiving/receiving-routes.ts"),
+      read("apps/api/src/receiving/receiving-service.ts"),
+      read("apps/web/src/order-board-page.tsx"),
+    ]);
+    expect(migration).toContain("receiving.batch.correct");
+    expect(migration).toContain("receiving.batch.delete");
+    expect(migration).toContain("root_superuser");
+    expect(migration).toContain("receiving batch is locked after rework initiation");
+    expect(migration).not.toContain("DROP TABLE receiving_receipts");
+    expect(routes).toContain('"receiving:correct"');
+    expect(routes).toContain('app.patch<{ Params: { receivingBatchId: string } }>');
+    expect(routes).toContain('app.delete<{ Params: { receivingBatchId: string } }>');
+    expect(service).toContain("correctBatch");
+    expect(service).toContain("deleteBatch");
+    expect(service).toContain("has_rework_history");
+    expect(board).toContain("修改收货订单");
+    expect(board).toContain("确认删除收货订单");
+    expect(board).toContain("row.rootMutable");
+  });
+
   it("requires 1-3 receiving-note images for a new receiving batch and reuses existing batch evidence on later receipts", async () => {
     const [page, routes, service] = await Promise.all([
       read("apps/web/src/receiving-page.tsx"),

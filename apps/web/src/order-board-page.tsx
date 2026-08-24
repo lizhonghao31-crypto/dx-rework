@@ -20,6 +20,8 @@ type BoardRow = Readonly<{
   lastReceiverName: string;
   reworkOrderId: string | null;
   reworkStatus: ReworkStatus;
+  version: number;
+  rootMutable: boolean;
 }>;
 
 type BoardResult = Readonly<{
@@ -57,6 +59,14 @@ const reworkLabel = (status: ReworkStatus): string => {
   return "发起返工";
 };
 
+const responseError = async (response: Response, fallback: string): Promise<string> => {
+  const body = await response.json().catch(() => null) as Readonly<{
+    message?: string;
+    error?: Readonly<{ message?: string }>;
+  }> | null;
+  return body?.error?.message ?? body?.message ?? fallback;
+};
+
 export function OrderBoardPage() {
   const [date, setDate] = useState(localDate);
   const [query, setQuery] = useState("");
@@ -65,6 +75,15 @@ export function OrderBoardPage() {
   const [message, setMessage] = useState("正在加载订单看板…");
   const [canReceive, setCanReceive] = useState(false);
   const [canInitiate, setCanInitiate] = useState(false);
+  const [isRoot, setIsRoot] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [editing, setEditing] = useState<BoardRow | null>(null);
+  const [deleting, setDeleting] = useState<BoardRow | null>(null);
+  const [editStyleNo, setEditStyleNo] = useState("");
+  const [editDocumentQuantity, setEditDocumentQuantity] = useState("");
+  const [editActualQuantity, setEditActualQuantity] = useState("");
+  const [mutationBusy, setMutationBusy] = useState(false);
+  const [mutationMessage, setMutationMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -80,11 +99,13 @@ export function OrderBoardPage() {
           && capabilities.includes("rework:initiate");
         setCanReceive(isRoot || warehouseReceiver);
         setCanInitiate(isRoot || roles.includes("owner_group") || qualityControl);
+        setIsRoot(isRoot);
       })
       .catch(() => {
         if (!active) return;
         setCanReceive(false);
         setCanInitiate(false);
+        setIsRoot(false);
       });
     return () => { active = false; };
   }, []);
@@ -108,7 +129,7 @@ export function OrderBoardPage() {
         setMessage("订单看板加载失败，请刷新后重试");
       });
     return () => { active = false; };
-  }, [date, debouncedQuery]);
+  }, [date, debouncedQuery, refreshToken]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
@@ -130,6 +151,72 @@ export function OrderBoardPage() {
       return <a className={className} href={pageUrl(`ui/tasks/${row.reworkOrderId}`)}>{label}</a>;
     }
     return <span className={`${className} is-readonly`}>{label}</span>;
+  };
+
+  const openEdit = (row: BoardRow) => {
+    setDeleting(null);
+    setEditing(row);
+    setEditStyleNo(row.styleNo);
+    setEditDocumentQuantity(String(row.documentQuantity));
+    setEditActualQuantity(String(row.actualQuantity));
+    setMutationMessage("");
+  };
+
+  const rootControls = (row: BoardRow, mobile: boolean) => {
+    if (!isRoot || !row.rootMutable) return null;
+    return <div className={`order-board-root-actions order-board-root-actions--${mobile ? "mobile" : "desktop"}`}>
+      <button type="button" onClick={() => openEdit(row)}>修改</button>
+      <button type="button" className="is-danger" onClick={() => { setEditing(null); setDeleting(row); setMutationMessage(""); }}>删除</button>
+    </div>;
+  };
+
+  const submitCorrection = async () => {
+    if (!editing || mutationBusy) return;
+    setMutationBusy(true);
+    setMutationMessage("");
+    try {
+      const response = await fetch(apiUrl(`receiving/batches/${editing.receivingBatchId}`), {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedVersion: editing.version,
+          styleNo: editStyleNo,
+          documentQuantity: Number(editDocumentQuantity),
+          actualQuantity: Number(editActualQuantity),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "收货订单修改失败"));
+      setEditing(null);
+      setRefreshToken((value) => value + 1);
+      setMutationMessage("收货订单已修改");
+    } catch (error) {
+      setMutationMessage(error instanceof Error ? error.message : "收货订单修改失败");
+    } finally {
+      setMutationBusy(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting || mutationBusy) return;
+    setMutationBusy(true);
+    setMutationMessage("");
+    try {
+      const response = await fetch(apiUrl(`receiving/batches/${deleting.receivingBatchId}`), {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expectedVersion: deleting.version }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "收货订单删除失败"));
+      setDeleting(null);
+      setRefreshToken((value) => value + 1);
+      setMutationMessage("收货订单已删除");
+    } catch (error) {
+      setMutationMessage(error instanceof Error ? error.message : "收货订单删除失败");
+    } finally {
+      setMutationBusy(false);
+    }
   };
 
   return <div className="order-board-page">
@@ -173,6 +260,7 @@ export function OrderBoardPage() {
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
               {reworkControl(row, false)}
+              {rootControls(row, false)}
             </div>
           </div>
           <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
@@ -181,10 +269,42 @@ export function OrderBoardPage() {
           <div><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
           <div><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
           <div><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
+          {rootControls(row, true)}
           {reworkControl(row, true)}
         </Surface>;
       })}
     </div>
     {message ? <p className="order-board-message" role="status">{message}</p> : null}
+    {mutationMessage && !editing && !deleting ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p> : null}
+
+    {editing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setEditing(null)}>
+      <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>
+        <h2>修改收货订单</h2>
+        <p>修改后用于看板和后续返工；原始收货记录与图片继续保留。</p>
+        <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value)} /></label>
+        <div className="order-board-dialog__quantity-grid">
+          <label>收货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
+          <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
+        </div>
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        <div className="order-board-dialog__actions">
+          <button type="button" disabled={mutationBusy} onClick={() => setEditing(null)}>取消</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || !editStyleNo.trim() || !editDocumentQuantity || editActualQuantity === ""}>{mutationBusy ? "保存中…" : "保存修改"}</button>
+        </div>
+      </form>
+    </div> : null}
+
+    {deleting ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setDeleting(null)}>
+      <div className="order-board-dialog order-board-delete-dialog" role="dialog" aria-modal="true" aria-label="删除收货订单" onMouseDown={(event) => event.stopPropagation()}>
+        <h2>确认删除收货订单？</h2>
+        <p>款号：<strong>{deleting.styleNo}</strong></p>
+        <p>删除后从订单看板隐藏，原始收货记录与图片仍保留审计。此操作仅限尚未发起返工的订单。</p>
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        <div className="order-board-dialog__actions">
+          <button type="button" disabled={mutationBusy} onClick={() => setDeleting(null)}>取消</button>
+          <button type="button" className="is-danger" disabled={mutationBusy} onClick={() => void confirmDelete()}>{mutationBusy ? "删除中…" : "确认删除"}</button>
+        </div>
+      </div>
+    </div> : null}
   </div>;
 }

@@ -47,6 +47,41 @@ const createBody = (input: unknown): {
   };
 };
 
+const mutationBody = (input: unknown): {
+  expectedVersion: number;
+  styleNo: string;
+  documentQuantity: number;
+  actualQuantity: number;
+} => {
+  if (!input || typeof input !== "object") {
+    throw new ApplicationError("VALIDATION_ERROR", "收货订单修改信息不完整", 400);
+  }
+  const body = input as Record<string, unknown>;
+  if (typeof body.styleNo !== "string") {
+    throw new ApplicationError("VALIDATION_ERROR", "款号不能为空", 400);
+  }
+  return {
+    expectedVersion: Number(body.expectedVersion),
+    styleNo: body.styleNo,
+    documentQuantity: Number(body.documentQuantity),
+    actualQuantity: Number(body.actualQuantity),
+  };
+};
+
+const deleteBody = (input: unknown): { expectedVersion: number } => {
+  if (!input || typeof input !== "object") {
+    throw new ApplicationError("VALIDATION_ERROR", "收货订单版本无效", 400);
+  }
+  return { expectedVersion: Number((input as Record<string, unknown>).expectedVersion) };
+};
+
+const batchId = (input: string): string => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input)) {
+    throw new ApplicationError("VALIDATION_ERROR", "收货订单标识无效", 400);
+  }
+  return input;
+};
+
 export type ReceivingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: ReceivingService;
@@ -80,6 +115,19 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     );
   };
 
+  const rootCorrector = async (request: FastifyRequest) => {
+    const user = await dependencies.authenticate(token(request));
+    if (!(await isRootUser(dependencies.root, user.id))) {
+      throw new ApplicationError("FORBIDDEN", "只有Root可以修改或删除收货订单", 403);
+    }
+    return businessActor(
+      dependencies.root,
+      user,
+      request.id,
+      "receiving:correct",
+    );
+  };
+
   app.get<{ Querystring: { q?: string } }>("/receiving/style-options", async (request) => {
     await readUser(request);
     return { styles: await dependencies.service.listStyleOptions(request.query.q ?? "") };
@@ -105,4 +153,22 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
+
+  app.patch<{ Params: { receivingBatchId: string } }>(
+    "/receiving/batches/:receivingBatchId",
+    async (request) => dependencies.service.correctBatch(
+      await rootCorrector(request),
+      batchId(request.params.receivingBatchId),
+      mutationBody(request.body),
+    ),
+  );
+
+  app.delete<{ Params: { receivingBatchId: string } }>(
+    "/receiving/batches/:receivingBatchId",
+    async (request) => dependencies.service.deleteBatch(
+      await rootCorrector(request),
+      batchId(request.params.receivingBatchId),
+      deleteBody(request.body).expectedVersion,
+    ),
+  );
 }

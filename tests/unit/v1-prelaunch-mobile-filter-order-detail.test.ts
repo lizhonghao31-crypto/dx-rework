@@ -18,8 +18,8 @@ describe("v1 prelaunch mobile filters and final order detail UI", () => {
 
   it("reads receiving totals and immutable supply snapshots in the business detail query", async () => {
     const service = await readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8");
-    expect(service).toContain("sum(receipt.actual_quantity)::bigint actual_quantity");
-    expect(service).toContain("receipt.receiving_batch_id=orders.source_receiving_batch_id");
+    expect(service).toContain("sum(receipt.actual_quantity)+batch.actual_quantity_adjustment");
+    expect(service).toContain("batch.receiving_batch_id=orders.source_receiving_batch_id");
     expect(service).toContain("LEFT JOIN rework_order_supply_context supply_context");
     expect(service).toContain("washing_supplier.supplier_name washing_supplier_name");
     expect(service).toContain("embroidery_supplier.supplier_name embroidery_supplier_name");

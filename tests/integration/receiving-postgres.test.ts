@@ -43,6 +43,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     requestId: randomUUID(),
   });
 
+  const rootCorrector = (): TrustedActorContext => ({
+    actorId: receiverId,
+    actorRoles: ["root_superuser"],
+    authorizationCapability: "receiving:correct",
+    authorizationCapabilities: ["receiving:correct"],
+    requestId: randomUUID(),
+  });
+
   const migration = async (name: string): Promise<void> => {
     await database.query(await readFile(
       new URL(`../../apps/api/migrations/${name}`, import.meta.url),
@@ -203,6 +211,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     );
     await insertLegacyReceipt();
     await migration("0086_receiving_rework_evidence_link.sql");
+    await migration("0088_root_receiving_correction.sql");
   });
 
   afterAll(async () => {
@@ -331,6 +340,73 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     )).rejects.toThrow("receiving attachment binding requires trusted audit context");
   });
 
+  it("lets Root correct and logically delete an unstarted receiving batch without rewriting receipt facts", async () => {
+    const image = await readyImage();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-ROOT-CORRECT-01",
+      documentQuantity: 30,
+      actualQuantity: 27,
+      attachmentIds: [image],
+    }, randomUUID());
+
+    let board = await service.board(businessDate());
+    const before = board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)!;
+    expect(before).toMatchObject({ version: 1, rootMutable: true });
+
+    await expect(service.correctBatch(receiver(), receipt.value.receivingBatchId, {
+      expectedVersion: before.version,
+      styleNo: "STYLE-ROOT-CORRECTED-01",
+      documentQuantity: 32,
+      actualQuantity: 31,
+    })).rejects.toThrow("只有Root");
+
+    const corrected = await service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
+      expectedVersion: before.version,
+      styleNo: "STYLE-ROOT-CORRECTED-01",
+      documentQuantity: 32,
+      actualQuantity: 31,
+    });
+    expect(corrected).toMatchObject({
+      styleNo: "STYLE-ROOT-CORRECTED-01",
+      documentQuantity: 32,
+      actualQuantity: 31,
+      differenceQuantity: -1,
+      version: 2,
+    });
+
+    const immutableFact = await database.query<{
+      style_no: string;
+      document_quantity: number;
+      actual_quantity: number;
+    }>(
+      "SELECT style_no,document_quantity,actual_quantity FROM receiving_receipts WHERE receipt_id=$1",
+      [receipt.value.receiptId],
+    );
+    expect(immutableFact.rows[0]).toEqual({
+      style_no: "STYLE-ROOT-CORRECT-01",
+      document_quantity: 30,
+      actual_quantity: 27,
+    });
+
+    board = await service.board(businessDate(), "CORRECTED");
+    expect(board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)).toMatchObject({
+      styleNo: "STYLE-ROOT-CORRECTED-01",
+      documentQuantity: 32,
+      actualQuantity: 31,
+      version: 2,
+      rootMutable: true,
+    });
+
+    await service.deleteBatch(rootCorrector(), receipt.value.receivingBatchId, 2);
+    board = await service.board(businessDate());
+    expect(board.rows.some((item) => item.receivingBatchId === receipt.value.receivingBatchId)).toBe(false);
+    const retained = await database.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM receiving_receipts WHERE receiving_batch_id=$1",
+      [receipt.value.receivingBatchId],
+    );
+    expect(retained.rows[0]?.count).toBe("1");
+  });
+
   it("binds a real server draft to the receiving batch, blocks a duplicate active rework, and reopens after cancellation", async () => {
     const image = await readyImage();
     const receipt = await service.create(receiver(), {
@@ -358,7 +434,17 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
 
     await cancelReworkDraft(firstDraftId, "STYLE-REWORK-LINK-01");
     board = await service.board(businessDate());
-    expect(board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)?.reworkStatus).toBeNull();
+    const cancelledRow = board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)!;
+    expect(cancelledRow.reworkStatus).toBeNull();
+    expect(cancelledRow.rootMutable).toBe(false);
+    await expect(service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
+      expectedVersion: cancelledRow.version,
+      styleNo: "STYLE-REWORK-LINK-01",
+      documentQuantity: 41,
+      actualQuantity: 41,
+    })).rejects.toThrow("已经发起过返工");
+    await expect(service.deleteBatch(rootCorrector(), receipt.value.receivingBatchId, cancelledRow.version))
+      .rejects.toThrow("已经发起过返工");
 
     const secondDraftId = await createReworkDraft("STYLE-REWORK-LINK-01");
     expect(secondDraftId).not.toBe(firstDraftId);
