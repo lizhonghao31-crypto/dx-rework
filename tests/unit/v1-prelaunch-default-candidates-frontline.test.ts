@@ -23,7 +23,8 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
     expect(frontlineEntries(user("worker", ["work:report", "todo:view"])).map((entry) => entry.label)).toEqual(["本人返工任务", "我的待办"]);
     const tailEntries = frontlineEntries(user("tail_inspector", ["tail_inspection:report", "todo:view"]));
     expect(tailEntries.map((entry) => entry.label)).toEqual(["本人尾查任务", "我的待办"]);
-    expect(tailEntries[0]?.href).toContain("ui/work-reporting?queue=in_progress");
+    expect(frontlineEntries(user("worker", ["work:report"]))[0]?.href).toContain("ui/frontline/tasks?kind=worker");
+    expect(tailEntries[0]?.href).toContain("ui/frontline/tasks?kind=tail_inspection");
   });
 
   it("keeps N02 edits order-local until the dedicated default-roster save", async () => {
