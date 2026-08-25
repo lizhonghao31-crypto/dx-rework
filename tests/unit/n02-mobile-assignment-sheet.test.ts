@@ -2,17 +2,19 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("N02 mobile personnel assignment", () => {
-  it("puts the default-worker actions beside the personnel title and shows compact removable names", async () => {
+  it("puts the current-order and default-roster actions beside the personnel title", async () => {
     const [source, styles] = await Promise.all([
       readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/web/src/process-worker-assignment-form.css", "utf8"),
     ]);
     expect(source).toContain('<div className="process-worker-picker__heading"><b>返工人员 *</b>');
     expect(source).toContain('className="process-worker-add-default" variant="primary"');
-    expect(source).toContain('item.source === "catalog" ? "＋ 增加默认工人" : "＋ 增加工人"');
+    expect(source).toContain('onClick={() => openMobileWorkerAssignment(index)}>选择本单工人</Button>');
     expect(source).toContain('className="process-worker-save-default"');
+    expect(source).toContain('savingDefaultIndex === index ? "保存中…" : "保存为默认名单"');
     expect(source).toContain('className="process-worker-default-list"');
-    expect(source).toContain('onClick={() => removeWorker(index, personId)}>−</button><small>{person?.displayName ?? "返工人员"}');
+    expect(source).toContain('onClick={() => removeWorker(index, personId)}>−</button>');
+    expect(source).toContain('className="process-worker-temporary-name"');
     expect(styles).toContain(".process-worker-picker__heading{justify-content:flex-start}");
     expect(source).toContain('<div className="process-worker-tail-title-row"><b>尾查</b><Button className="process-worker-mobile-assign"');
   });
@@ -25,7 +27,7 @@ describe("N02 mobile personnel assignment", () => {
     expect(source).toContain("setWorkerIds((current) => ({ ...current, [key]: selectedIds }))");
     expect(source).toContain("setTailPersonIds(selectedIds)");
     expect(source).toContain("markDefaultRosterDirty(mobileAssignment.index)");
-    expect(source).toContain("确认添加");
+    expect(source).toContain("确认本单分工");
     expect(source).toContain("确认分配");
     expect(source).toContain("取消");
   });

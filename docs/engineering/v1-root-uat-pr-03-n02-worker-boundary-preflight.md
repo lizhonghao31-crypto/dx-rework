@@ -6,7 +6,7 @@ base branch: main
 base SHA: 58e736e423abdbc41cc4eb06b633be56d36e4205
 working branch: fix/v1-root-uat-n02-worker-boundary
 task scope: 明确 N02 本单人员与全局默认名单边界，并在当前工序内复用既有弹窗补录临时工资料
-allowed files: docs/engineering/v1-root-uat-pr-03-n02-worker-boundary-preflight.md; docs/requirements/v1-root-uat-n02-worker-boundary-2026-08-25.md; packages/contracts/src/index.ts; apps/api/src/access/service.ts; apps/api/src/access/routes.ts; apps/api/migrations/0092_temporary_worker_profile_update.sql; apps/api/src/platform/migration-manifest.json; apps/web/src/process-worker-assignment-form.tsx; apps/web/src/process-worker-assignment-form.css; tests/integration/access-routes.test.ts; tests/integration/access-postgres.test.ts; tests/unit/v1-prelaunch-default-candidates-frontline.test.ts; tests/unit/v1-root-uat-n02-worker-boundary.test.ts
+allowed files: docs/engineering/v1-root-uat-pr-03-n02-worker-boundary-preflight.md; docs/requirements/v1-root-uat-n02-worker-boundary-2026-08-25.md; packages/contracts/src/index.ts; apps/api/src/access/service.ts; apps/api/src/access/routes.ts; apps/api/migrations/0092_temporary_worker_profile_update.sql; apps/api/src/platform/migration-manifest.json; apps/web/src/process-worker-assignment-form.tsx; apps/web/src/process-worker-assignment-form.css; tests/integration/access-routes.test.ts; tests/integration/access-postgres.test.ts; tests/unit/n02-mobile-assignment-sheet.test.ts; tests/unit/v1-prelaunch-default-candidates-frontline.test.ts; tests/unit/v1-root-uat-n02-worker-boundary.test.ts
 forbidden files: apps/api/src/rework/**; apps/api/src/receiving/**; apps/api/src/todos/**; apps/web/src/receiving-page.tsx; apps/web/src/master-data-page.tsx; packages/config/**; .github/**
 ```
 
