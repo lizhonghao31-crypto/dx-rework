@@ -12,7 +12,7 @@ describe("Root UAT PR-03 N02 worker boundary", () => {
 
     expect(form).toContain("选择本单工人");
     expect(form).toContain("保存为默认名单");
-    expect(form).toContain("只有点击“保存为默认名单”才会更新以后订单的默认工人");
+    expect(form).not.toContain("只有点击“保存为默认名单”才会更新以后订单的默认工人");
     expect(form.split(endpoint)).toHaveLength(2);
     expect(form.indexOf(endpoint)).toBeGreaterThan(saveStart);
     expect(form.indexOf(endpoint)).toBeLessThan(nextFunction);
