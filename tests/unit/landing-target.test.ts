@@ -38,15 +38,24 @@ describe("business landing target", () => {
     expect(landingTarget(user(["todo:view"], ["warehouse_receiver"]))).toBe("ui/my-tasks");
   });
 
-  it("keeps Root and management users on the management landing", () => {
+  it("routes Root and management users to their actionable todo landing", () => {
     expect(landingTarget({
       ...user(["receiving:create", "todo:view"], ["warehouse_receiver"]),
       isRoot: true,
-    })).toBe("ui/management");
+    })).toBe("ui/my-tasks");
     expect(landingTarget(user(
       ["dashboard:management:read", "work:report", "todo:view"],
       ["owner_group", "worker"],
-    ))).toBe("ui/management");
+    )).toBe("ui/my-tasks");
+    expect(landingTarget({
+      ...user(["todo:view"], ["owner_group"]),
+      isRoot: true,
+    })).toBe("ui/my-tasks");
+  });
+
+  it("does not expose the retired management cockpit as a landing target", () => {
+    expect(landingTarget(user(["dashboard:management:read", "todo:view"], ["system_admin"])))
+      .toBe("ui/my-tasks");
   });
 
   it("routes master-data-only users to a page they can actually open", () => {
