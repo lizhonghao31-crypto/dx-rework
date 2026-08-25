@@ -209,7 +209,7 @@ export class WorkReportingService {
                   AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
                 JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
                 WHERE assignment.user_id=person.app_user_id
-                  AND assignment.role_code='tail_inspector' AND assignment.revoked_at IS NULL
+                  AND assignment.role_code IN ('worker','tail_inspector') AND assignment.revoked_at IS NULL
               )) AS tail_eligible
        FROM business_people person
        WHERE person.active=true
@@ -756,7 +756,8 @@ export class WorkReportingService {
   }
 
   private isTailInspector(actor: TrustedActorContext): boolean {
-    return actor.actorRoles.includes("tail_inspector") && this.capabilities(actor).includes("tail_inspection:report");
+    return actor.actorRoles.some((role) => role === "worker" || role === "tail_inspector")
+      && this.capabilities(actor).includes("tail_inspection:report");
   }
 
   private canProxyReport(actor: TrustedActorContext, members?: readonly PersonRow[]): boolean {
