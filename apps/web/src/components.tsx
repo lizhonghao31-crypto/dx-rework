@@ -234,6 +234,7 @@ export function Shell({
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
   const todoAccess = hasCapability("todo:view");
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
+  const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const systemManagementAccess = auditAccess || technicalAdminAccess || canManageEmployeeAccess
     || isRoot || isOwner || hasCapability("master_data:manage");
@@ -258,7 +259,7 @@ export function Shell({
       href: "/ui/qc/new",
     });
   }
-  if (reportAccess) {
+  if (reworkBoardAccess) {
     navigation.push({
       name: "返工单看板",
       description: "查看权限范围内返工单及完整流程",

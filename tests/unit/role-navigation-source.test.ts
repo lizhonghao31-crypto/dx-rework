@@ -22,4 +22,19 @@ describe("1.0 role entry and navigation closure", () => {
     expect(navigation).toContain('finance_director: "财务总监"');
     expect(navigation).toContain('tail_inspector: "尾查"');
   });
+
+  it("shows the rework board to tail supervisors without granting finance reports", async () => {
+    const [navigation, access] = await Promise.all([
+      readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/api/migrations/0005_access_master_data.sql", "utf8"),
+    ]);
+    expect(access).toContain(
+      "('tail_supervisor', 'tools:user'), ('tail_supervisor', 'dashboard:site:read')",
+    );
+    expect(navigation).toContain(
+      'const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");',
+    );
+    expect(navigation).toContain("if (reworkBoardAccess) {");
+    expect(navigation).toContain("if (reportAccess) navigation.push({");
+  });
 });
