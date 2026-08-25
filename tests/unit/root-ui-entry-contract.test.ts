@@ -32,8 +32,8 @@ describe("zero-role Root UI entry contract", () => {
     })).toBe(true);
   });
 
-  it("lands a zero-role Root on the management dashboard", () => {
-    expect(landingTarget(zeroRoleRoot)).toBe("ui/management");
+  it("lands a zero-role Root on my tasks", () => {
+    expect(landingTarget(zeroRoleRoot)).toBe("ui/my-tasks");
   });
 
   it("keeps /auth/me Root-aware instead of deriving access only from role capabilities", async () => {
