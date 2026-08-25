@@ -146,7 +146,7 @@ export class AccessMasterDataService {
                 FILTER (WHERE rc.capability IS NOT NULL),'{}') capabilities
        FROM business_roles br
        LEFT JOIN role_capabilities rc ON rc.role_code=br.role_code
-       WHERE br.enabled=true
+       WHERE br.enabled=true AND br.role_code<>'tail_inspector'
        GROUP BY br.role_code
        ORDER BY br.role_code`,
     );
