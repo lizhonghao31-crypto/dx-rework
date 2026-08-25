@@ -36,8 +36,7 @@ export function buildTodoDeepLink(
       if (route.tab) query.set("node", route.tab);
       break;
     case "process_configuration":
-      path = "/ui/process-configuration";
-      query.set("rework", route.entityId);
+      path = `/ui/my-tasks/${route.todoId}`;
       break;
     case "whole_order_review":
       path = "/ui/work-reporting";

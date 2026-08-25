@@ -246,7 +246,9 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
     const sourceId = dingTalkTodoSourceId(input.sourceKey);
     let task = await this.getBySourceId(input.creatorUnionId, sourceId, true);
     let reconciled = task !== null;
+    let createdInThisCall = false;
     if (!task) {
+      createdInThisCall = true;
       const body = {
         subject: input.subject,
         description: input.description,
@@ -259,8 +261,8 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         priority: 20,
         notifyConfigs: {
           dingNotify: "1",
-          sendTodoApn: "true",
-          sendAssistantChat: "true",
+          sendTodoApn: "false",
+          sendAssistantChat: "false",
         },
       };
       try {
@@ -291,6 +293,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
         if (!task) throw error;
       }
     }
+    if (createdInThisCall) await this.sendChineseWorkNotification(input);
     return {
       providerMessageId: this.requestId(task),
       providerTodoId: this.taskId(task),
@@ -342,6 +345,80 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
       providerTodoId,
       state: "updated",
     };
+  }
+
+  private async sendChineseWorkNotification(input: DingTalkTodoCreateInput): Promise<void> {
+    const token = await this.getAppToken();
+    const url = new URL(`${OAPI}/topapi/message/corpconversation/asyncsend_v2`);
+    url.searchParams.set("access_token", token);
+    let response: Response;
+    try {
+      response = await this.http(url.toString(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agent_id: Number(this.config.agentId),
+          userid_list: input.recipientProviderUserId,
+          to_all_user: false,
+          msg: {
+            msgtype: "action_card",
+            action_card: {
+              title: input.subject,
+              markdown: `### ${input.subject}\n\n${input.description.replace(/\n/g, "\n\n")}`,
+              single_title: "查看详情",
+              single_url: input.deepLink,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 5_000),
+      });
+    } catch {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_CHINESE_NOTIFICATION_TIMEOUT",
+        "DingTalk Chinese work notification request failed or timed out",
+        true,
+        true,
+      );
+    }
+    if (response.status === 429 || response.status >= 500) {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_CHINESE_NOTIFICATION_RETRYABLE",
+        `DingTalk Chinese work notification returned HTTP ${response.status}`,
+        true,
+        response.status >= 500,
+      );
+    }
+    if (!response.ok) {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_CHINESE_NOTIFICATION_REJECTED",
+        `DingTalk Chinese work notification was rejected with HTTP ${response.status}`,
+        false,
+      );
+    }
+    let value: unknown;
+    try { value = await response.json(); } catch {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_CHINESE_NOTIFICATION_INVALID_RESPONSE",
+        "DingTalk Chinese work notification returned invalid JSON",
+        true,
+        true,
+      );
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_CHINESE_NOTIFICATION_INVALID_RESPONSE",
+        "DingTalk Chinese work notification returned an invalid response",
+        false,
+      );
+    }
+    const record = value as JsonRecord;
+    if (record.errcode !== 0) {
+      throw new DingTalkTodoDeliveryError(
+        "DINGTALK_CHINESE_NOTIFICATION_REJECTED",
+        `DingTalk Chinese work notification was rejected (${String(record.errcode)})`,
+        false,
+      );
+    }
   }
 
   private assertEnabled(): void {

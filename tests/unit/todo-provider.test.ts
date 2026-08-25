@@ -15,7 +15,7 @@ const createInput = {
   recipientProviderUserId: "userid-14",
   category: "process_configuration",
   subject: "配置返工工序",
-  description: "款号：DX-1001\n返工单：RW-2026-0813-001\n订单号：PO-88\n事项：请配置工序、计划数量和单价。",
+  description: "款号：DX-1001\n返工单：RW-2026-0813-001\n事项：请配置工序、计划数量和单价。",
   deliveryKind: "create" as const,
   sourceKey: "todo-source-13",
   route: {
@@ -69,6 +69,9 @@ describe("DingTalk todo provider boundary", () => {
       calls.push({ url, init });
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 99 });
       }
       if (url.endsWith("/tasks/sources/todo-source-13")) return json({}, 404);
       if (new URL(url).pathname.endsWith("/tasks") && init.method === "POST") {
@@ -124,8 +127,8 @@ describe("DingTalk todo provider boundary", () => {
       executorIds: ["union-14"],
       notifyConfigs: {
         dingNotify: "1",
-        sendTodoApn: "true",
-        sendAssistantChat: "true",
+        sendTodoApn: "false",
+        sendAssistantChat: "false",
       },
     });
     expect(JSON.parse(String(createCall?.init.body))).not.toHaveProperty("operatorId");
@@ -135,9 +138,25 @@ describe("DingTalk todo provider boundary", () => {
     expect(update?.url).toContain("/v1.0/todo/users/union-creator/tasks/task-1");
     expect(new URL(update!.url).searchParams.get("operatorId")).toBe("union-operator");
     expect(JSON.parse(String(update?.init.body))).not.toHaveProperty("operatorId");
-    expect(calls.some((call) =>
+    const chineseNotification = calls.find((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
-    )).toBe(false);
+    );
+    expect(chineseNotification).toBeDefined();
+    expect(JSON.parse(String(chineseNotification?.init.body))).toMatchObject({
+      agent_id: 123456,
+      userid_list: "userid-14",
+      to_all_user: false,
+      msg: {
+        msgtype: "action_card",
+        action_card: {
+          title: "配置返工工序",
+          single_title: "查看详情",
+          single_url: createInput.deepLink,
+        },
+      },
+    });
+    expect(String(chineseNotification?.init.body)).not.toContain("You have a new mission");
+    expect(String(chineseNotification?.init.body)).not.toContain("订单号");
     const completion = calls.find((call) =>
       new URL(call.url).pathname.endsWith("/executorStatus")
     );
@@ -155,6 +174,9 @@ describe("DingTalk todo provider boundary", () => {
       calls.push({ url, init });
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 99 });
       }
       if (url.endsWith("/tasks/sources/todo-source-13")) {
         return json({ requestId: "lookup-empty" });
@@ -188,6 +210,9 @@ describe("DingTalk todo provider boundary", () => {
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
       }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 99 });
+      }
       if (url.endsWith("/tasks/sources/todo-source-13")) {
         lookupCount += 1;
         return lookupCount === 1
@@ -220,6 +245,9 @@ describe("DingTalk todo provider boundary", () => {
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
       }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 99 });
+      }
       if (url.endsWith("/tasks/sources/todo-source-13")) {
         return json({ requestId: "lookup-empty" });
       }
@@ -247,6 +275,9 @@ describe("DingTalk todo provider boundary", () => {
       const url = String(input);
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 99 });
       }
       if (url.endsWith("/tasks/sources/todo-source-13")) {
         return json({ id: "task-existing", requestId: "lookup-existing" });
@@ -282,6 +313,9 @@ describe("DingTalk todo provider boundary", () => {
       calls.push({ url, init });
       if (url.startsWith("https://oapi.dingtalk.com/gettoken")) {
         return json({ errcode: 0, access_token: "token-value", expires_in: 7200 });
+      }
+      if (url.includes("/topapi/message/corpconversation/asyncsend_v2")) {
+        return json({ errcode: 0, task_id: 99 });
       }
       if (url.includes("/tasks/sources/")) {
         lookupCount += 1;
@@ -325,9 +359,9 @@ describe("DingTalk todo provider boundary", () => {
     expect(JSON.parse(String(createCalls[0]?.init.body))).toMatchObject({
       sourceId: sourceIds[0],
     });
-    expect(calls.some((call) =>
+    expect(calls.filter((call) =>
       call.url.includes("/topapi/message/corpconversation/asyncsend_v2")
-    )).toBe(false);
+    )).toHaveLength(1);
   });
 
   it("classifies retryable and permanent HTTP failures without leaking credentials", async () => {

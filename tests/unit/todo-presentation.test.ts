@@ -16,14 +16,24 @@ describe("todo business presentation", () => {
         styleNo: "DX-1001",
       },
     })).toEqual({
-      subject: "【返工单:RW-2026-0813-001｜款号:DX-1001｜订单号:PO-88】返工上数被退回",
+      subject: "【款号:DX-1001｜返工单:RW-2026-0813-001】返工上数被退回",
       description: [
         "款号：DX-1001",
         "返工单：RW-2026-0813-001",
-        "订单号：PO-88",
         "事项：请修正被退回的完成数量记录后重新提交。",
       ].join("\n"),
     });
+  });
+
+  it("never includes the retired order-number field in an order todo", () => {
+    const result = buildTodoPresentation({
+      category: "process_configuration",
+      deliveryKind: "create",
+      orderContext: { reworkNo: "RW-1", orderNo: null, styleNo: "9997" },
+    });
+    expect(result.subject).toBe("【款号:9997｜返工单:RW-1】配置返工工序");
+    expect(result.description).not.toContain("订单号");
+    expect(result.subject).not.toContain("未填写");
   });
 
   it("uses the wage month for direct month-close tasks and marks reminders clearly", () => {
