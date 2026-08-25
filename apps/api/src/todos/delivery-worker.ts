@@ -48,6 +48,7 @@ type BindingRow = Readonly<{
   external_generation: number;
   recipient_user_id: string;
   recipient_union_id: string;
+  creator_union_id: string;
   provider_todo_id: string | null;
   source_key: string;
   provider_state: "creating" | "active" | "unknown_response" | "completed" | "cancelled" | "permanent_failed";
@@ -216,11 +217,24 @@ export class TodoDeliveryWorker {
       );
       return "failed";
     }
+    const creatorIdentity = await this.deliveryActorIdentity(input);
+    if (!creatorIdentity) {
+      await this.failWithoutBinding(
+        claimed,
+        new DingTalkTodoDeliveryError(
+          "DINGTALK_TODO_CREATOR_NOT_FOUND",
+          "Todo creation actor has no active primary-corporation DingTalk identity",
+          true,
+        ),
+      );
+      return "failed";
+    }
     const sourceKey = claimed.idempotencyKey;
     const binding = await this.ensureBinding(
       claimed,
       input,
       recipientIdentity.unionId,
+      creatorIdentity.unionId,
       sourceKey,
     );
     try {
@@ -237,6 +251,7 @@ export class TodoDeliveryWorker {
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
         recipientUnionId: recipientIdentity.unionId,
+        creatorUnionId: creatorIdentity.unionId,
         recipientProviderUserId: recipientIdentity.providerUserId,
         category: todo.category,
         ...presentation,
@@ -274,10 +289,26 @@ export class TodoDeliveryWorker {
       );
       return "failed";
     }
+    const operatorIdentity = await this.deliveryActorIdentity(input);
+    if (!operatorIdentity) {
+      await this.recordFailure(
+        claimed,
+        input,
+        binding,
+        new DingTalkTodoDeliveryError(
+          "DINGTALK_TODO_OPERATOR_NOT_FOUND",
+          "Todo completion actor has no active primary-corporation DingTalk identity",
+          true,
+        ),
+      );
+      return "failed";
+    }
     try {
       const receipt = await this.provider.completeTodo({
         todoId: todo.todo_id,
         recipientUnionId: binding.recipient_union_id,
+        creatorUnionId: binding.creator_union_id,
+        operatorUnionId: operatorIdentity.unionId,
         ...(binding.provider_todo_id ? { providerTodoId: binding.provider_todo_id } : {}),
         sourceKey: binding.source_key,
         reason: todo.status === "cancelled" ? "Internal todo was cancelled" : "Internal todo was completed or transferred",
@@ -330,6 +361,20 @@ export class TodoDeliveryWorker {
       );
       return "failed";
     }
+    const operatorIdentity = await this.deliveryActorIdentity(input);
+    if (!operatorIdentity) {
+      await this.recordFailure(
+        claimed,
+        input,
+        binding,
+        new DingTalkTodoDeliveryError(
+          "DINGTALK_TODO_OPERATOR_NOT_FOUND",
+          "Todo update actor has no active primary-corporation DingTalk identity",
+          true,
+        ),
+      );
+      return "failed";
+    }
     try {
       const updateKind: "update" | "reminder" | "escalation" = input.deliveryKind === "reminder"
         ? "reminder"
@@ -346,6 +391,8 @@ export class TodoDeliveryWorker {
         todoId: todo.todo_id,
         recipientUserId: todo.recipient_user_id,
         recipientUnionId: binding.recipient_union_id,
+        creatorUnionId: binding.creator_union_id,
+        operatorUnionId: operatorIdentity.unionId,
         ...(binding.provider_todo_id ? { providerTodoId: binding.provider_todo_id } : {}),
         category: todo.category,
         ...presentation,
@@ -373,12 +420,13 @@ export class TodoDeliveryWorker {
     claimed: ClaimedDelivery,
     input: DeliveryPayload,
     recipientUnionId: string,
+    creatorUnionId: string,
     sourceKey: string,
   ): Promise<BindingRow> {
     return this.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [sourceKey]);
       const existing = await client.query<BindingRow>(
-        `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+        `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,creator_union_id,
                 provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id
          FROM dingtalk_todo_external_bindings
          WHERE provider='dingtalk' AND source_key=$1
@@ -394,10 +442,10 @@ export class TodoDeliveryWorker {
       const bindingId = randomUUID();
       const inserted = await client.query<BindingRow>(
         `INSERT INTO dingtalk_todo_external_bindings(
-           binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+           binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,creator_union_id,
            source_key,provider_state,create_outbox_event_id,create_operation_event_id
-         ) VALUES($1,$2,$3,$4,$5,$6,'creating',$7,$8)
-         RETURNING binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,'creating',$8,$9)
+         RETURNING binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,creator_union_id,
                    provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id`,
         [
           bindingId,
@@ -405,6 +453,7 @@ export class TodoDeliveryWorker {
           generation.rows[0]?.generation ?? 1,
           input.recipientUserId,
           recipientUnionId,
+          creatorUnionId,
           sourceKey,
           claimed.eventId,
           input.operationEventId,
@@ -419,7 +468,7 @@ export class TodoDeliveryWorker {
 
   private async openBinding(todoId: string, recipientUserId: string): Promise<BindingRow | null> {
     const result = await this.database.query<BindingRow>(
-      `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,
+      `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,creator_union_id,
               provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id
        FROM dingtalk_todo_external_bindings
        WHERE todo_id=$1 AND recipient_user_id=$2
@@ -696,6 +745,31 @@ export class TodoDeliveryWorker {
          ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
        WHERE user_record.id=$1 AND user_record.enabled=true`,
       [userId],
+    );
+    const identity = result.rows[0];
+    return identity
+      ? { unionId: identity.union_id, providerUserId: identity.provider_user_id }
+      : null;
+  }
+
+  private async deliveryActorIdentity(
+    input: DeliveryPayload,
+  ): Promise<{ unionId: string; providerUserId: string } | null> {
+    const result = await this.database.query<{
+      union_id: string;
+      provider_user_id: string;
+    }>(
+      `SELECT identity.union_id,identity.provider_user_id
+       FROM operation_events event
+       JOIN app_users user_record
+         ON user_record.id=event.actor_id AND user_record.enabled=true
+       JOIN identity_mappings identity
+         ON identity.user_id=user_record.id AND identity.provider='dingtalk'
+        AND identity.active=true AND identity.employed=true
+       JOIN access_security_policy policy
+         ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+       WHERE event.event_id=$1 AND event.request_id=$2`,
+      [input.operationEventId, input.operationRequestId],
     );
     const identity = result.rows[0];
     return identity
