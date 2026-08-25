@@ -46,7 +46,7 @@ describe("business landing target", () => {
     expect(landingTarget(user(
       ["dashboard:management:read", "work:report", "todo:view"],
       ["owner_group", "worker"],
-    )).toBe("ui/my-tasks");
+    ))).toBe("ui/my-tasks");
     expect(landingTarget({
       ...user(["todo:view"], ["owner_group"]),
       isRoot: true,
