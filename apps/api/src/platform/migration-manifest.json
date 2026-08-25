@@ -92,6 +92,7 @@
     { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" },
     { "version": "0091_role_entry_todo_reliability", "checksum": "79d4670a3848183498ac57fdc6a4b8d485e9591291521eaa2504e1a49c6bf03c" },
     { "version": "0092_temporary_worker_profile_update", "checksum": "f2e7858399d4a0e7770ad384759294af2309946542c44b6cbc6271bfeeff19c5" },
-    { "version": "0093_tail_inspection_worker_role", "checksum": "549e69774c6624a3d0fcaacab567df0df3eec2c2a185ec9e9815ab7ba0da093b" }
+    { "version": "0093_tail_inspection_worker_role", "checksum": "549e69774c6624a3d0fcaacab567df0df3eec2c2a185ec9e9815ab7ba0da093b" },
+    { "version": "0094_tail_assignment_parity", "checksum": "2c5828661ca5351bbd817ec322deadd2b57f083570509909178862d0b5c80104" }
   ]
 }

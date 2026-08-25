@@ -371,17 +371,21 @@ export class ProcessWorkerPlanService {
              WHERE assignment.user_id=person.app_user_id
                AND assignment.role_code='worker' AND assignment.revoked_at IS NULL
            )
-         )) OR ($2='tail_inspection' AND person.person_type='internal' AND EXISTS (
-           SELECT 1 FROM user_role_assignments assignment
-           JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
-           JOIN role_capabilities capability ON capability.role_code=assignment.role_code
-             AND capability.capability='tail_inspection:report'
-           JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
-           JOIN identity_mappings identity ON identity.user_id=app_user.id
-             AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
-           JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
-           WHERE assignment.user_id=person.app_user_id
-             AND assignment.role_code IN ('worker','tail_inspector') AND assignment.revoked_at IS NULL
+         )) OR ($2='tail_inspection' AND (
+           person.person_type='temporary' OR (
+             person.person_type='internal' AND EXISTS (
+               SELECT 1 FROM user_role_assignments assignment
+               JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+               JOIN role_capabilities capability ON capability.role_code=assignment.role_code
+                 AND capability.capability='tail_inspection:report'
+               JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
+               JOIN identity_mappings identity ON identity.user_id=app_user.id
+                 AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
+               JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+               WHERE assignment.user_id=person.app_user_id
+                 AND assignment.role_code IN ('worker','tail_inspector') AND assignment.revoked_at IS NULL
+             )
+           )
          ))
        )
        ORDER BY person.person_id FOR SHARE`,
