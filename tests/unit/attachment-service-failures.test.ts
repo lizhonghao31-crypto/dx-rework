@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import {
@@ -7,14 +8,16 @@ import {
 } from "../../apps/api/src/tools/storage.js";
 
 const actor = { actorId: "00000000-0000-4000-8000-000000000099", actorRoles: ["tail_supervisor"], authorizationCapability: "tools:user", requestId: "request-1" };
-const input = { filename: "proof.pdf", mimeType: "application/pdf" as const, sizeBytes: 12, sha256: "a".repeat(64) };
+const pdfBytes = Buffer.from("%PDF-1.4\n%%EOF\n");
+const pdfSha256 = createHash("sha256").update(pdfBytes).digest("hex");
+const input = { filename: "proof.pdf", mimeType: "application/pdf" as const, sizeBytes: pdfBytes.length, sha256: pdfSha256 };
 const row = {
   attachment_id: "00000000-0000-4000-8000-000000000001",
   object_key: "private/proof.pdf",
   original_filename: "proof.pdf",
   mime_type: "application/pdf",
-  size_bytes: "12",
-  sha256: "a".repeat(64),
+  size_bytes: String(pdfBytes.length),
+  sha256: pdfSha256,
   uploaded_by: actor.actorId,
   entity_type: null,
   entity_id: null,
@@ -48,7 +51,9 @@ const emptyStorage = (): ObjectStorage => ({
   createExactSizeNonOverwritableUploadGrant: vi.fn(),
   createDownloadGrant: vi.fn(),
   head: vi.fn(),
+  readBytes: vi.fn(async () => pdfBytes),
   computeSha256: vi.fn(async () => input.sha256),
+  deleteObject: vi.fn(async () => undefined),
 });
 
 describe("AttachmentService failure consistency", () => {
@@ -121,8 +126,8 @@ describe("AttachmentService failure consistency", () => {
 
   it.each([
     ["missing object", async () => { throw new ObjectStorageObjectNotFoundError(); }, "object_not_found"],
-    ["metadata mismatch", async () => ({ sizeBytes: 99, mimeType: "application/pdf", sha256: "a".repeat(64) }), "metadata_mismatch"],
-    ["missing SHA metadata", async () => ({ sizeBytes: 12, mimeType: "application/pdf" }), "metadata_mismatch"],
+    ["metadata mismatch", async () => ({ sizeBytes: 99, mimeType: "application/pdf", sha256: pdfSha256 }), "metadata_mismatch"],
+    ["missing SHA metadata", async () => ({ sizeBytes: pdfBytes.length, mimeType: "application/pdf" }), "metadata_mismatch"],
   ])("rejects and audits %s in one transaction", async (_name, head, reason) => {
     const { pool, client, operations } = poolWithOwnedRow();
     const storage: ObjectStorage = { ...emptyStorage(), head };
@@ -142,22 +147,56 @@ describe("AttachmentService failure consistency", () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it("marks an attachment ready after a signed HEAD metadata verification without re-reading the file", async () => {
+  it("marks an attachment ready only after checking metadata, real bytes and the actual digest", async () => {
     const { pool, operations } = poolWithOwnedRow();
     const storage: ObjectStorage = {
       ...emptyStorage(),
-      head: vi.fn(async () => ({ sizeBytes: 12, mimeType: "application/pdf", sha256: input.sha256 })),
+      head: vi.fn(async () => ({ sizeBytes: pdfBytes.length, mimeType: "application/pdf", sha256: input.sha256 })),
+      readBytes: vi.fn(async () => pdfBytes),
       computeSha256: vi.fn(async () => input.sha256),
     };
     const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 100 });
 
     await expect(service.finalize(actor, row.attachment_id)).resolves.toMatchObject({ status: "ready" });
     expect(storage.head).toHaveBeenCalledWith(row.object_key);
+    expect(storage.readBytes).toHaveBeenCalledWith(row.object_key, 100);
     expect(storage.computeSha256).not.toHaveBeenCalled();
     expect(operations[0]).toBe("BEGIN");
     expect(operations[1]).toContain("UPDATE attachments SET status='ready'");
     expect(operations[2]).toContain("INSERT INTO operation_events");
     expect(operations[3]).toBe("COMMIT");
+  });
+
+  it.each([
+    ["size mismatch", Buffer.from("%PDF-1.4\nchanged\n%%EOF\n"), "content_size_mismatch"],
+    ["digest mismatch", Buffer.from("%PDF-1.5\n%%EOF\n"), "content_sha256_mismatch"],
+    ["invalid declared type", Buffer.alloc(pdfBytes.length, 0x41), "content_invalid"],
+  ])("rejects real object bytes on %s", async (_name, bytes, reason) => {
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const ownedRow = reason === "content_invalid"
+      ? { ...row, sha256: digest }
+      : row;
+    const { pool, client } = poolWithOwnedRow(ownedRow);
+    const storage: ObjectStorage = {
+      ...emptyStorage(),
+      head: vi.fn(async () => ({
+        sizeBytes: Number(ownedRow.size_bytes),
+        mimeType: ownedRow.mime_type,
+        sha256: ownedRow.sha256,
+      })),
+      readBytes: vi.fn(async () => bytes),
+    };
+    const service = new AttachmentService(pool as never, storage, {
+      prefix: "private",
+      ttlSeconds: 300,
+      maxUploadBytes: 100,
+    });
+
+    await expect(service.finalize(actor, row.attachment_id)).rejects.toMatchObject({
+      code: "ATTACHMENT_METADATA_MISMATCH",
+      statusCode: 422,
+    });
+    expect(client.query.mock.calls[1]?.[1]).toEqual([row.attachment_id, reason]);
   });
 
   it("treats an already-ready finalize as idempotent without another HEAD or transaction", async () => {
@@ -217,5 +256,69 @@ describe("AttachmentService failure consistency", () => {
       "attachment.download_grant_issued",
       row.attachment_id,
     ]));
+  });
+
+  it("deletes only an expired attachment that is still unbound while holding its row lock", async () => {
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("SELECT object_key")) {
+          return { rowCount: 1, rows: [{ object_key: row.object_key }] };
+        }
+        if (sql.startsWith("DELETE FROM attachments")) return { rowCount: 1, rows: [] };
+        return { rowCount: 0, rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const pool = {
+      query: vi.fn(async () => ({
+        rowCount: 1,
+        rows: [{ attachment_id: row.attachment_id }],
+      })),
+      connect: vi.fn(async () => client),
+    };
+    const storage = emptyStorage();
+    const service = new AttachmentService(pool as never, storage, {
+      prefix: "private",
+      ttlSeconds: 300,
+      maxUploadBytes: 100,
+    });
+
+    await expect(service.cleanupExpiredUnbound(new Date("2026-09-01T00:00:00Z")))
+      .resolves.toEqual({ candidates: 1, deleted: 1, failed: 0 });
+    expect(storage.deleteObject).toHaveBeenCalledWith(row.object_key);
+    expect(client.query.mock.calls[1]?.[0]).toContain("entity_type IS NULL");
+    expect(client.query.mock.calls[1]?.[0]).toContain("FOR UPDATE");
+    expect(client.query.mock.calls[2]?.[0]).toContain("entity_id IS NULL");
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it("skips deletion when an attachment became bound before the cleanup row lock", async () => {
+    const client = {
+      query: vi.fn(async (sql: string) => sql.includes("SELECT object_key")
+        ? { rowCount: 0, rows: [] }
+        : { rowCount: 0, rows: [] }),
+      release: vi.fn(),
+    };
+    const pool = {
+      query: vi.fn(async () => ({
+        rowCount: 1,
+        rows: [{ attachment_id: row.attachment_id }],
+      })),
+      connect: vi.fn(async () => client),
+    };
+    const storage = emptyStorage();
+    const service = new AttachmentService(pool as never, storage, {
+      prefix: "private",
+      ttlSeconds: 300,
+      maxUploadBytes: 100,
+    });
+
+    await expect(service.cleanupExpiredUnbound(new Date("2026-09-01T00:00:00Z")))
+      .resolves.toEqual({ candidates: 1, deleted: 0, failed: 0 });
+    expect(storage.deleteObject).not.toHaveBeenCalled();
+    expect(client.query).not.toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM attachments"),
+      expect.anything(),
+    );
   });
 });

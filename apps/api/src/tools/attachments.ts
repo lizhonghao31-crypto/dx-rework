@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 import type {
@@ -8,6 +8,7 @@ import type {
   UploadIntentResponse,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
+import { InvalidStoredFileError, validateStoredFileContent } from "./file-content-validation.js";
 import { createPrivateObjectKey, ObjectStorageObjectNotFoundError, type ObjectStorage } from "./storage.js";
 import type { TrustedActorContext } from "./repositories.js";
 import { OperationEventRepository } from "./repositories.js";
@@ -32,6 +33,12 @@ type AttachmentRow = {
   status: "pending" | "ready" | "rejected";
   created_at: Date | string;
 };
+
+export type AttachmentCleanupResult = Readonly<{
+  candidates: number;
+  deleted: number;
+  failed: number;
+}>;
 
 export class AttachmentService {
   constructor(
@@ -100,6 +107,27 @@ export class AttachmentService {
       await this.rejectVerification(actor, row, "metadata_mismatch", "Uploaded object metadata does not match the upload intent");
     }
 
+    const content = await this.verificationCall(
+      actor,
+      row,
+      () => this.storage.readBytes(row.object_key, this.options.maxUploadBytes),
+    );
+    if (content.byteLength !== Number(row.size_bytes)) {
+      await this.rejectVerification(actor, row, "content_size_mismatch", "Uploaded object size does not match the upload intent");
+    }
+    const actualSha256 = createHash("sha256").update(content).digest("hex");
+    if (actualSha256 !== row.sha256) {
+      await this.rejectVerification(actor, row, "content_sha256_mismatch", "Uploaded object digest does not match the upload intent");
+    }
+    try {
+      await validateStoredFileContent(content, row.mime_type);
+    } catch (error) {
+      if (error instanceof InvalidStoredFileError) {
+        await this.rejectVerification(actor, row, "content_invalid", "Uploaded object is not a valid file of the declared type");
+      }
+      throw error;
+    }
+
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -161,6 +189,81 @@ export class AttachmentService {
     return grant;
   }
 
+  async cleanupExpiredUnbound(
+    now = new Date(),
+    requestedLimit = 50,
+  ): Promise<AttachmentCleanupResult> {
+    const limit = Math.max(1, Math.min(50, Math.trunc(requestedLimit)));
+    const shortCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const readyCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const candidates = await this.pool.query<Pick<AttachmentRow, "attachment_id">>(
+      `SELECT attachment_id
+       FROM attachments
+       WHERE entity_type IS NULL
+         AND entity_id IS NULL
+         AND (
+           (status IN ('pending','rejected') AND created_at<$1)
+           OR (status='ready' AND created_at<$2)
+         )
+       ORDER BY created_at,attachment_id
+       LIMIT $3`,
+      [shortCutoff, readyCutoff, limit],
+    );
+
+    let deleted = 0;
+    let failed = 0;
+    for (const candidate of candidates.rows) {
+      try {
+        if (await this.cleanupOne(candidate.attachment_id, shortCutoff, readyCutoff)) deleted += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { candidates: candidates.rows.length, deleted, failed };
+  }
+
+  private async cleanupOne(
+    attachmentId: string,
+    shortCutoff: Date,
+    readyCutoff: Date,
+  ): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const locked = await client.query<Pick<AttachmentRow, "object_key">>(
+        `SELECT object_key
+         FROM attachments
+         WHERE attachment_id=$1
+           AND entity_type IS NULL
+           AND entity_id IS NULL
+           AND (
+             (status IN ('pending','rejected') AND created_at<$2)
+             OR (status='ready' AND created_at<$3)
+           )
+         FOR UPDATE`,
+        [attachmentId, shortCutoff, readyCutoff],
+      );
+      const row = locked.rows[0];
+      if (!row) {
+        await client.query("COMMIT");
+        return false;
+      }
+      await this.storage.deleteObject(row.object_key);
+      const result = await client.query(
+        `DELETE FROM attachments
+         WHERE attachment_id=$1 AND entity_type IS NULL AND entity_id IS NULL`,
+        [attachmentId],
+      );
+      await client.query("COMMIT");
+      return result.rowCount === 1;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   private async verificationCall<T>(
     actor: TrustedActorContext,
     row: AttachmentRow,
@@ -174,7 +277,12 @@ export class AttachmentService {
   }
 
   private async handleVerificationFailure(actor: TrustedActorContext, row: AttachmentRow, error: unknown): Promise<never> {
-    if (error instanceof ApplicationError) throw error;
+    if (error instanceof ApplicationError) {
+      if (error.code === "ATTACHMENT_METADATA_MISMATCH") {
+        await this.rejectVerification(actor, row, "content_size_mismatch", error.message);
+      }
+      throw error;
+    }
     if (error instanceof ObjectStorageObjectNotFoundError) {
       await this.rejectVerification(actor, row, "object_not_found", "Uploaded object does not exist");
     }

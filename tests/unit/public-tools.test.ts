@@ -119,6 +119,7 @@ describe("private object storage", () => {
       createReadStream: async () => (async function* () {
         yield new TextEncoder().encode("test");
       })(),
+      delete: async () => undefined,
       head: async () => ({
         res: {
           headers: {
@@ -181,6 +182,7 @@ describe("private object storage", () => {
       signatureUrl: () => "https://oss.test/x",
       head: async () => ({ res: { headers: {} } }),
       createReadStream: async () => (async function* () { yield new Uint8Array(); })(),
+      delete: async () => undefined,
     };
     const weakened = new AliyunPrivateObjectStorage({
       ...base,
@@ -211,6 +213,7 @@ describe("private object storage", () => {
       signatureUrl: () => "https://oss.test",
       head: async () => { throw { status: 404, code: "NoSuchKey" }; },
       createReadStream: async () => { throw { status: 404, code: "NoSuchKey" }; },
+      delete: async () => { throw { status: 404, code: "NoSuchKey" }; },
     });
     await expect(storage.head("missing")).rejects.toBeInstanceOf(ObjectStorageObjectNotFoundError);
     await expect(storage.computeSha256("missing")).rejects.toBeInstanceOf(ObjectStorageObjectNotFoundError);
