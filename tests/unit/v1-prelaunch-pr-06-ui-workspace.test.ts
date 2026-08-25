@@ -21,14 +21,14 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
     expect(styles).toContain(".whole-order-review-flow .dx-field__control { min-height: 36px;");
   });
 
-  it("defaults mobile photos and workflow to collapsed without changing desktop content", async () => {
+  it("expands mobile photos and workflow for todo entry without changing desktop content", async () => {
     const [detail, compact] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/rework-detail-compact.css"),
     ]);
 
-    expect(detail).toContain("const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false)");
-    expect(detail).toContain("const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false)");
+    expect(detail).toContain("const [mobileImagesExpanded, setMobileImagesExpanded] = useState(returnToTodos)");
+    expect(detail).toContain("const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(returnToTodos)");
     expect(detail).toContain('aria-controls="order-images-content"');
     expect(detail).toContain('aria-controls="order-workflow-content"');
     expect(detail).toContain("activeWorkflowNode.number");
