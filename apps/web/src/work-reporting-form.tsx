@@ -25,7 +25,6 @@ export type FrontlineWorkContext = Readonly<{
   kind: "worker" | "tail_inspection";
   reworkNo: string | null;
   styleNo: string | null;
-  orderNo: string | null;
   processNames: readonly string[];
 }>;
 
@@ -330,7 +329,7 @@ export function WorkReportingForm({
     {!embedded && !frontlineContext && <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "历史人员分配" : "返工执行报数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "历史流程" : "N04"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "仅用于兼容旧订单；新订单已在节点02完成返工人员预分配。" : "返工人员与尾查都在本节点按本人任务填写实际整数件数。"}</p></div>}
     {frontlineContext ? <header className="frontline-work-context">
       <button type="button" onClick={() => onFrontlineExit?.()}>← 返回任务</button>
-      <div><small>{frontlineContext.reworkNo ?? "返工单"}</small><strong>{frontlineContext.styleNo ?? "款号未填写"} · {frontlineContext.orderNo ?? "订单号未填写"}</strong><span>{frontlineContext.processNames.join("、")}</span></div>
+      <div><strong>{frontlineContext.styleNo ?? "款号未填写"}</strong><small>{frontlineContext.reworkNo ?? "返工单号待生成"}</small><span>{frontlineContext.processNames.join("、")}</span></div>
       <StatusBadge tone="warning">{frontlineContext.kind === "tail_inspection" ? "待尾查报数" : "待完工上数"}</StatusBadge>
     </header> : null}
     {message && <p className="work-reporting-feedback" role="status">{message}</p>}

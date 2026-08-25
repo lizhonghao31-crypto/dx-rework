@@ -42,6 +42,7 @@ type FrontlineTaskRow = Readonly<{
   rework_no: string | null;
   style_no: string | null;
   order_no: string | null;
+  images: Array<{ attachmentId: string; filename: string }>;
   process_names: string[];
 }>;
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
@@ -124,6 +125,19 @@ export class WorkReportingService {
     }
     const result = await this.database.query<FrontlineTaskRow>(
       `SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
+              COALESCE((
+                SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'attachmentId',attachment.attachment_id,
+                    'filename',attachment.original_filename
+                  ) ORDER BY attachment.created_at,attachment.attachment_id
+                )
+                FROM attachments attachment
+                WHERE attachment.entity_type='rework_order'
+                  AND attachment.entity_id::text=order_record.rework_order_id::text
+                  AND attachment.status='ready'
+                  AND attachment.mime_type LIKE 'image/%'
+              ),'[]'::jsonb) AS images,
               array_agg(DISTINCT item.process_name ORDER BY item.process_name) AS process_names
        FROM rework_orders order_record
        JOIN rework_work_tasks task ON task.rework_order_id=order_record.rework_order_id AND task.status='active'
@@ -153,6 +167,7 @@ export class WorkReportingService {
         reworkNo: row.rework_no,
         styleNo: row.style_no,
         orderNo: row.order_no,
+        images: row.images,
         processNames: row.process_names,
         status: "in_progress" as const,
       })),

@@ -13,7 +13,7 @@ export type ToolsHttpDependencies=Readonly<{
  exports:ExportJobService;
  canDownloadBoundAttachment?(
    actor:Readonly<{actorId:string;actorRoles:readonly string[];capabilities:readonly string[]}>,
-   binding:Readonly<{entityType:string;entityId:string}>,
+   binding:Readonly<{entityType:string;entityId:string;mimeType:string}>,
  ):Promise<boolean>;
 }>;
 export function registerToolsRoutes(app:FastifyInstance,deps:ToolsHttpDependencies):void{

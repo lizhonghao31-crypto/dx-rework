@@ -201,6 +201,7 @@ const app = buildApp({
     attachments,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {
+      if (binding.entityType === "rework_order" && binding.mimeType.startsWith("image/")) return true;
       const businessReader = {
         actorId: actor.actorId,
         actorRoles: actor.actorRoles,
