@@ -25,6 +25,7 @@ const createBody = (input: unknown): {
   documentQuantity: number;
   actualQuantity: number;
   attachmentIds: readonly string[];
+  receivedDate?: string;
 } => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "收货信息不完整", 400);
@@ -39,11 +40,15 @@ const createBody = (input: unknown): {
   )) {
     throw new ApplicationError("VALIDATION_ERROR", "收货单图片信息无效", 400);
   }
+  if (body.receivedDate !== undefined && typeof body.receivedDate !== "string") {
+    throw new ApplicationError("VALIDATION_ERROR", "补录日期无效", 400);
+  }
   return {
     styleNo: body.styleNo,
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
     attachmentIds: (body.attachmentIds as string[] | undefined) ?? [],
+    ...(typeof body.receivedDate === "string" ? { receivedDate: body.receivedDate } : {}),
   };
 };
 

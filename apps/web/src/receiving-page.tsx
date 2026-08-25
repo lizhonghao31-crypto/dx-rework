@@ -9,6 +9,17 @@ import "./receiving-page.css";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MAX_RECEIVING_IMAGES = 3;
 
+const businessDateDaysAgo = (daysAgo: number): string => {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const [year, month, day] = today.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! - daysAgo)).toISOString().slice(0, 10);
+};
+
 type StyleOptions = Readonly<{ styles: readonly string[] }>;
 type Receipt = Readonly<{
   receiptId: string;
@@ -72,6 +83,8 @@ const uploadReceivingImage = async (source: File): Promise<string> => {
 
 export function ReceivingPage() {
   const [open, setOpen] = useState(false);
+  const [backfill, setBackfill] = useState(false);
+  const [receivedDate, setReceivedDate] = useState(businessDateDaysAgo(1));
   const [styles, setStyles] = useState<readonly string[]>([]);
   const [styleNo, setStyleNo] = useState("");
   const [documentQuantity, setDocumentQuantity] = useState("");
@@ -155,6 +168,10 @@ export function ReceivingPage() {
     if (!trimmedStyle) { setMessage("请选择或填写款号"); return; }
     if (!/^\d+$/.test(documentQuantity) || documentCount <= 0) { setMessage("收货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
+    if (backfill && receivedDate !== businessDateDaysAgo(1) && receivedDate !== businessDateDaysAgo(2)) {
+      setMessage("补录仅支持昨天和前天");
+      return;
+    }
 
     setBusy(true);
     setMessage(images.length ? `正在上传 ${images.length} 张收货单图片…` : "正在提交收货…");
@@ -179,19 +196,21 @@ export function ReceivingPage() {
           documentQuantity: documentCount,
           actualQuantity: actualCount,
           attachmentIds,
+          ...(backfill ? { receivedDate } : {}),
         }),
       });
       if (!response.ok) throw new Error(await errorMessage(response));
       const receipt = await response.json() as Receipt;
       pendingKey.current = null;
       const sign = receipt.differenceQuantity > 0 ? "+" : "";
-      setMessage(`收货成功 · 差异 ${sign}${receipt.differenceQuantity} 件`);
+      setMessage(`${backfill ? "补录" : "收货"}成功 · 差异 ${sign}${receipt.differenceQuantity} 件`);
       setStyleNo("");
       setDocumentQuantity("");
       setActualQuantity("");
       clearImages();
       setStyleMenuOpen(false);
       setOpen(false);
+      setBackfill(false);
       void loadStyles();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "提交失败，请稍后重试");
@@ -204,13 +223,29 @@ export function ReceivingPage() {
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
       {!open ? (
-        <button className="receiving-start" type="button" onClick={() => { setOpen(true); setMessage(""); }}>
-          <span aria-hidden="true">＋</span>
-          <strong>点击收货</strong>
-        </button>
+        <div className="receiving-entry-actions">
+          <button className="receiving-start" type="button" onClick={() => { setBackfill(false); setOpen(true); setMessage(""); }}>
+            <span aria-hidden="true">＋</span>
+            <strong>点击收货</strong>
+          </button>
+          <button className="receiving-backfill-start" type="button" onClick={() => { setBackfill(true); setReceivedDate(businessDateDaysAgo(1)); setOpen(true); setMessage(""); }}>
+            补录
+          </button>
+        </div>
       ) : (
         <Surface className="receiving-form-card">
-          <h1>收货</h1>
+          <h1>{backfill ? "补录收货" : "收货"}</h1>
+          {backfill ? <label className="receiving-field">
+            <span>收货日期</span>
+            <input
+              type="date"
+              min={businessDateDaysAgo(2)}
+              max={businessDateDaysAgo(1)}
+              value={receivedDate}
+              disabled={busy}
+              onChange={(event) => { setReceivedDate(event.target.value); pendingKey.current = null; }}
+            />
+          </label> : null}
           <label className="receiving-field">
             <span>款号</span>
             <div className="receiving-style-input">
@@ -246,7 +281,7 @@ export function ReceivingPage() {
           <div className="receiving-images">
             <div className="receiving-images-heading">
               <span>收货单图片</span>
-              <small>首次收货必传，最多3张；同款追加收货可复用已上传单据</small>
+              <small>{backfill ? "补录订单必须上传收货单图片，最多3张" : "首次收货必传，最多3张；同款追加收货可复用已上传单据"}</small>
             </div>
             <label className="receiving-image-upload">
               <span>{images.length >= MAX_RECEIVING_IMAGES ? "已达3张" : "＋ 选择图片"}</span>
@@ -265,8 +300,8 @@ export function ReceivingPage() {
               </article>)}
             </div> : null}
           </div>
-          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : "提交收货"}</Button>
-          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setOpen(false); }}>返回</button>
+          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : backfill ? "提交补录" : "提交收货"}</Button>
+          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setBackfill(false); setOpen(false); }}>返回</button>
         </Surface>
       )}
       {message ? <p className="receiving-message" role="status">{message}</p> : null}

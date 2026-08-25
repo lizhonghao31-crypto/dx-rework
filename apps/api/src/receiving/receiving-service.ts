@@ -18,6 +18,15 @@ type CreateReceivingInput = Readonly<{
   documentQuantity: number;
   actualQuantity: number;
   attachmentIds?: readonly string[];
+  receivedDate?: string;
+}>;
+
+type NormalizedCreateReceivingInput = Readonly<{
+  styleNo: string;
+  documentQuantity: number;
+  actualQuantity: number;
+  attachmentIds: readonly string[];
+  receivedDate: string | null;
 }>;
 
 type CorrectReceivingBatchInput = Readonly<{
@@ -106,6 +115,31 @@ const normalizeAttachmentIds = (values: readonly string[] | undefined): readonly
   return attachmentIds;
 };
 
+const businessDate = (now: Date): string => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(now);
+
+const shiftDate = (date: string, days: number): string => {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + days)).toISOString().slice(0, 10);
+};
+
+const normalizeReceivingBackfillDate = (value: string | undefined, now = new Date()): string | null => {
+  if (value === undefined) return null;
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== value) {
+    fail("补录日期无效");
+  }
+  const today = businessDate(now);
+  if (value < shiftDate(today, -2) || value > shiftDate(today, -1)) {
+    fail("补录仅支持昨天和前天；今天请使用普通收货");
+  }
+  return value;
+};
+
 const lifecycle = (status: string | null): ReworkStatus => {
   if (!status || status === "cancelled" || status === "deleted") return null;
   if (status === "draft") return "draft";
@@ -130,6 +164,7 @@ export class ReceivingService {
       documentQuantity: validateQuantity(input.documentQuantity, "收货单数量", false),
       actualQuantity: validateQuantity(input.actualQuantity, "实际收货数量", true),
       attachmentIds: normalizeAttachmentIds(input.attachmentIds),
+      receivedDate: normalizeReceivingBackfillDate(input.receivedDate),
     };
     const scope = "receiving.receipt.create";
     const client = await this.database.connect();
@@ -139,7 +174,13 @@ export class ReceivingService {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
-        requestHash: hash(scope, normalized),
+        requestHash: hash(scope, {
+          styleNo: normalized.styleNo,
+          documentQuantity: normalized.documentQuantity,
+          actualQuantity: normalized.actualQuantity,
+          attachmentIds: normalized.attachmentIds,
+          ...(normalized.receivedDate ? { receivedDate: normalized.receivedDate } : {}),
+        }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => ({ statusCode: 201, response: await this.createInTransaction(client, actor, normalized) }));
       await client.query("COMMIT");
@@ -381,6 +422,7 @@ export class ReceivingService {
     client: PoolClient,
     actor: TrustedActorContext,
     styleNo: string,
+    receivedDate: string | null,
   ): Promise<{ receivingBatchId: string; isNew: boolean }> {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [styleNo]);
     const latest = await client.query<{ receiving_batch_id: string; closed: boolean }>(
@@ -401,18 +443,29 @@ export class ReceivingService {
        FROM receiving_batches batch
        WHERE batch.style_no=$1
          AND batch.deleted_at IS NULL
+         AND NOT EXISTS(
+           SELECT 1
+           FROM receiving_receipts backfill_receipt
+           JOIN operation_events backfill_event
+             ON backfill_event.event_id=backfill_receipt.operation_event_id
+           WHERE backfill_receipt.receiving_batch_id=batch.receiving_batch_id
+             AND backfill_event.after_state->>'backfilled'='true'
+         )
        ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
        LIMIT 1`,
       [styleNo],
     );
     const current = latest.rows[0];
-    if (current && !current.closed) return { receivingBatchId: current.receiving_batch_id, isNew: false };
+    if (!receivedDate && current && !current.closed) return { receivingBatchId: current.receiving_batch_id, isNew: false };
 
     const receivingBatchId = randomUUID();
     await client.query(
-      `INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by)
-       VALUES($1,$2,$3)`,
-      [receivingBatchId, styleNo, actor.actorId],
+      `INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,created_at)
+       VALUES($1,$2,$3,COALESCE(
+         ($4::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+         CURRENT_TIMESTAMP
+       ))`,
+      [receivingBatchId, styleNo, actor.actorId, receivedDate],
     );
     return { receivingBatchId, isNew: true };
   }
@@ -475,9 +528,9 @@ export class ReceivingService {
   private async createInTransaction(
     client: PoolClient,
     actor: TrustedActorContext,
-    input: Required<CreateReceivingInput>,
+    input: NormalizedCreateReceivingInput,
   ): Promise<ReceivingReceipt> {
-    const { receivingBatchId } = await this.resolveReceivingBatch(client, actor, input.styleNo);
+    const { receivingBatchId } = await this.resolveReceivingBatch(client, actor, input.styleNo, input.receivedDate);
     const receiptId = randomUUID();
     const eventId = await this.events.append(client, actor, {
       action: "receiving.receipt.create",
@@ -491,6 +544,7 @@ export class ReceivingService {
         actualQuantity: input.actualQuantity,
         differenceQuantity: input.actualQuantity - input.documentQuantity,
         attachmentIds: input.attachmentIds,
+        ...(input.receivedDate ? { receivedDate: input.receivedDate, backfilled: true } : {}),
       },
     });
     await client.query(
@@ -511,8 +565,11 @@ export class ReceivingService {
     }>(
       `INSERT INTO receiving_receipts(
          receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,
-         received_by,operation_event_id,request_id
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+         received_by,operation_event_id,request_id,received_at
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,COALESCE(
+         ($9::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+         CURRENT_TIMESTAMP
+       ))
        RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,
                  difference_quantity,received_by,received_at`,
       [
@@ -524,6 +581,7 @@ export class ReceivingService {
         actor.actorId,
         eventId,
         actor.requestId,
+        input.receivedDate,
       ],
     );
     const row = inserted.rows[0]!;
@@ -661,6 +719,7 @@ export class ReceivingService {
   }
 }
 
+export { normalizeReceivingBackfillDate };
 export type {
   BoardResult,
   CorrectReceivingBatchInput,
