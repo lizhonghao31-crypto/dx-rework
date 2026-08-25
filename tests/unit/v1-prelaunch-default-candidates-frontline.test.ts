@@ -5,17 +5,21 @@ import { describe, expect, it } from "vitest";
 import { frontlineEntries } from "../../apps/web/src/frontline-landing-page.js";
 import { landingTarget } from "../../apps/web/src/landing-target.js";
 
-const user = (role: string, capabilities: readonly string[]) => ({
+const user = (role: string | readonly string[], capabilities: readonly string[]) => ({
   displayName: "测试用户",
-  businessRoles: [role],
+  businessRoles: typeof role === "string" ? [role] : [...role],
   capabilities,
 });
 
 describe("v1 prelaunch default candidates and frontline entry", () => {
-  it("routes warehouse, worker and tail-inspector roles to the frontline landing", () => {
-    expect(landingTarget(user("warehouse_receiver", ["receiving:create", "todo:view"]))).toBe("ui/frontline");
-    expect(landingTarget(user("worker", ["work:report", "todo:view"]))).toBe("ui/frontline");
-    expect(landingTarget(user("tail_inspector", ["tail_inspection:report", "todo:view"]))).toBe("ui/frontline");
+  it("routes each single frontline role directly and keeps the chooser for multiple jobs", () => {
+    expect(landingTarget(user("warehouse_receiver", ["receiving:create", "todo:view"]))).toBe("ui/receiving");
+    expect(landingTarget(user("worker", ["work:report", "todo:view"]))).toBe("ui/frontline/tasks?kind=worker");
+    expect(landingTarget(user("tail_inspector", ["tail_inspection:report", "todo:view"]))).toBe("ui/frontline/tasks?kind=tail_inspection");
+    expect(landingTarget(user(
+      ["warehouse_receiver", "tail_inspector"],
+      ["receiving:create", "tail_inspection:report", "todo:view"],
+    ))).toBe("ui/frontline");
   });
 
   it("shows each frontline role its own task entry and shared todos", () => {
