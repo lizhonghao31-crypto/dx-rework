@@ -387,8 +387,8 @@ export function ReworkDetailPage({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
-  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(returnToTodos);
-  const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(returnToTodos);
+  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false);
+  const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
     window.matchMedia("(max-width: 640px)").matches ? new Set(["planning", "execution", "responsibility"]) : new Set(),
   );
