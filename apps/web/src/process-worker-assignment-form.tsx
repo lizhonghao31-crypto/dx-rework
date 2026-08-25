@@ -103,6 +103,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const [optionLoadIssue, setOptionLoadIssue] = useState("");
   const [busy, setBusy] = useState(false);
   const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
+  const [temporaryEditingPersonId, setTemporaryEditingPersonId] = useState<string | null>(null);
   const [temporaryName, setTemporaryName] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
   const [temporaryPhoneNumber, setTemporaryPhoneNumber] = useState("");
@@ -377,16 +378,76 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       ? "当前 API 仍是上一版本：正式工和临时工已恢复，尾查人员需完成后端版本切换后加载"
       : "");
   };
-  const createTemporaryWorker = async () => {
+  const closeTemporaryWorkerDialog = () => {
+    if (busy) return;
+    setTemporaryDialogOpen(false);
+    setTemporaryEditingPersonId(null);
+    setTemporaryName("");
+    setTemporaryRemark("");
+    setTemporaryPhoneNumber("");
+    setTemporaryIdentityNumber("");
+  };
+  const openTemporaryWorkerCreate = () => {
+    if (!canCreateTemporary || busy) return;
+    setTemporaryEditingPersonId(null);
+    setTemporaryName("");
+    setTemporaryRemark("");
+    setTemporaryPhoneNumber("");
+    setTemporaryIdentityNumber("");
+    setTemporaryDialogOpen(true);
+  };
+  const openTemporaryWorkerProfile = async (personId: string) => {
+    if (!canCreateTemporary || busy) return;
+    setBusy(true);
+    try {
+      const profile = await request(`master-data/temporary-workers/${personId}`, (value) => value as {
+        personId: string;
+        displayName: string;
+        temporaryRemark: string | null;
+        temporaryPhoneNumber: string | null;
+        temporaryIdentityNumber: string | null;
+      });
+      setTemporaryEditingPersonId(profile.personId);
+      setTemporaryName(profile.displayName);
+      setTemporaryRemark(profile.temporaryRemark ?? "");
+      setTemporaryPhoneNumber(profile.temporaryPhoneNumber ?? "");
+      setTemporaryIdentityNumber(profile.temporaryIdentityNumber ?? "");
+      setTemporaryDialogOpen(true);
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "临时工资料加载失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveTemporaryWorker = async () => {
     const name = temporaryName.trim(); const remark = temporaryRemark.trim();
     const phoneNumber = temporaryPhoneNumber.trim().replace(/[\s-]/g, "");
     const identityNumber = temporaryIdentityNumber.trim().toUpperCase();
     if (!canCreateTemporary || busy || !name) return;
     setBusy(true);
     try {
+      if (temporaryEditingPersonId) {
+        await request(`master-data/temporary-workers/${temporaryEditingPersonId}`, (value) => value as { personId: string }, {
+          method: "PUT",
+          body: JSON.stringify({
+            temporaryRemark: remark || null,
+            temporaryPhoneNumber: phoneNumber || null,
+            temporaryIdentityNumber: identityNumber || null,
+            reason: "N02 分配工序&工人补录临时工资料",
+          }),
+        });
+        setTemporaryDialogOpen(false);
+        setTemporaryEditingPersonId(null);
+        setTemporaryName("");
+        setTemporaryRemark("");
+        setTemporaryPhoneNumber("");
+        setTemporaryIdentityNumber("");
+        setMessage(`临时工 ${name} 的资料已保存。`);
+        return;
+      }
       await request("master-data/temporary-workers", (value) => value as { personId: string }, { method: "POST", body: JSON.stringify({ personType: "temporary", displayName: name, aliases: [], reason: "N02 分配工序&工人现场新增临时工", ...(remark ? { temporaryRemark: remark } : {}), ...(phoneNumber ? { temporaryPhoneNumber: phoneNumber } : {}), ...(identityNumber ? { temporaryIdentityNumber: identityNumber } : {}) }) });
       await reloadPeople(); setTemporaryName(""); setTemporaryRemark(""); setTemporaryPhoneNumber(""); setTemporaryIdentityNumber(""); setTemporaryDialogOpen(false); setMessage(`临时工 ${name} 已添加，可直接分配。`);
-    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "临时工添加失败"); } finally { setBusy(false); }
+    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : temporaryEditingPersonId ? "临时工资料保存失败" : "临时工添加失败"); } finally { setBusy(false); }
   };
 
   const workerOptions = useMemo(() => people.filter((person) => person.eligibleExecutionKinds.includes("worker")), [people]);
@@ -411,8 +472,6 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         { label: "正式工", people: mobileFilteredOptions.filter((person) => person.personType === "internal") },
         { label: "临时工", people: mobileFilteredOptions.filter((person) => person.personType === "temporary") },
       ];
-  const mobileWorkerUsesDefaults = mobileAssignment?.kind === "worker"
-    && items[mobileAssignment.index]?.source === "catalog";
   const changedProps = onOrderChanged ? { onOrderChanged } : {};
 
   if (!response || !plan) return <Surface>{message || "正在加载…"}</Surface>;
@@ -451,9 +510,9 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
                 <InsetField label="候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={item.unitPrice} disabled={busy} onChange={(event) => setItem(index, { unitPrice: event.target.value })} />
               </div>
               <div className="process-worker-picker">
-                <div className="process-worker-picker__heading"><b>返工人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy || (!item.processId && item.source === "catalog")} onClick={() => openMobileWorkerAssignment(index)}>{item.source === "catalog" ? "＋ 增加默认工人" : "＋ 增加工人"}</Button>{publicProcessSelected ? <Button className="process-worker-save-default" {...(rosterDirty ? { variant: "primary" as const } : {})} disabled={busy || !rosterDirty || selectedIds.length === 0} onClick={() => void saveDefaultWorkers(index)}>{savingDefaultIndex === index ? "保存中…" : "保存"}</Button> : null}</div></div>
-                <div className="process-worker-default-list">{selectedIds.length ? selectedIds.map((personId) => { const person = peopleById.get(personId); return <span key={personId}><button type="button" aria-label={`移除 ${person?.displayName ?? "返工人员"}`} disabled={busy} onClick={() => removeWorker(index, personId)}>−</button><small>{person?.displayName ?? "返工人员"}{person?.personType === "temporary" ? " · 临时工" : ""}</small></span>; }) : <small>至少选择 1 名返工人员</small>}</div>
-                {publicProcessSelected && rosterDirty ? <small className="process-worker-roster-unsaved">名单有变更；当前订单已生效，点击“保存”后才会更新以后订单的默认工人。</small> : null}
+                <div className="process-worker-picker__heading"><b>返工人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy || (!item.processId && item.source === "catalog")} onClick={() => openMobileWorkerAssignment(index)}>选择本单工人</Button>{publicProcessSelected ? <Button className="process-worker-save-default" {...(rosterDirty ? { variant: "primary" as const } : {})} disabled={busy || !rosterDirty || selectedIds.length === 0} onClick={() => void saveDefaultWorkers(index)}>{savingDefaultIndex === index ? "保存中…" : "保存为默认名单"}</Button> : null}</div></div>
+                <div className="process-worker-default-list">{selectedIds.length ? selectedIds.map((personId) => { const person = peopleById.get(personId); const name = person?.displayName ?? "返工人员"; const temporary = person?.personType === "temporary"; return <span key={personId}><button type="button" aria-label={`移除 ${name}`} disabled={busy} onClick={() => removeWorker(index, personId)}>−</button><small>{temporary && canCreateTemporary ? <button type="button" className="process-worker-temporary-name" aria-label={`补录或修改 ${name} 的临时工资料`} disabled={busy} onClick={() => void openTemporaryWorkerProfile(personId)}>{name}</button> : name}{temporary ? " · 临时工" : ""}</small></span>; }) : <small>至少选择 1 名返工人员</small>}</div>
+                {publicProcessSelected && rosterDirty ? <small className="process-worker-roster-unsaved">本单人员已调整；只有点击“保存为默认名单”才会更新以后订单的默认工人。</small> : null}
               </div>
             </div>
           </section>;
@@ -472,14 +531,14 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         </div>
       </Surface>
       <div className="process-worker-actions"><Button disabled={busy || !saveReady} onClick={() => void save()}>{busy ? "处理中…" : "保存工序&工人"}</Button><Button variant="primary" disabled={busy || !submitReady} onClick={() => void submit()}>{busy ? "提交中…" : "提交 IE 核价"}</Button>{readinessIssues.length ? <p role="status">还需完成：{readinessIssues.join("；")}</p> : <p role="status">{message}</p>}</div>
-      {mobileAssignment ? <div className="process-worker-mobile-sheet-backdrop" role="presentation" onMouseDown={cancelMobileAssignment}><section className="process-worker-mobile-sheet" role="dialog" aria-modal="true" aria-label={mobileAssignment.kind === "tail" ? "选择尾查人员" : mobileWorkerUsesDefaults ? "增加默认工人" : `分配工序 ${mobileAssignment.index + 1} 人员`} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="process-worker-mobile-sheet__heading"><div><h2>{mobileAssignment.kind === "tail" ? "选择尾查人员" : mobileWorkerUsesDefaults ? "增加默认工人" : "分配返工人员"}</h2><small>已选择 {mobileAssignment.selectedIds.length} 人</small></div></div>
+      {mobileAssignment ? <div className="process-worker-mobile-sheet-backdrop" role="presentation" onMouseDown={cancelMobileAssignment}><section className="process-worker-mobile-sheet" role="dialog" aria-modal="true" aria-label={mobileAssignment.kind === "tail" ? "选择尾查人员" : "选择本单工人"} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="process-worker-mobile-sheet__heading"><div><h2>{mobileAssignment.kind === "tail" ? "选择尾查人员" : "选择本单工人"}</h2><small>已选择 {mobileAssignment.selectedIds.length} 人</small></div></div>
         <input className="process-worker-people-search" type="search" value={mobileAssignmentSearch} placeholder={mobileAssignment.kind === "tail" ? "搜索尾查人员" : "搜索正式工或临时工"} disabled={busy} onChange={(event) => setMobileAssignmentSearch(event.target.value)} />
         <div className="process-worker-mobile-sheet__selected"><small>当前选择</small><span>{mobileAssignment.selectedIds.length ? mobileAssignment.selectedIds.map((personId) => peopleById.get(personId)?.displayName ?? "已选人员").join("、") : "暂未选择"}</span></div>
-        <div className="process-worker-mobile-sheet__groups">{mobileAssignmentGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}><legend><span>{group.label}</span><small>{group.people.length} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={() => setTemporaryDialogOpen(true)}>＋新增</button> : null}</legend><div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={mobileAssignment.selectedIds.includes(person.personId)} disabled={busy} onChange={() => toggleMobileAssignmentPerson(person.personId)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "人员目录暂不可用" : "没有匹配人员"}</p>}</div></fieldset>)}</div>
-        <div className="process-worker-mobile-sheet__actions"><Button disabled={busy} onClick={cancelMobileAssignment}>取消</Button><Button variant="primary" disabled={busy || mobileAssignment.selectedIds.length === 0} onClick={confirmMobileAssignment}>{mobileWorkerUsesDefaults ? "确认添加" : "确认分配"}</Button></div>
+        <div className="process-worker-mobile-sheet__groups">{mobileAssignmentGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}><legend><span>{group.label}</span><small>{group.people.length} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={openTemporaryWorkerCreate}>＋新增</button> : null}</legend><div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={mobileAssignment.selectedIds.includes(person.personId)} disabled={busy} onChange={() => toggleMobileAssignmentPerson(person.personId)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "人员目录暂不可用" : "没有匹配人员"}</p>}</div></fieldset>)}</div>
+        <div className="process-worker-mobile-sheet__actions"><Button disabled={busy} onClick={cancelMobileAssignment}>取消</Button><Button variant="primary" disabled={busy || mobileAssignment.selectedIds.length === 0} onClick={confirmMobileAssignment}>{mobileAssignment.kind === "tail" ? "确认分配" : "确认本单分工"}</Button></div>
       </section></div> : null}
-      {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={() => setTemporaryDialogOpen(false)}><div role="dialog" aria-modal="true" aria-label="新增临时工" onMouseDown={(event) => event.stopPropagation()}><Surface><h2>新增临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={() => setTemporaryDialogOpen(false)}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void createTemporaryWorker()}>添加临时工</Button></div></Surface></div></div> : null}
+      {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={closeTemporaryWorkerDialog}><div role="dialog" aria-modal="true" aria-label={temporaryEditingPersonId ? "补录或修改临时工资料" : "新增临时工"} onMouseDown={(event) => event.stopPropagation()}><Surface><h2>{temporaryEditingPersonId ? "补录或修改临时工资料" : "新增临时工"}</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy || Boolean(temporaryEditingPersonId)} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={closeTemporaryWorkerDialog}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void saveTemporaryWorker()}>{temporaryEditingPersonId ? "保存资料" : "添加临时工"}</Button></div></Surface></div></div> : null}
     </div>;
   }
   if (response.reworkStatus === "pending_ie_review") {

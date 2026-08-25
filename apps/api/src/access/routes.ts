@@ -21,6 +21,7 @@ import {
   RoleAssignmentParamsSchema,
   RoleAssignmentsQuerySchema,
   SupplierParamsSchema,
+  UpdateTemporaryWorkerProfileSchema,
   WorkTaskParamsSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -118,6 +119,26 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       authorizationCapabilities,
       requestId: request.id,
     };
+  };
+
+  const temporaryWorkerActor = async (
+    request: FastifyRequest,
+    privateProfile = false,
+  ): Promise<TrustedActorContext> => {
+    const temporaryActor = await actor(request, "temporary_worker:manage");
+    const isRoot = temporaryActor.actorRoles.includes(ROOT_ACTOR_ROLE);
+    const permittedRole = temporaryActor.actorRoles.includes("tail_supervisor")
+      || temporaryActor.actorRoles.includes("owner_group")
+      || isRoot;
+    if (!permittedRole) {
+      throw new ApplicationError("FORBIDDEN", "当前角色无权管理临时工", 403);
+    }
+    if (privateProfile
+      && !isRoot
+      && temporaryActor.authorizationCapabilities?.includes("temporary_worker_private:read") !== true) {
+      throw new ApplicationError("FORBIDDEN", "无权查看或修改临时工隐私资料", 403);
+    }
+    return temporaryActor;
   };
 
   const roleManager = async (request: FastifyRequest): Promise<TrustedActorContext> => {
@@ -233,17 +254,23 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     if (input.personType !== "temporary") {
       throw new ApplicationError("VALIDATION_ERROR", "该入口只能新增临时工", 400);
     }
-    const temporaryActor = await actor(request, "temporary_worker:manage");
-    const permittedRole = temporaryActor.actorRoles.includes("tail_supervisor")
-      || temporaryActor.actorRoles.includes("owner_group")
-      || temporaryActor.actorRoles.includes(ROOT_ACTOR_ROLE);
-    if (!permittedRole) {
-      throw new ApplicationError("FORBIDDEN", "当前角色无权新增临时工", 403);
-    }
     return reply.code(201).send(
-      await dependencies.service.createPerson(temporaryActor, input),
+      await dependencies.service.createPerson(await temporaryWorkerActor(request), input),
     );
   });
+
+  app.get<{ Params: { personId: string } }>("/master-data/temporary-workers/:personId", async (request) =>
+    dependencies.service.getTemporaryWorkerProfile(
+      await temporaryWorkerActor(request, true),
+      parse(PersonParamsSchema, request.params).personId,
+    ));
+
+  app.put<{ Params: { personId: string } }>("/master-data/temporary-workers/:personId", async (request) =>
+    dependencies.service.updateTemporaryWorkerProfile(
+      await temporaryWorkerActor(request, true),
+      parse(PersonParamsSchema, request.params).personId,
+      parse(UpdateTemporaryWorkerProfileSchema, request.body),
+    ));
 
   app.post<{ Params: { personId: string } }>("/master-data/people/:personId/aliases", async (request, reply) =>
     reply.code(201).send(

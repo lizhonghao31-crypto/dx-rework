@@ -113,6 +113,12 @@ export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
   }).strict(),
 ]);
 export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
+export const UpdateTemporaryWorkerProfileSchema = z.object({
+  temporaryRemark: z.string().trim().min(1).max(100).nullable(),
+  temporaryPhoneNumber: z.string().trim().regex(/^\+?[0-9]{6,20}$/).nullable(),
+  temporaryIdentityNumber: z.string().trim().toUpperCase().regex(/^(?:[0-9]{15}|[0-9]{17}[0-9X])$/).nullable(),
+  reason: ReasonSchema,
+}).strict();
 export const PersonAliasParamsSchema = z.object({ aliasId: IdSchema }).strict();
 export const CreatePersonAliasSchema = z.object({
   alias: z.string().trim().min(1).max(100),
@@ -174,6 +180,7 @@ export const PeopleListQuerySchema = CatalogListQuerySchema.extend({
 
 export type AssignRole = z.infer<typeof AssignRoleSchema>;
 export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
+export type UpdateTemporaryWorkerProfile = z.infer<typeof UpdateTemporaryWorkerProfileSchema>;
 export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
 export type CreateProcess = z.infer<typeof CreateProcessSchema>;
 export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
