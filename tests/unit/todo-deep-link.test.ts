@@ -14,7 +14,7 @@ describe("todo deep links", () => {
       routeName: "process_configuration",
       entityId,
       todoId,
-    })).toBe(`/pilot/ui/process-configuration?todo=${todoId}&rework=${entityId}`);
+    })).toBe(`/pilot/ui/my-tasks/${todoId}?todo=${todoId}`);
     expect(buildTodoDeepLink("/", {
       routeName: "external_responsibility_detail",
       entityId,

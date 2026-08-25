@@ -75,7 +75,7 @@ const value = (input: string | null): string => input?.trim() || "未填写";
 
 const orderSubject = (input: TodoPresentationOrderContext | null | undefined): string =>
   input
-    ? `【返工单:${value(input.reworkNo)}｜款号:${value(input.styleNo)}｜订单号:${value(input.orderNo)}】`
+    ? `【款号:${value(input.styleNo)}｜返工单:${value(input.reworkNo)}】`
     : "";
 
 export const buildTodoPresentation = (input: Readonly<{
@@ -89,7 +89,6 @@ export const buildTodoPresentation = (input: Readonly<{
     ? [
         `款号：${value(input.orderContext.styleNo)}`,
         `返工单：${value(input.orderContext.reworkNo)}`,
-        `订单号：${value(input.orderContext.orderNo)}`,
       ]
     : input.wagePeriodMonth
       ? [`工资月份：${input.wagePeriodMonth.slice(0, 7)}`]
