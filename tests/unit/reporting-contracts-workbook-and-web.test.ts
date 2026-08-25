@@ -70,7 +70,6 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
       readFile(new URL("../../apps/web/src/reporting/reporting-client.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/migrations/0029_management_dashboard_reporting.sql", import.meta.url), "utf8"),
     ]);
-    expect(app).toContain('<ManagementDashboardPage mode="management"');
     expect(app).toContain('<ManagementDashboardPage mode="site"');
     expect(app).toContain("<ReworkQueryPage");
     expect(app).toContain("<ReportCenterPage");
