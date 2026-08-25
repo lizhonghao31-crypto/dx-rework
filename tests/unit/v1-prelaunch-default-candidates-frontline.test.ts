@@ -15,6 +15,7 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
   it("routes each single frontline role directly and keeps the chooser for multiple jobs", () => {
     expect(landingTarget(user("warehouse_receiver", ["receiving:create", "todo:view"]))).toBe("ui/receiving");
     expect(landingTarget(user("worker", ["work:report", "todo:view"]))).toBe("ui/frontline/tasks?kind=worker");
+    expect(landingTarget(user("worker", ["work:report", "tail_inspection:report", "todo:view"]))).toBe("ui/frontline");
     expect(landingTarget(user("tail_inspector", ["tail_inspection:report", "todo:view"]))).toBe("ui/frontline/tasks?kind=tail_inspection");
     expect(landingTarget(user(
       ["warehouse_receiver", "tail_inspector"],
@@ -25,19 +26,23 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
   it("shows each frontline role its own task entry and shared todos", () => {
     expect(frontlineEntries(user("warehouse_receiver", ["receiving:create", "todo:view"])).map((entry) => entry.label)).toEqual(["仓库收货", "我的待办"]);
     expect(frontlineEntries(user("worker", ["work:report", "todo:view"])).map((entry) => entry.label)).toEqual(["本人返工任务", "我的待办"]);
+    const workerTailEntries = frontlineEntries(user("worker", ["work:report", "tail_inspection:report", "todo:view"]));
+    expect(workerTailEntries.map((entry) => entry.label)).toEqual(["本人返工任务", "本人尾查任务", "我的待办"]);
     const tailEntries = frontlineEntries(user("tail_inspector", ["tail_inspection:report", "todo:view"]));
     expect(tailEntries.map((entry) => entry.label)).toEqual(["本人尾查任务", "我的待办"]);
     expect(frontlineEntries(user("worker", ["work:report"]))[0]?.href).toContain("ui/frontline/tasks?kind=worker");
+    expect(workerTailEntries[1]?.href).toContain("ui/frontline/tasks?kind=tail_inspection");
     expect(tailEntries[0]?.href).toContain("ui/frontline/tasks?kind=tail_inspection");
   });
 
   it("keeps N02 edits order-local until the dedicated default-roster save", async () => {
-    const [masterData, form, app, detail, reporting, assignmentSheetStyles] = await Promise.all([
+    const [masterData, form, app, detail, reporting, workReporting, assignmentSheetStyles] = await Promise.all([
       readFile(new URL("../../apps/web/src/master-data-page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/process-worker-assignment-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/reporting/management-reporting-service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/process-worker-assignment-mobile-sheet.css", import.meta.url), "utf8"),
     ]);
 
@@ -54,7 +59,7 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
     expect(app).toContain('path === "/ui/frontline"');
     expect(app).toContain('{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" }');
     expect(reporting).toContain('"work:report_for_worker", "tail_inspection:report"');
-    expect(reporting).toContain('actor.actorRoles.includes("tail_inspector")');
+    expect(workReporting).toContain('actor.actorRoles.some((role) => role === "worker" || role === "tail_inspector")');
     expect(reporting).toContain("workTaskActorUserId: actor.actorId");
     expect(detail).not.toContain('node("tail_inspection"');
   });

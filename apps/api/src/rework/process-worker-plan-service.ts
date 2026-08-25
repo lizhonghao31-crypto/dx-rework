@@ -381,7 +381,7 @@ export class ProcessWorkerPlanService {
              AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
            JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
            WHERE assignment.user_id=person.app_user_id
-             AND assignment.role_code='tail_inspector' AND assignment.revoked_at IS NULL
+             AND assignment.role_code IN ('worker','tail_inspector') AND assignment.revoked_at IS NULL
          ))
        )
        ORDER BY person.person_id FOR SHARE`,

@@ -31,7 +31,7 @@ export function frontlineEntries(user: AuthorizedUser): readonly Entry[] {
   if (hasRole(user, "worker") && has(user, "work:report")) {
     entries.push({ label: "本人返工任务", description: "查看本人任务并登记完成数量", href: pageUrl("ui/frontline/tasks?kind=worker") });
   }
-  if (hasRole(user, "tail_inspector") && has(user, "tail_inspection:report")) {
+  if ((hasRole(user, "worker") || hasRole(user, "tail_inspector")) && has(user, "tail_inspection:report")) {
     entries.push({ label: "本人尾查任务", description: "进入统一任务工作台登记本人尾查结果", href: pageUrl("ui/frontline/tasks?kind=tail_inspection") });
   }
   if (has(user, "todo:view")) {

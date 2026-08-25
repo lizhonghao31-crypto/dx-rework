@@ -4,13 +4,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 
-const actor = (role: "worker" | "tail_inspector") => ({
-  actorId: "00000000-0000-4000-8000-000000000001",
-  actorRoles: [role],
-  authorizationCapability: role === "worker" ? "work:report" : "tail_inspection:report",
-  authorizationCapabilities: [role === "worker" ? "work:report" : "tail_inspection:report"],
-  requestId: "frontline-task-list",
-});
+const actor = (
+  role: "worker" | "tail_inspector",
+  authorizationCapabilities?: readonly string[],
+) => {
+  const authorizationCapability = role === "worker" ? "work:report" : "tail_inspection:report";
+  return {
+    actorId: "00000000-0000-4000-8000-000000000001",
+    actorRoles: [role],
+    authorizationCapability,
+    authorizationCapabilities: authorizationCapabilities ?? [authorizationCapability],
+    requestId: "frontline-task-list",
+  };
+};
 
 describe("v1 prelaunch frontline minimal tasks and mobile density", () => {
   it("returns only the selected kind of the current user's unreported active tasks", async () => {
@@ -19,7 +25,8 @@ describe("v1 prelaunch frontline minimal tasks and mobile density", () => {
       expect(sql).toContain("item.execution_kind=$2");
       expect(sql).toContain("order_record.status='in_progress'");
       expect(sql).toContain("rework_work_report_rejections");
-      expect(values).toEqual(["00000000-0000-4000-8000-000000000001", "worker"]);
+      expect(values[0]).toBe("00000000-0000-4000-8000-000000000001");
+      expect(["worker", "tail_inspection"]).toContain(values[1]);
       return { rows: [{
         rework_order_id: "00000000-0000-4000-8000-000000000010",
         rework_no: "RW-001",
@@ -43,7 +50,11 @@ describe("v1 prelaunch frontline minimal tasks and mobile density", () => {
     await expect(service.listFrontlineTasks(actor("worker"), "tail_inspection")).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
-    expect(query).toHaveBeenCalledOnce();
+    await expect(service.listFrontlineTasks(
+      actor("worker", ["work:report", "tail_inspection:report"]),
+      "tail_inspection",
+    )).resolves.toMatchObject({ kind: "tail_inspection" });
+    expect(query).toHaveBeenCalledTimes(2);
   });
 
   it("uses separate worker and tail entries, auto-opens one order and keeps multiple orders minimal", async () => {

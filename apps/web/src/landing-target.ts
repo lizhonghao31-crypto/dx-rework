@@ -19,7 +19,7 @@ function frontlineTargets(user: AuthorizedUser): readonly string[] {
   if (hasRole(user, "worker") && has(user, "work:report")) {
     targets.push("ui/frontline/tasks?kind=worker");
   }
-  if (hasRole(user, "tail_inspector") && has(user, "tail_inspection:report")) {
+  if ((hasRole(user, "worker") || hasRole(user, "tail_inspector")) && has(user, "tail_inspection:report")) {
     targets.push("ui/frontline/tasks?kind=tail_inspection");
   }
 

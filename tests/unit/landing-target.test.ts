@@ -24,6 +24,7 @@ describe("business landing target", () => {
   it("routes each single frontline role directly to its own work page", () => {
     expect(landingTarget(user(["receiving:create", "todo:view"], ["warehouse_receiver"]))).toBe("ui/receiving");
     expect(landingTarget(user(["work:report", "todo:view"], ["worker"]))).toBe("ui/frontline/tasks?kind=worker");
+    expect(landingTarget(user(["work:report", "tail_inspection:report", "todo:view"], ["worker"]))).toBe("ui/frontline");
     expect(landingTarget(user(["tail_inspection:report", "todo:view"], ["tail_inspector"]))).toBe("ui/frontline/tasks?kind=tail_inspection");
   });
 

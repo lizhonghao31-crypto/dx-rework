@@ -91,6 +91,7 @@
     { "version": "0089_employee_access_role_lifecycle", "checksum": "dfcbdccb2104e3e151d42da939d76c3e4f4f2d459daad2b93514a0c5508e3281" },
     { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" },
     { "version": "0091_role_entry_todo_reliability", "checksum": "79d4670a3848183498ac57fdc6a4b8d485e9591291521eaa2504e1a49c6bf03c" },
-    { "version": "0092_temporary_worker_profile_update", "checksum": "f2e7858399d4a0e7770ad384759294af2309946542c44b6cbc6271bfeeff19c5" }
+    { "version": "0092_temporary_worker_profile_update", "checksum": "f2e7858399d4a0e7770ad384759294af2309946542c44b6cbc6271bfeeff19c5" },
+    { "version": "0093_tail_inspection_worker_role", "checksum": "549e69774c6624a3d0fcaacab567df0df3eec2c2a185ec9e9815ab7ba0da093b" }
   ]
 }

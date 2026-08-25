@@ -47,8 +47,10 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
       && user.capabilities.includes("work:assign");
     const worker = user.businessRoles?.includes("worker") === true
       && user.capabilities.includes("work:report");
-    const tailInspector = user.businessRoles?.includes("tail_inspector") === true
-      && user.capabilities.includes("tail_inspection:report");
+    const tailInspector = (
+      user.businessRoles?.includes("worker") === true
+      || user.businessRoles?.includes("tail_inspector") === true
+    ) && user.capabilities.includes("tail_inspection:report");
     const proxy = user.capabilities.includes("work:report_for_worker");
 
     if (mode === "assign") {

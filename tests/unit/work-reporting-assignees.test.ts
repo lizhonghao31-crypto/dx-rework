@@ -31,7 +31,7 @@ describe("work-reporting assignable people", () => {
     expect(sql).toContain("identity.employed=true");
     expect(sql).toContain("access_security_policy");
     expect(sql).toContain("assignment.role_code='worker'");
-    expect(sql).toContain("assignment.role_code='tail_inspector'");
+    expect(sql).toContain("assignment.role_code IN ('worker','tail_inspector')");
     expect(sql).toContain("capability.capability='tail_inspection:report'");
   });
 });
