@@ -17,6 +17,7 @@
 - `apps/web/src/admin-console-page.tsx`
 - `packages/contracts/src/admin-console.ts`
 - `tests/integration/admin-console-routes.test.ts`
+- `tests/unit/admin-console-service.test.ts`
 - `tests/unit/v1-root-uat-exception-traceability.test.ts`
 - `docs/requirements/v1-root-uat-exception-traceability-2026-08-25.md`
 - `docs/engineering/v1-root-uat-pr-04-exception-traceability-preflight.md`
@@ -34,4 +35,3 @@
 - 服务层覆盖关联订单、请求 ID、状态映射及错误脱敏。
 - 页面合同覆盖请求 ID 展示/复制和返工单直达入口。
 - 修改文件 lint、定向测试、Quick Gate、Full Gate 全绿。
-
