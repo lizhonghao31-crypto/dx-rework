@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 describe("business action readiness contract", () => {
   it("keeps N01 readiness and gates the simplified N08 submit action", async () => {
     const [initiation, responsibility] = await Promise.all([
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
     ]);
 
-    expect(initiation).toContain('disabled={mutationDisabled || !complete}');
+    expect(initiation).toContain("const complete = Boolean(");
+    expect(initiation).toContain("availableImageCount > 0");
+    expect(initiation).toContain('disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)}');
     expect(responsibility).toContain("const allProcessesValid = processes.length > 0 && processes.every(processValid);");
     expect(responsibility).toContain("!response || !editable || !allProcessesValid || !handlerUserId || busyAction");
     expect(responsibility).toContain('disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}');
@@ -16,16 +18,20 @@ describe("business action readiness contract", () => {
   });
 
   it("gates N02 save, submit and IE rejection with deterministic prerequisites", async () => {
-    const source = await readFile("apps/web/src/process-configuration-form.tsx", "utf8");
-    expect(source).toContain("const itemValidationError = validateItemForms(items);");
-    expect(source).toContain("const submitReady = editable && submitReadinessIssues.length === 0;");
+    const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
+    expect(source).toContain("const itemIssue = validateItems(items);");
+    expect(source).toContain("const workerIssue = items.findIndex");
+    expect(source).toContain("const submitReady = saveReady;");
     expect(source).toContain('disabled={busy || !saveReady}');
     expect(source).toContain('disabled={busy || !submitReady}');
-    expect(source).toContain('还需完成：{submitReadinessIssues.join("；")}');
+    expect(source).toContain('还需完成：{readinessIssues.join("；")}');
+    expect(source.indexOf('className="process-worker-actions"')).toBeLessThan(
+      source.indexOf('readinessIssues.length ? <p role="status">'),
+    );
     expect(source).toContain('disabled={busy || !reviewReason.trim()}');
   });
 
-  it("gates N04 assignment and N05 reporting before the user can trigger a no-op", async () => {
+  it("keeps historical assignment gated and N04 reporting ready before the user can trigger a no-op", async () => {
     const source = await readFile("apps/web/src/work-reporting-form.tsx", "utf8");
     expect(source).toContain("const selectedPeopleCount =");
     expect(source).toContain('disabled={busy || selectedPeopleCount === 0}');
@@ -33,16 +39,15 @@ describe("business action readiness contract", () => {
     expect(source).toContain('disabled={busy || !reportsReady}');
   });
 
-  it("gates N06 and N07 final actions with the same validation rules used on click", async () => {
-    const [tail, wholeOrder] = await Promise.all([
-      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
-      readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
-    ]);
-    expect(tail).toContain("const tailSubmitReady = Boolean(");
-    expect(tail).toContain('disabled={busy || !tailSubmitReady}');
-    expect(wholeOrder).toContain("const temporaryCoefficientIssue =");
-    expect(wholeOrder).toContain("const wholeOrderReady = allComplete && temporaryCoefficientIssue === \"\";");
-    expect(wholeOrder).toContain('disabled={busy || !wholeOrderReady}');
+  it("gates the N05 final action below deterministic readiness text", async () => {
+    const wholeOrder = await readFile("apps/web/src/whole-order-review-panel.tsx", "utf8");
+    expect(wholeOrder).toContain("const coefficientIssue =");
+    expect(wholeOrder).toContain("const ready = allComplete && !coefficientIssue;");
+    expect(wholeOrder).not.toContain("finalQuantities");
+    expect(wholeOrder).toContain('disabled={busy || !ready}');
+    expect(wholeOrder.indexOf('disabled={busy || !ready}')).toBeLessThan(
+      wholeOrder.indexOf('{!ready && <p role="status">'),
+    );
   });
 
   it("requires a rejection reason before the N09 own-factory rejection action is enabled", async () => {
@@ -59,6 +64,9 @@ describe("business action readiness contract", () => {
     expect(source).toContain("&& inputCents <= remainingCents;");
     expect(source).toContain('disabled={busy || !deductionReady}');
     expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(source.indexOf('className="external-case-actions"')).toBeLessThan(
+      source.indexOf('<small role="status">请输入大于 0、最多两位小数且不超过剩余金额的本次扣款。</small>'),
+    );
     expect(source).toContain("requestRevision(caseItem)");
   });
 

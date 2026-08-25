@@ -154,7 +154,7 @@
   margin-bottom: 0;
 }
 
-/* `.mobile-actions` is the sticky page footer by default. Some N06 rows reuse
+/* `.mobile-actions` is the sticky page footer by default. Some N05 rows reuse
    the same action group inside a card; those inline controls must stay in the
    row instead of becoming competing sticky footers. */
 .section-title > .mobile-actions {

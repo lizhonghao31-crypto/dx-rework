@@ -50,8 +50,9 @@ describe("phase-1 N08/N09 close", () => {
     expect(ownerService).not.toContain("validateSpecialMultiplierAdjustments");
     expect(ownerService).not.toContain("specialMultiplierAdjustments");
     expect(ownerService).toContain("this.external.ensureForFinalized(");
-    expect(panel).toContain("外部扣款倍率（最低 1.2）");
-    expect(panel).toContain("核对责任判定结果后同意或驳回");
+    expect(panel).toContain("扣款倍率（最低 1.2）");
+    expect(panel).toContain("仅包含本厂责任时需要老板确认");
+    expect(panel).toContain("+ 添加责任方");
     expect(panel).toContain("共同责任记录 / 修改说明（可选）");
     expect(migration).toContain("rework_responsibility_owner_multiplier_adjustments");
     expect(migration).toContain("rework.responsibility.owner_approve");

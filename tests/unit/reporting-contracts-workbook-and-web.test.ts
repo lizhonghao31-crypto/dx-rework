@@ -8,6 +8,7 @@ import {
 } from "@dx-rework/contracts/reporting";
 import { describe, expect, it } from "vitest";
 
+import { responsibilityReport } from "../../apps/api/src/reporting/management-reporting-report-responsibility.js";
 import { ManagementReportingService } from "../../apps/api/src/reporting/management-reporting-service.js";
 import { buildWorkbook } from "../../apps/api/src/reporting/xlsx-workbook.js";
 
@@ -91,5 +92,39 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
     expect(migration).toContain("report:view");
     expect(migration).toContain("report:export");
     expect(migration).not.toContain("('system_admin','report:");
+  });
+
+  it("reports the per-allocation multiplier and keeps N07/N08 panel labels aligned", async () => {
+    const [panel, api] = await Promise.all([
+      readFile(new URL("../../apps/web/src/responsibility-determination-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/reporting/management-reporting-report-responsibility.ts", import.meta.url), "utf8"),
+    ]);
+    expect(panel).toContain('ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"');
+    expect(panel).not.toContain('"N06 · 责任判定"');
+
+    let statement = "";
+    const report = await responsibilityReport({
+      query: async (sql: string) => {
+        statement = sql;
+        return {
+          rows: [{
+            rework_order_id: "order-1",
+            rework_no: "RW-001",
+            style_no: "S-001",
+            determination_version: 1,
+            process_name_snapshot: "车缝",
+            multiplier: "1.200",
+            responsibility_type: "processing_factory",
+            share_bps: 10000,
+            rounded_amount: "12.00",
+          }],
+        };
+      },
+    } as never, {} as never, { from: "2026-08-01", to: "2026-08-31" } as never, 100);
+
+    expect(api).toContain("JOIN rework_responsibility_allocations responsibility_allocation");
+    expect(api).toContain("COALESCE(responsibility_allocation.multiplier,process.multiplier)::text multiplier");
+    expect(statement).toContain("COALESCE(responsibility_allocation.multiplier,process.multiplier)::text multiplier");
+    expect(report.rows).toMatchObject([{ multiplier: "1.200", amount: "12.00" }]);
   });
 });

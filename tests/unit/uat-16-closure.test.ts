@@ -9,14 +9,14 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("UAT 1.6 closure regressions", () => {
-  it("keeps terminal archive, complete initiation context and readonly history visible in the order detail", async () => {
-    const [detail, form, service] = await Promise.all([
+  it("keeps terminal archive and historical initiation facts readable without restoring retired fields to N01 v2", async () => {
+    const [detail, v2Form, service] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/rework-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
       readFile("apps/api/src/rework/service.ts", "utf8"),
     ]);
     expect(detail).toContain('if (detail.status === "completed")');
-    expect(detail).toContain('node("settlement_followup", "10", "返工业务完成"');
+    expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
     expect(detail).toContain("处理人：");
     expect(detail).toContain("处理时间：");
     expect(detail).toContain("处理意见：");
@@ -36,19 +36,27 @@ describe("UAT 1.6 closure regressions", () => {
       "reworkReason",
       "reworkProcess",
     ]) {
-      expect(form).toContain(field);
       expect(service).toContain(field);
     }
+    expect(v2Form).toContain("款号 <b>*</b>");
+    expect(v2Form).toContain("加工厂 <b>*</b>");
+    expect(v2Form).toContain("订单跟单 <b>*</b>");
+    expect(v2Form).not.toContain("客户货号");
+    expect(v2Form).not.toContain("工厂款号");
+    expect(v2Form).not.toContain("订单数量（必填）");
+    expect(v2Form).not.toContain("返工原因");
   });
 
-  it("uses settled wage cents and allows an absent external supplier to be added at the handling point", async () => {
+  it("uses the reviewed pre-uplift responsibility base and allows an absent supplier to be added at the handling point", async () => {
     const [responsibility, external, access] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8"),
       readFile("apps/web/src/external-responsibility-panel.tsx", "utf8"),
       readFile("apps/api/src/access/routes.ts", "utf8"),
     ]);
-    expect(responsibility).toContain("wage.payable_amount::text amount");
-    expect(responsibility).toContain("sum(wage.payable_amount)");
+    expect(responsibility).toContain("wage.actual_quantity_snapshot*wage.unit_price_snapshot");
+    expect(responsibility).toContain("1::numeric/NULLIF(wage.member_count,0)");
+    expect(responsibility).not.toContain("wage.payable_amount::text amount");
+    expect(responsibility).not.toContain("sum(wage.payable_amount)");
     expect(responsibility).not.toContain("round(share.amount,2)::text amount");
     expect(external).toContain("新增并选择");
     expect(external).toContain("external-responsibilities/temporary-suppliers");

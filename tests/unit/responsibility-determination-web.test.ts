@@ -17,7 +17,7 @@ const styleUrl = new URL(
 );
 
 describe("responsibility determination web integration", () => {
-  it("uses one primary N08 submit action while retaining backend takeover and transfer compatibility", async () => {
+  it("uses one N09 submit action while retaining backend takeover and transfer compatibility", async () => {
     const [source, routes] = await Promise.all([
       readFile(panelUrl, "utf8"),
       readFile(routesUrl, "utf8"),
@@ -37,28 +37,30 @@ describe("responsibility determination web integration", () => {
       "pendingMutationKeys.current[signature] ?? crypto.randomUUID()",
     );
     expect(source).toContain('"idempotency-key": idempotencyKey');
-    expect(source).toContain("提交老板签字");
+    expect(source).toContain("提交责任判定");
     expect(source).not.toContain("请先保存草稿");
   });
 
-  it("keeps N08 to one primary responsibility and carries a joint-responsibility record", async () => {
+  it("supports multiple responsibility parties whose shares total 100 percent", async () => {
     const source = await readFile(panelUrl, "utf8");
-    expect(source).toContain("primaryResponsibilityType");
-    expect(source).toContain("setPrimaryResponsibility");
-    expect(source).toContain('sharePercent: "100"');
+    expect(source).toContain("addAllocation");
+    expect(source).toContain("removeAllocation");
+    expect(source).toContain("+ 添加责任方");
+    expect(source).toContain("比例合计必须为 100%");
     expect(source).toContain("共同责任记录 / 修改说明（可选）");
-    expect(source).toContain("每道工序选择一个责任方");
-    expect(source).toContain("外部扣款倍率（最低 1.2）");
+    expect(source).toContain("每道工序可添加多个责任方");
+    expect(source).toContain("扣款倍率（最低 1.2）");
   });
 
-  it("does not hardcode or calculate responsibility money in the browser", async () => {
+  it("does not hardcode responsibility money and labels the browser value as an estimate", async () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).not.toContain("154.55");
     expect(source).not.toContain("parseFloat(");
     expect(source).not.toContain("Number(process.multiplier");
     expect(source).not.toMatch(/responsibilityAmount\s*[/+*-]/);
     expect(source).toContain("process.baseAmount");
-    expect(source).toContain("persistedPrimary?.multiplier");
+    expect(source).toContain("estimatedAllocationAmount");
+    expect(source).toContain("persistedAllocation.roundedAmount");
   });
 
   it("uses the real task URL UUID and permission fields for actions", async () => {
@@ -80,7 +82,7 @@ describe("responsibility determination web integration", () => {
     const source = await readFile(styleUrl, "utf8");
     expect(source).toContain("@media (max-width: 800px)");
     expect(source).toContain("@media (max-width: 480px)");
-    expect(source).toContain(".responsibility-allocations > div");
+    expect(source).toContain(".responsibility-party");
     expect(source).toContain("grid-template-columns: 1fr");
   });
 });

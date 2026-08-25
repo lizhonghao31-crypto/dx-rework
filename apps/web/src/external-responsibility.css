@@ -97,6 +97,19 @@
   border-top: 1px solid var(--color-border);
 }
 
+.external-special-approval {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.external-special-approval span {
+  color: var(--color-muted);
+}
+
 .external-deduction-history {
   margin-top: var(--space-2);
 }

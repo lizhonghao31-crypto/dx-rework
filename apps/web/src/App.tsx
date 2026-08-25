@@ -12,7 +12,7 @@ import {
   type AuthorizedUser,
 } from "./auth.js";
 import { Shell } from "./components.js";
-import { ReworkInitiationForm } from "./rework-form.js";
+import { ReworkInitiationV2Form } from "./rework-v2-form.js";
 import { ReworkDetailPage } from "./rework-detail-page.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
@@ -31,6 +31,10 @@ import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { landingTarget } from "./landing-target.js";
 import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
+import { ReceivingPage } from "./receiving-page.js";
+import { OrderBoardPage } from "./order-board-page.js";
+import { FrontlineLandingPage } from "./frontline-landing-page.js";
+import { FrontlineTaskPage } from "./frontline-task-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -42,6 +46,7 @@ const WORK_QUEUE_STATUSES = [
   "pending_task_assignment",
   "in_progress",
   "pending_order_review",
+  "pending_final_quantity_ie_review",
   "pending_quantity_adjustment_ie_review",
 ] as const;
 
@@ -100,8 +105,14 @@ function useInternalLocation(basePath: string): InternalLocation {
 
       event.preventDefault();
       window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
-      window.scrollTo({ top: 0, left: 0 });
       sync();
+      if (url.hash) {
+        window.requestAnimationFrame(() => {
+          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
+        });
+      } else {
+        window.scrollTo({ top: 0, left: 0 });
+      }
     };
 
     window.addEventListener("popstate", sync);
@@ -180,8 +191,12 @@ export function App() {
   else if (path === "/ui/master-data") page = <MasterDataPage />;
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
+  else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
+  else if (path === "/ui/frontline/tasks") page = <FrontlineTaskPage />;
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
   else if (path.startsWith("/ui/my-tasks/")) page = <ResponsibilityTaskPage />;
+  else if (path === "/ui/receiving") page = <ReceivingPage />;
+  else if (path === "/ui/orders") page = <Shell active="订单看板"><OrderBoardPage /></Shell>;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
@@ -190,18 +205,30 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
-  else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationForm /></Shell>;
+  else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>;
   else if (path === "/ui/process-configuration") page = hasReworkContext
-    ? <Shell active="全部订单" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
-    : <WorkflowQueuePage active="全部订单" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
+    ? <Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
+    : <WorkflowQueuePage active="返工单看板" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
   else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
-    ? <Shell active="全部订单" mobileNavigation="transaction"><WorkReportingForm /></Shell>
-    : <WorkflowQueuePage active="全部订单" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
+    ? <Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>
+    : <WorkflowQueuePage active="返工单看板" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
 
   const owner = { requiredRole: "owner_group" } as const;
 
+  if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/receiving") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+    ]}>{page}</AuthGate>;
+  }
   if (path === "/ui/qc/new") {
     return <AuthGate requiredAnyOf={[
       owner,
@@ -231,6 +258,7 @@ export function App() {
       { requiredRole: "tail_supervisor", requiredCapability: "submission:audit" },
       { requiredRole: "tail_supervisor", requiredCapability: "quantity:adjust" },
       { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
       { requiredCapability: "work:report_for_worker" },
       { requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" },
       { requiredRole: "ie_reviewer", requiredCapability: "process:review" },

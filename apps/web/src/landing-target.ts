@@ -5,14 +5,40 @@ const has = (user: AuthorizedUser, capability: string): boolean =>
 const hasRole = (user: AuthorizedUser, role: string): boolean =>
   user.businessRoles?.includes(role) === true;
 
-export function landingTarget(user: AuthorizedUser): string | null {
-  if (has(user, "todo:view")) return "ui/my-tasks";
+function frontlineTargets(user: AuthorizedUser): readonly string[] {
+  const targets: string[] = [];
 
+  if (hasRole(user, "warehouse_receiver") && has(user, "receiving:create")) {
+    targets.push("ui/receiving");
+  }
+  if (hasRole(user, "worker") && has(user, "work:report")) {
+    targets.push("ui/frontline/tasks?kind=worker");
+  }
+  if (hasRole(user, "tail_inspector") && has(user, "tail_inspection:report")) {
+    targets.push("ui/frontline/tasks?kind=tail_inspection");
+  }
+
+  return targets;
+}
+
+export function frontlineLandingTarget(user: AuthorizedUser): string | null {
+  const targets = frontlineTargets(user);
+  if (targets.length === 1) return targets[0] ?? null;
+  if (targets.length > 1) return "ui/frontline";
+  return null;
+}
+
+export function landingTarget(user: AuthorizedUser): string | null {
   if (
     user.isRoot === true
     || hasRole(user, "owner_group")
     || has(user, "dashboard:management:read")
   ) return "ui/management";
+
+  const frontlineTarget = frontlineLandingTarget(user);
+  if (frontlineTarget) return frontlineTarget;
+
+  if (has(user, "todo:view")) return "ui/my-tasks";
 
   if (hasRole(user, "system_admin") && has(user, "admin:read")) {
     return "ui/admin";

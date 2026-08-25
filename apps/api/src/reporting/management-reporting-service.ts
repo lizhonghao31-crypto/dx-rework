@@ -15,8 +15,9 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
   pending_process_configuration: ["process:configure"],
   pending_ie_review: ["process:review"],
   pending_task_assignment: ["work:assign"],
-  in_progress: ["work:assign", "work:report", "work:report_for_worker"],
+  in_progress: ["work:assign", "work:report", "work:report_for_worker", "tail_inspection:report"],
   pending_order_review: ["submission:audit"],
+  pending_final_quantity_ie_review: ["process:review"],
   pending_quantity_adjustment_ie_review: ["quantity:adjust", "quantity:confirm", "process:review"],
   pending_responsibility_determination: ["responsibility:determine", "responsibility:takeover"],
   pending_owner_signature: ["responsibility:owner_sign"],
@@ -117,7 +118,7 @@ export class ManagementReportingService {
            ON todo.entity_type='rework_order' AND todo.entity_id=order_record.rework_order_id::text
          WHERE order_record.status IN (
            'pending_process_configuration','pending_ie_review','pending_task_assignment',
-           'in_progress','pending_order_review','pending_quantity_adjustment_ie_review'
+           'in_progress','pending_order_review','pending_final_quantity_ie_review','pending_quantity_adjustment_ie_review'
          ) AND (todo.status='blocked_recipient' OR (todo.status='pending' AND todo.due_at<CURRENT_TIMESTAMP))`,
       ),
     ]);
@@ -135,7 +136,7 @@ export class ManagementReportingService {
         pendingConfiguration: map.get("pending_process_configuration") ?? 0,
         pendingAssignment: map.get("pending_task_assignment") ?? 0,
         inProgress: map.get("in_progress") ?? 0,
-        pendingOrderReview: (map.get("pending_order_review") ?? 0) + (map.get("pending_quantity_adjustment_ie_review") ?? 0),
+        pendingOrderReview: (map.get("pending_order_review") ?? 0) + (map.get("pending_final_quantity_ie_review") ?? 0) + (map.get("pending_quantity_adjustment_ie_review") ?? 0),
         pendingWageReview: pendingWageMonthClose,
         siteExceptions: number(exceptions.rows[0]?.count ?? "0"),
       },
@@ -178,10 +179,12 @@ export class ManagementReportingService {
     const cursor = decodeCursor(query.cursor);
     const overdue = query.overdue === "true" ? true : query.overdue === "false" ? false : undefined;
     const exception = query.exception === "true" ? true : query.exception === "false" ? false : undefined;
-    const workerScoped = !broadCapability
+    const ownTaskScoped = !broadCapability
       && query.status === "in_progress"
-      && actor.actorRoles.includes("worker")
-      && currentCapabilities.includes("work:report")
+      && (
+        (actor.actorRoles.includes("worker") && currentCapabilities.includes("work:report"))
+        || (actor.actorRoles.includes("tail_inspector") && currentCapabilities.includes("tail_inspection:report"))
+      )
       && !currentCapabilities.includes("work:assign");
     const proxyScoped = !broadCapability
       && query.status === "in_progress"
@@ -197,7 +200,7 @@ export class ManagementReportingService {
       ...(exception === undefined ? {} : { exception }),
       ...(query.from ? { from: query.from } : {}),
       ...(query.to ? { to: query.to } : {}),
-      ...(workerScoped ? { workTaskActorUserId: actor.actorId } : {}),
+      ...(ownTaskScoped ? { workTaskActorUserId: actor.actorId } : {}),
       ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
       limit: query.limit + 1,
       ...(cursor ? { cursor } : {}),

@@ -42,7 +42,7 @@ const migrations = [
   "0026_todo_notification_foundation.sql",
   "0027_todo_routing_lifecycle_closure.sql",
   "0028_dingtalk_todo_external_bindings.sql",
-  "0076_dingtalk_todo_creator_identity.sql",
+  "0090_dingtalk_todo_creator_identity.sql",
 ] as const;
 
 runWithPostgres("PR-13 todo notification lifecycle", () => {

@@ -4,24 +4,28 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFile(path, "utf8");
 
 describe("N02/N03 process configuration UI idempotency", () => {
-  it("reuses draft/review keys and resumes an uncertain submit without saving another draft", async () => {
-    const source = await read("apps/web/src/process-configuration-form.tsx");
+  it("reuses draft, plan and review keys and resumes an uncertain submit", async () => {
+    const source = await read("apps/web/src/process-worker-assignment-form.tsx");
 
-    expect(source).toContain("pendingMutationKeys = useRef<Record<string, string>>({})");
-    expect(source).toContain("pendingSubmit = useRef<PendingSubmitAttempt | null>(null)");
-    expect(source).toContain('headers: { "idempotency-key": mutationKey(signature) }');
+    expect(source).toContain("pendingKeys = useRef<Record<string, string>>({})");
+    expect(source).toContain("pendingSubmit = useRef<PendingSubmit | null>(null)");
+    expect(source).toContain('headers: { "idempotency-key": mutationKey(configSignature) }');
+    expect(source).toContain('headers: { "idempotency-key": mutationKey(planSignature) }');
     expect(source).toContain("let attempt = pendingSubmit.current");
     expect(source).toContain('headers: { "idempotency-key": attempt.key }');
     expect(source).toContain("pendingSubmit.current = null");
-    expect(source).not.toContain('headers: { "idempotency-key": crypto.randomUUID() }');
-  });
-  it("requires N02 process, candidate price and tail-inspector assignment before N03 IE review", async () => {
-    const source = await read("apps/web/src/process-configuration-form.tsx");
-
-    expect(source).toContain("工序与候选单价");
-    expect(source).toContain("候选单价（元 / 件）");
-    expect(source).toContain("请至少分配一名尾查人员");
-    expect(source).toContain("提交 IE 审核");
+    expect(source).toContain('const reviewSignature = `review:${JSON.stringify(reviewBody)}`;');
+    expect(source).toContain('headers: { "idempotency-key": mutationKey(reviewSignature) }');
+    expect(source).toContain("delete pendingKeys.current[reviewSignature]");
   });
 
+  it("requires N02 process, candidate price, worker and tail-inspector assignment before N03 IE review", async () => {
+    const source = await read("apps/web/src/process-worker-assignment-form.tsx");
+
+    expect(source).toContain("分配工序 &工人");
+    expect(source).toContain("候选单价（元/件）");
+    expect(source).toContain("至少分配 1 名工人");
+    expect(source).toContain("至少分配 1 名尾查");
+    expect(source).toContain("提交 IE 核价");
+  });
 });

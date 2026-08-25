@@ -5,8 +5,12 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./dist/index.js"
+      "types": "./src/compat-index.ts",
+      "import": "./dist/compat-index.js"
+    },
+    "./business-person-id": {
+      "types": "./src/business-person-id.ts",
+      "import": "./dist/business-person-id.js"
     },
     "./responsibility-queue": {
       "types": "./src/responsibility-queue.ts",
@@ -19,6 +23,14 @@
     "./external-responsibility": {
       "types": "./src/external-responsibility.ts",
       "import": "./dist/external-responsibility.js"
+    },
+    "./rework-supply-context": {
+      "types": "./src/rework-supply-context.ts",
+      "import": "./dist/rework-supply-context.js"
+    },
+    "./process-worker-plan": {
+      "types": "./src/process-worker-plan.ts",
+      "import": "./dist/process-worker-plan.js"
     },
     "./wages": {
       "types": "./src/wages.ts",

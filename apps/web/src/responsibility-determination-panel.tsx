@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
 
@@ -29,7 +30,7 @@ type Supplier = Readonly<{
   supplierName: string;
 }>;
 type AllocationForm = { responsibilityType: ResponsibilityType; sharePercent: string; multiplier: string; supplierId: string };
-type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; baseAmount: string; primaryResponsibilityType: ResponsibilityType; allocations: AllocationForm[] };
+type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; baseAmount: string; allocations: AllocationForm[] };
 
 const requestError = async (response: Response): Promise<string> => {
   try { return ((await response.json()) as { error?: { message?: string } }).error?.message ?? "请求未完成，请稍后重试"; }
@@ -41,11 +42,9 @@ async function request(path: string, init: RequestInit = {}): Promise<Responsibi
   return ResponsibilityDeterminationResponseSchema.parse(await response.json());
 }
 const requestCurrentUserId = async (): Promise<string> => {
-  const response = await fetch(apiUrl("auth/me"), { credentials: "include", headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(await requestError(response));
-  const body = await response.json() as { user?: { id?: string } };
-  if (!body.user?.id) throw new Error("无法读取当前登录用户");
-  return body.user.id;
+  const session = await verifySession();
+  if (session === "denied" || session.status !== "authorized") throw new Error("无法读取当前登录用户");
+  return session.user.id;
 };
 const requestSuppliers = async (orderId: string): Promise<Supplier[]> => {
   const response = await fetch(apiUrl(`rework-orders/${orderId}/responsibility-determinations/supplier-options`), { credentials: "include", headers: { accept: "application/json" } });
@@ -76,26 +75,38 @@ const multiplierScaled = (value: string): bigint | null => {
 const isExternal = (type: ResponsibilityType): boolean => type !== "own_factory";
 const typeMeta = (type: ResponsibilityType) => responsibilityTypes.find((item) => item.value === type)!;
 const displayMoney = (value: string): string => `¥${value}`;
+const preferredProcessingFactoryId = (response: ResponsibilityDeterminationResponse): string =>
+  response.processingFactory?.type === "supplier" ? response.processingFactory.supplierId : "";
+const estimatedAllocationAmount = (baseAmount: string, allocation: AllocationForm): string => {
+  const shareBps = parsePercentToBps(allocation.sharePercent);
+  const multiplier = Number(allocation.multiplier);
+  const base = Number(baseAmount);
+  if (shareBps === null || !Number.isFinite(multiplier) || !Number.isFinite(base)) return "—";
+  return displayMoney((base * Number(shareBps) / 10_000 * multiplier).toFixed(2));
+};
 const formsFromResponse = (response: ResponsibilityDeterminationResponse): ProcessForm[] => {
   const persisted = response.determination?.processes ?? [];
   return response.sourceProcesses.map((source) => {
     const current = persisted.find((process) => process.configurationItemId === source.configurationItemId);
-    const primaryResponsibilityType = current?.allocations.find((allocation) => allocation.shareBps > 0)?.responsibilityType ?? "own_factory";
     return {
       configurationItemId: source.configurationItemId,
       processName: source.processName,
       pricingUnit: source.pricingUnit,
       baseAmount: source.baseAmount,
-      primaryResponsibilityType,
-      allocations: responsibilityTypes.map(({ value }) => {
-        const existing = current?.allocations.find((allocation) => allocation.responsibilityType === value);
-        return {
-          responsibilityType: value,
-          sharePercent: value === primaryResponsibilityType ? "100" : "",
-          multiplier: existing?.multiplier ?? (isExternal(value) ? "1.200" : "1.000"),
-          supplierId: existing?.supplier?.supplierId ?? "",
-        };
-      }),
+      allocations: current?.allocations.length
+        ? current.allocations.map((allocation) => ({
+            responsibilityType: allocation.responsibilityType,
+            sharePercent: String(allocation.shareBps / 100),
+            multiplier: allocation.multiplier,
+            supplierId: allocation.supplier?.supplierId
+              ?? (allocation.responsibilityType === "processing_factory" ? preferredProcessingFactoryId(response) : ""),
+          }))
+        : [{
+            responsibilityType: "own_factory",
+            sharePercent: "100",
+            multiplier: "1.000",
+            supplierId: "",
+          }],
     };
   });
 };
@@ -109,17 +120,19 @@ const canEditDetermination = (response: ResponsibilityDeterminationResponse): bo
     && (determination === null || determination.stage === "draft" || rejectedCurrentVersion);
 };
 const processValid = (process: ProcessForm): boolean => {
+  if (process.allocations.length === 0) return false;
+  if (new Set(process.allocations.map((allocation) => allocation.responsibilityType)).size !== process.allocations.length) return false;
   if (shareTotalBps(process.allocations) !== 10000n) return false;
-  return process.allocations.filter((allocation) => allocation.sharePercent !== "").every((allocation) => {
+  return process.allocations.every((allocation) => {
     const share = parsePercentToBps(allocation.sharePercent) ?? 0n;
-    if (share === 0n) return true;
+    if (share === 0n) return false;
     const multiplier = multiplierScaled(allocation.multiplier);
     if (multiplier === null || multiplier < 1000n) return false;
     return !isExternal(allocation.responsibilityType) || (multiplier >= 1200n && allocation.supplierId.length > 0);
   });
 };
 
-export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged }: { reworkOrderId: string | null; onOrderChanged?: () => void }) {
+export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false }: { reworkOrderId: string | null; onOrderChanged?: () => void; embedded?: boolean }) {
   const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(null);
   const [processes, setProcesses] = useState<ProcessForm[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -134,7 +147,18 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     setProcesses(formsFromResponse(next));
     setChangeReason(next.determination?.reason ?? "");
     if (canEditDetermination(next)) {
-      void requestSuppliers(next.reworkOrderId).then(setSuppliers).catch(() => setSuppliers([]));
+      void requestSuppliers(next.reworkOrderId).then((items) => {
+        setSuppliers(items);
+        const preferredId = preferredProcessingFactoryId(next);
+        if (preferredId && !items.some((supplier) => supplier.supplierId === preferredId)) {
+          setProcesses((current) => current.map((process) => ({
+            ...process,
+            allocations: process.allocations.map((allocation) => allocation.responsibilityType === "processing_factory" && allocation.supplierId === preferredId
+              ? { ...allocation, supplierId: "" }
+              : allocation),
+          })));
+        }
+      }).catch(() => setSuppliers([]));
     } else {
       setSuppliers([]);
     }
@@ -166,16 +190,27 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   );
   const handlerUserId = response?.handlerUserId ?? currentUserId;
 
-  const setAllocation = (configurationItemId: string, responsibilityType: ResponsibilityType, update: Partial<AllocationForm>): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : {
+  const setAllocation = (configurationItemId: string, allocationIndex: number, update: Partial<AllocationForm>): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : {
     ...process,
-    allocations: process.allocations.map((allocation) => allocation.responsibilityType === responsibilityType ? { ...allocation, ...update } : allocation),
+    allocations: process.allocations.map((allocation, index) => index === allocationIndex ? { ...allocation, ...update } : allocation),
   }));
-  const setPrimaryResponsibility = (configurationItemId: string, responsibilityType: ResponsibilityType): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : {
+  const addAllocation = (configurationItemId: string): void => setProcesses((current) => current.map((process) => {
+    if (process.configurationItemId !== configurationItemId) return process;
+    const nextType = responsibilityTypes.find((type) => !process.allocations.some((allocation) => allocation.responsibilityType === type.value))?.value;
+    if (!nextType) return process;
+    return {
+      ...process,
+      allocations: [...process.allocations, {
+        responsibilityType: nextType,
+        sharePercent: "",
+        multiplier: isExternal(nextType) ? "1.200" : "1.000",
+        supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "",
+      }],
+    };
+  }));
+  const removeAllocation = (configurationItemId: string, allocationIndex: number): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : {
     ...process,
-    primaryResponsibilityType: responsibilityType,
-    allocations: process.allocations.map((allocation) => allocation.responsibilityType === responsibilityType
-      ? { ...allocation, sharePercent: "100", multiplier: isExternal(responsibilityType) ? "1.200" : "1.000" }
-      : { ...allocation, sharePercent: "" }),
+    allocations: process.allocations.filter((_, index) => index !== allocationIndex),
   }));
   const payloadProcesses = () => processes.map((process) => ({
     configurationItemId: process.configurationItemId,
@@ -218,7 +253,10 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   };
   const submit = async (): Promise<void> => {
     if (!response || !editable || !allProcessesValid || !handlerUserId || busyAction) return;
-    if (!(await confirmInApp("提交给老板签字？提交后将锁定责任方、供应商和外部扣款倍率。"))) return;
+    const includesOwnFactory = processes.some((process) => process.allocations.some((allocation) => allocation.responsibilityType === "own_factory"));
+    if (!(await confirmInApp(includesOwnFactory
+      ? "提交责任判定并进入老板确认？提交后将锁定责任比例、供应商和外部扣款倍率。"
+      : "提交纯外部责任判定？系统将跳过老板确认并直接生成供应商扣款台账。"))) return;
     setBusyAction("submit");
     try {
       let working = response;
@@ -247,7 +285,9 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
         },
       );
       applyResponse(finalized);
-      setMessage("已提交老板签字。");
+      setMessage(finalized.reworkStatus === "pending_owner_signature"
+        ? "责任判定已提交老板确认。"
+        : "纯外部责任判定已完成，已跳过老板确认并生成供应商扣款台账。");
       onOrderChanged?.();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "责任判定提交失败");
@@ -283,34 +323,58 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const ownerSigning = response?.reworkStatus === "pending_owner_signature";
   const statusText = ownerSigning || determination?.stage === "finalized" ? "已提交" : editable ? "待提交" : "待处理";
   return <Surface className="responsibility-panel">
-    <div className="section-title responsibility-heading">
+    {!embedded && <div className="section-title responsibility-heading">
       <div>
-        <h2>{ownerSigning ? "N09 · 老板签字" : "N08 · 责任判定"}</h2>
-        <p>{ownerSigning ? "核对责任判定结果后同意或驳回。" : "每道工序选择一个责任方；外部责任选择供应商，扣款倍率最低 1.2。"}</p>
+        <h2>{ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"}</h2>
+        <p>{ownerSigning ? "仅包含本厂责任时需要老板确认；核对后同意或驳回。" : "每道工序可添加多个责任方，比例合计必须为 100%；金额由工资基础、比例和倍率自动计算。"}</p>
       </div>
       <StatusBadge tone={ownerSigning || determination?.stage === "finalized" ? "success" : "warning"}>{statusText}</StatusBadge>
-    </div>
+    </div>}
     {message && <p className="responsibility-message" role="status">{message}</p>}
 
     {processes.map((process) => {
-      const primary = process.allocations.find((allocation) => allocation.responsibilityType === process.primaryResponsibilityType)!;
-      const meta = typeMeta(primary.responsibilityType);
       const persisted = determination?.processes.find((item) => item.configurationItemId === process.configurationItemId);
-      const persistedPrimary = persisted?.allocations.find((item) => item.responsibilityType === process.primaryResponsibilityType);
-      const supplierOptions = suppliers.filter((supplier) => supplier.supplierType === meta.supplierType);
+      const totalBps = shareTotalBps(process.allocations);
       return <section className="responsibility-process" key={process.configurationItemId}>
         <div className="responsibility-process__title">
           <div><h3>{process.processName}</h3><p>工资基础 {displayMoney(process.baseAmount)} · {process.pricingUnit === "piece" ? "按件" : "按小时"}</p></div>
-          <b>{meta.label}</b>
+          <b className={totalBps === 10000n ? "share-ok" : "share-error"}>责任比例 {totalBps === null ? "格式有误" : `${Number(totalBps) / 100}%`}</b>
         </div>
-        {editable ? <label className="dx-field"><span>主责任方</span><span className="dx-field__control"><select value={process.primaryResponsibilityType} disabled={Boolean(busyAction)} onChange={(event) => setPrimaryResponsibility(process.configurationItemId, event.target.value as ResponsibilityType)}>{responsibilityTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label> : <p className="responsibility-party__supplier">主责任方：{meta.label}</p>}
-        {isExternal(primary.responsibilityType) && (editable ? <>
-          <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={primary.supplierId} placeholder={supplierOptions.length ? "选择供应商" : "没有可用供应商"} emptyText="没有匹配的供应商" onChange={(supplierId) => setAllocation(process.configurationItemId, primary.responsibilityType, { supplierId })} /></span></label>
-          <InsetField label="外部扣款倍率（最低 1.2）" value={primary.multiplier} inputMode="decimal" disabled={Boolean(busyAction)} onChange={(event) => setAllocation(process.configurationItemId, primary.responsibilityType, { multiplier: event.target.value })} />
-        </> : <>
-          <p className="responsibility-party__supplier">供应商：{persistedPrimary?.supplier?.name ?? "未填写"}</p>
-          <p className="responsibility-party__supplier">外部扣款倍率：{persistedPrimary?.multiplier ?? primary.multiplier}×</p>
-        </>)}
+        <div className="responsibility-party-list">
+          {process.allocations.map((allocation, allocationIndex) => {
+            const meta = typeMeta(allocation.responsibilityType);
+            const supplierOptions = suppliers.filter((supplier) => supplier.supplierType === meta.supplierType);
+            const persistedAllocation = persisted?.allocations.find((item) => item.responsibilityType === allocation.responsibilityType);
+            const availableTypes = responsibilityTypes.filter((item) => item.value === allocation.responsibilityType || !process.allocations.some((current) => current.responsibilityType === item.value));
+            return <div className="responsibility-party" key={`${process.configurationItemId}:${allocation.responsibilityType}`}>
+              {editable ? <>
+                <label className="dx-field"><span>责任方</span><span className="dx-field__control"><select value={allocation.responsibilityType} disabled={Boolean(busyAction)} onChange={(event) => {
+                  const nextType = event.target.value as ResponsibilityType;
+                  setAllocation(process.configurationItemId, allocationIndex, {
+                    responsibilityType: nextType,
+                    multiplier: isExternal(nextType) ? "1.200" : "1.000",
+                    supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "",
+                  });
+                }}>{availableTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label>
+                <InsetField label="承担比例（%）" value={allocation.sharePercent} inputMode="decimal" disabled={Boolean(busyAction)} placeholder="例如 70" onChange={(event) => setAllocation(process.configurationItemId, allocationIndex, { sharePercent: event.target.value })} />
+                {isExternal(allocation.responsibilityType) ? <>
+                  <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} placeholder={supplierOptions.length ? "选择供应商" : "没有可用供应商"} emptyText="没有匹配的供应商" onChange={(supplierId: string) => setAllocation(process.configurationItemId, allocationIndex, { supplierId })} /></span></label>
+                  <InsetField label="扣款倍率（最低 1.2）" value={allocation.multiplier} inputMode="decimal" disabled={Boolean(busyAction)} onChange={(event) => setAllocation(process.configurationItemId, allocationIndex, { multiplier: event.target.value })} />
+                </> : <div className="responsibility-party__fixed"><span>责任倍率</span><b>1.000×</b></div>}
+                <div className="responsibility-party__amount"><span>自动计算金额</span><strong>{estimatedAllocationAmount(process.baseAmount, allocation)}</strong></div>
+                <Button disabled={Boolean(busyAction) || process.allocations.length === 1} onClick={() => removeAllocation(process.configurationItemId, allocationIndex)}>移除</Button>
+              </> : <>
+                <div><b>{meta.label}</b><p>{allocation.sharePercent}% · {allocation.multiplier}×</p></div>
+                {isExternal(allocation.responsibilityType) && <div><span>责任供应商</span><p>{persistedAllocation?.supplier?.name ?? "未填写"}</p></div>}
+                <div className="responsibility-party__amount"><span>责任金额</span><strong>{persistedAllocation ? displayMoney(persistedAllocation.roundedAmount) : estimatedAllocationAmount(process.baseAmount, allocation)}</strong></div>
+              </>}
+            </div>;
+          })}
+        </div>
+        {editable && <div className="responsibility-process__footer">
+          <Button disabled={Boolean(busyAction) || process.allocations.length === responsibilityTypes.length} onClick={() => addAllocation(process.configurationItemId)}>+ 添加责任方</Button>
+          <span className={totalBps === 10000n ? "share-ok" : "share-error"}>{totalBps === 10000n ? "比例合计正确，可以提交" : "比例合计必须为 100%"}</span>
+        </div>}
       </section>;
     })}
 
@@ -321,7 +385,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       <Button disabled={Boolean(busyAction)} onClick={() => void takeover()}>{busyAction === "takeover" ? "接管中…" : "接管责任处理"}</Button>
     </div>}
     {editable && <div className="responsibility-actions">
-      <Button variant="primary" onClick={() => void submit()} disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}>{busyAction === "submit" ? "提交中…" : "提交老板签字"}</Button>
+      <Button variant="primary" onClick={() => void submit()} disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}>{busyAction === "submit" ? "提交中…" : "提交责任判定"}</Button>
     </div>}
     {ownerSigning && response?.canOwnerSign && <div className="responsibility-actions responsibility-actions--owner">
       <Button variant="primary" disabled={Boolean(busyAction)} onClick={() => void ownerDecision("approve")}>{busyAction === "owner-approve" ? "确认中…" : "确认同意并完成返工"}</Button>

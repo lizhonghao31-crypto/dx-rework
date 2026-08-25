@@ -52,6 +52,8 @@ type ConfigurationRow = Readonly<{
   created_at: Date;
   submitted_at: Date | null;
   reviewed_at: Date | null;
+  worker_preassignment_required: boolean;
+  unified_execution_required: boolean;
 }>;
 type ConfigurationItemRow = Readonly<{
   configuration_item_id: string;
@@ -59,6 +61,7 @@ type ConfigurationItemRow = Readonly<{
   catalog_process_id: string | null;
   catalog_process_version: number | null;
   process_name: string;
+  execution_kind: "worker" | "tail_inspection";
   pricing_unit: "piece" | "hour";
   planned_quantity: string | number;
   unit_price: string | number | null;
@@ -71,6 +74,7 @@ type PreparedItem = Readonly<{
   processVersion: number | null;
   customProcessName: string | null;
   processName: string;
+  executionKind: "worker" | "tail_inspection";
   pricingUnit: "piece" | "hour";
   plannedQuantity: number;
   unitPrice: number;
@@ -182,9 +186,18 @@ export class ProcessConfigurationService {
   async options(actor: TrustedActorContext): Promise<ProcessConfigurationOptionsResponse> {
     this.ensureConfigure(actor);
     const result = await this.database.query<{
-      process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour";
+      process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour"; default_worker_person_ids: string[];
     }>(
-      "SELECT process_id,version,process_name,pricing_unit FROM current_process_catalog WHERE active=true AND pricing_unit='piece' ORDER BY process_name,process_id",
+      `SELECT catalog.process_id,catalog.version,catalog.process_name,catalog.pricing_unit,
+              COALESCE(roster.person_ids,'{}'::uuid[]) AS default_worker_person_ids
+       FROM current_process_catalog catalog
+       LEFT JOIN LATERAL (
+         SELECT person_ids FROM process_default_worker_roster_versions roster_version
+         WHERE roster_version.process_id=catalog.process_id
+         ORDER BY roster_version.roster_version DESC LIMIT 1
+       ) roster ON true
+       WHERE catalog.active=true AND catalog.pricing_unit='piece'
+       ORDER BY catalog.process_name,catalog.process_id`,
     );
     return {
       processes: result.rows.map((row) => ({
@@ -192,6 +205,7 @@ export class ProcessConfigurationService {
         version: row.version,
         processName: row.process_name,
         pricingUnit: row.pricing_unit,
+        defaultWorkerPersonIds: row.default_worker_person_ids,
       })),
     };
   }
@@ -213,8 +227,10 @@ export class ProcessConfigurationService {
       if (input.changeReason) {
         throw new ApplicationError("VALIDATION_ERROR", "初次配置不能伪造为变更单", 400);
       }
-      const items = await this.prepareItems(client, input.items);
       const current = await this.latestConfiguration(client, reworkOrderId, true);
+      const unifiedExecutionRequired = true;
+      const workerPreassignmentRequired = true;
+      const items = await this.prepareItems(client, input.items);
       const configurationId = randomUUID();
       const configurationVersion = (current?.configuration_version ?? 0) + 1;
       const nextOrderVersion = order.version + 1;
@@ -225,6 +241,8 @@ export class ProcessConfigurationService {
         status: "draft",
         changeReason: input.changeReason ?? null,
         replacesConfigurationId: current?.status === "draft" ? current.configuration_id : null,
+        workerPreassignmentRequired,
+        unifiedExecutionRequired,
         items: items.map((item) => this.auditItem(item)),
       };
       const eventId = await this.events.append(client, actor, {
@@ -250,15 +268,15 @@ export class ProcessConfigurationService {
         );
       }
       await client.query(
-        "INSERT INTO rework_process_configurations(configuration_id,rework_order_id,configuration_version,configuration_kind,status,change_reason,created_by) VALUES($1,$2,$3,$4,'draft',$5,$6)",
-        [configurationId, reworkOrderId, configurationVersion, kind, input.changeReason ?? null, actor.actorId],
+        "INSERT INTO rework_process_configurations(configuration_id,rework_order_id,configuration_version,configuration_kind,status,change_reason,created_by,worker_preassignment_required,unified_execution_required) VALUES($1,$2,$3,$4,'draft',$5,$6,$7,$8)",
+        [configurationId, reworkOrderId, configurationVersion, kind, input.changeReason ?? null, actor.actorId, workerPreassignmentRequired, unifiedExecutionRequired],
       );
       for (const [index, item] of items.entries()) {
         await client.query(
-          "INSERT INTO rework_process_configuration_items(configuration_item_id,configuration_id,position,source,catalog_process_id,catalog_process_version,custom_process_name,process_name,pricing_unit,planned_quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+          "INSERT INTO rework_process_configuration_items(configuration_item_id,configuration_id,position,source,catalog_process_id,catalog_process_version,custom_process_name,process_name,execution_kind,pricing_unit,planned_quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
           [
             item.configurationItemId, configurationId, index + 1, item.source, item.processId,
-            item.processVersion, item.customProcessName, item.processName, item.pricingUnit,
+            item.processVersion, item.customProcessName, item.processName, item.executionKind, item.pricingUnit,
             item.plannedQuantity, item.unitPrice,
           ],
         );
@@ -288,17 +306,14 @@ export class ProcessConfigurationService {
       if (!configuration || configuration.status !== "draft" || configuration.configuration_version !== input.expectedConfigurationVersion) {
         throw new ApplicationError("CONFLICT", "工序配置已被更新，请刷新后重新提交", 409);
       }
-      if ((await this.items(client, configuration.configuration_id)).length === 0) {
-        throw new ApplicationError("VALIDATION_ERROR", "至少配置一道工序后才能提交IE审核", 400);
+      const configurationItems = await this.items(client, configuration.configuration_id);
+      if (configurationItems.filter((item) => item.execution_kind === "worker").length === 0) {
+        throw new ApplicationError("VALIDATION_ERROR", "至少配置一道返工工序后才能提交IE审核", 400);
       }
-      const inspectors = await this.tailInspectors(client, input.tailInspectors);
+      if (configurationItems.filter((item) => item.execution_kind === "tail_inspection").length !== 1) {
+        throw new ApplicationError("VALIDATION_ERROR", "必须且只能包含一道尾查特殊工序", 400);
+      }
       const nextOrderVersion = order.version + 1;
-      const tailAssignments = inspectors.map((inspector) => ({
-        assignmentId: randomUUID(),
-        userId: inspector.id,
-        displayName: inspector.display_name,
-        boxScope: input.tailInspectors.find((item) => item.userId === inspector.id)?.boxScope ?? null,
-      }));
       const eventId = await this.events.append(client, actor, {
         action: "rework.process_configuration.submit",
         entityType: "rework_order",
@@ -307,19 +322,10 @@ export class ProcessConfigurationService {
         after: {
           ...this.auditOrder(order, "pending_ie_review", nextOrderVersion),
           configuration: { ...(await this.configurationAudit(client, configuration)), status: "pending_ie_review" },
-          tailAssignments,
         },
       });
       await this.setConfigurationContext(client, eventId, actor.requestId);
       await this.setReworkContext(client, eventId, actor.requestId);
-      for (const assignment of tailAssignments) {
-        await client.query(
-          `INSERT INTO rework_tail_inspection_assignments(
-             tail_inspection_assignment_id,rework_order_id,tail_inspector_user_id,assigned_by,box_scope,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
-          [assignment.assignmentId, reworkOrderId, assignment.userId, actor.actorId, assignment.boxScope, eventId, actor.requestId],
-        );
-      }
       await client.query(
         "UPDATE rework_process_configurations SET status='pending_ie_review',submitted_at=CURRENT_TIMESTAMP WHERE configuration_id=$1",
         [configuration.configuration_id],
@@ -328,24 +334,6 @@ export class ProcessConfigurationService {
         "UPDATE rework_orders SET status='pending_ie_review',updated_by=$2,version=$3,updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1",
         [reworkOrderId, actor.actorId, nextOrderVersion],
       );
-      // N06 is deliberately parallel to IE review and later work reporting:
-      // the named tail inspector receives an actionable todo immediately once
-      // N02 succeeds, rather than waiting for any downstream node.
-      for (const assignment of tailAssignments) {
-        await this.todos?.actionableForNamedRecipient(client, actor, {
-          category: "tail_inspection",
-          sourceEventId: eventId,
-          sourceAction: "rework.process_configuration.submit",
-          entityType: "rework_order",
-          entityId: reworkOrderId,
-          recipientUserId: assignment.userId,
-          requiredRole: "tail_inspector",
-          requiredCapability: "tail_inspection:report",
-          route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "tail_inspection" },
-          policyKey: "general",
-          dedupeKey: `tail-inspection:${reworkOrderId}:${assignment.assignmentId}`,
-        });
-      }
       await this.todos?.completeOpenByDedupePrefix(
         client,
         actor,
@@ -438,11 +426,6 @@ export class ProcessConfigurationService {
       });
       await this.setConfigurationContext(client, eventId, actor.requestId);
       await this.setReworkContext(client, eventId, actor.requestId);
-      if (!approved) {
-        await this.revokeTailAssignments(client, actor, reworkOrderId, configuration.configuration_id);
-        await this.setConfigurationContext(client, eventId, actor.requestId);
-        await this.setReworkContext(client, eventId, actor.requestId);
-      }
       if (previousApproved) {
         await client.query(
           "UPDATE rework_process_configurations SET status='superseded' WHERE configuration_id=$1",
@@ -554,91 +537,21 @@ export class ProcessConfigurationService {
     }
   }
 
-  private async tailInspectors(
+  private async prepareItems(
     client: PoolClient,
-    input: readonly { userId: string; boxScope?: string | undefined }[],
-  ): Promise<Array<{ id: string; display_name: string }>> {
-    const ids = input.map((item) => item.userId);
-    const result = await client.query<{ id: string; display_name: string }>(
-      `SELECT user_row.id,user_row.display_name
-       FROM app_users user_row
-       JOIN user_role_assignments assignment
-         ON assignment.user_id=user_row.id
-        AND assignment.role_code='tail_inspector'
-        AND assignment.revoked_at IS NULL
-       JOIN business_roles role
-         ON role.role_code=assignment.role_code
-        AND role.enabled=true
-       JOIN role_capabilities capability
-         ON capability.role_code=assignment.role_code
-        AND capability.capability='tail_inspection:report'
-       WHERE user_row.enabled=true AND user_row.id=ANY($1::uuid[])
-       ORDER BY user_row.id FOR SHARE`,
-      [ids],
-    );
-    if (result.rowCount !== ids.length) {
-      throw new ApplicationError("VALIDATION_ERROR", "尾查人员必须是已启用且已授权的尾查角色", 400);
+    input: readonly ProcessConfigurationItem[],
+  ): Promise<PreparedItem[]> {
+    const tailItems = input.filter((item) => item.executionKind === "tail_inspection");
+    if (tailItems.length !== 1) {
+      throw new ApplicationError("VALIDATION_ERROR", "必须且只能配置一道尾查特殊工序", 400);
     }
-    return result.rows;
-  }
-
-  private async revokeTailAssignments(
-    client: PoolClient,
-    actor: TrustedActorContext,
-    reworkOrderId: string,
-    configurationId: string,
-  ): Promise<void> {
-    const assignments = await client.query<{
-      tail_inspection_assignment_id: string;
-      tail_inspector_user_id: string;
-      box_scope: string | null;
-    }>(
-      `SELECT tail_inspection_assignment_id,tail_inspector_user_id,box_scope
-       FROM rework_tail_inspection_assignments
-       WHERE rework_order_id=$1 AND revoked_at IS NULL
-       ORDER BY assigned_at,tail_inspection_assignment_id FOR UPDATE`,
-      [reworkOrderId],
-    );
-    for (const assignment of assignments.rows) {
-      const eventId = await this.events.append(client, actor, {
-        action: "rework.tail_inspection.revoke",
-        entityType: "rework_tail_inspection_assignment",
-        entityId: assignment.tail_inspection_assignment_id,
-        before: {
-          reworkOrderId,
-          tailInspectorUserId: assignment.tail_inspector_user_id,
-          boxScope: assignment.box_scope,
-          status: "active",
-        },
-        after: {
-          reworkOrderId,
-          tailInspectorUserId: assignment.tail_inspector_user_id,
-          status: "revoked",
-          configurationId,
-        },
-        reason: "IE退回工序与价格，原尾查分配及报数不再参与后续核验",
-      });
-      await this.setReworkContext(client, eventId, actor.requestId);
-      await client.query(
-        `UPDATE rework_tail_inspection_assignments
-         SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,
-             revoke_reason='IE退回工序与价格，需重新分配尾查'
-         WHERE tail_inspection_assignment_id=$1`,
-        [assignment.tail_inspection_assignment_id, actor.actorId],
-      );
-      await this.todos?.cancelOpenByDedupeKey(
-        client,
-        actor,
-        `tail-inspection:${reworkOrderId}:${assignment.tail_inspection_assignment_id}`,
-        "IE returned the process configuration and revoked this tail-inspection assignment",
-      );
-    }
-  }
-
-  private async prepareItems(client: PoolClient, input: readonly ProcessConfigurationItem[]): Promise<PreparedItem[]> {
     const prepared: PreparedItem[] = [];
     const names = new Set<string>();
     for (const item of input) {
+      const executionKind = item.executionKind ?? "worker";
+      if (executionKind === "tail_inspection" && (item.source !== "custom" || item.customProcessName.trim() !== "尾查")) {
+        throw new ApplicationError("VALIDATION_ERROR", "尾查特殊工序必须使用系统固定名称“尾查”", 400);
+      }
       const plannedQuantity = item.plannedQuantity;
       const unitPrice = truncateDecimal(item.unitPrice, 3);
       if (!Number.isInteger(plannedQuantity) || plannedQuantity <= 0 || unitPrice <= 0) {
@@ -684,6 +597,7 @@ export class ProcessConfigurationService {
         processVersion,
         customProcessName,
         processName,
+        executionKind,
         pricingUnit: item.pricingUnit,
         plannedQuantity,
         unitPrice,
@@ -696,7 +610,7 @@ export class ProcessConfigurationService {
     client: PoolClient,
     items: readonly ConfigurationItemRow[],
   ): Promise<Array<{ configurationItemId: string; processId: string; processCode: string }>> {
-    const customItems = items.filter((item) => item.source === "custom");
+    const customItems = items.filter((item) => item.source === "custom" && item.execution_kind === "worker");
     for (const lockKey of customPromotionLockKeys(customItems.map((item) => ({
       source: item.source,
       processName: item.process_name,
@@ -805,7 +719,7 @@ export class ProcessConfigurationService {
 
   private async items(client: Pick<PoolClient, "query">, configurationId: string): Promise<ConfigurationItemRow[]> {
     const result = await client.query<ConfigurationItemRow>(
-      "SELECT item.configuration_item_id,item.source,item.catalog_process_id,item.catalog_process_version,item.process_name,item.pricing_unit,item.planned_quantity,item.unit_price,promotion.process_id AS promoted_process_id FROM rework_process_configuration_items item LEFT JOIN rework_custom_process_promotions promotion ON promotion.configuration_item_id=item.configuration_item_id WHERE item.configuration_id=$1 ORDER BY item.position,item.configuration_item_id",
+      "SELECT item.configuration_item_id,item.source,item.catalog_process_id,item.catalog_process_version,item.process_name,item.execution_kind,item.pricing_unit,item.planned_quantity,item.unit_price,promotion.process_id AS promoted_process_id FROM rework_process_configuration_items item LEFT JOIN rework_custom_process_promotions promotion ON promotion.configuration_item_id=item.configuration_item_id WHERE item.configuration_id=$1 ORDER BY item.position,item.configuration_item_id",
       [configurationId],
     );
     return result.rows;
@@ -828,12 +742,14 @@ export class ProcessConfigurationService {
         createdAt: configuration.created_at.toISOString(),
         submittedAt: configuration.submitted_at?.toISOString() ?? null,
         reviewedAt: configuration.reviewed_at?.toISOString() ?? null,
+        unifiedExecutionRequired: configuration.unified_execution_required,
         items: (await this.items(client, configuration.configuration_id)).map((item) => ({
           configurationItemId: item.configuration_item_id,
           source: item.source,
           processId: item.catalog_process_id,
           processVersion: item.catalog_process_version,
           processName: item.process_name,
+          executionKind: item.execution_kind,
           pricingUnit: item.pricing_unit,
           plannedQuantity: numberValue(item.planned_quantity),
           unitPrice: item.unit_price === null ? null : numberValue(item.unit_price),
@@ -854,12 +770,15 @@ export class ProcessConfigurationService {
       status: configuration.status,
       changeReason: configuration.change_reason,
       reviewReason: configuration.review_reason,
+      workerPreassignmentRequired: configuration.worker_preassignment_required,
+      unifiedExecutionRequired: configuration.unified_execution_required,
       items: (await this.items(client, configuration.configuration_id)).map((item) => ({
         configurationItemId: item.configuration_item_id,
         source: item.source,
         processId: item.catalog_process_id,
         processVersion: item.catalog_process_version,
         processName: item.process_name,
+        executionKind: item.execution_kind,
         pricingUnit: item.pricing_unit,
         plannedQuantity: numberValue(item.planned_quantity),
         unitPrice: item.unit_price === null ? null : numberValue(item.unit_price),
@@ -875,6 +794,7 @@ export class ProcessConfigurationService {
       processId: item.processId,
       processVersion: item.processVersion,
       processName: item.processName,
+      executionKind: item.executionKind,
       pricingUnit: item.pricingUnit,
       plannedQuantity: item.plannedQuantity,
       unitPrice: item.unitPrice,

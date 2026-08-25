@@ -1,6 +1,8 @@
 import {
+  CorrectWorkReportQuantitySchema,
   IdempotencyKeySchema,
   RejectWorkReportSchema,
+  ReviewFinalQuantitySchema,
   ReviewWholeOrderSchema,
   WholeOrderReviewParamsSchema,
   WholeOrderReviewQuerySchema,
@@ -115,8 +117,28 @@ export function registerWholeOrderReviewRoutes(app: FastifyInstance, dependencie
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
   });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/whole-order-review/ie-review", async (request, reply) => {
+    const result = await dependencies.service.reviewFinalQuantity(
+      await actor(request, "process:review", "ie_reviewer"),
+      parse(WholeOrderReviewParamsSchema, request.params).reworkOrderId,
+      parse(ReviewFinalQuantitySchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return WholeOrderReviewResponseSchema.parse(result.value);
+  });
   app.post<{ Params: { workReportId: string } }>("/work-reports/:workReportId/reject", async (request, reply) => {
     const result = await dependencies.service.rejectReport(await actor(request, "submission:audit", "tail_supervisor"), parse(WorkReportRejectionParamsSchema, request.params).workReportId, parse(RejectWorkReportSchema, request.body), key(request));
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return WholeOrderReviewResponseSchema.parse(result.value);
+  });
+  app.post<{ Params: { workReportId: string } }>("/work-reports/:workReportId/effective-quantity", async (request, reply) => {
+    const result = await dependencies.service.correctReportQuantity(
+      await actor(request, "submission:audit", "tail_supervisor"),
+      parse(WorkReportRejectionParamsSchema, request.params).workReportId,
+      parse(CorrectWorkReportQuantitySchema, request.body),
+      key(request),
+    );
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return WholeOrderReviewResponseSchema.parse(result.value);
   });

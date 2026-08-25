@@ -17,9 +17,36 @@ describe("business landing target", () => {
     expect(landingTarget(user(["responsibility:takeover"]))).toBe("ui/responsibility");
   });
 
-  it("routes wage and work-reporting roles to pages they can actually open", () => {
+  it("routes wage users to a page they can actually open", () => {
     expect(landingTarget(user(["wage:view"]))).toBe("ui/wages");
-    expect(landingTarget(user(["work:report"], ["worker"]))).toBe("ui/work-reporting");
+  });
+
+  it("routes each single frontline role directly to its own work page", () => {
+    expect(landingTarget(user(["receiving:create", "todo:view"], ["warehouse_receiver"]))).toBe("ui/receiving");
+    expect(landingTarget(user(["work:report", "todo:view"], ["worker"]))).toBe("ui/frontline/tasks?kind=worker");
+    expect(landingTarget(user(["tail_inspection:report", "todo:view"], ["tail_inspector"]))).toBe("ui/frontline/tasks?kind=tail_inspection");
+  });
+
+  it("keeps the frontline chooser only when an account has multiple frontline jobs", () => {
+    expect(landingTarget(user(
+      ["receiving:create", "work:report", "todo:view"],
+      ["warehouse_receiver", "worker"],
+    ))).toBe("ui/frontline");
+  });
+
+  it("does not treat a role without its matching capability as a direct work entry", () => {
+    expect(landingTarget(user(["todo:view"], ["warehouse_receiver"]))).toBe("ui/my-tasks");
+  });
+
+  it("keeps Root and management users on the management landing", () => {
+    expect(landingTarget({
+      ...user(["receiving:create", "todo:view"], ["warehouse_receiver"]),
+      isRoot: true,
+    })).toBe("ui/management");
+    expect(landingTarget(user(
+      ["dashboard:management:read", "work:report", "todo:view"],
+      ["owner_group", "worker"],
+    ))).toBe("ui/management");
   });
 
   it("routes master-data-only users to a page they can actually open", () => {

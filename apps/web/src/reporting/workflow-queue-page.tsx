@@ -3,6 +3,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
+import { useDebouncedValue } from "../use-debounced-value.js";
 import { loadReworkOrders, reportingPageUrl } from "./reporting-client.js";
 import "./reporting.css";
 
@@ -13,6 +14,7 @@ type WorkflowStatus = Extract<
   | "pending_task_assignment"
   | "in_progress"
   | "pending_order_review"
+  | "pending_final_quantity_ie_review"
   | "pending_quantity_adjustment_ie_review"
 >;
 
@@ -37,31 +39,38 @@ const queueMeta: Record<WorkflowStatus, QueueMeta> = {
     label: "待 IE 审核",
     owner: "IE",
     action: "审核工序、计划数量、单位和单价",
-    next: "通过后流转到 N04 · 待分配人员；驳回则退回 N02",
+    next: "通过后自动启动 N04 · 返工执行报数；异常时回 N02 重试启动",
   },
   pending_task_assignment: {
-    node: "N04",
-    label: "待分配人员",
+    node: "N02",
+    label: "执行任务待启动",
     owner: "尾部主管",
-    action: "把已生效工序分配给实际返工人员",
-    next: "首个任务建立后流转到 N05 · 返工执行中",
+    action: "仅处理 IE 通过后未自动启动的预分配任务",
+    next: "启动后进入 N04 · 返工执行报数",
   },
   in_progress: {
-    node: "N05",
-    label: "返工执行中",
-    owner: "工人 / 已授权代录人",
-    action: "按实际完成进度登记本次完成数量",
-    next: "全部工序完成后自动流转到 N06 · 待整单审核",
+    node: "N04",
+    label: "返工执行报数",
+    owner: "返工人员 / 尾查 / 已授权代录人",
+    action: "按本人执行任务登记实际完成数量",
+    next: "全部执行报数完成后自动流转到 N05 · 尾部确认最终数量",
   },
   pending_order_review: {
-    node: "N06",
-    label: "待整单审核",
+    node: "N05",
+    label: "待最终数量确认",
     owner: "尾部主管",
-    action: "核对全部有效完成记录，确认本单返工已全部完成",
-    next: "确认后流转到 N07 · 待责任判定",
+    action: "核对工人上数与尾查数量，填写每道工序最终确认数量",
+    next: "确认后流转到 N06 · IE 复核",
+  },
+  pending_final_quantity_ie_review: {
+    node: "N06",
+    label: "最终数量待 IE 复核",
+    owner: "IE",
+    action: "核对最终确认数量与质量事实，只作通过或退回",
+    next: "通过后流转到 N07 · 责任判定；退回则回到 N05",
   },
   pending_quantity_adjustment_ie_review: {
-    node: "N06-A",
+    node: "N05-A",
     label: "数量调整待复核",
     owner: "订单跟单 / IE",
     action: "处理异常数量调整，不影响正常完成登记主流程",
@@ -70,7 +79,7 @@ const queueMeta: Record<WorkflowStatus, QueueMeta> = {
 };
 
 const actionHref = (order: ManagementReworkRow): string => {
-  if (order.status === "pending_process_configuration" || order.status === "pending_ie_review") {
+  if (["pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(order.status)) {
     return `/ui/process-configuration?rework=${order.reworkOrderId}`;
   }
   return `/ui/work-reporting?rework=${order.reworkOrderId}`;
@@ -102,6 +111,7 @@ export function WorkflowQueuePage({
     requested && statuses.includes(requested) ? requested : statuses[0]!,
   );
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 180);
   const [overdue, setOverdue] = useState("");
   const [exception, setException] = useState("");
   const [from, setFrom] = useState("");
@@ -109,24 +119,23 @@ export function WorkflowQueuePage({
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const baseFilters = useMemo(() => ({
-    q: q.trim() || undefined,
+    q: debouncedQ.trim() || undefined,
     overdue: overdue || undefined,
     exception: exception || undefined,
     from: from || undefined,
     to: to || undefined,
     limit: "100",
-  }), [q, overdue, exception, from, to]);
+  }), [debouncedQ, overdue, exception, from, to]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setState({ kind: "loading" });
-      void Promise.allSettled(
-        statuses.map(async (status) => [
-          status,
-          await loadReworkOrders({ ...baseFilters, status }, controller.signal),
-        ] as const),
-      ).then((results) => {
+    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
+    void Promise.allSettled(
+      statuses.map(async (status) => [
+        status,
+        await loadReworkOrders({ ...baseFilters, status }, controller.signal),
+      ] as const),
+    ).then((results) => {
         if (controller.signal.aborted) return;
         const pages: Partial<Record<WorkflowStatus, ManagementReworkPage>> = {};
         const available: WorkflowStatus[] = [];
@@ -146,10 +155,8 @@ export function WorkflowQueuePage({
         }
         setState({ kind: "ready", pages, available });
         setSelected((current) => available.includes(current) ? current : available[0]!);
-      });
-    }, 180);
+    });
     return () => {
-      window.clearTimeout(timer);
       controller.abort();
     };
   }, [baseFilters, refresh, statuses]);

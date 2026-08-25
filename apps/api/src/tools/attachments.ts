@@ -30,7 +30,7 @@ type AttachmentRow = {
   entity_type: string | null;
   entity_id: string | null;
   status: "pending" | "ready" | "rejected";
-  created_at: Date;
+  created_at: Date | string;
 };
 
 export class AttachmentService {
@@ -269,7 +269,9 @@ export class AttachmentService {
       sizeBytes: Number(row.size_bytes),
       sha256: row.sha256,
       status: row.status,
-      createdAt: row.created_at.toISOString(),
+      createdAt: row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : new Date(row.created_at).toISOString(),
     };
   }
 }

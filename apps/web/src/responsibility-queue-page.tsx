@@ -76,7 +76,7 @@ export function ResponsibilityQueuePage() {
           <h2>责任处理工作台</h2>
           <p>处理责任方、供应商及外部扣款倍率，完成后提交老板签字。</p>
         </div>
-        <StatusBadge tone="info">N08 · 待判责</StatusBadge>
+        <StatusBadge tone="info">N06 · 待判责</StatusBadge>
       </Surface>
       <Surface className="reporting-filters">
         <InsetField label="搜索当前节点订单" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />

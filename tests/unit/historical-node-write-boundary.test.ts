@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFile(path, "utf8");
 
 describe("historical node write boundary", () => {
-  it("never reopens N04 or N05 controls from a historical node click", async () => {
+  it("never reopens retired assignment or tail controls from a historical node click", async () => {
     const source = await read("apps/web/src/work-reporting-form.tsx");
 
     expect(source).toContain('loaded?.reworkStatus === "pending_task_assignment"');
@@ -14,7 +14,7 @@ describe("historical node write boundary", () => {
     expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
     expect(source).toContain('canAssign && assignmentWritable');
     expect(source).toContain('assignmentWritable ? "待开工" : "已处理"');
-    expect(source).toContain('workReportingWritable ? "返工中" : "已处理"');
+    expect(source).toContain('workReportingWritable ? "执行中" : "已处理"');
   });
 
   it("keeps backend state locks on the main write stages", async () => {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
 
-describe("N07 tail inspection rejection", () => {
+describe("legacy tail inspection rejection", () => {
   it("lets the tail supervisor reject a submitted tail count and keeps the original report as audit history", async () => {
     const [service, routes, migration, panel] = await Promise.all([
       read("apps/api/src/rework/tail-inspection-service.ts"),
@@ -33,7 +33,7 @@ describe("N07 tail inspection rejection", () => {
     expect(todoProjection).not.toContain('entityType: "rework_order"');
   });
 
-  it("does not disturb valid worker completion records when correcting N06", async () => {
+  it("does not disturb valid worker completion records when correcting a legacy tail count", async () => {
     const service = await read("apps/api/src/rework/tail-inspection-service.ts");
     expect(service).not.toContain("UPDATE rework_work_reports");
     expect(service).not.toContain("DELETE FROM rework_work_reports");

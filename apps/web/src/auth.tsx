@@ -3,12 +3,13 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 
 export type AuthorizedUser = {
+  id: string;
   displayName: string;
   capabilities: readonly string[];
   businessRoles?: readonly string[];
   isRoot?: boolean;
 };
-type Me = { status: "authorized" | "no_role"; user: AuthorizedUser };
+export type AuthorizedSession = { status: "authorized" | "no_role"; user: AuthorizedUser };
 export type PageAccessRequirement = {
   requiredRole?: string | undefined;
   requiredCapability?: string | undefined;
@@ -69,18 +70,18 @@ type QrRelayMessage = { type: typeof QR_RELAY_MESSAGE; authCode: string; state: 
 type ErrorBody = { error?: { code?: string; message?: string } };
 
 const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-type AuthGateState = "loading" | "denied" | Me;
-type VerifiedSession = Exclude<AuthGateState, "loading">;
+type AuthGateState = "loading" | "denied" | AuthorizedSession;
+export type VerifiedSession = Exclude<AuthGateState, "loading">;
 let verifiedSession: VerifiedSession | undefined;
 let sessionVerification: Promise<VerifiedSession> | undefined;
 
-const verifySession = (): Promise<VerifiedSession> => {
+export const verifySession = (): Promise<VerifiedSession> => {
   if (verifiedSession !== undefined) return Promise.resolve(verifiedSession);
 
   if (!sessionVerification) {
     sessionVerification = fetch(apiUrl("auth/me"), { credentials: "include" })
       .then(async (response): Promise<VerifiedSession> =>
-        response.ok ? await response.json() as Me : "denied",
+        response.ok ? await response.json() as AuthorizedSession : "denied",
       )
       .catch((): VerifiedSession => "denied")
       .then((state): VerifiedSession => {

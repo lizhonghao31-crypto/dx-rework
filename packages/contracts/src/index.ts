@@ -108,6 +108,8 @@ export const CreateBusinessPersonSchema = z.discriminatedUnion("personType", [
   PersonBaseSchema.extend({
     personType: z.literal("temporary"),
     temporaryRemark: z.string().trim().min(1).max(100).optional(),
+    temporaryPhoneNumber: z.string().trim().regex(/^\+?[0-9]{6,20}$/).optional(),
+    temporaryIdentityNumber: z.string().trim().toUpperCase().regex(/^(?:[0-9]{15}|[0-9]{17}[0-9X])$/).optional(),
   }).strict(),
 ]);
 export const PersonParamsSchema = z.object({ personId: IdSchema }).strict();
@@ -126,6 +128,10 @@ export const CreateProcessSchema = z.object({
 }).strict();
 export const ReviseProcessSchema = CreateProcessSchema.omit({ processCode: true });
 export const ProcessParamsSchema = z.object({ processId: IdSchema }).strict();
+export const ReplaceProcessDefaultWorkersSchema = z.object({
+  personIds: z.array(IdSchema).max(200).refine((value) => new Set(value).size === value.length, "人员不能重复"),
+  changeReason: ReasonSchema,
+}).strict();
 
 export const CreateSupplierSchema = z.object({
   supplierCode: CatalogCodeSchema,
@@ -171,6 +177,7 @@ export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
 export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
 export type CreateProcess = z.infer<typeof CreateProcessSchema>;
 export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
+export type ReplaceProcessDefaultWorkers = z.infer<typeof ReplaceProcessDefaultWorkersSchema>;
 export type CreateSupplier = z.infer<typeof CreateSupplierSchema>;
 export type ReviseSupplier = z.infer<typeof ReviseSupplierSchema>;
 export type CreateDelegation = z.infer<typeof CreateDelegationSchema>;
@@ -182,6 +189,7 @@ export const ReworkOrderStatusSchema = z.enum([
   "pending_task_assignment",
   "in_progress",
   "pending_order_review",
+  "pending_final_quantity_ie_review",
   "pending_quantity_adjustment_ie_review",
   "pending_responsibility_determination",
   "pending_owner_signature",
@@ -476,6 +484,7 @@ export type ExtractInspectionReportImage = z.infer<typeof ExtractInspectionRepor
 export type InspectionReportImageExtraction = z.infer<typeof InspectionReportImageExtractionSchema>;
 
 export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);
+export const ProcessExecutionKindSchema = z.enum(["worker", "tail_inspection"]);
 export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("catalog"),
@@ -484,6 +493,7 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),
+    executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   }).strict(),
   z.object({
     source: z.literal("custom"),
@@ -491,6 +501,7 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),
+    executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   }).strict(),
 ]).superRefine((value, context) => {
   if (value.pricingUnit === "piece" && !Number.isInteger(value.plannedQuantity)) {
@@ -520,15 +531,7 @@ export const SaveProcessConfigurationSchema = z.object({
 export const SubmitProcessConfigurationSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   expectedConfigurationVersion: z.number().int().positive(),
-  tailInspectors: z.array(z.object({
-    userId: IdSchema,
-    boxScope: z.string().trim().min(1).max(200).optional(),
-  }).strict()).min(1).max(20),
-}).strict().superRefine((value, context) => {
-  if (new Set(value.tailInspectors.map((item) => item.userId)).size !== value.tailInspectors.length) {
-    context.addIssue({ code: "custom", path: ["tailInspectors"], message: "Tail inspectors cannot contain duplicates" });
-  }
-});
+}).strict();
 
 export const ReviewProcessConfigurationSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
@@ -548,6 +551,7 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processId: IdSchema.nullable(),
   processVersion: z.number().int().positive().nullable(),
   processName: z.string().min(1),
+  executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   // Historical configurations created before N02 pricing was mandatory may
@@ -572,6 +576,7 @@ export const ProcessConfigurationResponseSchema = z.object({
     createdAt: z.string().datetime(),
     submittedAt: z.string().datetime().nullable(),
     reviewedAt: z.string().datetime().nullable(),
+    unifiedExecutionRequired: z.boolean().optional().default(false),
     items: z.array(ProcessConfigurationItemResponseSchema),
   }).nullable(),
 });
@@ -581,6 +586,7 @@ export const ProcessConfigurationOptionsResponseSchema = z.object({
     version: z.number().int().positive(),
     processName: z.string().min(1),
     pricingUnit: ProcessPricingUnitSchema,
+    defaultWorkerPersonIds: z.array(IdSchema),
   }).strict()),
 });
 
@@ -606,7 +612,7 @@ export const TailInspectionResponseSchema = z.object({
   processes: z.array(TailInspectionItemSchema),
 }).strict();
 export const TailInspectionOptionsResponseSchema = z.object({
-  inspectors: z.array(z.object({ userId: IdSchema, displayName: z.string().min(1) }).strict()),
+  inspectors: z.array(z.object({ userId: IdSchema, personId: IdSchema.optional(), displayName: z.string().min(1) }).strict()),
 }).strict();
 export const SubmitTailInspectionReportSchema = z.object({
   returnedQuantity: z.number().int().positive(),
@@ -653,6 +659,20 @@ export const CreateWorkTaskSchema = z.object({
 });
 export const WorkTaskParamsSchema = z.object({ workTaskId: IdSchema }).strict();
 export const ReworkWorkTasksParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
+export const FrontlineTaskKindSchema = z.enum(["worker", "tail_inspection"]);
+export const FrontlineTasksQuerySchema = z.object({ kind: FrontlineTaskKindSchema }).strict();
+export const FrontlineTaskItemSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkNo: z.string().nullable(),
+  styleNo: z.string().nullable(),
+  orderNo: z.string().nullable(),
+  processNames: z.array(z.string().min(1)).min(1),
+  status: z.literal("in_progress"),
+}).strict();
+export const FrontlineTasksResponseSchema = z.object({
+  kind: FrontlineTaskKindSchema,
+  items: z.array(FrontlineTaskItemSchema),
+}).strict();
 export const ConfirmWorkAssignmentsSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
 }).strict();
@@ -663,11 +683,24 @@ export const CreateWorkReportSchema = z.object({
   remark: z.string().trim().min(1).max(500).optional(),
   resubmitsWorkReportId: IdSchema.optional(),
 }).strict();
+const WorkReportBatchItemSchema = CreateWorkReportSchema
+  .omit({ expectedOrderVersion: true })
+  .extend({ workTaskId: IdSchema })
+  .strict();
+export const CreateWorkReportsBatchSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  reports: z.array(WorkReportBatchItemSchema).min(1).max(200),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.reports.map((report) => report.workTaskId)).size !== value.reports.length) {
+    context.addIssue({ code: "custom", path: ["reports"], message: "Work tasks cannot be reported more than once per batch" });
+  }
+});
 export const WorkTaskAssignablePeopleResponseSchema = z.object({
   people: z.array(z.object({
     personId: IdSchema,
     displayName: z.string().min(1),
     personType: z.enum(["internal", "temporary"]),
+    eligibleExecutionKinds: z.array(ProcessExecutionKindSchema).min(1),
   }).strict()),
 });
 export const WorkTaskResponseSchema = z.object({
@@ -675,6 +708,7 @@ export const WorkTaskResponseSchema = z.object({
   reworkOrderId: IdSchema,
   configurationItemId: IdSchema,
   processName: z.string().min(1),
+  executionKind: ProcessExecutionKindSchema.optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   unitPrice: z.number().positive().nullable(),
@@ -696,6 +730,12 @@ export const WorkReportResponseSchema = z.object({
   groupAmount: z.number().nonnegative().nullable(),
   memberShares: z.array(z.object({ personId: IdSchema, amount: z.number().nonnegative() }).strict()),
 });
+export const WorkReportsBatchResponseSchema = z.object({
+  reworkOrderId: IdSchema,
+  reworkStatus: z.enum(["in_progress", "pending_order_review"]),
+  orderVersion: z.number().int().positive(),
+  reports: z.array(WorkReportResponseSchema).min(1).max(200),
+}).strict();
 export const ReworkWorkTasksResponseSchema = z.object({
   reworkOrderId: IdSchema,
   reworkStatus: ReworkOrderStatusSchema,
@@ -705,10 +745,15 @@ export const ReworkWorkTasksResponseSchema = z.object({
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
 export type ConfirmWorkAssignments = z.infer<typeof ConfirmWorkAssignmentsSchema>;
 export type CreateWorkReport = z.infer<typeof CreateWorkReportSchema>;
+export type CreateWorkReportsBatch = z.infer<typeof CreateWorkReportsBatchSchema>;
+export type WorkReportsBatchResponse = z.infer<typeof WorkReportsBatchResponseSchema>;
 export type WorkTaskAssignablePeopleResponse = z.infer<typeof WorkTaskAssignablePeopleResponseSchema>;
 export type WorkTaskResponse = z.infer<typeof WorkTaskResponseSchema>;
 export type WorkReportResponse = z.infer<typeof WorkReportResponseSchema>;
 export type ReworkWorkTasksResponse = z.infer<typeof ReworkWorkTasksResponseSchema>;
+export type FrontlineTaskKind = z.infer<typeof FrontlineTaskKindSchema>;
+export type FrontlineTaskItem = z.infer<typeof FrontlineTaskItemSchema>;
+export type FrontlineTasksResponse = z.infer<typeof FrontlineTasksResponseSchema>;
 
 export const WholeOrderReviewParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
 export const WholeOrderReviewQuerySchema = z.object({ configurationItemId: IdSchema.optional() }).strict();
@@ -717,6 +762,10 @@ export const RejectWorkReportSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   rejectedPersonId: IdSchema.nullable(),
   reason: ReasonSchema,
+}).strict();
+export const CorrectWorkReportQuantitySchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  effectiveQuantity: z.number().int().positive(),
 }).strict();
 export const ReviewWholeOrderSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
@@ -731,9 +780,18 @@ export const ReviewWholeOrderSchema = z.object({
     }
   })),
 }).strict().superRefine((value, context) => {
-  const keys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
-  if (new Set(keys).size !== keys.length) {
+  const coefficientKeys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
+  if (new Set(coefficientKeys).size !== coefficientKeys.length) {
     context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
+  }
+});
+export const ReviewFinalQuantitySchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
   }
 });
 export const CreateQuantityDecreaseSchema = z.object({
@@ -797,15 +855,19 @@ export const WholeOrderReviewResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   canReview: z.boolean(),
+  canIeReview: z.boolean(),
   canAdjustQuantity: z.boolean(),
   canConfirmQuantity: z.boolean(),
   canReviewQuantityIncrease: z.boolean(),
+  unifiedExecutionRequired: z.boolean().optional().default(false),
   processes: z.array(z.object({
     configurationItemId: IdSchema,
     processName: z.string().min(1),
     pricingUnit: ProcessPricingUnitSchema,
     plannedQuantity: z.number().positive(),
+    originalCompletedQuantity: z.number().nonnegative(),
     completedQuantity: z.number().nonnegative(),
+    originalTailCheckedQuantity: z.number().int().nonnegative(),
     tailCheckedQuantity: z.number().int().nonnegative(),
     countGap: z.number().int(),
     complete: z.boolean(),
@@ -816,9 +878,15 @@ export const WholeOrderReviewResponseSchema = z.object({
     workTaskId: IdSchema,
     configurationItemId: IdSchema,
     actualQuantity: z.number().positive(),
+    effectiveQuantity: z.number().int().positive(),
+    corrected: z.boolean(),
+    correctionVersion: z.number().int().positive().nullable(),
+    correctedBy: IdSchema.nullable(),
+    correctedAt: z.string().datetime().nullable(),
     completedAt: z.string().datetime(),
     submittedBy: IdSchema,
     assignmentMode: z.enum(["individual", "collective"]),
+    executionKind: ProcessExecutionKindSchema.optional().default("worker"),
     members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1) }).strict()),
     rejected: z.boolean(),
     rejectedPersonId: IdSchema.nullable(),
@@ -835,9 +903,28 @@ export const WholeOrderReviewResponseSchema = z.object({
     reason: z.string().nullable(),
   }).strict()),
   reviewId: IdSchema.nullable(),
+  finalConfirmation: z.object({
+    confirmationId: IdSchema,
+    confirmationVersion: z.number().int().positive(),
+    status: z.enum(["pending_ie_review", "approved", "rejected"]),
+    confirmedBy: IdSchema,
+    confirmedAt: z.string().datetime(),
+    reviewedBy: IdSchema.nullable(),
+    reviewedAt: z.string().datetime().nullable(),
+    reviewReason: z.string().nullable(),
+    quantities: z.array(z.object({
+      configurationItemId: IdSchema,
+      workerReportedQuantity: z.number().int().nonnegative(),
+      tailReportedQuantity: z.number().int().nonnegative(),
+      finalConfirmedQuantity: z.number().int().positive(),
+      changed: z.boolean(),
+    }).strict()),
+  }).strict().nullable(),
 });
 export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
+export type CorrectWorkReportQuantity = z.infer<typeof CorrectWorkReportQuantitySchema>;
 export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
+export type ReviewFinalQuantity = z.infer<typeof ReviewFinalQuantitySchema>;
 export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;
 export type CreateQuantityIncrease = z.infer<typeof CreateQuantityIncreaseSchema>;
 export type ConfirmQuantityIncrease = z.infer<typeof ConfirmQuantityIncreaseSchema>;
@@ -864,7 +951,7 @@ export const ResponsibilitySupplierOptionsResponseSchema = z.object({
 }).strict();
 export const ResponsibilityAllocationInputSchema = z.object({
   responsibilityType: ResponsibilityTypeSchema,
-  shareBps: z.number().int().min(0).max(10_000),
+  shareBps: z.number().int().min(1).max(10_000),
   // V2 keeps the commercial rule on the responsible party rather than on the
   // process.  The two fields stay optional at the wire level so old, immutable
   // snapshots can still be read; a V2 submission is validated by the service.
@@ -875,7 +962,7 @@ export const ResponsibilityProcessInputSchema = z.object({
   configurationItemId: IdSchema,
   multiplier: ResponsibilityMultiplierSchema,
   highMultiplierReason: ReasonSchema.optional(),
-  allocations: z.array(ResponsibilityAllocationInputSchema).length(1),
+  allocations: z.array(ResponsibilityAllocationInputSchema).min(1).max(5),
 }).strict().superRefine((value, context) => {
   if (responsibilityMultiplierScaled(value.multiplier) !== 1_000n) {
     context.addIssue({ code: "custom", path: ["multiplier"], message: "The retired responsibility coefficient must remain 1" });
@@ -883,16 +970,25 @@ export const ResponsibilityProcessInputSchema = z.object({
   if (value.highMultiplierReason !== undefined) {
     context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: "The retired responsibility coefficient reason is not accepted" });
   }
-  const allocation = value.allocations[0]!;
-  if (allocation.shareBps !== 10_000) context.addIssue({ code: "custom", path: ["allocations", 0, "shareBps"], message: "The selected responsible party must bear 100%" });
-  const multiplier = responsibilityMultiplierScaled(allocation.multiplier ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"));
-  if (allocation.responsibilityType === "own_factory") {
-    if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", 0, "multiplier"], message: "Own-factory responsibility multiplier must be 1" });
-    if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", 0, "supplierId"], message: "Own-factory responsibility cannot carry a supplier" });
-  } else {
-    if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", 0, "multiplier"], message: "External deduction multiplier cannot be lower than 1.2" });
-    if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", 0, "supplierId"], message: "External responsibility requires the actual supplier" });
+  const totalShareBps = value.allocations.reduce((sum, allocation) => sum + allocation.shareBps, 0);
+  if (totalShareBps !== 10_000) {
+    context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility shares must total 100%" });
   }
+  const seenTypes = new Set<string>();
+  value.allocations.forEach((allocation, index) => {
+    if (seenTypes.has(allocation.responsibilityType)) {
+      context.addIssue({ code: "custom", path: ["allocations", index, "responsibilityType"], message: "A responsibility type can only be selected once per process" });
+    }
+    seenTypes.add(allocation.responsibilityType);
+    const multiplier = responsibilityMultiplierScaled(allocation.multiplier ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"));
+    if (allocation.responsibilityType === "own_factory") {
+      if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: "Own-factory responsibility multiplier must be 1" });
+      if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: "Own-factory responsibility cannot carry a supplier" });
+    } else {
+      if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: "External deduction multiplier cannot be lower than 1.2" });
+      if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: "External responsibility requires the actual supplier" });
+    }
+  });
 });
 export const CreateResponsibilityDraftSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
@@ -907,6 +1003,7 @@ export const TakeoverResponsibilitySchema = z.object({ expectedOrderVersion: z.n
 export const ConfirmHighMultiplierSchema = z.object({ expectedOrderVersion: z.number().int().positive(), expectedCurrentDeterminationVersion: z.number().int().positive(), reason: ReasonSchema }).strict();
 export const ResponsibilityDeterminationResponseSchema = z.object({
   reworkOrderId: IdSchema, reworkStatus: ReworkOrderStatusSchema, orderVersion: z.number().int().positive(),
+  processingFactory: ReworkProcessingFactorySchema.nullable().optional(),
   handlerUserId: IdSchema.nullable(), canDetermine: z.boolean(), canTakeover: z.boolean(), canConfirmHighMultiplier: z.boolean(),
   canOwnerSign: z.boolean().default(false),
   ownerSignature: z.object({
@@ -1076,6 +1173,7 @@ export const ExternalResponsibilityCaseStatusSchema = z.enum([
   "pending_business_signoff",
   "pending_payables_confirmation",
   "deduction_follow_up",
+  "pending_special_approval",
   "returned",
   "pending_responsibility_revision",
   "closed",
@@ -1145,6 +1243,9 @@ export const CloseExternalDeductionCaseSchema = z.object({
   if (value.result === "full" && (value.reason !== undefined || value.evidenceAttachmentIds.length !== 0 || value.remainingDifferenceDisposition !== undefined)) context.addIssue({ code: "custom", message: "A full deduction cannot provide failure evidence or a remaining-difference disposition" });
   if (value.result !== "full" && (value.reason === undefined || value.evidenceAttachmentIds.length === 0 || value.remainingDifferenceDisposition === undefined)) context.addIssue({ code: "custom", message: "Partial and failed deductions require a reason, ready evidence, and a remaining-difference disposition" });
 });
+export const RequestExternalDeductionSpecialApprovalSchema = z.object({ expectedCaseVersion: z.number().int().positive(), reason: ReasonSchema, attachmentIds: AttachmentIdsSchema }).strict();
+export const ApproveExternalDeductionSpecialApprovalSchema = z.object({ expectedCaseVersion: z.number().int().positive(), expectedRequestVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(2000).optional() }).strict();
+export const ReturnExternalDeductionSpecialApprovalSchema = z.object({ expectedCaseVersion: z.number().int().positive(), expectedRequestVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(2000) }).strict();
 export const CreateExternalResponsibilityRevisionSchema = z.object({
   expectedCaseVersion: z.number().int().positive(),
   requestedChange: z.record(z.string(), z.unknown()).refine((value) => Object.keys(value).length > 0, "requestedChange is required"),
@@ -1198,11 +1299,14 @@ const ExternalCaseResponseSchema = z.object({
   canFollowUp: z.boolean(),
   canRecordDeduction: z.boolean(),
   canClose: z.boolean(),
+  canRequestSpecialApproval: z.boolean(),
+  canDecideSpecialApproval: z.boolean(),
   canRequestRevision: z.boolean(),
   items: z.array(ExternalItemResponseSchema),
   deductions: z.array(ExternalDeductionEntryResponseSchema),
   followUps: z.array(z.object({ followUpId: IdSchema, content: z.string(), supplierFeedback: z.string().nullable(), nextFollowUpAt: z.string().datetime().nullable(), attachmentIds: z.array(IdSchema), createdBy: IdSchema, createdAt: z.string().datetime() }).strict()),
   closure: z.object({ result: z.enum(["full", "partial", "not_deducted"]), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), reason: z.string().nullable(), evidenceAttachmentIds: z.array(IdSchema), remainingDifferenceDisposition: z.string().nullable(), closedBy: IdSchema, closedAt: z.string().datetime() }).strict().nullable(),
+  specialApproval: z.object({ requestId: IdSchema, requestVersion: z.number().int().positive(), reason: z.string(), attachmentIds: z.array(IdSchema), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), requestedBy: IdSchema, requestedAt: z.string().datetime(), decision: z.object({ decision: z.enum(["approved", "returned"]), reason: z.string().nullable(), decidedBy: IdSchema, decidedAt: z.string().datetime() }).strict().nullable() }).strict().nullable(),
   canApproveRevision: z.boolean(),
   revisionRequests: z.array(z.object({ revisionRequestId: IdSchema, revisionVersion: z.number().int().positive(), status: z.enum(["pending", "approved", "rejected"]), reason: z.string(), requestedChange: z.record(z.string(), z.unknown()), requestedBy: IdSchema, decidedBy: IdSchema.nullable(), decisionReason: z.string().nullable(), createdAt: z.string().datetime(), decidedAt: z.string().datetime().nullable() }).strict()),
 }).strict();
@@ -1231,6 +1335,9 @@ export type PayablesReturnExternalResponsibilityCase = z.infer<typeof PayablesRe
 export type CreateExternalDeductionFollowUp = z.infer<typeof CreateExternalDeductionFollowUpSchema>;
 export type CreateExternalDeductionEntry = z.infer<typeof CreateExternalDeductionEntrySchema>;
 export type CloseExternalDeductionCase = z.infer<typeof CloseExternalDeductionCaseSchema>;
+export type RequestExternalDeductionSpecialApproval = z.infer<typeof RequestExternalDeductionSpecialApprovalSchema>;
+export type ApproveExternalDeductionSpecialApproval = z.infer<typeof ApproveExternalDeductionSpecialApprovalSchema>;
+export type ReturnExternalDeductionSpecialApproval = z.infer<typeof ReturnExternalDeductionSpecialApprovalSchema>;
 export type CreateExternalResponsibilityRevision = z.infer<typeof CreateExternalResponsibilityRevisionSchema>;
 export type DecideExternalResponsibilityRevision = z.infer<typeof DecideExternalResponsibilityRevisionSchema>;
 export type ExternalResponsibilityCaseResponse = z.infer<typeof ExternalResponsibilityCaseResponseSchema>;

@@ -86,8 +86,8 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
     const complete = await createOrder(2, [2]);
     const before = await review.get(tailAudit(), complete.reworkOrderId);
     expect(before.processes).toEqual([expect.objectContaining({ complete: true, completedQuantity: 2, plannedQuantity: 2 })]);
-    const first = review.approve(tailAudit(), complete.reworkOrderId, { expectedOrderVersion: before.orderVersion, temporaryCoefficients: [] }, randomUUID());
-    const second = review.approve(tailAudit(), complete.reworkOrderId, { expectedOrderVersion: before.orderVersion, temporaryCoefficients: [] }, randomUUID());
+    const first = review.approve(tailAudit(), complete.reworkOrderId, { expectedOrderVersion: before.orderVersion, finalQuantities: before.processes.map((process) => ({ configurationItemId: process.configurationItemId, finalConfirmedQuantity: process.completedQuantity })), temporaryCoefficients: [] }, randomUUID());
+    const second = review.approve(tailAudit(), complete.reworkOrderId, { expectedOrderVersion: before.orderVersion, finalQuantities: before.processes.map((process) => ({ configurationItemId: process.configurationItemId, finalConfirmedQuantity: process.completedQuantity })), temporaryCoefficients: [] }, randomUUID());
     const outcomes = await Promise.allSettled([first, second]);
     expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
     expect((await database.query("SELECT count(*)::int count FROM rework_order_reviews WHERE rework_order_id=$1", [complete.reworkOrderId])).rows[0]).toEqual({ count: 1 });
@@ -95,7 +95,7 @@ runWithPostgres("whole-order review PostgreSQL contracts", () => {
 
     const incomplete = await createOrder(5, [3]);
     const incompleteView = await review.get(tailAudit(), incomplete.reworkOrderId);
-    await expect(review.approve(tailAudit(), incomplete.reworkOrderId, { expectedOrderVersion: incompleteView.orderVersion, temporaryCoefficients: [] }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
+    await expect(review.approve(tailAudit(), incomplete.reworkOrderId, { expectedOrderVersion: incompleteView.orderVersion, finalQuantities: incompleteView.processes.map((process) => ({ configurationItemId: process.configurationItemId, finalConfirmedQuantity: process.completedQuantity })), temporaryCoefficients: [] }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
   });
 
   it("rejects only the selected report, invalidates completion, and keeps the historical version when resubmitted", async () => {

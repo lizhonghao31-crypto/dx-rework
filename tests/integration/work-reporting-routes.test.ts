@@ -19,6 +19,7 @@ const config = loadConfig({
 const apps: FastifyInstance[] = [];
 const orderId = "00000000-0000-4000-8000-000000000010";
 const taskId = "00000000-0000-4000-8000-000000000011";
+const migratedTailPersonId = "850e82b5-fc66-94fd-203f-a708fe72a9d0";
 
 afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 
@@ -28,7 +29,7 @@ const create = (
 ) => {
   const service = {
     list: vi.fn(async () => ({ reworkOrderId: orderId, reworkStatus: "in_progress", orderVersion: 2, tasks: [] })),
-    listAssignablePeople: vi.fn(async () => [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" as const }]),
+    listAssignablePeople: vi.fn(async () => [{ personId: migratedTailPersonId, displayName: "尾查人员", personType: "internal" as const, eligibleExecutionKinds: ["tail_inspection"] as const }]),
     createTask: vi.fn(),
     submitReport: vi.fn(async (_actor, submittedTaskId) => ({
       value: {
@@ -39,7 +40,30 @@ const create = (
         completedAt: "2026-08-02T12:00:00.000Z",
         status: "submitted" as const,
         groupAmount: null,
-        memberShares: [{ personId: "00000000-0000-4000-8000-000000000013", amount: 1 }],
+        memberShares: [{ personId: migratedTailPersonId, amount: 1 }],
+      },
+      reused: false,
+    })),
+    submitReportsBatch: vi.fn(async (_actor, submittedOrderId, input) => ({
+      value: {
+        reworkOrderId: submittedOrderId,
+        reworkStatus: "pending_order_review" as const,
+        orderVersion: input.expectedOrderVersion + 1,
+        reports: input.reports.map((report, index) => ({
+          workReportId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          workTaskId: report.workTaskId,
+          reworkOrderId: submittedOrderId,
+          actualQuantity: report.actualQuantity,
+          completedAt: "2026-08-02T12:00:00.000Z",
+          status: "submitted" as const,
+          groupAmount: 0,
+          memberShares: [{
+            personId: index === 23 || index === 37
+              ? migratedTailPersonId
+              : "00000000-0000-4000-8000-000000000013",
+            amount: 0,
+          }],
+        })),
       },
       reused: false,
     })),
@@ -61,12 +85,12 @@ const create = (
 };
 
 describe("work reporting routes", () => {
-  it("exposes only server-filtered assignees to a supervisor", async () => {
+  it("returns a migration-0079 tail inspector instead of failing the whole personnel response", async () => {
     const { app, service } = create(["tail_supervisor"], ["work:assign"]);
     const response = await app.inject({ method: "GET", url: "/work-task-options", headers: { cookie: "dx_rework_session=trusted" } });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ people: [{ personId: "00000000-0000-4000-8000-000000000013", displayName: "可上数工人", personType: "internal" }] });
+    expect(response.json()).toEqual({ people: [{ personId: migratedTailPersonId, displayName: "尾查人员", personType: "internal", eligibleExecutionKinds: ["tail_inspection"] }] });
     expect(service.listAssignablePeople).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "work:assign" }));
   });
 
@@ -93,6 +117,45 @@ describe("work reporting routes", () => {
       expect.objectContaining({ actualQuantity: 1 }),
       "proxy-report-1",
     );
+  });
+
+  it("submits a 50-item proxy-report payload through one atomic batch service call", async () => {
+    const { app, service } = create(
+      ["tail_supervisor", "worker"],
+      ["work:assign", "work:report", "work:report_for_worker"],
+    );
+    const reports = Array.from({ length: 50 }, (_, index) => ({
+      workTaskId: `00000000-0000-4000-8000-${String(index + 20).padStart(12, "0")}`,
+      actualQuantity: 5_000 + index,
+    }));
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-reports/batch`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "proxy-report-batch-50" },
+      payload: { expectedOrderVersion: 2, reports },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      reworkOrderId: orderId,
+      reworkStatus: "pending_order_review",
+      orderVersion: 3,
+    });
+    expect(response.json().reports).toHaveLength(50);
+    expect(response.json().reports[23].memberShares[0].personId).toBe(migratedTailPersonId);
+    expect(response.json().reports[37].memberShares[0].personId).toBe(migratedTailPersonId);
+    expect(service.submitReportsBatch).toHaveBeenCalledTimes(1);
+    expect(service.submitReportsBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["tail_supervisor", "worker"],
+        authorizationCapability: "work:report",
+        authorizationCapabilities: ["work:assign", "work:report", "work:report_for_worker"],
+      }),
+      orderId,
+      { expectedOrderVersion: 2, reports },
+      "proxy-report-batch-50",
+    );
+    expect(service.submitReport).not.toHaveBeenCalled();
   });
 
   it("rejects work-report quantities beyond one decimal place", async () => {

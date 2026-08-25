@@ -47,15 +47,17 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("formatBusinessTime(approval.decision.decidedAt)");
   });
 
-  it("lets N08 users select exactly one party and set the external deduction multiplier", async () => {
+  it("lets N09 users add multiple parties, split percentages and set external deduction facts", async () => {
     const source = await read("apps/web/src/responsibility-determination-panel.tsx");
-    expect(source).toContain("主责任方");
+    expect(source).toContain("+ 添加责任方");
+    expect(source).toContain("removeAllocation");
     expect(source).toContain("parsePercentToBps(allocation.sharePercent)");
     expect(source).toContain("shareBps: Number(allocation.shareBps)");
-    expect(source).toContain("外部扣款倍率（最低 1.2）");
+    expect(source).toContain("扣款倍率（最低 1.2）");
     expect(source).toContain("责任供应商");
-    expect(source).not.toContain('label="承担比例（%）"');
+    expect(source).toContain('label="承担比例（%）"');
     expect(source).not.toContain('label="承担比例（bps）"');
+    expect(source).not.toContain("主责任方");
     expect(source).not.toContain("返工单：{response?.reworkOrderId");
   });
 
@@ -83,12 +85,13 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("deductedOn[");
   });
 
-  it("lets one rework reference multiple order numbers without changing the one-style boundary", async () => {
-    const source = await read("apps/web/src/rework-form.tsx");
-    expect(source).toContain("一张返工单一个款号");
-    expect(source).toContain('label="订单号（可填多个，知道时填写）"');
-    expect(source).toContain('maxLength={100}');
-    expect(source).toContain('placeholder="多个订单号用逗号分隔，例如：PO001，PO002"');
+  it("keeps one style per rework while leaving order numbers to the upstream order domain", async () => {
+    const source = await read("apps/web/src/rework-v2-form.tsx");
+    expect(source).toContain("款号 <b>*</b>");
+    expect(source).toContain("styleNo: form.styleNo.trim() || null");
+    expect(source).not.toContain("订单号（可填多个，知道时填写）");
+    expect(source).not.toContain("多个订单号用逗号分隔");
+    expect(source).not.toContain("orderNo:");
   });
 
   it("keeps worker completion to one final-count action and closes reporting after everyone completes", async () => {
@@ -96,10 +99,10 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("我已完工&上数");
     expect(source).toContain("请输入您的实际完工件数");
     expect(source).toContain("返回返工");
-    expect(source).toContain("临时工代上数");
+    expect(source).toContain("临时工完工上数");
     expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
-    expect(source).toContain("已流转至 N07 · 尾部主管整单确认");
-    expect(source).toContain("canReviewOrder(me.user)");
+    expect(source).toContain("已流转至 N05 · 尾部最终数量确认");
+    expect(source).toContain("canReviewOrder(session.user)");
     expect(source).not.toContain("登记本次完成数量");
     expect(source).not.toContain('label="实际完成时间"');
     expect(source).not.toContain('data?.reworkOrderId ?? reworkOrderId ?? "返工任务"');
@@ -107,13 +110,14 @@ describe("business-facing workflow UI", () => {
     expect(source).not.toContain("result.groupAmount.toFixed(8)");
   });
 
-  it("keeps N04, N05 and N06 on isolated pages with server-backed state boundaries", async () => {
-    const [detail, reporting, reportingService, reviewService, processConfiguration] = await Promise.all([
+  it("keeps execution workspaces on isolated pages with server-backed state boundaries", async () => {
+    const [detail, reporting, reportingService, reviewService, processConfiguration, mergedProcess] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/work-reporting-form.tsx"),
       read("apps/api/src/rework/work-reporting-service.ts"),
       read("apps/api/src/rework/whole-order-review-service.ts"),
       read("apps/web/src/process-configuration-form.tsx"),
+      read("apps/web/src/process-worker-assignment-form.tsx"),
     ]);
 
     expect(detail).toContain("taskMode={selected.key}");
@@ -121,14 +125,15 @@ describe("business-facing workflow UI", () => {
     expect(detail).toContain('url.searchParams.set("node", nextNode)');
     expect(detail).toMatch(/<ProcessConfigurationForm[\s\S]*?reworkOrderId=\{detail\.reworkOrderId\}[\s\S]*?onOrderChanged=\{syncAfterNodeAction\}[\s\S]*?\/>/);
     expect(processConfiguration).toContain("onOrderChanged?: () => Promise<void> | void;");
-    expect(processConfiguration.match(/await onOrderChanged\?\.\(\);/g)).toHaveLength(2);
+    expect(processConfiguration).toContain("ProcessWorkerAssignmentForm");
+    expect((mergedProcess.match(/await onOrderChanged\?\.\(\);/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(reporting).toContain('effectiveTaskMode === "task_assignment"');
     expect(reporting).toContain('effectiveTaskMode === "work_reporting"');
     expect(reporting).toContain('effectiveTaskMode === "whole_order_review"');
     expect(reporting).not.toContain("N04–N06");
     expect(reporting).not.toContain("当前处理说明");
     expect(reporting).not.toContain("全部完成剩余");
-    expect(processConfiguration).not.toContain("当前处理说明");
+    expect(mergedProcess).not.toContain("当前处理说明");
     expect(reportingService).toContain('order.status !== "in_progress"');
     expect(reportingService).toContain('order.status !== "pending_task_assignment"');
     expect(reportingService).toContain("rework.work_task.assignment_confirm");
@@ -147,10 +152,10 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/whole-order-review-panel.tsx"),
       read("apps/web/src/work-reporting-form.css"),
     ]);
-    expect(source).toContain("工人上数与尾查汇总对照");
-    expect(source).toContain("确认整单并进入责任判定");
-    expect(source).toContain("工人有效上数不得超过尾查件数");
-    expect(source).toContain("countGap");
+    expect(source).toContain("工人合计");
+    expect(source).toContain("确认一致并提交 IE");
+    expect(source).toContain("主管可修正个人有效数量；原始上数始终保留");
+    expect(source).not.toContain("finalQuantities");
     expect(source).not.toContain("quantity-adjustments");
     expect(source).not.toContain("oneDecimalQuantity");
     expect(source).toContain('className="mobile-actions whole-order-actions"');
@@ -164,7 +169,7 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/components.tsx"),
     ]);
-    for (const entry of ["我的待办", "发起返工", "全部订单", "系统管理", "财务报表"]) {
+    for (const entry of ["我的待办", "订单看板", "发起返工", "返工单看板", "系统管理", "财务报表"]) {
       expect(navigation).toContain(`name: "${entry}"`);
     }
     expect(navigation).not.toContain('name: "返工执行"');

@@ -46,6 +46,11 @@ runWithPostgres("role permissions and versioned master data", () => {
     ...adminActor,
     authorizationCapability: "master_data:manage",
   };
+  const ownerPrivateProfileActor: TrustedActorContext = {
+    ...ownerActor,
+    authorizationCapability: "people:read",
+    authorizationCapabilities: ["people:read", "temporary_worker_private:read"],
+  };
   const delegationActor: TrustedActorContext = {
     ...ownerActor,
     authorizationCapability: "delegation:manage",
@@ -72,12 +77,27 @@ runWithPostgres("role permissions and versioned master data", () => {
       "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
+      "0083_rework_v2_temporary_worker_private_profile.sql",
+      "0084_rework_v2_process_default_worker_roster.sql",
     ]) {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url), "utf8");
       await database.query(sql);
     }
+    await database.query(
+      `CREATE TABLE owner_bootstrap_consumptions (
+         singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton=true),
+         user_id uuid NOT NULL REFERENCES app_users(id)
+       )`,
+    );
+    await database.query(await readFile(
+      new URL("../../apps/api/migrations/0089_employee_access_role_lifecycle.sql", import.meta.url),
+      "utf8",
+    ));
     for (const [index, userId] of userIds.entries()) {
-      await database.query("INSERT INTO app_users(id,display_name) VALUES($1,$2)", [userId, displayNames[index]]);
+      await database.query(
+        "INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",
+        [userId, displayNames[index]],
+      );
     }
     await database.query(
       `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
@@ -251,6 +271,8 @@ runWithPostgres("role permissions and versioned master data", () => {
       personType: "temporary",
       displayName: "临时工甲",
       aliases: ["临工甲"],
+      temporaryPhoneNumber: "13800138000",
+      temporaryIdentityNumber: "44010619900101123X",
       reason: "临时人员建档",
     });
     const canonicalAuditPerson = await service.createPerson(masterDataActor, {
@@ -358,6 +380,28 @@ runWithPostgres("role permissions and versioned master data", () => {
       [temporary.personId],
     );
     expect(temp.rows[0]).toEqual({ app_user_id: null, person_type: "temporary" });
+    expect(await service.listPeople()).toContainEqual(expect.objectContaining({
+      personId: temporary.personId,
+      temporaryPhoneNumber: "138****8000",
+      temporaryIdentityNumber: "440***********123X",
+      privateProfileMasked: true,
+    }));
+    expect(await service.listPeople({}, ownerPrivateProfileActor)).toContainEqual(expect.objectContaining({
+      personId: temporary.personId,
+      temporaryPhoneNumber: "13800138000",
+      temporaryIdentityNumber: "44010619900101123X",
+      privateProfileMasked: false,
+    }));
+    const temporaryAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      "SELECT after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.person.create'",
+      [temporary.personId],
+    );
+    expect(temporaryAudit.rows[0]?.after_state).toEqual(expect.objectContaining({
+      hasTemporaryPhoneNumber: true,
+      hasTemporaryIdentityNumber: true,
+    }));
+    expect(JSON.stringify(temporaryAudit.rows[0]?.after_state)).not.toContain("13800138000");
+    expect(JSON.stringify(temporaryAudit.rows[0]?.after_state)).not.toContain("44010619900101123X");
     const correctedTemporary = await service.createPerson(masterDataActor, {
       personType: "temporary",
       displayName: "临时工乙",
@@ -564,6 +608,33 @@ runWithPostgres("role permissions and versioned master data", () => {
       before_state: expect.objectContaining({ version: 1, processName: "返查", pricingUnit: "piece", active: true }),
       after_state: expect.objectContaining({ version: 2, processName: "成品返查", pricingUnit: "piece", active: true }),
     });
+    const defaultWorker = await service.createPerson(masterDataActor, {
+      personType: "temporary",
+      displayName: "返查默认临时工",
+      aliases: [],
+      reason: "验证工序默认名单",
+    });
+    expect(await service.listProcessDefaultWorkerCandidates()).toContainEqual(expect.objectContaining({
+      personId: defaultWorker.personId,
+      personType: "temporary",
+      displayName: "返查默认临时工",
+    }));
+    await service.replaceProcessDefaultWorkers(masterDataActor, process.processId, {
+      personIds: [defaultWorker.personId],
+      changeReason: "设定返查默认人员",
+    });
+    await service.replaceProcessDefaultWorkers(masterDataActor, process.processId, {
+      personIds: [],
+      changeReason: "清空返查默认人员",
+    });
+    expect(await database.query(
+      "SELECT 1 FROM process_default_worker_roster_versions WHERE process_id=$1",
+      [process.processId],
+    )).toHaveProperty("rowCount", 2);
+    await expect(database.query(
+      "DELETE FROM process_default_worker_roster_versions WHERE process_id=$1",
+      [process.processId],
+    )).rejects.toMatchObject({ code: "55000" });
 
     const supplier = await service.createSupplier(masterDataActor, {
       supplierCode: "FACTORY_01",
@@ -597,7 +668,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       after_state: expect.objectContaining({ version: 2, supplierName: "加工厂一号", active: true }),
     });
     expect(await service.listProcesses()).toEqual([
-      expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2 }),
+      expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2, defaultWorkerPersonIds: [] }),
     ]);
     expect(await service.listSuppliers()).toEqual([
       expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 2 }),

@@ -11,13 +11,21 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("N07–N11 responsibility settlement contract", () => {
-  it("allows the main-order N07 → N08 → N10 path and rejects a skipped owner signature", () => {
+  it("keeps owner confirmation for own-factory responsibility and permits the external-only settlement path", () => {
     expect(transitionReworkOrder(
       "pending_responsibility_determination",
       "pending_owner_signature",
     )).toBe("pending_owner_signature");
     expect(transitionReworkOrder(
       "pending_owner_signature",
+      "completed",
+    )).toBe("completed");
+    expect(transitionReworkOrder(
+      "pending_responsibility_determination",
+      "pending_responsibility_action",
+    )).toBe("pending_responsibility_action");
+    expect(transitionReworkOrder(
+      "pending_responsibility_action",
       "completed",
     )).toBe("completed");
 
@@ -98,7 +106,7 @@ describe("N07–N11 responsibility settlement contract", () => {
     expect(migration).toContain("SELECT access_is_root_actor(candidate)");
     expect(migration).toContain("Root is a globally authorized actor");
     expect(externalPanel).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
-    expect(externalPanel).toContain("const canAttachEvidence = canRecordDeduction || canRequestRevision || canLegacySubmit");
+    expect(externalPanel).toContain("const canAttachEvidence = canRecordDeduction || canRequestSpecialApproval || canRequestRevision || canLegacySubmit");
     expect(finalExternal).toContain("settlement_schema_version");
     expect(finalExternal).toContain("supplier_code_snapshot,supplier_name_snapshot,supplier_type_snapshot");
     expect(finalExternal).toContain("`external-deduction:${supersededCase.case_id}:`");

@@ -3,7 +3,7 @@ import type { InspectionReportDraft } from "@dx-rework/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import type { AuthorizedUser } from "./auth.js";
+import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
@@ -12,7 +12,6 @@ import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
 import { ResponsibilityDeterminationPanel } from "./responsibility-determination-panel.js";
 import { promptInApp } from "./system-dialog.js";
-import { TailInspectionPanel } from "./tail-inspection-panel.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./rework-detail.css";
 import "./rework-detail-compact.css";
@@ -26,6 +25,7 @@ type ReworkStatus =
   | "pending_task_assignment"
   | "in_progress"
   | "pending_order_review"
+  | "pending_final_quantity_ie_review"
   | "pending_quantity_adjustment_ie_review"
   | "pending_responsibility_determination"
   | "pending_owner_signature"
@@ -39,8 +39,8 @@ export type WorkflowNodeKey =
   | "ie_review"
   | "task_assignment"
   | "work_reporting"
-  | "tail_inspection"
   | "whole_order_review"
+  | "final_quantity_ie_review"
   | "quantity_adjustment"
   | "responsibility"
   | "owner_signature"
@@ -48,7 +48,7 @@ export type WorkflowNodeKey =
   | "archive"
   | "settlement_followup";
 
-type ReworkBusinessDetail = Readonly<{
+export type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkStatus;
@@ -58,6 +58,13 @@ type ReworkBusinessDetail = Readonly<{
   factoryStyleNo: string | null;
   orderNo: string | null;
   orderQuantity: number | null;
+  sourceReceivingActualQuantity: number | null;
+  supplyContext: Readonly<{
+    washingSupplierName: string | null;
+    embroiderySupplierName: string | null;
+    fabricSupplierName: string | null;
+    embroideryMerchandiserName: string | null;
+  }>;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
@@ -88,7 +95,7 @@ type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
-    entityType: "rework_order" | "external_responsibility_case";
+    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -100,7 +107,6 @@ type ReworkBusinessDetail = Readonly<{
 
 type ReworkAttachment = ReworkBusinessDetail["attachments"][number];
 type LoadState = { kind: "loading" } | { kind: "ready"; value: ReworkBusinessDetail } | { kind: "error"; message: string };
-type AuthMe = Readonly<{ status: "authorized" | "no_role"; user: AuthorizedUser }>;
 type WorkflowNodeState = "completed" | "current" | "future" | "followup";
 type WorkflowNode = Readonly<{
   key: WorkflowNodeKey;
@@ -115,11 +121,12 @@ type WorkflowStage = Readonly<{ key: string; title: string; nodes: readonly Work
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
-  pending_process_configuration: { label: "待工序与候选单价", next: "下一步由尾部主管配置工序、候选单价并分配尾查" },
-  pending_ie_review: { label: "待 IE 核价", next: "尾查已可并行清点；IE 通过工序与单价后，进入人员分配" },
-  pending_task_assignment: { label: "待分配人员", next: "工序与单价已核准，下一步由尾部主管分配返工人员" },
-  in_progress: { label: "返工执行中", next: "工人登记个人完成数量，全部完成后由尾部主管核量" },
-  pending_order_review: { label: "待尾部主管整单确认", next: "核对工人上数不超过尾查汇总，并确认临时工实发系数" },
+  pending_process_configuration: { label: "待分配工序 &工人", next: "下一步由尾部主管一次完成工序、候选单价、返工人员与尾查分配" },
+  pending_ie_review: { label: "待 IE 核价", next: "IE 通过后返工人员与尾查任务统一生效并进入执行" },
+  pending_task_assignment: { label: "待启动执行任务", next: "IE 已通过；预分配执行任务等待自动启动，可在节点02重试启动" },
+  in_progress: { label: "返工执行中", next: "返工人员与尾查统一登记实际完成数量，全部完成后由尾部主管核量" },
+  pending_order_review: { label: "待尾部确认最终数量", next: "核对工人上数与尾查数量，提交每道工序最终确认数量" },
+  pending_final_quantity_ie_review: { label: "最终数量待 IE 复核", next: "IE 核对数量与质量事实；通过后生成正式工资并进入责任判定" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
   pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
@@ -135,10 +142,11 @@ const statusRank: Record<Exclude<ReworkStatus, "cancelled">, number> = {
   pending_task_assignment: 3,
   in_progress: 4,
   pending_order_review: 5,
+  pending_final_quantity_ie_review: 6,
   pending_quantity_adjustment_ie_review: 5,
-  pending_responsibility_determination: 6,
-  pending_owner_signature: 7,
-  pending_responsibility_action: 8,
+  pending_responsibility_determination: 7,
+  pending_owner_signature: 8,
+  pending_responsibility_action: 9,
   completed: 10,
 };
 
@@ -146,9 +154,10 @@ const currentNodeByStatus: Partial<Record<ReworkStatus, WorkflowNodeKey>> = {
   draft: "initiation",
   pending_process_configuration: "process_configuration",
   pending_ie_review: "ie_review",
-  pending_task_assignment: "task_assignment",
+  pending_task_assignment: "process_configuration",
   in_progress: "work_reporting",
   pending_order_review: "whole_order_review",
+  pending_final_quantity_ie_review: "final_quantity_ie_review",
   pending_quantity_adjustment_ie_review: "whole_order_review",
   pending_responsibility_determination: "responsibility",
   pending_owner_signature: "owner_signature",
@@ -162,19 +171,19 @@ const nodeRank: Record<WorkflowNodeKey, number> = {
   ie_review: 2,
   task_assignment: 3,
   work_reporting: 4,
-  tail_inspection: 4,
   whole_order_review: 5,
+  final_quantity_ie_review: 6,
   quantity_adjustment: 5,
-  responsibility: 6,
-  owner_signature: 7,
+  responsibility: 7,
+  owner_signature: 8,
   settlement_ledger: 8,
   archive: 9,
-  settlement_followup: 10,
+  settlement_followup: 9,
 };
 
 const nodeKeys = new Set<WorkflowNodeKey>([
-  "initiation", "process_configuration", "ie_review", "task_assignment", "work_reporting", "tail_inspection",
-  "whole_order_review", "quantity_adjustment", "responsibility", "owner_signature", "settlement_ledger", "archive", "settlement_followup",
+  "initiation", "process_configuration", "ie_review", "task_assignment", "work_reporting",
+  "whole_order_review", "final_quantity_ie_review", "quantity_adjustment", "responsibility", "owner_signature", "settlement_ledger", "archive", "settlement_followup",
 ]);
 
 const orderIdFromLocation = (): string | null => {
@@ -189,6 +198,7 @@ const orderIdFromLocation = (): string | null => {
 const workflowNodeFromSearch = (): WorkflowNodeKey | null => {
   const value = new URLSearchParams(window.location.search).get("node");
   if (value === "archive") return "settlement_followup";
+  if (value === "task_assignment") return "process_configuration";
   return value && nodeKeys.has(value as WorkflowNodeKey) ? value as WorkflowNodeKey : null;
 };
 
@@ -215,21 +225,12 @@ const canUseWorkWorkspace = (user: AuthorizedUser | null): boolean => elevated(u
     hasCapability(user, "work:assign") || hasCapability(user, "submission:audit") || hasCapability(user, "quantity:adjust")
   ))
   || (hasRole(user, "worker") && hasCapability(user, "work:report"))
+  || (hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report"))
   || hasCapability(user, "work:report_for_worker")
   || (hasRole(user, "order_merchandiser") && hasCapability(user, "quantity:confirm"))
   || (hasRole(user, "ie_reviewer") && hasCapability(user, "process:review"));
-const canUseTailInspection = (user: AuthorizedUser | null): boolean => elevated(user)
-  || (hasRole(user, "tail_supervisor") && (
-    hasCapability(user, "process:configure") || hasCapability(user, "submission:audit")
-  ))
-  || (hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report"));
-
 const workflowState = (detail: ReworkBusinessDetail, key: WorkflowNodeKey): WorkflowNodeState => {
   if (detail.status === "cancelled") return "future";
-  if (key === "tail_inspection") {
-    if (["pending_ie_review", "pending_task_assignment", "in_progress"].includes(detail.status)) return "current";
-    return statusRank[detail.status] > nodeRank[key] ? "completed" : "future";
-  }
   if (key === "settlement_ledger" && detail.status === "pending_responsibility_action") return "completed";
   if (detail.status === "completed") {
     if (key !== "settlement_followup") return "completed";
@@ -279,27 +280,26 @@ const buildWorkflow = (
       title: "发起、配置与核价",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "工序与候选单价", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "配置返工工序、候选单价并分配尾查；不再预估返工数量。"),
-        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后才能分配返工人员。"),
+        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "一次完成返工工序、候选单价、返工人员与尾查分配；不再设置独立人员分配节点。"),
+        node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后预分配工人自动生效并进入返工执行。"),
       ],
     },
     {
       key: "execution",
-      title: "分工与返工执行",
+      title: "返工执行",
       nodes: [
-        node("task_assignment", "04", "分配返工人员", "尾部主管", "待 IE 核价通过", "按 IE 核准的工序为正式工或临时工分配任务。"),
-        node("work_reporting", "05", "工人完工上数", "返工人员", "待人员分配", "工人一次提交本人最终完工件数；临时工由尾部主管代录。"),
-        node("tail_inspection", "06", "尾查报数", "尾查", "待尾部主管分配", "N02 分配后即可开始；多人清点结果按工序汇总。"),
+        node("work_reporting", "04", "返工执行报数", "返工人员 / 尾查", "待 IE 核价通过并自动激活任务", "返工人员与尾查都在同一执行节点提交本人实际件数；临时工由尾部主管代录。"),
       ],
     },
     {
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("whole_order_review", "07", "尾部主管整单确认", "尾部主管", "待工人上数与尾查报数完成", "逐工序核对工人上数不得超过尾查汇总；临时工实发系数在此确认。"),
-        node("responsibility", "08", "责任判定", "生产管理", "待 N07 提交", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
-        node("owner_signature", "09", "老板确认签字", "老板", "待 N08 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
-        node("settlement_followup", "10", "返工业务完成", "系统", "N09 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
+        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", "逐工序对照工人原报数与尾查数，提交最终确认数量并保留每版审计。"),
+        node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
+        node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
+        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
       ],
     },
   ];
@@ -330,15 +330,16 @@ const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): stri
     ? `${detail.status === "completed" ? "订单已完成 · " : ""}${followUpStatusLabel(detail)}`
     : node.state === "completed" ? "已完成" : node.state === "current" ? "处理中" : "未开始";
 
-const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}`;
+const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}#node-workspace`;
 
 const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action === "rework.attachments.supplement") return "initiation";
   if (action.startsWith("rework.draft") || action === "rework.submit" || action === "rework.withdraw" || action === "rework.cancel") return "initiation";
+  if (action.startsWith("rework.final_quantity.")) return "final_quantity_ie_review";
+  if (action === "rework.tail_completion.confirm") return "whole_order_review";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "ie_review";
-  if (action.includes("process_configuration")) return "process_configuration";
-  if (action.includes("tail_inspection")) return "tail_inspection";
-  if (action.includes("work_task")) return "task_assignment";
+  if (action.includes("process_configuration") || action.includes("process_worker_plan") || action.includes("work_task")) return "process_configuration";
+  if (action.includes("tail_inspection")) return "work_reporting";
   if (action.includes("work_report")) return "work_reporting";
   if (action.includes("whole_order")) return "whole_order_review";
   if (action.includes("quantity.")) return "quantity_adjustment";
@@ -352,11 +353,14 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
 const historyActionLabel = (action: string): string => {
   if (action === "rework.attachments.supplement") return "补充订单图片";
   if (action === "rework.submit") return "提交返工单";
+  if (action === "rework.tail_completion.confirm") return "尾部确认最终数量";
+  if (action.startsWith("rework.final_quantity.")) return "IE 复核最终数量";
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
+  if (action.includes("process_worker_plan")) return "返工人员预分配";
   if (action.includes("process_configuration")) return "工序配置处理";
-  if (action.includes("tail_inspection")) return "尾查报数";
+  if (action.includes("tail_inspection")) return "返工执行报数";
   if (action.includes("work_task")) return "返工人员分配";
-  if (action.includes("work_report")) return "完成数量登记";
+  if (action.includes("work_report")) return "执行报数";
   if (action.includes("whole_order")) return "整单审核";
   if (action.includes("quantity.")) return "数量调整";
   if (action.includes("owner_approve")) return "老板确认同意";
@@ -383,6 +387,8 @@ export function ReworkDetailPage({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
+  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false);
+  const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
     window.matchMedia("(max-width: 640px)").matches ? new Set(["planning", "execution", "responsibility"]) : new Set(),
   );
@@ -419,13 +425,11 @@ export function ReworkDetailPage({
   }, [load]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch(apiUrl("auth/me"), {
-      credentials: "include", signal: controller.signal, headers: { accept: "application/json" },
-    }).then(async (response) => response.ok ? await response.json() as AuthMe : null)
-      .then((body) => { if (body?.status === "authorized") setCurrentUser(body.user); })
-      .catch(() => undefined);
-    return () => controller.abort();
+    let mounted = true;
+    void verifySession().then((session) => {
+      if (mounted && session !== "denied" && session.status === "authorized") setCurrentUser(session.user);
+    });
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -458,17 +462,42 @@ export function ReworkDetailPage({
   }
 
   const detail = state.value;
-  const orderAttachments = detail.attachments.filter((attachment) => attachment.entityType === "rework_order");
+  const orderAttachments = detail.attachments.filter((attachment) =>
+    attachment.entityType === "rework_order" || attachment.entityType === "receiving_batch");
   const imageAttachments = orderAttachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
+  const dynamicFacts = [
+    { label: "客供款号", value: detail.customerSupplyCode },
+    { label: "工厂款号", value: detail.factoryStyleNo },
+    { label: "订单号", value: detail.orderNo },
+    { label: "订单数量", value: detail.orderQuantity === null ? null : `${detail.orderQuantity} 件` },
+    { label: "返工原因", value: detail.reworkReason },
+    { label: "问题部位", value: detail.problemPart },
+    { label: "问题描述", value: detail.problemDescription },
+    { label: "返工数量", value: detail.reworkQuantity === null ? null : `${detail.reworkQuantity} 件` },
+    { label: "洗水厂", value: detail.supplyContext.washingSupplierName },
+    { label: "印绣花厂", value: detail.supplyContext.embroiderySupplierName },
+    { label: "面辅料供应商", value: detail.supplyContext.fabricSupplierName },
+    { label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName },
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
+  const visibleImageAttachments = imageAttachments.slice(0, 6);
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
   const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key;
+  const activeWorkflowNode = workflowNodes.find((node) => node.key === activeNode);
   const selectedFromUrl = workflowNodeFromSearch();
   const defaultSelectedNode = activeNode ?? "settlement_followup";
   const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
   const selected = workflowNodes.find((node) => node.key === selectedNode);
   const activeStepIndex = Math.max(1, workflowNodes.findIndex((node) => node.key === activeNode) + 1);
+  const selectedImageIndex = selectedImage
+    ? imageAttachments.findIndex((attachment) => attachment.attachmentId === selectedImage.attachmentId)
+    : -1;
+  const showRelativeImage = (offset: number): void => {
+    if (selectedImageIndex < 0 || imageAttachments.length === 0) return;
+    const nextIndex = (selectedImageIndex + offset + imageAttachments.length) % imageAttachments.length;
+    setSelectedImage(imageAttachments[nextIndex] ?? null);
+  };
 
   const canSeeResponsibility = elevated(currentUser)
     || hasCapability(currentUser, "responsibility:determine")
@@ -497,8 +526,8 @@ export function ReworkDetailPage({
       <p>{selected.preview}</p>
       <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
       {selected.state === "completed" && (
-        <div className="rework-detail-node-history">
-          <h3>处理历史</h3>
+        <details className="rework-detail-node-history">
+          <summary>处理历史{nodeHistory.length ? ` · ${nodeHistory.length} 条` : ""}</summary>
           {nodeHistory.length ? nodeHistory.map((event, index) => (
             <div key={`${event.action}-${event.handledAt}-${index}`}>
               <b>{historyActionLabel(event.action)}</b>
@@ -507,11 +536,13 @@ export function ReworkDetailPage({
             </div>
           )) : <p>该节点的早期历史记录未完整入库；可在系统管理的审计日志中查询原始记录。</p>}
           {detail.attachments.length > 0 && <p>关联附件：{detail.attachments.map((attachment) => <span key={attachment.attachmentId}>
-            {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}{attachment.filename}{" "}
+            {attachment.entityType === "external_responsibility_case" ? "外部责任 · " : ""}
+            {attachment.entityType === "receiving_batch" ? "收货凭证 · " : ""}
+            {attachment.filename}{" "}
             <a href={attachmentUrl(attachment.attachmentId, "preview")} rel="noreferrer" target="_blank">预览</a>{" · "}
             <a href={attachmentUrl(attachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载</a>{"；"}
           </span>)}</p>}
-        </div>
+        </details>
       )}
     </Surface>;
   };
@@ -527,27 +558,23 @@ export function ReworkDetailPage({
       return <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
-      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} onOrderChanged={syncAfterNodeAction} />;
+      if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} initialDetail={detail} embedded workspaceNode={selected.key} onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
-      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} onOrderChanged={syncAfterNodeAction} />;
+      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
-    if (selected.state !== "future" && selected.key === "tail_inspection") {
-      if (canUseTailInspection(currentUser)) return <TailInspectionPanel reworkOrderId={detail.reworkOrderId} isRoot={currentUser?.isRoot === true} onOrderChanged={syncAfterNodeAction} />;
-      if (selected.state === "current") return <NodePermissionNotice node={selected} />;
-    }
-    if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "quantity_adjustment")) {
-      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" onOrderChanged={syncAfterNodeAction} />;
+    if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review" || selected.key === "quantity_adjustment")) {
+      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "responsibility" || selected.key === "owner_signature")) {
-      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} onOrderChanged={syncAfterNodeAction} />;
+      if (canSeeResponsibility) return <ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={syncAfterNodeAction} />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && selected.key === "settlement_ledger") {
-      if (canSeeExternal || elevated(currentUser)) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly />;
+      if (canSeeExternal || elevated(currentUser)) return <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly embedded />;
       return <SettlementLedgerNotice detail={detail} />;
     }
     if (selected.state !== "future" && selected.key === "settlement_followup") {
@@ -555,7 +582,7 @@ export function ReworkDetailPage({
       return <>
         <OrderCompletionAndSettlementSummary detail={detail} />
         {canSeeExternal || hasWageFollowUp ? <>
-          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
+          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
           {hasWageFollowUp ? <WageSettlementFollowUp periods={detail.unsettledWagePeriods} /> : null}
         </> : null}
       </>;
@@ -573,36 +600,58 @@ export function ReworkDetailPage({
 
   return (
     <Shell active="全部订单">
-      <Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} {...backAction} />
+      <div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
-          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd>{detail.reworkProcess ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact rework-detail-core-fact--attachments"><dt>附件</dt><dd>{orderAttachments.length} 份</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${detail.sourceReceivingActualQuantity} 件`}</dd></div>
         </dl>
+
+        {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
+          <div className="section-title rework-detail-panel-title">
+            <div><h2>订单补充信息</h2><p>仅展示本单已填写的业务字段。</p></div>
+            <StatusBadge tone="info">{dynamicFacts.length} 项</StatusBadge>
+          </div>
+          <dl className="rework-detail-dynamic-facts">
+            {dynamicFacts.map((fact) => <div key={fact.label}>
+              <dt>{fact.label}</dt><dd>{fact.value}</dd>
+            </div>)}
+          </dl>
+        </Surface> : null}
 
         {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
 
         <div className="rework-detail-overview-grid">
           <section className="rework-detail-images" aria-label="订单图片">
-            <div className="section-title rework-detail-panel-title">
+            <div className="section-title rework-detail-panel-title rework-detail-desktop-panel-heading">
               <div><h2>订单图片</h2></div>
-              <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge>
+              {imageAttachments.length > 0 ? <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge> : null}
             </div>
-            {canSupplementOrderImages && (
-              <OrderImageSupplementUploader
-                reworkOrderId={detail.reworkOrderId}
-                expectedVersion={detail.version}
-                currentAttachmentCount={orderAttachments.length}
-                onUploaded={async () => { await load(); }}
-              />
-            )}
-            {imageAttachments.length > 0 ? (
-              <div className="rework-detail-image-grid">
-                {imageAttachments.map((attachment) => (
+            <button
+              className="rework-detail-mobile-panel-toggle"
+              type="button"
+              aria-controls="order-images-content"
+              aria-expanded={mobileImagesExpanded}
+              onClick={() => setMobileImagesExpanded((value) => !value)}
+            >
+              <span><strong>订单图片</strong>{imageAttachments.length > 0 ? <small>{imageAttachments.length} 张</small> : null}</span>
+              <b aria-hidden="true">{mobileImagesExpanded ? "−" : "+"}</b>
+            </button>
+            <div id="order-images-content" className={`rework-detail-mobile-collapsible${mobileImagesExpanded ? " is-expanded" : ""}`}>
+              {canSupplementOrderImages && (
+                <OrderImageSupplementUploader
+                  reworkOrderId={detail.reworkOrderId}
+                  expectedVersion={detail.version}
+                  currentAttachmentCount={detail.attachments.filter((attachment) => attachment.entityType === "rework_order").length}
+                  onUploaded={async () => { await load(); }}
+                />
+              )}
+              {visibleImageAttachments.length > 0 ? <div className="rework-detail-image-grid">
+                {visibleImageAttachments.map((attachment, index) => (
                   <button
                     className="rework-detail-image-card"
                     type="button"
@@ -611,59 +660,72 @@ export function ReworkDetailPage({
                     aria-label={`放大查看 ${attachment.filename}`}
                   >
                     <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
-                    <span>{attachment.filename}</span>
+                    <span className="rework-detail-image-card__filename">{attachment.filename}</span>
+                    {index === 5 && imageAttachments.length > 6 ? <strong className="rework-detail-image-card__overflow">+{imageAttachments.length - 5}</strong> : null}
                   </button>
                 ))}
-              </div>
-            ) : <p className="rework-detail-empty">暂无订单图片</p>}
+              </div> : null}
+            </div>
           </section>
 
           <section className="rework-workflow" key={detail.status} aria-label="订单流程">
-            <div className="rework-workflow__heading rework-detail-panel-title">
+            <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
               <div><h2>订单流程</h2></div>
               <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
             </div>
-            <div className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
-              {workflowNodes.map(renderWorkflowNode)}
+            <button
+              className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle"
+              type="button"
+              aria-controls="order-workflow-content"
+              aria-expanded={mobileWorkflowExpanded}
+              onClick={() => setMobileWorkflowExpanded((value) => !value)}
+            >
+              <span>
+                <strong>订单流程</strong>
+                {activeWorkflowNode ? <small>{activeWorkflowNode.number} · {activeWorkflowNode.label} · {nodeStatusLabel(activeWorkflowNode, detail)}</small> : null}
+              </span>
+              <span><small>{activeStepIndex}/{workflowNodes.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
+            </button>
+            <div id="order-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
+              <div className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
+                {workflowNodes.map(renderWorkflowNode)}
+              </div>
+              <div className="rework-workflow__stages rework-workflow__desktop-stages">
+                {stages.map((stage) => {
+                  const state = stageState(stage);
+                  const isOpen = !collapsedStages.has(stage.key);
+                  return <details
+                    className={`rework-workflow__stage is-${state}`}
+                    key={stage.key}
+                    open={isOpen}
+                    onToggle={(event) => {
+                      const nextOpen = event.currentTarget.open;
+                      setCollapsedStages((current) => {
+                        const next = new Set(current);
+                        if (nextOpen) next.delete(stage.key);
+                        else next.add(stage.key);
+                        return next;
+                      });
+                    }}
+                  >
+                    <summary>
+                      <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
+                      <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
+                    </summary>
+                    <div className="rework-workflow__nodes">{stage.nodes.map(renderWorkflowNode)}</div>
+                  </details>;
+                })}
+              </div>
+              <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
+                {workflowNodes.map(renderWorkflowNode)}
+              </div>
+              {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
             </div>
-            <div className="rework-workflow__stages rework-workflow__desktop-stages">
-              {stages.map((stage) => {
-                const state = stageState(stage);
-                const isOpen = !collapsedStages.has(stage.key);
-                return <details
-                  className={`rework-workflow__stage is-${state}`}
-                  key={stage.key}
-                  open={isOpen}
-                  onToggle={(event) => {
-                    const nextOpen = event.currentTarget.open;
-                    setCollapsedStages((current) => {
-                      const next = new Set(current);
-                      if (nextOpen) next.delete(stage.key);
-                      else next.add(stage.key);
-                      return next;
-                    });
-                  }}
-                >
-                  <summary>
-                    <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
-                    <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
-                  </summary>
-                  <div className="rework-workflow__nodes">{stage.nodes.map(renderWorkflowNode)}</div>
-                </details>;
-              })}
-            </div>
-            <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
-              {workflowNodes.map(renderWorkflowNode)}
-            </div>
-            {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N08 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
           </section>
         </div>
 
-        <section className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-          <div className="rework-detail-task__heading">
-            <div><h2>当前工作区</h2><p>{selected?.number} · {selected?.label}</p></div>
-            <StatusBadge tone={selected?.state === "completed" ? "success" : "info"}>{selected ? nodeStatusLabel(selected, detail) : "预览"}</StatusBadge>
-          </div>
+        <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
+          <div className="rework-detail-task__heading"><h2>办理区</h2></div>
           {renderSelectedTask()}
         </section>
       </div>
@@ -682,7 +744,10 @@ export function ReworkDetailPage({
               <button type="button" onClick={() => setSelectedImage(null)}>关闭</button>
             </div>
             <img src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
-            <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
+            <div className="rework-image-modal__actions">
+              {imageAttachments.length > 1 ? <><button type="button" onClick={() => showRelativeImage(-1)}>上一张</button><span>{selectedImageIndex + 1} / {imageAttachments.length}</span><button type="button" onClick={() => showRelativeImage(1)}>下一张</button></> : null}
+              <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
+            </div>
           </section>
         </div>
       )}
@@ -760,7 +825,7 @@ function SettlementLedgerNotice({ detail }: { detail: ReworkBusinessDetail }) {
       ? "所有供应商扣款台账已终结。"
       : detail.settlementStatus === "revision_in_progress"
         ? "存在责任调整，待重新确认后自动生成新的责任结算台账。"
-        : "责任结算台账已自动生成；供应商实际扣款在 N10 的后续结算区跟进，不阻塞订单完成。";
+        : "责任结算台账已自动生成；供应商实际扣款在 N08 的后续结算区跟进，不阻塞订单完成。";
   return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">系统自动生成 · 只读</StatusBadge><h2>09 · 责任结算台账</h2><p>{text}</p></Surface>;
 }
 
@@ -768,7 +833,7 @@ function OrderCompletionAndSettlementSummary({ detail }: { detail: ReworkBusines
   const orderCompleted = detail.status === "completed";
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone={orderCompleted ? "success" : "info"}>{orderCompleted ? "订单已完成" : "责任结算中"}</StatusBadge>
-    <h2>10 · 订单完成与后续结算</h2>
+    <h2>09 · 订单完成与后续结算</h2>
     <p>{orderCompleted
       ? "返工生产和责任判定已经结束；工资月结与供应商实际扣款继续独立跟进，不会重新打开订单。"
       : "责任结算台账已生成，正在完成后续责任结算。"}</p>
@@ -780,7 +845,7 @@ function WageSettlementFollowUp({ periods }: { periods: ReworkBusinessDetail["un
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone="info">已计入工资批次</StatusBadge>
     <h2>工资结算进度</h2>
-    <p>订单已经完成；工资在 N10 内按月份独立核对，不会重新打开订单主流程。</p>
+    <p>订单已经完成；工资在 N08 完成后的独立周期按月份核对，不会重新打开订单主流程。</p>
     <div className="rework-detail-wage-links">
       {periods.map((period) => <a key={period.periodId} href={pageUrl(`ui/wages/${period.periodId}`)}>
         {period.periodMonth.slice(0, 7)} · {wageStatusLabel(period.status)} · 进入处理

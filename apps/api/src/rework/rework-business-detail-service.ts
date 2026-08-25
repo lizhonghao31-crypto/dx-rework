@@ -14,6 +14,13 @@ export type ReworkBusinessDetail = Readonly<{
   factoryStyleNo: string | null;
   orderNo: string | null;
   orderQuantity: number | null;
+  sourceReceivingActualQuantity: number | null;
+  supplyContext: Readonly<{
+    washingSupplierName: string | null;
+    embroiderySupplierName: string | null;
+    fabricSupplierName: string | null;
+    embroideryMerchandiserName: string | null;
+  }>;
   merchandiser: Readonly<{ userId: string; displayName: string }> | null;
   processingFactory: Readonly<{
     type: "own_factory" | "supplier";
@@ -47,7 +54,7 @@ export type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
-    entityType: "rework_order" | "external_responsibility_case";
+    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -61,7 +68,7 @@ type AttachmentRow = Readonly<{
   attachment_id: string;
   original_filename: string;
   mime_type: string;
-  entity_type: "rework_order" | "external_responsibility_case";
+  entity_type: "rework_order" | "external_responsibility_case" | "receiving_batch";
 }>;
 
 type WorkflowHistoryRow = Readonly<{
@@ -82,6 +89,11 @@ type DetailRow = Readonly<{
   factory_style_no: string | null;
   order_no: string | null;
   order_quantity: string | null;
+  source_receiving_actual_quantity: string | null;
+  washing_supplier_name: string | null;
+  embroidery_supplier_name: string | null;
+  fabric_supplier_name: string | null;
+  embroidery_merchandiser_name: string | null;
   merchandiser_user_id: string | null;
   merchandiser_name: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
@@ -130,6 +142,13 @@ export class ReworkBusinessDetailService {
          to_jsonb(orders)->>'factory_style_no' factory_style_no,
          orders.order_no,
          to_jsonb(orders)->>'order_quantity' order_quantity,
+         CASE WHEN orders.source_receiving_batch_id IS NULL THEN NULL
+           ELSE COALESCE(receiving.actual_quantity,0)::text
+         END source_receiving_actual_quantity,
+         washing_supplier.supplier_name washing_supplier_name,
+         embroidery_supplier.supplier_name embroidery_supplier_name,
+         fabric_supplier.supplier_name fabric_supplier_name,
+         embroidery_merchandiser.display_name embroidery_merchandiser_name,
          orders.merchandiser_user_id,merchandiser.display_name merchandiser_name,
          orders.processing_factory_type,orders.processing_factory_supplier_id,
          supplier.supplier_name,
@@ -144,6 +163,19 @@ export class ReworkBusinessDetailService {
        FROM rework_orders orders
        JOIN app_users creator ON creator.id=orders.created_by
        LEFT JOIN app_users merchandiser ON merchandiser.id=orders.merchandiser_user_id
+       LEFT JOIN rework_order_supply_context supply_context
+         ON supply_context.rework_order_id=orders.rework_order_id
+       LEFT JOIN supplier_catalog_versions washing_supplier
+         ON washing_supplier.supplier_id=supply_context.washing_supplier_id
+        AND washing_supplier.version=supply_context.washing_supplier_version
+       LEFT JOIN supplier_catalog_versions embroidery_supplier
+         ON embroidery_supplier.supplier_id=supply_context.embroidery_supplier_id
+        AND embroidery_supplier.version=supply_context.embroidery_supplier_version
+       LEFT JOIN supplier_catalog_versions fabric_supplier
+         ON fabric_supplier.supplier_id=supply_context.fabric_supplier_id
+        AND fabric_supplier.version=supply_context.fabric_supplier_version
+       LEFT JOIN app_users embroidery_merchandiser
+         ON embroidery_merchandiser.id=supply_context.embroidery_merchandiser_user_id
        LEFT JOIN supplier_catalog_versions supplier
          ON supplier.supplier_id=orders.processing_factory_supplier_id
         AND supplier.version=orders.processing_factory_supplier_version
@@ -161,6 +193,14 @@ export class ReworkBusinessDetailService {
        ) latest_configuration ON true
        LEFT JOIN app_users configuration_creator
          ON configuration_creator.id=latest_configuration.created_by
+       LEFT JOIN LATERAL (
+         SELECT (sum(receipt.actual_quantity)+batch.actual_quantity_adjustment)::bigint actual_quantity
+         FROM receiving_batches batch
+         JOIN receiving_receipts receipt
+           ON receipt.receiving_batch_id=batch.receiving_batch_id
+         WHERE batch.receiving_batch_id=orders.source_receiving_batch_id
+         GROUP BY batch.receiving_batch_id
+       ) receiving ON true
        WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
@@ -176,6 +216,15 @@ export class ReworkBusinessDetailService {
        WHERE attachment.status='ready'
          AND (
            (attachment.entity_type='rework_order' AND attachment.entity_id=$1::text)
+           OR (
+             attachment.entity_type='receiving_batch'
+             AND EXISTS (
+               SELECT 1
+               FROM rework_orders source_order
+               WHERE source_order.rework_order_id=$1::uuid
+                 AND source_order.source_receiving_batch_id::text=attachment.entity_id
+             )
+           )
            OR (
              attachment.entity_type='external_responsibility_case'
              AND EXISTS (
@@ -205,6 +254,11 @@ export class ReworkBusinessDetailService {
     const settlement = await this.database.query<{
       external_status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
       wage_status: "not_required" | "in_progress" | "closed";
+      unsettled_wage_periods: Array<{
+        periodId: string;
+        periodMonth: string;
+        status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
+      }>;
     }>(
       `WITH v2_cases AS (
          SELECT target_case.status
@@ -216,7 +270,7 @@ export class ReworkBusinessDetailService {
            AND determination.settlement_schema_version=2
            AND target_case.status<>'superseded'
        ), wage_periods AS (
-         SELECT DISTINCT period.status
+         SELECT DISTINCT period.period_id,period.period_month,period.status
          FROM rework_wage_items wage
          JOIN rework_wage_periods period ON period.period_id=wage.period_id
          WHERE wage.rework_order_id=$1
@@ -231,30 +285,20 @@ export class ReworkBusinessDetailService {
          WHEN EXISTS(SELECT 1 FROM wage_periods WHERE status<>'locked') THEN 'in_progress'
          WHEN NOT EXISTS(SELECT 1 FROM wage_periods) THEN 'not_required'
          ELSE 'closed'
-       END wage_status`,
-      [reworkOrderId],
+       END wage_status,
+       CASE WHEN $2::boolean THEN COALESCE((
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'periodId',period_id,
+             'periodMonth',period_month::text,
+             'status',status
+           ) ORDER BY period_month,period_id
+         )
+         FROM wage_periods
+         WHERE status<>'locked'
+       ),'[]'::jsonb) ELSE '[]'::jsonb END unsettled_wage_periods`,
+      [reworkOrderId, canViewWagePeriods(actor)],
     );
-    const unsettledWagePeriods = canViewWagePeriods(actor)
-      ? await this.database.query<{
-          period_id: string;
-          period_month: string;
-          status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
-        }>(
-        `SELECT unsettled.period_id,unsettled.period_month::text period_month,unsettled.status
-         FROM (
-           SELECT DISTINCT period.period_id,period.period_month,period.status
-           FROM rework_wage_items wage
-           JOIN rework_wage_periods period ON period.period_id=wage.period_id
-           WHERE wage.rework_order_id=$1 AND period.status<>'locked'
-         ) unsettled
-         ORDER BY unsettled.period_month,unsettled.period_id`,
-        [reworkOrderId],
-      )
-      : { rows: [] as {
-          period_id: string;
-          period_month: string;
-          status: "pending_tail_review" | "pending_admin_review" | "ready_to_lock";
-        }[] };
 
     return {
       reworkOrderId: row.rework_order_id,
@@ -266,6 +310,15 @@ export class ReworkBusinessDetailService {
       factoryStyleNo: row.factory_style_no,
       orderNo: row.order_no,
       orderQuantity: row.order_quantity === null ? null : Number(row.order_quantity),
+      sourceReceivingActualQuantity: row.source_receiving_actual_quantity == null
+        ? null
+        : Number(row.source_receiving_actual_quantity),
+      supplyContext: {
+        washingSupplierName: row.washing_supplier_name ?? null,
+        embroiderySupplierName: row.embroidery_supplier_name ?? null,
+        fabricSupplierName: row.fabric_supplier_name ?? null,
+        embroideryMerchandiserName: row.embroidery_merchandiser_name ?? null,
+      },
       merchandiser: row.merchandiser_user_id && row.merchandiser_name
         ? { userId: row.merchandiser_user_id, displayName: row.merchandiser_name }
         : null,
@@ -298,11 +351,7 @@ export class ReworkBusinessDetailService {
       cancelReason: row.cancel_reason,
       settlementStatus: settlement.rows[0]?.external_status ?? "not_required",
       wageSettlementStatus: settlement.rows[0]?.wage_status ?? "not_required",
-      unsettledWagePeriods: unsettledWagePeriods.rows.map((period) => ({
-        periodId: period.period_id,
-        periodMonth: period.period_month,
-        status: period.status,
-      })),
+      unsettledWagePeriods: settlement.rows[0]?.unsettled_wage_periods ?? [],
       attachments: attachments.rows.map((attachment) => ({
         attachmentId: attachment.attachment_id,
         filename: attachment.original_filename,
@@ -322,25 +371,33 @@ export class ReworkBusinessDetailService {
     actor: TrustedActorContext,
     binding: Readonly<{ entityType: string; entityId: string }>,
   ): Promise<boolean> {
-    let reworkOrderId: string | null = null;
+    let reworkOrderIds: readonly string[] = [];
     if (binding.entityType === "rework_order") {
-      reworkOrderId = binding.entityId;
+      reworkOrderIds = [binding.entityId];
+    } else if (binding.entityType === "receiving_batch") {
+      const receiving = await this.database.query<{ rework_order_id: string }>(
+        `SELECT rework_order_id
+         FROM rework_orders
+         WHERE source_receiving_batch_id::text=$1 AND status<>'deleted'`,
+        [binding.entityId],
+      );
+      reworkOrderIds = receiving.rows.map((row) => row.rework_order_id);
     } else if (binding.entityType === "external_responsibility_case") {
       const externalCase = await this.database.query<{ rework_order_id: string }>(
         "SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
         [binding.entityId],
       );
-      reworkOrderId = externalCase.rows[0]?.rework_order_id ?? null;
+      reworkOrderIds = externalCase.rows[0] ? [externalCase.rows[0].rework_order_id] : [];
     }
-    if (!reworkOrderId) return false;
-
-    try {
-      await this.get(actor, reworkOrderId);
-      return true;
-    } catch (error) {
-      if (error instanceof ApplicationError && [403, 404].includes(error.statusCode)) return false;
-      throw error;
+    for (const reworkOrderId of reworkOrderIds) {
+      try {
+        await this.get(actor, reworkOrderId);
+        return true;
+      } catch (error) {
+        if (!(error instanceof ApplicationError) || ![403, 404].includes(error.statusCode)) throw error;
+      }
     }
+    return false;
   }
 
   private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
@@ -382,6 +439,15 @@ export class ReworkBusinessDetailService {
     ) {
       const assignment = await this.database.query(
         `SELECT 1
+         FROM rework_work_tasks task
+         JOIN rework_process_configuration_items item
+           ON item.configuration_item_id=task.configuration_item_id
+          AND item.execution_kind='tail_inspection'
+         JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
+         JOIN business_people person ON person.person_id=member.person_id
+         WHERE task.rework_order_id=$2 AND task.status='active' AND person.app_user_id=$1
+         UNION ALL
+         SELECT 1
          FROM rework_tail_inspection_assignments assignment
          WHERE assignment.rework_order_id=$2
            AND assignment.tail_inspector_user_id=$1

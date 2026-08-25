@@ -75,6 +75,20 @@
     { "version": "0073_wage_direct_month_close_guard", "checksum": "c6e4ebc9c7eb4ee15b0da9b02a186a42a5e29e3d53528cd50df5815081819189" },
     { "version": "0074_wage_review_adjustment_retirement", "checksum": "37c93954349fad851bfe2b813c2113271b5e8c355d4abc7223488d990167bbfc" },
     { "version": "0075_root_delete_wage_cleanup", "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018" },
-    { "version": "0076_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" }
+    { "version": "0076_receiving_fact_layer", "checksum": "cc01d08c793638f6290df825f126e554ffd1c485fa79739f9920a251b4142f79" },
+    { "version": "0077_rework_v2_n01_supply_context", "checksum": "bda0d654533c6c6020a1d725206a13116f44f817636842dc60117ea82ede621d" },
+    { "version": "0078_rework_v2_process_worker_preassignment", "checksum": "2927c98cb9e28f76d3a3e4e9cab6293c7876a7ea77daf45f22b94d65727c7ec3" },
+    { "version": "0079_rework_v2_unified_execution", "checksum": "59385d69f030de279de4b8006f08b40e5da7cdb81fd2008be7012d1ace387a57" },
+    { "version": "0080_rework_v2_final_quantity_ie_review", "checksum": "2240e68a516d1483863e3ba40eba2ed70ea6e03670ccb88a70858e50cd97fd53" },
+    { "version": "0081_rework_v2_responsibility_2", "checksum": "ffcde287569ff070663e7e450d75b9bfdfdeb4cbeec21b658652b2efef297a08" },
+    { "version": "0082_rework_v2_finance_closure", "checksum": "2984978017ded345f72bb8f9e3264040c86b203e6f52603069454abad8db03f0" },
+    { "version": "0083_rework_v2_temporary_worker_private_profile", "checksum": "e43b9e06605ab8e97f6354c1cef6dcf85b6c1b0e1ea288af7d1e934dc5c6cf43" },
+    { "version": "0084_rework_v2_process_default_worker_roster", "checksum": "c9ac3d43bfb76ce0f6d1d9aefb34228b496726b0953a32763a87865869b2fbac" },
+    { "version": "0085_n04_tail_work_report_audit_guard", "checksum": "64b00da8cc95d70efa161ed93980d92032e12c075f974f1c93894d140eab07c7" },
+    { "version": "0086_receiving_rework_evidence_link", "checksum": "f6013e54007f441f2c42c6fdd4ec1f0cdbd9db7236b42b7bdb67106677252649" },
+    { "version": "0087_effective_work_report_quantity", "checksum": "3044161405547f7fcf4bc212a2407a96015025cc51fd37072ff212c33c0da4ba" },
+    { "version": "0088_root_receiving_correction", "checksum": "76faf84dadb0d04723f1af8cd0db52992d9b4143171fec27b5d662f134dd28c4" },
+    { "version": "0089_employee_access_role_lifecycle", "checksum": "dfcbdccb2104e3e151d42da939d76c3e4f4f2d459daad2b93514a0c5508e3281" },
+    { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" }
   ]
 }

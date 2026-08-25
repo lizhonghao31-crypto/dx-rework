@@ -23,6 +23,7 @@ describe("single-user UAT worker grant and review visibility", () => {
 
     expect(panel).toContain('["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)');
     expect(panel).toContain("return null;");
-    expect(panel).toContain('data.canReview && data.reworkStatus === "pending_order_review"');
+    expect(panel).toContain('tailStage && data.canReview');
   });
 });
+

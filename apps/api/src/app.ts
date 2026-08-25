@@ -21,6 +21,7 @@ import {
   registerEmployeeAccessRoutes,
   type EmployeeAccessHttpDependencies,
 } from "./access/employee-access-routes.js";
+import { registerReceivingRoutes, type ReceivingHttpDependencies } from "./receiving/receiving-routes.js";
 import { registerReworkRoutes, type ReworkHttpDependencies } from "./rework/routes.js";
 import {
   registerProcessConfigurationRoutes,
@@ -46,6 +47,7 @@ export type AppDependencies = Readonly<{
   tools?: ToolsHttpDependencies;
   access?: AccessHttpDependencies;
   employeeAccess?: EmployeeAccessHttpDependencies;
+  receiving?: ReceivingHttpDependencies;
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
   workReporting?: WorkReportingHttpDependencies;
@@ -127,6 +129,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
   if (dependencies.access) registerAccessRoutes(app, dependencies.access);
   if (dependencies.employeeAccess) registerEmployeeAccessRoutes(app, dependencies.employeeAccess);
+  if (dependencies.receiving) registerReceivingRoutes(app, dependencies.receiving);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);
   if (dependencies.processConfiguration) {
     registerProcessConfigurationRoutes(app, dependencies.processConfiguration);
@@ -199,14 +202,23 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   app.setErrorHandler(async (error, request, reply) => {
     const known = error instanceof ApplicationError;
     const denied = error instanceof AuthDeniedError;
-    const statusCode = known ? error.statusCode : denied ? 401 : 500;
+    const frameworkStatusCode = typeof error === "object"
+      && error !== null
+      && "statusCode" in error
+      && typeof error.statusCode === "number"
+      && error.statusCode >= 400
+      && error.statusCode < 500
+      ? error.statusCode
+      : null;
+    const frameworkClientError = !known && !denied && frameworkStatusCode !== null;
+    const statusCode = known ? error.statusCode : denied ? 401 : frameworkStatusCode ?? 500;
     if (statusCode >= 500) {
       request.log.error({ err: error }, "request failed");
     }
     const response: ErrorResponse = {
       error: {
-        code: known || denied ? error.code : "INTERNAL_ERROR",
-        message: known || denied ? error.message : "Internal server error",
+        code: known || denied ? error.code : frameworkClientError ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
+        message: known || denied ? error.message : frameworkClientError ? "Request validation failed" : "Internal server error",
         requestId: request.id,
       },
     };

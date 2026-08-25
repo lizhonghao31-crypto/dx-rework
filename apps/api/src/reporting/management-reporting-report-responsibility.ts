@@ -11,10 +11,12 @@ export async function responsibilityReport(source: Queryable, query: ReportQuery
        WHERE determination.stage='finalized' AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations successor WHERE successor.replaces_determination_id=determination.determination_id)
      )
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,leaf.determination_version,
-       process.process_name_snapshot,process.multiplier::text,allocation.responsibility_type,allocation.share_bps,
+       process.process_name_snapshot,COALESCE(responsibility_allocation.multiplier,process.multiplier)::text multiplier,allocation.responsibility_type,allocation.share_bps,
        allocation.effective_rounded_amount::text rounded_amount
      FROM leaf JOIN rework_orders order_record USING(rework_order_id)
      JOIN rework_effective_responsibility_allocations allocation USING(determination_id)
+     JOIN rework_responsibility_allocations responsibility_allocation
+       USING(determination_id,configuration_item_id,responsibility_type)
      JOIN rework_responsibility_processes process USING(determination_id,configuration_item_id)
      WHERE order_record.status<>'deleted'
        AND (leaf.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date

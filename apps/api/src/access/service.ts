@@ -7,6 +7,7 @@ import type {
   CreatePersonAlias,
   CreateProcess,
   CreateSupplier,
+  ReplaceProcessDefaultWorkers,
   ReviseProcess,
   ReviseSupplier,
 } from "@dx-rework/contracts";
@@ -44,6 +45,23 @@ const ensureProtectedRoleAuthority = (actor: TrustedActorContext, roleCode: stri
   if (roleCode === "owner_group" && !actor.actorRoles.includes("owner_group")) {
     throw new ApplicationError("FORBIDDEN", "老板权限组只能由现有老板权限组成员维护", 403);
   }
+};
+
+const canReadTemporaryWorkerPrivateProfile = (actor?: TrustedActorContext): boolean =>
+  actor !== undefined && (
+    isRootActor(actor)
+    || actor.authorizationCapabilities?.includes("temporary_worker_private:read") === true
+  );
+
+const maskPhoneNumber = (value: string | null): string | null => {
+  if (!value) return null;
+  if (value.length <= 7) return `${value.slice(0, 2)}***${value.slice(-2)}`;
+  return `${value.slice(0, 3)}****${value.slice(-4)}`;
+};
+
+const maskIdentityNumber = (value: string | null): string | null => {
+  if (!value) return null;
+  return `${value.slice(0, 3)}${"*".repeat(Math.max(4, value.length - 7))}${value.slice(-4)}`;
 };
 
 const ensureActiveOrganizationUser = async (
@@ -203,13 +221,19 @@ export class AccessMasterDataService {
     }));
   }
 
-  async listPeople(input: { includeInactive?: boolean; includeRevokedAliases?: boolean } = {}): Promise<Array<{
+  async listPeople(
+    input: { includeInactive?: boolean; includeRevokedAliases?: boolean } = {},
+    actor?: TrustedActorContext,
+  ): Promise<Array<{
     personId: string;
     personType: string;
     appUserId: string | null;
     displayName: string;
     temporaryCode: string | null;
     temporaryRemark: string | null;
+    temporaryPhoneNumber: string | null;
+    temporaryIdentityNumber: string | null;
+    privateProfileMasked: boolean;
     active: boolean;
     aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
   }>> {
@@ -220,10 +244,13 @@ export class AccessMasterDataService {
       display_name: string;
       temporary_code: string | null;
       temporary_remark: string | null;
+      temporary_phone_number: string | null;
+      temporary_identity_number: string | null;
       active: boolean;
       aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
     }>(
-      `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.temporary_code,p.temporary_remark,p.active,
+      `SELECT p.person_id,p.person_type,p.app_user_id,p.display_name,p.temporary_code,p.temporary_remark,
+              p.temporary_phone_number,p.temporary_identity_number,p.active,
               COALESCE(
                 jsonb_agg(
                   jsonb_build_object(
@@ -245,6 +272,7 @@ export class AccessMasterDataService {
        ORDER BY p.display_name,p.person_id`,
       [input.includeInactive ?? false, input.includeRevokedAliases ?? false],
     );
+    const canReadPrivateProfile = canReadTemporaryWorkerPrivateProfile(actor);
     return result.rows.map((row) => ({
       personId: row.person_id,
       personType: row.person_type,
@@ -252,6 +280,10 @@ export class AccessMasterDataService {
       displayName: row.display_name,
       temporaryCode: row.temporary_code,
       temporaryRemark: row.temporary_remark,
+      temporaryPhoneNumber: canReadPrivateProfile ? row.temporary_phone_number : maskPhoneNumber(row.temporary_phone_number),
+      temporaryIdentityNumber: canReadPrivateProfile ? row.temporary_identity_number : maskIdentityNumber(row.temporary_identity_number),
+      privateProfileMasked: !canReadPrivateProfile
+        && (row.temporary_phone_number !== null || row.temporary_identity_number !== null),
       active: row.active,
       aliases: row.aliases,
     }));
@@ -264,6 +296,7 @@ export class AccessMasterDataService {
     processName: string;
     pricingUnit: string;
     active: boolean;
+    defaultWorkerPersonIds: string[];
   }>> {
     const result = await this.database.query<{
       process_id: string;
@@ -272,9 +305,16 @@ export class AccessMasterDataService {
       process_name: string;
       pricing_unit: string;
       active: boolean;
+      default_worker_person_ids: string[];
     }>(
-      `SELECT process_id,process_code,version,process_name,pricing_unit,active
-       FROM current_process_catalog
+      `SELECT catalog.process_id,catalog.process_code,catalog.version,catalog.process_name,catalog.pricing_unit,catalog.active,
+              COALESCE(roster.person_ids,'{}'::uuid[]) AS default_worker_person_ids
+       FROM current_process_catalog catalog
+       LEFT JOIN LATERAL (
+         SELECT person_ids FROM process_default_worker_roster_versions roster_version
+         WHERE roster_version.process_id=catalog.process_id
+         ORDER BY roster_version.roster_version DESC LIMIT 1
+       ) roster ON true
        WHERE ($1::boolean OR active=true)
        ORDER BY process_name,process_code`,
       [includeInactive],
@@ -286,6 +326,40 @@ export class AccessMasterDataService {
       processName: row.process_name,
       pricingUnit: row.pricing_unit,
       active: row.active,
+      defaultWorkerPersonIds: row.default_worker_person_ids,
+    }));
+  }
+
+  async listProcessDefaultWorkerCandidates(): Promise<Array<{
+    personId: string;
+    personType: "internal" | "temporary";
+    displayName: string;
+    temporaryRemark: string | null;
+  }>> {
+    const result = await this.database.query<{
+      person_id: string;
+      person_type: "internal" | "temporary";
+      display_name: string;
+      temporary_remark: string | null;
+    }>(
+      `SELECT p.person_id,p.person_type,p.display_name,p.temporary_remark
+       FROM business_people p
+       WHERE p.active=true AND (
+         p.person_type='temporary'
+         OR EXISTS (
+           SELECT 1 FROM user_role_assignments assignment
+           WHERE assignment.user_id=p.app_user_id
+             AND assignment.role_code='worker'
+             AND assignment.revoked_at IS NULL
+         )
+       )
+       ORDER BY p.person_type,p.display_name,p.person_id`,
+    );
+    return result.rows.map((row) => ({
+      personId: row.person_id,
+      personType: row.person_type,
+      displayName: row.display_name,
+      temporaryRemark: row.temporary_remark,
     }));
   }
 
@@ -337,7 +411,7 @@ export class AccessMasterDataService {
       if (input.roleCode === "owner_group") {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
       }
-      await ensureActiveOrganizationUser(client, input.userId, this.corporationId, "目标用户不存在、不在职或已停用");
+      await this.autoEnableForAuthorization(client, actor, input.userId, input.reason);
       const role = await client.query<{ enabled: boolean }>("SELECT enabled FROM business_roles WHERE role_code=$1 FOR SHARE", [input.roleCode]);
       if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用", 404);
       await client.query(
@@ -407,6 +481,7 @@ export class AccessMasterDataService {
          WHERE assignment_id=$1`,
         [assignmentId, actor.actorId, reason],
       );
+      await this.autoDisableWithoutAuthorization(client, actor, assignment.user_id, reason);
     });
   }
 
@@ -422,6 +497,8 @@ export class AccessMasterDataService {
         ? `TMP-${personId.replace(/-/g, "").slice(0, 8).toUpperCase()}`
         : null;
       const temporaryRemark = input.personType === "temporary" ? input.temporaryRemark ?? null : null;
+      const temporaryPhoneNumber = input.personType === "temporary" ? input.temporaryPhoneNumber ?? null : null;
+      const temporaryIdentityNumber = input.personType === "temporary" ? input.temporaryIdentityNumber ?? null : null;
       const aliases = input.aliases.map((alias, index) => ({
         aliasId: randomUUID(),
         alias,
@@ -435,7 +512,10 @@ export class AccessMasterDataService {
         action: "master_data.person.create",
         entityType: "business_person",
         entityId: personId,
-        after: { personType: input.personType, appUserId, displayName: input.displayName, temporaryCode, temporaryRemark, active: true, aliases },
+        after: { personType: input.personType, appUserId, displayName: input.displayName, temporaryCode, temporaryRemark,
+          hasTemporaryPhoneNumber: temporaryPhoneNumber !== null,
+          hasTemporaryIdentityNumber: temporaryIdentityNumber !== null,
+          active: true, aliases },
         reason: input.reason,
       });
       await client.query(
@@ -445,8 +525,12 @@ export class AccessMasterDataService {
         [personEventId, actor.requestId],
       );
       await client.query(
-        "INSERT INTO business_people(person_id,person_type,app_user_id,display_name,temporary_code,temporary_remark,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
-        [personId, input.personType, appUserId, input.displayName, temporaryCode, temporaryRemark, actor.actorId],
+        `INSERT INTO business_people(
+           person_id,person_type,app_user_id,display_name,temporary_code,temporary_remark,
+           temporary_phone_number,temporary_identity_number,created_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [personId, input.personType, appUserId, input.displayName, temporaryCode, temporaryRemark,
+          temporaryPhoneNumber, temporaryIdentityNumber, actor.actorId],
       );
       for (const alias of aliases) {
         await client.query(
@@ -563,6 +647,60 @@ export class AccessMasterDataService {
     });
   }
 
+  async replaceProcessDefaultWorkers(
+    actor: TrustedActorContext,
+    processId: string,
+    input: ReplaceProcessDefaultWorkers,
+  ): Promise<{ processId: string; rosterVersion: number; personIds: string[] }> {
+    return this.transaction(async (client) => {
+      const process = await client.query(
+        "SELECT process_id FROM process_catalog_items WHERE process_id=$1 FOR UPDATE",
+        [processId],
+      );
+      if (!process.rows[0]) throw new ApplicationError("NOT_FOUND", "工序不存在", 404);
+      const personIds = [...input.personIds].sort();
+      if (personIds.length > 0) {
+        const eligible = await client.query<{ person_id: string }>(
+          `SELECT p.person_id
+           FROM business_people p
+           WHERE p.person_id=ANY($1::uuid[]) AND p.active=true AND (
+             p.person_type='temporary'
+             OR EXISTS (
+               SELECT 1 FROM user_role_assignments assignment
+               WHERE assignment.user_id=p.app_user_id
+                 AND assignment.role_code='worker'
+                 AND assignment.revoked_at IS NULL
+             )
+           )`,
+          [personIds],
+        );
+        if (eligible.rowCount !== personIds.length) {
+          throw new ApplicationError("VALIDATION_ERROR", "默认名单只能包含当前有效的正式工或临时工", 400);
+        }
+      }
+      const latest = await client.query<{ roster_version: number }>(
+        `SELECT roster_version FROM process_default_worker_roster_versions
+         WHERE process_id=$1 ORDER BY roster_version DESC LIMIT 1`,
+        [processId],
+      );
+      const rosterVersion = (latest.rows[0]?.roster_version ?? 0) + 1;
+      const operationEventId = await this.events.append(client, actor, {
+        action: "master_data.process_default_workers.replace",
+        entityType: "process_default_worker_roster",
+        entityId: processId,
+        after: { processId, rosterVersion, personIds },
+        reason: input.changeReason,
+      });
+      await client.query(
+        `INSERT INTO process_default_worker_roster_versions(
+           process_id,roster_version,person_ids,change_reason,changed_by,operation_event_id
+         ) VALUES($1,$2,$3,$4,$5,$6)`,
+        [processId, rosterVersion, personIds, input.changeReason, actor.actorId, operationEventId],
+      );
+      return { processId, rosterVersion, personIds };
+    });
+  }
+
   async createSupplier(actor: TrustedActorContext, input: CreateSupplier): Promise<{ supplierId: string; version: number }> {
     return this.transaction(async (client) => {
       const supplierId = randomUUID();
@@ -604,7 +742,7 @@ export class AccessMasterDataService {
     }
     return this.transaction(async (client) => {
       await ensureActiveOrganizationUser(client, input.grantorUserId, this.corporationId, "授权人不存在、不在职或已停用");
-      await ensureActiveOrganizationUser(client, input.granteeUserId, this.corporationId, "被授权用户不存在、不在职或已停用");
+      await this.autoEnableForAuthorization(client, actor, input.granteeUserId, input.reason);
       const grantorCapability = await client.query(
         `SELECT 1
          FROM user_role_assignments ura
@@ -637,6 +775,12 @@ export class AccessMasterDataService {
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [delegationId, input.grantorUserId, input.granteeUserId, input.capability, input.scopeType, input.scopeId ?? null, input.validFrom, input.validUntil, actor.actorId, input.reason],
       );
+      await this.autoDisableWithoutAuthorization(
+        client,
+        actor,
+        input.granteeUserId,
+        input.reason,
+      );
       return { delegationId };
     });
   }
@@ -666,6 +810,126 @@ export class AccessMasterDataService {
          WHERE delegation_id=$1`,
         [delegationId, actor.actorId, reason],
       );
+      await this.autoDisableWithoutAuthorization(
+        client,
+        actor,
+        existing.rows[0].grantee_user_id,
+        reason,
+      );
+    });
+  }
+
+  private async autoEnableForAuthorization(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    const target = await client.query<{
+      enabled: boolean;
+      manual_access_disabled: boolean;
+    }>(
+      `SELECT app_user.enabled,app_user.manual_access_disabled
+       FROM app_users app_user
+       WHERE app_user.id=$1
+         AND EXISTS (
+           SELECT 1
+           FROM identity_mappings identity
+           WHERE identity.user_id=app_user.id
+             AND identity.provider='dingtalk'
+             AND identity.corp_id=$2
+             AND identity.active=true
+             AND identity.employed=true
+         )
+       FOR UPDATE OF app_user`,
+      [userId, this.corporationId],
+    );
+    const current = target.rows[0];
+    if (!current) {
+      throw new ApplicationError("NOT_FOUND", "目标用户不存在或不属于当前在职企业成员", 404);
+    }
+    if (current.enabled) return;
+    if (current.manual_access_disabled) {
+      throw new ApplicationError("CONFLICT", "目标员工已被人工停用，请先恢复访问", 409);
+    }
+
+    await client.query(
+      "UPDATE app_users SET enabled=true,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+      [userId],
+    );
+    await this.events.append(client, actor, {
+      action: "access.employee.auto_enable",
+      entityType: "app_user",
+      entityId: userId,
+      before: { enabled: false },
+      after: { enabled: true },
+      reason,
+    });
+  }
+
+  private async autoDisableWithoutAuthorization(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    const target = await client.query<{
+      enabled: boolean;
+      manual_access_disabled: boolean;
+      is_root: boolean;
+      has_authorization: boolean;
+    }>(
+      `SELECT
+         app_user.enabled,
+         app_user.manual_access_disabled,
+         EXISTS(
+           SELECT 1
+           FROM owner_bootstrap_consumptions root
+           WHERE root.singleton=true AND root.user_id=app_user.id
+         ) is_root,
+         access_user_has_effective_authorization(app_user.id) has_authorization
+       FROM app_users app_user
+       WHERE app_user.id=$1
+       FOR UPDATE OF app_user`,
+      [userId],
+    );
+    const current = target.rows[0];
+    if (!current || current.is_root || current.has_authorization) return;
+
+    if (!current.enabled) {
+      if (!current.manual_access_disabled) return;
+      await client.query(
+        `UPDATE app_users
+         SET manual_access_disabled=false,updated_at=CURRENT_TIMESTAMP
+         WHERE id=$1`,
+        [userId],
+      );
+      await this.events.append(client, actor, {
+        action: "access.employee.auto_disable",
+        entityType: "app_user",
+        entityId: userId,
+        before: { enabled: false, manualAccessDisabled: true },
+        after: { enabled: false, manualAccessDisabled: false, sessionsRevoked: true },
+        reason,
+      });
+      return;
+    }
+
+    await client.query(
+      "UPDATE app_users SET enabled=false,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+      [userId],
+    );
+    await client.query(
+      "UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND revoked_at IS NULL",
+      [userId],
+    );
+    await this.events.append(client, actor, {
+      action: "access.employee.auto_disable",
+      entityType: "app_user",
+      entityId: userId,
+      before: { enabled: true },
+      after: { enabled: false, sessionsRevoked: true },
+      reason,
     });
   }
 

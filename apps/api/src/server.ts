@@ -17,16 +17,21 @@ import {
   getAppliedSchemaHistory,
   registerDatabasePoolErrorHandler,
 } from "./platform/database.js";
+import { ReceivingService } from "./receiving/receiving-service.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
 import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-whole-order-review-service.js";
 import { ExternalResponsibilityApplicationService } from "./rework/external-responsibility-application-service.js";
 import { OwnFactoryApprovalApplicationService } from "./rework/own-factory-approval-application-service.js";
 import { ProcessConfigurationService } from "./rework/process-configuration-service.js";
+import { ProcessWorkerPlanService } from "./rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "./rework/responsibility-determination-application-service.js";
 import { ReworkBusinessDetailService } from "./rework/rework-business-detail-service.js";
 import { InspectionImageExtractionService } from "./rework/inspection-image-extraction-service.js";
 import { ReworkInitiationService } from "./rework/service.js";
+import { ReworkSupplyContextService } from "./rework/supply-context-service.js";
+import { ReworkV2DraftService } from "./rework/v2-draft-service.js";
+import { ReworkV2SubmissionService } from "./rework/v2-submission-service.js";
 import { WorkReportingService } from "./rework/work-reporting-service.js";
 import { TailInspectionService } from "./rework/tail-inspection-service.js";
 import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
@@ -59,7 +64,11 @@ const rootAuthority = new RootAuthority(
   config.dingtalk.corpId,
   config.rootDingtalkUserId,
 );
-const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
+const authStore = new PostgresAuthStore(
+  database,
+  config.dingtalk.corpId,
+  config.rootDingtalkUserId,
+);
 const accessService = new WorkerAwareAccessMasterDataService(database, config.dingtalk.corpId);
 await accessService.ensureOrganizationPolicy();
 await rootAuthority.assertConfigurationConsistency();
@@ -95,6 +104,7 @@ const attachments = new AttachmentService(database, storage, {
 });
 const todoService = new TodoService(database);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
+const receivingService = new ReceivingService(database);
 const reworkService = new ReworkInitiationService(
   database,
   config.dingtalk.corpId,
@@ -103,6 +113,22 @@ const reworkService = new ReworkInitiationService(
   undefined,
   todoProjection,
   todoService,
+);
+const reworkSupplyContextService = new ReworkSupplyContextService(
+  database,
+  config.dingtalk.corpId,
+);
+const reworkV2DraftService = new ReworkV2DraftService(
+  database,
+  config.dingtalk.corpId,
+);
+const reworkV2SubmissionService = new ReworkV2SubmissionService(
+  database,
+  config.dingtalk.corpId,
+  undefined,
+  undefined,
+  undefined,
+  todoProjection,
 );
 const reworkBusinessDetailService = new ReworkBusinessDetailService(database);
 const inspectionImageExtractor = new InspectionImageExtractionService({
@@ -124,6 +150,7 @@ const processConfigurationService = new ProcessConfigurationService(
   undefined,
   todoProjection,
 );
+const processWorkerPlanService = new ProcessWorkerPlanService(database);
 const workReportingService = new WorkReportingService(
   database,
   undefined,
@@ -164,6 +191,11 @@ const app = buildApp({
     service: employeeAccessService,
     root: rootAuthority,
   },
+  receiving: {
+    authenticate: (token) => auth.authenticate(token),
+    service: receivingService,
+    root: rootAuthority,
+  },
   tools: {
     authenticate: (token) => auth.authenticate(token),
     attachments,
@@ -184,7 +216,10 @@ const app = buildApp({
   rework: {
     authenticate: (token) => auth.authenticate(token),
     service: reworkService,
+    v2DraftService: reworkV2DraftService,
+    v2SubmissionService: reworkV2SubmissionService,
     businessDetailService: reworkBusinessDetailService,
+    supplyContextService: reworkSupplyContextService,
     root: rootAuthority,
     attachments,
     inspectionImageExtractor,
@@ -218,6 +253,7 @@ const app = buildApp({
   processConfiguration: {
     authenticate: (token) => auth.authenticate(token),
     service: processConfigurationService,
+    workerPlan: processWorkerPlanService,
     root: rootAuthority,
   },
   workReporting: {

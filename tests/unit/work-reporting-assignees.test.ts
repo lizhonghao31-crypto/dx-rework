@@ -6,8 +6,8 @@ describe("work-reporting assignable people", () => {
   it("uses one guarded query for active temporary workers and eligible internal workers", async () => {
     const query = vi.fn(async () => ({
       rows: [
-        { person_id: "person-internal", display_name: "内部工人", person_type: "internal" },
-        { person_id: "person-temporary", display_name: "临时工", person_type: "temporary" },
+        { person_id: "person-internal", display_name: "内部工人", person_type: "internal", worker_eligible: true, tail_eligible: false },
+        { person_id: "person-temporary", display_name: "临时工", person_type: "temporary", worker_eligible: true, tail_eligible: false },
       ],
     }));
     const service = new WorkReportingService({ query } as never);
@@ -19,8 +19,8 @@ describe("work-reporting assignable people", () => {
       authorizationCapabilities: ["work:assign"],
       requestId: "assignable-people",
     })).resolves.toEqual([
-      { personId: "person-internal", displayName: "内部工人", personType: "internal" },
-      { personId: "person-temporary", displayName: "临时工", personType: "temporary" },
+      { personId: "person-internal", displayName: "内部工人", personType: "internal", eligibleExecutionKinds: ["worker"] },
+      { personId: "person-temporary", displayName: "临时工", personType: "temporary", eligibleExecutionKinds: ["worker"] },
     ]);
 
     const sql = String(query.mock.calls[0]?.[0]);
@@ -31,6 +31,8 @@ describe("work-reporting assignable people", () => {
     expect(sql).toContain("identity.employed=true");
     expect(sql).toContain("access_security_policy");
     expect(sql).toContain("assignment.role_code='worker'");
+    expect(sql).toContain("assignment.role_code='tail_inspector'");
+    expect(sql).toContain("capability.capability='tail_inspection:report'");
   });
 });
 

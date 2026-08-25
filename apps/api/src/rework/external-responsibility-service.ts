@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   AllocateExternalSuppliers,
+  ApproveExternalDeductionSpecialApproval,
   CloseExternalDeductionCase,
   CreateExternalDeductionEntry,
   CreateExternalDeductionFollowUp,
@@ -11,6 +12,8 @@ import type {
   ExternalResponsibilityQueueResponse,
   PayablesAcceptExternalResponsibilityCase,
   PayablesReturnExternalResponsibilityCase,
+  RequestExternalDeductionSpecialApproval,
+  ReturnExternalDeductionSpecialApproval,
   SubmitExternalResponsibilityCase,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
@@ -573,6 +576,8 @@ export class ExternalResponsibilityService {
           `deduction-follow-up:${targetCase.case_id}:`,
           `deduction-overdue:${targetCase.case_id}:`,
           `external-deduction:${targetCase.case_id}:`,
+          `external-special-return:${targetCase.case_id}:`,
+          `external-special:${targetCase.case_id}:`,
         ]) {
           await this.todos?.cancelOpenByDedupePrefix(
             client,
@@ -604,7 +609,9 @@ export class ExternalResponsibilityService {
               (c.proposed_deduction_amount-COALESCE((SELECT sum(entry.amount) FROM rework_external_deduction_entries entry WHERE entry.case_id=c.case_id),0))::text remaining_amount,
               c.case_version,
               EXISTS(SELECT 1 FROM rework_external_deduction_follow_ups follow WHERE follow.case_id=c.case_id AND follow.next_follow_up_at<CURRENT_TIMESTAMP) overdue,
-              (external_responsibility_can_sign($1,c.rework_order_id,c.responsibility_type) OR external_responsibility_can_payables($1,c.rework_order_id,c.responsibility_type)) can_act
+              (external_responsibility_can_sign($1,c.rework_order_id,c.responsibility_type)
+                OR external_responsibility_can_payables($1,c.rework_order_id,c.responsibility_type)
+                OR (c.status='pending_special_approval' AND external_responsibility_direct_role($1,'external_deduction:special_approve',ARRAY['finance_director']))) can_act
        FROM rework_external_responsibility_cases c
        JOIN rework_external_responsibility_batches batch ON batch.batch_id=c.batch_id
        JOIN rework_orders o ON o.rework_order_id=c.rework_order_id
@@ -806,10 +813,9 @@ export class ExternalResponsibilityService {
     return this.mutate(actor,"rework.external_deduction.close",key,{caseId,input},200,async(client)=>{
       const current=await this.lockCase(client,caseId); const order=await this.order(client,current.rework_order_id,true); this.requireCaseVersion(current,input.expectedCaseVersion); this.requireStatus(current,["deduction_follow_up"]);
       if(!await this.canPayables(client,actor.actorId,order.rework_order_id,current.responsibility_type)) fail("当前用户无权关闭扣款台账",403,"FORBIDDEN"); await this.readyAttachments(client,input.evidenceAttachmentIds);
-      const ledger=(await client.query<{actual:string;is_full:boolean;is_zero:boolean}>(
+      const ledger=(await client.query<{actual:string;is_full:boolean}>(
         `SELECT COALESCE(sum(entry.amount),0)::text actual,
-                COALESCE(sum(entry.amount),0)=case_record.proposed_deduction_amount is_full,
-                COALESCE(sum(entry.amount),0)=0 is_zero
+                COALESCE(sum(entry.amount),0)=case_record.proposed_deduction_amount is_full
          FROM rework_external_responsibility_cases case_record
          LEFT JOIN rework_external_deduction_entries entry ON entry.case_id=case_record.case_id
          WHERE case_record.case_id=$1
@@ -817,16 +823,87 @@ export class ExternalResponsibilityService {
         [caseId],
       )).rows[0]!;
       const actual=ledger.actual; const proposed=current.proposed_deduction_amount;
-      if((input.result==="full" && !ledger.is_full)
-        || (input.result==="not_deducted" && !ledger.is_zero)
-        || (input.result==="partial" && (ledger.is_zero || ledger.is_full))) {
-        fail("扣款关闭结果与服务器累计金额不一致",400,"VALIDATION_ERROR");
+      if(input.result!=="full" || !ledger.is_full) {
+        fail("实际扣款未达到拟扣金额时必须转财务总监特批",400,"VALIDATION_ERROR");
       }
       const eventId=await this.event(client,actor,"rework.external_deduction.close","external_deduction:close",order); await this.bindAttachments(client,actor,caseId,input.evidenceAttachmentIds);
       await client.query(`INSERT INTO rework_external_deduction_closures(closure_id,case_id,result,proposed_amount,actual_deducted_amount,remaining_amount,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$4-$5,$6,$7,$8,$9,$10,$11)`,[randomUUID(),caseId,input.result,proposed,actual,input.reason??null,input.evidenceAttachmentIds,input.remainingDifferenceDisposition??null,actor.actorId,eventId,actor.requestId]);
       await client.query("UPDATE rework_external_responsibility_cases SET status='closed',case_version=case_version+1 WHERE case_id=$1",[caseId]);
       await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-overdue:${caseId}:`,"The deduction case was closed");
       await this.todos?.completeOpenByDedupePrefix(client,actor,`external-deduction:${caseId}:`,"The deduction case was closed");
+      return this.getCase(actor,caseId,client);
+    });
+  }
+
+  requestSpecialApproval(actor: TrustedActorContext, caseId: string, input: RequestExternalDeductionSpecialApproval, key: string): Promise<Result<ExternalResponsibilityCaseResponse>> {
+    return this.mutate(actor,"rework.external_deduction.special.request",key,{caseId,input},201,async(client)=>{
+      const current=await this.lockCase(client,caseId); const order=await this.order(client,current.rework_order_id,true); this.requireCaseVersion(current,input.expectedCaseVersion); this.requireStatus(current,["deduction_follow_up"]);
+      if(!await this.canPayables(client,actor.actorId,order.rework_order_id,current.responsibility_type)) fail("当前用户无权发起扣款特批",403,"FORBIDDEN");
+      await this.readyAttachments(client,input.attachmentIds);
+      const ledger=(await client.query<{actual:string;request_version:number}>(
+        `SELECT COALESCE(sum(entry.amount),0)::text actual,
+                COALESCE((SELECT max(request_version) FROM rework_external_deduction_special_requests WHERE case_id=$1),0)+1 request_version
+         FROM rework_external_deduction_entries entry WHERE entry.case_id=$1`,[caseId],
+      )).rows[0]!;
+      const actual=toCents(ledger.actual); const proposed=toCents(current.proposed_deduction_amount);
+      if(actual===proposed) fail("实际扣款已等于拟扣金额，请直接确认完成",400,"VALIDATION_ERROR");
+      const eventId=await this.event(client,actor,"rework.external_deduction.special.request","external_deduction:close",order); await this.bindAttachments(client,actor,caseId,input.attachmentIds);
+      const requestId=randomUUID();
+      await client.query(`INSERT INTO rework_external_deduction_special_requests(special_request_id,case_id,request_version,proposed_amount_snapshot,actual_deducted_amount_snapshot,remaining_amount_snapshot,reason,attachment_ids,requested_by,operation_event_id,request_id) VALUES($1,$2,$3,$4::numeric,$5::numeric,$4::numeric-$5::numeric,$6,$7,$8,$9,$10)`,[requestId,caseId,ledger.request_version,current.proposed_deduction_amount,ledger.actual,input.reason,input.attachmentIds,actor.actorId,eventId,actor.requestId]);
+      await client.query("UPDATE rework_external_responsibility_cases SET status='pending_special_approval',case_version=case_version+1 WHERE case_id=$1",[caseId]);
+      await this.todos?.completeOpenByDedupeKey(client,actor,`deduction-follow-up:${caseId}:${current.case_version}`,"Deduction exception was sent to the finance director");
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`external-deduction:${caseId}:`,"Deduction exception was sent to the finance director");
+      await this.todos?.completeOpenByDedupePrefix(client,actor,`external-special-return:${caseId}:`,"Returned deduction exception was resubmitted");
+      await this.todos?.actionableForUniqueDirectRole(client,actor,{
+        category:"external_deduction_special_approval",sourceEventId:eventId,sourceAction:"rework.external_deduction.special.request",
+        entityType:"rework_order",entityId:order.rework_order_id,requiredRole:"finance_director",
+        requiredCapability:"external_deduction:special_approve",route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},
+        policyKey:"finance_return_or_wage_review",dedupeKey:`external-special:${caseId}:${requestId}`,
+      });
+      return this.getCase(actor,caseId,client);
+    });
+  }
+
+  approveSpecialApproval(actor: TrustedActorContext, caseId: string, input: ApproveExternalDeductionSpecialApproval, key: string): Promise<Result<ExternalResponsibilityCaseResponse>> {
+    return this.decideSpecialApproval(actor,caseId,input.expectedCaseVersion,input.expectedRequestVersion,"approved",input.reason??null,key);
+  }
+
+  returnSpecialApproval(actor: TrustedActorContext, caseId: string, input: ReturnExternalDeductionSpecialApproval, key: string): Promise<Result<ExternalResponsibilityCaseResponse>> {
+    return this.decideSpecialApproval(actor,caseId,input.expectedCaseVersion,input.expectedRequestVersion,"returned",input.reason,key);
+  }
+
+  private decideSpecialApproval(actor: TrustedActorContext, caseId: string, expectedCaseVersion: number, expectedRequestVersion: number, decision: "approved"|"returned", reason: string|null, key: string): Promise<Result<ExternalResponsibilityCaseResponse>> {
+    return this.mutate(actor,`rework.external_deduction.special.${decision}`,key,{caseId,expectedCaseVersion,expectedRequestVersion,decision,reason},200,async(client)=>{
+      const current=await this.lockCase(client,caseId); const order=await this.order(client,current.rework_order_id,true); this.requireCaseVersion(current,expectedCaseVersion); this.requireStatus(current,["pending_special_approval"]);
+      const permission=await client.query<{permitted:boolean}>("SELECT external_responsibility_direct_role($1,'external_deduction:special_approve',ARRAY['finance_director']) permitted",[actor.actorId]);
+      if(!permission.rows[0]?.permitted) fail("当前用户无权审核扣款特批",403,"FORBIDDEN");
+      const request=(await client.query<{special_request_id:string;request_version:number;reason:string;attachment_ids:string[];requested_by:string;proposed_amount_snapshot:string;actual_deducted_amount_snapshot:string;remaining_amount_snapshot:string}>(`SELECT special_request_id,request_version,reason,attachment_ids,requested_by,proposed_amount_snapshot::text,actual_deducted_amount_snapshot::text,remaining_amount_snapshot::text FROM rework_external_deduction_special_requests source WHERE case_id=$1 AND NOT EXISTS(SELECT 1 FROM rework_external_deduction_special_decisions decision WHERE decision.special_request_id=source.special_request_id) ORDER BY request_version DESC LIMIT 1 FOR UPDATE`,[caseId])).rows[0]??fail("扣款特批申请不存在",404,"NOT_FOUND");
+      if(request.request_version!==expectedRequestVersion) fail("扣款特批申请版本冲突");
+      const action=`rework.external_deduction.special.${decision}`; const eventId=await this.event(client,actor,action,"external_deduction:special_approve",order);
+      await client.query(`INSERT INTO rework_external_deduction_special_decisions(special_decision_id,special_request_id,decision,reason,decided_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7)`,[randomUUID(),request.special_request_id,decision,reason,actor.actorId,eventId,actor.requestId]);
+      await this.todos?.completeOpenByDedupeKey(client,actor,`external-special:${caseId}:${request.special_request_id}`,decision==="approved"?"Finance director approved the deduction exception":"Finance director returned the deduction exception");
+      if(decision==="approved") {
+        const result=toCents(request.actual_deducted_amount_snapshot)===0n?"not_deducted":"partial";
+        await client.query(`INSERT INTO rework_external_deduction_closures(closure_id,case_id,result,proposed_amount,actual_deducted_amount,remaining_amount,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,operation_event_id,request_id,special_request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'财务总监特批确认剩余差额',$9,$10,$11,$12)`,[randomUUID(),caseId,result,request.proposed_amount_snapshot,request.actual_deducted_amount_snapshot,request.remaining_amount_snapshot,request.reason,request.attachment_ids,actor.actorId,eventId,actor.requestId,request.special_request_id]);
+        await client.query("UPDATE rework_external_responsibility_cases SET status='closed',case_version=case_version+1 WHERE case_id=$1",[caseId]);
+        await this.todos?.completeOpenByDedupePrefix(client,actor,`deduction-overdue:${caseId}:`,"The deduction exception was approved and closed");
+        await this.todos?.completeOpenByDedupePrefix(client,actor,`external-deduction:${caseId}:`,"The deduction exception was approved and closed");
+      } else {
+        await client.query("UPDATE rework_external_responsibility_cases SET status='deduction_follow_up',case_version=case_version+1 WHERE case_id=$1",[caseId]);
+        await this.todos?.actionableForUniqueRoleOrOrderDelegate(client,actor,{
+          category:"external_deduction_special_return",sourceEventId:eventId,sourceAction:action,
+          entityType:"rework_order",entityId:order.rework_order_id,requiredRole:current.payables_handler_role_snapshot,
+          requiredCapability:"external_deduction:close",delegationScopeId:order.rework_order_id,
+          route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},policyKey:"finance_return_or_wage_review",
+          dedupeKey:`external-special-return:${caseId}:${request.special_request_id}`,
+        });
+      }
+      await this.todos?.information(client,actor,{
+        category:decision==="approved"?"external_deduction_special_approved":"external_deduction_special_returned",
+        sourceEventId:eventId,sourceAction:action,entityType:"rework_order",entityId:order.rework_order_id,
+        recipientUserId:request.requested_by,route:{routeName:"external_responsibility_detail",entityId:caseId,reworkOrderId:order.rework_order_id},
+        dedupeKey:`external-special-decision:${request.special_request_id}:${decision}`,
+      });
       return this.getCase(actor,caseId,client);
     });
   }
@@ -848,6 +925,8 @@ export class ExternalResponsibilityService {
         `deduction-follow-up:${caseId}:`,
         `deduction-overdue:${caseId}:`,
         `external-deduction:${caseId}:`,
+        `external-special-return:${caseId}:`,
+        `external-special:${caseId}:`,
       ]) {
         await this.todos?.cancelOpenByDedupePrefix(
           client,
@@ -920,17 +999,18 @@ export class ExternalResponsibilityService {
   }
 
   private async caseDto(actor: TrustedActorContext, row: CaseRow, executor: Queryable): Promise<ExternalResponsibilityCaseResponse> {
-    const [items,deductions,followUps,closure,revisions,permissions] = await Promise.all([
+    const [items,deductions,followUps,closure,special,revisions,permissions] = await Promise.all([
       executor.query<{external_item_id:string;configuration_item_id:string;responsibility_type:ResponsibilityType;process_snapshot:Record<string,unknown>;multiplier_snapshot:string;share_bps_snapshot:number;proposed_amount:string;amount_line_snapshot:Record<string,unknown>}>(`SELECT item.external_item_id,item.configuration_item_id,item.responsibility_type,item.process_snapshot,item.multiplier_snapshot::text,item.share_bps_snapshot,item.proposed_amount::text,item.amount_line_snapshot FROM rework_external_responsibility_case_items mapping JOIN rework_external_responsibility_items item ON item.external_item_id=mapping.external_item_id WHERE mapping.case_id=$1 ORDER BY item.configuration_item_id`,[row.case_id]),
       executor.query<{deduction_entry_id:string;entry_type:"deduction"|"adjustment"|"reversal";amount:string;deducted_on:string;reference_no:string|null;attachment_ids:string[];reverses_entry_id:string|null;recorded_by:string;created_at:Date}>(`SELECT deduction_entry_id,entry_type,amount::text,deducted_on::text,reference_no,attachment_ids,reverses_entry_id,recorded_by,created_at FROM rework_external_deduction_entries WHERE case_id=$1 ORDER BY created_at,deduction_entry_id`,[row.case_id]),
       executor.query<{follow_up_id:string;content:string;supplier_feedback:string|null;next_follow_up_at:Date|null;attachment_ids:string[];created_by:string;created_at:Date}>(`SELECT follow_up_id,content,supplier_feedback,next_follow_up_at,attachment_ids,created_by,created_at FROM rework_external_deduction_follow_ups WHERE case_id=$1 ORDER BY created_at,follow_up_id`,[row.case_id]),
       executor.query<{result:"full"|"partial"|"not_deducted";proposed_amount:string;actual_deducted_amount:string;remaining_amount:string;reason:string|null;evidence_attachment_ids:string[];remaining_difference_disposition:string|null;closed_by:string;closed_at:Date}>(`SELECT result,proposed_amount::text,actual_deducted_amount::text,remaining_amount::text,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,closed_at FROM rework_external_deduction_closures WHERE case_id=$1`,[row.case_id]),
+      executor.query<{special_request_id:string;request_version:number;reason:string;attachment_ids:string[];proposed_amount_snapshot:string;actual_deducted_amount_snapshot:string;remaining_amount_snapshot:string;requested_by:string;requested_at:Date;decision:"approved"|"returned"|null;decision_reason:string|null;decided_by:string|null;decided_at:Date|null}>(`SELECT source.special_request_id,source.request_version,source.reason,source.attachment_ids,source.proposed_amount_snapshot::text,source.actual_deducted_amount_snapshot::text,source.remaining_amount_snapshot::text,source.requested_by,source.requested_at,decision.decision,decision.reason decision_reason,decision.decided_by,decision.decided_at FROM rework_external_deduction_special_requests source LEFT JOIN rework_external_deduction_special_decisions decision USING(special_request_id) WHERE source.case_id=$1 ORDER BY source.request_version DESC LIMIT 1`,[row.case_id]),
       executor.query<{revision_request_id:string;revision_version:number;status:"pending"|"approved"|"rejected";reason:string;requested_change:Record<string,unknown>;requested_by:string;decided_by:string|null;decision_reason:string|null;created_at:Date;decided_at:Date|null}>(`SELECT revision_request_id,revision_version,status,reason,requested_change,requested_by,decided_by,decision_reason,created_at,decided_at FROM rework_external_responsibility_revision_requests WHERE case_id=$1 ORDER BY created_at`,[row.case_id]),
-      executor.query<{can_sign:boolean;can_payables:boolean;can_approve_revision:boolean}>(`SELECT external_responsibility_can_sign($1,$2,$3) can_sign,external_responsibility_can_payables($1,$2,$3) can_payables,external_responsibility_direct_role($1,'external_responsibility:approve_revision',ARRAY['production_management','owner_group']) can_approve_revision`,[actor.actorId,row.rework_order_id,row.responsibility_type]),
+      executor.query<{can_sign:boolean;can_payables:boolean;can_approve_revision:boolean;can_special_approve:boolean}>(`SELECT external_responsibility_can_sign($1,$2,$3) can_sign,external_responsibility_can_payables($1,$2,$3) can_payables,external_responsibility_direct_role($1,'external_responsibility:approve_revision',ARRAY['production_management','owner_group']) can_approve_revision,external_responsibility_direct_role($1,'external_deduction:special_approve',ARRAY['finance_director']) can_special_approve`,[actor.actorId,row.rework_order_id,row.responsibility_type]),
     ]);
     const actual=deductions.rows.reduce((sum,rowValue)=>sum+toCents(rowValue.amount),0n); const proposed=toCents(row.proposed_deduction_amount);
-    const permitted=permissions.rows[0] ?? {can_sign:false,can_payables:false,can_approve_revision:false}; const closed=row.status==="closed"; const active=row.batch_status==="active"; const unresolvedClosedDifference=closed&&actual>0n&&actual<proposed || closed&&actual===0n&&proposed>0n;
-    return { caseId:row.case_id,batchId:row.batch_id,reworkOrderId:row.rework_order_id,responsibilityType:row.responsibility_type,supplier:{supplierId:row.supplier_id,version:row.supplier_version,code:row.supplier_code_snapshot,name:row.supplier_name_snapshot,type:row.supplier_type_snapshot},businessHandlerUserId:row.business_handler_user_id,payablesHandlerRole:row.payables_handler_role_snapshot,proposedDeductionAmount:row.proposed_deduction_amount,actualDeductedAmount:money(actual),remainingAmount:money(proposed-actual),caseVersion:row.case_version,status:row.status,submittedAt:toIso(row.submitted_at),payablesConfirmedAt:toIso(row.payables_confirmed_at),canSign:active&&permitted.can_sign && ["pending_business_signoff","returned"].includes(row.status),canPayablesConfirm:active&&permitted.can_payables && row.status==="pending_payables_confirmation",canFollowUp:active&&!closed && (permitted.can_sign||permitted.can_payables) && row.status==="deduction_follow_up",canRecordDeduction:active&&!closed&&permitted.can_payables&&["pending_payables_confirmation","deduction_follow_up"].includes(row.status),canClose:active&&!closed&&permitted.can_payables&&row.status==="deduction_follow_up",canRequestRevision:active&&permitted.can_sign&&(["pending_business_signoff","returned","pending_payables_confirmation","deduction_follow_up"].includes(row.status)||unresolvedClosedDifference),canApproveRevision:active&&permitted.can_approve_revision&&row.status==="pending_responsibility_revision",items:items.rows.map((item)=>this.itemDto(item)),deductions:deductions.rows.map((entry)=>({deductionEntryId:entry.deduction_entry_id,entryType:entry.entry_type,amount:entry.amount,deductedOn:entry.deducted_on,referenceNo:entry.reference_no,attachmentIds:entry.attachment_ids,reversesEntryId:entry.reverses_entry_id,recordedBy:entry.recorded_by,createdAt:entry.created_at.toISOString()})),followUps:followUps.rows.map((follow)=>({followUpId:follow.follow_up_id,content:follow.content,supplierFeedback:follow.supplier_feedback,nextFollowUpAt:toIso(follow.next_follow_up_at),attachmentIds:follow.attachment_ids,createdBy:follow.created_by,createdAt:follow.created_at.toISOString()})),closure:closure.rows[0]?{result:closure.rows[0].result,proposedAmount:closure.rows[0].proposed_amount,actualDeductedAmount:closure.rows[0].actual_deducted_amount,remainingAmount:closure.rows[0].remaining_amount,reason:closure.rows[0].reason,evidenceAttachmentIds:closure.rows[0].evidence_attachment_ids,remainingDifferenceDisposition:closure.rows[0].remaining_difference_disposition,closedBy:closure.rows[0].closed_by,closedAt:closure.rows[0].closed_at.toISOString()}:null,revisionRequests:revisions.rows.map((request)=>({revisionRequestId:request.revision_request_id,revisionVersion:request.revision_version,status:request.status,reason:request.reason,requestedChange:request.requested_change,requestedBy:request.requested_by,decidedBy:request.decided_by,decisionReason:request.decision_reason,createdAt:request.created_at.toISOString(),decidedAt:toIso(request.decided_at)})) };
+    const permitted=permissions.rows[0] ?? {can_sign:false,can_payables:false,can_approve_revision:false,can_special_approve:false}; const closed=row.status==="closed"; const active=row.batch_status==="active"; const unresolvedClosedDifference=closed&&actual>0n&&actual<proposed || closed&&actual===0n&&proposed>0n; const latestSpecial=special.rows[0];
+    return { caseId:row.case_id,batchId:row.batch_id,reworkOrderId:row.rework_order_id,responsibilityType:row.responsibility_type,supplier:{supplierId:row.supplier_id,version:row.supplier_version,code:row.supplier_code_snapshot,name:row.supplier_name_snapshot,type:row.supplier_type_snapshot},businessHandlerUserId:row.business_handler_user_id,payablesHandlerRole:row.payables_handler_role_snapshot,proposedDeductionAmount:row.proposed_deduction_amount,actualDeductedAmount:money(actual),remainingAmount:money(proposed-actual),caseVersion:row.case_version,status:row.status,submittedAt:toIso(row.submitted_at),payablesConfirmedAt:toIso(row.payables_confirmed_at),canSign:active&&permitted.can_sign && ["pending_business_signoff","returned"].includes(row.status),canPayablesConfirm:active&&permitted.can_payables && row.status==="pending_payables_confirmation",canFollowUp:active&&!closed && (permitted.can_sign||permitted.can_payables) && row.status==="deduction_follow_up",canRecordDeduction:active&&!closed&&permitted.can_payables&&["pending_payables_confirmation","deduction_follow_up"].includes(row.status),canClose:active&&!closed&&permitted.can_payables&&row.status==="deduction_follow_up"&&actual===proposed,canRequestSpecialApproval:active&&!closed&&permitted.can_payables&&row.status==="deduction_follow_up"&&actual!==proposed,canDecideSpecialApproval:active&&!closed&&permitted.can_special_approve&&row.status==="pending_special_approval",canRequestRevision:active&&permitted.can_sign&&(["pending_business_signoff","returned","pending_payables_confirmation","deduction_follow_up"].includes(row.status)||unresolvedClosedDifference),canApproveRevision:active&&permitted.can_approve_revision&&row.status==="pending_responsibility_revision",items:items.rows.map((item)=>this.itemDto(item)),deductions:deductions.rows.map((entry)=>({deductionEntryId:entry.deduction_entry_id,entryType:entry.entry_type,amount:entry.amount,deductedOn:entry.deducted_on,referenceNo:entry.reference_no,attachmentIds:entry.attachment_ids,reversesEntryId:entry.reverses_entry_id,recordedBy:entry.recorded_by,createdAt:entry.created_at.toISOString()})),followUps:followUps.rows.map((follow)=>({followUpId:follow.follow_up_id,content:follow.content,supplierFeedback:follow.supplier_feedback,nextFollowUpAt:toIso(follow.next_follow_up_at),attachmentIds:follow.attachment_ids,createdBy:follow.created_by,createdAt:follow.created_at.toISOString()})),closure:closure.rows[0]?{result:closure.rows[0].result,proposedAmount:closure.rows[0].proposed_amount,actualDeductedAmount:closure.rows[0].actual_deducted_amount,remainingAmount:closure.rows[0].remaining_amount,reason:closure.rows[0].reason,evidenceAttachmentIds:closure.rows[0].evidence_attachment_ids,remainingDifferenceDisposition:closure.rows[0].remaining_difference_disposition,closedBy:closure.rows[0].closed_by,closedAt:closure.rows[0].closed_at.toISOString()}:null,specialApproval:latestSpecial?{requestId:latestSpecial.special_request_id,requestVersion:latestSpecial.request_version,reason:latestSpecial.reason,attachmentIds:latestSpecial.attachment_ids,proposedAmount:latestSpecial.proposed_amount_snapshot,actualDeductedAmount:latestSpecial.actual_deducted_amount_snapshot,remainingAmount:latestSpecial.remaining_amount_snapshot,requestedBy:latestSpecial.requested_by,requestedAt:latestSpecial.requested_at.toISOString(),decision:latestSpecial.decision&&latestSpecial.decided_by&&latestSpecial.decided_at?{decision:latestSpecial.decision,reason:latestSpecial.decision_reason,decidedBy:latestSpecial.decided_by,decidedAt:latestSpecial.decided_at.toISOString()}:null}:null,revisionRequests:revisions.rows.map((request)=>({revisionRequestId:request.revision_request_id,revisionVersion:request.revision_version,status:request.status,reason:request.reason,requestedChange:request.requested_change,requestedBy:request.requested_by,decidedBy:request.decided_by,decisionReason:request.decision_reason,createdAt:request.created_at.toISOString(),decidedAt:toIso(request.decided_at)})) };
   }
   private itemDto(item:{external_item_id:string;configuration_item_id:string;responsibility_type:ResponsibilityType;process_snapshot:Record<string,unknown>;multiplier_snapshot:string;share_bps_snapshot:number;proposed_amount:string;amount_line_snapshot:Record<string,unknown>}) { return {externalItemId:item.external_item_id,configurationItemId:item.configuration_item_id,responsibilityType:item.responsibility_type,processSnapshot:item.process_snapshot,multiplierSnapshot:item.multiplier_snapshot,shareBpsSnapshot:item.share_bps_snapshot,proposedAmount:item.proposed_amount,amountLineSnapshot:item.amount_line_snapshot}; }
   private async order(client:Queryable,orderId:string,locked:boolean):Promise<OrderRow>{const result=await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted' ${locked?"FOR UPDATE":""}`,[orderId]);return result.rows[0]??fail("返工单不存在",404,"NOT_FOUND");}

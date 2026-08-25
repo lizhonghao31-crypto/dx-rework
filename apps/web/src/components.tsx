@@ -6,19 +6,12 @@ import {
   StatusBadge,
   Surface,
 } from "@dx-rework/ui";
-import { createWebUrls } from "../url-contract.js";
-import { hasPageAccess, type AuthorizedUser } from "./auth.js";
+import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
-
-type ShellMe = Readonly<{
-  status?: string;
-  user?: AuthorizedUser;
-}>;
 
 type NavigationEntry = Readonly<{
   name: string;
@@ -31,6 +24,7 @@ const ROLE_LABELS: Record<string, string> = {
   system_admin: "系统管理员",
   production_management: "生产管理",
   quality_control: "质检",
+  warehouse_receiver: "仓管人员",
   tail_supervisor: "尾部主管",
   ie_reviewer: "IE 审核",
   order_merchandiser: "订单跟单",
@@ -46,12 +40,8 @@ const ROLE_LABELS: Record<string, string> = {
 
 const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
-let shellMeRequest: Promise<ShellMe | null> | undefined;
-function loadShellMe(): Promise<ShellMe | null> {
-  shellMeRequest ??= fetch(apiUrl("auth/me"), { credentials: "include" })
-    .then(async (response) => response.ok ? await response.json() as ShellMe : null)
-    .catch(() => null);
-  return shellMeRequest;
+function loadShellMe() {
+  return verifySession().then((session) => session === "denied" ? null : session);
 }
 
 let employeeAccessPermission: Promise<boolean> | undefined;
@@ -90,12 +80,13 @@ function PrimaryNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "发起返工", "全部订单"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
+  "订单看板": { label: "收货", glyph: "收" },
   "发起返工": { label: "发起", glyph: "发" },
-  "全部订单": { label: "订单", glyph: "单" },
+  "返工单看板": { label: "返工", glyph: "返" },
 };
 
 function isMobilePrimaryNavigation(entry: NavigationEntry): boolean {
@@ -253,6 +244,11 @@ export function Shell({
       href: "/ui/my-tasks",
     });
   }
+  navigation.push({
+    name: "订单看板",
+    description: "查看每日收货与数量差异",
+    href: "/ui/orders",
+  });
   if (initiationAccess) {
     navigation.push({
       name: "发起返工",
@@ -262,8 +258,8 @@ export function Shell({
   }
   if (reportAccess) {
     navigation.push({
-      name: "全部订单",
-      description: "查看权限范围内订单及完整流程",
+      name: "返工单看板",
+      description: "查看权限范围内返工单及完整流程",
       href: "/ui/tasks",
     });
   }
@@ -327,12 +323,14 @@ export function Header({
   title,
   subtitle,
   badge,
+  badgePlacement = "actions",
   action,
   actionHref,
 }: {
   title: string;
   subtitle?: string;
   badge: string;
+  badgePlacement?: "actions" | "subtitle";
   action?: string;
   actionHref?: string;
 }) {
@@ -342,10 +340,13 @@ export function Header({
     <header className="page-heading">
       <div className="page-heading__copy">
         <h1>{title}</h1>
-        {subtitle ? <p className="page-heading__subtitle">{subtitle}</p> : null}
+        {subtitle ? <div className="page-heading__subtitle-row">
+          <p className="page-heading__subtitle">{subtitle}</p>
+          {badgePlacement === "subtitle" ? <StatusBadge tone="info">{badge}</StatusBadge> : null}
+        </div> : null}
       </div>
       <div className="page-heading__actions header-actions">
-        <StatusBadge tone="info">{badge}</StatusBadge>
+        {badgePlacement === "actions" ? <StatusBadge tone="info">{badge}</StatusBadge> : null}
         {action ? (
           resolvedActionHref
             ? <a className="dx-button dx-button--secondary header-action-link" href={resolvedActionHref}>{action}</a>
@@ -389,11 +390,11 @@ export function Queue({ supervisor = false }: { supervisor?: boolean }) {
   const rows = supervisor
     ? [
         "N02　工序与候选单价",
-        "N04　分配返工人员",
-        "N05　工人完工上数",
-        "N06　尾查报数",
-        "N07　尾部主管整单确认",
-        "N08　责任判定",
+        "N04　返工执行报数",
+        "N05　尾部最终数量确认",
+        "N06　IE 最终数量复核",
+        "N07　责任判定",
+        "N08　老板确认签字",
       ]
     : [
         "N01　发起返工",

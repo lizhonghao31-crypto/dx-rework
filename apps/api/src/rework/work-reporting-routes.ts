@@ -1,12 +1,16 @@
 import {
   CreateWorkReportSchema,
+  CreateWorkReportsBatchSchema,
   CreateWorkTaskSchema,
   ConfirmWorkAssignmentsSchema,
+  FrontlineTasksQuerySchema,
+  FrontlineTasksResponseSchema,
   IdempotencyKeySchema,
   ReworkWorkTasksParamsSchema,
   ReworkWorkTasksResponseSchema,
   WorkTaskAssignablePeopleResponseSchema,
   WorkReportResponseSchema,
+  WorkReportsBatchResponseSchema,
   WorkTaskParamsSchema,
   WorkTaskResponseSchema,
 } from "@dx-rework/contracts";
@@ -43,6 +47,8 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
       && user.capabilities.includes("work:assign");
     const worker = user.businessRoles?.includes("worker") === true
       && user.capabilities.includes("work:report");
+    const tailInspector = user.businessRoles?.includes("tail_inspector") === true
+      && user.capabilities.includes("tail_inspection:report");
     const proxy = user.capabilities.includes("work:report_for_worker");
 
     if (mode === "assign") {
@@ -50,9 +56,26 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
       return businessActor(dependencies.root, user, request.id, "work:assign", isRoot ? "tail_supervisor" : undefined);
     }
     if (mode === "report") {
-      if (!isRoot && !worker && !proxy) throw new ApplicationError("FORBIDDEN", "当前角色无权提交返工上数", 403);
-      if (isRoot) return businessActor(dependencies.root, user, request.id, "work:report_for_worker", "tail_supervisor");
-      return businessActor(dependencies.root, user, request.id, worker ? "work:report" : "work:report_for_worker");
+      if (!isRoot && !worker && !proxy && !tailInspector) throw new ApplicationError("FORBIDDEN", "当前角色无权提交返工执行报数", 403);
+      if (isRoot) {
+        const rootActor = await businessActor(dependencies.root, user, request.id, "work:report_for_worker", "tail_supervisor");
+        return { ...rootActor, authorizationCapabilities: [...new Set([...(rootActor.authorizationCapabilities ?? []), "work:report_for_worker", "tail_inspection:report"]) ] };
+      }
+      const primaryCapability = tailInspector && !worker && !proxy
+        ? "tail_inspection:report"
+        : worker ? "work:report" : "work:report_for_worker";
+      const reportActor = await businessActor(dependencies.root, user, request.id, primaryCapability);
+      return {
+        ...reportActor,
+        authorizationCapabilities: [
+          ...new Set([
+            ...(reportActor.authorizationCapabilities ?? [reportActor.authorizationCapability]),
+            ...(worker ? ["work:report"] : []),
+            ...(proxy ? ["work:report_for_worker"] : []),
+            ...(tailInspector ? ["tail_inspection:report"] : []),
+          ]),
+        ],
+      };
     }
     if (isRoot) {
       const rootActor = await businessActor(
@@ -69,6 +92,7 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
             ...(rootActor.authorizationCapabilities ?? []),
             "work:assign",
             "work:report_for_worker",
+            "tail_inspection:report",
           ]),
         ],
       };
@@ -85,9 +109,17 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     }
     if (supervisor) return businessActor(dependencies.root, user, request.id, "work:assign");
     if (worker) return businessActor(dependencies.root, user, request.id, "work:report");
+    if (tailInspector) return businessActor(dependencies.root, user, request.id, "tail_inspection:report");
     if (proxy) return businessActor(dependencies.root, user, request.id, "work:report_for_worker");
-    throw new ApplicationError("FORBIDDEN", "当前角色无权查看工人任务或上数", 403);
+    throw new ApplicationError("FORBIDDEN", "当前角色无权查看返工执行任务或报数", 403);
   };
+
+  app.get("/frontline/work-tasks", async (request) => {
+    const query = parse(FrontlineTasksQuerySchema, request.query);
+    return FrontlineTasksResponseSchema.parse(
+      await dependencies.service.listFrontlineTasks(await actor(request, "read"), query.kind),
+    );
+  });
 
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request) => ReworkWorkTasksResponseSchema.parse(await dependencies.service.list(await actor(request, "read"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId)));
   app.get("/work-task-options", async (request) => {
@@ -109,7 +141,7 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
   app.post<{ Params: { workTaskId: string } }>("/work-tasks/:workTaskId/reports", async (request, reply) => {
     const input = parse(CreateWorkReportSchema, request.body);
     if (!Number.isInteger(input.actualQuantity)) {
-      throw new ApplicationError("VALIDATION_ERROR", "工人完工上数只能填写整数件数", 400);
+      throw new ApplicationError("VALIDATION_ERROR", "返工执行报数只能填写整数件数", 400);
     }
     const result = await dependencies.service.submitReport(
       await actor(request, "report"),
@@ -119,5 +151,28 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     );
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(WorkReportResponseSchema.parse(result.value));
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-reports/batch", async (request, reply) => {
+    const startedAt = Date.now();
+    const reworkOrderId = parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId;
+    const input = parse(CreateWorkReportsBatchSchema, request.body);
+    if (input.reports.some((report) => !Number.isInteger(report.actualQuantity))) {
+      throw new ApplicationError("VALIDATION_ERROR", "返工执行报数只能填写整数件数", 400);
+    }
+    const result = await dependencies.service.submitReportsBatch(
+      await actor(request, "report"),
+      reworkOrderId,
+      input,
+      key(request),
+    );
+    const response = WorkReportsBatchResponseSchema.parse(result.value);
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    request.log.info({
+      reworkOrderId,
+      reportCount: input.reports.length,
+      durationMs: Date.now() - startedAt,
+      idempotencyReplayed: result.reused,
+    }, "N04 batch work reports submitted");
+    return reply.code(201).send(response);
   });
 }

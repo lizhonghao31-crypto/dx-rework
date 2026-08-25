@@ -27,8 +27,8 @@ describe("zero-role Root UI entry contract", () => {
       requiredCapability: "work:report",
     })).toBe(true);
     expect(hasPageAccess(zeroRoleRoot, {
-      requiredRole: "administrative_clerk",
-      requiredCapability: "wage:administrative_review",
+      requiredRole: "warehouse_receiver",
+      requiredCapability: "receiving:create",
     })).toBe(true);
   });
 
@@ -68,7 +68,7 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).toContain("const initiationAccess = isRoot ||");
     expect(source).toContain("const reportAccess = isRoot || isOwner");
     expect(source).toContain("const systemManagementAccess = auditAccess || technicalAdminAccess");
-    for (const entry of ["发起返工", "全部订单", "系统管理", "财务报表", "工资管理"]) {
+    for (const entry of ["订单看板", "发起返工", "返工单看板", "系统管理", "财务报表", "工资管理"]) {
       expect(source).toContain(`name: "${entry}"`);
     }
     expect(source).not.toContain('name: "返工上数"');
@@ -76,9 +76,29 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).not.toContain('...(isRoot ? ["超级用户"] : [])');
   });
 
+  it("keeps Root on the N00-to-N01 v2 path without an ordinary QC assignment", async () => {
+    const [board, routes, supplyRoutes, submission] = await Promise.all([
+      readFile(new URL("../../apps/web/src/order-board-page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/routes.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/supply-context-routes.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/v2-submission-service.ts", import.meta.url), "utf8"),
+    ]);
+
+    expect(board).toContain("setCanInitiate(isRoot || roles.includes(\"owner_group\") || qualityControl)");
+    expect(board).toContain('pageUrl("ui/qc/new")');
+    expect(routes).toContain('actorRoles.push("root_superuser")');
+    expect(routes).toContain('actorRoles.push("quality_control")');
+    expect(routes).toContain('authorizationCapabilities.push("rework:initiate")');
+    expect(supplyRoutes).toContain('actorRoles.push("root_superuser")');
+    expect(supplyRoutes).toContain('actorRoles.push("quality_control")');
+    expect(submission).toContain('actor.actorRoles.includes("root_superuser")');
+    expect(submission).toContain('const expectedUploader = actor.actorRoles.includes("root_superuser") ? null : actor.actorId;');
+    expect(submission).toContain('($2::uuid IS NULL OR uploaded_by=$2)');
+  });
+
   it("does not mask Root workflow actions behind ordinary-role-only UI gates", async () => {
     const [process, work, tail, review, responsibility, external, detail] = await Promise.all([
-      readFile(new URL("../../apps/web/src/process-configuration-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/process-worker-assignment-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/tail-inspection-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/whole-order-review-panel.tsx", import.meta.url), "utf8"),
@@ -89,10 +109,11 @@ describe("zero-role Root UI entry contract", () => {
 
     expect(process).toContain("user?.isRoot === true");
     expect(work).toContain("const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;");
-    expect(work).toContain('isRoot ? "代上数"');
+    expect(work).toContain('isRoot ? "代为报数"');
     expect(tail).toContain('isRoot ? "可代报"');
-    expect(tail).toContain('isRoot ? `代 ${actionableAssignment.tailInspectorName} 填写本次清点`');
-    expect(detail).toContain("isRoot={currentUser?.isRoot === true}");
+    expect(work).toContain('task.executionKind === "tail_inspection"');
+    expect(detail).toContain("const canUseWorkWorkspace");
+    expect(detail).toContain("const elevated =");
     expect(review).toContain("data.canReview");
     expect(review).toContain("data.processes.every((process) => process.complete)");
     expect(review).not.toContain("data.canSubmitTailPricing");

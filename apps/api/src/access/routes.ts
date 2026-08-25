@@ -12,6 +12,7 @@ import {
   IdempotencyKeySchema,
   PeopleListQuerySchema,
   ProcessParamsSchema,
+  ReplaceProcessDefaultWorkersSchema,
   PersonAliasParamsSchema,
   PersonParamsSchema,
   ReviseProcessSchema,
@@ -93,6 +94,32 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     };
   };
 
+  const defaultWorkerRosterActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    const managesMasterData = user.capabilities.includes("master_data:manage");
+    const configuresOrders = user.businessRoles?.includes("tail_supervisor") === true
+      && user.capabilities.includes("process:configure")
+      && user.capabilities.includes("work:assign");
+    if (!isRoot && !managesMasterData && !configuresOrders) {
+      throw new ApplicationError("FORBIDDEN", "仅尾部主管可在工序分配区维护默认工人", 403);
+    }
+    const authorizationCapability = managesMasterData ? "master_data:manage" : "process:configure";
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    const authorizationCapabilities = [...user.capabilities];
+    if (isRoot && !authorizationCapabilities.includes(authorizationCapability)) {
+      authorizationCapabilities.push(authorizationCapability);
+    }
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability,
+      authorizationCapabilities,
+      requestId: request.id,
+    };
+  };
+
   const roleManager = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
     const isRoot = await dependencies.root.isRootUser(user.id);
@@ -150,18 +177,23 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   });
 
   app.get("/master-data/people", async (request) => {
-    await actor(request, "people:read");
+    const peopleActor = await actor(request, "people:read");
     const query = parse(PeopleListQuerySchema, request.query);
     return dependencies.service.listPeople({
       includeInactive: query.includeInactive === "true",
       includeRevokedAliases: query.includeRevokedAliases === "true",
-    });
+    }, peopleActor);
   });
 
   app.get("/master-data/processes", async (request) => {
     await actor(request, "process_catalog:read");
     const query = parse(CatalogListQuerySchema, request.query);
     return dependencies.service.listProcesses(query.includeInactive === "true");
+  });
+
+  app.get("/master-data/process-default-worker-candidates", async (request) => {
+    await actor(request, "master_data:manage");
+    return dependencies.service.listProcessDefaultWorkerCandidates();
   });
 
   app.get("/master-data/suppliers", async (request) => {
@@ -259,6 +291,13 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
         parse(ProcessParamsSchema, request.params).processId,
         parse(ReviseProcessSchema, request.body),
       ),
+    ));
+
+  app.put<{ Params: { processId: string } }>("/master-data/processes/:processId/default-workers", async (request) =>
+    dependencies.service.replaceProcessDefaultWorkers(
+      await defaultWorkerRosterActor(request),
+      parse(ProcessParamsSchema, request.params).processId,
+      parse(ReplaceProcessDefaultWorkersSchema, request.body),
     ));
 
   app.post("/master-data/suppliers", async (request, reply) =>

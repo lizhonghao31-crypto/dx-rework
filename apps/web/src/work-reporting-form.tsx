@@ -4,20 +4,30 @@ import {
   WorkTaskAssignablePeopleResponseSchema,
   WorkTaskResponseSchema,
   WorkReportResponseSchema,
+  WorkReportsBatchResponseSchema,
   type ReworkWorkTasksResponse,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
+import { mapWithConcurrency } from "./concurrency.js";
 import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
+import { reportsArePersisted } from "./work-reporting-submission.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
 import "./work-reporting-form.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type Person = { personId: string; displayName: string; personType: "internal" | "temporary" };
 type Task = ReworkWorkTasksResponse["tasks"][number];
-type AuthMe = { status: "authorized" | "no_role"; user: WorkReportingUser };
+export type FrontlineWorkContext = Readonly<{
+  kind: "worker" | "tail_inspection";
+  reworkNo: string | null;
+  styleNo: string | null;
+  orderNo: string | null;
+  processNames: readonly string[];
+}>;
 
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), {
@@ -48,6 +58,7 @@ const canReviewOrder = (user: WorkReportingUser): boolean => user.isRoot === tru
 const canReadWorkFacts = (user: WorkReportingUser): boolean =>
   canAssignWork(user)
   || (user.businessRoles?.includes("worker") === true && user.capabilities.includes("work:report"))
+  || (user.businessRoles?.includes("tail_inspector") === true && user.capabilities.includes("tail_inspection:report"))
   || user.capabilities.includes("work:report_for_worker")
   || (user.businessRoles?.includes("owner_group") === true && user.capabilities.includes("business:read_all"));
 
@@ -55,10 +66,16 @@ export function WorkReportingForm({
   reworkOrderId: providedReworkOrderId,
   taskMode = "workspace",
   onOrderChanged,
+  embedded = false,
+  frontlineContext,
+  onFrontlineExit,
 }: {
   reworkOrderId?: string;
   taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review";
   onOrderChanged?: () => Promise<void> | void;
+  embedded?: boolean;
+  frontlineContext?: FrontlineWorkContext;
+  onFrontlineExit?: () => void;
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? new URLSearchParams(window.location.search).get("rework");
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
@@ -71,6 +88,8 @@ export function WorkReportingForm({
   const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
   const [temporaryName, setTemporaryName] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
+  const [temporaryPhoneNumber, setTemporaryPhoneNumber] = useState("");
+  const [temporaryIdentityNumber, setTemporaryIdentityNumber] = useState("");
   const [reportTasks, setReportTasks] = useState<Task[] | null>(null);
   const [reportQuantities, setReportQuantities] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -78,7 +97,6 @@ export function WorkReportingForm({
   const [canAssign, setCanAssign] = useState(false);
   const [canCreateTemporary, setCanCreateTemporary] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
-  const [canReadTasks, setCanReadTasks] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
 
   const filteredPeople = useMemo(() => {
@@ -104,14 +122,14 @@ export function WorkReportingForm({
   useEffect(() => {
     if (!reworkOrderId) { setMessage("请从当前节点工作台选择一张订单进入处理。"); return; }
     const load = async () => {
-      const me = await request("auth/me", (value) => value as AuthMe);
-      const assignable = me.status === "authorized" && canAssignWork(me.user);
-      const root = me.status === "authorized" && me.user.isRoot === true;
-      const taskReadable = me.status === "authorized" && canReadWorkFacts(me.user);
-      const orderReviewable = me.status === "authorized" && canReviewOrder(me.user);
-      const temporaryManageable = me.status === "authorized"
-        && (root || me.user.capabilities.includes("temporary_worker:manage"));
-      setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setCanReadTasks(taskReadable); setReviewEligible(orderReviewable);
+      const session = await verifySession();
+      if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
+      const assignable = canAssignWork(session.user);
+      const root = session.user.isRoot === true;
+      const taskReadable = canReadWorkFacts(session.user);
+      const orderReviewable = canReviewOrder(session.user);
+      const temporaryManageable = root || session.user.capabilities.includes("temporary_worker:manage");
+      setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
       const assignmentView = loaded?.reworkStatus === "pending_task_assignment"
@@ -138,12 +156,16 @@ export function WorkReportingForm({
     if (memberIds.length === 0) { setMessage("请至少选择一名返工人员。"); return; }
     setBusy(true);
     try {
-      for (const personId of memberIds) await request(`rework-orders/${data.reworkOrderId}/work-tasks`, WorkTaskResponseSchema.parse, {
+      const assigned = await mapWithConcurrency(memberIds, 3, (personId) => request(`rework-orders/${data.reworkOrderId}/work-tasks`, WorkTaskResponseSchema.parse, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ expectedOrderVersion: data.orderVersion, configurationItemId, mode: "individual", members: [{ personId }] }),
-      });
-      await reload(); setSelected({}); setMessage("人员已分配。各工序都分完后，再统一点击“开始返工”。");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "人员分配失败"); } finally { setBusy(false); }
+      }));
+      setData({ ...data, tasks: [...data.tasks, ...assigned] });
+      setSelected({}); setMessage("人员已分配。各工序都分完后，再统一点击“开始返工”。");
+    } catch (cause) {
+      await reload().catch(() => null);
+      setMessage(cause instanceof Error ? cause.message : "人员分配失败");
+    } finally { setBusy(false); }
   };
 
   const confirmRemoval = async () => {
@@ -170,6 +192,8 @@ export function WorkReportingForm({
     if (!canCreateTemporary || busy) return;
     const displayName = temporaryName.trim();
     const remark = temporaryRemark.trim();
+    const phoneNumber = temporaryPhoneNumber.trim().replace(/[\s-]/g, "");
+    const identityNumber = temporaryIdentityNumber.trim().toUpperCase();
     if (!displayName) { setMessage("请填写临时工姓名。"); return; }
     setBusy(true);
     try {
@@ -181,6 +205,8 @@ export function WorkReportingForm({
           aliases: [],
           reason: "N04 现场新增临时工",
           ...(remark ? { temporaryRemark: remark } : {}),
+          ...(phoneNumber ? { temporaryPhoneNumber: phoneNumber } : {}),
+          ...(identityNumber ? { temporaryIdentityNumber: identityNumber } : {}),
         }),
       });
       await reloadPeople();
@@ -189,6 +215,8 @@ export function WorkReportingForm({
       setSelected({});
       setTemporaryName("");
       setTemporaryRemark("");
+      setTemporaryPhoneNumber("");
+      setTemporaryIdentityNumber("");
       setTemporaryDialogOpen(false);
       setMessage(`临时工 ${displayName} 已添加，可直接选择分配。`);
     } catch (cause) {
@@ -202,10 +230,10 @@ export function WorkReportingForm({
     if (!data || data.reworkStatus !== "pending_task_assignment" || busy) return;
     setBusy(true);
     try {
-      await request(`rework-orders/${data.reworkOrderId}/work-tasks/confirm`, ReworkWorkTasksResponseSchema.parse, {
+      const confirmed = await request(`rework-orders/${data.reworkOrderId}/work-tasks/confirm`, ReworkWorkTasksResponseSchema.parse, {
         method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
       });
-      await reload(); setMessage("返工已开始。工人只需在真正完工后点击“我已完工&上数”。"); await onOrderChanged?.();
+      setData(confirmed); setMessage("返工已开始。工人只需在真正完工后点击“我已完工&上数”。"); await onOrderChanged?.();
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "无法开始返工"); } finally { setBusy(false); }
   };
 
@@ -218,23 +246,72 @@ export function WorkReportingForm({
     const quantities = reportTasks.map((task) => ({ task, text: reportQuantities[task.workTaskId]?.trim() ?? "" }));
     if (quantities.some(({ text }) => !/^\d+$/.test(text) || Number(text) <= 0)) { setMessage("请输入大于 0 的整数件数。"); return; }
     setBusy(true);
+    setMessage(quantities.length > 1
+      ? `正在批量提交 ${quantities.length} 项报数，请勿关闭页面或重复操作。`
+      : "正在提交报数，请勿重复操作。");
     try {
-      for (const { task, text } of quantities) await request(`work-tasks/${task.workTaskId}/reports`, WorkReportResponseSchema.parse, {
-        method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(text) }),
-      });
-      const loaded = await reload(); setReportTasks(null);
-      if (loaded?.reworkStatus === "pending_order_review") { setMessage("工人上数与尾查报数均已完成，已流转至 N07 · 尾部主管整单确认。"); await onOrderChanged?.(); }
-      else setMessage("工人完工件数已确认；系统继续并行等待其他工人或尾查完成报数。");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "完工上数失败"); } finally { setBusy(false); }
+      let submittedStatus: ReworkWorkTasksResponse["reworkStatus"] | undefined;
+      if (quantities.length === 1) {
+        const quantity = quantities[0]!;
+        await request(`work-tasks/${quantity.task.workTaskId}/reports`, WorkReportResponseSchema.parse, {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(quantity.text) }),
+        });
+      } else {
+        const submitted = await request(
+          `rework-orders/${data.reworkOrderId}/work-reports/batch`,
+          WorkReportsBatchResponseSchema.parse,
+          {
+            method: "POST",
+            headers: { "idempotency-key": crypto.randomUUID() },
+            body: JSON.stringify({
+              expectedOrderVersion: data.orderVersion,
+              reports: quantities.map(({ task, text }) => ({
+                workTaskId: task.workTaskId,
+                actualQuantity: Number(text),
+              })),
+            }),
+          },
+        );
+        submittedStatus = submitted.reworkStatus;
+      }
+      setReportTasks(null);
+      const loaded = await reload().catch(() => null);
+      if ((loaded?.reworkStatus ?? submittedStatus) === "pending_order_review") {
+        setMessage(`${quantities.length} 项返工执行报数已全部完成，已流转至 N05 · 尾部最终数量确认。`);
+        try { await onOrderChanged?.(); } catch { /* The committed batch remains successful even if the surrounding page refresh fails. */ }
+      } else {
+        setMessage(`${quantities.length} 项报数已确认；系统继续等待其他返工人员或尾查完成。`);
+      }
+    } catch (cause) {
+      const loaded = quantities.length > 1 ? await reload().catch(() => null) : null;
+      if (loaded && reportsArePersisted(
+        loaded.tasks,
+        quantities.map(({ task, text }) => ({ workTaskId: task.workTaskId, actualQuantity: Number(text) })),
+      )) {
+        setReportTasks(null);
+        if (loaded.reworkStatus === "pending_order_review") {
+          setMessage(`${quantities.length} 项返工执行报数已保存，已流转至 N05 · 尾部最终数量确认。`);
+          try { await onOrderChanged?.(); } catch { /* The committed batch remains successful even if the surrounding page refresh fails. */ }
+        } else {
+          setMessage(`${quantities.length} 项报数已保存；系统继续等待其他返工人员或尾查完成。`);
+        }
+        return;
+      }
+      setMessage(cause instanceof Error ? cause.message : "完工上数失败");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const effectiveTaskMode = taskMode === "workspace"
-    ? data?.reworkStatus === "pending_task_assignment" ? "task_assignment" : data?.reworkStatus === "pending_order_review" ? "whole_order_review" : "work_reporting"
+    ? data?.reworkStatus === "pending_task_assignment" ? "task_assignment" : ["pending_order_review", "pending_final_quantity_ie_review"].includes(data?.reworkStatus ?? "") ? "whole_order_review" : "work_reporting"
     : taskMode;
   const assignmentWritable = data?.reworkStatus === "pending_task_assignment";
   const workReportingWritable = data?.reworkStatus === "in_progress";
-  const pendingTasks = data?.tasks.filter((task) => workReportingWritable && task.canSubmitReport) ?? [];
+  const visibleTasks = data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? [];
+  const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
   const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;
   const allProcessesAssigned = configItems.length > 0 && configItems.every((item) => data?.tasks.some((task) => task.configurationItemId === item.configurationItemId));
@@ -246,11 +323,16 @@ export function WorkReportingForm({
 
   if (effectiveTaskMode === "whole_order_review") return <div className="mobile-page work-reporting-page">
     {!reviewEligible && <Surface>{message}</Surface>}
-    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} onChanged={async () => { if (canReadTasks) await reload(); await onOrderChanged?.(); }} />}
+    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { await onOrderChanged?.(); }} />}
   </div>;
 
-  return <div className="mobile-page work-reporting-page">
-    <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "分配返工人员" : "工人完工上数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "N04" : "N05"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "每名人员独立分配。全部分完后统一开始返工。" : "只填实际整数件数；尾查报数与本节点并行，不以计划数作为上数依据。"}</p></div>
+  return <div className={`mobile-page work-reporting-page${embedded ? " is-embedded" : ""}${frontlineContext ? " is-frontline" : ""}`}>
+    {!embedded && !frontlineContext && <div className="mobile-hero"><div className="mobile-title"><h1>{effectiveTaskMode === "task_assignment" ? "历史人员分配" : "返工执行报数"}</h1><StatusBadge tone="info">{effectiveTaskMode === "task_assignment" ? "历史流程" : "N04"}</StatusBadge></div><p>{effectiveTaskMode === "task_assignment" ? "仅用于兼容旧订单；新订单已在节点02完成返工人员预分配。" : "返工人员与尾查都在本节点按本人任务填写实际整数件数。"}</p></div>}
+    {frontlineContext ? <header className="frontline-work-context">
+      <button type="button" onClick={() => onFrontlineExit?.()}>← 返回任务</button>
+      <div><small>{frontlineContext.reworkNo ?? "返工单"}</small><strong>{frontlineContext.styleNo ?? "款号未填写"} · {frontlineContext.orderNo ?? "订单号未填写"}</strong><span>{frontlineContext.processNames.join("、")}</span></div>
+      <StatusBadge tone="warning">{frontlineContext.kind === "tail_inspection" ? "待尾查报数" : "待完工上数"}</StatusBadge>
+    </header> : null}
     {message && <p className="work-reporting-feedback" role="status">{message}</p>}
     {effectiveTaskMode === "task_assignment" && data && <>
       {data.tasks.length > 0 && <Surface><h2>已分配人员</h2>{data.tasks.map((task) => <div className="section-title whole-order-row n04-assignment-row" key={task.workTaskId}><div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")}</p></div><div className="n04-assignment-controls"><StatusBadge tone={assignmentWritable ? "info" : "success"}>{assignmentWritable ? "待开工" : "已处理"}</StatusBadge>{canAssign && assignmentWritable && task.mode === "individual" && task.members.length === 1 && <Button onClick={() => setRemovalTask(task)} disabled={busy}>移除</Button>}</div></div>)}</Surface>}
@@ -272,12 +354,12 @@ export function WorkReportingForm({
       </Surface>}
     </>}
     {effectiveTaskMode === "work_reporting" && <>
-      {data?.tasks.map((task) => <Surface key={task.workTaskId}><div className="section-title"><div><h2>{task.processName}</h2><p>返工人员：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>{task.remainingQuantity === 0 ? "已完工" : workReportingWritable ? "返工中" : "已处理"}</StatusBadge></div><p>{task.remainingQuantity === 0 ? `已上数 ${task.submittedQuantity} 件` : workReportingWritable ? "待本人按实际完成件数上数" : "该节点已结束，仅保留历史分工与上数记录"}</p></Surface>)}
-      {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代上数" : canAssign ? "临时工代上数" : "我已返工完成"}</h2><p>{isRoot ? "为返工人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为完工上数" : canAssign ? "临时工完工上数" : "我已完工&上数"}</Button></Surface>}
-      {data?.tasks.length === 0 && <Surface>当前暂无返工任务。</Surface>}
+      {visibleTasks.map((task) => <Surface {...(frontlineContext ? { className: "frontline-work-task" } : {})} key={task.workTaskId}><div className="section-title"><div><h2>{task.executionKind === "tail_inspection" ? "尾查" : task.processName}</h2><p>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>{task.remainingQuantity === 0 ? "已报数" : workReportingWritable ? "执行中" : "已处理"}</StatusBadge></div><p>{task.remainingQuantity === 0 ? `已报数 ${task.submittedQuantity} 件` : workReportingWritable ? "待本人按实际完成件数报数" : "该节点已结束，仅保留历史分工与报数记录"}</p></Surface>)}
+      {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代报数" : canAssign ? "临时工代报数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "我已完成尾查" : "我已返工完成"}</h2><p>{isRoot ? "为执行人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "填写本人实际尾查数量，提交后计入统一数量事实。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为报数" : canAssign ? "临时工完工上数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "尾查完成&报数" : "我已完工&上数"}</Button></Surface>}
+      {visibleTasks.length === 0 && <Surface>当前暂无需要本人处理的任务。</Surface>}
     </>}
     {removalTask && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”分配？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}
-    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
-    {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="工人完工上数"><h2>{isRoot ? "请输入代上数的实际件数" : canAssign ? "请输入临时工的实际件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? "确认中…" : "确认"}</Button></div></div></Surface></div>}
+    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
+    {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? "请输入您的实际尾查件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}{busy && <p role="status">正在提交 {reportTasks.length} 项报数，请勿关闭页面或重复操作。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? reportTasks.length > 1 ? `批量提交中（${reportTasks.length} 项）…` : "提交中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;
 }

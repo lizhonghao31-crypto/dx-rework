@@ -44,7 +44,7 @@ export async function fetchFacts(source: Queryable, options: {
     const id = bind(options.cursor.id);
     where.push(`(order_record.updated_at,order_record.rework_order_id)<(${date}::timestamptz,${id}::uuid)`);
   }
-  if (options.siteOnly) where.push(`order_record.status IN ('pending_process_configuration','pending_ie_review','pending_task_assignment','in_progress','pending_order_review','pending_quantity_adjustment_ie_review')`);
+  if (options.siteOnly) where.push(`order_record.status IN ('pending_process_configuration','pending_ie_review','pending_task_assignment','in_progress','pending_order_review','pending_final_quantity_ie_review','pending_quantity_adjustment_ie_review')`);
   if (options.workTaskActorUserId || options.includeTemporaryProxyTasks) {
     const visibility: string[] = [];
     if (options.workTaskActorUserId) {
@@ -153,17 +153,19 @@ export async function fetchFacts(source: Queryable, options: {
        order_record.status,
        CASE order_record.status
          WHEN 'draft' THEN 'N01' WHEN 'pending_process_configuration' THEN 'N02'
-         WHEN 'pending_ie_review' THEN 'N03' WHEN 'pending_task_assignment' THEN 'N04'
-         WHEN 'in_progress' THEN 'N05' WHEN 'pending_order_review' THEN 'N06'
-         WHEN 'pending_quantity_adjustment_ie_review' THEN 'N06-A'
+         WHEN 'pending_ie_review' THEN 'N03' WHEN 'pending_task_assignment' THEN 'N02-R'
+         WHEN 'in_progress' THEN 'N04' WHEN 'pending_order_review' THEN 'N05'
+         WHEN 'pending_final_quantity_ie_review' THEN 'N06'
+         WHEN 'pending_quantity_adjustment_ie_review' THEN 'N05-A'
          WHEN 'pending_responsibility_determination' THEN 'N07'
          WHEN 'pending_owner_signature' THEN 'N08'
          WHEN 'pending_responsibility_action' THEN 'N-LEGACY'
-         WHEN 'completed' THEN 'N10' ELSE 'N-C' END node,
+         WHEN 'completed' THEN 'N09' ELSE 'N-C' END node,
        CASE order_record.status
          WHEN 'draft' THEN '发起返工 / 草稿' WHEN 'pending_process_configuration' THEN '待配置工序'
          WHEN 'pending_ie_review' THEN '待 IE 审核' WHEN 'pending_task_assignment' THEN '待分配人员'
-         WHEN 'in_progress' THEN '返工执行中' WHEN 'pending_order_review' THEN '待整单审核'
+         WHEN 'in_progress' THEN '返工执行中' WHEN 'pending_order_review' THEN '待尾部确认最终数量'
+         WHEN 'pending_final_quantity_ie_review' THEN '最终数量待 IE 复核'
          WHEN 'pending_quantity_adjustment_ie_review' THEN '数量调整待 IE'
          WHEN 'pending_responsibility_determination' THEN '责任判定与资料核验'
          WHEN 'pending_owner_signature' THEN '待老板确认签字'

@@ -12,6 +12,8 @@ export type WorkTaskPayload = Readonly<{
 export type PendingWorkReport = Readonly<{ signature: string; key: string }>;
 export type PendingWorkTask = Readonly<{ signature: string; key: string }>;
 export type WorkReportDraft = Readonly<{ quantity: string; completedAt: string }>;
+export type SubmittedWorkTask = Readonly<{ workTaskId: string; submittedQuantity: number }>;
+export type SubmittedWorkReport = Readonly<{ workTaskId: string; actualQuantity: number }>;
 
 const invokeKeyFactory = (createKey: () => string): string =>
   createKey.call(globalThis.crypto);
@@ -49,3 +51,10 @@ export const workReportDraft = (
   taskId: string,
   date: Date = new Date(),
 ): WorkReportDraft => drafts[taskId] ?? { quantity: "", completedAt: localDateTimeValue(date) };
+
+export const reportsArePersisted = (
+  tasks: readonly SubmittedWorkTask[],
+  reports: readonly SubmittedWorkReport[],
+): boolean => reports.every((report) => tasks.some((task) => (
+  task.workTaskId === report.workTaskId && task.submittedQuantity === report.actualQuantity
+)));

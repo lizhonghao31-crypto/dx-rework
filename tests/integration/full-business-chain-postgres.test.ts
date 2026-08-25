@@ -4,20 +4,28 @@ import { readFile } from "node:fs/promises";
 import {
   CreateResponsibilityDraftSchema,
   CreateWorkReportSchema,
-  CreateWorkTaskSchema,
   ReviewProcessConfigurationSchema,
   SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
+import {
+  ApproveExternalDeductionSpecialApprovalSchema,
+  CloseExternalDeductionCaseSchema,
+  CreateExternalDeductionEntrySchema,
+  RequestExternalDeductionSpecialApprovalSchema,
+  ReturnExternalDeductionSpecialApprovalSchema,
+} from "@dx-rework/contracts/external-responsibility";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
+import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
+import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
-import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
+import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
@@ -80,6 +88,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     undefined,
     todoProjection,
   );
+  const v2Submission = new ReworkV2SubmissionService(
+    database,
+    "corp",
+    undefined,
+    undefined,
+    undefined,
+    todoProjection,
+  );
   const configuration = new ProcessConfigurationService(
     database,
     undefined,
@@ -87,18 +103,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     undefined,
     todoProjection,
   );
-  const tailInspection = new TailInspectionService(
-    database,
-    undefined,
-    undefined,
-    todoProjection,
-  );
+  const workerPlan = new ProcessWorkerPlanService(database);
   const work = new WorkReportingService(database, undefined, undefined, todoProjection);
   const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
   const responsibility = new ResponsibilityDeterminationApplicationService(
     database,
     todoProjection,
   );
+  const external = new ExternalResponsibilityApplicationService(database, todoProjection);
   const wages = new WageService(database, undefined, undefined, todoProjection);
 
   const ids = {
@@ -113,6 +125,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     production: randomUUID(),
     factoryPayables: randomUUID(),
     fabricPayables: randomUUID(),
+    financeDirector: randomUUID(),
     embroideryMerchandiser: randomUUID(),
     embroideryPayables: randomUUID(),
     administrative: randomUUID(),
@@ -121,7 +134,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   };
 
   let workerPersonId = "";
+  let tailPersonId = "";
   let factorySupplierId = "";
+  let fabricSupplierId = "";
   let publicProcessId = "";
 
   const actor = (
@@ -175,10 +190,20 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ["production_management"],
     "responsibility:determine",
   );
-  const ownerApproval = () => actor(
-    ids.ownerOne,
-    ["owner_group"],
-    "responsibility:owner_sign",
+  const factoryPayables = (capability: string) => actor(
+    ids.factoryPayables,
+    ["factory_payables"],
+    capability,
+  );
+  const fabricPayables = (capability: string) => actor(
+    ids.fabricPayables,
+    ["fabric_payables"],
+    capability,
+  );
+  const financeDirector = () => actor(
+    ids.financeDirector,
+    ["finance_director"],
+    "external_deduction:special_approve",
   );
   const wageView = () => actor(
     ids.tail,
@@ -232,6 +257,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.production, "生产管理", "production_management"],
       [ids.factoryPayables, "加工厂应付", "factory_payables"],
       [ids.fabricPayables, "面料应付", "fabric_payables"],
+      [ids.financeDirector, "财务总监", "finance_director"],
       [ids.embroideryMerchandiser, "印绣花跟单", "embroidery_washing_merchandiser"],
       [ids.embroideryPayables, "印绣花应付", "embroidery_washing_payables"],
       [ids.administrative, "行政文员", "administrative_clerk"],
@@ -266,12 +292,26 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       aliases: [],
       reason: "全链验收工人档案",
     })).personId;
+    tailPersonId = (await access.createPerson(ownerMasterData(), {
+      personType: "internal",
+      appUserId: ids.tailInspector,
+      displayName: "尾查",
+      aliases: [],
+      reason: "全链验收尾查档案",
+    })).personId;
     factorySupplierId = (await access.createSupplier(ownerMasterData(), {
       supplierCode: "UATFAC01",
       supplierType: "factory",
       supplierName: "全链测试加工厂",
       active: true,
       changeReason: "全链验收加工厂",
+    })).supplierId;
+    fabricSupplierId = (await access.createSupplier(ownerMasterData(), {
+      supplierCode: "UATFAB01",
+      supplierType: "fabric",
+      supplierName: "全链测试面料商",
+      active: true,
+      changeReason: "全链验收面料商",
     })).supplierId;
     publicProcessId = (await access.createProcess(ownerMasterData(), {
       processCode: "UATPROC01",
@@ -370,9 +410,17 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       items: [{
         source: "catalog",
         processId: publicProcessId,
+        executionKind: "worker",
         plannedQuantity: submitted.value.reworkQuantity,
         pricingUnit: "piece",
         unitPrice: 0.55,
+      }, {
+        source: "custom",
+        customProcessName: "尾查",
+        executionKind: "tail_inspection",
+        plannedQuantity: 1,
+        pricingUnit: "piece",
+        unitPrice: 0.2,
       }],
     });
     const n02Saved = await configuration.saveDraft(
@@ -385,16 +433,35 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       reworkStatus: "pending_process_configuration",
       configuration: {
         status: "draft",
-        items: [{ plannedQuantity: 200, unitPrice: 0.55 }],
+        items: [
+          expect.objectContaining({ executionKind: "worker", plannedQuantity: 200, unitPrice: 0.55 }),
+          expect.objectContaining({ executionKind: "tail_inspection", plannedQuantity: 1, unitPrice: 0.2 }),
+        ],
       },
     });
+    const workerItem = n02Saved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const tailItem = n02Saved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
+    const planned = await workerPlan.save(
+      tailAssign(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: n02Saved.value.orderVersion,
+        configurationId: n02Saved.value.configuration!.configurationId,
+        expectedConfigurationVersion: n02Saved.value.configuration!.configurationVersion,
+        assignments: [
+          { configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] },
+          { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
+        ],
+      },
+      randomUUID(),
+    );
+    expect(planned.value).toMatchObject({ required: true, complete: true });
     const n02Submitted = await configuration.submit(
       tailConfigure(),
       submitted.value.reworkOrderId,
       SubmitProcessConfigurationSchema.parse({
         expectedOrderVersion: n02Saved.value.orderVersion,
         expectedConfigurationVersion: n02Saved.value.configuration!.configurationVersion,
-        tailInspectors: [{ userId: ids.tailInspector, boxScope: "全链测试箱" }],
       }),
       randomUUID(),
     );
@@ -410,7 +477,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       randomUUID(),
     );
     expect(n03Approved.value.reworkStatus).toBe("pending_task_assignment");
-    const approvedItem = n03Approved.value.configuration!.items[0]!;
+    const approvedItem = n03Approved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const approvedTailItem = n03Approved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
     expect(approvedItem).toMatchObject({
       processId: publicProcessId,
       processName: "袖口返修",
@@ -419,53 +487,53 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       unitPrice: 0.55,
     });
 
-    // N03 needs an explicit assignment confirmation before work starts.
-    const task = await work.createTask(
-      tailAssign(),
+    expect(approvedTailItem).toMatchObject({
+      processName: "尾查",
+      executionKind: "tail_inspection",
+      plannedQuantity: 1,
+      unitPrice: 0.2,
+    });
+
+    // IE approval activates the complete N02 plan into two unified execution tasks.
+    const activated = await workerPlan.activateAfterIeApproval(
       submitted.value.reworkOrderId,
-      CreateWorkTaskSchema.parse({
-        expectedOrderVersion: n03Approved.value.orderVersion,
-        configurationItemId: approvedItem.configurationItemId,
-        mode: "individual",
-        members: [{ personId: workerPersonId }],
-      }),
+      n03Approved.value.configuration!.configurationVersion,
       randomUUID(),
     );
-    expect(task.value).toMatchObject({
+    expect(activated).toMatchObject({ reworkStatus: "in_progress", tasksCreated: 2 });
+    const n04Started = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    expect(n04Started.reworkStatus).toBe("in_progress");
+    const workerTask = n04Started.tasks.find((item) => item.executionKind === "worker")!;
+    const tailTask = n04Started.tasks.find((item) => item.executionKind === "tail_inspection")!;
+    expect(workerTask).toMatchObject({
       processName: "袖口返修",
       plannedQuantity: 200,
       unitPrice: 0.55,
       members: [{ personId: workerPersonId, displayName: "工人" }],
     });
-    const pendingAssignments = await work.list(
-      tailAssign(),
-      submitted.value.reworkOrderId,
-    );
-    const n04Started = await work.confirmAssignments(
-      tailAssign(),
-      submitted.value.reworkOrderId,
-      { expectedOrderVersion: pendingAssignments.orderVersion },
-      randomUUID(),
-    );
-    expect(n04Started.value.reworkStatus).toBe("in_progress");
+    expect(tailTask).toMatchObject({
+      processName: "尾查",
+      executionKind: "tail_inspection",
+      members: [{ personId: tailPersonId, displayName: "尾查" }],
+    });
 
     // N05 has one final completion report per assigned task; wage is still
     // generated only after N06 confirms the quantity.
     const firstReportKey = randomUUID();
     const firstReportInput = CreateWorkReportSchema.parse({
-      expectedOrderVersion: n04Started.value.orderVersion,
+      expectedOrderVersion: n04Started.orderVersion,
       actualQuantity: 200,
       completedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     });
     const firstReport = await work.submitReport(
       worker(),
-      task.value.workTaskId,
+      workerTask.workTaskId,
       firstReportInput,
       firstReportKey,
     );
     const firstReplay = await work.submitReport(
       worker(),
-      task.value.workTaskId,
+      workerTask.workTaskId,
       firstReportInput,
       firstReportKey,
     );
@@ -473,31 +541,21 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(firstReplay.value.workReportId).toBe(firstReport.value.workReportId);
     expect(firstReport.value.memberShares[0]?.amount).toBe(0);
 
-    const tailView = await tailInspection.get(
+    const tailReportingView = await work.list(tailInspect(), submitted.value.reworkOrderId);
+    const tailReported = await work.submitReport(
       tailInspect(),
-      submitted.value.reworkOrderId,
-    );
-    expect(tailView).toMatchObject({
-      reworkStatus: "in_progress",
-      assignments: [expect.objectContaining({
-        tailInspectorUserId: ids.tailInspector,
-        canSubmit: true,
-      })],
-    });
-    const tailAssignment = tailView.assignments[0]!;
-    const tailReported = await tailInspection.submit(
-      tailInspect(),
-      tailAssignment.assignmentId,
-      {
-        returnedQuantity: 200,
-        items: [{
-          configurationItemId: approvedItem.configurationItemId,
-          inspectedQuantity: 200,
-        }],
-      },
+      tailTask.workTaskId,
+      CreateWorkReportSchema.parse({
+        expectedOrderVersion: tailReportingView.orderVersion,
+        actualQuantity: 200,
+        completedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      }),
       randomUUID(),
     );
-    expect(tailReported.value.reworkStatus).toBe("pending_order_review");
+    expect(tailReported.value).toMatchObject({
+      workTaskId: tailTask.workTaskId,
+      status: "submitted",
+    });
 
     const n07View = await wholeOrder.get(
       tailAudit(),
@@ -514,17 +572,35 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       })],
     });
 
-    // N07 confirms worker counts against tail-inspection facts and creates wages.
-    const n07Approved = await wholeOrder.approve(
+    // N05 records versioned final quantities without materializing wages.
+    const n05Confirmed = await wholeOrder.approve(
       tailAudit(),
       submitted.value.reworkOrderId,
       {
         expectedOrderVersion: n07View.orderVersion,
+        finalQuantities: n07View.processes.map((process) => ({
+          configurationItemId: process.configurationItemId,
+          finalConfirmedQuantity: process.completedQuantity,
+        })),
         temporaryCoefficients: [],
       },
       randomUUID(),
     );
-    expect(n07Approved.value).toMatchObject({
+    expect(n05Confirmed.value.reworkStatus).toBe("pending_final_quantity_ie_review");
+    expect((await database.query(
+      "SELECT count(*)::int count FROM rework_wage_items WHERE rework_order_id=$1",
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({ count: 0 });
+
+    // N06 IE approval locks settlement quantities, creates wages, then enters responsibility.
+    const n06View = await wholeOrder.get(ie(), submitted.value.reworkOrderId);
+    const n06Approved = await wholeOrder.reviewFinalQuantity(
+      ie(),
+      submitted.value.reworkOrderId,
+      { expectedOrderVersion: n06View.orderVersion, decision: "approved" },
+      randomUUID(),
+    );
+    expect(n06Approved.value).toMatchObject({
       reworkStatus: "pending_responsibility_determination",
       processes: [expect.objectContaining({
         configurationItemId: approvedItem.configurationItemId,
@@ -532,24 +608,32 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       })],
     });
 
-    // N07 records one primary responsibility for each process. Shared
-    // responsibility remains explanatory text and does not split money.
+    // N09 splits one process between two external responsible parties. Because
+    // no own-factory share exists, finalization must skip owner confirmation.
     const n07Draft = await responsibility.saveDraft(
       production(),
       submitted.value.reworkOrderId,
       CreateResponsibilityDraftSchema.parse({
-        expectedOrderVersion: n07Approved.value.orderVersion,
+        expectedOrderVersion: n06Approved.value.orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
         processes: [{
           configurationItemId: approvedItem.configurationItemId,
           multiplier: "1.000",
-          allocations: [{
-            responsibilityType: "processing_factory",
-            shareBps: 10000,
-            multiplier: "1.200",
-            supplierId: factorySupplierId,
-          }],
+          allocations: [
+            {
+              responsibilityType: "processing_factory",
+              shareBps: 7000,
+              multiplier: "1.200",
+              supplierId: factorySupplierId,
+            },
+            {
+              responsibilityType: "fabric_supplier",
+              shareBps: 3000,
+              multiplier: "1.200",
+              supplierId: fabricSupplierId,
+            },
+          ],
         }],
       }),
       randomUUID(),
@@ -560,10 +644,18 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       processes: [{
         baseAmount: "110.00",
         responsibilityAmount: "132.00",
-        allocations: [expect.objectContaining({
-          responsibilityType: "processing_factory",
-          roundedAmount: "132.00",
-        })],
+        allocations: [
+          expect.objectContaining({
+            responsibilityType: "fabric_supplier",
+            shareBps: 3000,
+            roundedAmount: "39.60",
+          }),
+          expect.objectContaining({
+            responsibilityType: "processing_factory",
+            shareBps: 7000,
+            roundedAmount: "92.40",
+          }),
+        ],
       }],
     });
     const n07Final = await responsibility.finalize(
@@ -576,51 +668,209 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       },
       randomUUID(),
     );
-    expect(n07Final.value.reworkStatus).toBe("pending_owner_signature");
+    expect(n07Final.value.reworkStatus).toBe("completed");
     expect(n07Final.value.canOwnerSign).toBe(false);
-
-    // N08 completes the production flow and atomically materializes the N09
-    // supplier ledger from the immutable N07 responsibility facts.
-    const ownerSigned = await responsibility.approveOwnerSignature(
-      ownerApproval(),
-      submitted.value.reworkOrderId,
-      {
-        expectedOrderVersion: n07Final.value.orderVersion,
-      },
-      randomUUID(),
-    );
-    expect(ownerSigned.value).toMatchObject({
-      reworkStatus: "completed",
-      ownerSignature: {
-        decision: "approved", signedBy: ids.ownerOne,
-        multiplierAdjustments: [],
-      },
-    });
+    expect(n07Final.value.ownerSignature).toBeNull();
 
     const externalCases = await database.query<{
+      caseId: string;
       responsibilityType: string;
       supplierId: string;
       proposedAmount: string;
       status: string;
     }>(
-      `SELECT responsibility_type AS "responsibilityType",
+      `SELECT case_id AS "caseId",
+              responsibility_type AS "responsibilityType",
               supplier_id AS "supplierId",
               proposed_deduction_amount::text AS "proposedAmount",
               status
        FROM rework_external_responsibility_cases
-       WHERE rework_order_id=$1`,
+       WHERE rework_order_id=$1
+       ORDER BY responsibility_type`,
       [submitted.value.reworkOrderId],
     );
-    expect(externalCases.rows).toEqual([{
-      responsibilityType: "processing_factory",
-      supplierId: factorySupplierId,
-      proposedAmount: "132.00",
-      status: "deduction_follow_up",
-    }]);
+    expect(externalCases.rows.map((item) => ({
+      responsibilityType: item.responsibilityType,
+      supplierId: item.supplierId,
+      proposedAmount: item.proposedAmount,
+      status: item.status,
+    }))).toEqual([
+      {
+        responsibilityType: "fabric_supplier",
+        supplierId: fabricSupplierId,
+        proposedAmount: "39.60",
+        status: "deduction_follow_up",
+      },
+      {
+        responsibilityType: "processing_factory",
+        supplierId: factorySupplierId,
+        proposedAmount: "92.40",
+        status: "deduction_follow_up",
+      },
+    ]);
     expect((await database.query<{ status: string }>(
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [submitted.value.reworkOrderId],
     )).rows[0]).toEqual({ status: "completed" });
+
+    // N11 / PR-07 - exact deductions close normally; partial or failed
+    // deductions require one append-only finance-director decision.
+    const processingCaseId = externalCases.rows.find(
+      (item) => item.responsibilityType === "processing_factory",
+    )!.caseId;
+    const fabricCaseId = externalCases.rows.find(
+      (item) => item.responsibilityType === "fabric_supplier",
+    )!.caseId;
+    const initialProcessingCase = await external.getCase(
+      factoryPayables("external_deduction:record"),
+      processingCaseId,
+    );
+    const partialDeduction = await external.recordDeduction(
+      factoryPayables("external_deduction:record"),
+      processingCaseId,
+      CreateExternalDeductionEntrySchema.parse({
+        expectedCaseVersion: initialProcessingCase.caseVersion,
+        entryType: "deduction",
+        amount: "80.00",
+        deductedOn: new Date().toISOString().slice(0, 10),
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    await expect(external.close(
+      factoryPayables("external_deduction:close"),
+      processingCaseId,
+      CloseExternalDeductionCaseSchema.parse({
+        expectedCaseVersion: partialDeduction.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      }),
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const firstRequest = await external.requestSpecialApproval(
+      factoryPayables("external_deduction:close"),
+      processingCaseId,
+      RequestExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: partialDeduction.value.caseVersion,
+        reason: "供应商只确认扣款 80 元",
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    expect(firstRequest.value).toMatchObject({
+      status: "pending_special_approval",
+      canRequestSpecialApproval: false,
+      specialApproval: {
+        requestVersion: 1,
+        proposedAmount: "92.40",
+        actualDeductedAmount: "80.00",
+        remainingAmount: "12.40",
+        decision: null,
+      },
+    });
+    expect((await database.query<{
+      recipientUserId: string;
+      provider: string;
+      outcome: string;
+    }>(
+      `SELECT todo.recipient_user_id AS "recipientUserId",
+              attempt.provider,attempt.outcome
+       FROM rework_todos todo
+       JOIN todo_delivery_attempts attempt USING(todo_id)
+       WHERE todo.category='external_deduction_special_approval'
+         AND todo.entity_id=$1
+       ORDER BY attempt.attempted_at DESC LIMIT 1`,
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({
+      recipientUserId: ids.financeDirector,
+      provider: "dingtalk",
+      outcome: "queued",
+    });
+
+    const returned = await external.returnSpecialApproval(
+      financeDirector(),
+      processingCaseId,
+      ReturnExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: firstRequest.value.caseVersion,
+        expectedRequestVersion: 1,
+        reason: "请继续与供应商核对差额",
+      }),
+      randomUUID(),
+    );
+    expect(returned.value).toMatchObject({
+      status: "deduction_follow_up",
+      specialApproval: { decision: { decision: "returned" } },
+    });
+    const secondRequest = await external.requestSpecialApproval(
+      factoryPayables("external_deduction:close"),
+      processingCaseId,
+      RequestExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: returned.value.caseVersion,
+        reason: "供应商确认最终只能扣款 80 元",
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    expect(secondRequest.value.specialApproval).toMatchObject({
+      requestVersion: 2,
+      decision: null,
+    });
+    const speciallyClosed = await external.approveSpecialApproval(
+      financeDirector(),
+      processingCaseId,
+      ApproveExternalDeductionSpecialApprovalSchema.parse({
+        expectedCaseVersion: secondRequest.value.caseVersion,
+        expectedRequestVersion: 2,
+        reason: "确认按实际扣款关闭",
+      }),
+      randomUUID(),
+    );
+    expect(speciallyClosed.value).toMatchObject({
+      status: "closed",
+      closure: {
+        result: "partial",
+        proposedAmount: "92.40",
+        actualDeductedAmount: "80.00",
+        remainingAmount: "12.40",
+      },
+      specialApproval: { decision: { decision: "approved" } },
+    });
+    await expect(database.query(
+      "UPDATE rework_external_deduction_special_decisions SET reason='tampered' WHERE special_request_id=$1",
+      [speciallyClosed.value.specialApproval!.requestId],
+    )).rejects.toThrow();
+
+    const initialFabricCase = await external.getCase(
+      fabricPayables("external_deduction:record"),
+      fabricCaseId,
+    );
+    const fullDeduction = await external.recordDeduction(
+      fabricPayables("external_deduction:record"),
+      fabricCaseId,
+      CreateExternalDeductionEntrySchema.parse({
+        expectedCaseVersion: initialFabricCase.caseVersion,
+        entryType: "deduction",
+        amount: "39.60",
+        deductedOn: new Date().toISOString().slice(0, 10),
+        attachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    const normallyClosed = await external.close(
+      fabricPayables("external_deduction:close"),
+      fabricCaseId,
+      CloseExternalDeductionCaseSchema.parse({
+        expectedCaseVersion: fullDeduction.value.caseVersion,
+        result: "full",
+        evidenceAttachmentIds: [],
+      }),
+      randomUUID(),
+    );
+    expect(normallyClosed.value).toMatchObject({
+      status: "closed",
+      closure: { result: "full", remainingAmount: "0.00" },
+    });
 
     /* Historical N08-B scenario retained below as reference only. Current V2
        N09/N11 execution is covered by the active assertions and Root double pass.
@@ -768,17 +1018,17 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const wagePeriod = periods[0]!;
     expect(wagePeriod).toMatchObject({
       status: "ready_to_lock",
-      sourceItemCount: 1,
-      personCount: 1,
-      totalAmount: "110.00",
+      sourceItemCount: 2,
+      personCount: 2,
+      totalAmount: "150.00",
     });
     const wageDetail = await wages.get(wageView(), wagePeriod.periodId);
-    expect(wageDetail.items).toHaveLength(1);
+    expect(wageDetail.items).toHaveLength(2);
     expect(wageDetail.items.reduce(
       (sum, item) => sum + Number(item.payableAmount),
       0,
-    )).toBe(110);
-    expect(wageDetail.period.totalAmount).toBe("110.00");
+    )).toBe(150);
+    expect(wageDetail.period.totalAmount).toBe("150.00");
     await expect(wages.lock(
       monthCloseWage(),
       wagePeriod.periodId,
@@ -828,11 +1078,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [submitted.value.reworkOrderId],
     );
     expect(totals.rows[0]).toEqual({
-      report_total: "110.00",
+      report_total: "150.00",
       responsibility_total: "132.00",
       own_factory_total: "0.00",
       external_total: "132.00",
-      wage_total: "110.00",
+      wage_total: "150.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(
       `SELECT category
@@ -841,48 +1091,49 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
          AND status IN ('pending','blocked_recipient')
        ORDER BY category,todo_id`,
     );
-    expect(openBusinessTodos.rows).toEqual([
-      { category: "external_deduction_follow_up" },
-      { category: "wage_month_close" },
-    ]);
+    expect(openBusinessTodos.rows).toEqual([{ category: "wage_month_close" }]);
   });
 
-  it("submits the eight required N01 facts without retired manual-entry fields", async () => {
+  it("submits simplified N01 without retired manual-entry facts", async () => {
     const initialImageId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
          attachment_id,object_key,original_filename,mime_type,size_bytes,
          sha256,uploaded_by,status,ready_at
-       ) VALUES($1,$2,'n01-eight-fields.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+       ) VALUES($1,$2,'n01-v2-minimal.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [initialImageId, `private/${initialImageId}.webp`, "f".repeat(64), ids.qc],
     );
     const draft = await initiation.createDraft(qc(), {
-      styleNo: "UAT-N01-EIGHT-FIELDS",
-      orderQuantity: 120,
+      styleNo: "UAT-N01-V2-MINIMAL",
+      merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
-      inspectionReport: n01CoreInspectionReport("八项资料提交测试款"),
       attachmentIds: [initialImageId],
     }, randomUUID());
 
     expect(draft.value).toMatchObject({
-      merchandiserUserId: null,
+      status: "draft",
+      styleNo: "UAT-N01-V2-MINIMAL",
+      orderQuantity: null,
+      merchandiserUserId: ids.merchandiser,
       problemPart: null,
       problemDescription: null,
       reworkQuantity: null,
+      inspectionReport: null,
     });
 
-    const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, {
+    const submitted = await v2Submission.submit(qc(), draft.value.reworkOrderId, {
       expectedVersion: draft.value.version,
     }, randomUUID());
 
     expect(submitted.value).toMatchObject({
       status: "pending_process_configuration",
-      styleNo: "UAT-N01-EIGHT-FIELDS",
-      orderQuantity: 120,
-      merchandiserUserId: null,
+      styleNo: "UAT-N01-V2-MINIMAL",
+      orderQuantity: null,
+      merchandiserUserId: ids.merchandiser,
       problemPart: null,
       problemDescription: null,
       reworkQuantity: null,
+      inspectionReport: null,
     });
     expect(submitted.value.reworkNo).toMatch(/^RW-\d{4}-\d{4}-\d{3,}$/);
   });

@@ -5,7 +5,7 @@ import {
   splitAmount,
 } from "../../apps/api/src/rework/work-reporting-service.js";
 import { canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
-import { localDateTimeValue, reportAttempt, taskAttempt, workReportDraft } from "../../apps/web/src/work-reporting-submission.js";
+import { localDateTimeValue, reportAttempt, reportsArePersisted, taskAttempt, workReportDraft } from "../../apps/web/src/work-reporting-submission.js";
 import { describe, expect, it } from "vitest";
 
 describe("work reporting monetary snapshots", () => {
@@ -37,6 +37,9 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("我已完工&上数");
     expect(form).toContain("task.canSubmitReport");
     expect(form).toContain("reportQuantities");
+    expect(form).toContain("work-reports/batch");
+    expect(form).toContain("正在批量提交");
+    expect(form).not.toContain("for (const { task, text } of quantities)");
     expect(form).toContain('step="1"');
     expect(form).toContain("大于 0 的整数件数");
     expect(form).toContain("当前岗位只处理尾部确认，不展示工人的个人上数");
@@ -49,6 +52,9 @@ describe("work reporting monetary snapshots", () => {
     expect(service).toContain("async confirmAssignments");
     expect(service).toContain("if (order.version !== input.expectedOrderVersion)");
     expect(service).toContain("rework.work_task.assignment_confirm");
+    expect(service).toContain("async submitReportsBatch");
+    expect(service).toContain("rework.work_report.batch_submit");
+    expect(service).toContain("submittedWorkTaskIds: readonly string[]");
     expect(service).toContain("该人员已经分配到这道工序");
   });
 
@@ -60,6 +66,21 @@ describe("work reporting monetary snapshots", () => {
       signature: JSON.stringify({ ...payload, actualQuantity: 2 }),
       key: "changed-key",
     });
+  });
+
+  it("recognizes a committed batch from its refreshed task facts without sending another POST", () => {
+    const reports = [
+      { workTaskId: "task-a", actualQuantity: 5_000 },
+      { workTaskId: "task-b", actualQuantity: 6_000 },
+    ];
+    expect(reportsArePersisted([
+      { workTaskId: "task-a", submittedQuantity: 5_000 },
+      { workTaskId: "task-b", submittedQuantity: 6_000 },
+    ], reports)).toBe(true);
+    expect(reportsArePersisted([
+      { workTaskId: "task-a", submittedQuantity: 5_000 },
+      { workTaskId: "task-b", submittedQuantity: 0 },
+    ], reports)).toBe(false);
   });
 
   it("invokes the real Web Crypto randomUUID method with its required receiver", () => {

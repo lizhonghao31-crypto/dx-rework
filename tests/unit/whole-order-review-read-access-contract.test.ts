@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("whole-order-review read access contract", () => {
-  it("lets each N06 actor read the same server-backed review context they must act on", async () => {
+  it("lets each N05 actor read the same server-backed review context they must act on", async () => {
     const routes = await readFile(
       "apps/api/src/rework/whole-order-review-routes.ts",
       "utf8",

@@ -32,6 +32,9 @@ type FactoryState = Readonly<{
   supplierId: string | null;
   supplierVersion: number | null;
 }> | null;
+type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{
+  receivingBatchId?: string;
+}>;
 type ReworkOrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
@@ -51,6 +54,7 @@ type ReworkOrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   inspection_report: InspectionReportDraft | null;
+  source_receiving_batch_id: string | null;
   created_by: string;
   updated_by: string;
   version: number;
@@ -131,11 +135,16 @@ export class ReworkInitiationService {
 
   async createDraft(
     actor: TrustedActorContext,
-    input: CreateReworkDraft,
+    input: CreateReworkDraftWithReceivingBatch,
     idempotencyKey: string,
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, "rework.draft.create", idempotencyKey, input, 201, async (client) => {
       const reworkOrderId = randomUUID();
+      const sourceReceivingBatchId = await this.resolveSourceReceivingBatch(
+        client,
+        input.receivingBatchId,
+        input.styleNo ?? null,
+      );
       const factory = await this.resolveFactory(client, input.processingFactory ?? null);
       if (input.merchandiserUserId) {
         await this.ensureActiveMerchandiser(client, input.merchandiserUserId);
@@ -145,6 +154,7 @@ export class ReworkInitiationService {
         reworkOrderId,
         reworkNo: null,
         status: "draft" as const,
+        receivingBatchId: sourceReceivingBatchId,
         styleNo: input.styleNo ?? null,
         customerSupplyCode: input.customerSupplyCode ?? null,
         factoryStyleNo: input.factoryStyleNo ?? null,
@@ -174,8 +184,9 @@ export class ReworkInitiationService {
            order_no,order_quantity,merchandiser_user_id,
            processing_factory_type,processing_factory_supplier_id,
            processing_factory_supplier_version,rework_reason,rework_process,
-           problem_part,problem_description,rework_quantity,inspection_report,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)`,
+           problem_part,problem_description,rework_quantity,inspection_report,
+           source_receiving_batch_id,created_by,updated_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18)`,
         [
           reworkOrderId,
           next.styleNo,
@@ -193,12 +204,64 @@ export class ReworkInitiationService {
           next.problemDescription,
           next.reworkQuantity,
           next.inspectionReport,
+          sourceReceivingBatchId,
           actor.actorId,
         ],
       );
       await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
     });
+  }
+
+  private async resolveSourceReceivingBatch(
+    client: PoolClient,
+    receivingBatchId: string | undefined,
+    styleNo: string | null,
+  ): Promise<string | null> {
+    const normalizedStyleNo = styleNo?.trim();
+    if (!receivingBatchId) {
+      if (!normalizedStyleNo) return null;
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
+      const fallback = await client.query<{ receiving_batch_id: string }>(
+        `SELECT batch.receiving_batch_id
+         FROM receiving_batches batch
+         WHERE batch.style_no=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM rework_orders completed_order
+             WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
+               AND completed_order.status='completed'
+           )
+         ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+         LIMIT 1`,
+        [normalizedStyleNo],
+      );
+      return fallback.rows[0]?.receiving_batch_id ?? null;
+    }
+    if (!normalizedStyleNo) {
+      throw new ApplicationError("VALIDATION_ERROR", "收货批次要求同时提供款号", 400);
+    }
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
+    const batch = await client.query<{ style_no: string; closed: boolean }>(
+      `SELECT batch.style_no,
+              EXISTS(
+                SELECT 1 FROM rework_orders completed_order
+                WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
+                  AND completed_order.status='completed'
+              ) AS closed
+       FROM receiving_batches batch
+       WHERE batch.receiving_batch_id=$1
+       FOR UPDATE`,
+      [receivingBatchId],
+    );
+    const row = batch.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
+    if (row.style_no !== normalizedStyleNo) {
+      throw new ApplicationError("VALIDATION_ERROR", "收货批次与款号不一致", 400);
+    }
+    if (row.closed) {
+      throw new ApplicationError("CONFLICT", "已完成返工的收货批次不能再次发起返工", 409);
+    }
+    return receivingBatchId;
   }
 
   async updateDraft(
@@ -224,12 +287,16 @@ export class ReworkInitiationService {
       const factory = input.processingFactory === undefined
         ? factoryFromRow(current)
         : await this.resolveFactory(client, input.processingFactory);
+      const nextStyleNo = input.styleNo === undefined ? current.style_no : input.styleNo;
+      const sourceReceivingBatchId = current.source_receiving_batch_id
+        ?? await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
       const nextVersion = current.version + 1;
       const next = {
         reworkOrderId,
         reworkNo: current.rework_no,
         status: "draft" as const,
-        styleNo: input.styleNo === undefined ? current.style_no : input.styleNo,
+        receivingBatchId: sourceReceivingBatchId,
+        styleNo: nextStyleNo,
         customerSupplyCode: input.customerSupplyCode === undefined
           ? current.customer_supply_code
           : input.customerSupplyCode,
@@ -277,7 +344,7 @@ export class ReworkInitiationService {
              processing_factory_supplier_version=$10,rework_reason=$11,
              rework_process=$12,problem_part=$13,problem_description=$14,
              rework_quantity=$15,inspection_report=$16,updated_by=$17,version=$18,
-             updated_at=CURRENT_TIMESTAMP
+             source_receiving_batch_id=$19,updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
           reworkOrderId,
@@ -298,6 +365,7 @@ export class ReworkInitiationService {
           next.inspectionReport,
           actor.actorId,
           nextVersion,
+          sourceReceivingBatchId,
         ],
       );
       if (input.attachmentIds !== undefined) {
@@ -1136,6 +1204,7 @@ export class ReworkInitiationService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      receivingBatchId: row.source_receiving_batch_id,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
