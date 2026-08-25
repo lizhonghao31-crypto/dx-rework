@@ -199,17 +199,19 @@ export class WorkReportingService {
                 WHERE assignment.user_id=person.app_user_id
                   AND assignment.role_code='worker' AND assignment.revoked_at IS NULL
               )) AS worker_eligible,
-              (person.person_type='internal' AND EXISTS (
-                SELECT 1 FROM user_role_assignments assignment
-                JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
-                JOIN role_capabilities capability ON capability.role_code=assignment.role_code
-                  AND capability.capability='tail_inspection:report'
-                JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
-                JOIN identity_mappings identity ON identity.user_id=app_user.id
-                  AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
-                JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
-                WHERE assignment.user_id=person.app_user_id
-                  AND assignment.role_code IN ('worker','tail_inspector') AND assignment.revoked_at IS NULL
+              (person.person_type='temporary' OR (
+                person.person_type='internal' AND EXISTS (
+                  SELECT 1 FROM user_role_assignments assignment
+                  JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+                  JOIN role_capabilities capability ON capability.role_code=assignment.role_code
+                    AND capability.capability='tail_inspection:report'
+                  JOIN app_users app_user ON app_user.id=assignment.user_id AND app_user.enabled=true
+                  JOIN identity_mappings identity ON identity.user_id=app_user.id
+                    AND identity.provider='dingtalk' AND identity.active=true AND identity.employed=true
+                  JOIN access_security_policy policy ON policy.policy_key='primary' AND policy.dingtalk_corp_id=identity.corp_id
+                  WHERE assignment.user_id=person.app_user_id
+                    AND assignment.role_code IN ('worker','tail_inspector') AND assignment.revoked_at IS NULL
+                )
               )) AS tail_eligible
        FROM business_people person
        WHERE person.active=true
@@ -781,6 +783,7 @@ export class WorkReportingService {
   ): "work:report" | "work:report_for_worker" | "tail_inspection:report" | undefined {
     if (task.execution_kind === "tail_inspection") {
       if (isRootActor(actor) || this.isOwnTailInspector(actor, members)) return "tail_inspection:report";
+      if (this.canProxyReport(actor, members)) return "work:report_for_worker";
       return undefined;
     }
     if (this.isOwnWorker(actor, members)) return "work:report";
@@ -883,7 +886,7 @@ export class WorkReportingService {
     const members = await this.members(client, id);
     const ownWorker = task.execution_kind === "worker" && this.isOwnWorker(actor, members);
     const ownTailInspector = task.execution_kind === "tail_inspection" && this.isOwnTailInspector(actor, members);
-    const proxyTask = task.execution_kind === "worker" && this.canProxyReport(actor, members);
+    const proxyTask = this.canProxyReport(actor, members);
     const supervisor = this.isSupervisor(actor) || isRootActor(actor);
     if (!supervisor && !ownWorker && !ownTailInspector && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
     const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.work_task_id=$1 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)", [task.work_task_id]);
@@ -913,7 +916,7 @@ export class WorkReportingService {
       filters.push(`item.execution_kind='tail_inspection' AND EXISTS (SELECT 1 FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id WHERE member.work_task_id=task.work_task_id AND person.app_user_id=$${values.length})`);
     }
     if (this.canProxyReport(actor)) {
-      filters.push("item.execution_kind='worker' AND EXISTS (SELECT 1 FROM rework_work_task_members member WHERE member.work_task_id=task.work_task_id AND member.person_type_snapshot='temporary')");
+      filters.push("EXISTS (SELECT 1 FROM rework_work_task_members member WHERE member.work_task_id=task.work_task_id AND member.person_type_snapshot='temporary')");
     }
     if (!supervisor && filters.length === 0) error("当前用户无权读取返工执行任务", 403, "FORBIDDEN");
     const access = supervisor ? "" : ` AND (${filters.map((value) => `(${value})`).join(" OR ")})`;

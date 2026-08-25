@@ -16,7 +16,8 @@ describe("N02 mobile personnel assignment", () => {
     expect(source).toContain('onClick={() => removeWorker(index, personId)}>−</button>');
     expect(source).toContain('className="process-worker-temporary-name"');
     expect(styles).toContain(".process-worker-picker__heading{justify-content:flex-start}");
-    expect(source).toContain('<div className="process-worker-tail-title-row"><b>尾查</b><Button className="process-worker-mobile-assign"');
+    expect(source).toContain('<div className="process-worker-picker__heading"><b>尾查人员 *</b>');
+    expect(source).toContain('onClick={openMobileTailAssignment}>选择本单工人</Button>');
   });
 
   it("uses a temporary selection draft so cancel does not mutate the form and confirm writes the shared worker state", async () => {
@@ -28,13 +29,15 @@ describe("N02 mobile personnel assignment", () => {
     expect(source).toContain("setTailPersonIds(selectedIds)");
     expect(source).toContain("markDefaultRosterDirty(mobileAssignment.index)");
     expect(source).toContain("确认本单分工");
-    expect(source).toContain("确认分配");
     expect(source).toContain("取消");
   });
 
   it("keeps compact worker actions visible on phones and opens a bottom sheet for selection", async () => {
     const css = await readFile("apps/web/src/process-worker-assignment-mobile-sheet.css", "utf8");
-    expect(css).toContain(".process-worker-tail-body>.process-worker-picker{display:none}");
+    expect(css).toContain(".process-worker-tail-body>.process-worker-picker{display:grid");
+    expect(css.lastIndexOf(".process-worker-tail-body>.process-worker-picker{display:grid")).toBeGreaterThan(css.lastIndexOf(".process-worker-tail-body>.process-worker-picker{display:none}"));
+    expect(css).toContain(".process-worker-tail-body>.process-worker-picker>.process-worker-default-list{display:flex;width:100%");
+    expect(css).toContain(".process-worker-tail-body>.process-worker-picker>.process-worker-default-list small{min-width:0;overflow-wrap:anywhere}");
     expect(css).not.toContain(".process-worker-line>.process-worker-line__body>.process-worker-picker,.process-worker-tail-body>.process-worker-picker{display:none}");
     expect(css).toContain(".process-worker-fields{grid-template-columns:1fr");
     expect(css).toContain('.process-worker-line{grid-template-areas:"heading picker" "fields picker";grid-template-columns:minmax(120px,.82fr) minmax(0,1.18fr)');
