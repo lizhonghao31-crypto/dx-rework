@@ -666,6 +666,10 @@ export const FrontlineTaskItemSchema = z.object({
   reworkNo: z.string().nullable(),
   styleNo: z.string().nullable(),
   orderNo: z.string().nullable(),
+  images: z.array(z.object({
+    attachmentId: IdSchema,
+    filename: z.string().min(1),
+  }).strict()),
   processNames: z.array(z.string().min(1)).min(1),
   status: z.literal("in_progress"),
 }).strict();

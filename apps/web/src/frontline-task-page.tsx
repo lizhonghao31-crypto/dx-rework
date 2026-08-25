@@ -11,6 +11,8 @@ import { WorkReportingForm } from "./work-reporting-form.js";
 import "./frontline-task-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const imageUrl = (attachmentId: string): string =>
+  apiUrl(`tools/attachments/${attachmentId}/download?mode=preview`);
 
 type State =
   | Readonly<{ kind: "loading" }>
@@ -79,6 +81,14 @@ export function FrontlineTaskPage() {
 
   if (selected && kind) {
     return <main className="frontline-task-workspace">
+      {selected.images.length > 0 ? <section className="frontline-task-images" aria-label="订单图片">
+        <strong>订单图片</strong>
+        <div>
+          {selected.images.map((image) => <a href={imageUrl(image.attachmentId)} target="_blank" rel="noreferrer" key={image.attachmentId}>
+            <img src={imageUrl(image.attachmentId)} alt={image.filename} loading="lazy" />
+          </a>)}
+        </div>
+      </section> : null}
       <WorkReportingForm
         reworkOrderId={selected.reworkOrderId}
         taskMode="work_reporting"
@@ -86,7 +96,6 @@ export function FrontlineTaskPage() {
           kind,
           reworkNo: selected.reworkNo,
           styleNo: selected.styleNo,
-          orderNo: selected.orderNo,
           processNames: selected.processNames,
         }}
         onFrontlineExit={exit}
@@ -104,8 +113,9 @@ export function FrontlineTaskPage() {
     {state.kind === "error" ? <Surface>{state.message}</Surface> : null}
     {state.kind === "ready" && items.length === 0 ? <Surface>当前没有需要本人处理的任务。</Surface> : null}
     {state.kind === "ready" && items.length > 1 ? <div className="frontline-task-list">
-      {items.map((item) => <button type="button" onClick={() => enter(item)} key={item.reworkOrderId}>
-        <span><small>款号 / 订单</small><strong>{item.styleNo ?? "款号未填写"} · {item.orderNo ?? "订单号未填写"}</strong></span>
+      {items.map((item) => <button className={item.images[0] ? "has-image" : undefined} type="button" onClick={() => enter(item)} key={item.reworkOrderId}>
+        <span className="frontline-task-list__identity"><small>款号</small><strong>{item.styleNo ?? "款号未填写"}</strong><small>{item.reworkNo ?? "返工单号待生成"}</small></span>
+        {item.images[0] ? <img className="frontline-task-list__image" src={imageUrl(item.images[0].attachmentId)} alt={item.images[0].filename} loading="lazy" /> : null}
         <span><small>工序</small><strong>{item.processNames.join("、")}</strong></span>
         <StatusBadge tone="warning">{kind === "tail_inspection" ? "待尾查报数" : "待完工上数"}</StatusBadge>
         <b>进入</b>

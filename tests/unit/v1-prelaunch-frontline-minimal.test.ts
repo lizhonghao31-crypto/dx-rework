@@ -59,7 +59,9 @@ describe("v1 prelaunch frontline minimal tasks and mobile density", () => {
     expect(app).toContain('path === "/ui/frontline/tasks"');
     expect(page).toContain("items.length === 1 ? items[0] : null");
     expect(page).toContain("只显示分配给本人且尚未报数的当前任务");
-    expect(page).toContain("款号 / 订单");
+    expect(page).toContain("款号");
+    expect(page).toContain("返工单");
+    expect(page).not.toContain("订单号未填写");
     expect(page).toContain("工序");
     expect(page).toContain("<b>进入</b>");
     expect(form).toContain('task.executionKind === frontlineContext.kind');

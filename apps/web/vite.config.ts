@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
   build: {
     outDir: "dist",
     sourcemap: true,
+    cssTarget: "chrome61",
   },
   server: {
     port: 3200,
