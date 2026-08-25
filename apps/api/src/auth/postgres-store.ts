@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 
 import type { OrganizationMember } from "./provider.js";
 import {
+  AuthDeniedError,
   stableEqual,
   type AuthStore,
   type AuthUser,
@@ -17,6 +18,7 @@ export class PostgresAuthStore implements AuthStore {
   constructor(
     private readonly database: Pool,
     private readonly corporationId: string,
+    private readonly rootDingtalkUserId?: string,
   ) {}
 
   async cleanupExpiredAuthArtifacts(now: Date): Promise<void> {
@@ -74,17 +76,26 @@ export class PostgresAuthStore implements AuthStore {
 
   async upsertIdentity(member: OrganizationMember): Promise<AuthUser> {
     const client = await this.database.connect();
+    let user: AuthUser | undefined;
+    let enabled = false;
     try {
       await client.query("BEGIN");
-      const user = await this.upsertDirectoryIdentity(client, member);
+      user = await this.upsertDirectoryIdentity(client, member);
+      const access = await client.query<{ enabled: boolean }>(
+        "SELECT enabled FROM app_users WHERE id=$1",
+        [user.id],
+      );
+      enabled = access.rows[0]?.enabled === true;
       await client.query("COMMIT");
-      return user;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
+    if (!enabled) throw new AuthDeniedError("ACCOUNT_DISABLED", "账号尚未分配有效业务权限");
+    if (!user) throw new Error("DingTalk identity upsert did not return a user");
+    return user;
   }
 
   async upsertDirectoryIdentity(client: PoolClient, member: OrganizationMember): Promise<AuthUser> {
@@ -97,17 +108,26 @@ export class PostgresAuthStore implements AuthStore {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
       `dingtalk:${member.corpId}:${member.unionId}`,
     ]);
+    const isRootIdentity = member.userId === this.rootDingtalkUserId;
     const existing = await client.query<{ user_id: string }>(
       "SELECT user_id FROM identity_mappings WHERE provider='dingtalk' AND corp_id=$1 AND (provider_user_id=$2 OR union_id=$3) FOR UPDATE",
       [member.corpId, member.userId, member.unionId],
     );
     const userId = existing.rows[0]?.user_id ?? randomUUID();
     if (!existing.rows[0]) {
-      await client.query("INSERT INTO app_users(id, display_name) VALUES($1,$2)", [userId, member.displayName]);
+      await client.query(
+        "INSERT INTO app_users(id,display_name,enabled,manual_access_disabled) VALUES($1,$2,$3,false)",
+        [userId, member.displayName, isRootIdentity],
+      );
     } else {
       await client.query(
-        "UPDATE app_users SET display_name=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$1",
-        [userId, member.displayName],
+        `UPDATE app_users
+         SET display_name=$2,
+             enabled=CASE WHEN $3 THEN true ELSE enabled END,
+             manual_access_disabled=CASE WHEN $3 THEN false ELSE manual_access_disabled END,
+             updated_at=CURRENT_TIMESTAMP
+         WHERE id=$1`,
+        [userId, member.displayName, isRootIdentity],
       );
     }
     if (existing.rows[0]) {
@@ -119,6 +139,28 @@ export class PostgresAuthStore implements AuthStore {
       await client.query(
         "INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk',$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)",
         [randomUUID(), userId, member.corpId, member.userId, member.unionId, member.active, member.employed],
+      );
+    }
+    const accessState = await client.query<{ enabled: boolean }>(
+      `UPDATE app_users app_user
+       SET enabled=CASE
+             WHEN $2 THEN true
+             WHEN app_user.manual_access_disabled THEN false
+             ELSE access_user_has_effective_authorization(app_user.id)
+           END,
+           manual_access_disabled=CASE
+             WHEN $2 THEN false
+             ELSE app_user.manual_access_disabled
+           END,
+           updated_at=CURRENT_TIMESTAMP
+       WHERE app_user.id=$1
+       RETURNING app_user.enabled`,
+      [userId, isRootIdentity],
+    );
+    if (accessState.rows[0]?.enabled !== true) {
+      await client.query(
+        "UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND revoked_at IS NULL",
+        [userId],
       );
     }
     const authorization = await this.loadAuthorization(client, userId);

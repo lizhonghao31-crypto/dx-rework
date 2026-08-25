@@ -16,6 +16,7 @@ const employee = (
   active: true,
   employed: true,
   enabled: true,
+  manualAccessDisabled: false,
   lastVerifiedAt: "2026-08-25T00:00:00.000Z",
   hasLoggedIn: false,
   businessRoles: ["worker"],
