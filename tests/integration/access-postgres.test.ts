@@ -83,8 +83,21 @@ runWithPostgres("role permissions and versioned master data", () => {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url), "utf8");
       await database.query(sql);
     }
+    await database.query(
+      `CREATE TABLE owner_bootstrap_consumptions (
+         singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton=true),
+         user_id uuid NOT NULL REFERENCES app_users(id)
+       )`,
+    );
+    await database.query(await readFile(
+      new URL("../../apps/api/migrations/0089_employee_access_role_lifecycle.sql", import.meta.url),
+      "utf8",
+    ));
     for (const [index, userId] of userIds.entries()) {
-      await database.query("INSERT INTO app_users(id,display_name) VALUES($1,$2)", [userId, displayNames[index]]);
+      await database.query(
+        "INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",
+        [userId, displayNames[index]],
+      );
     }
     await database.query(
       `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)

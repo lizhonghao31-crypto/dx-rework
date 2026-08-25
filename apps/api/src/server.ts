@@ -64,7 +64,11 @@ const rootAuthority = new RootAuthority(
   config.dingtalk.corpId,
   config.rootDingtalkUserId,
 );
-const authStore = new PostgresAuthStore(database, config.dingtalk.corpId);
+const authStore = new PostgresAuthStore(
+  database,
+  config.dingtalk.corpId,
+  config.rootDingtalkUserId,
+);
 const accessService = new WorkerAwareAccessMasterDataService(database, config.dingtalk.corpId);
 await accessService.ensureOrganizationPolicy();
 await rootAuthority.assertConfigurationConsistency();

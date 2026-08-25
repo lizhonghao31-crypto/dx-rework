@@ -411,7 +411,7 @@ export class AccessMasterDataService {
       if (input.roleCode === "owner_group") {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
       }
-      await ensureActiveOrganizationUser(client, input.userId, this.corporationId, "目标用户不存在、不在职或已停用");
+      await this.autoEnableForAuthorization(client, actor, input.userId, input.reason);
       const role = await client.query<{ enabled: boolean }>("SELECT enabled FROM business_roles WHERE role_code=$1 FOR SHARE", [input.roleCode]);
       if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用", 404);
       await client.query(
@@ -481,6 +481,7 @@ export class AccessMasterDataService {
          WHERE assignment_id=$1`,
         [assignmentId, actor.actorId, reason],
       );
+      await this.autoDisableWithoutAuthorization(client, actor, assignment.user_id, reason);
     });
   }
 
@@ -741,7 +742,7 @@ export class AccessMasterDataService {
     }
     return this.transaction(async (client) => {
       await ensureActiveOrganizationUser(client, input.grantorUserId, this.corporationId, "授权人不存在、不在职或已停用");
-      await ensureActiveOrganizationUser(client, input.granteeUserId, this.corporationId, "被授权用户不存在、不在职或已停用");
+      await this.autoEnableForAuthorization(client, actor, input.granteeUserId, input.reason);
       const grantorCapability = await client.query(
         `SELECT 1
          FROM user_role_assignments ura
@@ -774,6 +775,12 @@ export class AccessMasterDataService {
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [delegationId, input.grantorUserId, input.granteeUserId, input.capability, input.scopeType, input.scopeId ?? null, input.validFrom, input.validUntil, actor.actorId, input.reason],
       );
+      await this.autoDisableWithoutAuthorization(
+        client,
+        actor,
+        input.granteeUserId,
+        input.reason,
+      );
       return { delegationId };
     });
   }
@@ -803,6 +810,126 @@ export class AccessMasterDataService {
          WHERE delegation_id=$1`,
         [delegationId, actor.actorId, reason],
       );
+      await this.autoDisableWithoutAuthorization(
+        client,
+        actor,
+        existing.rows[0].grantee_user_id,
+        reason,
+      );
+    });
+  }
+
+  private async autoEnableForAuthorization(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    const target = await client.query<{
+      enabled: boolean;
+      manual_access_disabled: boolean;
+    }>(
+      `SELECT app_user.enabled,app_user.manual_access_disabled
+       FROM app_users app_user
+       WHERE app_user.id=$1
+         AND EXISTS (
+           SELECT 1
+           FROM identity_mappings identity
+           WHERE identity.user_id=app_user.id
+             AND identity.provider='dingtalk'
+             AND identity.corp_id=$2
+             AND identity.active=true
+             AND identity.employed=true
+         )
+       FOR UPDATE OF app_user`,
+      [userId, this.corporationId],
+    );
+    const current = target.rows[0];
+    if (!current) {
+      throw new ApplicationError("NOT_FOUND", "目标用户不存在或不属于当前在职企业成员", 404);
+    }
+    if (current.enabled) return;
+    if (current.manual_access_disabled) {
+      throw new ApplicationError("CONFLICT", "目标员工已被人工停用，请先恢复访问", 409);
+    }
+
+    await client.query(
+      "UPDATE app_users SET enabled=true,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+      [userId],
+    );
+    await this.events.append(client, actor, {
+      action: "access.employee.auto_enable",
+      entityType: "app_user",
+      entityId: userId,
+      before: { enabled: false },
+      after: { enabled: true },
+      reason,
+    });
+  }
+
+  private async autoDisableWithoutAuthorization(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    const target = await client.query<{
+      enabled: boolean;
+      manual_access_disabled: boolean;
+      is_root: boolean;
+      has_authorization: boolean;
+    }>(
+      `SELECT
+         app_user.enabled,
+         app_user.manual_access_disabled,
+         EXISTS(
+           SELECT 1
+           FROM owner_bootstrap_consumptions root
+           WHERE root.singleton=true AND root.user_id=app_user.id
+         ) is_root,
+         access_user_has_effective_authorization(app_user.id) has_authorization
+       FROM app_users app_user
+       WHERE app_user.id=$1
+       FOR UPDATE OF app_user`,
+      [userId],
+    );
+    const current = target.rows[0];
+    if (!current || current.is_root || current.has_authorization) return;
+
+    if (!current.enabled) {
+      if (!current.manual_access_disabled) return;
+      await client.query(
+        `UPDATE app_users
+         SET manual_access_disabled=false,updated_at=CURRENT_TIMESTAMP
+         WHERE id=$1`,
+        [userId],
+      );
+      await this.events.append(client, actor, {
+        action: "access.employee.auto_disable",
+        entityType: "app_user",
+        entityId: userId,
+        before: { enabled: false, manualAccessDisabled: true },
+        after: { enabled: false, manualAccessDisabled: false, sessionsRevoked: true },
+        reason,
+      });
+      return;
+    }
+
+    await client.query(
+      "UPDATE app_users SET enabled=false,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+      [userId],
+    );
+    await client.query(
+      "UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND revoked_at IS NULL",
+      [userId],
+    );
+    await this.events.append(client, actor, {
+      action: "access.employee.auto_disable",
+      entityType: "app_user",
+      entityId: userId,
+      before: { enabled: true },
+      after: { enabled: false, sessionsRevoked: true },
+      reason,
     });
   }
 

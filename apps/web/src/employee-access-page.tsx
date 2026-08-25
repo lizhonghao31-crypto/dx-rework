@@ -52,7 +52,8 @@ const employeeTone = (employee: EmployeeAccessEmployee): "success" | "warning" |
 const employeeStatus = (employee: EmployeeAccessEmployee): string => {
   if (!employee.employed) return "非在职";
   if (!employee.active) return "组织停用";
-  return employee.enabled ? "系统启用" : "系统停用";
+  if (employee.enabled) return "系统启用";
+  return employee.manualAccessDisabled ? "人工停用" : "未授权";
 };
 
 export function EmployeeAccessPage() {
@@ -267,7 +268,7 @@ export function EmployeeAccessPage() {
                     <dl className="employee-access-facts">
                       <div><dt>部门</dt><dd>{employee.departments.length ? employee.departments.join(" / ") : "未同步"}</dd></div>
                       <div><dt>组织状态</dt><dd>{employee.employed && employee.active ? "正常在职" : employee.employed ? "组织停用" : "非在职"}</dd></div>
-                      <div><dt>系统状态</dt><dd>{employee.enabled ? "已启用" : "已停用"} · {employee.hasLoggedIn ? "已登录过" : "未登录"}</dd></div>
+                      <div><dt>系统状态</dt><dd>{employeeStatus(employee)} · {employee.hasLoggedIn ? "已登录过" : "未登录"}</dd></div>
                       <div><dt>最近校验</dt><dd>{new Date(employee.lastVerifiedAt).toLocaleString("zh-CN")}</dd></div>
                       <div><dt>当前角色</dt><dd>{employee.businessRoles.length ? employee.businessRoles.map(roleName).join("、") : "未分配"}</dd></div>
                     </dl>
@@ -297,7 +298,7 @@ export function EmployeeAccessPage() {
                           || (isSelf && !canSelfGrantSystemAdmin)
                           || !employee.active
                           || !employee.employed
-                          || !employee.enabled}
+                          || employee.manualAccessDisabled}
                         onClick={() => void grant(employee, selected)}
                       >
                         授予角色
@@ -309,14 +310,14 @@ export function EmployeeAccessPage() {
                         >
                           停用访问
                         </Button>
-                      ) : (
+                      ) : employee.manualAccessDisabled ? (
                         <Button
                           disabled={Boolean(busy) || !employee.active || !employee.employed || protectedTargetLocked}
                           onClick={() => void changeAccess(employee, "restore")}
                         >
                           恢复访问
                         </Button>
-                      )}
+                      ) : null}
                     </div>
 
                     <details className="employee-access-history">

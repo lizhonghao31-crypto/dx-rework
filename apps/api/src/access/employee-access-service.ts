@@ -28,6 +28,7 @@ type EmployeeRow = Readonly<{
   active: boolean;
   employed: boolean;
   enabled: boolean;
+  manual_access_disabled: boolean;
   last_verified_at: Date;
   has_logged_in: boolean;
   business_roles: string[];
@@ -48,6 +49,7 @@ type RoleHistoryRow = Readonly<{
 type AccessStateRow = Readonly<{
   user_id: string;
   enabled: boolean;
+  manual_access_disabled: boolean;
   active: boolean;
   employed: boolean;
   provider_user_id: string;
@@ -64,6 +66,7 @@ type DirectoryAuditRow = Readonly<{
   active: boolean;
   employed: boolean;
   enabled: boolean;
+  manual_access_disabled: boolean;
 }>;
 
 const translateDatabaseError = (error: unknown): never => {
@@ -94,6 +97,7 @@ const directoryAuditState = (row: DirectoryAuditRow) => ({
   active: row.active,
   employed: row.employed,
   enabled: row.enabled,
+  manualAccessDisabled: row.manual_access_disabled,
 });
 
 const sameDirectoryState = (left: DirectoryAuditRow, right: DirectoryAuditRow): boolean =>
@@ -104,6 +108,7 @@ const sameDirectoryState = (left: DirectoryAuditRow, right: DirectoryAuditRow): 
   && left.active === right.active
   && left.employed === right.employed
   && left.enabled === right.enabled
+  && left.manual_access_disabled === right.manual_access_disabled
   && sameStrings(left.department_names, right.department_names);
 
 export class EmployeeAccessService {
@@ -128,6 +133,7 @@ export class EmployeeAccessService {
            i.active,
            i.employed,
            u.enabled,
+           u.manual_access_disabled,
            i.last_verified_at,
            EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id) has_logged_in,
            COALESCE(
@@ -186,6 +192,7 @@ export class EmployeeAccessService {
         active: row.active,
         employed: row.employed,
         enabled: row.enabled,
+        manualAccessDisabled: row.manual_access_disabled,
         lastVerifiedAt: row.last_verified_at.toISOString(),
         hasLoggedIn: row.has_logged_in,
         businessRoles: row.business_roles,
@@ -240,7 +247,9 @@ export class EmployeeAccessService {
       }
 
       await client.query(
-        "UPDATE app_users SET enabled=false,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+        `UPDATE app_users
+         SET enabled=false,manual_access_disabled=true,updated_at=CURRENT_TIMESTAMP
+         WHERE id=$1`,
         [userId],
       );
       await client.query(
@@ -251,8 +260,8 @@ export class EmployeeAccessService {
         action: "access.employee.disable",
         entityType: "app_user",
         entityId: userId,
-        before: { enabled: true },
-        after: { enabled: false, sessionsRevoked: true },
+        before: { enabled: true, manualAccessDisabled: false },
+        after: { enabled: false, manualAccessDisabled: true, sessionsRevoked: true },
         reason,
       });
     });
@@ -265,17 +274,32 @@ export class EmployeeAccessService {
       if (!target.active || !target.employed || target.corp_id !== this.corporationId) {
         throw new ApplicationError("FORBIDDEN", "仅可恢复当前仍在本企业组织且在职的员工", 403);
       }
+      const authorization = await client.query<{ allowed: boolean }>(
+        `SELECT
+           access_user_has_effective_authorization($1)
+           OR EXISTS(
+             SELECT 1
+             FROM owner_bootstrap_consumptions root
+             WHERE root.singleton=true AND root.user_id=$1
+           ) allowed`,
+        [userId],
+      );
+      if (authorization.rows[0]?.allowed !== true) {
+        throw new ApplicationError("CONFLICT", "请先为员工授予有效角色或临时授权", 409);
+      }
 
       await client.query(
-        "UPDATE app_users SET enabled=true,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+        `UPDATE app_users
+         SET enabled=true,manual_access_disabled=false,updated_at=CURRENT_TIMESTAMP
+         WHERE id=$1`,
         [userId],
       );
       await this.events.append(client, actor, {
         action: "access.employee.restore",
         entityType: "app_user",
         entityId: userId,
-        before: { enabled: false },
-        after: { enabled: true },
+        before: { enabled: false, manualAccessDisabled: target.manual_access_disabled },
+        after: { enabled: true, manualAccessDisabled: false },
         reason,
       });
     });
@@ -299,7 +323,8 @@ export class EmployeeAccessService {
              COALESCE(p.department_names,'{}'::text[]) department_names,
              i.active,
              i.employed,
-             u.enabled
+             u.enabled,
+             u.manual_access_disabled
            FROM identity_mappings i
            JOIN app_users u ON u.id=i.user_id
            LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
@@ -328,7 +353,8 @@ export class EmployeeAccessService {
              COALESCE(p.department_names,'{}'::text[]) department_names,
              i.active,
              i.employed,
-             u.enabled
+             u.enabled,
+             u.manual_access_disabled
            FROM identity_mappings i
            JOIN app_users u ON u.id=i.user_id
            LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
@@ -432,6 +458,7 @@ export class EmployeeAccessService {
       `SELECT
          u.id user_id,
          u.enabled,
+         u.manual_access_disabled,
          i.active,
          i.employed,
          i.provider_user_id,
