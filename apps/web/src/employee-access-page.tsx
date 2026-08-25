@@ -3,6 +3,11 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts/employee-access";
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import {
+  employeesInAccessFilter,
+  hasEffectiveRoleAccess,
+  type EmployeeAccessFilter,
+} from "./employee-access-filter.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { confirmInApp, promptInApp } from "./system-dialog.js";
 import "./employee-access.css";
@@ -57,6 +62,7 @@ export function EmployeeAccessPage() {
   const [reasonByUser, setReasonByUser] = useState<Record<string, string>>({});
   const [roleByUser, setRoleByUser] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const [accessFilter, setAccessFilter] = useState<EmployeeAccessFilter>("all");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -95,9 +101,10 @@ export function EmployeeAccessPage() {
 
   const filteredEmployees = useMemo(() => {
     if (!directory) return [];
+    const employees = employeesInAccessFilter(directory.employees, accessFilter);
     const needle = query.trim().toLocaleLowerCase("zh-CN");
-    if (!needle) return directory.employees;
-    return directory.employees.filter((employee) => {
+    if (!needle) return employees;
+    return employees.filter((employee) => {
       const roleNames = employee.businessRoles.map((code) => roleNameByCode.get(code) ?? BUILTIN_ROLE_NAMES[code] ?? code);
       const haystack = [
         employee.displayName,
@@ -108,7 +115,12 @@ export function EmployeeAccessPage() {
       ].join(" ").toLocaleLowerCase("zh-CN");
       return haystack.includes(needle);
     });
-  }, [directory, query, roleNameByCode]);
+  }, [accessFilter, directory, query, roleNameByCode]);
+
+  const effectiveRoleCount = useMemo(
+    () => directory?.employees.filter(hasEffectiveRoleAccess).length ?? 0,
+    [directory],
+  );
 
   const mutate = async (key: string, work: () => Promise<unknown>) => {
     if (busy) return;
@@ -197,6 +209,14 @@ export function EmployeeAccessPage() {
         <Surface className="admin-card"><SystemManagementNavigation active="employee-access" /></Surface>
         <Surface className="employee-access-card">
           <div className="employee-access-toolbar">
+            <select
+              value={accessFilter}
+              aria-label="员工范围"
+              onChange={(event) => setAccessFilter(event.target.value as EmployeeAccessFilter)}
+            >
+              <option value="all">全部员工</option>
+              <option value="effective-role">当前生效且已分配角色</option>
+            </select>
             <input
               type="search"
               value={query}
@@ -204,7 +224,10 @@ export function EmployeeAccessPage() {
               aria-label="搜索员工"
               onChange={(event) => setQuery(event.target.value)}
             />
-            <span>{filteredEmployees.length} 人</span>
+            <span>
+              显示 {filteredEmployees.length} 人 · 当前生效且已分配角色 {effectiveRoleCount} 人
+              {` · 全部 ${directory?.employees.length ?? 0} 人`}
+            </span>
           </div>
 
           {error ? <p className="employee-access-error" role="alert">{error}</p> : null}
