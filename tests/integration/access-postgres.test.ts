@@ -51,6 +51,18 @@ runWithPostgres("role permissions and versioned master data", () => {
     authorizationCapability: "people:read",
     authorizationCapabilities: ["people:read", "temporary_worker_private:read"],
   };
+  const ownerTemporaryWorkerActor: TrustedActorContext = {
+    ...ownerActor,
+    authorizationCapability: "temporary_worker:manage",
+    authorizationCapabilities: ["temporary_worker:manage", "temporary_worker_private:read"],
+  };
+  const tailN02Actor: TrustedActorContext = {
+    actorId: liTongshengId,
+    actorRoles: ["tail_supervisor"],
+    authorizationCapability: "process:configure",
+    authorizationCapabilities: ["process:configure", "work:assign"],
+    requestId: randomUUID(),
+  };
   const delegationActor: TrustedActorContext = {
     ...ownerActor,
     authorizationCapability: "delegation:manage",
@@ -77,6 +89,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
+      "0071_n04_assignment_workforce_ux.sql",
       "0083_rework_v2_temporary_worker_private_profile.sql",
       "0084_rework_v2_process_default_worker_roster.sql",
     ]) {
@@ -91,6 +104,10 @@ runWithPostgres("role permissions and versioned master data", () => {
     );
     await database.query(await readFile(
       new URL("../../apps/api/migrations/0089_employee_access_role_lifecycle.sql", import.meta.url),
+      "utf8",
+    ));
+    await database.query(await readFile(
+      new URL("../../apps/api/migrations/0092_temporary_worker_profile_update.sql", import.meta.url),
       "utf8",
     ));
     for (const [index, userId] of userIds.entries()) {
@@ -402,6 +419,60 @@ runWithPostgres("role permissions and versioned master data", () => {
     }));
     expect(JSON.stringify(temporaryAudit.rows[0]?.after_state)).not.toContain("13800138000");
     expect(JSON.stringify(temporaryAudit.rows[0]?.after_state)).not.toContain("44010619900101123X");
+    await expect(database.query(
+      "UPDATE business_people SET temporary_phone_number='13900139000' WHERE person_id=$1",
+      [temporary.personId],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(service.getTemporaryWorkerProfile(ownerTemporaryWorkerActor, li.personId))
+      .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    expect(await service.getTemporaryWorkerProfile(ownerTemporaryWorkerActor, temporary.personId)).toEqual({
+      personId: temporary.personId,
+      displayName: "临时工甲",
+      temporaryRemark: null,
+      temporaryPhoneNumber: "13800138000",
+      temporaryIdentityNumber: "44010619900101123X",
+    });
+    const updatedTemporary = await service.updateTemporaryWorkerProfile(
+      { ...ownerTemporaryWorkerActor, requestId: randomUUID() },
+      temporary.personId,
+      {
+        temporaryRemark: "旺季补充人员",
+        temporaryPhoneNumber: "13900139000",
+        temporaryIdentityNumber: "440106199101011234",
+        reason: "N02 补录临时工资料",
+      },
+    );
+    expect(updatedTemporary).toEqual(expect.objectContaining({
+      personId: temporary.personId,
+      displayName: "临时工甲",
+      temporaryRemark: "旺季补充人员",
+      temporaryPhoneNumber: "13900139000",
+      temporaryIdentityNumber: "440106199101011234",
+    }));
+    const profileAudit = await database.query<{
+      before_state: Record<string, unknown>;
+      after_state: Record<string, unknown>;
+    }>(
+      `SELECT before_state,after_state FROM operation_events
+       WHERE entity_id=$1 AND action='master_data.temporary_worker_profile.update'`,
+      [temporary.personId],
+    );
+    expect(profileAudit.rows[0]).toEqual({
+      before_state: {
+        hasTemporaryRemark: false,
+        hasTemporaryPhoneNumber: true,
+        hasTemporaryIdentityNumber: true,
+      },
+      after_state: {
+        hasTemporaryRemark: true,
+        hasTemporaryPhoneNumber: true,
+        hasTemporaryIdentityNumber: true,
+      },
+    });
+    const serializedProfileAudit = JSON.stringify(profileAudit.rows[0]);
+    expect(serializedProfileAudit).not.toContain("13900139000");
+    expect(serializedProfileAudit).not.toContain("440106199101011234");
+    expect(serializedProfileAudit).not.toContain("旺季补充人员");
     const correctedTemporary = await service.createPerson(masterDataActor, {
       personType: "temporary",
       displayName: "临时工乙",
@@ -623,7 +694,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       personIds: [defaultWorker.personId],
       changeReason: "设定返查默认人员",
     });
-    await service.replaceProcessDefaultWorkers(masterDataActor, process.processId, {
+    await service.replaceProcessDefaultWorkers(tailN02Actor, process.processId, {
       personIds: [],
       changeReason: "清空返查默认人员",
     });

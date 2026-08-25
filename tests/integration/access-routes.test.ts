@@ -42,6 +42,20 @@ const create = (
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
     revokeRole: vi.fn(),
     createPerson: vi.fn(),
+    getTemporaryWorkerProfile: vi.fn(async () => ({
+      personId: "00000000-0000-4000-8000-000000000030",
+      displayName: "临时工甲",
+      temporaryRemark: null,
+      temporaryPhoneNumber: "13800138000",
+      temporaryIdentityNumber: null,
+    })),
+    updateTemporaryWorkerProfile: vi.fn(async () => ({
+      personId: "00000000-0000-4000-8000-000000000030",
+      displayName: "临时工甲",
+      temporaryRemark: "旺季",
+      temporaryPhoneNumber: "13900139000",
+      temporaryIdentityNumber: null,
+    })),
     addPersonAlias: vi.fn(async () => ({ aliasId: "00000000-0000-4000-8000-000000000011" })),
     revokePersonAlias: vi.fn(),
     deactivatePerson: vi.fn(),
@@ -248,6 +262,76 @@ describe("access routes", () => {
       }),
       expect.objectContaining({ personType: "temporary", displayName: "UAT临时工" }),
     );
+  });
+
+  it("lets only an authorized N02 manager read and update a temporary worker profile", async () => {
+    const personId = "00000000-0000-4000-8000-000000000030";
+    const tailSupervisor = create(
+      ["temporary_worker:manage", "temporary_worker_private:read"],
+      ["tail_supervisor"],
+    );
+    const loaded = await tailSupervisor.app.inject({
+      method: "GET",
+      url: `/master-data/temporary-workers/${personId}`,
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "temporary-profile-read" },
+    });
+    expect(loaded.statusCode).toBe(200);
+    expect(tailSupervisor.service.getTemporaryWorkerProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["tail_supervisor"],
+        authorizationCapability: "temporary_worker:manage",
+        authorizationCapabilities: ["temporary_worker:manage", "temporary_worker_private:read"],
+      }),
+      personId,
+    );
+
+    const updated = await tailSupervisor.app.inject({
+      method: "PUT",
+      url: `/master-data/temporary-workers/${personId}`,
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "temporary-profile-update" },
+      payload: {
+        temporaryRemark: "旺季",
+        temporaryPhoneNumber: "13900139000",
+        temporaryIdentityNumber: null,
+        reason: "N02 补录临时工资料",
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(tailSupervisor.service.updateTemporaryWorkerProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: "temporary-profile-update" }),
+      personId,
+      {
+        temporaryRemark: "旺季",
+        temporaryPhoneNumber: "13900139000",
+        temporaryIdentityNumber: null,
+        reason: "N02 补录临时工资料",
+      },
+    );
+
+    const missingPrivateRead = create(["temporary_worker:manage"], ["owner_group"]);
+    expect((await missingPrivateRead.app.inject({
+      method: "GET",
+      url: `/master-data/temporary-workers/${personId}`,
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(403);
+    expect(missingPrivateRead.service.getTemporaryWorkerProfile).not.toHaveBeenCalled();
+
+    const wrongRole = create(
+      ["temporary_worker:manage", "temporary_worker_private:read"],
+      ["finance_read"],
+    );
+    expect((await wrongRole.app.inject({
+      method: "PUT",
+      url: `/master-data/temporary-workers/${personId}`,
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        temporaryRemark: null,
+        temporaryPhoneNumber: null,
+        temporaryIdentityNumber: null,
+        reason: "越权尝试",
+      },
+    })).statusCode).toBe(403);
+    expect(wrongRole.service.updateTemporaryWorkerProfile).not.toHaveBeenCalled();
   });
 
   it("uses separate read capabilities for business directory consumers", async () => {

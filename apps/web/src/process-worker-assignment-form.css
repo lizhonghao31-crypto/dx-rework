@@ -23,3 +23,4 @@
 .process-worker-picker__heading{justify-content:flex-start}
 .process-worker-roster-actions{justify-content:flex-start}
 .process-worker-default-list small{padding:4px 9px 4px 4px}
+.process-worker-temporary-name{min-height:28px;padding:0;border:0;background:transparent;color:var(--dx-v2-color-primary);font:inherit;font-weight:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}.process-worker-temporary-name:disabled{cursor:default;opacity:.65}@media(max-width:640px){.process-worker-temporary-name{min-height:44px}}

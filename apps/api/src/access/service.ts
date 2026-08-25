@@ -10,6 +10,7 @@ import type {
   ReplaceProcessDefaultWorkers,
   ReviseProcess,
   ReviseSupplier,
+  UpdateTemporaryWorkerProfile,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
@@ -19,6 +20,28 @@ import { isRootActor } from "./business-authority.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
 type PersonAliasRow = Readonly<{ alias_id: string; person_id: string; alias: string; normalized_alias: string }>;
+type TemporaryWorkerProfileRow = Readonly<{
+  person_id: string;
+  display_name: string;
+  temporary_remark: string | null;
+  temporary_phone_number: string | null;
+  temporary_identity_number: string | null;
+}>;
+type TemporaryWorkerProfile = Readonly<{
+  personId: string;
+  displayName: string;
+  temporaryRemark: string | null;
+  temporaryPhoneNumber: string | null;
+  temporaryIdentityNumber: string | null;
+}>;
+
+const temporaryWorkerProfile = (row: TemporaryWorkerProfileRow): TemporaryWorkerProfile => ({
+  personId: row.person_id,
+  displayName: row.display_name,
+  temporaryRemark: row.temporary_remark,
+  temporaryPhoneNumber: row.temporary_phone_number,
+  temporaryIdentityNumber: row.temporary_identity_number,
+});
 
 const normalizeAliases = async (client: PoolClient, aliases: readonly string[]): Promise<string[]> => {
   if (aliases.length === 0) return [];
@@ -545,6 +568,87 @@ export class AccessMasterDataService {
         );
       }
       return { personId };
+    });
+  }
+
+  async getTemporaryWorkerProfile(
+    actor: TrustedActorContext,
+    personId: string,
+  ): Promise<TemporaryWorkerProfile> {
+    if (!canReadTemporaryWorkerPrivateProfile(actor)) {
+      throw new ApplicationError("FORBIDDEN", "无权查看临时工隐私资料", 403);
+    }
+    const result = await this.database.query<TemporaryWorkerProfileRow>(
+      `SELECT person_id,display_name,temporary_remark,temporary_phone_number,temporary_identity_number
+       FROM business_people
+       WHERE person_id=$1 AND person_type='temporary' AND active=true`,
+      [personId],
+    );
+    const profile = result.rows[0];
+    if (!profile) throw new ApplicationError("NOT_FOUND", "有效临时工档案不存在", 404);
+    return temporaryWorkerProfile(profile);
+  }
+
+  async updateTemporaryWorkerProfile(
+    actor: TrustedActorContext,
+    personId: string,
+    input: UpdateTemporaryWorkerProfile,
+  ): Promise<TemporaryWorkerProfile> {
+    if (!canReadTemporaryWorkerPrivateProfile(actor)) {
+      throw new ApplicationError("FORBIDDEN", "无权修改临时工隐私资料", 403);
+    }
+    return this.transaction(async (client) => {
+      const result = await client.query<TemporaryWorkerProfileRow>(
+        `SELECT person_id,display_name,temporary_remark,temporary_phone_number,temporary_identity_number
+         FROM business_people
+         WHERE person_id=$1 AND person_type='temporary' AND active=true
+         FOR UPDATE`,
+        [personId],
+      );
+      const current = result.rows[0];
+      if (!current) throw new ApplicationError("NOT_FOUND", "有效临时工档案不存在", 404);
+
+      const next: TemporaryWorkerProfileRow = {
+        ...current,
+        temporary_remark: input.temporaryRemark,
+        temporary_phone_number: input.temporaryPhoneNumber,
+        temporary_identity_number: input.temporaryIdentityNumber,
+      };
+      if (
+        current.temporary_remark === next.temporary_remark
+        && current.temporary_phone_number === next.temporary_phone_number
+        && current.temporary_identity_number === next.temporary_identity_number
+      ) return temporaryWorkerProfile(current);
+
+      const operationEventId = await this.events.append(client, actor, {
+        action: "master_data.temporary_worker_profile.update",
+        entityType: "business_person",
+        entityId: personId,
+        before: {
+          hasTemporaryRemark: current.temporary_remark !== null,
+          hasTemporaryPhoneNumber: current.temporary_phone_number !== null,
+          hasTemporaryIdentityNumber: current.temporary_identity_number !== null,
+        },
+        after: {
+          hasTemporaryRemark: next.temporary_remark !== null,
+          hasTemporaryPhoneNumber: next.temporary_phone_number !== null,
+          hasTemporaryIdentityNumber: next.temporary_identity_number !== null,
+        },
+        reason: input.reason,
+      });
+      await client.query(
+        `SELECT
+           set_config('dx_rework.temporary_worker_profile_event_id',$1,true),
+           set_config('dx_rework.temporary_worker_profile_request_id',$2,true)`,
+        [operationEventId, actor.requestId],
+      );
+      await client.query(
+        `UPDATE business_people
+         SET temporary_remark=$2,temporary_phone_number=$3,temporary_identity_number=$4
+         WHERE person_id=$1`,
+        [personId, next.temporary_remark, next.temporary_phone_number, next.temporary_identity_number],
+      );
+      return temporaryWorkerProfile(next);
     });
   }
 
