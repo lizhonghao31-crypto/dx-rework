@@ -32,8 +32,8 @@ describe("N02 compact responsive layout", () => {
     expect(css).toContain(".process-worker-people-group>div,.process-worker-people-group--tail>div{grid-template-columns:repeat(2,minmax(0,1fr));max-height:118px}");
     expect(css).toContain("@media(max-width:380px)");
     expect(form).toContain("mobileAssignmentSearch");
-    expect(form).toContain('"搜索正式工或临时工"');
-    expect(form).toContain('placeholder="搜索尾查人员"');
+    expect(form).toContain('placeholder="搜索正式工或临时工"');
+    expect(form).not.toContain('placeholder="搜索尾查人员"');
     expect(form).not.toContain("workerSearches");
   });
 });
