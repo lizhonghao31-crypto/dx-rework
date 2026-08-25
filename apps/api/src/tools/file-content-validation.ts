@@ -59,8 +59,7 @@ const validateJpeg = (bytes: Buffer): void => {
   while (offset < bytes.length - 2) {
     if (bytes[offset] !== 0xff) invalid();
     while (bytes[offset] === 0xff) offset += 1;
-    const marker = bytes[offset];
-    if (marker === undefined) invalid();
+    const marker = bytes[offset] ?? invalid();
     offset += 1;
     if (marker === 0x00 || marker === 0xd8 || marker === 0xd9) invalid();
     if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
