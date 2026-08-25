@@ -5,6 +5,11 @@ const has = (user: AuthorizedUser, capability: string): boolean =>
 const hasRole = (user: AuthorizedUser, role: string): boolean =>
   user.businessRoles?.includes(role) === true;
 
+const FRONTLINE_ROLES = new Set(["warehouse_receiver", "worker", "tail_inspector"]);
+
+const hasStandardWorkspaceRole = (user: AuthorizedUser): boolean =>
+  user.businessRoles?.some((role) => !FRONTLINE_ROLES.has(role)) === true;
+
 function frontlineTargets(user: AuthorizedUser): readonly string[] {
   const targets: string[] = [];
 
@@ -29,11 +34,8 @@ export function frontlineLandingTarget(user: AuthorizedUser): string | null {
 }
 
 export function landingTarget(user: AuthorizedUser): string | null {
-  if (
-    user.isRoot === true
-    || hasRole(user, "owner_group")
-    || has(user, "dashboard:management:read")
-  ) return "ui/management";
+  if (user.isRoot === true) return "ui/my-tasks";
+  if (hasStandardWorkspaceRole(user) && has(user, "todo:view")) return "ui/my-tasks";
 
   const frontlineTarget = frontlineLandingTarget(user);
   if (frontlineTarget) return frontlineTarget;

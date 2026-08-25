@@ -190,7 +190,6 @@ export function App() {
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/master-data") page = <MasterDataPage />;
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
-  else if (path === "/ui/management") page = <ManagementDashboardPage mode="management" />;
   else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
   else if (path === "/ui/frontline/tasks") page = <FrontlineTaskPage />;
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
@@ -307,12 +306,6 @@ export function App() {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredRole: "owner_group", requiredCapability: "access:admin" },
-    ]}>{page}</AuthGate>;
-  }
-  if (path === "/ui/management") {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredCapability: "dashboard:management:read" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/supervisor") {

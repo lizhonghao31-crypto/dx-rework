@@ -89,6 +89,7 @@
     { "version": "0087_effective_work_report_quantity", "checksum": "3044161405547f7fcf4bc212a2407a96015025cc51fd37072ff212c33c0da4ba" },
     { "version": "0088_root_receiving_correction", "checksum": "76faf84dadb0d04723f1af8cd0db52992d9b4143171fec27b5d662f134dd28c4" },
     { "version": "0089_employee_access_role_lifecycle", "checksum": "dfcbdccb2104e3e151d42da939d76c3e4f4f2d459daad2b93514a0c5508e3281" },
-    { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" }
+    { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" },
+    { "version": "0091_role_entry_todo_reliability", "checksum": "79d4670a3848183498ac57fdc6a4b8d485e9591291521eaa2504e1a49c6bf03c" }
   ]
 }
