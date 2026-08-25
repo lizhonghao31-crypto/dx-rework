@@ -19,6 +19,11 @@ const businessDate = (): string => new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 }).format(new Date());
 
+const pastBusinessDate = (days: number): string => {
+  const [year, month, day] = businessDate().split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! - days)).toISOString().slice(0, 10);
+};
+
 runWithPostgres("receiving fact PostgreSQL contracts", () => {
   const schema = `receiving_${randomUUID().replaceAll("-", "")}`;
   const admin = new Pool({ connectionString: databaseUrl! });
@@ -522,6 +527,71 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       source_receiving_batch_id: receipt.value.receivingBatchId,
       audited_receiving_batch_id: receipt.value.receivingBatchId,
     });
+  });
+
+  it("backfills a missed order into its own batch for yesterday or the day before only", async () => {
+    const current = await service.create(receiver(), {
+      styleNo: "STYLE-BACKFILL-01",
+      documentQuantity: 20,
+      actualQuantity: 20,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const yesterday = pastBusinessDate(1);
+    const backfilled = await service.create(receiver(), {
+      styleNo: "STYLE-BACKFILL-01",
+      documentQuantity: 18,
+      actualQuantity: 17,
+      attachmentIds: [await readyImage()],
+      receivedDate: yesterday,
+    }, randomUUID());
+
+    expect(backfilled.value.receivingBatchId).not.toBe(current.value.receivingBatchId);
+    const historicalBoard = await service.board(yesterday, "STYLE-BACKFILL-01");
+    expect(historicalBoard.rows).toHaveLength(1);
+    expect(historicalBoard.rows[0]).toMatchObject({
+      receivingBatchId: backfilled.value.receivingBatchId,
+      documentQuantity: 18,
+      actualQuantity: 17,
+      receiptCount: 1,
+    });
+
+    const stored = await database.query<{
+      received_date: string;
+      audited_date: string;
+      backfilled: boolean;
+    }>(
+      `SELECT (receipt.received_at AT TIME ZONE 'Asia/Shanghai')::date::text received_date,
+              event.after_state->>'receivedDate' audited_date,
+              (event.after_state->>'backfilled')::boolean backfilled
+       FROM receiving_receipts receipt
+       JOIN operation_events event ON event.event_id=receipt.operation_event_id
+       WHERE receipt.receipt_id=$1`,
+      [backfilled.value.receiptId],
+    );
+    expect(stored.rows[0]).toEqual({ received_date: yesterday, audited_date: yesterday, backfilled: true });
+
+    const isolatedBackfill = await service.create(receiver(), {
+      styleNo: "STYLE-BACKFILL-ISOLATED",
+      documentQuantity: 7,
+      actualQuantity: 7,
+      attachmentIds: [await readyImage()],
+      receivedDate: yesterday,
+    }, randomUUID());
+    const laterNormalReceipt = await service.create(receiver(), {
+      styleNo: "STYLE-BACKFILL-ISOLATED",
+      documentQuantity: 8,
+      actualQuantity: 8,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    expect(laterNormalReceipt.value.receivingBatchId).not.toBe(isolatedBackfill.value.receivingBatchId);
+
+    await expect(service.create(receiver(), {
+      styleNo: "STYLE-BACKFILL-TOO-OLD",
+      documentQuantity: 1,
+      actualQuantity: 1,
+      attachmentIds: [],
+      receivedDate: pastBusinessDate(3),
+    }, randomUUID())).rejects.toThrow("仅支持昨天和前天");
   });
 
   it("searches known style numbers without forcing a second manual spelling", async () => {
