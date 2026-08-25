@@ -37,7 +37,10 @@ const sanitize = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
   let text = typeof value === "string" ? value : JSON.stringify(value);
   text = text.replace(/(password|secret|token|cookie|authorization|database_url|connectionString)\s*[=:]\s*[^\s,;}]+/gi, "$1=[REDACTED]");
+  text = text.replace(/(app[_-]?secret|client[_-]?secret|access[_-]?token|refresh[_-]?token)\s*[=:]\s*[^\s,;}]+/gi, "$1=[REDACTED]");
   text = text.replace(/postgres(?:ql)?:\/\/\S+/gi, "postgres://[REDACTED]");
+  text = text.replace(/(?<!\d)(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)/g, "[PHONE REDACTED]");
+  text = text.replace(/(?<!\d)(?:\d{17}[\dXx]|\d{15})(?![\dXx])/g, "[IDENTITY REDACTED]");
   return text.length > 300 ? `${text.slice(0, 300)}…` : text;
 };
 
@@ -160,6 +163,10 @@ export class AdminConsoleService {
       exception_type: string;
       source_entity_type: string;
       source_entity_id: string;
+      rework_order_id: string | null;
+      business_action: string;
+      failure_stage: string;
+      request_id: string | null;
       status: string;
       occurred_at: Date;
       last_updated_at: Date;
@@ -167,19 +174,114 @@ export class AdminConsoleService {
       retryable: boolean;
       deep_link: string | null;
       details: unknown;
-    }>(`WITH exceptions AS (
-      SELECT 'message_outbox_failed' exception_type,'message_outbox' source_entity_type,event_id::text source_entity_id,status,COALESCE(claimed_at,updated_at,created_at) occurred_at,updated_at last_updated_at,last_error safe_error,true retryable,NULL::text deep_link,jsonb_build_object('topic',topic,'aggregateType',aggregate_type,'aggregateId',aggregate_id,'attempts',attempts,'version',attempts) details FROM message_outbox WHERE status='failed' OR (status='processing' AND claimed_at<CURRENT_TIMESTAMP - interval '30 minutes')
-      UNION ALL SELECT 'export_job_failed','export_job',export_job_id::text,status,COALESCE(completed_at,claimed_at,updated_at,created_at),updated_at,last_error,false,NULL::text,jsonb_build_object('exportType',export_type,'requestedBy',requested_by,'version',0) FROM export_jobs WHERE status='failed' OR (status='running' AND claimed_at<CURRENT_TIMESTAMP - interval '30 minutes')
-      UNION ALL SELECT 'todo_delivery_failed','todo_delivery_attempt',delivery_attempt_id::text,outcome,attempted_at,attempted_at,COALESCE(error_code||': '||error_message,error_message,error_code),false,NULL::text,jsonb_build_object('todoId',todo_id,'messageOutboxEventId',message_outbox_event_id,'deliveryKind',delivery_kind,'version',0) FROM todo_delivery_attempts WHERE outcome IN ('failed','unknown_response')
-      UNION ALL SELECT 'dingtalk_binding_permanent_failed','dingtalk_todo_external_binding',binding_id::text,provider_state,updated_at,updated_at,'DingTalk binding permanent failure',false,NULL::text,jsonb_build_object('todoId',todo_id,'provider',provider,'version',version) FROM dingtalk_todo_external_bindings WHERE provider_state='permanent_failed'
-      UNION ALL SELECT 'attachment_upload_not_completed','attachment',attachment_id::text,status,created_at,updated_at,rejection_reason,false,NULL::text,jsonb_build_object('entityType',entity_type,'entityId',entity_id,'version',0) FROM attachments WHERE status='pending' AND created_at<CURRENT_TIMESTAMP - interval '30 minutes'
-    ) SELECT occurred_at created_at,source_entity_id id,* FROM exceptions ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY occurred_at DESC,source_entity_id DESC LIMIT $${params.push(query.limit + 1)}`, params)).rows;
+    }>(`WITH todo_order AS (
+      SELECT todo.todo_id,todo.category,
+        COALESCE(
+          CASE WHEN NULLIF(todo.route_descriptor->>'reworkOrderId','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid END,
+          CASE todo.entity_type
+            WHEN 'rework_order' THEN CASE WHEN todo.entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN todo.entity_id::uuid END
+            WHEN 'own_factory_approval' THEN approval.rework_order_id
+            WHEN 'external_responsibility_case' THEN external_case.rework_order_id
+            WHEN 'responsibility_determination' THEN determination.rework_order_id
+            ELSE NULL
+          END
+        ) rework_order_id
+      FROM rework_todos todo
+      LEFT JOIN rework_own_factory_approvals approval
+        ON todo.entity_type='own_factory_approval' AND approval.approval_id::text=todo.entity_id
+      LEFT JOIN rework_external_responsibility_cases external_case
+        ON todo.entity_type='external_responsibility_case' AND external_case.case_id::text=todo.entity_id
+      LEFT JOIN rework_responsibility_determinations determination
+        ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
+    ), latest_binding_event AS (
+      SELECT DISTINCT ON (binding_id) binding_id,request_id,action
+      FROM dingtalk_todo_external_binding_events
+      ORDER BY binding_id,created_at DESC,binding_event_id DESC
+    ), exceptions AS (
+      SELECT 'message_outbox_failed' exception_type,'message_outbox' source_entity_type,
+        outbox.event_id::text source_entity_id,
+        COALESCE(
+          mapped.rework_order_id,
+          CASE WHEN outbox.aggregate_type='rework_order'
+            AND outbox.aggregate_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN outbox.aggregate_id::uuid END,
+          CASE WHEN NULLIF(outbox.payload->>'reworkOrderId','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN NULLIF(outbox.payload->>'reworkOrderId','')::uuid END
+        ) rework_order_id,
+        COALESCE(NULLIF(outbox.payload->>'category',''),NULLIF(outbox.payload->>'deliveryKind',''),outbox.topic) business_action,
+        '后台消息投递' failure_stage,NULLIF(outbox.payload->>'operationRequestId','') request_id,
+        outbox.status,COALESCE(outbox.claimed_at,outbox.updated_at,outbox.created_at) occurred_at,
+        outbox.updated_at last_updated_at,outbox.last_error safe_error,true retryable,
+        jsonb_build_object('topic',outbox.topic,'aggregateType',outbox.aggregate_type,'aggregateId',outbox.aggregate_id,'attempts',outbox.attempts,'version',outbox.attempts) details
+      FROM message_outbox outbox
+      LEFT JOIN todo_order mapped
+        ON outbox.aggregate_type='rework_todo' AND mapped.todo_id::text=outbox.aggregate_id
+      WHERE outbox.status='failed' OR (outbox.status='processing' AND outbox.claimed_at<CURRENT_TIMESTAMP - interval '30 minutes')
+      UNION ALL
+      SELECT 'export_job_failed','export_job',job.export_job_id::text,
+        CASE WHEN NULLIF(job.filters->>'reworkOrderId','') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          THEN NULLIF(job.filters->>'reworkOrderId','')::uuid END,
+        job.export_type,'报表导出',(
+          SELECT event.request_id FROM operation_events event
+          WHERE event.entity_type='export_job' AND event.entity_id=job.export_job_id::text
+          ORDER BY event.created_at DESC,event.event_id DESC LIMIT 1
+        ),job.status,COALESCE(job.completed_at,job.claimed_at,job.updated_at,job.created_at),
+        job.updated_at,job.last_error,false,
+        jsonb_build_object('exportType',job.export_type,'requestedBy',job.requested_by,'version',0)
+      FROM export_jobs job
+      WHERE job.status='failed' OR (job.status='running' AND job.claimed_at<CURRENT_TIMESTAMP - interval '30 minutes')
+      UNION ALL
+      SELECT 'todo_delivery_failed','todo_delivery_attempt',attempt.delivery_attempt_id::text,
+        mapped.rework_order_id,COALESCE(mapped.category,attempt.delivery_kind),
+        '钉钉待办投递',attempt.operation_request_id,attempt.outcome,attempt.attempted_at,attempt.attempted_at,
+        COALESCE(attempt.error_code||': '||attempt.error_message,attempt.error_message,attempt.error_code),false,
+        jsonb_build_object('todoId',attempt.todo_id,'messageOutboxEventId',attempt.message_outbox_event_id,'deliveryKind',attempt.delivery_kind,'version',0)
+      FROM todo_delivery_attempts attempt
+      LEFT JOIN todo_order mapped USING(todo_id)
+      WHERE attempt.outcome IN ('failed','unknown_response')
+      UNION ALL
+      SELECT 'dingtalk_binding_permanent_failed','dingtalk_todo_external_binding',binding.binding_id::text,
+        mapped.rework_order_id,COALESCE(mapped.category,latest.action,'dingtalk_todo'),
+        '钉钉待办绑定',latest.request_id,binding.provider_state,binding.updated_at,binding.updated_at,
+        COALESCE((
+          SELECT NULLIF(concat_ws(': ',attempt.error_code,attempt.error_message),'')
+          FROM todo_delivery_attempts attempt
+          WHERE attempt.todo_id=binding.todo_id AND attempt.outcome IN ('failed','unknown_response')
+          ORDER BY attempt.attempted_at DESC,attempt.delivery_attempt_id DESC LIMIT 1
+        ),'DingTalk binding permanent failure'),false,
+        jsonb_build_object('todoId',binding.todo_id,'provider',binding.provider,'version',binding.version)
+      FROM dingtalk_todo_external_bindings binding
+      LEFT JOIN todo_order mapped USING(todo_id)
+      LEFT JOIN latest_binding_event latest USING(binding_id)
+      WHERE binding.provider_state='permanent_failed'
+      UNION ALL
+      SELECT 'attachment_upload_not_completed','attachment',attachment.attachment_id::text,
+        CASE WHEN attachment.entity_type='rework_order'
+          AND attachment.entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          THEN attachment.entity_id::uuid END,
+        'attachment.upload','附件上传',(
+          SELECT event.request_id FROM operation_events event
+          WHERE event.entity_type='attachment' AND event.entity_id=attachment.attachment_id::text
+          ORDER BY event.created_at DESC,event.event_id DESC LIMIT 1
+        ),attachment.status,attachment.created_at,attachment.updated_at,attachment.rejection_reason,false,
+        jsonb_build_object('entityType',attachment.entity_type,'entityId',attachment.entity_id,'version',0)
+      FROM attachments attachment
+      WHERE attachment.status='pending' AND attachment.created_at<CURRENT_TIMESTAMP - interval '30 minutes'
+    ) SELECT occurred_at created_at,source_entity_id id,exceptions.*,
+      CASE WHEN rework_order_id IS NULL THEN NULL ELSE '/ui/tasks/'||rework_order_id::text END deep_link
+    FROM exceptions ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY occurred_at DESC,source_entity_id DESC LIMIT $${params.push(query.limit + 1)}`, params)).rows;
     const page = rows.slice(0, query.limit);
     return {
       items: page.map((row): AdminException => ({
         exceptionType: row.exception_type,
         sourceEntityType: row.source_entity_type,
         sourceEntityId: row.source_entity_id,
+        reworkOrderId: row.rework_order_id,
+        businessAction: row.business_action,
+        failureStage: row.failure_stage,
+        requestId: row.request_id,
         status: row.status,
         occurredAt: row.occurred_at.toISOString(),
         lastUpdatedAt: row.last_updated_at.toISOString(),
