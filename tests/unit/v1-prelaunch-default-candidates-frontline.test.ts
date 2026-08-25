@@ -36,12 +36,13 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
   });
 
   it("keeps N02 edits order-local until the dedicated default-roster save", async () => {
-    const [masterData, form, app, detail, reporting, assignmentSheetStyles] = await Promise.all([
+    const [masterData, form, app, detail, reporting, workReporting, assignmentSheetStyles] = await Promise.all([
       readFile(new URL("../../apps/web/src/master-data-page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/process-worker-assignment-form.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/src/reporting/management-reporting-service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/process-worker-assignment-mobile-sheet.css", import.meta.url), "utf8"),
     ]);
 
@@ -58,7 +59,7 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
     expect(app).toContain('path === "/ui/frontline"');
     expect(app).toContain('{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" }');
     expect(reporting).toContain('"work:report_for_worker", "tail_inspection:report"');
-    expect(reporting).toContain('actor.actorRoles.some((role) => role === "worker" || role === "tail_inspector")');
+    expect(workReporting).toContain('actor.actorRoles.some((role) => role === "worker" || role === "tail_inspector")');
     expect(reporting).toContain("workTaskActorUserId: actor.actorId");
     expect(detail).not.toContain('node("tail_inspection"');
   });
