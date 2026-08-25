@@ -25,7 +25,9 @@ export interface ObjectStorage {
   ): Promise<UploadGrant>;
   createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant>;
   head(objectKey: string): Promise<StoredObjectMetadata>;
+  readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array>;
   computeSha256(objectKey: string): Promise<string>;
+  deleteObject(objectKey: string): Promise<void>;
 }
 
 export type AliyunPostPolicyCondition =
@@ -47,6 +49,7 @@ export interface AliyunOssSdkClient {
   signatureUrl(name: string, options: Record<string, unknown>): string;
   head(name: string): Promise<{ res: { headers: Record<string, string | number | undefined> } }>;
   createReadStream(name: string): Promise<AsyncIterable<Uint8Array>>;
+  delete(name: string): Promise<void>;
 }
 
 export class AliyunPrivateObjectStorage implements ObjectStorage {
@@ -125,6 +128,35 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     }
   }
 
+  async readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array> {
+    try {
+      const stream = await this.client.createReadStream(objectKey);
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      for await (const chunk of stream) {
+        totalBytes += chunk.byteLength;
+        if (totalBytes > maxBytes) {
+          throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "Stored object exceeds its declared size", 422);
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks, totalBytes);
+    } catch (error) {
+      if (error instanceof ApplicationError) throw error;
+      if (isObjectNotFound(error)) throw new ObjectStorageObjectNotFoundError();
+      throw error;
+    }
+  }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    try {
+      await this.client.delete(objectKey);
+    } catch (error) {
+      if (isObjectNotFound(error)) return;
+      throw error;
+    }
+  }
+
   async head(objectKey: string): Promise<StoredObjectMetadata> {
     let result;
     try {
@@ -169,12 +201,16 @@ export class DisabledObjectStorage implements ObjectStorage {
   async createExactSizeNonOverwritableUploadGrant(): Promise<UploadGrant> { return this.unavailable(); }
   async createDownloadGrant(): Promise<DownloadGrant> { return this.unavailable(); }
   async head(): Promise<StoredObjectMetadata> { return this.unavailable(); }
+  async readBytes(): Promise<Uint8Array> { return this.unavailable(); }
   async computeSha256(): Promise<string> { return this.unavailable(); }
+  async deleteObject(): Promise<void> { return this.unavailable(); }
 }
 
 export class FakeObjectStorage implements ObjectStorage {
   readonly objects = new Map<string, StoredObjectMetadata>();
+  readonly objectBytes = new Map<string, Uint8Array>();
   readonly contentSha256 = new Map<string, string>();
+  readonly deleted: string[] = [];
   readonly signed: Array<{ method: "POST" | "GET"; objectKey: string; ttlSeconds: number; sizeBytes?: number }> = [];
 
   constructor(private readonly now: () => Date = () => new Date()) {}
@@ -214,6 +250,23 @@ export class FakeObjectStorage implements ObjectStorage {
     const digest = this.contentSha256.get(objectKey) ?? value.sha256;
     if (!digest) throw new Error("Object content digest is unavailable");
     return digest.toLowerCase();
+  }
+
+  async readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array> {
+    if (!this.objects.has(objectKey)) throw new ObjectStorageObjectNotFoundError();
+    const bytes = this.objectBytes.get(objectKey);
+    if (!bytes) throw new Error("Object bytes are unavailable");
+    if (bytes.byteLength > maxBytes) {
+      throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "Stored object exceeds its declared size", 422);
+    }
+    return bytes;
+  }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    this.deleted.push(objectKey);
+    this.objects.delete(objectKey);
+    this.objectBytes.delete(objectKey);
+    this.contentSha256.delete(objectKey);
   }
 
   async head(objectKey: string): Promise<StoredObjectMetadata> {

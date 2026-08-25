@@ -331,11 +331,25 @@ const todoRuntime = new TodoRuntimeLifecycle(database, {
   logger: app.log,
 });
 
+const ATTACHMENT_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+let attachmentCleanupTimer: ReturnType<typeof setInterval> | undefined;
+const runAttachmentCleanup = async (): Promise<void> => {
+  try {
+    const result = await attachments.cleanupExpiredUnbound();
+    if (result.candidates > 0) {
+      app.log.info({ attachmentCleanup: result }, "expired unbound attachment cleanup completed");
+    }
+  } catch {
+    app.log.warn("expired unbound attachment cleanup failed");
+  }
+};
+
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   app.log.info({ signal }, "graceful shutdown started");
+  if (attachmentCleanupTimer) clearInterval(attachmentCleanupTimer);
   await todoRuntime.stop();
   await app.close();
   await database.end();
@@ -347,6 +361,12 @@ process.once("SIGINT", () => void shutdown("SIGINT"));
 try {
   await app.listen({ host: config.host, port: config.port });
   todoRuntime.start();
+  void runAttachmentCleanup();
+  attachmentCleanupTimer = setInterval(
+    () => void runAttachmentCleanup(),
+    ATTACHMENT_CLEANUP_INTERVAL_MS,
+  );
+  attachmentCleanupTimer.unref();
 } catch (error: unknown) {
   app.log.fatal({ err: error }, "API startup failed");
   await todoRuntime.stop();

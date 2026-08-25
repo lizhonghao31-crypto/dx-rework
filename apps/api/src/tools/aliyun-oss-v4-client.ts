@@ -23,7 +23,7 @@ type ClientOptions = Readonly<{
 }>;
 
 type PresignOptions = Readonly<{
-  method: "GET" | "HEAD";
+  method: "DELETE" | "GET" | "HEAD";
   expires: number;
   query?: Readonly<Record<string, string>>;
 }>;
@@ -260,6 +260,16 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
       );
     }
     return response.body as unknown as AsyncIterable<Uint8Array>;
+  }
+
+  async delete(name: string): Promise<void> {
+    const response = await this.fetchImpl(
+      this.presign(name, { method: "DELETE", expires: INTERNAL_REQUEST_TTL_SECONDS }),
+      { method: "DELETE" },
+    );
+    if (response.status === 404) return;
+    this.ensureSuccess(response);
+    await response.body?.cancel();
   }
 
   private presign(name: string, options: PresignOptions): string {
