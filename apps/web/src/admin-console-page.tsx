@@ -19,14 +19,48 @@ import {
 } from "./business-display.js";
 import "./admin-console.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 type Tab = SystemManagementTechnicalTab;
-type LoadState<T> = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: T };
+type LoadError = { kind: "error"; message: string; requestId: string | null };
+type LoadState<T> = { kind: "loading" } | LoadError | { kind: "ready"; data: T };
+
+class AdminRequestError extends Error {
+  constructor(message: string, readonly requestId: string | null) {
+    super(message);
+    this.name = "AdminRequestError";
+  }
+}
+
+const loadError = (error: unknown): LoadError => ({
+  kind: "error",
+  message: error instanceof Error ? error.message : "加载失败",
+  requestId: error instanceof AdminRequestError ? error.requestId : null,
+});
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(apiUrl(path), { credentials: "include", headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(`请求失败：${response.status}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: { message?: string; requestId?: string } } | null;
+    throw new AdminRequestError(
+      body?.error?.message ?? `请求失败：${response.status}`,
+      body?.error?.requestId ?? response.headers.get("x-request-id"),
+    );
+  }
   return await response.json() as T;
+}
+
+function CopyableRequestId({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return <span>请求 ID：<code>{value}</code> <Button onClick={() => void copy()}>{copied ? "已复制" : "复制请求 ID"}</Button></span>;
 }
 
 function JsonDetails({ value }: { value: unknown }) {
@@ -96,7 +130,7 @@ function AuditTab() {
       getJson<AdminAuditExportsPage>("admin/audit/exports?limit=10"),
     ])
       .then(([events, exports]) => setState({ kind: "ready", data: { events, exports } }))
-      .catch((error: unknown) => setState({ kind: "error", message: error instanceof Error ? error.message : "加载失败" }));
+      .catch((error: unknown) => setState(loadError(error)));
   }, [cursor, searchVersion]);
   const submitSearch = () => {
     setCursor(undefined);
@@ -141,7 +175,7 @@ function FilterGrid<T extends Record<string, string>>({ filters, setFilters, onS
 
 function State<T>({ state, render }: { state: LoadState<T>; render: (value: T) => ReactNode }) {
   if (state.kind === "loading") return <p>加载中…</p>;
-  if (state.kind === "error") return <p className="admin-error">{state.message}</p>;
+  if (state.kind === "error") return <div className="admin-error" role="alert"><p>{state.message}</p>{state.requestId ? <CopyableRequestId value={state.requestId} /> : null}</div>;
   return render(state.data);
 }
 
@@ -158,7 +192,7 @@ function AttachmentsTab() {
     setState({ kind: "loading" });
     void getJson<AdminAttachmentsPage>(`admin/attachments?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`)
       .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => setState({ kind: "error", message: error instanceof Error ? error.message : "加载失败" }));
+      .catch((error: unknown) => setState(loadError(error)));
   }, [cursor]);
   return (
     <section className="admin-panel">
@@ -172,7 +206,7 @@ function DelegationsTab() {
   useEffect(() => {
     void getJson<AdminDelegationsPage>("admin/delegations?includeRevoked=true&limit=50")
       .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => setState({ kind: "error", message: error instanceof Error ? error.message : "加载失败" }));
+      .catch((error: unknown) => setState(loadError(error)));
   }, []);
   return <section className="admin-panel"><State state={state} render={(data) => <div className="admin-list">{data.items.length === 0 ? <p>暂无代理授权。</p> : data.items.map((item) => <article key={item.delegationId}><h3>{businessCapabilityLabel(item.capability)}</h3><p>授权人：{item.grantor.displayName ?? "未知"}（{item.grantor.userId}） → 被授权人：{item.grantee.displayName ?? "未知"}（{item.grantee.userId}）</p><p>授权范围：{businessValue("scopeType", item.scopeType)} / {item.scopeId ?? "全局"}</p><p>{item.effectiveNow ? "当前有效" : "当前无效"} · {formatBusinessTime(item.validFrom)} 至 {formatBusinessTime(item.validUntil)}</p><p>{item.revokedAt ? `已撤销：${item.revokeReason ?? "未记录"}` : item.grantReason}</p></article>)}</div>} /></section>;
 }
@@ -182,7 +216,7 @@ function ExceptionsTab() {
   useEffect(() => {
     void getJson<AdminExceptionsPage>("admin/exceptions?limit=50")
       .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => setState({ kind: "error", message: error instanceof Error ? error.message : "加载失败" }));
+      .catch((error: unknown) => setState(loadError(error)));
   }, []);
-  return <section className="admin-panel"><State state={state} render={(data) => <div className="admin-list">{data.items.length === 0 ? <p>暂无系统异常。</p> : data.items.map((item) => <article key={`${item.exceptionType}:${item.sourceEntityId}`}><h3>{businessExceptionLabel(item.exceptionType)}</h3><p>{businessEntityLabel(item.sourceEntityType)} / {item.sourceEntityId}</p><p>{businessValue("status", item.status)} · {formatBusinessTime(item.occurredAt)}</p><p>{item.safeError ?? "无安全错误摘要"}</p><p>{item.retryable ? "可安全重试" : "不可由管理员重试"}</p><JsonDetails value={item.details} /></article>)}</div>} /></section>;
+  return <section className="admin-panel"><State state={state} render={(data) => <div className="admin-list">{data.items.length === 0 ? <p>暂无系统异常。</p> : data.items.map((item) => <article key={`${item.exceptionType}:${item.sourceEntityId}`}><h3>{businessExceptionLabel(item.exceptionType)}</h3><p>{businessEntityLabel(item.sourceEntityType)} / {item.sourceEntityId}</p><p>关联订单：{item.reworkOrderId && item.deepLink ? <a href={pageUrl(item.deepLink)}>{item.reworkOrderId} · 进入返工单</a> : "未关联返工单"}</p><p>业务动作：{item.businessAction} · 失败阶段：{item.failureStage}</p><p>处理状态：{businessValue("status", item.status)} · 最近更新：{formatBusinessTime(item.lastUpdatedAt)}</p><p>最近错误：{item.safeError ?? "无安全错误摘要"}</p>{item.requestId ? <p><CopyableRequestId value={item.requestId} /></p> : <p>请求 ID：未记录</p>}<p>{item.retryable ? "可安全重试" : "不可由管理员重试"}</p><JsonDetails value={item.details} /></article>)}</div>} /></section>;
 }

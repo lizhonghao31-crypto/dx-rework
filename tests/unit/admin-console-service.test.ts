@@ -21,8 +21,10 @@ describe("admin console service safety", () => {
 
     await expect(service.exceptions({ limit: 50 })).resolves.toEqual({ items: [], nextCursor: null });
     const sql = String(query.mock.calls[0]?.[0]);
-    expect(sql).toContain("'export_job_failed'");
-    expect(sql).toMatch(/'export_job_failed'.*last_error,false,NULL::text/s);
+    const exportProjection = sql.match(/SELECT 'export_job_failed'[\s\S]*?FROM export_jobs job/)?.[0];
+    expect(exportProjection).toBeDefined();
+    expect(exportProjection).toMatch(/job\.last_error,\s*false,\s*jsonb_build_object/);
+    expect(exportProjection).not.toMatch(/job\.last_error,\s*true,/);
   });
 
   it("rejects an actively claimed processing outbox row without clearing its worker fence", async () => {

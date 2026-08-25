@@ -87,12 +87,16 @@ export const AdminExceptionSchema = z.object({
   exceptionType: z.string(),
   sourceEntityType: z.string(),
   sourceEntityId: z.string(),
+  reworkOrderId: IdSchema.nullable(),
+  businessAction: z.string().min(1).max(200),
+  failureStage: z.string().min(1).max(100),
+  requestId: z.string().min(1).max(200).nullable(),
   status: z.string(),
   occurredAt: z.string().datetime(),
   lastUpdatedAt: z.string().datetime(),
   safeError: z.string().nullable(),
   retryable: z.boolean(),
-  deepLink: z.string().nullable(),
+  deepLink: z.string().startsWith("/").nullable(),
   details: JsonValueSchema,
 }).strict();
 export const AdminExceptionsPageSchema = z.object({ items: z.array(AdminExceptionSchema), nextCursor: z.string().nullable() }).strict();
