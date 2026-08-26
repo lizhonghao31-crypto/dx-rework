@@ -142,7 +142,9 @@ export const transitionReworkOrder = (
   }, from, to);
 
 export type SourcingCaseStatus =
-  | "pending_decision"
+  | "pending_ie_quote"
+  | "pending_management_decision"
+  | "pending_owner_approval"
   | "pending_contract"
   | "pending_finance_reconciliation"
   | "pending_factory_change_verification"
@@ -151,7 +153,10 @@ export type SourcingCaseStatus =
 
 export type SourcingBusinessAction =
   | "created"
-  | "decision_recorded"
+  | "ie_price_quoted"
+  | "management_decision_recorded"
+  | "owner_approved"
+  | "owner_rejected"
   | "contract_recorded"
   | "factory_change_requested"
   | "factory_change_approved"
@@ -168,8 +173,14 @@ type SourcingTransitionRule = Readonly<{
 }>;
 
 export const SOURCING_ACTION_TRANSITIONS: Readonly<Record<SourcingBusinessAction, SourcingTransitionRule>> = {
-  created: { from: null, to: "pending_decision" },
-  decision_recorded: { from: "pending_decision", to: "pending_contract" },
+  created: { from: null, to: "pending_ie_quote" },
+  ie_price_quoted: { from: "pending_ie_quote", to: "pending_management_decision" },
+  management_decision_recorded: {
+    from: "pending_management_decision",
+    to: "pending_owner_approval",
+  },
+  owner_approved: { from: "pending_owner_approval", to: "pending_contract" },
+  owner_rejected: { from: "pending_owner_approval", to: "pending_management_decision" },
   contract_recorded: { from: "pending_contract", to: "pending_finance_reconciliation" },
   factory_change_requested: {
     from: "pending_finance_reconciliation",
