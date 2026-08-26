@@ -6,7 +6,7 @@ const read = (path: string): string => readFileSync(path, "utf8");
 
 describe("tail inspection default worker roster", () => {
   it("keeps tail defaults versioned and audited without turning tail into a catalog process", () => {
-    const migration = read("apps/api/migrations/0099_tail_default_worker_roster.sql");
+    const migration = read("apps/api/migrations/0098_tail_default_worker_roster.sql");
     expect(migration).toContain("tail_inspection_default_worker_roster_versions");
     expect(migration).toContain("master_data.tail_default_workers.replace");
     expect(migration).toContain("person.person_type='temporary'");
