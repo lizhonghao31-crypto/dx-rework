@@ -96,6 +96,7 @@
     { "version": "0094_tail_assignment_parity", "checksum": "2c5828661ca5351bbd817ec322deadd2b57f083570509909178862d0b5c80104" },
     { "version": "0095_receiving_defective_quantity", "checksum": "b6dc6a36a0ad5d0f55ebfc7f9eb49adb27cfb5db20fb97f049b3575d4800fe7c" },
     { "version": "0096_sourcing_view_capability", "checksum": "d184272fa0ab595394d15426842462e0e33e354270477436c79ee6c9916392e6" },
-    { "version": "0097_sourcing_foundation", "checksum": "3bc1ae83529791e2dcc7679aad50006a5ac0d5c26893e4f623e7abf4aecb2e5e" }
+    { "version": "0097_sourcing_foundation", "checksum": "3bc1ae83529791e2dcc7679aad50006a5ac0d5c26893e4f623e7abf4aecb2e5e" },
+    { "version": "0098_tail_default_worker_roster", "checksum": "af2f2c38396edc74d213d3a57385c86c3013739c6cefaacf7c8e0e4145a89864" }
   ]
 }

@@ -706,6 +706,16 @@ runWithPostgres("role permissions and versioned master data", () => {
       "DELETE FROM process_default_worker_roster_versions WHERE process_id=$1",
       [process.processId],
     )).rejects.toMatchObject({ code: "55000" });
+    await service.replaceTailInspectionDefaultWorkers(tailN02Actor, {
+      personIds: [defaultWorker.personId],
+      changeReason: "设定尾查默认人员",
+    });
+    expect((await database.query<{ person_ids: string[] }>(
+      "SELECT person_ids FROM tail_inspection_default_worker_roster_versions ORDER BY roster_version DESC LIMIT 1",
+    )).rows[0]?.person_ids).toEqual([defaultWorker.personId]);
+    await expect(database.query(
+      "DELETE FROM tail_inspection_default_worker_roster_versions",
+    )).rejects.toMatchObject({ code: "55000" });
 
     const supplier = await service.createSupplier(masterDataActor, {
       supplierCode: "FACTORY_01",
