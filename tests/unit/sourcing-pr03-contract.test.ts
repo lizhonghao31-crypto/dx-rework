@@ -45,7 +45,7 @@ describe("sourcing PR03 contracts", () => {
     expect(page).toContain("确认 IE 价格");
     expect(page).toContain("系统计算总额");
     expect(page).not.toContain("选择供应商");
-    expect(page).not.toContain("老板批准");
-    expect(page).not.toContain("登记合同");
+    expect(page).not.toContain("提交老板审批");
+    expect(page).not.toContain("登记合同执行");
   });
 });
