@@ -50,6 +50,9 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("groupTasksByProcess");
     expect(form).toContain("processOrder.set(processName, processOrder.size)");
     expect(form).toContain("30_000");
+    expect(form).toContain("IE 核准单价：¥");
+    expect(form).toContain("formatApprovedUnitPrice(task.unitPrice)");
+    expect(form).toContain('className="work-reporting-approved-price"');
     expect(form).toContain("pendingTasksExpanded");
     expect(form).toContain("completedTasksExpanded");
     expect(form).toContain('aria-controls="n04-pending-task-list"');
