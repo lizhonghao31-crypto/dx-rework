@@ -18,6 +18,7 @@ import {
   registerDatabasePoolErrorHandler,
 } from "./platform/database.js";
 import { ReceivingService } from "./receiving/receiving-service.js";
+import { SourcingService } from "./sourcing/sourcing-service.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
 import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-whole-order-review-service.js";
@@ -105,6 +106,7 @@ const attachments = new AttachmentService(database, storage, {
 const todoService = new TodoService(database);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const receivingService = new ReceivingService(database);
+const sourcingService = new SourcingService(database);
 const reworkService = new ReworkInitiationService(
   database,
   config.dingtalk.corpId,
@@ -194,6 +196,11 @@ const app = buildApp({
   receiving: {
     authenticate: (token) => auth.authenticate(token),
     service: receivingService,
+    root: rootAuthority,
+  },
+  sourcing: {
+    authenticate: (token) => auth.authenticate(token),
+    service: sourcingService,
     root: rootAuthority,
   },
   tools: {
