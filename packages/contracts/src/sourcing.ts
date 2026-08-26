@@ -41,7 +41,6 @@ export const SourcingCaseStatusSchema = z.enum([
 ]);
 
 export const CreateSourcingCaseSchema = z.object({
-  erpOrderId: z.string().trim().min(1).max(200).optional(),
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
   orderQuantity: z.number().int().positive().max(10_000_000),
