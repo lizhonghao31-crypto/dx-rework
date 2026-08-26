@@ -57,7 +57,9 @@ describe("optional tail inspection", () => {
       read("tests/integration/optional-tail-inspection-postgres.test.ts"),
       read("apps/web/src/whole-order-review-panel.tsx"),
     ]);
-    expect(migration).toContain("CASE WHEN tail_required THEN 1 ELSE 0 END");
+    expect(migration).toContain("tail_process_count bigint");
+    expect(migration).toContain("tail_required AND tail_process_count<>1");
+    expect(migration).toContain("NOT tail_required AND tail_process_count<>0");
     expect(migration).toContain("unified_execution AND tail_required AND EXISTS");
     expect(integration).toContain("review.reviewFinalQuantity");
     expect(integration).toContain('reworkStatus: "pending_responsibility_determination"');
