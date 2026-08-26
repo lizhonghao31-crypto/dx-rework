@@ -17,6 +17,7 @@ type CreateReceivingInput = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity?: number;
   attachmentIds?: readonly string[];
   receivedDate?: string;
 }>;
@@ -25,6 +26,7 @@ type NormalizedCreateReceivingInput = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   attachmentIds: readonly string[];
   receivedDate: string | null;
 }>;
@@ -34,6 +36,7 @@ type CorrectReceivingBatchInput = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity?: number;
 }>;
 
 type ReceivingReceipt = Readonly<{
@@ -42,6 +45,7 @@ type ReceivingReceipt = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   differenceQuantity: number;
   receivedBy: string;
   receivedAt: string;
@@ -54,6 +58,7 @@ type BoardRow = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   differenceQuantity: number;
   receiptCount: number;
   lastReceivedAt: string;
@@ -69,6 +74,7 @@ type ReceivingBatchSnapshot = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   differenceQuantity: number;
   version: number;
 }>;
@@ -159,10 +165,14 @@ export class ReceivingService {
     input: CreateReceivingInput,
     idempotencyKey: string,
   ): Promise<Result<ReceivingReceipt>> {
+    const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
+    const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
+    if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     const normalized = {
       styleNo: normalizeStyleNo(input.styleNo),
       documentQuantity: validateQuantity(input.documentQuantity, "收货单数量", false),
-      actualQuantity: validateQuantity(input.actualQuantity, "实际收货数量", true),
+      actualQuantity,
+      defectiveQuantity,
       attachmentIds: normalizeAttachmentIds(input.attachmentIds),
       receivedDate: normalizeReceivingBackfillDate(input.receivedDate),
     };
@@ -178,6 +188,7 @@ export class ReceivingService {
           styleNo: normalized.styleNo,
           documentQuantity: normalized.documentQuantity,
           actualQuantity: normalized.actualQuantity,
+          defectiveQuantity: normalized.defectiveQuantity,
           attachmentIds: normalized.attachmentIds,
           ...(normalized.receivedDate ? { receivedDate: normalized.receivedDate } : {}),
         }),
@@ -222,6 +233,7 @@ export class ReceivingService {
     deleted_at: Date | null;
     document_quantity: string;
     actual_quantity: string;
+    defective_quantity: string;
     has_rework_history: boolean;
   }>> {
     const result = await client.query<{
@@ -230,11 +242,13 @@ export class ReceivingService {
       deleted_at: Date | null;
       document_quantity: string;
       actual_quantity: string;
+      defective_quantity: string;
       has_rework_history: boolean;
     }>(
       `SELECT batch.style_no,batch.version,batch.deleted_at,
               (totals.document_quantity+batch.document_quantity_adjustment)::bigint AS document_quantity,
               (totals.actual_quantity+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
+              (totals.defective_quantity+batch.defective_quantity_adjustment)::bigint AS defective_quantity,
               EXISTS(
                 SELECT 1 FROM rework_orders rework
                 WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
@@ -242,7 +256,8 @@ export class ReceivingService {
        FROM receiving_batches batch
        JOIN LATERAL (
          SELECT sum(receipt.document_quantity)::bigint AS document_quantity,
-                sum(receipt.actual_quantity)::bigint AS actual_quantity
+                sum(receipt.actual_quantity)::bigint AS actual_quantity,
+                sum(receipt.defective_quantity)::bigint AS defective_quantity
          FROM receiving_receipts receipt
          WHERE receipt.receiving_batch_id=batch.receiving_batch_id
        ) totals ON totals.document_quantity IS NOT NULL
@@ -271,6 +286,9 @@ export class ReceivingService {
       styleNo: normalizeStyleNo(input.styleNo),
       documentQuantity: validateQuantity(input.documentQuantity, "收货单数量", false),
       actualQuantity: validateQuantity(input.actualQuantity, "实际收货数量", true),
+      defectiveQuantity: input.defectiveQuantity === undefined
+        ? undefined
+        : validateQuantity(input.defectiveQuantity, "次品数量", true),
     };
     const client = await this.database.connect();
     try {
@@ -286,11 +304,14 @@ export class ReceivingService {
       if (current.version !== normalized.expectedVersion) {
         fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
       }
+      const defectiveQuantity = normalized.defectiveQuantity ?? Number(current.defective_quantity);
+      if (defectiveQuantity > normalized.actualQuantity) fail("次品数量不能超过实际收货数量");
       const before = {
         receivingBatchId,
         styleNo: current.style_no,
         documentQuantity: Number(current.document_quantity),
         actualQuantity: Number(current.actual_quantity),
+        defectiveQuantity: Number(current.defective_quantity),
         differenceQuantity: Number(current.actual_quantity) - Number(current.document_quantity),
         version: current.version,
       };
@@ -299,6 +320,7 @@ export class ReceivingService {
         styleNo: normalized.styleNo,
         documentQuantity: normalized.documentQuantity,
         actualQuantity: normalized.actualQuantity,
+        defectiveQuantity,
         differenceQuantity: normalized.actualQuantity - normalized.documentQuantity,
         version: current.version + 1,
       };
@@ -325,10 +347,15 @@ export class ReceivingService {
                FROM receiving_receipts receipt
                WHERE receipt.receiving_batch_id=batch.receiving_batch_id
              ),
-             version=batch.version+1,updated_by=$5,updated_at=clock_timestamp(),
-             last_operation_event_id=$6,last_request_id=$7
+             defective_quantity_adjustment=$5-(
+               SELECT sum(receipt.defective_quantity)
+               FROM receiving_receipts receipt
+               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+             ),
+             version=batch.version+1,updated_by=$6,updated_at=clock_timestamp(),
+             last_operation_event_id=$7,last_request_id=$8
          WHERE batch.receiving_batch_id=$1
-           AND batch.version=$8
+           AND batch.version=$9
            AND batch.deleted_at IS NULL
            AND NOT EXISTS(
              SELECT 1 FROM rework_orders rework
@@ -339,6 +366,7 @@ export class ReceivingService {
           normalized.styleNo,
           normalized.documentQuantity,
           normalized.actualQuantity,
+          defectiveQuantity,
           actor.actorId,
           eventId,
           actor.requestId,
@@ -381,6 +409,7 @@ export class ReceivingService {
         styleNo: current.style_no,
         documentQuantity: Number(current.document_quantity),
         actualQuantity: Number(current.actual_quantity),
+        defectiveQuantity: Number(current.defective_quantity),
         differenceQuantity: Number(current.actual_quantity) - Number(current.document_quantity),
         version: current.version,
       };
@@ -542,6 +571,7 @@ export class ReceivingService {
         styleNo: input.styleNo,
         documentQuantity: input.documentQuantity,
         actualQuantity: input.actualQuantity,
+        defectiveQuantity: input.defectiveQuantity,
         differenceQuantity: input.actualQuantity - input.documentQuantity,
         attachmentIds: input.attachmentIds,
         ...(input.receivedDate ? { receivedDate: input.receivedDate, backfilled: true } : {}),
@@ -559,18 +589,19 @@ export class ReceivingService {
       style_no: string;
       document_quantity: number;
       actual_quantity: number;
+      defective_quantity: number;
       difference_quantity: number;
       received_by: string;
       received_at: Date;
     }>(
       `INSERT INTO receiving_receipts(
-         receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,
+         receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
          received_by,operation_event_id,request_id,received_at
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,COALESCE(
-         ($9::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE(
+         ($10::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
          CURRENT_TIMESTAMP
        ))
-       RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,
+       RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
                  difference_quantity,received_by,received_at`,
       [
         receiptId,
@@ -578,6 +609,7 @@ export class ReceivingService {
         input.styleNo,
         input.documentQuantity,
         input.actualQuantity,
+        input.defectiveQuantity,
         actor.actorId,
         eventId,
         actor.requestId,
@@ -591,6 +623,7 @@ export class ReceivingService {
       styleNo: row.style_no,
       documentQuantity: row.document_quantity,
       actualQuantity: row.actual_quantity,
+      defectiveQuantity: row.defective_quantity,
       differenceQuantity: row.difference_quantity,
       receivedBy: row.received_by,
       receivedAt: row.received_at.toISOString(),
@@ -622,6 +655,7 @@ export class ReceivingService {
       style_no: string;
       document_quantity: string;
       actual_quantity: string;
+      defective_quantity: string;
       difference_quantity: string;
       receipt_count: string;
       last_received_at: Date;
@@ -644,6 +678,7 @@ export class ReceivingService {
                 batch.style_no,
                 (sum(r.document_quantity)+batch.document_quantity_adjustment)::bigint AS document_quantity,
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
+                (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS defective_quantity,
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment
                   -sum(r.document_quantity)-batch.document_quantity_adjustment)::bigint AS difference_quantity,
                 count(*)::bigint AS receipt_count,
@@ -658,7 +693,7 @@ export class ReceivingService {
          GROUP BY r.receiving_batch_id,batch.receiving_batch_id
        )
        SELECT totals.receiving_batch_id,totals.style_no,totals.document_quantity,
-              totals.actual_quantity,totals.difference_quantity,totals.receipt_count,
+              totals.actual_quantity,totals.defective_quantity,totals.difference_quantity,totals.receipt_count,
               totals.last_received_at,receiver.display_name AS last_receiver_name,
               rework.rework_order_id,rework.status AS rework_status,
               totals.version,
@@ -693,6 +728,7 @@ export class ReceivingService {
       styleNo: row.style_no,
       documentQuantity: Number(row.document_quantity),
       actualQuantity: Number(row.actual_quantity),
+      defectiveQuantity: Number(row.defective_quantity),
       differenceQuantity: Number(row.difference_quantity),
       receiptCount: Number(row.receipt_count),
       lastReceivedAt: row.last_received_at.toISOString(),

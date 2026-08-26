@@ -14,6 +14,7 @@ type BoardRow = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   differenceQuantity: number;
   receiptCount: number;
   lastReceivedAt: string;
@@ -82,6 +83,7 @@ export function OrderBoardPage() {
   const [editStyleNo, setEditStyleNo] = useState("");
   const [editDocumentQuantity, setEditDocumentQuantity] = useState("");
   const [editActualQuantity, setEditActualQuantity] = useState("");
+  const [editDefectiveQuantity, setEditDefectiveQuantity] = useState("");
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
 
@@ -159,6 +161,7 @@ export function OrderBoardPage() {
     setEditStyleNo(row.styleNo);
     setEditDocumentQuantity(String(row.documentQuantity));
     setEditActualQuantity(String(row.actualQuantity));
+    setEditDefectiveQuantity(String(row.defectiveQuantity));
     setMutationMessage("");
   };
 
@@ -172,6 +175,10 @@ export function OrderBoardPage() {
 
   const submitCorrection = async () => {
     if (!editing || mutationBusy) return;
+    if (Number(editDefectiveQuantity) > Number(editActualQuantity)) {
+      setMutationMessage("次品数量不能超过实际收货数量");
+      return;
+    }
     setMutationBusy(true);
     setMutationMessage("");
     try {
@@ -184,6 +191,7 @@ export function OrderBoardPage() {
           styleNo: editStyleNo,
           documentQuantity: Number(editDocumentQuantity),
           actualQuantity: Number(editActualQuantity),
+          defectiveQuantity: Number(editDefectiveQuantity),
         }),
       });
       if (!response.ok) throw new Error(await responseError(response, "收货订单修改失败"));
@@ -265,6 +273,7 @@ export function OrderBoardPage() {
           </div>
           <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
           <div><span>实收</span><strong>{row.actualQuantity}件</strong></div>
+          <div><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
           <div className="order-board-row__difference"><span>差异</span><strong>{signed}件</strong></div>
           <div><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
           <div><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
@@ -285,11 +294,12 @@ export function OrderBoardPage() {
         <div className="order-board-dialog__quantity-grid">
           <label>收货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
           <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
+          <label>次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setEditDefectiveQuantity(event.target.value)} /></label>
         </div>
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setEditing(null)}>取消</button>
-          <button type="submit" className="is-primary" disabled={mutationBusy || !editStyleNo.trim() || !editDocumentQuantity || editActualQuantity === ""}>{mutationBusy ? "保存中…" : "保存修改"}</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || !editStyleNo.trim() || !editDocumentQuantity || editActualQuantity === "" || editDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修改"}</button>
         </div>
       </form>
     </div> : null}

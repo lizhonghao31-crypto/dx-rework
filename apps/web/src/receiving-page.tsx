@@ -33,6 +33,7 @@ type Receipt = Readonly<{
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   differenceQuantity: number;
   receivedAt: string;
 }>;
@@ -120,6 +121,7 @@ export function ReceivingPage() {
   const [styleNo, setStyleNo] = useState("");
   const [documentQuantity, setDocumentQuantity] = useState("");
   const [actualQuantity, setActualQuantity] = useState("");
+  const [defectiveQuantity, setDefectiveQuantity] = useState("0");
   const [images, setImages] = useState<readonly SelectedImage[]>([]);
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -196,9 +198,12 @@ export function ReceivingPage() {
     const trimmedStyle = styleNo.trim();
     const documentCount = Number(documentQuantity);
     const actualCount = Number(actualQuantity);
+    const defectiveCount = Number(defectiveQuantity);
     if (!trimmedStyle) { setMessage("请选择或填写款号"); return; }
     if (!/^\d+$/.test(documentQuantity) || documentCount <= 0) { setMessage("收货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
+    if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
+    if (defectiveCount > actualCount) { setMessage("次品数量不能超过实际收货数量"); return; }
     if (backfill && receivedDate !== businessDateDaysAgo(1) && receivedDate !== businessDateDaysAgo(2)) {
       setMessage("补录仅支持昨天和前天");
       return;
@@ -226,6 +231,7 @@ export function ReceivingPage() {
           styleNo: trimmedStyle,
           documentQuantity: documentCount,
           actualQuantity: actualCount,
+          defectiveQuantity: defectiveCount,
           attachmentIds,
           ...(backfill ? { receivedDate } : {}),
         }),
@@ -234,10 +240,11 @@ export function ReceivingPage() {
       const receipt = await response.json() as Receipt;
       pendingKey.current = null;
       const sign = receipt.differenceQuantity > 0 ? "+" : "";
-      setMessage(`${backfill ? "补录" : "收货"}成功 · 差异 ${sign}${receipt.differenceQuantity} 件`);
+      setMessage(`${backfill ? "补录" : "收货"}成功 · 次品 ${receipt.defectiveQuantity} 件 · 差异 ${sign}${receipt.differenceQuantity} 件`);
       setStyleNo("");
       setDocumentQuantity("");
       setActualQuantity("");
+      setDefectiveQuantity("0");
       clearImages();
       setStyleMenuOpen(false);
       setOpen(false);
@@ -308,6 +315,10 @@ export function ReceivingPage() {
           <label className="receiving-field">
             <span>实际收货数量</span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
+          </label>
+          <label className="receiving-field">
+            <span>次品数量</span>
+            <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={defectiveQuantity} disabled={busy} onChange={(event) => { setDefectiveQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <div className="receiving-images">
             <div className="receiving-images-heading">
