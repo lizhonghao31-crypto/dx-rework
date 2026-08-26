@@ -1,3 +1,4 @@
+import { calculateSourcingTotalExact } from "@dx-rework/contracts";
 import type {
   SourcingCaseListResponse,
   SourcingCaseStatus,
@@ -56,13 +57,13 @@ const canAct = (
   );
 
 const totalPreview = (unitPrice: string, quantity: number): string => {
-  if (!/^\d{1,10}(?:\.\d{0,4})?$/.test(unitPrice) || Number(unitPrice) <= 0) return "—";
-  const total = Number(unitPrice) * quantity;
-  if (!Number.isFinite(total)) return "—";
-  return total.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  if (!/^\d{1,10}(?:\.\d{1,4})?$/.test(unitPrice) || Number(unitPrice) <= 0) return "—";
+  try {
+    const [whole, fraction] = calculateSourcingTotalExact(unitPrice, quantity).split(".");
+    return `${whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${fraction}`;
+  } catch {
+    return "—";
+  }
 };
 
 const formatDateTime = (value: string): string =>
