@@ -22,6 +22,7 @@ import {
   type EmployeeAccessHttpDependencies,
 } from "./access/employee-access-routes.js";
 import { registerReceivingRoutes, type ReceivingHttpDependencies } from "./receiving/receiving-routes.js";
+import { registerSourcingRoutes, type SourcingHttpDependencies } from "./sourcing/sourcing-routes.js";
 import { registerReworkRoutes, type ReworkHttpDependencies } from "./rework/routes.js";
 import {
   registerProcessConfigurationRoutes,
@@ -48,6 +49,7 @@ export type AppDependencies = Readonly<{
   access?: AccessHttpDependencies;
   employeeAccess?: EmployeeAccessHttpDependencies;
   receiving?: ReceivingHttpDependencies;
+  sourcing?: SourcingHttpDependencies;
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
   workReporting?: WorkReportingHttpDependencies;
@@ -130,6 +132,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.access) registerAccessRoutes(app, dependencies.access);
   if (dependencies.employeeAccess) registerEmployeeAccessRoutes(app, dependencies.employeeAccess);
   if (dependencies.receiving) registerReceivingRoutes(app, dependencies.receiving);
+  if (dependencies.sourcing) registerSourcingRoutes(app, dependencies.sourcing);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);
   if (dependencies.processConfiguration) {
     registerProcessConfigurationRoutes(app, dependencies.processConfiguration);
