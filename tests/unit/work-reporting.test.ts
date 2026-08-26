@@ -49,7 +49,7 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("ManagerTaskProgressRow");
     expect(form).toContain("groupTasksByProcess");
     expect(form).toContain("processOrder.set(processName, processOrder.size)");
-    expect(form).toContain("30_000");
+    expect(form).not.toContain("window.setInterval");
     expect(form).toContain("pendingTasksExpanded");
     expect(form).toContain("completedTasksExpanded");
     expect(form).toContain('aria-controls="n04-pending-task-list"');
