@@ -268,7 +268,6 @@ export function OrderBoardPage() {
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
               {reworkControl(row, false)}
-              {rootControls(row, false)}
             </div>
           </div>
           <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
@@ -278,6 +277,7 @@ export function OrderBoardPage() {
           <div><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
           <div><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
           <div><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
+          {rootControls(row, false)}
           {rootControls(row, true)}
           {reworkControl(row, true)}
         </Surface>;
