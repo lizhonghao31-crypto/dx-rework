@@ -7,6 +7,7 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   unified_execution boolean;
   tail_required boolean;
+  tail_process_count bigint;
 BEGIN
   SELECT target.tail_inspection_required
   INTO tail_required
@@ -26,12 +27,17 @@ BEGIN
     WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' AND item.unit_price IS NULL
   ) THEN RAISE EXCEPTION 'every IE-approved process requires a price' USING ERRCODE='23514'; END IF;
 
+  SELECT count(*) INTO tail_process_count
+  FROM rework_process_configurations configuration
+  JOIN rework_process_configuration_items item USING(configuration_id)
+  WHERE configuration.rework_order_id=NEW.rework_order_id
+    AND configuration.status='approved'
+    AND item.execution_kind='tail_inspection';
+
   IF unified_execution AND (
-    SELECT count(*) FROM rework_process_configurations configuration
-    JOIN rework_process_configuration_items item USING(configuration_id)
-    WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' AND item.execution_kind='tail_inspection'
-  )<>CASE WHEN tail_required THEN 1 ELSE 0 END
-  THEN RAISE EXCEPTION 'unified execution tail-inspection process does not match the order decision' USING ERRCODE='23514'; END IF;
+    (tail_required AND tail_process_count<>1)
+    OR (NOT tail_required AND tail_process_count<>0)
+  ) THEN RAISE EXCEPTION 'unified execution tail-inspection process does not match the order decision' USING ERRCODE='23514'; END IF;
 
   IF NOT EXISTS(
     SELECT 1 FROM rework_tail_completion_confirmations confirmation
