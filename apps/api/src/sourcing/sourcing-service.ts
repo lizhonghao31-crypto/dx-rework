@@ -244,9 +244,10 @@ export class SourcingService {
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
+    const erpOrderNo = normalizeText(input.erpOrderNo, "ERP订单号", 100);
     const normalized = {
-      erpOrderNo: normalizeText(input.erpOrderNo, "ERP订单号", 100),
-      erpOrderId: normalizeText(input.erpOrderId ?? input.erpOrderNo, "ERP订单稳定标识", 200),
+      erpOrderNo,
+      erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       orderQuantity: normalizeQuantity(input.orderQuantity),
     };
