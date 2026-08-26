@@ -121,7 +121,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const canReview = user?.isRoot === true || Boolean(user?.businessRoles?.includes("ie_reviewer") && user.capabilities.includes("process:review"));
   const canCreateTemporary = user?.isRoot === true || user?.capabilities.includes("temporary_worker:manage") === true;
   const configuration = response?.configuration ?? null;
-  const unifiedExecution = true;
+  const tailInspectionRequired = response?.tailInspectionRequired ?? true;
   const editable = Boolean(canConfigure && response?.reworkStatus === "pending_process_configuration");
   const reviewBlocked = Boolean(user && user.isRoot !== true && detail && (user.id === detail.createdBy.userId || user.id === detail.processConfigurationCreatedBy?.userId));
   const reviewable = Boolean(canReview && response?.reworkStatus === "pending_ie_review" && !reviewBlocked);
@@ -135,11 +135,11 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const readinessIssues = [
     ...(itemIssue ? [itemIssue] : []),
     ...(workerIssue >= 0 ? [`工序 ${workerIssue + 1} 至少分配 1 名工人`] : []),
-    ...(unifiedExecution && tailPriceIssue ? [tailPriceIssue] : []),
-    ...(unifiedExecution && tailPersonIds.length === 0 ? ["至少分配 1 名尾查"] : []),
+    ...(tailInspectionRequired && tailPriceIssue ? [tailPriceIssue] : []),
+    ...(tailInspectionRequired && tailPersonIds.length === 0 ? ["至少分配 1 名尾查"] : []),
   ];
   const saveReady = editable && itemIssue === null && workerIssue < 0
-    && (!unifiedExecution || (tailPriceIssue === null && tailPersonIds.length > 0));
+    && (!tailInspectionRequired || (tailPriceIssue === null && tailPersonIds.length > 0));
   const submitReady = saveReady;
 
   const mutationKey = (signature: string): string => {
@@ -206,8 +206,8 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
           .filter((person) => person.eligibleExecutionKinds.includes("tail_inspection"))
           .map((person) => person.personId));
         const eligibleDefaults = (processResult.value.tailDefaultWorkerPersonIds ?? []).filter((personId) => eligibleTailIds.has(personId));
-        setTailDefaultCandidateCount(config.configuration ? 0 : eligibleDefaults.length);
-        if (!config.configuration) setTailPersonIds(eligibleDefaults);
+        setTailDefaultCandidateCount(config.tailInspectionRequired && !config.configuration ? eligibleDefaults.length : 0);
+        if (config.tailInspectionRequired && !config.configuration) setTailPersonIds(eligibleDefaults);
         setTailDefaultRosterDirty(false);
       }
       setOptionLoadIssue(issues.join("；"));
@@ -326,7 +326,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     if (!response || !editable || itemIssue || workerIssue >= 0) {
       throw new Error("请先补完整返工工序和人员分配");
     }
-    if (unifiedExecution && (tailPriceIssue || tailPersonIds.length === 0)) {
+    if (tailInspectionRequired && (tailPriceIssue || tailPersonIds.length === 0)) {
       throw new Error("请先补完整尾查计件信息");
     }
     const configItems = items.map((item) => ({
@@ -336,7 +336,9 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     }));
     const configBody = {
       expectedOrderVersion: response.orderVersion,
-      items: [...configItems, { source: "custom" as const, customProcessName: "尾查", executionKind: "tail_inspection" as const, plannedQuantity: 1, pricingUnit: "piece" as const, unitPrice: Number(tailUnitPrice) }],
+      items: tailInspectionRequired
+        ? [...configItems, { source: "custom" as const, customProcessName: "尾查", executionKind: "tail_inspection" as const, plannedQuantity: 1, pricingUnit: "piece" as const, unitPrice: Number(tailUnitPrice) }]
+        : configItems,
     };
     const configSignature = `config:${JSON.stringify(configBody)}`;
     const saved = await request(`rework-orders/${reworkOrderId}/process-configuration/draft`, ProcessConfigurationResponseSchema.parse, { method: "PUT", headers: { "idempotency-key": mutationKey(configSignature) }, body: JSON.stringify(configBody) });
@@ -345,7 +347,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     if (!savedConfiguration || savedConfiguration.status !== "draft") throw new Error("工序保存后的版本异常，请刷新后重试");
     const savedWorkerItems = savedConfiguration.items.filter((item) => item.executionKind !== "tail_inspection");
     const savedTailItem = savedConfiguration.items.find((item) => item.executionKind === "tail_inspection");
-    if (savedWorkerItems.length !== items.length || !savedTailItem) {
+    if (savedWorkerItems.length !== items.length || (tailInspectionRequired && !savedTailItem)) {
       throw new Error("执行工序保存不完整，请刷新后重试");
     }
     const planBody = {
@@ -354,7 +356,9 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       expectedConfigurationVersion: savedConfiguration.configurationVersion,
       assignments: [
         ...savedWorkerItems.map((item, index) => ({ configurationItemId: item.configurationItemId, memberIds: workerIds[String(index)] ?? [] })),
-        { configurationItemId: savedTailItem.configurationItemId, memberIds: tailPersonIds },
+        ...(tailInspectionRequired && savedTailItem
+          ? [{ configurationItemId: savedTailItem.configurationItemId, memberIds: tailPersonIds }]
+          : []),
       ],
     };
     const planSignature = `plan:${JSON.stringify(planBody)}`;
@@ -379,13 +383,13 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         pendingSubmit.current = attempt;
       }
       const submitted = await request(`rework-orders/${reworkOrderId}/process-configuration/submit`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(attempt.body) });
-      pendingSubmit.current = null; setResponse(submitted); setMessage("已提交 IE 核价；返工人员与尾查方案已锁定，IE 通过后统一开始执行。"); await onOrderChanged?.();
+      pendingSubmit.current = null; setResponse(submitted); setMessage(tailInspectionRequired ? "已提交 IE 核价；返工人员与尾查方案已锁定，IE 通过后统一开始执行。" : "已提交 IE 核价；返工人员方案已锁定，IE 通过后开始执行。"); await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "提交 IE 核价失败"); } finally { setBusy(false); }
   };
   const review = async (decision: "approved" | "rejected") => {
     if (!response || !configuration || !reviewable || busy) return;
     if (decision === "rejected" && !reviewReason.trim()) { setMessage("IE 驳回必须填写原因"); return; }
-    if (!(await confirmInApp(decision === "approved" ? "确认核价通过？通过后返工人员与尾查任务会统一生效并开始执行。" : "确认驳回并退回尾部主管修改？"))) return;
+    if (!(await confirmInApp(decision === "approved" ? (tailInspectionRequired ? "确认核价通过？通过后返工人员与尾查任务会统一生效并开始执行。" : "确认核价通过？通过后返工任务会生效并开始执行。") : "确认驳回并退回尾部主管修改？"))) return;
     setBusy(true);
     try {
       const reviewBody = { expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: configuration.configurationVersion, decision, reason: reviewReason.trim() || undefined };
@@ -393,7 +397,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       const reviewed = await request(`rework-orders/${reworkOrderId}/process-configuration/review`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": mutationKey(reviewSignature) }, body: JSON.stringify(reviewBody) });
       delete pendingKeys.current[reviewSignature];
       const latestPlan = await request(`rework-orders/${reworkOrderId}/process-worker-plan`, ProcessWorkerPlanResponseSchema.parse); hydrate(reviewed, latestPlan);
-      setMessage(decision === "approved" ? reviewed.reworkStatus === "in_progress" ? "IE 已通过；返工人员与尾查任务已统一生效，返工开始。" : "IE 已通过；自动启动未完成，尾部主管可在本节点重试启动。" : "IE 已驳回，等待尾部主管重新配置工序与工人。");
+      setMessage(decision === "approved" ? reviewed.reworkStatus === "in_progress" ? (tailInspectionRequired ? "IE 已通过；返工人员与尾查任务已统一生效，返工开始。" : "IE 已通过；返工任务已生效，返工开始。") : "IE 已通过；自动启动未完成，尾部主管可在本节点重试启动。" : "IE 已驳回，等待尾部主管重新配置工序与工人。");
       await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "IE 核价提交失败"); } finally { setBusy(false); }
   };
@@ -402,7 +406,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     setBusy(true);
     try {
       await request(`rework-orders/${reworkOrderId}/process-worker-plan/activate`, ProcessWorkerPlanActivationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: plan.configurationVersion }) });
-      setMessage("返工人员与尾查任务已生效，返工开始。"); await onOrderChanged?.();
+      setMessage(tailInspectionRequired ? "返工人员与尾查任务已生效，返工开始。" : "返工任务已生效，返工开始。"); await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "返工启动失败"); } finally { setBusy(false); }
   };
   const reloadPeople = async () => {
@@ -524,7 +528,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   }
   if (editable) {
     return <div className={`process-worker-page${embedded ? " is-embedded" : ""}`}>
-      {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。</p></div>}
+      {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>{tailInspectionRequired ? "返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。" : "本单无需整查；只需分配返工工序与人员，IE 核价通过后开始执行。"}</p></div>}
       <Surface>
         <div className="section-title"><div><h2>工序与人员</h2><p>左侧设置工序与价格，右侧快速分配正式工或临时工；每道工序至少 1 人。</p></div><Button disabled={busy} onClick={() => { setItems((current) => [...current, emptyItem()]); setWorkerIds((current) => ({ ...current, [String(items.length)]: [] })); }}>增加工序</Button></div>
         {optionLoadIssue ? <p className="process-worker-option-alert" role="alert">{optionLoadIssue}</p> : null}
@@ -549,7 +553,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
           </section>;
         })}</div>
       </Surface>
-      <Surface className="process-worker-tail-card">
+      {tailInspectionRequired ? <Surface className="process-worker-tail-card">
         <div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少 1 人"}</StatusBadge></div>
         <div className="process-worker-tail-body">
           <div className="process-worker-tail-work"><div className="process-worker-tail-title-row"><b>尾查</b></div><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
@@ -559,7 +563,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
             {tailDefaultCandidateCount > 0 ? <small className="process-worker-default-candidates">已自动带入 {tailDefaultCandidateCount} 名默认候选人</small> : null}
           </div>
         </div>
-      </Surface>
+      </Surface> : null}
       <div className="process-worker-actions"><Button disabled={busy || !saveReady} onClick={() => void save()}>{busy ? "处理中…" : "保存工序&工人"}</Button><Button variant="primary" disabled={busy || !submitReady} onClick={() => void submit()}>{busy ? "提交中…" : "提交 IE 核价"}</Button>{readinessIssues.length ? <p role="status">还需完成：{readinessIssues.join("；")}</p> : <p role="status">{message}</p>}</div>
       {mobileAssignment ? <div className="process-worker-mobile-sheet-backdrop" role="presentation" onMouseDown={cancelMobileAssignment}><section className="process-worker-mobile-sheet" role="dialog" aria-modal="true" aria-label="选择本单工人" onMouseDown={(event) => event.stopPropagation()}>
         <div className="process-worker-mobile-sheet__heading"><div><h2>选择本单工人</h2><small>已选择 {mobileAssignment.selectedIds.length} 人</small></div></div>

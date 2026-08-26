@@ -64,13 +64,14 @@ type V2FormState = Readonly<{
   styleNo: string;
   factory: string;
   merchandiserUserId: string;
+  tailInspectionRequired: boolean;
   washingSupplierId: string;
   embroiderySupplierId: string;
   fabricSupplierId: string;
   embroideryMerchandiserUserId: string;
 }>;
 type LocalN01Draft = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
   receivingBatchId?: string | null;
   form: V2FormState;
   images: readonly StoredImage[];
@@ -91,6 +92,7 @@ const emptyForm = (useUrlStyle = true): V2FormState => ({
   styleNo: useUrlStyle ? initialStyleNo() : "",
   factory: "",
   merchandiserUserId: "",
+  tailInspectionRequired: true,
   washingSupplierId: "",
   embroiderySupplierId: "",
   fabricSupplierId: "",
@@ -100,7 +102,7 @@ const emptyForm = (useUrlStyle = true): V2FormState => ({
 const isFormState = (value: unknown): value is V2FormState => {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;
-  return [
+  const stringFieldsValid = [
     "styleNo",
     "factory",
     "merchandiserUserId",
@@ -109,6 +111,8 @@ const isFormState = (value: unknown): value is V2FormState => {
     "fabricSupplierId",
     "embroideryMerchandiserUserId",
   ].every((key) => typeof row[key] === "string");
+  return stringFieldsValid
+    && (row.tailInspectionRequired === undefined || typeof row.tailInspectionRequired === "boolean");
 };
 
 const isStoredImage = (value: unknown): value is StoredImage => {
@@ -126,7 +130,7 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (
-      parsed.schemaVersion !== 1
+      (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2)
       || !isFormState(parsed.form)
       || !Array.isArray(parsed.images)
       || !parsed.images.every(isStoredImage)
@@ -139,7 +143,18 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
     if (requestedStyle && parsed.form.styleNo.trim() !== requestedStyle) return null;
     const requestedBatchId = initialReceivingBatchId();
     if (requestedBatchId && parsed.receivingBatchId !== requestedBatchId) return null;
-    return parsed as LocalN01Draft;
+    return {
+      schemaVersion: 2,
+      ...(parsed.receivingBatchId === undefined
+        ? {}
+        : { receivingBatchId: parsed.receivingBatchId as string | null }),
+      form: {
+        ...(parsed.form as V2FormState),
+        tailInspectionRequired: (parsed.form as Record<string, unknown>).tailInspectionRequired !== false,
+      },
+      images: parsed.images as StoredImage[],
+      savedAt: parsed.savedAt,
+    };
   } catch {
     return null;
   }
@@ -152,7 +167,7 @@ const writeLocalN01Draft = (
 ): void => {
   if (typeof window === "undefined") return;
   const draft: LocalN01Draft = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     receivingBatchId: receivingBatchId ?? null,
     form,
     images: images.map(({ attachmentId, filename, mimeType }) => ({ attachmentId, filename, mimeType })),
@@ -275,6 +290,7 @@ export function ReworkInitiationV2Form({
           styleNo: draft.styleNo ?? "",
           factory: factoryValue(draft),
           merchandiserUserId: draft.merchandiserUserId ?? "",
+          tailInspectionRequired: draft.tailInspectionRequired,
           washingSupplierId: context.washingSupplier?.supplierId ?? "",
           embroiderySupplierId: context.embroiderySupplier?.supplierId ?? "",
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
@@ -328,6 +344,7 @@ export function ReworkInitiationV2Form({
     styleNo: form.styleNo.trim(),
     factory: form.factory,
     merchandiserUserId: form.merchandiserUserId,
+    tailInspectionRequired: form.tailInspectionRequired,
     attachmentIds: images.map((image) => image.attachmentId),
   });
 
@@ -380,6 +397,7 @@ export function ReworkInitiationV2Form({
       const payload = {
         styleNo: form.styleNo.trim() || null,
         merchandiserUserId: form.merchandiserUserId || null,
+        tailInspectionRequired: form.tailInspectionRequired,
         processingFactory: processingFactory ?? null,
         attachmentIds: images.map((image) => image.attachmentId),
       };
@@ -627,6 +645,11 @@ export function ReworkInitiationV2Form({
         <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
         <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory }); pendingSubmit.current = null; }} /></div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
+        <fieldset className="rework-v2-tail-choice" disabled={busy}>
+          <legend>是否需要整查？</legend>
+          <label><input type="radio" name="tailInspectionRequired" checked={form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={!form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false }); pendingSubmit.current = null; }} />否</label>
+        </fieldset>
       </div>
       <details className="rework-v2-more">
         <summary>更多信息</summary>
