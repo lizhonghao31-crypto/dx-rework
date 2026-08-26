@@ -173,6 +173,13 @@
   font-size: 12px;
 }
 
+.rework-detail-single-piece-total {
+  color: var(--dx-v2-color-primary);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .rework-workflow__stages {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
