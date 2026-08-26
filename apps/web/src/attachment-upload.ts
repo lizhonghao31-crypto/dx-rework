@@ -123,6 +123,9 @@ export const isSupportedAttachment = (file: Pick<File, "type">): boolean =>
 export const isImageAttachment = (file: Pick<File, "type">): boolean =>
   IMAGE_MIME_TYPES.has(file.type);
 
+export const isReceivingImageCandidate = (file: Pick<File, "type">): boolean =>
+  file.type.startsWith("image/");
+
 /**
  * Small camera images already transfer quickly, while decoding and re-encoding
  * them can take several seconds on lower-end phones. Keep compression for larger
@@ -144,6 +147,95 @@ const webpFilename = (filename: string): string => {
 
 const canvasBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
   new Promise((resolve) => canvas.toBlob(resolve, "image/webp", WEBP_QUALITY));
+
+type DecodedReceivingImage = Readonly<{
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close(): void;
+}>;
+
+const loadReceivingImageElement = (file: File): Promise<DecodedReceivingImage> =>
+  new Promise((resolve, reject) => {
+    if (typeof Image === "undefined" || typeof URL.createObjectURL !== "function") {
+      reject(new Error("当前浏览器无法读取这张图片"));
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    const release = () => URL.revokeObjectURL(objectUrl);
+    image.onload = () => {
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      if (!width || !height) {
+        release();
+        reject(new Error("图片内容无法识别"));
+        return;
+      }
+      resolve({ source: image, width, height, close: release });
+    };
+    image.onerror = () => {
+      release();
+      reject(new Error("图片内容无法识别"));
+    };
+    image.src = objectUrl;
+  });
+
+const decodeReceivingImage = async (file: File): Promise<DecodedReceivingImage> => {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close(),
+      };
+    } catch {
+      // Some iOS/WeChat webviews can preview an image through <img> even when
+      // createImageBitmap cannot decode it. Use that browser decoder as fallback.
+    }
+  }
+  return loadReceivingImageElement(file);
+};
+
+const normalizedImageFilename = (filename: string, mimeType: string): string => {
+  const stem = filename.replace(/\.[^.]+$/, "").trim() || "receiving-evidence";
+  return `${stem}.${mimeType === "image/webp" ? "webp" : "jpg"}`;
+};
+
+export const normalizeReceivingImageForUpload = async (file: File): Promise<File> => {
+  if (!isReceivingImageCandidate(file)) throw new Error("请选择有效的图片文件");
+
+  let decoded: DecodedReceivingImage | undefined;
+  try {
+    decoded = await decodeReceivingImage(file);
+    const longestEdge = Math.max(decoded.width, decoded.height);
+    const scale = Math.min(1, MAX_IMAGE_EDGE / longestEdge);
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("当前浏览器无法处理这张图片");
+    context.drawImage(decoded.source, 0, 0, width, height);
+
+    const normalized = await canvasBlob(canvas);
+    if (!normalized || normalized.type !== "image/webp") {
+      throw new Error("当前浏览器无法转换这张图片");
+    }
+    return new File([normalized], normalizedImageFilename(file.name, normalized.type), {
+      type: normalized.type,
+      lastModified: file.lastModified,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("当前浏览器")) throw error;
+    throw new Error("图片格式无法识别，请重新选择图片");
+  } finally {
+    decoded?.close();
+  }
+};
 
 /**
  * QC photos are reduced before hashing/uploading. This preserves the original
@@ -245,3 +337,4 @@ export const prepareAndUploadWithConcurrency = async <T, Prepared, Result>(
 
   return results;
 };
+
