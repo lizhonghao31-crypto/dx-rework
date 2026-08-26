@@ -2,7 +2,7 @@ import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
 import { verifySession, type AuthorizedUser } from "./auth.js";
-import { accessiblePlatformModules } from "./platform-modules.js";
+import { accessiblePlatformModules, platformModuleHref } from "./platform-modules.js";
 import "./platform-home.css";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -60,7 +60,7 @@ export function PlatformHomePage() {
             <StatusBadge tone="info">业务模块</StatusBadge>
             <h2>{moduleCopy[module.id].title}</h2>
             <p>{moduleCopy[module.id].description}</p>
-            <a className="dx-button dx-button--primary platform-home__action" href={`${basePath}/${module.href}`}>进入模块</a>
+            <a className="dx-button dx-button--primary platform-home__action" href={`${basePath}/${platformModuleHref(module)}`}>进入模块</a>
           </Surface>
         ))}
       </section>
