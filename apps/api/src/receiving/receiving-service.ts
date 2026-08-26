@@ -671,7 +671,7 @@ export class ReceivingService {
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=receipt.receiving_batch_id
           AND batch.deleted_at IS NULL
-         WHERE (receipt.received_at AT TIME ZONE 'Asia/Shanghai')::date=$1::date
+         WHERE ($2::text<>'' OR (receipt.received_at AT TIME ZONE 'Asia/Shanghai')::date=$1::date)
            AND ($2::text='' OR batch.style_no ILIKE '%' || $2 || '%')
        ), totals AS (
          SELECT r.receiving_batch_id,
@@ -689,7 +689,7 @@ export class ReceivingService {
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=r.receiving_batch_id
           AND batch.deleted_at IS NULL
-         WHERE (r.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date
+         WHERE ($2::text<>'' OR (r.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date)
          GROUP BY r.receiving_batch_id,batch.receiving_batch_id
        )
        SELECT totals.receiving_batch_id,totals.style_no,totals.document_quantity,
@@ -707,7 +707,7 @@ export class ReceivingService {
          FROM receiving_receipts latest
          JOIN app_users u ON u.id=latest.received_by
          WHERE latest.receiving_batch_id=totals.receiving_batch_id
-           AND (latest.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date
+           AND ($2::text<>'' OR (latest.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date)
          ORDER BY latest.received_at DESC,latest.receipt_id DESC
          LIMIT 1
        ) receiver ON true

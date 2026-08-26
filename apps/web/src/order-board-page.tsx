@@ -124,7 +124,7 @@ export function OrderBoardPage() {
       .then((body) => {
         if (!active) return;
         setData(body);
-        setMessage(body.rows.length ? "" : "当天没有匹配的收货记录");
+        setMessage(body.rows.length ? "" : debouncedQuery.trim() ? "没有匹配的收货记录" : "当天没有匹配的收货记录");
       })
       .catch(() => {
         if (!active) return;
@@ -140,6 +140,7 @@ export function OrderBoardPage() {
     differenceQuantity: 0,
     differenceRate: 0,
   }, [data]);
+  const globalSearch = Boolean(query.trim());
 
   const reworkControl = (row: BoardRow, mobile: boolean) => {
     const className = `order-board-rework-link ${mobile ? "order-board-rework-link--mobile" : "order-board-rework-link--desktop"}`;
@@ -234,7 +235,7 @@ export function OrderBoardPage() {
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">
-        <label>日期<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+        <label>日期<input type="date" value={date} disabled={globalSearch} onChange={(event) => setDate(event.target.value)} /></label>
         <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       </div>
       <div className="order-board-heading__action">
@@ -243,8 +244,8 @@ export function OrderBoardPage() {
     </div>
 
     <div className="order-board-kpis">
-      <KpiInstrument label="今日收货订单数" value={kpis.orderCount} detail={date} tone="info" />
-      <KpiInstrument label="今日收货数量" value={`${kpis.receivedQuantity}件`} detail={`${date} · 实际收货`} tone="info" />
+      <KpiInstrument label={globalSearch ? "匹配订单数" : "今日收货订单数"} value={kpis.orderCount} detail={globalSearch ? "全历史收货" : date} tone="info" />
+      <KpiInstrument label={globalSearch ? "匹配收货数量" : "今日收货数量"} value={`${kpis.receivedQuantity}件`} detail={globalSearch ? "全历史 · 实际收货" : `${date} · 实际收货`} tone="info" />
       <KpiInstrument label="异常订单数量" value={kpis.abnormalOrderCount} detail="累计收货与单据数量不一致" tone={kpis.abnormalOrderCount ? "warning" : "success"} />
       <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail={`绝对差异 ${kpis.differenceQuantity} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
     </div>
