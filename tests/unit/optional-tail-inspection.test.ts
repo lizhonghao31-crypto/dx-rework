@@ -45,9 +45,10 @@ describe("optional tail inspection", () => {
   it("persists worker-derived final quantities without fabricating tail facts", async () => {
     const migration = await read("apps/api/migrations/0100_optional_tail_final_quantity_guard.sql");
     expect(migration).toContain("target.tail_inspection_required");
+    expect(migration).toContain("rework_work_report_effective_quantity(report.work_report_id)");
     expect(migration).toContain("NEW.tail_reported_quantity<>0");
     expect(migration).toContain("NEW.final_confirmed_quantity<>worker_quantity");
-    expect(migration).toContain("NEW.final_confirmed_quantity>tail_quantity");
+    expect(migration).toContain("worker_quantity<>tail_quantity");
   });
 
   it("uses no-tail workflow copy and waits for the saved tail roster to load", async () => {

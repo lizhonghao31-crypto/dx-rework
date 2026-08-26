@@ -32,7 +32,7 @@ BEGIN
   FOR SHARE OF confirmation,target;
   IF target_order_id IS NULL THEN RAISE EXCEPTION 'quantity line lacks active final confirmation' USING ERRCODE='55000'; END IF;
 
-  SELECT COALESCE(sum(report.actual_quantity),0) INTO worker_quantity
+  SELECT COALESCE(sum(rework_work_report_effective_quantity(report.work_report_id)),0) INTO worker_quantity
   FROM rework_work_reports report
   JOIN rework_process_configuration_items item ON item.configuration_item_id=report.configuration_item_id
   JOIN rework_process_configurations configuration ON configuration.configuration_id=item.configuration_id
@@ -42,7 +42,7 @@ BEGIN
     AND report.status='submitted'
     AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id);
 
-  SELECT COALESCE(sum(report.actual_quantity),0) INTO tail_quantity
+  SELECT COALESCE(sum(rework_work_report_effective_quantity(report.work_report_id)),0) INTO tail_quantity
   FROM rework_work_reports report
   JOIN rework_process_configuration_items item ON item.configuration_item_id=report.configuration_item_id
   WHERE report.rework_order_id=target_order_id
@@ -50,13 +50,16 @@ BEGIN
     AND report.status='submitted'
     AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id);
 
-  IF NEW.worker_reported_quantity<>worker_quantity THEN
+  IF worker_quantity<=0 OR NEW.worker_reported_quantity<>worker_quantity THEN
     RAISE EXCEPTION 'final quantity line does not match immutable worker facts' USING ERRCODE='23514';
   END IF;
 
   IF tail_required THEN
-    IF NEW.tail_reported_quantity<>tail_quantity OR NEW.final_confirmed_quantity>tail_quantity THEN
-      RAISE EXCEPTION 'final quantity line does not match immutable worker/tail facts' USING ERRCODE='23514';
+    IF worker_quantity<>tail_quantity
+       OR NEW.tail_reported_quantity<>tail_quantity
+       OR NEW.final_confirmed_quantity<>worker_quantity
+    THEN
+      RAISE EXCEPTION 'final quantity must equal reconciled effective worker and tail facts' USING ERRCODE='23514';
     END IF;
   ELSIF tail_quantity<>0 OR NEW.tail_reported_quantity<>0 OR NEW.final_confirmed_quantity<>worker_quantity THEN
     RAISE EXCEPTION 'no-tail final quantity must equal immutable worker facts' USING ERRCODE='23514';
