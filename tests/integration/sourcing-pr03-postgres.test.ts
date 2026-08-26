@@ -48,6 +48,22 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
       "0003_identity_union_continuity.sql",
       "0004_public_tools_foundation.sql",
       "0005_access_master_data.sql",
+    ]) {
+      await database.query(await readFile(
+        new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
+        "utf8",
+      ));
+    }
+    await database.query(`
+      DROP TRIGGER business_roles_no_insert ON business_roles;
+      INSERT INTO business_roles(role_code,display_name,description)
+      VALUES('finance_director','财务总监','报价选厂测试所需既有角色')
+      ON CONFLICT DO NOTHING;
+      CREATE TRIGGER business_roles_no_insert
+        BEFORE INSERT ON business_roles FOR EACH ROW
+        EXECUTE FUNCTION reject_operation_event_mutation();
+    `);
+    for (const migration of [
       "0096_sourcing_view_capability.sql",
       "0097_sourcing_foundation.sql",
     ]) {
