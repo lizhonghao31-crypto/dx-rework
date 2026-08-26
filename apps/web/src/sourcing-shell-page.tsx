@@ -240,6 +240,9 @@ export function SourcingShellPage() {
               </div>
               <StatusBadge tone="info">加工厂</StatusBadge>
             </div>
+            <p className="sourcing-shell__entry-note">
+              当前由跟单根据正式 ERP 订单人工录入，请核对订单号、款号和数量。
+            </p>
             <label className="sourcing-shell__field">
               <span>ERP 订单号</span>
               <input
