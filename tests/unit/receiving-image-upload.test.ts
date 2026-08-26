@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  INVALID_DECLARED_IMAGE_MESSAGE,
   isReceivingImageCandidate,
   normalizeReceivingImageForUpload,
+  uploadImageWithNormalizationRetry,
 } from "../../apps/web/src/attachment-upload.js";
 
 class BrowserFile extends Blob {
@@ -60,5 +62,37 @@ describe("receiving image normalization", () => {
     expect(drawImage).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
   });
-});
 
+  it("retries a MIME-mismatched QC image with normalized WebP bytes", async () => {
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      toBlob: vi.fn((resolve: BlobCallback, type: string) => {
+        resolve(new Blob(["normalized"], { type }));
+      }),
+    };
+    vi.stubGlobal("File", BrowserFile);
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({
+      width: 1200,
+      height: 800,
+      close: vi.fn(),
+    })));
+    vi.stubGlobal("document", { createElement: vi.fn(() => canvas) });
+
+    const source = new BrowserFile(["wechat"], "微信群图片.jpg", {
+      type: "image/jpeg",
+    }) as File;
+    const upload = vi.fn()
+      .mockRejectedValueOnce(new Error(INVALID_DECLARED_IMAGE_MESSAGE))
+      .mockResolvedValueOnce("attachment-1");
+
+    await expect(uploadImageWithNormalizationRetry(source, source, upload))
+      .resolves.toBe("attachment-1");
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[1]?.[0]).toMatchObject({
+      name: "微信群图片.webp",
+      type: "image/webp",
+    });
+  });
+});

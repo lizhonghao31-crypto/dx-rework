@@ -123,8 +123,10 @@ export const isSupportedAttachment = (file: Pick<File, "type">): boolean =>
 export const isImageAttachment = (file: Pick<File, "type">): boolean =>
   IMAGE_MIME_TYPES.has(file.type);
 
-export const isReceivingImageCandidate = (file: Pick<File, "type">): boolean =>
+export const isImageUploadCandidate = (file: Pick<File, "type">): boolean =>
   file.type.startsWith("image/");
+
+export const isReceivingImageCandidate = isImageUploadCandidate;
 
 /**
  * Small camera images already transfer quickly, while decoding and re-encoding
@@ -205,7 +207,7 @@ const normalizedImageFilename = (filename: string, mimeType: string): string => 
 };
 
 export const normalizeReceivingImageForUpload = async (file: File): Promise<File> => {
-  if (!isReceivingImageCandidate(file)) throw new Error("请选择有效的图片文件");
+  if (!isImageUploadCandidate(file)) throw new Error("请选择有效的图片文件");
 
   let decoded: DecodedReceivingImage | undefined;
   try {
@@ -234,6 +236,43 @@ export const normalizeReceivingImageForUpload = async (file: File): Promise<File
     throw new Error("图片格式无法识别，请重新选择图片");
   } finally {
     decoded?.close();
+  }
+};
+
+export const prepareImageUploadCandidate = async (file: File): Promise<File> =>
+  isImageAttachment(file)
+    ? prepareAttachmentForUpload(file)
+    : normalizeReceivingImageForUpload(file);
+
+export const INVALID_DECLARED_IMAGE_MESSAGE = "Uploaded object is not a valid file of the declared type";
+
+const hasInvalidDeclaredImageError = (error: unknown): boolean =>
+  error instanceof Error && error.message === INVALID_DECLARED_IMAGE_MESSAGE;
+
+/**
+ * Retries an image whose declared MIME type does not match its real bytes after
+ * decoding it in the browser and re-encoding it as validator-safe WebP. This is
+ * shared by image upload entry points so WeChat-saved images behave the same as
+ * camera photos without weakening server-side content validation.
+ */
+export const uploadImageWithNormalizationRetry = async <T>(
+  source: File,
+  prepared: File,
+  uploadPrepared: (file: File) => Promise<T>,
+): Promise<T> => {
+  try {
+    return await uploadPrepared(prepared);
+  } catch (error) {
+    if (!hasInvalidDeclaredImageError(error)) throw error;
+  }
+
+  try {
+    return await uploadPrepared(await normalizeReceivingImageForUpload(source));
+  } catch (error) {
+    if (hasInvalidDeclaredImageError(error)) {
+      throw new Error(`${source.name} 图片格式无法识别，请重新选择图片`);
+    }
+    throw error;
   }
 };
 
@@ -337,4 +376,3 @@ export const prepareAndUploadWithConcurrency = async <T, Prepared, Result>(
 
   return results;
 };
-

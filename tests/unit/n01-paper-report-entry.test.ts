@@ -17,9 +17,11 @@ describe("N01 v2 streamlined initiation", () => {
     }
     expect(form).toContain("上传报告 <b>*</b>");
     expect(form).toContain("＋ 上传报告");
+    expect(form).toContain('accept="image/*"');
+    expect(form).toContain("uploadImageWithNormalizationRetry");
     expect(form).toContain("availableImageCount > 0");
     expect(form).toContain("order?.attachmentIds.length ?? existingAttachmentCount");
-    expect(form).toContain("报告仅支持 JPEG / PNG / WebP 图片格式");
+    expect(form).toContain("报告仅支持图片格式");
     expect(form).not.toContain("验货阶段（必填）");
     expect(form).not.toContain("订单数量（必填）");
     expect(migration).toContain("rework_orders_n01_v2_submission_complete_check");
