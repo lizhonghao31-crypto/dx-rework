@@ -28,6 +28,12 @@ describe("sourcing PR03 contracts", () => {
       styleNo: "DX-100",
       orderQuantity: 1.5,
     })).toThrow();
+    expect(() => CreateSourcingCaseSchema.parse({
+      erpOrderId: "caller-controlled-id",
+      erpOrderNo: "ERP-2026-001",
+      styleNo: "DX-100",
+      orderQuantity: 120,
+    })).toThrow();
   });
 
   it("keeps IE price at four decimals and calculates the two-decimal total exactly", () => {
@@ -46,6 +52,7 @@ describe("sourcing PR03 contracts", () => {
     expect(page).toContain("创建并交给 IE");
     expect(page).toContain("确认 IE 价格");
     expect(page).toContain("系统计算总额");
+    expect(page).toContain("当前由跟单根据正式 ERP 订单人工录入");
     expect(page).not.toContain("选择供应商");
     expect(page).not.toContain("提交老板审批");
     expect(page).not.toContain("登记合同执行");
