@@ -1,5 +1,5 @@
 import { StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Foundation } from "./pages.js";
@@ -9,6 +9,7 @@ import {
   LoginPage,
   QrLoginPage,
   QrRelayPage,
+  verifySession,
   type AuthorizedUser,
 } from "./auth.js";
 import { Shell } from "./components.js";
@@ -34,7 +35,12 @@ import { ReceivingPage } from "./receiving-page.js";
 import { OrderBoardPage } from "./order-board-page.js";
 import { FrontlineLandingPage } from "./frontline-landing-page.js";
 import { FrontlineTaskPage } from "./frontline-task-page.js";
-import { platformLandingTarget } from "./platform-modules.js";
+import {
+  accessiblePlatformModules,
+  PLATFORM_MODULE_QUERY,
+  platformLandingTarget,
+  shouldRedirectLegacyLandingToPlatformHome,
+} from "./platform-modules.js";
 import { PlatformHomePage } from "./platform-home-page.js";
 import { SourcingShellPage } from "./sourcing-shell-page.js";
 
@@ -128,6 +134,87 @@ function useInternalLocation(basePath: string): InternalLocation {
   return location;
 }
 
+const PLATFORM_MODULE_SESSION_KEY = "dx-rework:platform-module";
+
+function readSelectedPlatformModule(): string | null {
+  try {
+    return window.sessionStorage.getItem(PLATFORM_MODULE_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberReworkModule(): void {
+  try {
+    window.sessionStorage.setItem(PLATFORM_MODULE_SESSION_KEY, "rework");
+  } catch {
+    // Session storage can be unavailable in restricted embedded browsers.
+  }
+}
+
+function skipsInitialPlatformEntryCheck(path: string): boolean {
+  return path === "/"
+    || path === "/ui/home"
+    || path === "/ui/sourcing"
+    || path.startsWith("/auth/");
+}
+
+function useInitialPlatformEntryCheck(path: string, search: string): boolean {
+  const initialLocation = useRef({ path, search }).current;
+  const [ready, setReady] = useState(() => skipsInitialPlatformEntryCheck(initialLocation.path));
+
+  useEffect(() => {
+    if (ready) return;
+
+    let mounted = true;
+    const query = new URLSearchParams(initialLocation.search);
+    if (query.get(PLATFORM_MODULE_QUERY) === "rework") {
+      rememberReworkModule();
+      setReady(true);
+      return;
+    }
+
+    void verifySession().then((session) => {
+      if (!mounted) return;
+
+      if (session !== "denied" && session.status === "authorized") {
+        const selectedModule = readSelectedPlatformModule();
+        if (shouldRedirectLegacyLandingToPlatformHome(
+          session.user,
+          initialLocation.path,
+          initialLocation.search,
+          selectedModule,
+        )) {
+          window.location.replace(pageUrl("ui/home"));
+          return;
+        }
+
+        if (accessiblePlatformModules(session.user).length >= 2) rememberReworkModule();
+      }
+
+      setReady(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [initialLocation, ready]);
+
+  return ready;
+}
+
+function PlatformEntryChecking() {
+  return (
+    <main className="auth-shell">
+      <Surface className="auth-card">
+        <StatusBadge tone="info">达兴组织准入</StatusBadge>
+        <h1>正在进入业务工作台</h1>
+        <p>正在核对可访问的业务模块…</p>
+      </Surface>
+    </main>
+  );
+}
+
 function HomeLanding() {
   const [message, setMessage] = useState("正在进入业务工作台…");
 
@@ -175,7 +262,9 @@ function HomeLanding() {
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { path, search } = useInternalLocation(basePath);
+  const platformEntryReady = useInitialPlatformEntryCheck(path, search);
   const hasReworkContext = new URLSearchParams(search).has("rework");
+  if (!platformEntryReady) return <PlatformEntryChecking />;
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;
