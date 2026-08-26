@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { calculateSourcingTotalExact } from "@dx-rework/contracts";
 import type {
   CreateSourcingCase,
   CreateSourcingIeQuote,
@@ -27,7 +28,6 @@ const DEFAULT_CREATION_REASON = "基于正式 ERP 订单创建报价选厂询价
 const DEFAULT_QUOTE_REASON = "IE核定加工价格";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UNIT_PRICE_PATTERN = /^\d{1,10}(?:\.\d{1,4})?$/;
-const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type SqlError = Readonly<{ code?: string; constraint?: string }>;
@@ -93,13 +93,12 @@ export const normalizeSourcingUnitPrice = (value: string): string => {
 
 export const calculateSourcingTotal = (unitPrice: string, quantity: number): string => {
   const normalizedQuantity = normalizeQuantity(quantity);
-  const cents = (scaledUnitPrice(unitPrice) * BigInt(normalizedQuantity) + 50n) / 100n;
-  if (cents <= 0n || cents > MAX_TOTAL_CENTS) {
-    fail("报价总额超出系统允许范围");
+  scaledUnitPrice(unitPrice);
+  try {
+    return calculateSourcingTotalExact(unitPrice, normalizedQuantity);
+  } catch {
+    return fail("报价总额超出系统允许范围");
   }
-  const whole = cents / 100n;
-  const fraction = (cents % 100n).toString().padStart(2, "0");
-  return `${whole}.${fraction}`;
 };
 
 const requestHash = (scope: string, payload: unknown): string =>
