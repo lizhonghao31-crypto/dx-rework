@@ -50,6 +50,10 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("groupTasksByProcess");
     expect(form).toContain("processOrder.set(processName, processOrder.size)");
     expect(form).toContain("30_000");
+    expect(form).toContain("pendingTasksExpanded");
+    expect(form).toContain("completedTasksExpanded");
+    expect(form).toContain('aria-controls="n04-pending-task-list"');
+    expect(form).toContain('aria-controls="n04-completed-task-list"');
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
