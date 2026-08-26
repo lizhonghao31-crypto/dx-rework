@@ -20,11 +20,12 @@ import { createWebUrls } from "../url-contract.js";
 import {
   currentQcUploadConcurrency,
   currentUploadClientProfile,
-  isImageAttachment,
+  isImageUploadCandidate,
   measureAttachmentUploadStage,
   prepareAndUploadWithConcurrency,
-  prepareAttachmentForUpload,
+  prepareImageUploadCandidate,
   sha256Hex,
+  uploadImageWithNormalizationRetry,
   type AttachmentUploadTimingContext,
 } from "./attachment-upload.js";
 import { FactorySearch } from "./factory-search.js";
@@ -487,8 +488,8 @@ export function ReworkInitiationV2Form({
       setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张报告图片`);
       return;
     }
-    if (selected.some((file) => !isImageAttachment(file))) {
-      setMessage("报告仅支持 JPEG / PNG / WebP 图片格式");
+    if (selected.some((file) => !isImageUploadCandidate(file))) {
+      setMessage("报告仅支持图片格式");
       return;
     }
     setUploading(true);
@@ -510,57 +511,69 @@ export function ReworkInitiationV2Form({
           const prepared = await measureAttachmentUploadStage(
             baseTiming,
             "prepare",
-            () => prepareAttachmentForUpload(file),
+            () => prepareImageUploadCandidate(file),
           );
           const timing = { ...baseTiming, uploadBytes: prepared.size };
           const sha256 = await measureAttachmentUploadStage(timing, "hash", () => sha256Hex(prepared));
           return { file: prepared, timing, sha256, index };
         },
-        async ({ file, timing, sha256 }, _source, index): Promise<UploadedImage> => {
+        async ({ file, timing, sha256 }, source, index): Promise<UploadedImage> => {
           setMessage(`正在上传第 ${index + 1}/${selected.length} 张报告图片…`);
-          const intent = await measureAttachmentUploadStage(
-            timing,
-            "intent",
-            () => request(
-              "tools/attachments/upload-intents",
-              UploadIntentResponseSchema,
-              {
-                method: "POST",
-                body: JSON.stringify({
-                  filename: file.name,
-                  mimeType: file.type,
-                  sizeBytes: file.size,
-                  sha256,
-                }),
-              },
-            ),
-          );
-          const upload = new FormData();
-          for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
-          upload.append("file", file);
-          const response = await measureAttachmentUploadStage(
-            timing,
-            "oss",
-            () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
-          );
-          if (!response.ok) throw new Error(`${file.name} 上传失败`);
-          const finalized = await measureAttachmentUploadStage(
-            timing,
-            "finalize",
-            () => request(
-              `tools/attachments/${intent.attachmentId}/finalize`,
-              AttachmentResponseSchema,
-              { method: "POST" },
-            ),
-          );
-          const previewUrl = URL.createObjectURL(file);
-          previewUrls.current.push(previewUrl);
-          return {
-            attachmentId: finalized.attachmentId,
-            filename: finalized.filename,
-            mimeType: finalized.mimeType,
-            previewUrl,
-          };
+          return uploadImageWithNormalizationRetry(source, file, async (candidate) => {
+            const candidateTiming = candidate === file
+              ? timing
+              : { ...timing, uploadBytes: candidate.size, mimeType: candidate.type };
+            const candidateSha256 = candidate === file
+              ? sha256
+              : await measureAttachmentUploadStage(
+                  candidateTiming,
+                  "hash",
+                  () => sha256Hex(candidate),
+                );
+            const intent = await measureAttachmentUploadStage(
+              candidateTiming,
+              "intent",
+              () => request(
+                "tools/attachments/upload-intents",
+                UploadIntentResponseSchema,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    filename: candidate.name,
+                    mimeType: candidate.type,
+                    sizeBytes: candidate.size,
+                    sha256: candidateSha256,
+                  }),
+                },
+              ),
+            );
+            const upload = new FormData();
+            for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
+            upload.append("file", candidate);
+            const response = await measureAttachmentUploadStage(
+              candidateTiming,
+              "oss",
+              () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
+            );
+            if (!response.ok) throw new Error(`${source.name} 上传失败`);
+            const finalized = await measureAttachmentUploadStage(
+              candidateTiming,
+              "finalize",
+              () => request(
+                `tools/attachments/${intent.attachmentId}/finalize`,
+                AttachmentResponseSchema,
+                { method: "POST" },
+              ),
+            );
+            const previewUrl = URL.createObjectURL(candidate);
+            previewUrls.current.push(previewUrl);
+            return {
+              attachmentId: finalized.attachmentId,
+              filename: finalized.filename,
+              mimeType: finalized.mimeType,
+              previewUrl,
+            };
+          });
         },
       );
       setImages((current) => [...current, ...uploaded]);
@@ -634,7 +647,7 @@ export function ReworkInitiationV2Form({
       </div>
       <label className="rework-v2-upload">
         <span>{uploading ? "正在上传…" : "＋ 上传报告"}</span>
-        <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || uploading || images.length >= MAX_REWORK_ATTACHMENTS} onChange={(event) => { void uploadFiles(event.target.files); event.target.value = ""; }} />
+        <input type="file" accept="image/*" multiple disabled={busy || uploading || images.length >= MAX_REWORK_ATTACHMENTS} onChange={(event) => { void uploadFiles(event.target.files); event.target.value = ""; }} />
       </label>
       {images.length ? <div className="rework-v2-image-grid">
         {images.map((image) => <article key={image.attachmentId}>
