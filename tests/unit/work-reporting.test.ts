@@ -43,6 +43,13 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain('step="1"');
     expect(form).toContain("大于 0 的整数件数");
     expect(form).toContain("当前岗位只处理尾部确认，不展示工人的个人上数");
+    expect(form).toContain("managerProgressView");
+    expect(form).toContain("未完成 {incompleteTasks.length}");
+    expect(form).toContain("已完成 {completedTasks.length}");
+    expect(form).toContain("ManagerTaskProgressRow");
+    expect(form).toContain("groupTasksByProcess");
+    expect(form).toContain("processOrder.set(processName, processOrder.size)");
+    expect(form).toContain("30_000");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
   });
