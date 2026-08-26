@@ -339,6 +339,7 @@ export function WholeOrderReviewPanel({
   };
 
   return <div className="whole-order-review-flow">
+    {embedded && message && <p role="status">{message}</p>}
     {!embedded && <Surface>
       <div className="section-title">
         <div>

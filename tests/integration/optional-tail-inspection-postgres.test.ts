@@ -164,7 +164,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
     await adminPool.end();
   });
 
-  it("moves an explicitly no-tail order from worker reporting through N05 without a tail fact", async () => {
+  it("moves an explicitly no-tail order through N06 approval without a tail fact", async () => {
     const attachmentId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -300,5 +300,34 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       tail_reported_quantity: "0.00",
       final_confirmed_quantity: "10.00",
     }]);
+
+    const ieApproved = await review.reviewFinalQuantity(
+      ie(),
+      draft.value.reworkOrderId,
+      {
+        expectedOrderVersion: confirmed.value.orderVersion,
+        decision: "approved",
+      },
+      randomUUID(),
+    );
+    expect(ieApproved.value).toMatchObject({
+      reworkStatus: "pending_responsibility_determination",
+      tailInspectionRequired: false,
+    });
+    expect(ieApproved.value.orderVersion).toBe(confirmed.value.orderVersion + 1);
+    expect((await database.query(
+      `SELECT report.settlement_quantity::text,report.group_amount>0 AS has_wage
+       FROM rework_work_reports report
+       WHERE report.rework_order_id=$1 AND report.status='submitted'`,
+      [draft.value.reworkOrderId],
+    )).rows).toEqual([{
+      settlement_quantity: "10.00",
+      has_wage: true,
+    }]);
+    expect((await database.query(
+      `SELECT count(*)::int AS count,bool_and(reviewed_by=$2) AS reviewed_by_ie
+       FROM rework_order_reviews WHERE rework_order_id=$1`,
+      [draft.value.reworkOrderId, ids.ie],
+    )).rows).toEqual([{ count: 1, reviewed_by_ie: true }]);
   });
 });
