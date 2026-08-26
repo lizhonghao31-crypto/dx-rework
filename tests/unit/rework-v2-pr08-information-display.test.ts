@@ -10,11 +10,12 @@ describe("PR-08 information display", () => {
     ]);
     expect(service).toContain("abnormalOrderCount");
     expect(service).toContain("row.differenceQuantity !== 0");
-    expect(page).toContain('label="今日收货订单数"');
-    expect(page).toContain('label="今日收货数量"');
+    expect(page).toContain('label={globalSearch ? "匹配订单数" : "今日收货订单数"}');
+    expect(page).toContain('label={globalSearch ? "匹配收货数量" : "今日收货数量"}');
     expect(page).toContain('label="异常订单数量"');
     expect(page).toContain('label="差异率"');
-    expect(page).toContain("detail={date}");
+    expect(page).toContain('detail={globalSearch ? "全历史收货" : date}');
+    expect(page).toContain('detail={globalSearch ? "全历史 · 实际收货" : `${date} · 实际收货`}');
   });
 
   it("keeps supplier and temporary-worker wage facts visible without changing deduction math", async () => {
