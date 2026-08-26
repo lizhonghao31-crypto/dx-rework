@@ -89,7 +89,6 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
   it("creates once, records an exact IE quote and advances the audited state", async () => {
     const createKey = randomUUID();
     const input = {
-      erpOrderId: "erp-order-20260826-001",
       erpOrderNo: "ERP-20260826-001",
       styleNo: "DX-260826",
       orderQuantity: 137,
@@ -98,7 +97,7 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
     const created = await service.createCase(merchandiserActor(), input, createKey);
     expect(created.reused).toBe(false);
     expect(created.value).toMatchObject({
-      erpOrderId: input.erpOrderId,
+      erpOrderId: input.erpOrderNo,
       erpOrderNo: input.erpOrderNo,
       styleNo: input.styleNo,
       laneKey: "garment_processing",
