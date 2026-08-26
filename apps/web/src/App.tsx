@@ -28,13 +28,15 @@ import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 import { MasterDataPage } from "./master-data-page.js";
 import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
-import { landingTarget } from "./landing-target.js";
 import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
 import { ReceivingPage } from "./receiving-page.js";
 import { OrderBoardPage } from "./order-board-page.js";
 import { FrontlineLandingPage } from "./frontline-landing-page.js";
 import { FrontlineTaskPage } from "./frontline-task-page.js";
+import { platformLandingTarget } from "./platform-modules.js";
+import { PlatformHomePage } from "./platform-home-page.js";
+import { SourcingShellPage } from "./sourcing-shell-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -143,7 +145,7 @@ function HomeLanding() {
           return;
         }
 
-        const target = landingTarget(body.user);
+        const target = platformLandingTarget(body.user);
         if (!target) {
           if (mounted) setMessage("当前角色暂时没有可进入的业务模块，请联系管理员核对岗位权限。");
           return;
@@ -180,7 +182,9 @@ export function App() {
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   let page;
-  if (path === "/ui/admin" || path === "/ui/audit") {
+  if (path === "/ui/home") page = <PlatformHomePage />;
+  else if (path === "/ui/sourcing") page = <SourcingShellPage />;
+  else if (path === "/ui/admin" || path === "/ui/audit") {
     const requestedTab = new URLSearchParams(search).get("tab");
     const adminTab = requestedTab === "attachments" || requestedTab === "delegations" || requestedTab === "exceptions"
       ? requestedTab
@@ -215,6 +219,14 @@ export function App() {
   else return <HomeLanding />;
 
   const owner = { requiredRole: "owner_group" } as const;
+
+  if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
+  if (path === "/ui/sourcing") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "sourcing:view" },
+    ]}>{page}</AuthGate>;
+  }
 
   if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {
     return <AuthGate requiredAnyOf={[

@@ -1,0 +1,5 @@
+.sourcing-shell { display: grid; place-items: center; min-height: 100vh; padding: var(--dx-v2-space-6); }
+.sourcing-shell__card { width: min(640px, 100%); }
+.sourcing-shell__card h1 { margin: var(--dx-v2-space-5) 0 var(--dx-v2-space-3); }
+.sourcing-shell__card p { margin-bottom: var(--dx-v2-space-6); color: var(--dx-v2-color-text-secondary); }
+.sourcing-shell__card a { text-decoration: none; }
