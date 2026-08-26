@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 describe("sourcing PR02 foundation", () => {
   it("keeps the approved happy path and factory-change path explicit", () => {
     let status = transitionSourcingCase(null, "created");
-    status = transitionSourcingCase(status, "decision_recorded");
+    status = transitionSourcingCase(status, "ie_price_quoted");
+    status = transitionSourcingCase(status, "management_decision_recorded");
+    status = transitionSourcingCase(status, "owner_approved");
     status = transitionSourcingCase(status, "contract_recorded");
     status = transitionSourcingCase(status, "factory_change_requested");
     status = transitionSourcingCase(status, "factory_change_approved");
@@ -18,7 +20,15 @@ describe("sourcing PR02 foundation", () => {
     expect(status).toBe("closed");
   });
 
-  it("supports rejected changes and verified finance differences without silent overwrite", () => {
+  it("returns owner rejection to management and keeps midstream changes owner-free", () => {
+    expect(transitionSourcingCase(
+      "pending_owner_approval",
+      "owner_rejected",
+    )).toBe("pending_management_decision");
+    expect(transitionSourcingCase(
+      "pending_management_decision",
+      "management_decision_recorded",
+    )).toBe("pending_owner_approval");
     expect(transitionSourcingCase(
       "pending_factory_change_verification",
       "factory_change_rejected",
@@ -31,8 +41,12 @@ describe("sourcing PR02 foundation", () => {
       "pending_exception_verification",
       "exception_reopened_for_reconciliation",
     )).toBe("pending_finance_reconciliation");
-    expect(() => transitionSourcingCase("pending_contract", "finance_matched"))
+    expect(() => transitionSourcingCase("pending_management_decision", "owner_approved"))
       .toThrowError(/Cannot apply sourcing action/);
+    expect(transitionSourcingCase(
+      "pending_factory_change_verification",
+      "factory_change_approved",
+    )).toBe("pending_contract");
   });
 
   it("keeps one action-specific transition registry aligned with the database states", async () => {
@@ -55,6 +69,8 @@ describe("sourcing PR02 foundation", () => {
     expect(sql).toContain("UNIQUE(erp_order_id,lane_key)");
     expect(sql).toContain("UNIQUE(sourcing_case_id,decision_version)");
     expect(sql).toContain("CHECK(total_amount=round(unit_price*quantity,2))");
+    expect(sql).toContain("sourcing_ie_quotes");
+    expect(sql).toContain("sourcing_owner_decisions");
     expect(sql).toContain("sourcing_factory_change_requests");
     expect(sql).toContain("sourcing_factory_change_decisions");
     expect(sql).toContain("sourcing_contract_executions");
@@ -64,7 +80,9 @@ describe("sourcing PR02 foundation", () => {
 
     for (const table of [
       "sourcing_cases",
+      "sourcing_ie_quotes",
       "sourcing_decisions",
+      "sourcing_owner_decisions",
       "sourcing_contracts",
       "sourcing_factory_change_requests",
       "sourcing_factory_change_decisions",
@@ -85,7 +103,9 @@ describe("sourcing PR02 foundation", () => {
       .map((match) => [match[1], match[2]]);
     expect(grants).toEqual([
       ["order_merchandiser", "sourcing:inquiry:create"],
+      ["ie_reviewer", "sourcing:price:quote"],
       ["production_management", "sourcing:decision:record"],
+      ["owner_group", "sourcing:owner:approve"],
       ["order_merchandiser", "sourcing:contract:record"],
       ["order_merchandiser", "sourcing:factory_change:request"],
       ["production_management", "sourcing:factory_change:verify"],
