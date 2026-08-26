@@ -8,7 +8,7 @@ import {
   type ReworkWorkTasksResponse,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { verifySession } from "./auth.js";
@@ -60,6 +60,29 @@ const canReadWorkFacts = (user: WorkReportingUser): boolean =>
   || (user.businessRoles?.includes("tail_inspector") === true && user.capabilities.includes("tail_inspection:report"))
   || user.capabilities.includes("work:report_for_worker")
   || (user.businessRoles?.includes("owner_group") === true && user.capabilities.includes("business:read_all"));
+
+const taskProcessName = (task: Task): string =>
+  task.executionKind === "tail_inspection" ? "尾查" : task.processName;
+
+function ManagerTaskProgressRow({
+  task,
+  writable,
+}: Readonly<{
+  task: Task;
+  writable: boolean;
+}>): ReactElement {
+  const completed = task.remainingQuantity === 0;
+  const temporary = task.members.some((member) => member.personType === "temporary");
+  return <div className="n04-progress-row">
+    <div className="n04-progress-fact"><small>工序</small><b>{taskProcessName(task)}</b></div>
+    <div className="n04-progress-fact n04-progress-fact--worker">
+      <small>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}</small>
+      <span><b>{task.members.map((member) => member.displayName).join("、")}</b>{temporary ? <em>临时工</em> : null}</span>
+    </div>
+    <div className="n04-progress-fact"><small>状态</small><StatusBadge tone={completed ? "success" : writable ? "warning" : "info"}>{completed ? "已完成" : writable ? "待上报" : "未完成"}</StatusBadge></div>
+    <div className="n04-progress-fact"><small>上报数量</small><b className={completed ? "is-completed" : ""}>{completed ? `${task.submittedQuantity}件` : "—"}</b></div>
+  </div>;
+}
 
 export function WorkReportingForm({
   reworkOrderId: providedReworkOrderId,
@@ -142,6 +165,16 @@ export function WorkReportingForm({
     };
     void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"));
   }, [reworkOrderId, taskMode]);
+
+  useEffect(() => {
+    if (!reworkOrderId || !canAssign || frontlineContext || data?.reworkStatus !== "in_progress") return;
+    const timer = window.setInterval(() => {
+      void request(`rework-orders/${reworkOrderId}/work-tasks`, ReworkWorkTasksResponseSchema.parse)
+        .then(setData)
+        .catch(() => undefined);
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [canAssign, data?.reworkStatus, frontlineContext, reworkOrderId]);
 
   const choosePeopleType = (type: "internal" | "temporary") => {
     setPeopleType(type);
@@ -310,6 +343,9 @@ export function WorkReportingForm({
   const assignmentWritable = data?.reworkStatus === "pending_task_assignment";
   const workReportingWritable = data?.reworkStatus === "in_progress";
   const visibleTasks = data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? [];
+  const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
+  const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
+  const managerProgressView = !frontlineContext && canAssign;
   const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
   const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;
@@ -353,7 +389,21 @@ export function WorkReportingForm({
       </Surface>}
     </>}
     {effectiveTaskMode === "work_reporting" && <>
-      {visibleTasks.map((task) => <Surface {...(frontlineContext ? { className: "frontline-work-task" } : {})} key={task.workTaskId}><div className="section-title"><div><h2>{task.executionKind === "tail_inspection" ? "尾查" : task.processName}</h2><p>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>{task.remainingQuantity === 0 ? "已报数" : workReportingWritable ? "执行中" : "已处理"}</StatusBadge></div><p>{task.remainingQuantity === 0 ? `已报数 ${task.submittedQuantity} 件` : workReportingWritable ? "待本人按实际完成件数报数" : "该节点已结束，仅保留历史分工与报数记录"}</p></Surface>)}
+      {managerProgressView ? <div className="n04-progress-board">
+        <div className="n04-progress-summary" aria-label="返工任务进度汇总">
+          <strong>任务进度</strong>
+          <span className="is-pending">未完成 {incompleteTasks.length}</span>
+          <span className="is-completed">已完成 {completedTasks.length}</span>
+        </div>
+        <Surface className="n04-progress-group n04-progress-group--pending">
+          <div className="n04-progress-group__heading"><h2>未完成</h2><StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge></div>
+          {incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}
+        </Surface>
+        <Surface className="n04-progress-group n04-progress-group--completed">
+          <div className="n04-progress-group__heading"><h2>已完成</h2><StatusBadge tone="success">{completedTasks.length} 项</StatusBadge></div>
+          {completedTasks.length > 0 ? <div className="n04-progress-list">{completedTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} />)}</div> : <p className="n04-progress-empty">暂无已完成任务。</p>}
+        </Surface>
+      </div> : visibleTasks.map((task) => <Surface {...(frontlineContext ? { className: "frontline-work-task" } : {})} key={task.workTaskId}><div className="section-title"><div><h2>{taskProcessName(task)}</h2><p>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>{task.remainingQuantity === 0 ? "已完成" : workReportingWritable ? "待上报" : "未完成"}</StatusBadge></div><p>{task.remainingQuantity === 0 ? `已上报 ${task.submittedQuantity} 件` : workReportingWritable ? "按实际完成件数报数" : "该节点已结束"}</p></Surface>)}
       {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代报数" : canAssign ? "临时工代报数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "我已完成尾查" : "我已返工完成"}</h2><p>{isRoot ? "为执行人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "填写本人实际尾查数量，提交后计入统一数量事实。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为报数" : canAssign ? "临时工完工上数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "尾查完成&报数" : "我已完工&上数"}</Button></Surface>}
       {visibleTasks.length === 0 && <Surface>当前暂无需要本人处理的任务。</Surface>}
     </>}

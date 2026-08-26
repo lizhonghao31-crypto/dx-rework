@@ -251,3 +251,131 @@
     padding: var(--dx-v2-space-3);
   }
 }
+
+
+/* N04 supervisor progress board: unfinished first, completed second. */
+.work-reporting-page .n04-progress-board {
+  display: grid;
+  gap: 10px;
+}
+
+.work-reporting-page .n04-progress-summary,
+.work-reporting-page .n04-progress-group__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.work-reporting-page .n04-progress-summary {
+  padding: 2px 4px;
+}
+
+.work-reporting-page .n04-progress-summary strong {
+  margin-right: auto;
+  font-size: 16px;
+}
+
+.work-reporting-page .n04-progress-summary span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.work-reporting-page .n04-progress-summary .is-pending {
+  color: #9a6700;
+}
+
+.work-reporting-page .n04-progress-summary .is-completed {
+  color: #28733b;
+}
+
+.work-reporting-page .n04-progress-group {
+  gap: 0;
+  padding: 12px 14px;
+}
+
+.work-reporting-page .n04-progress-group__heading {
+  padding-bottom: 8px;
+}
+
+.work-reporting-page .n04-progress-group__heading h2 {
+  margin: 0 auto 0 0;
+  font-size: 16px;
+}
+
+.work-reporting-page .n04-progress-list {
+  display: grid;
+}
+
+.work-reporting-page .n04-progress-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1.2fr) minmax(150px, 1.6fr) minmax(90px, .8fr) minmax(90px, .8fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 0;
+  border-top: 1px solid #dbe3ea;
+}
+
+.work-reporting-page .n04-progress-fact {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.work-reporting-page .n04-progress-fact small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+
+.work-reporting-page .n04-progress-fact b {
+  overflow: hidden;
+  color: var(--dx-v2-color-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-reporting-page .n04-progress-fact > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.work-reporting-page .n04-progress-fact em {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef3ff;
+  padding: 2px 6px;
+  color: var(--dx-v2-color-primary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.work-reporting-page .n04-progress-fact b.is-completed {
+  color: #28733b;
+}
+
+.work-reporting-page .n04-progress-empty {
+  margin: 0;
+  padding: 8px 0 2px;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .work-reporting-page .n04-progress-summary {
+    align-items: baseline;
+  }
+
+  .work-reporting-page .n04-progress-group {
+    padding: 10px;
+  }
+
+  .work-reporting-page .n04-progress-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    padding: 9px 0;
+  }
+}
