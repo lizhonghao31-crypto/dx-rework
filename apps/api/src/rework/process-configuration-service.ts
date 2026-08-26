@@ -185,7 +185,7 @@ export class ProcessConfigurationService {
 
   async options(actor: TrustedActorContext): Promise<ProcessConfigurationOptionsResponse> {
     this.ensureConfigure(actor);
-    const result = await this.database.query<{
+    const [result, tailRoster] = await Promise.all([this.database.query<{
       process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour"; default_worker_person_ids: string[];
     }>(
       `SELECT catalog.process_id,catalog.version,catalog.process_name,catalog.pricing_unit,
@@ -196,9 +196,12 @@ export class ProcessConfigurationService {
          WHERE roster_version.process_id=catalog.process_id
          ORDER BY roster_version.roster_version DESC LIMIT 1
        ) roster ON true
-       WHERE catalog.active=true AND catalog.pricing_unit='piece'
+      WHERE catalog.active=true AND catalog.pricing_unit='piece'
        ORDER BY catalog.process_name,catalog.process_id`,
-    );
+    ), this.database.query<{ person_ids: string[] }>(
+      `SELECT person_ids FROM tail_inspection_default_worker_roster_versions
+       ORDER BY roster_version DESC LIMIT 1`,
+    )]);
     return {
       processes: result.rows.map((row) => ({
         processId: row.process_id,
@@ -207,6 +210,7 @@ export class ProcessConfigurationService {
         pricingUnit: row.pricing_unit,
         defaultWorkerPersonIds: row.default_worker_person_ids,
       })),
+      tailDefaultWorkerPersonIds: tailRoster.rows[0]?.person_ids ?? [],
     };
   }
 

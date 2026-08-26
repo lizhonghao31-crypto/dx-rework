@@ -62,6 +62,7 @@ const create = (
     createProcess: vi.fn(),
     reviseProcess: vi.fn(),
     replaceProcessDefaultWorkers: vi.fn(async () => ({ processId: "00000000-0000-4000-8000-000000000020", rosterVersion: 1, personIds: [] })),
+    replaceTailInspectionDefaultWorkers: vi.fn(async () => ({ executionKind: "tail_inspection" as const, rosterVersion: 1, personIds: [] })),
     createSupplier: vi.fn(),
     reviseSupplier: vi.fn(),
     createDelegation: vi.fn(),
@@ -413,6 +414,37 @@ describe("access routes", () => {
       payload: { personIds: [], changeReason: "缺少分配权限" },
     })).statusCode).toBe(403);
     expect(incompleteTailSupervisor.service.replaceProcessDefaultWorkers).not.toHaveBeenCalled();
+  });
+
+  it("uses the same explicit default-roster authority for tail inspection", async () => {
+    const tailSupervisor = create(["process:configure", "work:assign"], ["tail_supervisor"]);
+    const response = await tailSupervisor.app.inject({
+      method: "PUT",
+      url: "/master-data/tail-inspection/default-workers",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "n02-tail-default-workers" },
+      payload: {
+        personIds: ["00000000-0000-4000-8000-000000000021"],
+        changeReason: "尾部主管在工序分配区维护尾查默认工人",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(tailSupervisor.service.replaceTailInspectionDefaultWorkers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["tail_supervisor"],
+        authorizationCapability: "process:configure",
+        requestId: "n02-tail-default-workers",
+      }),
+      expect.objectContaining({ personIds: ["00000000-0000-4000-8000-000000000021"] }),
+    );
+
+    const worker = create(["process:configure", "work:assign"], ["worker"]);
+    expect((await worker.app.inject({
+      method: "PUT",
+      url: "/master-data/tail-inspection/default-workers",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { personIds: [], changeReason: "越权尝试" },
+    })).statusCode).toBe(403);
+    expect(worker.service.replaceTailInspectionDefaultWorkers).not.toHaveBeenCalled();
   });
 
   it("exposes revoked alias history only when explicitly requested", async () => {

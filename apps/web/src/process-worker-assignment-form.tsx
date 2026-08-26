@@ -97,6 +97,9 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const [mobileAssignmentSearch, setMobileAssignmentSearch] = useState("");
   const [defaultRosterDirty, setDefaultRosterDirty] = useState<Record<string, boolean>>({});
   const [savingDefaultIndex, setSavingDefaultIndex] = useState<number | null>(null);
+  const [tailDefaultRosterDirty, setTailDefaultRosterDirty] = useState(false);
+  const [tailDefaultCandidateCount, setTailDefaultCandidateCount] = useState(0);
+  const [savingTailDefault, setSavingTailDefault] = useState(false);
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载分配工序与工人…");
   const [optionLoadIssue, setOptionLoadIssue] = useState("");
@@ -161,6 +164,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       });
       setWorkerIds(nextWorkers);
       setDefaultRosterDirty({});
+      setTailDefaultRosterDirty(false);
       setTailPersonIds(unified && tailItem
         ? workerPlan.assignments.find((assignment) => assignment.configurationItemId === tailItem.configurationItemId)?.members.map((member) => member.personId) ?? []
         : []);
@@ -197,6 +201,15 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       } else {
         issues.push(`人员加载失败：${peopleResult.reason instanceof Error ? peopleResult.reason.message : "请刷新重试"}`);
       }
+      if (processResult.status === "fulfilled" && peopleResult.status === "fulfilled") {
+        const eligibleTailIds = new Set(peopleResult.value.response.people
+          .filter((person) => person.eligibleExecutionKinds.includes("tail_inspection"))
+          .map((person) => person.personId));
+        const eligibleDefaults = processResult.value.tailDefaultWorkerPersonIds.filter((personId) => eligibleTailIds.has(personId));
+        setTailDefaultCandidateCount(config.configuration ? 0 : eligibleDefaults.length);
+        if (!config.configuration) setTailPersonIds(eligibleDefaults);
+        setTailDefaultRosterDirty(false);
+      }
       setOptionLoadIssue(issues.join("；"));
     }
     setMessage("");
@@ -219,6 +232,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const removeWorker = (index: number, personId: string) => { setWorkerIds((current) => ({ ...current, [String(index)]: (current[String(index)] ?? []).filter((id) => id !== personId) })); markDefaultRosterDirty(index); pendingSubmit.current = null; };
   const removeTailWorker = (personId: string) => {
     setTailPersonIds((current) => current.filter((id) => id !== personId));
+    setTailDefaultRosterDirty(true);
     pendingSubmit.current = null;
   };
   const openMobileWorkerAssignment = (index: number) => {
@@ -253,6 +267,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       markDefaultRosterDirty(mobileAssignment.index);
     } else {
       setTailPersonIds(selectedIds);
+      setTailDefaultRosterDirty(true);
     }
     pendingSubmit.current = null;
     setMobileAssignment(null);
@@ -281,6 +296,28 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       setMessage(error instanceof Error ? error.message : "默认工人保存失败");
     } finally {
       setSavingDefaultIndex(null);
+      setBusy(false);
+    }
+  };
+
+  const saveTailDefaultWorkers = async (): Promise<void> => {
+    if (!tailDefaultRosterDirty || tailPersonIds.length === 0 || busy) return;
+    setBusy(true);
+    setSavingTailDefault(true);
+    try {
+      const saved = await request(
+        "master-data/tail-inspection/default-workers",
+        (value) => value as { executionKind: "tail_inspection"; rosterVersion: number; personIds: string[] },
+        { method: "PUT", body: JSON.stringify({ personIds: tailPersonIds, changeReason: "尾部主管在工序分配区维护尾查默认工人" }) },
+      );
+      setTailPersonIds(saved.personIds);
+      setTailDefaultCandidateCount(saved.personIds.length);
+      setTailDefaultRosterDirty(false);
+      setMessage("尾查默认工人已保存；以后新建返工单时会自动带入这份名单。");
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "尾查默认工人保存失败");
+    } finally {
+      setSavingTailDefault(false);
       setBusy(false);
     }
   };
@@ -517,8 +554,9 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         <div className="process-worker-tail-body">
           <div className="process-worker-tail-work"><div className="process-worker-tail-title-row"><b>尾查</b></div><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
           <div className="process-worker-picker">
-            <div className="process-worker-picker__heading"><b>尾查人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy} onClick={openMobileTailAssignment}>选择本单工人</Button></div></div>
+            <div className="process-worker-picker__heading"><b>尾查人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy} onClick={openMobileTailAssignment}>选择本单工人</Button><Button className="process-worker-save-default" {...(tailDefaultRosterDirty ? { variant: "primary" as const } : {})} disabled={busy || !tailDefaultRosterDirty || tailPersonIds.length === 0} onClick={() => void saveTailDefaultWorkers()}>{savingTailDefault ? "保存中…" : "保存为默认名单"}</Button></div></div>
             <div className="process-worker-default-list" aria-label="已分配人员">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); const name = person?.displayName ?? "尾查人员"; const temporary = person?.personType === "temporary"; return <span key={personId}><button type="button" aria-label={`移除 ${name}`} disabled={busy} onClick={() => removeTailWorker(personId)}>−</button><small>{temporary && canCreateTemporary ? <button type="button" className="process-worker-temporary-name" aria-label={`补录或修改 ${name} 的临时工资料`} disabled={busy} onClick={() => void openTemporaryWorkerProfile(personId)}>{name}</button> : name}{temporary ? " · 临时工" : ""}</small></span>; }) : <small>至少选择 1 名尾查人员</small>}</div>
+            {tailDefaultCandidateCount > 0 ? <small className="process-worker-default-candidates">已自动带入 {tailDefaultCandidateCount} 名默认候选人</small> : null}
           </div>
         </div>
       </Surface>
