@@ -218,6 +218,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0086_receiving_rework_evidence_link.sql");
     await migration("0088_root_receiving_correction.sql");
     await migration("0095_receiving_defective_quantity.sql");
+    await migration("0099_optional_tail_inspection.sql");
   });
 
   afterAll(async () => {

@@ -37,7 +37,7 @@ describe("mobile rework initiation layout", () => {
     expect(source).toContain("保存草稿");
     expect(source).toContain("提交返工");
     expect(source).toContain('await confirmInApp("确认提交返工单？")');
-    expect(source).toContain('accept="image/jpeg,image/png,image/webp"');
+    expect(source).toContain('accept="image/*"');
     const saveBlock = source.match(/const save = async \(\): Promise<void> => \{[\s\S]*?\n {2}const submit = async/);
     expect(saveBlock?.[0]).toBeTruthy();
     expect(saveBlock?.[0]).not.toContain("onOrderChanged");

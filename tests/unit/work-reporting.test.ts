@@ -49,7 +49,7 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("ManagerTaskProgressRow");
     expect(form).toContain("groupTasksByProcess");
     expect(form).toContain("processOrder.set(processName, processOrder.size)");
-    expect(form).toContain("30_000");
+    expect(form).not.toContain("window.setInterval");
     expect(form).toContain("IE 核准单价：¥");
     expect(form).toContain("formatApprovedUnitPrice(task.unitPrice)");
     expect(form).toContain('className="work-reporting-approved-price"');

@@ -14,7 +14,8 @@ describe("historical node write boundary", () => {
     expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
     expect(source).toContain('canAssign && assignmentWritable');
     expect(source).toContain('assignmentWritable ? "待开工" : "已处理"');
-    expect(source).toContain('workReportingWritable ? "执行中" : "已处理"');
+    expect(source).toContain('task.remainingQuantity === 0 ? "已完成"');
+    expect(source).toContain('workReportingWritable ? "待上报" : "未完成"');
   });
 
   it("keeps backend state locks on the main write stages", async () => {

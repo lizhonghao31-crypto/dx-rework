@@ -36,6 +36,7 @@ type OrderRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
+  tail_inspection_required: boolean;
   inspection_report: ReworkOrderResponse["inspectionReport"];
   created_by: string;
   updated_by: string;
@@ -324,6 +325,7 @@ export class ReworkV2DraftService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
+      tailInspectionRequired: row.tail_inspection_required,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
@@ -359,6 +361,7 @@ export class ReworkV2DraftService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
+      tailInspectionRequired: row.tail_inspection_required,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),

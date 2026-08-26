@@ -88,7 +88,7 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkV2Form).toContain("submit-v2");
     expect(reworkV2Form).toContain("sha256Hex");
     expect(attachmentUpload).toContain("crypto.subtle.digest");
-    expect(reworkV2Form).toContain('upload.append("file", file)');
+    expect(reworkV2Form).toContain('upload.append("file", candidate)');
     expect(reworkV2Form).toContain("款号 <b>*</b>");
     expect(reworkV2Form).toContain("加工厂 <b>*</b>");
     expect(reworkV2Form).toContain("订单跟单 <b>*</b>");

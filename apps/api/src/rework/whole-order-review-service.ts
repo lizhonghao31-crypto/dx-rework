@@ -30,7 +30,7 @@ type OrderRow = Readonly<{
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null; problem_part: string | null;
-  problem_description: string | null; rework_quantity: number | null;
+  problem_description: string | null; rework_quantity: number | null; tail_inspection_required: boolean;
 }>;
 type PlanRow = Readonly<{
   configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour";
@@ -119,7 +119,7 @@ export class WholeOrderReviewService {
       if (plans.length === 0 || plans.some((plan) => plan.unit_price === null)) {
         error("每道工序必须完成 IE 核价后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
       }
-      await this.assertTailReconciliation(client, reworkOrderId);
+      await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required);
       const finalQuantities = plans.map((plan) => ({
         configurationItemId: plan.configuration_item_id,
         finalConfirmedQuantity: numberValue(plan.completed_quantity),
@@ -355,7 +355,7 @@ export class WholeOrderReviewService {
         error("每道工序必须在 N03 完成 IE 核价后才能核量", 409, "INVALID_STATE_TRANSITION");
       }
       if (plans.length === 0) error("当前返工单没有 IE 已核价工序", 409, "INVALID_STATE_TRANSITION");
-      await this.assertTailReconciliation(client, reworkOrderId);
+      await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required);
       const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
       const submittedCoefficientKeys = new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`));
       const expectedCoefficientKeys = new Set(temporaryWorkers.map((worker) => `${worker.configuration_item_id}:${worker.person_id}`));
@@ -884,14 +884,16 @@ export class WholeOrderReviewService {
     ]);
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
-      ...permissions, unifiedExecutionRequired,
+      ...permissions, unifiedExecutionRequired, tailInspectionRequired: order.tail_inspection_required,
       processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({
         configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit,
         plannedQuantity: numberValue(plan.planned_quantity),
         originalCompletedQuantity: numberValue(plan.original_completed_quantity), completedQuantity: numberValue(plan.completed_quantity),
         originalTailCheckedQuantity: numberValue(plan.original_tail_checked_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity),
-        countGap: numberValue(plan.completed_quantity) - numberValue(plan.tail_checked_quantity),
-        complete: numberValue(plan.completed_quantity) === numberValue(plan.tail_checked_quantity),
+        countGap: order.tail_inspection_required ? numberValue(plan.completed_quantity) - numberValue(plan.tail_checked_quantity) : 0,
+        complete: order.tail_inspection_required
+          ? numberValue(plan.completed_quantity) === numberValue(plan.tail_checked_quantity)
+          : numberValue(plan.completed_quantity) > 0,
         finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price),
       })),
       reports,
@@ -1003,7 +1005,25 @@ export class WholeOrderReviewService {
     return result.rows;
   }
 
-  private async assertTailReconciliation(client: PoolClient, reworkOrderId: string): Promise<void> {
+  private async assertTailReconciliation(client: PoolClient, reworkOrderId: string, tailInspectionRequired: boolean): Promise<void> {
+    if (!tailInspectionRequired) {
+      const pendingExecution = await client.query(
+        `SELECT 1 FROM rework_work_tasks task
+         WHERE task.rework_order_id=$1 AND task.status='active'
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_work_reports report
+             WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_work_report_rejections rejection
+                 WHERE rejection.work_report_id=report.work_report_id
+               )
+           )
+         LIMIT 1`,
+        [reworkOrderId],
+      );
+      if (pendingExecution.rowCount) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
+      return;
+    }
     const pending = await client.query<{ execution_pending: boolean; legacy_tail_pending: boolean }>(
       `SELECT
          EXISTS(
@@ -1367,7 +1387,7 @@ export class WholeOrderReviewService {
 
   private async order(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
-      `SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
+      `SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
       [reworkOrderId],
     );
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");

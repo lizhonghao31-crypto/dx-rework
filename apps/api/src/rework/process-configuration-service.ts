@@ -36,6 +36,7 @@ type OrderRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
+  tail_inspection_required: boolean;
   created_by: string;
   updated_by: string;
   version: number;
@@ -234,7 +235,7 @@ export class ProcessConfigurationService {
       const current = await this.latestConfiguration(client, reworkOrderId, true);
       const unifiedExecutionRequired = true;
       const workerPreassignmentRequired = true;
-      const items = await this.prepareItems(client, input.items);
+      const items = await this.prepareItems(client, input.items, order.tail_inspection_required);
       const configurationId = randomUUID();
       const configurationVersion = (current?.configuration_version ?? 0) + 1;
       const nextOrderVersion = order.version + 1;
@@ -314,8 +315,13 @@ export class ProcessConfigurationService {
       if (configurationItems.filter((item) => item.execution_kind === "worker").length === 0) {
         throw new ApplicationError("VALIDATION_ERROR", "至少配置一道返工工序后才能提交IE审核", 400);
       }
-      if (configurationItems.filter((item) => item.execution_kind === "tail_inspection").length !== 1) {
-        throw new ApplicationError("VALIDATION_ERROR", "必须且只能包含一道尾查特殊工序", 400);
+      const tailItemCount = configurationItems.filter((item) => item.execution_kind === "tail_inspection").length;
+      if (order.tail_inspection_required ? tailItemCount !== 1 : tailItemCount !== 0) {
+        throw new ApplicationError(
+          "VALIDATION_ERROR",
+          order.tail_inspection_required ? "必须且只能包含一道尾查特殊工序" : "本单不需要整查，不能配置尾查工序",
+          400,
+        );
       }
       const nextOrderVersion = order.version + 1;
       const eventId = await this.events.append(client, actor, {
@@ -544,10 +550,15 @@ export class ProcessConfigurationService {
   private async prepareItems(
     client: PoolClient,
     input: readonly ProcessConfigurationItem[],
+    tailInspectionRequired: boolean,
   ): Promise<PreparedItem[]> {
     const tailItems = input.filter((item) => item.executionKind === "tail_inspection");
-    if (tailItems.length !== 1) {
-      throw new ApplicationError("VALIDATION_ERROR", "必须且只能配置一道尾查特殊工序", 400);
+    if (tailInspectionRequired ? tailItems.length !== 1 : tailItems.length !== 0) {
+      throw new ApplicationError(
+        "VALIDATION_ERROR",
+        tailInspectionRequired ? "必须且只能配置一道尾查特殊工序" : "本单不需要整查，不能配置尾查工序",
+        400,
+      );
     }
     const prepared: PreparedItem[] = [];
     const names = new Set<string>();
@@ -736,6 +747,7 @@ export class ProcessConfigurationService {
       reworkNo: order.rework_no,
       reworkStatus: order.status,
       orderVersion: order.version,
+      tailInspectionRequired: order.tail_inspection_required,
       configuration: configuration ? {
         configurationId: configuration.configuration_id,
         configurationVersion: configuration.configuration_version,

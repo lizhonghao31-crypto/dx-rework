@@ -136,7 +136,7 @@ describe("PR-05 web behavior", () => {
     expect(form).not.toContain("firstUploadStartedAt");
     expect(form).not.toContain("秒开始上传");
     expect(form).toContain("rework-v2-image-grid");
-    expect(form).toContain("URL.createObjectURL(file)");
+    expect(form).toContain("URL.createObjectURL(candidate)");
     expect(detail).toContain("订单图片");
     expect(detail).toContain("rework-detail-image-grid");
     expect(detail).toContain("rework-image-modal");
