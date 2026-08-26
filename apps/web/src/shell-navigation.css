@@ -38,3 +38,14 @@
     display: none;
   }
 }
+.app-shell__platform-home {
+  display: inline-flex;
+  margin-bottom: var(--dx-v2-space-3);
+  color: inherit;
+  font-weight: 700;
+}
+
+.app-shell__platform-home:focus-visible {
+  outline: 3px solid var(--dx-v2-color-focus);
+  outline-offset: 2px;
+}

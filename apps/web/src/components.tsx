@@ -9,6 +9,7 @@ import {
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
+import { canAccessSourcing } from "./platform-modules.js";
 
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
@@ -301,6 +302,9 @@ export function Shell({
       ) : null}
       <aside>
         <h2>达兴 · 质检返工</h2>
+        {currentUser && canAccessSourcing(currentUser) ? (
+          <a className="app-shell__platform-home" href={`${basePath}/ui/home`}>返回业务工作台</a>
+        ) : null}
         <PrimaryNavigation navigation={navigation} active={active} basePath={basePath} />
         <div className="org app-shell__identity">
           {currentUser ? (
