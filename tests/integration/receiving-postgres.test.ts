@@ -306,6 +306,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(row).toMatchObject({
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 200,
+      attachments: [{ attachmentId: firstImage, filename: `${firstImage}.jpg` }],
       actualQuantity: 200,
       defectiveQuantity: 7,
       differenceQuantity: 0,

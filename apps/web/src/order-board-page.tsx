@@ -9,10 +9,12 @@ import "./order-board-page.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
+type ReceivingAttachment = Readonly<{ attachmentId: string; filename: string }>;
 type BoardRow = Readonly<{
   receivingBatchId: string;
   styleNo: string;
   documentQuantity: number;
+  attachments: readonly ReceivingAttachment[];
   actualQuantity: number;
   defectiveQuantity: number;
   differenceQuantity: number;
@@ -68,6 +70,9 @@ const responseError = async (response: Response, fallback: string): Promise<stri
   return body?.error?.message ?? body?.message ?? fallback;
 };
 
+const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
+  apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
+
 export function OrderBoardPage() {
   const [date, setDate] = useState(localDate);
   const [query, setQuery] = useState("");
@@ -86,6 +91,10 @@ export function OrderBoardPage() {
   const [editDefectiveQuantity, setEditDefectiveQuantity] = useState("");
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
+  const [attachmentViewer, setAttachmentViewer] = useState<Readonly<{
+    attachments: readonly ReceivingAttachment[];
+    index: number;
+  }> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -141,6 +150,7 @@ export function OrderBoardPage() {
     differenceRate: 0,
   }, [data]);
   const globalSearch = Boolean(query.trim());
+  const selectedAttachment = attachmentViewer?.attachments[attachmentViewer.index] ?? null;
 
   const reworkControl = (row: BoardRow, mobile: boolean) => {
     const className = `order-board-rework-link ${mobile ? "order-board-rework-link--mobile" : "order-board-rework-link--desktop"}`;
@@ -280,7 +290,18 @@ export function OrderBoardPage() {
               </StatusBadge>
             </div>
           </div>
-          <div className="order-board-row__document"><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
+          <div className="order-board-row__document">
+            <span>收货单</span>
+            <div className="order-board-row__document-value">
+              <strong>{row.documentQuantity}件</strong>
+              {row.attachments.length ? <button
+                type="button"
+                className="order-board-attachment-button"
+                aria-label={`查看${row.styleNo}的收货单附件，共${row.attachments.length}张`}
+                onClick={() => setAttachmentViewer({ attachments: row.attachments, index: 0 })}
+              >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
+            </div>
+          </div>
           <div className="order-board-row__actual"><span>实收</span><strong>{row.actualQuantity}件</strong></div>
           <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
           <div className="order-board-row__difference"><span>差异</span><strong>{signed}件</strong></div>
@@ -294,6 +315,41 @@ export function OrderBoardPage() {
     </div>
     {message ? <p className="order-board-message" role="status">{message}</p> : null}
     {mutationMessage && !editing && !deleting ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p> : null}
+
+    {attachmentViewer && selectedAttachment ? <div
+      className="order-board-attachment-modal"
+      role="presentation"
+      onMouseDown={() => setAttachmentViewer(null)}
+    >
+      <section
+        className="order-board-attachment-modal__content"
+        role="dialog"
+        aria-modal="true"
+        aria-label="查看收货单附件"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="order-board-attachment-modal__heading">
+          <strong>收货单附件 {attachmentViewer.index + 1}/{attachmentViewer.attachments.length}</strong>
+          <button type="button" onClick={() => setAttachmentViewer(null)}>关闭</button>
+        </div>
+        <img src={attachmentUrl(selectedAttachment.attachmentId, "preview")} alt={selectedAttachment.filename} />
+        <div className="order-board-attachment-modal__actions">
+          {attachmentViewer.attachments.length > 1 ? <>
+            <button
+              type="button"
+              disabled={attachmentViewer.index === 0}
+              onClick={() => setAttachmentViewer((current) => current && ({ ...current, index: current.index - 1 }))}
+            >上一张</button>
+            <button
+              type="button"
+              disabled={attachmentViewer.index === attachmentViewer.attachments.length - 1}
+              onClick={() => setAttachmentViewer((current) => current && ({ ...current, index: current.index + 1 }))}
+            >下一张</button>
+          </> : null}
+          <a href={attachmentUrl(selectedAttachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
+        </div>
+      </section>
+    </div> : null}
 
     {editing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setEditing(null)}>
       <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>

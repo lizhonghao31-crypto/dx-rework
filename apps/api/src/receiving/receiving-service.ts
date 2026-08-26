@@ -57,6 +57,7 @@ type BoardRow = Readonly<{
   receivingBatchId: string;
   styleNo: string;
   documentQuantity: number;
+  attachments: readonly Readonly<{ attachmentId: string; filename: string }>[];
   actualQuantity: number;
   defectiveQuantity: number;
   differenceQuantity: number;
@@ -654,6 +655,7 @@ export class ReceivingService {
       receiving_batch_id: string;
       style_no: string;
       document_quantity: string;
+      receiving_attachments: { attachmentId: string; filename: string }[];
       actual_quantity: string;
       defective_quantity: string;
       difference_quantity: string;
@@ -696,6 +698,7 @@ export class ReceivingService {
               totals.actual_quantity,totals.defective_quantity,totals.difference_quantity,totals.receipt_count,
               totals.last_received_at,receiver.display_name AS last_receiver_name,
               rework.rework_order_id,rework.status AS rework_status,
+              COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments,
               totals.version,
               NOT EXISTS(
                 SELECT 1 FROM rework_orders history
@@ -719,6 +722,20 @@ export class ReceivingService {
          ORDER BY item.updated_at DESC,item.rework_order_id DESC
          LIMIT 1
        ) rework ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'attachmentId',attachment.attachment_id,
+                    'filename',attachment.original_filename
+                  )
+                  ORDER BY attachment.created_at,attachment.attachment_id
+                ) AS items
+         FROM attachments attachment
+         WHERE attachment.entity_type='receiving_batch'
+           AND attachment.entity_id=totals.receiving_batch_id::text
+           AND attachment.status='ready'
+           AND attachment.mime_type LIKE 'image/%'
+       ) receiving_attachments ON true
        ORDER BY CASE WHEN totals.difference_quantity<0 THEN 0 WHEN totals.difference_quantity>0 THEN 1 ELSE 2 END,
                 abs(totals.difference_quantity) DESC,totals.last_received_at DESC,totals.style_no`,
       [date, needle],
@@ -727,6 +744,7 @@ export class ReceivingService {
       receivingBatchId: row.receiving_batch_id,
       styleNo: row.style_no,
       documentQuantity: Number(row.document_quantity),
+      attachments: row.receiving_attachments,
       actualQuantity: Number(row.actual_quantity),
       defectiveQuantity: Number(row.defective_quantity),
       differenceQuantity: Number(row.difference_quantity),
