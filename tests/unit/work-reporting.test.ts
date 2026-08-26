@@ -47,6 +47,8 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("未完成 {incompleteTasks.length}");
     expect(form).toContain("已完成 {completedTasks.length}");
     expect(form).toContain("ManagerTaskProgressRow");
+    expect(form).toContain("groupTasksByProcess");
+    expect(form).toContain("processOrder.set(processName, processOrder.size)");
     expect(form).toContain("30_000");
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");

@@ -64,6 +64,20 @@ const canReadWorkFacts = (user: WorkReportingUser): boolean =>
 const taskProcessName = (task: Task): string =>
   task.executionKind === "tail_inspection" ? "尾查" : task.processName;
 
+const groupTasksByProcess = (tasks: readonly Task[]): Task[] => {
+  const processOrder = new Map<string, number>();
+  tasks.forEach((task) => {
+    const processName = taskProcessName(task);
+    if (!processOrder.has(processName)) processOrder.set(processName, processOrder.size);
+  });
+  return tasks
+    .map((task, index) => ({ task, index }))
+    .sort((left, right) =>
+      (processOrder.get(taskProcessName(left.task)) ?? 0) - (processOrder.get(taskProcessName(right.task)) ?? 0)
+      || left.index - right.index)
+    .map(({ task }) => task);
+};
+
 function ManagerTaskProgressRow({
   task,
   writable,
@@ -342,7 +356,7 @@ export function WorkReportingForm({
     : taskMode;
   const assignmentWritable = data?.reworkStatus === "pending_task_assignment";
   const workReportingWritable = data?.reworkStatus === "in_progress";
-  const visibleTasks = data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? [];
+  const visibleTasks = groupTasksByProcess(data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? []);
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
   const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
   const managerProgressView = !frontlineContext && canAssign;
