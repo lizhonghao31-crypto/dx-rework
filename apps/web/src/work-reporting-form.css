@@ -294,12 +294,29 @@
 }
 
 .work-reporting-page .n04-progress-group__heading {
-  padding-bottom: 8px;
+  width: 100%;
+  padding: 0 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-reporting-page .n04-progress-group__heading.is-collapsed {
+  padding-bottom: 0;
 }
 
 .work-reporting-page .n04-progress-group__heading h2 {
   margin: 0 auto 0 0;
   font-size: 16px;
+}
+
+.work-reporting-page .n04-progress-group__heading > b {
+  color: var(--dx-v2-color-primary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .work-reporting-page .n04-progress-list {
