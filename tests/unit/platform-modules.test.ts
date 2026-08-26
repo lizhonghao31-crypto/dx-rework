@@ -6,7 +6,10 @@ import { landingTarget } from "../../apps/web/src/landing-target.js";
 import {
   accessiblePlatformModules,
   canAccessSourcing,
+  PLATFORM_MODULE_QUERY,
   platformLandingTarget,
+  platformModuleHref,
+  shouldRedirectLegacyLandingToPlatformHome,
 } from "../../apps/web/src/platform-modules.js";
 
 const user = (
@@ -45,15 +48,47 @@ describe("thin platform module routing", () => {
       .toBe(landingTarget(dual));
   });
 
+
+  it("redirects only an unselected legacy default landing and preserves deep links", () => {
+    const dual = user(["order_merchandiser"], ["todo:view", "sourcing:view"]);
+    expect(shouldRedirectLegacyLandingToPlatformHome(dual, "/ui/my-tasks", "", null)).toBe(true);
+    expect(shouldRedirectLegacyLandingToPlatformHome(
+      dual,
+      "/ui/my-tasks",
+      `?${PLATFORM_MODULE_QUERY}=rework`,
+      null,
+    )).toBe(false);
+    expect(shouldRedirectLegacyLandingToPlatformHome(dual, "/ui/my-tasks", "", "rework")).toBe(false);
+    expect(shouldRedirectLegacyLandingToPlatformHome(dual, "/ui/my-tasks/task-1", "", null)).toBe(false);
+
+    const reworkOnly = user(["quality_control"], ["todo:view", "rework:initiate"]);
+    expect(shouldRedirectLegacyLandingToPlatformHome(reworkOnly, "/ui/my-tasks", "", null)).toBe(false);
+  });
+
+  it("marks the rework card with explicit module intent without changing sourcing", () => {
+    const dual = user(["production_management"], ["todo:view", "sourcing:view"]);
+    const modules = accessiblePlatformModules(dual);
+    const rework = modules.find((module) => module.id === "rework");
+    const sourcing = modules.find((module) => module.id === "sourcing");
+    expect(rework && platformModuleHref(rework)).toContain(`${PLATFORM_MODULE_QUERY}=rework`);
+    expect(sourcing && platformModuleHref(sourcing)).toBe("ui/sourcing");
+  });
+
   it("protects sourcing with AuthGate and keeps new CSS token-based and mobile single-column", async () => {
-    const [app, platformCss, sourcingCss] = await Promise.all([
+    const [app, components, platformHome, platformCss, sourcingCss] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
+      readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/web/src/platform-home-page.tsx", "utf8"),
       readFile("apps/web/src/platform-home.css", "utf8"),
       readFile("apps/web/src/sourcing-shell.css", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/sourcing"');
     expect(app).toContain('{ requiredCapability: "sourcing:view" }');
     expect(app).toMatch(/path === "\/ui\/sourcing"[\s\S]*?<AuthGate requiredAnyOf=/);
+    expect(app).toContain("useInitialPlatformEntryCheck(path, search)");
+    expect(platformHome).toContain("platformModuleHref(module)");
+    expect(components).toContain('mobile-primary-navigation__label">平台');
+    expect(components).toContain("showPlatformHome={currentUser ? canAccessSourcing(currentUser) : false}");
     expect(platformCss).toContain("var(--dx-v2-");
     expect(platformCss).toContain("@media (max-width: 640px)");
     expect(platformCss).toContain("grid-template-columns: minmax(0, 1fr)");
