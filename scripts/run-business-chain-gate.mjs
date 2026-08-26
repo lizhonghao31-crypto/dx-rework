@@ -160,7 +160,8 @@ async function cleanupIsolatedGateSchemas() {
        WHERE nspname LIKE 'full_chain_%'
           OR nspname LIKE 'root_http_%'
           OR nspname LIKE 'receiving_%'
-          OR nspname LIKE 'rework_v2_%'\n          OR nspname LIKE 'sourcing_%'`,
+          OR nspname LIKE 'rework_v2_%'
+          OR nspname LIKE 'sourcing_%'`,
     );
     for (const row of result.rows) {
       const schema = String(row.nspname);
@@ -191,7 +192,8 @@ if (hasDatabase) {
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
     "tests/integration/receiving-postgres.test.ts",
     "tests/integration/rework-v2-n01-postgres.test.ts",
-    "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",\n    "tests/integration/sourcing-pr03-postgres.test.ts",
+    "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
+    "tests/integration/sourcing-pr03-postgres.test.ts",
   );
   process.stdout.write(
     "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
