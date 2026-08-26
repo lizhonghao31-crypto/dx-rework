@@ -26,7 +26,7 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(migration).toContain("root_superuser");
     expect(migration).toContain("receiving batch is locked after rework initiation");
     expect(migration).not.toContain("DROP TABLE receiving_receipts");
-    expect(routes).toContain('"receiving:correct"');
+    expect(routes).toContain('\"receiving:correct\"');
     expect(routes).toContain('app.patch<{ Params: { receivingBatchId: string } }>');
     expect(routes).toContain('app.delete<{ Params: { receivingBatchId: string } }>');
     expect(service).toContain("correctBatch");
@@ -38,16 +38,18 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
   });
 
   it("requires 1-3 receiving-note images for a new receiving batch and reuses existing batch evidence on later receipts", async () => {
-    const [page, routes, service] = await Promise.all([
+    const [page, upload, routes, service] = await Promise.all([
       read("apps/web/src/receiving-page.tsx"),
+      read("apps/web/src/attachment-upload.ts"),
       read("apps/api/src/receiving/receiving-routes.ts"),
       read("apps/api/src/receiving/receiving-service.ts"),
     ]);
     expect(page).toContain("收货单图片");
     expect(page).toContain("最多3张");
-    expect(page).toContain("image/jpeg");
-    expect(page).toContain("image/png");
-    expect(page).toContain("image/webp");
+    expect(page).toContain('accept="image/*"');
+    expect(upload).toContain("image/jpeg");
+    expect(upload).toContain("image/png");
+    expect(upload).toContain("image/webp");
     expect(routes).toContain("attachmentIds");
     expect(service).toContain("attachmentIds");
     expect(service).toContain("receiving_batch");
