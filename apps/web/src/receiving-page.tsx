@@ -2,7 +2,13 @@ import { Button, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { isImageAttachment, prepareAttachmentForUpload, sha256Hex } from "./attachment-upload.js";
+import {
+  isImageAttachment,
+  isReceivingImageCandidate,
+  normalizeReceivingImageForUpload,
+  prepareAttachmentForUpload,
+  sha256Hex,
+} from "./attachment-upload.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import "./receiving-page.css";
 
@@ -57,8 +63,9 @@ const requestJson = async <T,>(path: string, init: RequestInit): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
-const uploadReceivingImage = async (source: File): Promise<string> => {
-  const file = await prepareAttachmentForUpload(source);
+const INVALID_DECLARED_IMAGE_MESSAGE = "Uploaded object is not a valid file of the declared type";
+
+const uploadPreparedReceivingImage = async (file: File, sourceName: string): Promise<string> => {
   const sha256 = await sha256Hex(file);
   const intent = await requestJson<UploadIntent>("tools/attachments/upload-intents", {
     method: "POST",
@@ -73,12 +80,36 @@ const uploadReceivingImage = async (source: File): Promise<string> => {
   for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
   upload.append("file", file);
   const uploaded = await fetch(intent.uploadUrl, { method: "POST", body: upload });
-  if (!uploaded.ok) throw new Error(`${source.name} 上传失败`);
+  if (!uploaded.ok) throw new Error(`${sourceName} 上传失败`);
   const finalized = await requestJson<FinalizedAttachment>(
     `tools/attachments/${intent.attachmentId}/finalize`,
     { method: "POST" },
   );
   return finalized.attachmentId;
+};
+
+const hasInvalidDeclaredImageError = (error: unknown): boolean =>
+  error instanceof Error && error.message === INVALID_DECLARED_IMAGE_MESSAGE;
+
+const uploadReceivingImage = async (source: File): Promise<string> => {
+  const prepared = isImageAttachment(source)
+    ? await prepareAttachmentForUpload(source)
+    : await normalizeReceivingImageForUpload(source);
+  try {
+    return await uploadPreparedReceivingImage(prepared, source.name);
+  } catch (error) {
+    if (!hasInvalidDeclaredImageError(error)) throw error;
+  }
+
+  try {
+    const normalized = await normalizeReceivingImageForUpload(source);
+    return await uploadPreparedReceivingImage(normalized, source.name);
+  } catch (error) {
+    if (hasInvalidDeclaredImageError(error)) {
+      throw new Error(`${source.name} 图片格式无法识别，请重新选择图片`);
+    }
+    throw error;
+  }
 };
 
 export function ReceivingPage() {
@@ -134,8 +165,8 @@ export function ReceivingPage() {
       setMessage("收货单图片最多3张");
       return;
     }
-    if (selected.some((file) => !isImageAttachment(file))) {
-      setMessage("收货单图片仅支持 JPEG / PNG / WebP");
+    if (selected.some((file) => !isReceivingImageCandidate(file))) {
+      setMessage("请选择手机相册中的图片文件");
       return;
     }
     const additions = selected.map((file) => {
@@ -287,7 +318,7 @@ export function ReceivingPage() {
               <span>{images.length >= MAX_RECEIVING_IMAGES ? "已达3张" : "＋ 选择图片"}</span>
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/*"
                 multiple
                 disabled={busy || images.length >= MAX_RECEIVING_IMAGES}
                 onChange={(event) => { selectImages(event.target.files); event.target.value = ""; }}
@@ -308,3 +339,4 @@ export function ReceivingPage() {
     </section>
   </main>;
 }
+
