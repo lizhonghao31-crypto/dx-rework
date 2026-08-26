@@ -89,12 +89,12 @@ export function registerSourcingRoutes(
 
   app.post("/sourcing/cases", async (request, reply) => {
     const parsed = CreateSourcingCaseSchema.safeParse(request.body);
-    if (!parsed.success) {
-      validationError(parsed.error.issues[0]?.message ?? "询价信息不完整");
-    }
+    const data = parsed.success
+      ? parsed.data
+      : validationError(parsed.error.issues[0]?.message ?? "询价信息不完整");
     const result = await dependencies.service.createCase(
       await actionActor(request, "order_merchandiser", "sourcing:inquiry:create"),
-      parsed.data,
+      data,
       idempotencyKey(request),
     );
     if (result.reused) void reply.header("idempotency-replayed", "true");
@@ -105,13 +105,13 @@ export function registerSourcingRoutes(
     "/sourcing/cases/:sourcingCaseId/ie-quotes",
     async (request, reply) => {
       const parsed = CreateSourcingIeQuoteSchema.safeParse(request.body);
-      if (!parsed.success) {
-        validationError(parsed.error.issues[0]?.message ?? "IE报价信息不完整");
-      }
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "IE报价信息不完整");
       const result = await dependencies.service.quoteIePrice(
         await actionActor(request, "ie_reviewer", "sourcing:price:quote"),
         caseId(request.params.sourcingCaseId),
-        parsed.data,
+        data,
         idempotencyKey(request),
       );
       if (result.reused) void reply.header("idempotency-replayed", "true");
