@@ -53,7 +53,9 @@ runWithPostgres("sourcing PR02 PostgreSQL foundation", () => {
        ORDER BY table_name`,
       [[
         "sourcing_cases",
+        "sourcing_ie_quotes",
         "sourcing_decisions",
+        "sourcing_owner_decisions",
         "sourcing_contract_executions",
         "sourcing_factory_change_requests",
         "sourcing_factory_change_decisions",
@@ -61,7 +63,7 @@ runWithPostgres("sourcing PR02 PostgreSQL foundation", () => {
         "sourcing_case_transitions",
       ]],
     );
-    expect(tables.rows).toHaveLength(7);
+    expect(tables.rows).toHaveLength(9);
 
     const grants = await database.query<{ role_code: string; capability: string }>(
       `SELECT role_code,capability
@@ -77,6 +79,8 @@ runWithPostgres("sourcing PR02 PostgreSQL foundation", () => {
       { role_code: "production_management", capability: "sourcing:factory_change:verify" },
       { role_code: "factory_payables", capability: "sourcing:finance:reconcile" },
       { role_code: "order_merchandiser", capability: "sourcing:inquiry:create" },
+      { role_code: "owner_group", capability: "sourcing:owner:approve" },
+      { role_code: "ie_reviewer", capability: "sourcing:price:quote" },
     ]);
   });
 
@@ -109,7 +113,7 @@ runWithPostgres("sourcing PR02 PostgreSQL foundation", () => {
         `INSERT INTO sourcing_case_transitions(
            sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
            business_action,transition_reason,actor_id,operation_event_id,request_id
-         ) VALUES($1,$2,1,NULL,'pending_decision','created',$3,$4,$5,$6)`,
+         ) VALUES($1,$2,1,NULL,'pending_ie_quote','created',$3,$4,$5,$6)`,
         [randomUUID(),caseId,reason,actorId,eventId,requestId],
       );
       await client.query("COMMIT");
@@ -121,7 +125,7 @@ runWithPostgres("sourcing PR02 PostgreSQL foundation", () => {
       "SELECT status,version,lane_key FROM current_sourcing_cases WHERE sourcing_case_id=$1",
       [caseId],
     )).rows[0]).toEqual({
-      status: "pending_decision",
+      status: "pending_ie_quote",
       version: 1,
       lane_key: "garment_processing",
     });
@@ -131,28 +135,28 @@ runWithPostgres("sourcing PR02 PostgreSQL foundation", () => {
     )).rejects.toMatchObject({ code: "55000" });
   });
 
-  it("rejects a state jump without its matching immutable business fact", async () => {
+  it("rejects a state jump without its matching immutable IE quote fact", async () => {
     const current = await database.query<{ sourcing_case_id: string }>(
       "SELECT sourcing_case_id FROM sourcing_cases LIMIT 1",
     );
     const caseId = current.rows[0]!.sourcing_case_id;
     const eventId = randomUUID();
     const requestId = randomUUID();
-    const reason = "尝试跳过选厂决定";
+    const reason = "尝试跳过 IE 报价事实";
     await database.query(
       `INSERT INTO operation_events(
          event_id,request_id,actor_id,actor_roles,authorization_capability,
          action,entity_type,entity_id,reason
-       ) VALUES($1,$2,$3,ARRAY['production_management'],'sourcing:decision:record',
-         'sourcing.decision.record','sourcing_case',$4,$5)`,
+       ) VALUES($1,$2,$3,ARRAY['ie_reviewer'],'sourcing:price:quote',
+         'sourcing.ie_price.quote','sourcing_case',$4,$5)`,
       [eventId,requestId,actorId,caseId,reason],
     );
     await expect(database.query(
       `INSERT INTO sourcing_case_transitions(
          sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
          business_action,transition_reason,actor_id,operation_event_id,request_id
-       ) VALUES($1,$2,2,'pending_decision','pending_contract',
-         'decision_recorded',$3,$4,$5,$6)`,
+       ) VALUES($1,$2,2,'pending_ie_quote','pending_management_decision',
+         'ie_price_quoted',$3,$4,$5,$6)`,
       [randomUUID(),caseId,reason,actorId,eventId,requestId],
     )).rejects.toMatchObject({ code: "55000" });
   });
