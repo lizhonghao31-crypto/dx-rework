@@ -182,16 +182,6 @@ export function WorkReportingForm({
     void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"));
   }, [reworkOrderId, taskMode]);
 
-  useEffect(() => {
-    if (!reworkOrderId || !canAssign || frontlineContext || data?.reworkStatus !== "in_progress") return;
-    const timer = window.setInterval(() => {
-      void request(`rework-orders/${reworkOrderId}/work-tasks`, ReworkWorkTasksResponseSchema.parse)
-        .then(setData)
-        .catch(() => undefined);
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [canAssign, data?.reworkStatus, frontlineContext, reworkOrderId]);
-
   const choosePeopleType = (type: "internal" | "temporary") => {
     setPeopleType(type);
     setPeopleQuery("");

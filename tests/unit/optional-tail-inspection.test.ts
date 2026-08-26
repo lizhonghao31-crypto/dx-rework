@@ -36,7 +36,7 @@ describe("optional tail inspection", () => {
     expect(assignment).toContain("tailInspectionRequired ? <Surface");
     expect(assignment).toContain(": configItems");
     expect(review).toContain("if (!tailInspectionRequired)");
-    expect(review).toContain("工人有效上数");
+    expect(review).toContain("仍有返工执行报数未完成，不能整单确认");
     expect(panel).toContain("!overview.tailInspectionRequired");
     expect(panel).toContain("本单无需整查");
   });

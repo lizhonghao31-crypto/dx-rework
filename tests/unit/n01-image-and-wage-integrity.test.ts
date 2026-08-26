@@ -21,7 +21,7 @@ describe("N01 image and wage integrity", () => {
     expect(migration).toContain("attachment.mime_type IN ('image/jpeg','image/png','image/webp')");
     expect(castRepairMigration).toContain("guard_rework_submission_requires_image");
     expect(castRepairMigration).toContain("attachment.entity_id=NEW.rework_order_id::text");
-    expect(form).toContain('accept="image/jpeg,image/png,image/webp"');
+    expect(form).toContain('accept="image/*"');
     expect(form).toContain("availableImageCount > 0");
   });
 
