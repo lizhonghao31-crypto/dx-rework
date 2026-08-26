@@ -117,6 +117,20 @@ describe("order detail information architecture", () => {
     expect(detail).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId}");
   });
 
+  it("shows the latest configuration unit-price sum beside every node workspace", async () => {
+    const [detail, service, styles] = await Promise.all([
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+    ]);
+    expect(service).toContain("SELECT SUM(item.unit_price)::text");
+    expect(service).toContain("singlePieceReworkTotal");
+    expect(detail).toContain("单件返工总价：");
+    expect(detail).toContain("detail.singlePieceReworkTotal");
+    expect(styles).toContain(".rework-detail-single-piece-total");
+    expect(styles).toContain("var(--dx-v2-color-primary)");
+  });
+
   it("derives the visible rework process from the latest N02 configuration without mutating the order", async () => {
     const service = await readFile("apps/api/src/rework/rework-business-detail-service.ts", "utf8");
     expect(service).toContain("string_agg(item.process_name,'、' ORDER BY item.position)");

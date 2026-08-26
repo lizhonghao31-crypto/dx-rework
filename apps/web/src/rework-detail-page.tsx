@@ -77,6 +77,7 @@ export type ReworkBusinessDetail = Readonly<{
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
+  singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
   processConfigurationCreatedBy: Readonly<{ userId: string; displayName: string }> | null;
@@ -210,6 +211,9 @@ const formatTime = (value: string | null): string => {
     hour12: false, timeZone: "Asia/Shanghai",
   }).format(new Date(value));
 };
+
+const formatSinglePieceReworkTotal = (value: number): string =>
+  value.toFixed(3).replace(/\.?0+$/, "");
 
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
@@ -726,7 +730,7 @@ export function ReworkDetailPage({
         </div>
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><h2>办理区</h2></div>
+          <div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : `¥${formatSinglePieceReworkTotal(detail.singlePieceReworkTotal)}`}</span></div>
           {renderSelectedTask()}
         </section>
       </div>

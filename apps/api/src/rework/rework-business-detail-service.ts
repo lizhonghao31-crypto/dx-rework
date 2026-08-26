@@ -32,6 +32,7 @@ export type ReworkBusinessDetail = Readonly<{
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
+  singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
   processConfigurationCreatedBy: Readonly<{
@@ -104,6 +105,7 @@ type DetailRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: string | null;
+  single_piece_rework_total: string | null;
   inspection_report: InspectionReportDraft | null;
   created_by: string;
   creator_name: string;
@@ -155,6 +157,7 @@ export class ReworkBusinessDetailService {
          to_jsonb(orders)->>'rework_reason' rework_reason,
          COALESCE(NULLIF(latest_configuration.process_names,''),to_jsonb(orders)->>'rework_process') rework_process,
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
+         latest_configuration.single_piece_rework_total,
          orders.inspection_report,
          orders.created_by,creator.display_name creator_name,
          latest_configuration.created_by configuration_created_by,
@@ -185,7 +188,12 @@ export class ReworkBusinessDetailService {
                   SELECT string_agg(item.process_name,'、' ORDER BY item.position)
                   FROM rework_process_configuration_items item
                   WHERE item.configuration_id=configuration.configuration_id
-                ) process_names
+                ) process_names,
+                (
+                  SELECT SUM(item.unit_price)::text
+                  FROM rework_process_configuration_items item
+                  WHERE item.configuration_id=configuration.configuration_id
+                ) single_piece_rework_total
          FROM rework_process_configurations configuration
          WHERE configuration.rework_order_id=orders.rework_order_id
          ORDER BY configuration.configuration_version DESC
@@ -336,6 +344,7 @@ export class ReworkBusinessDetailService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
+      singlePieceReworkTotal: row.single_piece_rework_total === null ? null : Number(row.single_piece_rework_total),
       inspectionReport: row.inspection_report,
       createdBy: { userId: row.created_by, displayName: row.creator_name },
       processConfigurationCreatedBy: row.configuration_created_by && row.configuration_creator_name
