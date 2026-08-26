@@ -396,3 +396,13 @@
     padding: 9px 0;
   }
 }
+
+
+.work-reporting-page .work-reporting-approved-price {
+  display: block;
+  margin-top: 4px;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
