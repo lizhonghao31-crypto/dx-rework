@@ -7,6 +7,28 @@ const MoneyInputSchema = z.string().trim().regex(
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
 
+const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
+
+export const calculateSourcingTotalExact = (
+  unitPrice: string,
+  quantity: number,
+): string => {
+  const normalized = unitPrice.trim();
+  if (!/^\d{1,10}(?:\.\d{1,4})?$/.test(normalized) || Number(normalized) <= 0) {
+    throw new RangeError("加工单价必须大于0且最多4位小数");
+  }
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10_000_000) {
+    throw new RangeError("订单数量必须是1至10000000之间的整数");
+  }
+  const [whole, fraction = ""] = normalized.split(".");
+  const scaled = BigInt(whole!) * 10_000n + BigInt(fraction.padEnd(4, "0"));
+  const cents = (scaled * BigInt(quantity) + 50n) / 100n;
+  if (cents <= 0n || cents > MAX_TOTAL_CENTS) {
+    throw new RangeError("报价总额超出系统允许范围");
+  }
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+};
+
 export const SourcingCaseStatusSchema = z.enum([
   "pending_ie_quote",
   "pending_management_decision",
