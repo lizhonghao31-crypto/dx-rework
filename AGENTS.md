@@ -142,7 +142,25 @@ PR 描述必须包含：
 - Quick Gate 禁止 PostgreSQL、全量测试、migration replay、backup/restore、PR-17 acceptance、release packaging、Playwright/browser install 和 Preview。
 - 重型验证只允许在 PR 带 `full-gate` label 时由 `.github/workflows/full-gate.yml` 执行；label 存在后的任何新 Head 都必须重新 Full Gate。
 - 禁止 noop commit 仅为触发 CI；同一 Head 的失败 Job 最多 rerun 一次，再失败必须先查根因。
-- Codex Review 只能在最终 intended Head 的 Full Gate 全绿后发起，默认每 PR 一次；第二次仅限明确 P0/P1 或业务负责人授权。
+- Codex Review 只能在最终 intended Head 的 Full Gate 全绿后，由业务负责人手动触发；ChatGPT、Codex 或其他 Agent 不得自行触发。默认每 PR 一次；第二次仅限明确 P0/P1 或业务负责人授权。
 - Full Gate 默认每 PR 最多两次；第三次需要业务负责人明确授权并说明前两次为何未收口。
 - 正常开发 GitHub-hosted Linux minutes 月度目标不超过 1200，至少保留 800 included minutes 作为非计划储备。
 - `scripts/ci/verify-actions-policy.mjs` 是机器红线。未经业务负责人在具体 PR 中明确授权，不得删除、绕过或弱化该脚本及本节规则。
+
+
+## 12. ChatGPT + Codex 固定施工流程（P0）
+
+详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；平台与报价选厂的已确认决定和当前进度见 `docs/roadmap/platform-sourcing-roadmap-v1.0.md`。任何新聊天窗口、新 Codex 任务或直接施工开始前必须先读取这两个文件。
+
+以下规则为默认强制流程：
+
+- ChatGPT 是施工控制器，负责读取 Golden Source、冻结范围、选择执行方式、审查 diff、管理 GitHub 交付和向用户汇报。
+- 默认优先由 Codex 执行编码和测试，但 Codex 不是唯一施工渠道。额度不足、服务不可用、环境/remote/push/PR 能力缺失、HEAD 无法对齐或明显卡住时，ChatGPT 应简短告知后自动接管直接施工，不得因此停止项目或反复要求用户确认。
+- Codex 云任务缺少 remote、不能 push 或不能创建 PR，不是业务阻塞；由 ChatGPT 使用可用的 GitHub 能力完成分支和 PR 交付。
+- 完成修改和可用门禁后直接创建普通 PR（`draft: false`）；未经业务负责人明确要求，不得创建或转换为 Draft。
+- PR 创建成功后必须立即报告 PR 链接、范围和测试结果并结束本轮；不得为了等待 CI、润色描述、整理计划或其他非阻断性收尾继续占用施工窗口。
+- CI 作为异步状态处理；CI 后续失败时再开启明确的修复任务，不得原地盲等。
+- Codex Review 只能由业务负责人手动触发。ChatGPT、Codex 和其他 Agent 不得自行触发、代点或暗中触发。
+- PR 合并和部署只能由业务负责人明确决定。
+- 用户说“停”后立即停止一切检查、写入、PR 操作和等待。
+- 业务负责人的明确授权可以覆盖本节的流程性默认规则；临时授权仅限所述范围和当前任务，长期例外必须通过版本化文件和 PR 固化。任何授权均不得绕过平台安全策略、密钥和生产数据保护或法律合规要求。
