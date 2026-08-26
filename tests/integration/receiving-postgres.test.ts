@@ -217,6 +217,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await insertLegacyReceipt();
     await migration("0086_receiving_rework_evidence_link.sql");
     await migration("0088_root_receiving_correction.sql");
+    await migration("0095_receiving_defective_quantity.sql");
   });
 
   afterAll(async () => {
@@ -229,15 +230,17 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const legacy = await database.query<{
       document_quantity: number;
       actual_quantity: number;
+      defective_quantity: number;
       difference_quantity: number;
       receiving_batch_id: string;
     }>(
-      `SELECT document_quantity,actual_quantity,difference_quantity,receiving_batch_id
+      `SELECT document_quantity,actual_quantity,defective_quantity,difference_quantity,receiving_batch_id
        FROM receiving_receipts WHERE style_no='STYLE-LEGACY-01'`,
     );
     expect(legacy.rows[0]).toMatchObject({
       document_quantity: 50,
       actual_quantity: 45,
+      defective_quantity: 0,
       difference_quantity: -5,
     });
     expect(legacy.rows[0]?.receiving_batch_id).toMatch(/^[0-9a-f-]{36}$/i);
@@ -257,6 +260,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 80,
+      defectiveQuantity: 5,
       attachmentIds: [firstImage],
     }, firstKey);
     expect(first.reused).toBe(false);
@@ -264,6 +268,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 80,
+      defectiveQuantity: 5,
       differenceQuantity: -20,
       receivedBy: receiverId,
     });
@@ -281,6 +286,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 80,
+      defectiveQuantity: 5,
       attachmentIds: [firstImage],
     }, firstKey);
     expect(replay.reused).toBe(true);
@@ -289,6 +295,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 120,
+      defectiveQuantity: 2,
       attachmentIds: [],
     }, randomUUID());
     expect(second.value.receivingBatchId).toBe(first.value.receivingBatchId);
@@ -300,6 +307,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 200,
       actualQuantity: 200,
+      defectiveQuantity: 7,
       differenceQuantity: 0,
       receiptCount: 2,
       reworkOrderId: null,
@@ -313,11 +321,20 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       attachmentIds: [randomUUID(), randomUUID(), randomUUID(), randomUUID()],
     }, randomUUID())).rejects.toThrow("最多3张");
 
-    const facts = await database.query<{ difference_quantity: number }>(
-      "SELECT difference_quantity FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
+    await expect(service.create(receiver(), {
+      styleNo: "STYLE-INVALID-DEFECTIVE",
+      documentQuantity: 2,
+      actualQuantity: 1,
+      defectiveQuantity: 2,
+      attachmentIds: [],
+    }, randomUUID())).rejects.toThrow("次品数量不能超过实际收货数量");
+
+    const facts = await database.query<{ difference_quantity: number; defective_quantity: number }>(
+      "SELECT difference_quantity,defective_quantity FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
       [first.value.receivingBatchId],
     );
     expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-20, 20]);
+    expect(facts.rows.map((item) => item.defective_quantity).sort((left, right) => left - right)).toEqual([2, 5]);
     await expect(database.query(
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
       [first.value.receiptId],
@@ -351,18 +368,20 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-ROOT-CORRECT-01",
       documentQuantity: 30,
       actualQuantity: 27,
+      defectiveQuantity: 2,
       attachmentIds: [image],
     }, randomUUID());
 
     let board = await service.board(businessDate());
     const before = board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)!;
-    expect(before).toMatchObject({ version: 1, rootMutable: true });
+    expect(before).toMatchObject({ defectiveQuantity: 2, version: 1, rootMutable: true });
 
     await expect(service.correctBatch(receiver(), receipt.value.receivingBatchId, {
       expectedVersion: before.version,
       styleNo: "STYLE-ROOT-CORRECTED-01",
       documentQuantity: 32,
       actualQuantity: 31,
+      defectiveQuantity: 1,
     })).rejects.toThrow("只有Root");
 
     const corrected = await service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
@@ -370,11 +389,13 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-ROOT-CORRECTED-01",
       documentQuantity: 32,
       actualQuantity: 31,
+      defectiveQuantity: 1,
     });
     expect(corrected).toMatchObject({
       styleNo: "STYLE-ROOT-CORRECTED-01",
       documentQuantity: 32,
       actualQuantity: 31,
+      defectiveQuantity: 1,
       differenceQuantity: -1,
       version: 2,
     });
@@ -383,14 +404,16 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       style_no: string;
       document_quantity: number;
       actual_quantity: number;
+      defective_quantity: number;
     }>(
-      "SELECT style_no,document_quantity,actual_quantity FROM receiving_receipts WHERE receipt_id=$1",
+      "SELECT style_no,document_quantity,actual_quantity,defective_quantity FROM receiving_receipts WHERE receipt_id=$1",
       [receipt.value.receiptId],
     );
     expect(immutableFact.rows[0]).toEqual({
       style_no: "STYLE-ROOT-CORRECT-01",
       document_quantity: 30,
       actual_quantity: 27,
+      defective_quantity: 2,
     });
 
     board = await service.board(businessDate(), "CORRECTED");
@@ -398,6 +421,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       styleNo: "STYLE-ROOT-CORRECTED-01",
       documentQuantity: 32,
       actualQuantity: 31,
+      defectiveQuantity: 1,
       version: 2,
       rootMutable: true,
     });

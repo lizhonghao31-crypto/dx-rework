@@ -24,6 +24,7 @@ const createBody = (input: unknown): {
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity: number;
   attachmentIds: readonly string[];
   receivedDate?: string;
 } => {
@@ -47,6 +48,7 @@ const createBody = (input: unknown): {
     styleNo: body.styleNo,
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
+    defectiveQuantity: body.defectiveQuantity === undefined ? 0 : Number(body.defectiveQuantity),
     attachmentIds: (body.attachmentIds as string[] | undefined) ?? [],
     ...(typeof body.receivedDate === "string" ? { receivedDate: body.receivedDate } : {}),
   };
@@ -57,6 +59,7 @@ const mutationBody = (input: unknown): {
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
+  defectiveQuantity?: number;
 } => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "收货订单修改信息不完整", 400);
@@ -70,6 +73,9 @@ const mutationBody = (input: unknown): {
     styleNo: body.styleNo,
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
+    ...(body.defectiveQuantity === undefined
+      ? {}
+      : { defectiveQuantity: Number(body.defectiveQuantity) }),
   };
 };
 
