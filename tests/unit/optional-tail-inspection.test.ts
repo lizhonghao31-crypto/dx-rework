@@ -51,6 +51,19 @@ describe("optional tail inspection", () => {
     expect(migration).toContain("worker_quantity<>tail_quantity");
   });
 
+  it("keeps the N06 guard and embedded error feedback aligned with the order decision", async () => {
+    const [migration, integration, panel] = await Promise.all([
+      read("apps/api/migrations/0101_optional_tail_n06_guard.sql"),
+      read("tests/integration/optional-tail-inspection-postgres.test.ts"),
+      read("apps/web/src/whole-order-review-panel.tsx"),
+    ]);
+    expect(migration).toContain("CASE WHEN tail_required THEN 1 ELSE 0 END");
+    expect(migration).toContain("unified_execution AND tail_required AND EXISTS");
+    expect(integration).toContain("review.reviewFinalQuantity");
+    expect(integration).toContain('reworkStatus: "pending_responsibility_determination"');
+    expect(panel).toContain("embedded && message");
+  });
+
   it("uses no-tail workflow copy and waits for the saved tail roster to load", async () => {
     const [detail, assignment, businessDetail] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
