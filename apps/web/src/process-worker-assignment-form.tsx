@@ -100,6 +100,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const [tailDefaultRosterDirty, setTailDefaultRosterDirty] = useState(false);
   const [tailDefaultCandidateCount, setTailDefaultCandidateCount] = useState(0);
   const [savingTailDefault, setSavingTailDefault] = useState(false);
+  const [assignmentOptionsLoading, setAssignmentOptionsLoading] = useState(true);
   const [reviewReason, setReviewReason] = useState("");
   const [message, setMessage] = useState("正在加载分配工序与工人…");
   const [optionLoadIssue, setOptionLoadIssue] = useState("");
@@ -132,13 +133,13 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     : !threeDecimals.test(tailUnitPrice.trim()) || Number(tailUnitPrice) < 0.001
       ? "尾查单价最低 0.001 元，最多三位小数"
       : null;
-  const readinessIssues = [
+  const readinessIssues = assignmentOptionsLoading && editable ? [] : [
     ...(itemIssue ? [itemIssue] : []),
     ...(workerIssue >= 0 ? [`工序 ${workerIssue + 1} 至少分配 1 名工人`] : []),
     ...(tailInspectionRequired && tailPriceIssue ? [tailPriceIssue] : []),
     ...(tailInspectionRequired && tailPersonIds.length === 0 ? ["至少分配 1 名尾查"] : []),
   ];
-  const saveReady = editable && itemIssue === null && workerIssue < 0
+  const saveReady = editable && !assignmentOptionsLoading && itemIssue === null && workerIssue < 0
     && (!tailInspectionRequired || (tailPriceIssue === null && tailPersonIds.length > 0));
   const submitReady = saveReady;
 
@@ -172,6 +173,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   };
 
   const loadCore = async () => {
+    setAssignmentOptionsLoading(true);
     const [session, config, workerPlan, loadedDetail] = await Promise.all([
       verifySession(),
       request(`rework-orders/${reworkOrderId}/process-configuration`, ProcessConfigurationResponseSchema.parse),
@@ -212,9 +214,10 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       }
       setOptionLoadIssue(issues.join("；"));
     }
+    setAssignmentOptionsLoading(false);
     setMessage("");
   };
-  useEffect(() => { void loadCore().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "当前节点加载失败")); }, [reworkOrderId]);
+  useEffect(() => { void loadCore().catch((error: unknown) => { setAssignmentOptionsLoading(false); setMessage(error instanceof Error ? error.message : "当前节点加载失败"); }); }, [reworkOrderId]);
 
   const setItem = (index: number, next: Partial<ItemForm>) => { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...next } : item)); pendingSubmit.current = null; };
   const selectCatalogProcess = (index: number, processId: string): void => {
@@ -554,12 +557,12 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         })}</div>
       </Surface>
       {tailInspectionRequired ? <Surface className="process-worker-tail-card">
-        <div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : "至少 1 人"}</StatusBadge></div>
+        <div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : assignmentOptionsLoading ? "加载中" : "至少 1 人"}</StatusBadge></div>
         <div className="process-worker-tail-body">
           <div className="process-worker-tail-work"><div className="process-worker-tail-title-row"><b>尾查</b></div><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
           <div className="process-worker-picker">
-            <div className="process-worker-picker__heading"><b>尾查人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy} onClick={openMobileTailAssignment}>选择本单工人</Button><Button className="process-worker-save-default" {...(tailDefaultRosterDirty ? { variant: "primary" as const } : {})} disabled={busy || !tailDefaultRosterDirty || tailPersonIds.length === 0} onClick={() => void saveTailDefaultWorkers()}>{savingTailDefault ? "保存中…" : "保存为默认名单"}</Button></div></div>
-            <div className="process-worker-default-list" aria-label="已分配人员">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); const name = person?.displayName ?? "尾查人员"; const temporary = person?.personType === "temporary"; return <span key={personId}><button type="button" aria-label={`移除 ${name}`} disabled={busy} onClick={() => removeTailWorker(personId)}>−</button><small>{temporary && canCreateTemporary ? <button type="button" className="process-worker-temporary-name" aria-label={`补录或修改 ${name} 的临时工资料`} disabled={busy} onClick={() => void openTemporaryWorkerProfile(personId)}>{name}</button> : name}{temporary ? " · 临时工" : ""}</small></span>; }) : <small>至少选择 1 名尾查人员</small>}</div>
+            <div className="process-worker-picker__heading"><b>尾查人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy || assignmentOptionsLoading} onClick={openMobileTailAssignment}>选择本单工人</Button><Button className="process-worker-save-default" {...(tailDefaultRosterDirty ? { variant: "primary" as const } : {})} disabled={busy || assignmentOptionsLoading || !tailDefaultRosterDirty || tailPersonIds.length === 0} onClick={() => void saveTailDefaultWorkers()}>{savingTailDefault ? "保存中…" : "保存为默认名单"}</Button></div></div>
+            <div className="process-worker-default-list" aria-label="已分配人员">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); const name = person?.displayName ?? "尾查人员"; const temporary = person?.personType === "temporary"; return <span key={personId}><button type="button" aria-label={`移除 ${name}`} disabled={busy} onClick={() => removeTailWorker(personId)}>−</button><small>{temporary && canCreateTemporary ? <button type="button" className="process-worker-temporary-name" aria-label={`补录或修改 ${name} 的临时工资料`} disabled={busy} onClick={() => void openTemporaryWorkerProfile(personId)}>{name}</button> : name}{temporary ? " · 临时工" : ""}</small></span>; }) : <small>{assignmentOptionsLoading ? "正在加载默认名单…" : "至少选择 1 名尾查人员"}</small>}</div>
             {tailDefaultCandidateCount > 0 ? <small className="process-worker-default-candidates">已自动带入 {tailDefaultCandidateCount} 名默认候选人</small> : null}
           </div>
         </div>
