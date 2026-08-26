@@ -141,6 +141,78 @@ export const transitionReworkOrder = (
     deleted: [],
   }, from, to);
 
+export type SourcingCaseStatus =
+  | "pending_decision"
+  | "pending_contract"
+  | "pending_finance_reconciliation"
+  | "pending_factory_change_verification"
+  | "pending_exception_verification"
+  | "closed";
+
+export type SourcingBusinessAction =
+  | "created"
+  | "decision_recorded"
+  | "contract_recorded"
+  | "factory_change_requested"
+  | "factory_change_approved"
+  | "factory_change_rejected"
+  | "finance_matched"
+  | "finance_difference"
+  | "exception_reopened_for_contract"
+  | "exception_reopened_for_reconciliation"
+  | "exception_closed";
+
+type SourcingTransitionRule = Readonly<{
+  from: SourcingCaseStatus | null;
+  to: SourcingCaseStatus;
+}>;
+
+export const SOURCING_ACTION_TRANSITIONS: Readonly<Record<SourcingBusinessAction, SourcingTransitionRule>> = {
+  created: { from: null, to: "pending_decision" },
+  decision_recorded: { from: "pending_decision", to: "pending_contract" },
+  contract_recorded: { from: "pending_contract", to: "pending_finance_reconciliation" },
+  factory_change_requested: {
+    from: "pending_finance_reconciliation",
+    to: "pending_factory_change_verification",
+  },
+  factory_change_approved: {
+    from: "pending_factory_change_verification",
+    to: "pending_contract",
+  },
+  factory_change_rejected: {
+    from: "pending_factory_change_verification",
+    to: "pending_finance_reconciliation",
+  },
+  finance_matched: { from: "pending_finance_reconciliation", to: "closed" },
+  finance_difference: {
+    from: "pending_finance_reconciliation",
+    to: "pending_exception_verification",
+  },
+  exception_reopened_for_contract: {
+    from: "pending_exception_verification",
+    to: "pending_contract",
+  },
+  exception_reopened_for_reconciliation: {
+    from: "pending_exception_verification",
+    to: "pending_finance_reconciliation",
+  },
+  exception_closed: { from: "pending_exception_verification", to: "closed" },
+};
+
+export function transitionSourcingCase(
+  from: SourcingCaseStatus | null,
+  action: SourcingBusinessAction,
+): SourcingCaseStatus {
+  const rule = SOURCING_ACTION_TRANSITIONS[action];
+  if (rule.from !== from) {
+    throw new DomainRuleError(
+      "INVALID_STATE_TRANSITION",
+      `Cannot apply sourcing action ${action} from ${from ?? "uncreated"}`,
+    );
+  }
+  return rule.to;
+}
+
 export function sanitizeOperationalError(error: unknown): string {
   void error;
   // Worker errors are persisted in retry tables. Never attempt to enumerate
