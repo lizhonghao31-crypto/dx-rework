@@ -11,6 +11,7 @@ describe("optional tail inspection", () => {
     ]);
     expect(migration).toContain("tail_inspection_required boolean NOT NULL DEFAULT true");
     expect(manifest).toContain('"version": "0099_optional_tail_inspection"');
+    expect(manifest).toContain('"version": "0100_optional_tail_final_quantity_guard"');
   });
 
   it("defaults N01 to yes and preserves old local drafts as yes", async () => {
@@ -39,5 +40,28 @@ describe("optional tail inspection", () => {
     expect(review).toContain("仍有返工执行报数未完成，不能整单确认");
     expect(panel).toContain("!overview.tailInspectionRequired");
     expect(panel).toContain("本单无需整查");
+  });
+
+  it("persists worker-derived final quantities without fabricating tail facts", async () => {
+    const migration = await read("apps/api/migrations/0100_optional_tail_final_quantity_guard.sql");
+    expect(migration).toContain("target.tail_inspection_required");
+    expect(migration).toContain("rework_work_report_effective_quantity(report.work_report_id)");
+    expect(migration).toContain("NEW.tail_reported_quantity<>0");
+    expect(migration).toContain("NEW.final_confirmed_quantity<>worker_quantity");
+    expect(migration).toContain("worker_quantity<>tail_quantity");
+  });
+
+  it("uses no-tail workflow copy and waits for the saved tail roster to load", async () => {
+    const [detail, assignment, businessDetail] = await Promise.all([
+      read("apps/web/src/rework-detail-page.tsx"),
+      read("apps/web/src/process-worker-assignment-form.tsx"),
+      read("apps/api/src/rework/rework-business-detail-service.ts"),
+    ]);
+    expect(detail).toContain('detail.tailInspectionRequired ? "返工人员 / 尾查" : "返工人员"');
+    expect(detail).toContain("系统按工人有效上数生成最终数量");
+    expect(assignment).toContain("assignmentOptionsLoading && editable ? []");
+    expect(assignment).toContain("正在加载默认名单…");
+    expect(assignment).toContain("editable && !assignmentOptionsLoading");
+    expect(businessDetail).toContain("tailInspectionRequired: row.tail_inspection_required");
   });
 });

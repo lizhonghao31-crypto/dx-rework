@@ -32,6 +32,7 @@ export type ReworkBusinessDetail = Readonly<{
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
+  tailInspectionRequired: boolean;
   singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
@@ -105,6 +106,7 @@ type DetailRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: string | null;
+  tail_inspection_required: boolean;
   single_piece_rework_total: string | null;
   inspection_report: InspectionReportDraft | null;
   created_by: string;
@@ -157,6 +159,7 @@ export class ReworkBusinessDetailService {
          to_jsonb(orders)->>'rework_reason' rework_reason,
          COALESCE(NULLIF(latest_configuration.process_names,''),to_jsonb(orders)->>'rework_process') rework_process,
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
+         orders.tail_inspection_required,
          latest_configuration.single_piece_rework_total,
          orders.inspection_report,
          orders.created_by,creator.display_name creator_name,
@@ -344,6 +347,7 @@ export class ReworkBusinessDetailService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
+      tailInspectionRequired: row.tail_inspection_required,
       singlePieceReworkTotal: row.single_piece_rework_total === null ? null : Number(row.single_piece_rework_total),
       inspectionReport: row.inspection_report,
       createdBy: { userId: row.created_by, displayName: row.creator_name },
