@@ -205,7 +205,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         const eligibleTailIds = new Set(peopleResult.value.response.people
           .filter((person) => person.eligibleExecutionKinds.includes("tail_inspection"))
           .map((person) => person.personId));
-        const eligibleDefaults = processResult.value.tailDefaultWorkerPersonIds.filter((personId) => eligibleTailIds.has(personId));
+        const eligibleDefaults = (processResult.value.tailDefaultWorkerPersonIds ?? []).filter((personId) => eligibleTailIds.has(personId));
         setTailDefaultCandidateCount(config.configuration ? 0 : eligibleDefaults.length);
         if (!config.configuration) setTailPersonIds(eligibleDefaults);
         setTailDefaultRosterDirty(false);

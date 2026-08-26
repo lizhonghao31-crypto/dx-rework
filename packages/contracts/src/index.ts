@@ -595,7 +595,7 @@ export const ProcessConfigurationOptionsResponseSchema = z.object({
     pricingUnit: ProcessPricingUnitSchema,
     defaultWorkerPersonIds: z.array(IdSchema),
   }).strict()),
-  tailDefaultWorkerPersonIds: z.array(IdSchema).optional().default([]),
+  tailDefaultWorkerPersonIds: z.array(IdSchema).optional(),
 });
 
 export const TailInspectionAssignmentSchema = z.object({
