@@ -6,7 +6,9 @@ DROP TRIGGER role_capabilities_no_insert ON role_capabilities;
 
 INSERT INTO capability_catalog(capability,display_name,description) VALUES
   ('sourcing:inquiry:create','创建报价选厂询价','基于正式 ERP 订单创建报价选厂案例'),
-  ('sourcing:decision:record','记录选厂定价决定','生产主管记录不可覆盖的供应商与价格决定'),
+  ('sourcing:price:quote','IE 提供加工价格','IE 记录生产管理调整前的加工价格依据'),
+  ('sourcing:decision:record','记录选厂定价决定','生产主管引用 IE 价格并记录不可覆盖的供应商与调整价格决定'),
+  ('sourcing:owner:approve','老板审批选厂决定','老板最终批准或驳回生产管理的选厂定价决定'),
   ('sourcing:contract:record','登记合同执行','跟单登记与当前选厂决定对应的合同'),
   ('sourcing:factory_change:request','发起中途换厂','跟单发起从当前工厂改到另一工厂的核实请求'),
   ('sourcing:factory_change:verify','核实中途换厂','生产主管批准或驳回中途换厂请求'),
@@ -16,7 +18,9 @@ ON CONFLICT (capability) DO NOTHING;
 
 INSERT INTO role_capabilities(role_code,capability) VALUES
   ('order_merchandiser','sourcing:inquiry:create'),
+  ('ie_reviewer','sourcing:price:quote'),
   ('production_management','sourcing:decision:record'),
+  ('owner_group','sourcing:owner:approve'),
   ('order_merchandiser','sourcing:contract:record'),
   ('order_merchandiser','sourcing:factory_change:request'),
   ('production_management','sourcing:factory_change:verify'),
@@ -48,11 +52,30 @@ CREATE TABLE sourcing_cases (
 CREATE INDEX sourcing_cases_order_no_idx ON sourcing_cases(erp_order_no,lane_key);
 CREATE INDEX sourcing_cases_created_idx ON sourcing_cases(created_at DESC);
 
+CREATE TABLE sourcing_ie_quotes (
+  sourcing_ie_quote_id uuid PRIMARY KEY,
+  sourcing_case_id uuid NOT NULL REFERENCES sourcing_cases(sourcing_case_id),
+  quote_version integer NOT NULL CHECK(quote_version > 0),
+  unit_price numeric(18,4) NOT NULL CHECK(unit_price > 0),
+  quantity integer NOT NULL CHECK(quantity > 0),
+  total_amount numeric(18,2) NOT NULL CHECK(total_amount > 0),
+  quote_reason text NOT NULL CHECK(length(btrim(quote_reason)) BETWEEN 1 AND 500),
+  quoted_by uuid NOT NULL REFERENCES app_users(id),
+  operation_event_id uuid NOT NULL UNIQUE REFERENCES operation_events(event_id),
+  request_id text NOT NULL CHECK(request_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
+  quoted_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(sourcing_case_id,quote_version),
+  CHECK(total_amount=round(unit_price*quantity,2))
+);
+CREATE INDEX sourcing_ie_quotes_case_idx
+  ON sourcing_ie_quotes(sourcing_case_id,quote_version DESC);
+
 CREATE TABLE sourcing_decisions (
   sourcing_decision_id uuid PRIMARY KEY,
   sourcing_case_id uuid NOT NULL REFERENCES sourcing_cases(sourcing_case_id),
   decision_version integer NOT NULL CHECK(decision_version > 0),
-  source_type text NOT NULL CHECK(source_type IN ('initial','factory_change')),
+  source_type text NOT NULL CHECK(source_type IN ('initial','management_revision','factory_change')),
+  source_ie_quote_id uuid REFERENCES sourcing_ie_quotes(sourcing_ie_quote_id),
   supersedes_decision_id uuid REFERENCES sourcing_decisions(sourcing_decision_id),
   source_change_request_id uuid,
   supplier_id uuid NOT NULL REFERENCES supplier_catalog_items(supplier_id),
@@ -69,13 +92,32 @@ CREATE TABLE sourcing_decisions (
   UNIQUE(sourcing_case_id,decision_version),
   CHECK(total_amount=round(unit_price*quantity,2)),
   CHECK(
-    (source_type='initial' AND supersedes_decision_id IS NULL AND source_change_request_id IS NULL)
+    (source_type='initial' AND source_ie_quote_id IS NOT NULL
+      AND supersedes_decision_id IS NULL AND source_change_request_id IS NULL)
     OR
-    (source_type='factory_change' AND supersedes_decision_id IS NOT NULL AND source_change_request_id IS NOT NULL)
+    (source_type='management_revision' AND source_ie_quote_id IS NOT NULL
+      AND supersedes_decision_id IS NOT NULL AND source_change_request_id IS NULL)
+    OR
+    (source_type='factory_change' AND source_ie_quote_id IS NULL
+      AND supersedes_decision_id IS NOT NULL AND source_change_request_id IS NOT NULL)
   )
 );
 CREATE INDEX sourcing_decisions_case_history_idx
   ON sourcing_decisions(sourcing_case_id,decision_version DESC);
+
+CREATE TABLE sourcing_owner_decisions (
+  sourcing_owner_decision_id uuid PRIMARY KEY,
+  sourcing_case_id uuid NOT NULL REFERENCES sourcing_cases(sourcing_case_id),
+  sourcing_decision_id uuid NOT NULL UNIQUE REFERENCES sourcing_decisions(sourcing_decision_id),
+  decision text NOT NULL CHECK(decision IN ('approved','rejected')),
+  decision_reason text NOT NULL CHECK(length(btrim(decision_reason)) BETWEEN 1 AND 500),
+  decided_by uuid NOT NULL REFERENCES app_users(id),
+  operation_event_id uuid NOT NULL UNIQUE REFERENCES operation_events(event_id),
+  request_id text NOT NULL CHECK(request_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
+  decided_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX sourcing_owner_decisions_case_idx
+  ON sourcing_owner_decisions(sourcing_case_id,decided_at DESC);
 
 CREATE TABLE sourcing_contract_executions (
   sourcing_contract_id uuid PRIMARY KEY,
@@ -170,7 +212,9 @@ CREATE TABLE sourcing_case_transitions (
   sequence integer NOT NULL CHECK(sequence > 0),
   from_status text,
   to_status text NOT NULL CHECK(to_status IN (
-    'pending_decision',
+    'pending_ie_quote',
+    'pending_management_decision',
+    'pending_owner_approval',
     'pending_contract',
     'pending_finance_reconciliation',
     'pending_factory_change_verification',
@@ -179,7 +223,10 @@ CREATE TABLE sourcing_case_transitions (
   )),
   business_action text NOT NULL CHECK(business_action IN (
     'created',
-    'decision_recorded',
+    'ie_price_quoted',
+    'management_decision_recorded',
+    'owner_approved',
+    'owner_rejected',
     'contract_recorded',
     'factory_change_requested',
     'factory_change_approved',
@@ -197,7 +244,9 @@ CREATE TABLE sourcing_case_transitions (
   transitioned_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(sourcing_case_id,sequence),
   CHECK(from_status IS NULL OR from_status IN (
-    'pending_decision',
+    'pending_ie_quote',
+    'pending_management_decision',
+    'pending_owner_approval',
     'pending_contract',
     'pending_finance_reconciliation',
     'pending_factory_change_verification',
@@ -307,11 +356,39 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION guard_sourcing_ie_quote_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  source_case sourcing_cases%ROWTYPE;
+  previous_version integer;
+BEGIN
+  SELECT * INTO source_case FROM sourcing_cases
+  WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
+  SELECT COALESCE(max(quote_version),0) INTO previous_version
+  FROM sourcing_ie_quotes WHERE sourcing_case_id=NEW.sourcing_case_id;
+  IF source_case.sourcing_case_id IS NULL
+    OR sourcing_current_status(NEW.sourcing_case_id)<>'pending_ie_quote'
+    OR NEW.quote_version<>previous_version+1
+    OR NEW.quantity<>source_case.order_quantity THEN
+    RAISE EXCEPTION 'IE quote must price the immutable order quantity in pending IE quote state'
+      USING ERRCODE='23514';
+  END IF;
+  PERFORM sourcing_require_operation_event(
+    NEW.operation_event_id,NEW.request_id,NEW.quoted_by,
+    'sourcing.ie_price.quote','sourcing:price:quote',
+    NEW.sourcing_case_id,NEW.quote_reason
+  );
+  RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION guard_sourcing_decision_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   source_case sourcing_cases%ROWTYPE;
+  current_quote sourcing_ie_quotes%ROWTYPE;
   previous_decision sourcing_decisions%ROWTYPE;
+  previous_owner_decision sourcing_owner_decisions%ROWTYPE;
   source_change sourcing_factory_change_requests%ROWTYPE;
   source_verification sourcing_factory_change_decisions%ROWTYPE;
 BEGIN
@@ -330,16 +407,41 @@ BEGIN
   ORDER BY decision_version DESC
   LIMIT 1;
 
-  IF NEW.source_type='initial' THEN
-    IF sourcing_current_status(NEW.sourcing_case_id)<>'pending_decision'
-      OR previous_decision.sourcing_decision_id IS NOT NULL
-      OR NEW.decision_version<>1 THEN
-      RAISE EXCEPTION 'initial sourcing decision is not valid in the current state'
+  IF NEW.source_type IN ('initial','management_revision') THEN
+    SELECT * INTO current_quote
+    FROM sourcing_ie_quotes
+    WHERE sourcing_case_id=NEW.sourcing_case_id
+    ORDER BY quote_version DESC
+    LIMIT 1;
+    IF sourcing_current_status(NEW.sourcing_case_id)<>'pending_management_decision'
+      OR current_quote.sourcing_ie_quote_id IS NULL
+      OR NEW.source_ie_quote_id<>current_quote.sourcing_ie_quote_id THEN
+      RAISE EXCEPTION 'management decision must reference the current IE quote'
         USING ERRCODE='23514';
+    END IF;
+    IF NEW.source_type='initial' THEN
+      IF previous_decision.sourcing_decision_id IS NOT NULL
+        OR NEW.decision_version<>1
+        OR NEW.supersedes_decision_id IS NOT NULL THEN
+        RAISE EXCEPTION 'first management decision must be version 1'
+          USING ERRCODE='23514';
+      END IF;
+    ELSE
+      SELECT * INTO previous_owner_decision
+      FROM sourcing_owner_decisions
+      WHERE sourcing_decision_id=previous_decision.sourcing_decision_id
+        AND decision='rejected';
+      IF previous_decision.sourcing_decision_id IS NULL
+        OR previous_owner_decision.sourcing_owner_decision_id IS NULL
+        OR NEW.decision_version<>previous_decision.decision_version+1
+        OR NEW.supersedes_decision_id<>previous_decision.sourcing_decision_id THEN
+        RAISE EXCEPTION 'management revision must supersede the owner-rejected decision'
+          USING ERRCODE='23514';
+      END IF;
     END IF;
     PERFORM sourcing_require_operation_event(
       NEW.operation_event_id,NEW.request_id,NEW.decided_by,
-      'sourcing.decision.record','sourcing:decision:record',
+      'sourcing.management_decision.record','sourcing:decision:record',
       NEW.sourcing_case_id,NEW.decision_reason
     );
   ELSE
@@ -381,6 +483,39 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION guard_sourcing_owner_decision_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  current_decision sourcing_decisions%ROWTYPE;
+  required_action text;
+BEGIN
+  PERFORM 1 FROM sourcing_cases
+  WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
+  SELECT * INTO current_decision
+  FROM sourcing_decisions
+  WHERE sourcing_case_id=NEW.sourcing_case_id
+  ORDER BY decision_version DESC
+  LIMIT 1;
+  IF sourcing_current_status(NEW.sourcing_case_id)<>'pending_owner_approval'
+    OR current_decision.sourcing_decision_id IS NULL
+    OR current_decision.source_type='factory_change'
+    OR NEW.sourcing_decision_id<>current_decision.sourcing_decision_id THEN
+    RAISE EXCEPTION 'owner decision must bind the current management decision'
+      USING ERRCODE='23514';
+  END IF;
+  required_action := CASE NEW.decision
+    WHEN 'approved' THEN 'sourcing.owner.approve'
+    ELSE 'sourcing.owner.reject'
+  END;
+  PERFORM sourcing_require_operation_event(
+    NEW.operation_event_id,NEW.request_id,NEW.decided_by,
+    required_action,'sourcing:owner:approve',
+    NEW.sourcing_case_id,NEW.decision_reason
+  );
+  RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION guard_sourcing_contract_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -395,7 +530,15 @@ BEGIN
   LIMIT 1;
   IF sourcing_current_status(NEW.sourcing_case_id)<>'pending_contract'
     OR current_decision.sourcing_decision_id IS NULL
-    OR NEW.sourcing_decision_id<>current_decision.sourcing_decision_id THEN
+    OR NEW.sourcing_decision_id<>current_decision.sourcing_decision_id
+    OR (
+      current_decision.source_type<>'factory_change'
+      AND NOT EXISTS (
+        SELECT 1 FROM sourcing_owner_decisions owner_decision
+        WHERE owner_decision.sourcing_decision_id=current_decision.sourcing_decision_id
+          AND owner_decision.decision='approved'
+      )
+    ) THEN
     RAISE EXCEPTION 'contract must bind the current decision in pending contract state'
       USING ERRCODE='23514';
   END IF;
@@ -564,8 +707,8 @@ BEGIN
 
   IF previous_transition.sourcing_transition_id IS NULL THEN
     IF NEW.sequence<>1 OR NEW.from_status IS NOT NULL
-      OR NEW.to_status<>'pending_decision' OR NEW.business_action<>'created' THEN
-      RAISE EXCEPTION 'first sourcing transition must create a pending decision case'
+      OR NEW.to_status<>'pending_ie_quote' OR NEW.business_action<>'created' THEN
+      RAISE EXCEPTION 'first sourcing transition must create a pending IE quote case'
         USING ERRCODE='23514';
     END IF;
   ELSIF NEW.sequence<>previous_transition.sequence+1
@@ -577,8 +720,11 @@ BEGIN
   SELECT rule.from_status,rule.to_status,rule.event_action,rule.capability
   INTO expected_from,expected_to,expected_event_action,expected_capability
   FROM (VALUES
-    ('created',NULL::text,'pending_decision','sourcing.case.create','sourcing:inquiry:create'),
-    ('decision_recorded','pending_decision','pending_contract','sourcing.decision.record','sourcing:decision:record'),
+    ('created',NULL::text,'pending_ie_quote','sourcing.case.create','sourcing:inquiry:create'),
+    ('ie_price_quoted','pending_ie_quote','pending_management_decision','sourcing.ie_price.quote','sourcing:price:quote'),
+    ('management_decision_recorded','pending_management_decision','pending_owner_approval','sourcing.management_decision.record','sourcing:decision:record'),
+    ('owner_approved','pending_owner_approval','pending_contract','sourcing.owner.approve','sourcing:owner:approve'),
+    ('owner_rejected','pending_owner_approval','pending_management_decision','sourcing.owner.reject','sourcing:owner:approve'),
     ('contract_recorded','pending_contract','pending_finance_reconciliation','sourcing.contract.record','sourcing:contract:record'),
     ('factory_change_requested','pending_finance_reconciliation','pending_factory_change_verification','sourcing.factory_change.request','sourcing:factory_change:request'),
     ('factory_change_approved','pending_factory_change_verification','pending_contract','sourcing.factory_change.approved','sourcing:factory_change:verify'),
@@ -604,11 +750,28 @@ BEGIN
       WHERE source_case.sourcing_case_id=NEW.sourcing_case_id
         AND source_case.operation_event_id=NEW.operation_event_id
     )
-    WHEN 'decision_recorded' THEN EXISTS(
+    WHEN 'ie_price_quoted' THEN EXISTS(
+      SELECT 1 FROM sourcing_ie_quotes quote_row
+      WHERE quote_row.sourcing_case_id=NEW.sourcing_case_id
+        AND quote_row.operation_event_id=NEW.operation_event_id
+    )
+    WHEN 'management_decision_recorded' THEN EXISTS(
       SELECT 1 FROM sourcing_decisions decision_row
       WHERE decision_row.sourcing_case_id=NEW.sourcing_case_id
         AND decision_row.operation_event_id=NEW.operation_event_id
-        AND decision_row.source_type='initial'
+        AND decision_row.source_type IN ('initial','management_revision')
+    )
+    WHEN 'owner_approved' THEN EXISTS(
+      SELECT 1 FROM sourcing_owner_decisions owner_decision
+      WHERE owner_decision.sourcing_case_id=NEW.sourcing_case_id
+        AND owner_decision.operation_event_id=NEW.operation_event_id
+        AND owner_decision.decision='approved'
+    )
+    WHEN 'owner_rejected' THEN EXISTS(
+      SELECT 1 FROM sourcing_owner_decisions owner_decision
+      WHERE owner_decision.sourcing_case_id=NEW.sourcing_case_id
+        AND owner_decision.operation_event_id=NEW.operation_event_id
+        AND owner_decision.decision='rejected'
     )
     WHEN 'contract_recorded' THEN EXISTS(
       SELECT 1 FROM sourcing_contract_executions contract_row
@@ -678,6 +841,7 @@ BEGIN
     WHERE transition_row.sourcing_case_id=NEW.sourcing_case_id
       AND transition_row.sequence=1
       AND transition_row.business_action='created'
+      AND transition_row.to_status='pending_ie_quote'
       AND transition_row.operation_event_id=NEW.operation_event_id
   ) THEN
     RAISE EXCEPTION 'sourcing case requires its audited initial transition'
@@ -690,9 +854,15 @@ $$;
 CREATE TRIGGER sourcing_cases_guard_insert
   BEFORE INSERT ON sourcing_cases FOR EACH ROW
   EXECUTE FUNCTION guard_sourcing_case_insert();
+CREATE TRIGGER sourcing_ie_quotes_guard_insert
+  BEFORE INSERT ON sourcing_ie_quotes FOR EACH ROW
+  EXECUTE FUNCTION guard_sourcing_ie_quote_insert();
 CREATE TRIGGER sourcing_decisions_guard_insert
   BEFORE INSERT ON sourcing_decisions FOR EACH ROW
   EXECUTE FUNCTION guard_sourcing_decision_insert();
+CREATE TRIGGER sourcing_owner_decisions_guard_insert
+  BEFORE INSERT ON sourcing_owner_decisions FOR EACH ROW
+  EXECUTE FUNCTION guard_sourcing_owner_decision_insert();
 CREATE TRIGGER sourcing_contracts_guard_insert
   BEFORE INSERT ON sourcing_contract_executions FOR EACH ROW
   EXECUTE FUNCTION guard_sourcing_contract_insert();
@@ -720,11 +890,25 @@ CREATE TRIGGER sourcing_cases_no_delete BEFORE DELETE ON sourcing_cases
 CREATE TRIGGER sourcing_cases_no_truncate BEFORE TRUNCATE ON sourcing_cases
   FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
+CREATE TRIGGER sourcing_ie_quotes_no_update BEFORE UPDATE ON sourcing_ie_quotes
+  FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sourcing_ie_quotes_no_delete BEFORE DELETE ON sourcing_ie_quotes
+  FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sourcing_ie_quotes_no_truncate BEFORE TRUNCATE ON sourcing_ie_quotes
+  FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+
 CREATE TRIGGER sourcing_decisions_no_update BEFORE UPDATE ON sourcing_decisions
   FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER sourcing_decisions_no_delete BEFORE DELETE ON sourcing_decisions
   FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER sourcing_decisions_no_truncate BEFORE TRUNCATE ON sourcing_decisions
+  FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+
+CREATE TRIGGER sourcing_owner_decisions_no_update BEFORE UPDATE ON sourcing_owner_decisions
+  FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sourcing_owner_decisions_no_delete BEFORE DELETE ON sourcing_owner_decisions
+  FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sourcing_owner_decisions_no_truncate BEFORE TRUNCATE ON sourcing_owner_decisions
   FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 
 CREATE TRIGGER sourcing_contracts_no_update BEFORE UPDATE ON sourcing_contract_executions
