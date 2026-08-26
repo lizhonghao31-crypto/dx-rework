@@ -3,17 +3,26 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("order board Root action layout", () => {
-  it("keeps desktop correction actions in a compact dedicated rightmost column", async () => {
+  it("keeps every desktop field isolated and places all actions in the rightmost column", async () => {
     const [page, styles] = await Promise.all([
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
       readFile("apps/web/src/order-board-page.css", "utf8"),
     ]);
 
-    expect(page.indexOf("{rootControls(row, false)}")).toBeGreaterThan(
+    expect(page.indexOf("{actionControls(row, false)}")).toBeGreaterThan(
       page.indexOf("<span>收货人</span>"),
     );
-    expect(styles).toContain("repeat(7,minmax(72px,1fr)) minmax(74px,auto)");
-    expect(styles).toContain(".order-board-root-actions--desktop{justify-self:end;white-space:nowrap}");
-    expect(styles).toContain(".order-board-root-actions--mobile{display:flex!important;grid-column:1/-1;justify-content:flex-end}");
+    expect(page).not.toContain("{reworkControl(row, false)}");
+    expect(page).toContain("const rework = reworkControl(row, mobile)");
+    expect(styles).toContain("minmax(190px,auto)!important");
+    expect(styles).toContain(".order-board-actions--desktop,.order-board-actions--desktop *{white-space:nowrap}");
+  });
+
+  it("uses four information columns and one compact action row on mobile", async () => {
+    const styles = await readFile("apps/web/src/order-board-page.css", "utf8");
+
+    expect(styles).toContain("grid-template-columns:repeat(4,minmax(0,1fr))!important");
+    expect(styles).toContain(".order-board-row__latest{grid-column:span 2}");
+    expect(styles).toContain(".order-board-actions--mobile{display:flex!important;grid-column:1/-1");
   });
 });

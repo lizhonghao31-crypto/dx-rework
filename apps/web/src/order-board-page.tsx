@@ -174,6 +174,16 @@ export function OrderBoardPage() {
     </div>;
   };
 
+  const actionControls = (row: BoardRow, mobile: boolean) => {
+    const rework = reworkControl(row, mobile);
+    const root = rootControls(row, mobile);
+    if (!rework && !root) return null;
+    return <div className={`order-board-actions order-board-actions--${mobile ? "mobile" : "desktop"}`}>
+      {rework}
+      {root}
+    </div>;
+  };
+
   const submitCorrection = async () => {
     if (!editing || mutationBusy) return;
     if (Number(editDefectiveQuantity) > Number(editActualQuantity)) {
@@ -268,19 +278,17 @@ export function OrderBoardPage() {
               <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
-              {reworkControl(row, false)}
             </div>
           </div>
-          <div><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
-          <div><span>实收</span><strong>{row.actualQuantity}件</strong></div>
-          <div><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
+          <div className="order-board-row__document"><span>收货单</span><strong>{row.documentQuantity}件</strong></div>
+          <div className="order-board-row__actual"><span>实收</span><strong>{row.actualQuantity}件</strong></div>
+          <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
           <div className="order-board-row__difference"><span>差异</span><strong>{signed}件</strong></div>
-          <div><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
-          <div><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
-          <div><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
-          {rootControls(row, false)}
-          {rootControls(row, true)}
-          {reworkControl(row, true)}
+          <div className="order-board-row__count"><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
+          <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
+          <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
+          {actionControls(row, false)}
+          {actionControls(row, true)}
         </Surface>;
       })}
     </div>
