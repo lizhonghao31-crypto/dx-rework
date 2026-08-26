@@ -26,7 +26,7 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(migration).toContain("root_superuser");
     expect(migration).toContain("receiving batch is locked after rework initiation");
     expect(migration).not.toContain("DROP TABLE receiving_receipts");
-    expect(routes).toContain('\"receiving:correct\"');
+    expect(routes).toContain('"receiving:correct"');
     expect(routes).toContain('app.patch<{ Params: { receivingBatchId: string } }>');
     expect(routes).toContain('app.delete<{ Params: { receivingBatchId: string } }>');
     expect(service).toContain("correctBatch");
