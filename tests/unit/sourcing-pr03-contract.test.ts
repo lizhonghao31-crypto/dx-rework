@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import {
+  calculateSourcingTotalExact,
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
 } from "@dx-rework/contracts";
@@ -34,6 +35,7 @@ describe("sourcing PR03 contracts", () => {
       .toEqual({ unitPrice: "12.3456" });
     expect(normalizeSourcingUnitPrice("12.3")).toBe("12.3000");
     expect(calculateSourcingTotal("12.3456", 120)).toBe("1481.47");
+    expect(calculateSourcingTotalExact("176.1933", 54_550)).toBe("9611344.52");
     expect(calculateSourcingTotal("0.0050", 1)).toBe("0.01");
     expect(() => CreateSourcingIeQuoteSchema.parse({ unitPrice: "12.34567" })).toThrow();
     expect(() => calculateSourcingTotal("0.0001", 1)).toThrow(/总额/);
