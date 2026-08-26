@@ -70,6 +70,13 @@
   margin: var(--dx-v2-space-1) 0 0;
 }
 
+.sourcing-shell__entry-note {
+  margin: 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .sourcing-shell__field {
   display: grid;
   gap: var(--dx-v2-space-2);
