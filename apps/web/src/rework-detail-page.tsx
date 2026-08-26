@@ -7,6 +7,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
+import { ImageViewer } from "./image-viewer.js";
 import { OrderImageSupplementUploader } from "./order-image-supplement-uploader.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
@@ -743,7 +744,7 @@ export function ReworkDetailPage({
               <strong>{selectedImage.filename}</strong>
               <button type="button" onClick={() => setSelectedImage(null)}>关闭</button>
             </div>
-            <img src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
+            <ImageViewer src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
             <div className="rework-image-modal__actions">
               {imageAttachments.length > 1 ? <><button type="button" onClick={() => showRelativeImage(-1)}>上一张</button><span>{selectedImageIndex + 1} / {imageAttachments.length}</span><button type="button" onClick={() => showRelativeImage(1)}>下一张</button></> : null}
               <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
