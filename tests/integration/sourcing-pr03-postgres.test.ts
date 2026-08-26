@@ -66,6 +66,7 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
     for (const migration of [
       "0096_sourcing_view_capability.sql",
       "0097_sourcing_foundation.sql",
+      "0098_sourcing_ie_view_grant.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
