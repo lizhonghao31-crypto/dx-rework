@@ -1169,19 +1169,6 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
           "ALTER TABLE rework_process_configurations ENABLE TRIGGER rework_process_configurations_guard_update",
         );
       }
-      await database.query(
-        "ALTER TABLE rework_process_configuration_items DISABLE TRIGGER rework_process_configuration_items_no_delete",
-      );
-      try {
-        await database.query(
-          "DELETE FROM rework_process_configuration_items WHERE configuration_item_id=$1",
-          [tailItem.configurationItemId],
-        );
-      } finally {
-        await database.query(
-          "ALTER TABLE rework_process_configuration_items ENABLE TRIGGER rework_process_configuration_items_no_delete",
-        );
-      }
     }
     await workerPlan.save(
       tailAssign(),
@@ -1190,12 +1177,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         expectedOrderVersion: saved.value.orderVersion,
         configurationId: saved.value.configuration!.configurationId,
         expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
-        assignments: legacy
-          ? [{ configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] }]
-          : [
-            { configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] },
-            { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
-          ],
+        assignments: [
+          { configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] },
+          { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
+        ],
       },
       randomUUID(),
     );
@@ -1231,6 +1216,17 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       completedAt: new Date().toISOString(),
     }), randomUUID());
     const afterWorker = await work.list(tailInspect(), submitted.value.reworkOrderId);
+    const tailTask = started.tasks.find((task) => task.executionKind === "tail_inspection")!;
+    const unifiedWrongTail = await work.submitReport(
+      tailInspect(),
+      tailTask.workTaskId,
+      CreateWorkReportSchema.parse({
+        expectedOrderVersion: afterWorker.orderVersion,
+        actualQuantity: 180,
+        completedAt: new Date().toISOString(),
+      }),
+      randomUUID(),
+    );
     let wrongTailReportId: string;
     let correctionTodoKey: string;
     let waiverVersion: number;
@@ -1286,18 +1282,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       waiverVersion = beforeWaiver.orderVersion;
       correctionTodoKey = `tail-inspection-return:${wrongTailReportId}`;
     } else {
-      const tailTask = started.tasks.find((task) => task.executionKind === "tail_inspection")!;
-      const wrongTail = await work.submitReport(
-        tailInspect(),
-        tailTask.workTaskId,
-        CreateWorkReportSchema.parse({
-          expectedOrderVersion: afterWorker.orderVersion,
-          actualQuantity: 180,
-          completedAt: new Date().toISOString(),
-        }),
-        randomUUID(),
-      );
-      wrongTailReportId = wrongTail.value.workReportId;
+      wrongTailReportId = unifiedWrongTail.value.workReportId;
       const beforeWaiver = await work.list(tailAssign(), submitted.value.reworkOrderId);
       expect(beforeWaiver.reworkStatus).toBe("pending_order_review");
       const rejectedWrongTail = await wholeOrder.rejectReport(
