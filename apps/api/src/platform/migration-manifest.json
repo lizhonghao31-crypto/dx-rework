@@ -100,6 +100,6 @@
     { "version": "0098_tail_default_worker_roster", "checksum": "af2f2c38396edc74d213d3a57385c86c3013739c6cefaacf7c8e0e4145a89864" },
     { "version": "0099_optional_tail_inspection", "checksum": "2074fc010a2de62804ac222042806d3861cbe53ed90a62945c5e90d25c4a8e7d" },
     { "version": "0100_optional_tail_final_quantity_guard", "checksum": "da9d8950149dfc3837c340e82b647e2947e93a44cd2c77d753c4dfd74ea64dc8" },
-    { "version": "0101_optional_tail_n06_guard", "checksum": "7c4318cb87a8b6c6c72cf9b80bf1fd47a849ce02b44004cc8349bfd350714e01" }
+    { "version": "0101_optional_tail_n06_guard", "checksum": "1ccc243d4e85e88edd2a158bf05e196caeddc80e5e59d82decafcc32b032dc50" }
   ]
 }
