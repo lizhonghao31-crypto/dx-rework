@@ -4,6 +4,8 @@ import {
   calculateSourcingTotalExact,
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
+  DecideSourcingOwnerSchema,
+  RecordSourcingManagementDecisionSchema,
 } from "@dx-rework/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -47,14 +49,26 @@ describe("sourcing PR03 contracts", () => {
     expect(() => calculateSourcingTotal("0.0001", 1)).toThrow(/总额/);
   });
 
-  it("keeps PR03 UI limited to inquiry creation and IE quote", async () => {
+  it("validates management adjustments and requires an owner rejection reason", () => {
+    expect(RecordSourcingManagementDecisionSchema.parse({
+      supplierId: "00000000-0000-4000-8000-000000000200",
+      unitPrice: "12.5000",
+      decisionReason: "结合产能调整",
+    })).toMatchObject({ unitPrice: "12.5000" });
+    expect(DecideSourcingOwnerSchema.parse({ decision: "approved" }))
+      .toEqual({ decision: "approved" });
+    expect(() => DecideSourcingOwnerSchema.parse({ decision: "rejected" })).toThrow();
+  });
+
+  it("keeps PR04 UI inside management selection and owner approval", async () => {
     const page = await readFile("apps/web/src/sourcing-shell-page.tsx", "utf8");
     expect(page).toContain("创建并交给 IE");
     expect(page).toContain("确认 IE 价格");
-    expect(page).toContain("系统计算总额");
-    expect(page).toContain("当前由跟单根据正式 ERP 订单人工录入");
-    expect(page).not.toContain("选择供应商");
-    expect(page).not.toContain("提交老板审批");
+    expect(page).toContain("选择加工厂");
+    expect(page).toContain("提交老板终审");
+    expect(page).toContain("驳回时必须填写原因");
     expect(page).not.toContain("登记合同执行");
+    expect(page).not.toContain("中途换厂");
+    expect(page).not.toContain("提交财务核对");
   });
 });

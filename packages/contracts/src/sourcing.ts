@@ -51,6 +51,23 @@ export const CreateSourcingIeQuoteSchema = z.object({
   quoteReason: z.string().trim().max(500).optional(),
 }).strict();
 
+export const RecordSourcingManagementDecisionSchema = z.object({
+  supplierId: IdSchema,
+  unitPrice: MoneyInputSchema,
+  decisionReason: z.string().trim().max(500).optional(),
+}).strict();
+
+export const DecideSourcingOwnerSchema = z.discriminatedUnion("decision", [
+  z.object({
+    decision: z.literal("approved"),
+    decisionReason: z.string().trim().max(500).optional(),
+  }).strict(),
+  z.object({
+    decision: z.literal("rejected"),
+    decisionReason: z.string().trim().min(1, "驳回原因不能为空").max(500),
+  }).strict(),
+]);
+
 export const SourcingIeQuoteSchema = z.object({
   sourcingIeQuoteId: IdSchema,
   quoteVersion: z.number().int().positive(),
@@ -60,6 +77,42 @@ export const SourcingIeQuoteSchema = z.object({
   quoteReason: z.string(),
   quotedBy: IdSchema,
   quotedAt: z.string().datetime(),
+}).strict();
+
+export const SourcingFactorySchema = z.object({
+  supplierId: IdSchema,
+  supplierCode: z.string(),
+  supplierName: z.string(),
+}).strict();
+
+export const SourcingFactoryListResponseSchema = z.object({
+  items: z.array(SourcingFactorySchema),
+}).strict();
+
+export const SourcingDecisionSchema = z.object({
+  sourcingDecisionId: IdSchema,
+  decisionVersion: z.number().int().positive(),
+  sourceType: z.enum(["initial", "management_revision", "factory_change"]),
+  sourceIeQuoteId: IdSchema.nullable(),
+  supersedesDecisionId: IdSchema.nullable(),
+  supplierId: IdSchema,
+  supplierCode: z.string(),
+  supplierName: z.string(),
+  unitPrice: z.string(),
+  quantity: z.number().int().positive(),
+  totalAmount: z.string(),
+  decisionReason: z.string(),
+  decidedBy: IdSchema,
+  decidedAt: z.string().datetime(),
+}).strict();
+
+export const SourcingOwnerDecisionSchema = z.object({
+  sourcingOwnerDecisionId: IdSchema,
+  sourcingDecisionId: IdSchema,
+  decision: z.enum(["approved", "rejected"]),
+  decisionReason: z.string(),
+  decidedBy: IdSchema,
+  decidedAt: z.string().datetime(),
 }).strict();
 
 export const SourcingCaseSummarySchema = z.object({
@@ -75,6 +128,8 @@ export const SourcingCaseSummarySchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   ieQuote: SourcingIeQuoteSchema.nullable(),
+  decision: SourcingDecisionSchema.nullable(),
+  ownerDecision: SourcingOwnerDecisionSchema.nullable(),
 }).strict();
 
 export const SourcingCaseListResponseSchema = z.object({
@@ -83,6 +138,14 @@ export const SourcingCaseListResponseSchema = z.object({
 
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
 export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
+export type RecordSourcingManagementDecision = z.infer<
+  typeof RecordSourcingManagementDecisionSchema
+>;
+export type DecideSourcingOwner = z.infer<typeof DecideSourcingOwnerSchema>;
+export type SourcingFactory = z.infer<typeof SourcingFactorySchema>;
+export type SourcingFactoryListResponse = z.infer<typeof SourcingFactoryListResponseSchema>;
+export type SourcingDecision = z.infer<typeof SourcingDecisionSchema>;
+export type SourcingOwnerDecision = z.infer<typeof SourcingOwnerDecisionSchema>;
 export type SourcingCaseStatus = z.infer<typeof SourcingCaseStatusSchema>;
 export type SourcingIeQuote = z.infer<typeof SourcingIeQuoteSchema>;
 export type SourcingCaseSummary = z.infer<typeof SourcingCaseSummarySchema>;

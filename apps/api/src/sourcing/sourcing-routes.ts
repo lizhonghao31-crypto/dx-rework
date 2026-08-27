@@ -1,6 +1,8 @@
 import {
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
+  DecideSourcingOwnerSchema,
+  RecordSourcingManagementDecisionSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -61,8 +63,12 @@ export function registerSourcingRoutes(
 
   const actionActor = async (
     request: FastifyRequest,
-    role: "order_merchandiser" | "ie_reviewer",
-    capability: "sourcing:inquiry:create" | "sourcing:price:quote",
+    role: "order_merchandiser" | "ie_reviewer" | "production_management" | "owner_group",
+    capability:
+      | "sourcing:inquiry:create"
+      | "sourcing:price:quote"
+      | "sourcing:decision:record"
+      | "sourcing:owner:approve",
   ) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
@@ -79,6 +85,9 @@ export function registerSourcingRoutes(
       root ? role : undefined,
     );
   };
+
+  app.get("/sourcing/factories", async (request) =>
+    dependencies.service.listFactories(await readActor(request)));
 
   app.get<{ Querystring: { q?: string } }>("/sourcing/cases", async (request) => {
     if (request.query.q !== undefined && typeof request.query.q !== "string") {
@@ -118,4 +127,45 @@ export function registerSourcingRoutes(
       return reply.code(201).send(result.value);
     },
   );
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/management-decisions",
+    async (request, reply) => {
+      const parsed = RecordSourcingManagementDecisionSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "生产管理决定信息不完整");
+      const result = await dependencies.service.recordManagementDecision(
+        await actionActor(
+          request,
+          "production_management",
+          "sourcing:decision:record",
+        ),
+        caseId(request.params.sourcingCaseId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/owner-decisions",
+    async (request, reply) => {
+      const parsed = DecideSourcingOwnerSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "老板审批信息不完整");
+      const result = await dependencies.service.decideOwner(
+        await actionActor(request, "owner_group", "sourcing:owner:approve"),
+        caseId(request.params.sourcingCaseId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
 }

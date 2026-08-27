@@ -31,6 +31,8 @@ const caseSummary: SourcingCaseSummary = {
   createdAt: "2026-08-26T00:00:00.000Z",
   updatedAt: "2026-08-26T00:00:00.000Z",
   ieQuote: null,
+  decision: null,
+  ownerDecision: null,
 };
 
 const apps: FastifyInstance[] = [];
@@ -43,6 +45,13 @@ const create = (
 ) => {
   const service = {
     listCases: vi.fn(async () => ({ items: [caseSummary] })),
+    listFactories: vi.fn(async () => ({
+      items: [{
+        supplierId: "00000000-0000-4000-8000-000000000200",
+        supplierCode: "FAC-01",
+        supplierName: "一号加工厂",
+      }],
+    })),
     createCase: vi.fn(async () => ({ value: caseSummary, reused: false })),
     quoteIePrice: vi.fn(async () => ({
       value: {
@@ -60,6 +69,14 @@ const create = (
           quotedAt: "2026-08-26T00:01:00.000Z",
         },
       },
+      reused: false,
+    })),
+    recordManagementDecision: vi.fn(async () => ({
+      value: { ...caseSummary, status: "pending_owner_approval" as const, version: 3 },
+      reused: false,
+    })),
+    decideOwner: vi.fn(async () => ({
+      value: { ...caseSummary, status: "pending_contract" as const, version: 4 },
       reused: false,
     })),
   };
@@ -229,6 +246,38 @@ describe("sourcing PR03 routes", () => {
       actorRoles: ["root_superuser", "ie_reviewer"],
       authorizationCapability: "sourcing:price:quote",
     }));
+
+    expect((await app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/management-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "root-management",
+      },
+      payload: {
+        supplierId: "00000000-0000-4000-8000-000000000200",
+        unitPrice: "8.5",
+      },
+    })).statusCode).toBe(201);
+    expect(service.recordManagementDecision.mock.calls[0]?.[0])
+      .toEqual(expect.objectContaining({
+        actorRoles: ["root_superuser", "production_management"],
+        authorizationCapability: "sourcing:decision:record",
+      }));
+
+    expect((await app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/owner-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "root-owner",
+      },
+      payload: { decision: "approved" },
+    })).statusCode).toBe(201);
+    expect(service.decideOwner.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      actorRoles: ["root_superuser", "owner_group"],
+      authorizationCapability: "sourcing:owner:approve",
+    }));
   });
 
   it("rejects malformed amount, quantity and missing idempotency key before service writes", async () => {
@@ -255,4 +304,81 @@ describe("sourcing PR03 routes", () => {
     })).statusCode).toBe(400);
     expect(ie.service.quoteIePrice).not.toHaveBeenCalled();
   });
+
+  it("enforces production-management and owner roles for the approval chain", async () => {
+    const manager = create(
+      ["sourcing:view", "sourcing:decision:record"],
+      ["production_management"],
+    );
+    expect((await manager.app.inject({
+      method: "GET",
+      url: "/sourcing/factories",
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(200);
+    const decided = await manager.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/management-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "x-request-id": "management-1",
+        "idempotency-key": "management-key-1",
+      },
+      payload: {
+        supplierId: "00000000-0000-4000-8000-000000000200",
+        unitPrice: "12.5000",
+        decisionReason: "结合工厂产能调整",
+      },
+    });
+    expect(decided.statusCode).toBe(201);
+    expect(manager.service.recordManagementDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["production_management"],
+        authorizationCapability: "sourcing:decision:record",
+      }),
+      caseSummary.sourcingCaseId,
+      {
+        supplierId: "00000000-0000-4000-8000-000000000200",
+        unitPrice: "12.5000",
+        decisionReason: "结合工厂产能调整",
+      },
+      "management-key-1",
+    );
+
+    const owner = create(
+      ["sourcing:view", "sourcing:owner:approve"],
+      ["owner_group"],
+    );
+    const rejected = await owner.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/owner-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "owner-key-1",
+      },
+      payload: { decision: "rejected", decisionReason: "请重新核对价格" },
+    });
+    expect(rejected.statusCode).toBe(201);
+    expect(owner.service.decideOwner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["owner_group"],
+        authorizationCapability: "sourcing:owner:approve",
+      }),
+      caseSummary.sourcingCaseId,
+      { decision: "rejected", decisionReason: "请重新核对价格" },
+      "owner-key-1",
+    );
+
+    const ie = create(["sourcing:view", "sourcing:price:quote"], ["ie_reviewer"]);
+    expect((await ie.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/owner-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "forbidden-owner",
+      },
+      payload: { decision: "approved" },
+    })).statusCode).toBe(403);
+    expect(ie.service.decideOwner).not.toHaveBeenCalled();
+  });
+
 });

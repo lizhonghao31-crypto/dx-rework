@@ -268,3 +268,60 @@
     font-size: 16px;
   }
 }
+
+.sourcing-case__decision,
+.sourcing-case__owner {
+  display: grid;
+  gap: var(--dx-v2-space-3);
+  padding: var(--dx-v2-space-3);
+  border: 1px solid var(--dx-v2-color-border, #d8dde6);
+  border-radius: var(--dx-v2-radius-md, 10px);
+  background: var(--dx-v2-color-surface-muted, #f5f6f8);
+}
+
+.sourcing-case__decision {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sourcing-case__decision .sourcing-case__reason,
+.sourcing-case__decision .sourcing-case__rejection,
+.sourcing-case__decision .dx-button {
+  grid-column: 1 / -1;
+}
+
+.sourcing-case__rejection {
+  margin: 0;
+  color: var(--color-danger, #a12b2b);
+  font-weight: 600;
+}
+
+.sourcing-case__owner p {
+  margin: 0;
+}
+
+.sourcing-case__owner-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-shell__field select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--dx-v2-color-border, #d8dde6);
+  border-radius: var(--dx-v2-radius-md, 10px);
+  background: var(--dx-v2-color-surface, #fff);
+  color: var(--dx-v2-color-text);
+  padding: 0 var(--dx-v2-space-3);
+}
+
+@media (max-width: 720px) {
+  .sourcing-case__decision {
+    grid-template-columns: 1fr;
+  }
+
+  .sourcing-case__owner-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
