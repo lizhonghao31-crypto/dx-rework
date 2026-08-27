@@ -8,6 +8,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../../url-contract.js";
+import { createClientRequestId } from "../client-request-id.js";
 import { confirmInApp } from "../system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -72,7 +73,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
     const path = `wage-periods/${period.periodId}/lock`;
     const body = { expectedVersion: period.periodVersion, lockNote: null };
     const signature = `${path}:${JSON.stringify(body)}`;
-    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
+    const idempotencyKey = pendingMutationKeys.current[signature] ?? createClientRequestId();
     pendingMutationKeys.current[signature] = idempotencyKey;
     setBusy(true);
     setMessage("");

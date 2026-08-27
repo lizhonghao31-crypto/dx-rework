@@ -3,6 +3,7 @@ import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-r
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
@@ -788,7 +789,7 @@ function InitiationFollowUpActions({
         headers: {
           accept: "application/json",
           "content-type": "application/json",
-          "idempotency-key": crypto.randomUUID(),
+          "idempotency-key": createClientRequestId(),
         },
         body: JSON.stringify({ expectedVersion: detail.version, reason: reason.trim() }),
       });

@@ -7,6 +7,8 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 import type { z } from "zod";
 
+import { createClientRequestId } from "./client-request-id.js";
+
 type CheckResult = z.infer<typeof InspectionCheckResultSchema>;
 type ReportChange = (report: InspectionReportDraft) => void;
 
@@ -20,7 +22,7 @@ const today = (): string => {
 };
 
 const newSample = (index: number): InspectionSizeSample => ({
-  sampleId: crypto.randomUUID(),
+  sampleId: createClientRequestId(),
   sizeLabel: "M",
   sampleLabel: `第 ${index} 件`,
   measurements: DEFAULT_MEASUREMENT_PARTS.map((partName) => ({
@@ -58,7 +60,7 @@ export const createEmptyInspectionReport = (): InspectionReportDraft => ({
     productMarking: null,
   },
   issues: [{
-    issueId: crypto.randomUUID(),
+    issueId: createClientRequestId(),
     category: null,
     description: null,
     majorCount: 0,
@@ -417,7 +419,7 @@ export function InspectionReportStepThree({ report, disabled, onChange }: { repo
           ))}
         </div>
         <div className="inspection-issue-total"><span>合计</span><strong>严重 {totalMajor} 件</strong><strong>轻微 {totalMinor} 件</strong></div>
-        {!disabled ? <Button onClick={() => onChange({ ...report, issues: [...report.issues, { issueId: crypto.randomUUID(), category: null, description: null, majorCount: 0, minorCount: 0 }] })}>新增问题</Button> : null}
+        {!disabled ? <Button onClick={() => onChange({ ...report, issues: [...report.issues, { issueId: createClientRequestId(), category: null, description: null, majorCount: 0, minorCount: 0 }] })}>新增问题</Button> : null}
       </Surface>
       <Surface className="inspection-section">
         <div className="section-title"><div><h2>结论与签名</h2><p>验货结果固定为返工；查货人由系统记录当前操作人。</p></div><StatusBadge tone="warning">返工</StatusBadge></div>

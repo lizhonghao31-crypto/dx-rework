@@ -9,6 +9,7 @@ import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
 import "./sourcing-shell.css";
 
@@ -157,7 +158,7 @@ export function SourcingShellPage() {
     }
     setBusyAction("create");
     setMessage("正在创建询价…");
-    createKey.current ??= window.crypto.randomUUID();
+    createKey.current ??= createClientRequestId();
     try {
       await requestJson<SourcingCaseSummary>("sourcing/cases", {
         method: "POST",
@@ -211,7 +212,7 @@ export function SourcingShellPage() {
     setMessage(`正在提交 ${item.erpOrderNo} 的 IE 价格…`);
     let key = quoteKeys.current.get(item.sourcingCaseId);
     if (!key) {
-      key = window.crypto.randomUUID();
+      key = createClientRequestId();
       quoteKeys.current.set(item.sourcingCaseId, key);
     }
     try {
@@ -277,7 +278,7 @@ export function SourcingShellPage() {
     setBusyAction(`management-${item.sourcingCaseId}`);
     let key = decisionKeys.current.get(item.sourcingCaseId);
     if (!key) {
-      key = window.crypto.randomUUID();
+      key = createClientRequestId();
       decisionKeys.current.set(item.sourcingCaseId, key);
     }
     try {
@@ -318,7 +319,7 @@ export function SourcingShellPage() {
     const keyScope = `${item.sourcingCaseId}:${decision}`;
     let key = ownerKeys.current.get(keyScope);
     if (!key) {
-      key = window.crypto.randomUUID();
+      key = createClientRequestId();
       ownerKeys.current.set(keyScope, key);
     }
     try {

@@ -12,6 +12,7 @@ import {
 import { DeleteReworkOrderResponseSchema } from "@dx-rework/contracts";
 
 import { createWebUrls } from "../../url-contract.js";
+import { createClientRequestId } from "../client-request-id.js";
 import { shanghaiBusinessDate } from "../business-date.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -62,7 +63,7 @@ export const deleteReworkOrder = async (reworkOrderId: string): Promise<void> =>
     credentials: "include",
     headers: {
       accept: "application/json",
-      "idempotency-key": `root-delete-${crypto.randomUUID()}`,
+      "idempotency-key": `root-delete-${createClientRequestId()}`,
     },
   });
   if (!response.ok) {

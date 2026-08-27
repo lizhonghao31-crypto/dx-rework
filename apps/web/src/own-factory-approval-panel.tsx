@@ -6,6 +6,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./own-factory-approval.css";
 
@@ -132,7 +133,7 @@ export function OwnFactoryApprovalPanel({
         decision,
         body,
       });
-      const idempotencyKey = pendingDecisionKeys.current[signature] ?? crypto.randomUUID();
+      const idempotencyKey = pendingDecisionKeys.current[signature] ?? createClientRequestId();
       pendingDecisionKeys.current[signature] = idempotencyKey;
       const response = await fetch(
         apiUrl(`own-factory-approvals/${approval.approvalId}/${decision === "approved" ? "approve" : "reject"}`),

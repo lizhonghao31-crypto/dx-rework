@@ -6,6 +6,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./tail-inspection-panel.css";
 
@@ -114,7 +115,7 @@ export function TailInspectionPanel({
         TailInspectionResponseSchema.parse,
         {
           method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
+          headers: { "idempotency-key": createClientRequestId() },
           body: JSON.stringify({
             returnedQuantity: Number(returned),
             items: items.map(({ configurationItemId, inspectedQuantity }) => ({ configurationItemId, inspectedQuantity })),

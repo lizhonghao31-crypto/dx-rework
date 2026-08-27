@@ -10,6 +10,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./process-configuration-form.css";
@@ -161,7 +162,7 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
   };
   const mutationKey = (signature: string): string => {
     const existing = pendingMutationKeys.current[signature]; if (existing) return existing;
-    const next = crypto.randomUUID(); pendingMutationKeys.current[signature] = next; return next;
+    const next = createClientRequestId(); pendingMutationKeys.current[signature] = next; return next;
   };
   const persistCurrentDraft = async (): Promise<ProcessConfigurationResponse> => {
     if (!response || !editable) throw new Error("当前返工单不能保存工序配置。");
@@ -187,7 +188,7 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
       if (!attempt) {
         const saved = await persistCurrentDraft(); const savedConfiguration = saved.configuration;
         if (!savedConfiguration || savedConfiguration.status !== "draft") throw new Error("配置草稿保存后状态异常，请刷新后重试。");
-        attempt = { reworkOrderId: saved.reworkOrderId, body: { expectedOrderVersion: saved.orderVersion, expectedConfigurationVersion: savedConfiguration.configurationVersion, tailInspectors: tailInspectors.map((inspector) => ({ userId: inspector.userId, ...(inspector.boxScope.trim() ? { boxScope: inspector.boxScope.trim() } : {}) })) }, key: crypto.randomUUID() };
+        attempt = { reworkOrderId: saved.reworkOrderId, body: { expectedOrderVersion: saved.orderVersion, expectedConfigurationVersion: savedConfiguration.configurationVersion, tailInspectors: tailInspectors.map((inspector) => ({ userId: inspector.userId, ...(inspector.boxScope.trim() ? { boxScope: inspector.boxScope.trim() } : {}) })) }, key: createClientRequestId() };
         pendingSubmit.current = attempt;
       }
       const submitted = await request("rework-orders/" + attempt.reworkOrderId + "/process-configuration/submit", ProcessConfigurationResponseSchema, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(attempt.body) });

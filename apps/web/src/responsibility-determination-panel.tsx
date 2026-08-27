@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { verifySession } from "./auth.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -227,7 +228,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   }));
   const write = async (action: string, path: string, payload: unknown): Promise<ResponsibilityDeterminationResponse> => {
     const signature = `${action}:${path}:${JSON.stringify(payload)}`;
-    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
+    const idempotencyKey = pendingMutationKeys.current[signature] ?? createClientRequestId();
     pendingMutationKeys.current[signature] = idempotencyKey;
     const next = await request(path, {
       method: "POST",

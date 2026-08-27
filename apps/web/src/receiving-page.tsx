@@ -2,6 +2,7 @@ import { Button, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import {
   isImageAttachment,
   isReceivingImageCandidate,
@@ -221,7 +222,7 @@ export function ReceivingPage() {
         return attachmentId;
       });
 
-      const key = pendingKey.current ?? crypto.randomUUID();
+      const key = pendingKey.current ?? createClientRequestId();
       pendingKey.current = key;
       const response = await fetch(apiUrl("receiving/receipts"), {
         method: "POST",

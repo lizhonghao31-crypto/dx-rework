@@ -6,6 +6,7 @@ import {
 import { useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import {
   currentQcUploadConcurrency,
   isImageAttachment,
@@ -120,7 +121,7 @@ export function OrderImageSupplementUploader({
         { parse: (value: unknown) => value },
         {
           method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
+          headers: { "idempotency-key": createClientRequestId() },
           body: JSON.stringify({ expectedVersion, attachmentIds }),
         },
       );
