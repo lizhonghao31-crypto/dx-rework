@@ -65,7 +65,7 @@ describe("thin platform module routing", () => {
     expect(shouldRedirectLegacyLandingToPlatformHome(reworkOnly, "/ui/my-tasks", "", null)).toBe(false);
   });
 
-  it("marks the rework card with explicit module intent without changing sourcing", () => {
+  it("marks rework intent while keeping the official sourcing entry direct", () => {
     const dual = user(["production_management"], ["todo:view", "sourcing:view"]);
     const modules = accessiblePlatformModules(dual);
     const rework = modules.find((module) => module.id === "rework");
