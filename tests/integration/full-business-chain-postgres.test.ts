@@ -1198,23 +1198,39 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const beforeWaiver = await work.list(tailAssign(), submitted.value.reworkOrderId);
     expect(beforeWaiver.reworkStatus).toBe("pending_order_review");
 
+    const rejectedWrongTail = await wholeOrder.rejectReport(
+      tailAudit(),
+      wrongTail.value.workReportId,
+      {
+        expectedOrderVersion: beforeWaiver.orderVersion,
+        rejectedPersonId: tailPersonId,
+        reason: "尾查工序配置错误，该报数无需重报",
+      },
+      randomUUID(),
+    );
+    expect(rejectedWrongTail.value.reworkStatus).toBe("in_progress");
+    expect((await database.query<{ status: string }>(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [`work-report-return:${wrongTail.value.workReportId}`],
+    )).rows[0]).toEqual({ status: "pending" });
+
     await expect(initiation.waiveTailInspection(
       actor(ids.qc, ["quality_control"], "tail_inspection:waive"),
       submitted.value.reworkOrderId,
-      { expectedVersion: beforeWaiver.orderVersion, reason: "权限验证" },
+      { expectedVersion: rejectedWrongTail.value.orderVersion, reason: "权限验证" },
       randomUUID(),
     )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
 
     const waived = await initiation.waiveTailInspection(
       actor(ids.ownerOne, ["owner_group"], "tail_inspection:waive"),
       submitted.value.reworkOrderId,
-      { expectedVersion: beforeWaiver.orderVersion, reason: "工序实际无需尾查，原尾查数上报错误" },
+      { expectedVersion: rejectedWrongTail.value.orderVersion, reason: "工序实际无需尾查，原尾查数上报错误" },
       randomUUID(),
     );
     expect(waived.value).toMatchObject({
       status: "pending_order_review",
       tailInspectionRequired: false,
-      version: beforeWaiver.orderVersion + 1,
+      version: rejectedWrongTail.value.orderVersion + 1,
     });
     expect((await database.query(
       `SELECT report.work_report_id,task.status,
@@ -1229,6 +1245,17 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "superseded",
       rejected: true,
     }]);
+    expect((await database.query<{ status: string }>(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [`work-report-return:${wrongTail.value.workReportId}`],
+    )).rows[0]).toEqual({ status: "cancelled" });
+    expect((await database.query<{ source_action: string; status: string }>(
+      "SELECT source_action,status FROM rework_todos WHERE dedupe_key=$1",
+      [`whole-order-review:${submitted.value.reworkOrderId}:${waived.value.version}`],
+    )).rows[0]).toEqual({
+      source_action: "rework.tail_inspection.waive",
+      status: "pending",
+    });
 
     const reviewView = await wholeOrder.get(tailAudit(), submitted.value.reworkOrderId);
     expect(reviewView).toMatchObject({

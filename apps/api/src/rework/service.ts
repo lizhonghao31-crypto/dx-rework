@@ -484,6 +484,16 @@ export class ReworkInitiationService {
            FOR UPDATE OF report`,
           [reworkOrderId],
         );
+        const unifiedTailReportIds = await client.query<{ work_report_id: string }>(
+          `SELECT report.work_report_id
+           FROM rework_work_reports report
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=report.configuration_item_id
+           WHERE report.rework_order_id=$1
+             AND item.execution_kind='tail_inspection'
+           ORDER BY report.work_report_id`,
+          [reworkOrderId],
+        );
         const tailTasks = await client.query<{ work_task_id: string }>(
           `SELECT task.work_task_id
            FROM rework_work_tasks task
@@ -501,6 +511,13 @@ export class ReworkInitiationService {
            WHERE rework_order_id=$1 AND status='submitted'
            ORDER BY tail_inspection_report_id
            FOR UPDATE`,
+          [reworkOrderId],
+        );
+        const legacyTailReportIds = await client.query<{ tail_inspection_report_id: string }>(
+          `SELECT tail_inspection_report_id
+           FROM rework_tail_inspection_reports
+           WHERE rework_order_id=$1
+           ORDER BY tail_inspection_report_id`,
           [reworkOrderId],
         );
         const legacyAssignments = await client.query<{ tail_inspection_assignment_id: string }>(
@@ -627,15 +644,32 @@ export class ReworkInitiationService {
         await this.todos?.cancelOpenByDedupePrefix(
           client, actor, `tail-inspection:${reworkOrderId}:`, todoReason,
         );
-        for (const report of legacyReports.rows) {
+        for (const report of legacyTailReportIds.rows) {
           await this.todos?.cancelOpenByDedupeKey(
             client, actor, `tail-inspection-return:${report.tail_inspection_report_id}`, todoReason,
           );
         }
-        if (nextStatus === "in_progress") {
-          await this.todos?.cancelOpenByDedupePrefix(
-            client, actor, `whole-order-review:${reworkOrderId}:`, todoReason,
+        for (const report of unifiedTailReportIds.rows) {
+          await this.todos?.cancelOpenByDedupeKey(
+            client, actor, `work-report-return:${report.work_report_id}`, todoReason,
           );
+        }
+        await this.todos?.cancelOpenByDedupePrefix(
+          client, actor, `whole-order-review:${reworkOrderId}:`, todoReason,
+        );
+        if (nextStatus === "pending_order_review") {
+          await this.todos?.actionableForUniqueDirectRole(client, actor, {
+            category: "whole_order_review",
+            sourceEventId: eventId,
+            sourceAction: "rework.tail_inspection.waive",
+            entityType: "rework_order",
+            entityId: reworkOrderId,
+            requiredRole: "tail_supervisor",
+            requiredCapability: "submission:audit",
+            route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "whole_order_review" },
+            policyKey: "general",
+            dedupeKey: `whole-order-review:${reworkOrderId}:${nextVersion}`,
+          });
         }
         return this.getAccessibleWithClient(client, reworkOrderId);
       },
