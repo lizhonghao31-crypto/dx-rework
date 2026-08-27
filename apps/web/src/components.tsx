@@ -297,7 +297,7 @@ export function Shell({
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
-  const systemManagementAccess = auditAccess || technicalAdminAccess || canManageEmployeeAccess
+  const systemManagementAccess = auditAccess || technicalAdminAccess
     || isRoot || isOwner || hasCapability("master_data:manage");
 
   const globalNavigation: NavigationEntry[] = [];
