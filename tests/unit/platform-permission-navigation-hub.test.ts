@@ -43,6 +43,8 @@ describe("platform permission and desktop navigation hub", () => {
     expect(employeeAccess).toContain('aria-label="业务模块"');
     expect(systemNavigation).toContain(">人员与权限</a>");
     expect(css).toContain(".desktop-navigation__group");
+    expect(css).toContain("color: var(--dx-v2-color-surface);");
+    expect(css).toContain(".desktop-navigation__group > summary:hover small");
     expect(css).toContain("var(--dx-v2-");
   });
 });
