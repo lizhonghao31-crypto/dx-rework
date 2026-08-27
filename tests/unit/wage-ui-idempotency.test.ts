@@ -8,7 +8,7 @@ describe("N11 wage UI retry safety", () => {
     const source = await read("apps/web/src/wages/wage-period-detail.tsx");
 
     expect(source).toContain("pendingMutationKeys = useRef<Record<string, string>>({})");
-    expect(source).toContain("pendingMutationKeys.current[signature] ?? crypto.randomUUID()");
+    expect(source).toContain("pendingMutationKeys.current[signature] ?? createClientRequestId()");
     expect(source).toContain('"idempotency-key": idempotencyKey');
     expect(source).toContain("delete pendingMutationKeys.current[signature]");
     expect(source).not.toContain('"idempotency-key": crypto.randomUUID()');

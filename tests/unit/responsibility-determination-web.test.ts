@@ -34,7 +34,7 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("responsibility-determinations/supplier-options");
     expect(source).toContain("responsibility-owner-signature/${decision}");
     expect(source).toContain(
-      "pendingMutationKeys.current[signature] ?? crypto.randomUUID()",
+      "pendingMutationKeys.current[signature] ?? createClientRequestId()",
     );
     expect(source).toContain('"idempotency-key": idempotencyKey');
     expect(source).toContain("提交责任判定");
