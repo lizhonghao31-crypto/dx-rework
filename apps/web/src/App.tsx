@@ -42,7 +42,7 @@ import {
   shouldRedirectLegacyLandingToPlatformHome,
 } from "./platform-modules.js";
 import { PlatformHomePage } from "./platform-home-page.js";
-import { SourcingShellPage } from "./sourcing-shell-page.js";
+import { SourcingWorkspacePage } from "./sourcing-workspace-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -155,7 +155,7 @@ function rememberReworkModule(): void {
 function skipsInitialPlatformEntryCheck(path: string): boolean {
   return path === "/"
     || path === "/ui/home"
-    || path === "/ui/sourcing"
+    || path.startsWith("/ui/sourcing")
     || path.startsWith("/auth/");
 }
 
@@ -270,9 +270,13 @@ export function App() {
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
+  const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/home") page = <PlatformHomePage />;
-  else if (path === "/ui/sourcing") page = <SourcingShellPage />;
+  else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
+  else if (path === "/ui/sourcing/create") page = <SourcingWorkspacePage view="create" />;
+  else if (path === "/ui/sourcing/history") page = <SourcingWorkspacePage view="history" />;
+  else if (sourcingOrderMatch?.[1]) page = <SourcingWorkspacePage view="detail" sourcingCaseId={sourcingOrderMatch[1]} />;
   else if (path === "/ui/admin" || path === "/ui/audit") {
     const requestedTab = new URLSearchParams(search).get("tab");
     const adminTab = requestedTab === "attachments" || requestedTab === "delegations" || requestedTab === "exceptions"
@@ -310,7 +314,7 @@ export function App() {
   const owner = { requiredRole: "owner_group" } as const;
 
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
-  if (path === "/ui/sourcing") {
+  if (path.startsWith("/ui/sourcing")) {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredCapability: "sourcing:view" },
