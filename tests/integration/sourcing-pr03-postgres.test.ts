@@ -98,19 +98,34 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     );
     await database.query(`
       ALTER TABLE supplier_catalog_items
-        DISABLE TRIGGER supplier_catalog_items_require_initial_version;
+        DISABLE TRIGGER supplier_catalog_items_require_initial_version
+    `);
+    await database.query(`
       ALTER TABLE supplier_catalog_versions
-        DISABLE TRIGGER supplier_catalog_versions_guard_creation;
-      INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
-      VALUES($1,'FAC-01','factory');
-      INSERT INTO supplier_catalog_versions(
-        supplier_id,version,supplier_name,active,change_reason,changed_by
-      ) VALUES($1,1,'一号加工厂',true,'测试夹具',$2);
-      ALTER TABLE supplier_catalog_versions
-        ENABLE TRIGGER supplier_catalog_versions_guard_creation;
-      ALTER TABLE supplier_catalog_items
-        ENABLE TRIGGER supplier_catalog_items_require_initial_version;
-    `, [factoryId, managerId]);
+        DISABLE TRIGGER supplier_catalog_versions_guard_creation
+    `);
+    try {
+      await database.query(
+        `INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
+         VALUES($1,'FAC-01','factory')`,
+        [factoryId],
+      );
+      await database.query(
+        `INSERT INTO supplier_catalog_versions(
+           supplier_id,version,supplier_name,active,change_reason,changed_by
+         ) VALUES($1,1,'一号加工厂',true,'测试夹具',$2)`,
+        [factoryId, managerId],
+      );
+    } finally {
+      await database.query(`
+        ALTER TABLE supplier_catalog_versions
+          ENABLE TRIGGER supplier_catalog_versions_guard_creation
+      `);
+      await database.query(`
+        ALTER TABLE supplier_catalog_items
+          ENABLE TRIGGER supplier_catalog_items_require_initial_version
+      `);
+    }
   });
 
   afterAll(async () => {

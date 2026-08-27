@@ -73,7 +73,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              apps/api/src/rework/*|apps/api/src/wages/*|apps/api/src/todos/*|apps/api/src/reporting/*|packages/contracts/src/wages.ts|packages/contracts/src/todo-presentation.ts|tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/run-business-chain-gate.mjs)
+              apps/api/src/rework/*|apps/api/src/wages/*|apps/api/src/todos/*|apps/api/src/reporting/*|apps/api/src/sourcing/*|packages/contracts/src/wages.ts|packages/contracts/src/todo-presentation.ts|packages/contracts/src/sourcing.ts|tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|tests/integration/sourcing-*-postgres.test.ts|scripts/run-business-chain-gate.mjs)
                 business_chain_sensitive=true
                 ;;
             esac
