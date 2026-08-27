@@ -21,6 +21,7 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   own_factory_approval: "查看历史本厂审批",
   external_responsibility_detail: "记录供应商实际扣款",
   wage_period_detail: "核对返工工资",
+  sourcing_detail: "处理报价选厂订单",
 };
 
 const taskTitle = (todo: TodoResponse): string =>
@@ -49,6 +50,9 @@ const categoryLabel = (todo: TodoResponse): string => {
     external_supplier_selection: "历史供应商选择",
     external_responsibility: "供应商实际扣款",
     wage_review: "返工工资核对",
+    sourcing_ie_quote: "IE 给价",
+    sourcing_management_decision: "生产管理调价选厂",
+    sourcing_owner_approval: "老板最终审批",
   };
   return labels[todo.category] ?? taskTitle(todo);
 };
@@ -69,6 +73,9 @@ const todoHref = (todo: TodoResponse): string => {
       break;
     case "wage_period_detail":
       target = `ui/wages/${route.entityId}`;
+      break;
+    case "sourcing_detail":
+      target = `ui/sourcing/orders/${route.entityId}`;
       break;
     case "responsibility_detail":
     case "own_factory_approval":
@@ -172,11 +179,13 @@ export function MyTodosPage() {
           {actionable.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
-            const orderSummary = order
-              ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
-              : todo.route.routeName === "wage_period_detail"
-                ? "工资期间核对任务"
-                : "返工单关联信息待读取";
+            const orderSummary = todo.entityType === "sourcing_case"
+              ? "报价选厂订单 · 点击查看完整流程与审批记录"
+              : order
+                ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
+                : todo.route.routeName === "wage_period_detail"
+                  ? "工资期间核对任务"
+                  : "返工单关联信息待读取";
             return (
               <Surface className="my-todo-card" key={todo.todoId}>
                 {blocked ? (
