@@ -505,11 +505,10 @@ export function WorkReportingForm({
         </div>
         <Surface className="n04-progress-group n04-progress-group--pending">
           <div className="n04-progress-group__toolbar">
-            <h2 className="n04-progress-group__title">未完成</h2>
-            {activeAdjustmentWritable ? <button type="button" className="n04-add-worker" onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</button> : null}
-            <button type="button" className={`n04-progress-group__heading n04-progress-group__heading--compact${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
-              <StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
+            <button type="button" className={`n04-progress-group__heading${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
+              <h2>未完成</h2><StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
             </button>
+            {activeAdjustmentWritable ? <button type="button" className="n04-add-worker" onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</button> : null}
           </div>
           {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
         </Surface>
