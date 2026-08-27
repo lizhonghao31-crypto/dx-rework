@@ -14,6 +14,10 @@ describe("platform permission and desktop navigation hub", () => {
       .toEqual(["rework", "sourcing", "platform"]);
     expect(accessModuleLabelsForCapabilities(["sourcing:quote:write"]))
       .toEqual(["报价&选厂"]);
+    expect(accessModuleIdsForCapabilities(["tools:user", "todo:view", "receiving:create"]))
+      .toEqual([]);
+    expect(accessModuleIdsForCapabilities(["rework:initiate", "todo:view"]))
+      .toEqual(["rework"]);
     expect(employeeHasAccessModule(
       ["ie_reviewer"],
       [{ roleCode: "ie_reviewer", capabilities: ["sourcing:view", "sourcing:quote:write"] }],
@@ -42,6 +46,8 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"]');
     expect(employeeAccess).toContain('<h1>人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
+    expect(employeeAccess).toContain("employee.isRoot");
+    expect(employeeAccess).toContain("Root（返工 / 报价&选厂 / 平台管理）");
     expect(systemNavigation).toContain(">人员与权限</a>");
     expect(css).toContain(".desktop-navigation__group");
     expect(css).toContain("color: var(--dx-v2-color-surface);");
