@@ -1,0 +1,278 @@
+.sourcing-workspace {
+  display: grid;
+  gap: var(--dx-v2-space-4);
+  width: min(1460px, 100%);
+  margin: 0 auto;
+}
+
+.sourcing-create-card,
+.sourcing-list-card,
+.sourcing-history-panel {
+  display: grid;
+  gap: var(--dx-v2-space-4);
+  padding: var(--dx-v2-space-5);
+}
+
+.sourcing-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--dx-v2-space-3);
+  align-items: end;
+}
+
+.sourcing-form-grid label,
+.sourcing-owner-actions label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.sourcing-form-grid input,
+.sourcing-form-grid select,
+.sourcing-owner-actions input,
+.sourcing-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  color: var(--dx-v2-color-text);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+  font: inherit;
+}
+
+.sourcing-form-grid input:focus,
+.sourcing-form-grid select:focus,
+.sourcing-owner-actions input:focus,
+.sourcing-search input:focus {
+  border-color: var(--dx-v2-color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(47 107 255 / 12%);
+}
+
+.sourcing-form-wide {
+  grid-column: 1 / -1;
+}
+
+.sourcing-photo-field {
+  display: grid;
+  gap: var(--dx-v2-space-3);
+  padding: var(--dx-v2-space-4);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-inset);
+}
+
+.sourcing-photo-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  color: var(--dx-v2-color-text-secondary);
+  border: 1px dashed var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+}
+
+.sourcing-upload-button {
+  justify-self: start;
+}
+
+.sourcing-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-3);
+  padding-top: var(--dx-v2-space-3);
+  border-top: 1px solid var(--dx-v2-color-border);
+}
+
+.sourcing-submit-row p {
+  margin: 0;
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.sourcing-search {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-list-message {
+  margin: 0;
+  padding: var(--dx-v2-space-4);
+  color: var(--dx-v2-color-text-secondary);
+  text-align: center;
+}
+
+.sourcing-order-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+}
+
+.sourcing-order-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.3fr) repeat(4, minmax(100px, .8fr)) minmax(155px, 1fr);
+  gap: var(--dx-v2-space-3);
+  align-items: center;
+  min-height: 76px;
+  padding: var(--dx-v2-space-3) var(--dx-v2-space-4);
+  color: var(--dx-v2-color-text);
+  text-decoration: none;
+  background: var(--dx-v2-color-surface);
+}
+
+.sourcing-order-row + .sourcing-order-row {
+  border-top: 1px solid var(--dx-v2-color-border);
+}
+
+.sourcing-order-row:hover,
+.sourcing-order-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--dx-v2-color-primary);
+  outline-offset: -2px;
+  background: var(--dx-v2-color-inset);
+}
+
+.sourcing-order-row > div,
+.sourcing-order-row > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sourcing-order-row strong,
+.sourcing-order-row b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourcing-order-row small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+
+.sourcing-order-detail .rework-detail-core-facts {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.sourcing-order-detail .rework-detail-overview-grid {
+  align-items: stretch;
+}
+
+.sourcing-order-detail .rework-detail-images,
+.sourcing-order-detail .rework-workflow {
+  min-height: 260px;
+  padding: var(--dx-v2-space-4);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+}
+
+.sourcing-order-detail .rework-workflow__desktop-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sourcing-history-panel {
+  padding: var(--dx-v2-space-4);
+}
+
+.sourcing-timeline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--dx-v2-space-3);
+}
+
+.sourcing-timeline article {
+  display: grid;
+  gap: var(--dx-v2-space-2);
+  padding: var(--dx-v2-space-3);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-inset);
+}
+
+.sourcing-timeline article > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-timeline small {
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.sourcing-timeline p {
+  margin: 0;
+  color: var(--dx-v2-color-text-secondary);
+  line-height: 1.55;
+}
+
+.sourcing-timeline dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dx-v2-space-2);
+  margin: 0;
+}
+
+.sourcing-timeline dl > div {
+  display: flex;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-surface);
+}
+
+.sourcing-timeline dt {
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.sourcing-timeline dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.sourcing-action-panel {
+  display: grid;
+  gap: var(--dx-v2-space-3);
+}
+
+.sourcing-action-panel .rework-detail-node-preview {
+  gap: var(--dx-v2-space-3);
+}
+
+.sourcing-owner-actions {
+  display: grid;
+  gap: var(--dx-v2-space-3);
+}
+
+.sourcing-owner-actions > div {
+  display: flex;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-action-message {
+  margin: 0;
+  color: var(--dx-v2-color-text-secondary);
+}
+
+@media (max-width: 1180px) and (min-width: 801px) {
+  .sourcing-order-row {
+    grid-template-columns: minmax(150px, 1.2fr) repeat(3, minmax(90px, .8fr)) minmax(140px, 1fr);
+  }
+
+  .sourcing-order-row > span:nth-of-type(4) {
+    display: none;
+  }
+
+  .sourcing-order-detail .rework-detail-core-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

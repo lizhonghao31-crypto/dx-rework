@@ -10,6 +10,8 @@ import type {
   SourcingFactoryListResponse,
   SourcingCaseStatus,
   SourcingCaseSummary,
+  SourcingAttachmentListResponse,
+  SourcingTimelineResponse,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
@@ -296,10 +298,12 @@ export class SourcingService {
   async listCases(
     actor: TrustedActorContext,
     query = "",
+    statusFilter: "all" | "pending" | "closed" = "all",
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
     const normalizedQuery = query.trim();
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
+    if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
     const result = await this.database.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
@@ -343,13 +347,133 @@ export class SourcingService {
        ) decision_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
-       WHERE $1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
-          OR case_view.style_no ILIKE '%'||$1||'%'
+       WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
+          OR case_view.style_no ILIKE '%'||$1||'%')
+         AND ($2='all' OR ($2='closed' AND case_view.status='closed')
+           OR ($2='pending' AND case_view.status<>'closed'))
        ORDER BY case_view.created_at DESC
        LIMIT 200`,
-      [normalizedQuery],
+      [normalizedQuery, statusFilter],
     );
     return { items: result.rows.map(mapCase) };
+  }
+
+  async getCase(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+  ): Promise<SourcingCaseSummary> {
+    this.assertReader(actor);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    return this.readCase(this.database, sourcingCaseId);
+  }
+
+  async listAttachments(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+  ): Promise<SourcingAttachmentListResponse> {
+    this.assertReader(actor);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const result = await this.database.query<{
+      attachment_id: string;
+      original_filename: string;
+      mime_type: "image/jpeg" | "image/png" | "image/webp";
+    }>(
+      `SELECT attachment_id,original_filename,mime_type
+       FROM attachments
+       WHERE entity_type='sourcing_case' AND entity_id=$1 AND status='ready'
+         AND mime_type IN ('image/jpeg','image/png','image/webp')
+       ORDER BY created_at,attachment_id`,
+      [sourcingCaseId],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        attachmentId: row.attachment_id,
+        filename: row.original_filename,
+        mimeType: row.mime_type,
+      })),
+    };
+  }
+
+  async listTimeline(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+  ): Promise<SourcingTimelineResponse> {
+    this.assertReader(actor);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const result = await this.database.query<{
+      entry_id: string;
+      kind: "created" | "ie_quote" | "management_decision" | "owner_decision";
+      entry_version: number | string;
+      handled_by: string;
+      handled_at: Date | string;
+      reason: string;
+      unit_price: string | null;
+      total_amount: string | null;
+      supplier_name: string | null;
+      decision: "approved" | "rejected" | null;
+    }>(
+      `WITH timeline AS (
+         SELECT source_case.sourcing_case_id AS entry_id,'created'::text AS kind,
+                1 AS entry_version,source_case.created_by AS actor_id,
+                source_case.created_at AS handled_at,source_case.creation_reason AS reason,
+                NULL::numeric AS unit_price,NULL::numeric AS total_amount,
+                NULL::text AS supplier_name,NULL::text AS decision
+         FROM sourcing_cases source_case
+         WHERE source_case.sourcing_case_id=$1
+         UNION ALL
+         SELECT quote.sourcing_ie_quote_id,'ie_quote',quote.quote_version,quote.quoted_by,
+                quote.quoted_at,quote.quote_reason,quote.unit_price,quote.total_amount,
+                NULL::text,NULL::text
+         FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=$1
+         UNION ALL
+         SELECT choice.sourcing_decision_id,'management_decision',choice.decision_version,
+                choice.decided_by,choice.decided_at,choice.decision_reason,
+                choice.unit_price,choice.total_amount,choice.supplier_name_snapshot,NULL::text
+         FROM sourcing_decisions choice WHERE choice.sourcing_case_id=$1
+         UNION ALL
+         SELECT owner.sourcing_owner_decision_id,'owner_decision',
+                row_number() OVER (ORDER BY owner.decided_at,owner.sourcing_owner_decision_id),
+                owner.decided_by,owner.decided_at,owner.decision_reason,
+                NULL::numeric,NULL::numeric,NULL::text,owner.decision
+         FROM sourcing_owner_decisions owner WHERE owner.sourcing_case_id=$1
+       )
+       SELECT timeline.entry_id,timeline.kind,timeline.entry_version,
+              COALESCE(app_user.display_name,'系统用户') AS handled_by,
+              timeline.handled_at,timeline.reason,
+              timeline.unit_price::text,timeline.total_amount::text,
+              timeline.supplier_name,timeline.decision
+       FROM timeline
+       LEFT JOIN app_users app_user ON app_user.id=timeline.actor_id
+       ORDER BY timeline.handled_at,timeline.kind,timeline.entry_version`,
+      [sourcingCaseId],
+    );
+    if (result.rows.length === 0) fail("报价选厂询价不存在", 404, "NOT_FOUND");
+    return {
+      items: result.rows.map((row) => ({
+        entryId: row.entry_id,
+        kind: row.kind,
+        version: Number(row.entry_version),
+        handledBy: row.handled_by,
+        handledAt: toIso(row.handled_at),
+        reason: row.reason,
+        unitPrice: row.unit_price,
+        totalAmount: row.total_amount,
+        supplierName: row.supplier_name,
+        decision: row.decision,
+      })),
+    };
+  }
+
+  canDownloadBoundAttachment(
+    actor: TrustedActorContext,
+    binding: Readonly<{ entityType: string; entityId: string; mimeType: string }>,
+  ): boolean {
+    return binding.entityType === "sourcing_case"
+      && binding.mimeType.startsWith("image/")
+      && (
+        actor.actorRoles.includes(ROOT_ROLE)
+        || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
+      );
   }
 
   async listFactories(
@@ -387,6 +511,7 @@ export class SourcingService {
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       orderQuantity: normalizeQuantity(input.orderQuantity),
+      attachmentIds: [...(input.attachmentIds ?? [])],
     };
     const scope = "sourcing.case.create";
     const client = await this.database.connect();
@@ -408,6 +533,7 @@ export class SourcingService {
             ...normalized,
             laneKey: LANE_KEY,
             status: "pending_ie_quote",
+            attachmentCount: normalized.attachmentIds.length,
           },
           reason: DEFAULT_CREATION_REASON,
         });
@@ -429,6 +555,26 @@ export class SourcingService {
             DEFAULT_CREATION_REASON,
           ],
         );
+        if (normalized.attachmentIds.length > 0) {
+          const images = await client.query<{ attachment_id: string }>(
+            `SELECT attachment_id
+             FROM attachments
+             WHERE attachment_id=ANY($1::uuid[]) AND uploaded_by=$2
+               AND status='ready' AND entity_type IS NULL AND entity_id IS NULL
+               AND mime_type IN ('image/jpeg','image/png','image/webp')
+             FOR UPDATE`,
+            [normalized.attachmentIds, actor.actorId],
+          );
+          if (images.rows.length !== normalized.attachmentIds.length) {
+            fail("订单图片必须已上传完成、属于当前账号且尚未绑定");
+          }
+          await client.query(
+            `UPDATE attachments
+             SET entity_type='sourcing_case',entity_id=$2,updated_at=CURRENT_TIMESTAMP
+             WHERE attachment_id=ANY($1::uuid[])`,
+            [normalized.attachmentIds, sourcingCaseId],
+          );
+        }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
              sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,

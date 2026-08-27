@@ -89,12 +89,44 @@ export function registerSourcingRoutes(
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));
 
-  app.get<{ Querystring: { q?: string } }>("/sourcing/cases", async (request) => {
+  app.get<{ Querystring: { q?: string; status?: string } }>("/sourcing/cases", async (request) => {
     if (request.query.q !== undefined && typeof request.query.q !== "string") {
       validationError("搜索内容无效");
     }
-    return dependencies.service.listCases(await readActor(request), request.query.q ?? "");
+    const status = request.query.status;
+    if (status !== undefined && status !== "pending" && status !== "closed") {
+      validationError("订单状态筛选无效");
+    }
+    const statusFilter = status === "pending" || status === "closed" ? status : undefined;
+    const actor = await readActor(request);
+    return statusFilter
+      ? dependencies.service.listCases(actor, request.query.q ?? "", statusFilter)
+      : dependencies.service.listCases(actor, request.query.q ?? "");
   });
+
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId",
+    async (request) => dependencies.service.getCase(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
+
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/attachments",
+    async (request) => dependencies.service.listAttachments(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
+
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/timeline",
+    async (request) => dependencies.service.listTimeline(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
 
   app.post("/sourcing/cases", async (request, reply) => {
     const parsed = CreateSourcingCaseSchema.safeParse(request.body);
