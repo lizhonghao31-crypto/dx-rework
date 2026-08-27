@@ -9,7 +9,7 @@ const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
 const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
 const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32})$/;
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32}|sourcing_[0-9a-f]{32})$/;
 const RUNTIME_ENV_KEYS = new Set([
   "TEST_DATABASE_URL",
   "DATABASE_URL",
@@ -160,7 +160,8 @@ async function cleanupIsolatedGateSchemas() {
        WHERE nspname LIKE 'full_chain_%'
           OR nspname LIKE 'root_http_%'
           OR nspname LIKE 'receiving_%'
-          OR nspname LIKE 'rework_v2_%'`,
+          OR nspname LIKE 'rework_v2_%'
+          OR nspname LIKE 'sourcing_%'`,
     );
     for (const row of result.rows) {
       const schema = String(row.nspname);
@@ -192,9 +193,10 @@ if (hasDatabase) {
     "tests/integration/receiving-postgres.test.ts",
     "tests/integration/rework-v2-n01-postgres.test.ts",
     "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
+    "tests/integration/sourcing-pr03-postgres.test.ts",
   );
   process.stdout.write(
-    "BUSINESS_CHAIN_GATE_START: receiving + N01 v2 + PR-03 process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
+    "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + browser/root/storage regressions\n",
   );
 } else {
   process.stdout.write(
@@ -244,7 +246,7 @@ if (exitCode !== 0) {
 
 process.stdout.write(
   hasDatabase
-    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: receiving + N01 v2 + PR-03 process-worker preassignment + N01-N11 + two fresh Root single-account passes\n"
+    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + N01-N11 + two fresh Root single-account passes\n"
     : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
 );
 
