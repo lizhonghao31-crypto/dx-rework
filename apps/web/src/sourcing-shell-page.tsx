@@ -244,8 +244,8 @@ export function SourcingShellPage() {
 
   const decisionDraft = (item: SourcingCaseSummary): DecisionDraft =>
     decisionDrafts[item.sourcingCaseId] ?? {
-      supplierId: "",
-      unitPrice: item.ieQuote?.unitPrice ?? "",
+      supplierId: item.decision?.supplierId ?? "",
+      unitPrice: item.decision?.unitPrice ?? item.ieQuote?.unitPrice ?? "",
       decisionReason: "",
     };
 
@@ -269,7 +269,7 @@ export function SourcingShellPage() {
       setMessage("生产管理单价必须大于0且最多4位小数");
       return;
     }
-    const priceChanged = draft.unitPrice !== item.ieQuote?.unitPrice;
+    const priceChanged = Number(draft.unitPrice) !== Number(item.ieQuote?.unitPrice);
     if (priceChanged && !draft.decisionReason.trim()) {
       setMessage("调整 IE 价格时必须填写原因");
       return;

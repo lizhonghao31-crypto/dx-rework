@@ -778,6 +778,7 @@ export class SourcingService {
     const suppliedReason = input.decisionReason?.trim() ?? "";
     if (input.decision === "rejected" && !suppliedReason) fail("驳回原因不能为空");
     const decisionReason = suppliedReason || DEFAULT_OWNER_APPROVAL_REASON;
+    if (decisionReason.length > 500) fail("审批说明不能超过500个字符");
     const scope = `sourcing.owner.${input.decision}`;
     const client = await this.database.connect();
     try {

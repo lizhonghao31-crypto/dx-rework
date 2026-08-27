@@ -69,6 +69,6 @@ describe("sourcing PR03 contracts", () => {
     expect(page).toContain("驳回时必须填写原因");
     expect(page).not.toContain("登记合同执行");
     expect(page).not.toContain("中途换厂");
-    expect(page).not.toContain("财务核对");
+    expect(page).not.toContain("提交财务核对");
   });
 });

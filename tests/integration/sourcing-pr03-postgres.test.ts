@@ -214,6 +214,19 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       supplierName: "一号加工厂",
     }]);
 
+    await expect(service.recordManagementDecision(
+      managerActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: factoryId,
+        unitPrice: "11.0000",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400,
+    });
+
     const firstDecision = await service.recordManagementDecision(
       managerActor(),
       created.value.sourcingCaseId,

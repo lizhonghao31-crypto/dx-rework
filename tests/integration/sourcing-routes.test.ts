@@ -246,6 +246,38 @@ describe("sourcing PR03 routes", () => {
       actorRoles: ["root_superuser", "ie_reviewer"],
       authorizationCapability: "sourcing:price:quote",
     }));
+
+    expect((await app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/management-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "root-management",
+      },
+      payload: {
+        supplierId: "00000000-0000-4000-8000-000000000200",
+        unitPrice: "8.5",
+      },
+    })).statusCode).toBe(201);
+    expect(service.recordManagementDecision.mock.calls[0]?.[0])
+      .toEqual(expect.objectContaining({
+        actorRoles: ["root_superuser", "production_management"],
+        authorizationCapability: "sourcing:decision:record",
+      }));
+
+    expect((await app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/owner-decisions`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "root-owner",
+      },
+      payload: { decision: "approved" },
+    })).statusCode).toBe(201);
+    expect(service.decideOwner.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      actorRoles: ["root_superuser", "owner_group"],
+      authorizationCapability: "sourcing:owner:approve",
+    }));
   });
 
   it("rejects malformed amount, quantity and missing idempotency key before service writes", async () => {
