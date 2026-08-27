@@ -23,12 +23,12 @@ describe("UAT interface closure", () => {
       read("apps/web/src/master-data-page.tsx"),
     ]);
     expect(navigation).toContain('pageUrl("ui/employee-access")');
-    expect(navigation).toContain("员工权限管理");
+    expect(navigation).toContain("人员与权限");
     expect(navigation).toContain("工厂&amp;工序管理");
     expect(navigation).toContain('pageUrl("ui/master-data")');
-    expect(navigation.indexOf("员工权限管理")).toBeLessThan(navigation.indexOf("工厂&amp;工序管理"));
+    expect(navigation.indexOf("人员与权限")).toBeLessThan(navigation.indexOf("工厂&amp;工序管理"));
     expect(navigation).toContain("visibleTabs.map");
-    expect(employee).toContain('<Shell active="系统管理">');
+    expect(employee).toContain('<Shell active="人员与权限">');
     expect(employee).toContain('<SystemManagementNavigation active="employee-access" />');
     expect(employee).toContain("assignableRoles");
     expect(masterData).toContain('<SystemManagementNavigation active="master-data" />');
