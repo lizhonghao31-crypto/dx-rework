@@ -295,7 +295,7 @@ function OrderListPage({ mode }: { mode: "pending" | "history" }) {
   const load = async (query = search): Promise<void> => {
     try {
       const body = await request(
-        `sourcing/cases?q=${encodeURIComponent(query.trim())}`,
+        `sourcing/cases?status=${mode === "history" ? "closed" : "pending"}&q=${encodeURIComponent(query.trim())}`,
         SourcingCaseListResponseSchema,
       );
       setItems(body.items);
