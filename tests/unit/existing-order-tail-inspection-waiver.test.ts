@@ -40,6 +40,7 @@ describe("existing-order tail inspection waiver", () => {
     expect(migration).toContain("guard_rework_work_report_rejection_insert");
     expect(migration).toContain("guard_rework_tail_inspection_report_rejection");
     expect(migration).toContain("guard_rework_tail_inspection_assignment_revoke");
+    expect(migration).toContain("NOT tail_required AND tail_process_count>1");
   });
 
   it("keeps waived tail configuration out of completion readiness and explains settlement exclusion in UI", async () => {

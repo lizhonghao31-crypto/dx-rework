@@ -273,3 +273,117 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM operation_events event WHERE event.event_id=audit_event_id::uuid AND event.request_id=audit_request_id AND event.actor_id=audit_actor_id AND event.entity_type='rework_order' AND event.entity_id=NEW.rework_order_id::text AND ((event.action=expected_action AND (event.authorization_capability=expected_capability OR (expected_action='rework.work_report.submit' AND event.authorization_capability IN ('work:report','work:report_for_worker','tail_inspection:report')))) OR (alternative_action IS NOT NULL AND event.action=alternative_action AND event.authorization_capability=alternative_capability) OR (alternative_action_two IS NOT NULL AND event.action=alternative_action_two AND event.authorization_capability=alternative_capability_two) OR (alternative_action_three IS NOT NULL AND event.action=alternative_action_three AND event.authorization_capability=alternative_capability_three)) AND event.after_state @> jsonb_build_object('reworkOrderId',NEW.rework_order_id,'reworkNo',NEW.rework_no,'status',NEW.status,'styleNo',NEW.style_no,'orderNo',NEW.order_no,'merchandiserUserId',NEW.merchandiser_user_id,'processingFactory',CASE WHEN NEW.processing_factory_type IS NULL THEN NULL WHEN NEW.processing_factory_type='own_factory' THEN jsonb_build_object('type','own_factory') ELSE jsonb_build_object('type','supplier','supplierId',NEW.processing_factory_supplier_id,'supplierVersion',NEW.processing_factory_supplier_version) END,'problemPart',NEW.problem_part,'problemDescription',NEW.problem_description,'reworkQuantity',NEW.rework_quantity,'version',NEW.version) AND (expected_action<>'rework.tail_inspection.waive' OR event.after_state @> '{"tailInspectionRequired":false}'::jsonb) AND (NEW.status<>'cancelled' OR (event.after_state->>'cancelReason'=NEW.cancel_reason AND NEW.cancelled_by=audit_actor_id)) AND (NEW.status<>'deleted' OR (event.after_state->>'deletedBy'=NEW.deleted_by::text AND NEW.deleted_by=audit_actor_id))) THEN RAISE EXCEPTION 'rework order audit event does not match the write' USING ERRCODE='55000'; END IF;
   RETURN NEW;
 END $$;
+
+-- Keep the approved tail configuration item as immutable planning evidence after
+-- a waiver. A no-tail order may therefore have zero current tail configuration
+-- items (created no-tail) or one retired historical item (waived existing order).
++CREATE OR REPLACE FUNCTION guard_rework_order_review_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  unified_execution boolean;
+  tail_required boolean;
+  tail_process_count bigint;
+BEGIN
+  SELECT target.tail_inspection_required
+  INTO tail_required
+  FROM rework_orders target
+  WHERE target.rework_order_id=NEW.rework_order_id
+    AND target.status='pending_final_quantity_ie_review';
+  IF tail_required IS NULL
+  THEN RAISE EXCEPTION 'order is not pending IE final-quantity review' USING ERRCODE='23514'; END IF;
+
+  SELECT configuration.unified_execution_required INTO unified_execution
+  FROM rework_process_configurations configuration
+  WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' LIMIT 1;
+
+  IF unified_execution IS NULL OR EXISTS(
+    SELECT 1 FROM rework_process_configurations configuration
+    JOIN rework_process_configuration_items item USING(configuration_id)
+    WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' AND item.unit_price IS NULL
+  ) THEN RAISE EXCEPTION 'every IE-approved process requires a price' USING ERRCODE='23514'; END IF;
+
+  SELECT count(*) INTO tail_process_count
+  FROM rework_process_configurations configuration
+  JOIN rework_process_configuration_items item USING(configuration_id)
+  WHERE configuration.rework_order_id=NEW.rework_order_id
+    AND configuration.status='approved'
+    AND item.execution_kind='tail_inspection';
+
+  IF unified_execution AND (
+    (tail_required AND tail_process_count<>1)
+    OR (NOT tail_required AND tail_process_count>1)
+  ) THEN RAISE EXCEPTION 'unified execution tail-inspection process does not match the order decision' USING ERRCODE='23514'; END IF;
+
+  IF NOT EXISTS(
+    SELECT 1 FROM rework_tail_completion_confirmations confirmation
+    JOIN rework_tail_completion_reviews review ON review.confirmation_id=confirmation.confirmation_id AND review.decision='approved'
+    WHERE confirmation.rework_order_id=NEW.rework_order_id AND confirmation.workflow_stage='pending_ie_review'
+      AND review.reviewed_by=NEW.reviewed_by
+      AND review.operation_event_id=nullif(current_setting('dx_rework.rework_event_id',true),'')::uuid
+      AND review.request_id=nullif(current_setting('dx_rework.rework_request_id',true),'')
+  ) THEN RAISE EXCEPTION 'approved IE final-quantity review is required' USING ERRCODE='23514'; END IF;
+
+  IF EXISTS(
+    SELECT 1 FROM rework_work_tasks task
+    WHERE task.rework_order_id=NEW.rework_order_id AND task.status='active'
+      AND NOT EXISTS(SELECT 1 FROM rework_work_reports report WHERE report.work_task_id=task.work_task_id AND report.status='submitted'
+        AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id))
+  ) THEN RAISE EXCEPTION 'every active execution task requires a valid report' USING ERRCODE='23514'; END IF;
+
+  IF NOT unified_execution AND EXISTS(
+    SELECT 1 FROM rework_tail_inspection_assignments assignment
+    WHERE assignment.rework_order_id=NEW.rework_order_id AND assignment.revoked_at IS NULL
+      AND NOT EXISTS(SELECT 1 FROM rework_tail_inspection_reports report
+        WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id AND report.status='submitted')
+  ) THEN RAISE EXCEPTION 'every active legacy tail inspector requires a submitted count' USING ERRCODE='23514'; END IF;
+
+  IF unified_execution AND tail_required AND EXISTS(
+    WITH tail_total AS (
+      SELECT COALESCE(sum(rework_work_report_effective_quantity(report.work_report_id)),0) AS quantity
+      FROM rework_work_reports report
+      JOIN rework_process_configuration_items item ON item.configuration_item_id=report.configuration_item_id
+      WHERE report.rework_order_id=NEW.rework_order_id AND item.execution_kind='tail_inspection' AND report.status='submitted'
+        AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+    )
+    SELECT 1 FROM rework_process_configurations configuration
+    JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
+    CROSS JOIN tail_total
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(sum(rework_work_report_effective_quantity(report.work_report_id)),0) AS quantity
+      FROM rework_work_reports report
+      WHERE report.rework_order_id=NEW.rework_order_id AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted'
+        AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+    ) worker ON true
+    WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' AND item.execution_kind='worker'
+      AND worker.quantity<>tail_total.quantity
+  ) THEN RAISE EXCEPTION 'worker count must equal unified tail-inspection count' USING ERRCODE='23514'; END IF;
+
+  IF NOT unified_execution AND EXISTS(
+    SELECT 1 FROM rework_process_configurations configuration
+    JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report
+      WHERE report.rework_order_id=NEW.rework_order_id AND report.configuration_item_id=item.configuration_item_id AND report.status='submitted'
+        AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+    ) worker ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(sum(report_item.inspected_quantity),0) AS quantity
+      FROM rework_tail_inspection_report_items report_item
+      JOIN rework_tail_inspection_reports report ON report.tail_inspection_report_id=report_item.tail_inspection_report_id AND report.status='submitted'
+      JOIN rework_tail_inspection_assignments assignment ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id AND assignment.revoked_at IS NULL
+      WHERE report.rework_order_id=NEW.rework_order_id AND report_item.configuration_item_id=item.configuration_item_id
+    ) tail_checked ON true
+    WHERE configuration.rework_order_id=NEW.rework_order_id AND configuration.status='approved' AND worker.quantity>tail_checked.quantity
+  ) THEN RAISE EXCEPTION 'worker count cannot exceed legacy tail inspection count' USING ERRCODE='23514'; END IF;
+
+  IF EXISTS(
+    SELECT 1 FROM rework_work_reports report
+    WHERE report.rework_order_id=NEW.rework_order_id AND report.status='submitted'
+      AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+      AND report.group_amount<=0
+  ) THEN RAISE EXCEPTION 'every valid report requires generated wages' USING ERRCODE='23514'; END IF;
+
+  PERFORM require_whole_order_review_event('rework.final_quantity.ie_review','process:review',NEW.rework_order_id,NEW.reviewed_by);
+  RETURN NEW;
+END;
+$$;
