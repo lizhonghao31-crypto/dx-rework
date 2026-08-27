@@ -1265,6 +1265,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         items: [{
           configurationItemId: workerItem.configurationItemId,
           inspectedQuantity: 180,
+        }, {
+          configurationItemId: tailItem.configurationItemId,
+          inspectedQuantity: 180,
         }],
       }, randomUUID());
       wrongTailReportId = (await database.query<{ tail_inspection_report_id: string }>(
