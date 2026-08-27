@@ -40,10 +40,14 @@ export const SourcingCaseStatusSchema = z.enum([
   "closed",
 ]);
 
+export const MAX_SOURCING_ATTACHMENTS = 8;
+
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
   orderQuantity: z.number().int().positive().max(10_000_000),
+  attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS).default([])
+    .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
 }).strict();
 
 export const CreateSourcingIeQuoteSchema = z.object({
@@ -136,6 +140,33 @@ export const SourcingCaseListResponseSchema = z.object({
   items: z.array(SourcingCaseSummarySchema),
 }).strict();
 
+export const SourcingAttachmentSchema = z.object({
+  attachmentId: IdSchema,
+  filename: z.string(),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+}).strict();
+
+export const SourcingAttachmentListResponseSchema = z.object({
+  items: z.array(SourcingAttachmentSchema),
+}).strict();
+
+export const SourcingTimelineEntrySchema = z.object({
+  entryId: IdSchema,
+  kind: z.enum(["created", "ie_quote", "management_decision", "owner_decision"]),
+  version: z.number().int().positive(),
+  handledBy: z.string(),
+  handledAt: z.string().datetime(),
+  reason: z.string(),
+  unitPrice: z.string().nullable(),
+  totalAmount: z.string().nullable(),
+  supplierName: z.string().nullable(),
+  decision: z.enum(["approved", "rejected"]).nullable(),
+}).strict();
+
+export const SourcingTimelineResponseSchema = z.object({
+  items: z.array(SourcingTimelineEntrySchema),
+}).strict();
+
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
 export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
 export type RecordSourcingManagementDecision = z.infer<
@@ -150,3 +181,7 @@ export type SourcingCaseStatus = z.infer<typeof SourcingCaseStatusSchema>;
 export type SourcingIeQuote = z.infer<typeof SourcingIeQuoteSchema>;
 export type SourcingCaseSummary = z.infer<typeof SourcingCaseSummarySchema>;
 export type SourcingCaseListResponse = z.infer<typeof SourcingCaseListResponseSchema>;
+export type SourcingAttachment = z.infer<typeof SourcingAttachmentSchema>;
+export type SourcingAttachmentListResponse = z.infer<typeof SourcingAttachmentListResponseSchema>;
+export type SourcingTimelineEntry = z.infer<typeof SourcingTimelineEntrySchema>;
+export type SourcingTimelineResponse = z.infer<typeof SourcingTimelineResponseSchema>;
