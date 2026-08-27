@@ -507,7 +507,7 @@ export class SourcingService {
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       orderQuantity: normalizeQuantity(input.orderQuantity),
-      attachmentIds: [...input.attachmentIds],
+      attachmentIds: [...(input.attachmentIds ?? [])],
     };
     const scope = "sourcing.case.create";
     const client = await this.database.connect();
