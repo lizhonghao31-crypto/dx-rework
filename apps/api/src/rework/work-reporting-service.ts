@@ -1047,7 +1047,9 @@ export class WorkReportingService {
          FROM rework_process_configurations configuration
          JOIN rework_process_configuration_items item
            ON item.configuration_id=configuration.configuration_id
+         JOIN rework_orders target ON target.rework_order_id=configuration.rework_order_id
          WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+           AND (item.execution_kind='worker' OR target.tail_inspection_required)
            AND NOT EXISTS(
              SELECT 1 FROM rework_work_tasks active_task
              WHERE active_task.rework_order_id=$1

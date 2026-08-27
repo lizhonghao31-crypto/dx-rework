@@ -396,6 +396,10 @@ export const SupplementReworkOrderImagesSchema = z.object({
   expectedVersion: z.number().int().positive(),
   attachmentIds: ReworkAttachmentIdsSchema(1),
 }).strict();
+export const WaiveTailInspectionSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  reason: ReasonSchema,
+}).strict();
 export const SubmitReworkOrderSchema = z.object({
   expectedVersion: z.number().int().positive(),
 }).strict();
@@ -492,6 +496,7 @@ export type InspectionReport = z.infer<typeof InspectionReportSchema>;
 export type CreateReworkDraft = z.infer<typeof CreateReworkDraftSchema>;
 export type UpdateReworkDraft = z.infer<typeof UpdateReworkDraftSchema>;
 export type SupplementReworkOrderImages = z.infer<typeof SupplementReworkOrderImagesSchema>;
+export type WaiveTailInspection = z.infer<typeof WaiveTailInspectionSchema>;
 export type SubmitReworkOrder = z.infer<typeof SubmitReworkOrderSchema>;
 export type TransitionReworkOrder = z.infer<typeof TransitionReworkOrderSchema>;
 export type ReworkOrderResponse = z.infer<typeof ReworkOrderResponseSchema>;

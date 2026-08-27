@@ -103,6 +103,7 @@
     { "version": "0101_optional_tail_n06_guard", "checksum": "1ccc243d4e85e88edd2a158bf05e196caeddc80e5e59d82decafcc32b032dc50" },
     { "version": "0102_sourcing_ie_view_grant", "checksum": "346e35b2f0c5c0fcb17a32e16468060421ff3e71d3fe42d2193df6d3fb409fb3" },
     { "version": "0103_role_based_rework_image_supplement", "checksum": "6aec184b234d9bcf50d4a9a4e650758784f76d3d945a19806bcd5255138aada0" },
-    { "version": "0104_in_progress_workforce_adjustment", "checksum": "050c7694060fdc17cddc4bcb4eb24af2bdaada407c77eae7d51c307bdcc081b3" }
+    { "version": "0104_in_progress_workforce_adjustment", "checksum": "050c7694060fdc17cddc4bcb4eb24af2bdaada407c77eae7d51c307bdcc081b3" },
+    { "version": "0105_existing_order_tail_inspection_waiver", "checksum": "6557ff08c2ccbebaaf4a560041e7ce7aed394e9aeb041f51712742ec1cc77374" }
   ]
 }

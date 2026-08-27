@@ -25,6 +25,7 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -105,6 +106,12 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   );
   const workerPlan = new ProcessWorkerPlanService(database);
   const work = new WorkReportingService(database, undefined, undefined, todoProjection);
+  const legacyTailInspection = new TailInspectionService(
+    database,
+    undefined,
+    undefined,
+    todoProjection,
+  );
   const wholeOrder = new BusinessAwareWholeOrderReviewService(database, todoProjection);
   const responsibility = new ResponsibilityDeterminationApplicationService(
     database,
@@ -1092,6 +1099,304 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        ORDER BY category,todo_id`,
     );
     expect(openBusinessTodos.rows).toEqual([{ category: "wage_month_close" }]);
+  });
+
+  it.each([
+    { executionModel: "unified", legacy: false },
+    { executionModel: "legacy", legacy: true },
+  ])(
+    "waives an existing wrong $executionModel tail report without deleting audit facts or paying tail wages",
+    async ({ legacy }) => {
+    const imageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'tail-waiver.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [imageId, `private/${imageId}.webp`, "a".repeat(64), ids.qc],
+    );
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "UAT-TAIL-WAIVER",
+      orderQuantity: 500,
+      orderNo: "ORDER-TAIL-WAIVER",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      inspectionReport: n01CoreInspectionReport("免尾查测试款"),
+      problemPart: "后幅",
+      problemDescription: "历史订单实际无需尾查",
+      reworkQuantity: 200,
+      attachmentIds: [imageId],
+    }, randomUUID());
+    const submitted = await initiation.submit(
+      qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID(),
+    );
+    const saved = await configuration.saveDraft(
+      tailConfigure(),
+      submitted.value.reworkOrderId,
+      SaveProcessConfigurationSchema.parse({
+        expectedOrderVersion: submitted.value.version,
+        items: [{
+          source: "catalog",
+          processId: publicProcessId,
+          executionKind: "worker",
+          plannedQuantity: 200,
+          pricingUnit: "piece",
+          unitPrice: 0.55,
+        }, {
+          source: "custom",
+          customProcessName: "尾查",
+          executionKind: "tail_inspection",
+          plannedQuantity: 1,
+          pricingUnit: "piece",
+          unitPrice: 0.2,
+        }],
+      }),
+      randomUUID(),
+    );
+    const workerItem = saved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const tailItem = saved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
+    if (legacy) {
+      await database.query(
+        "ALTER TABLE rework_process_configurations DISABLE TRIGGER rework_process_configurations_guard_update",
+      );
+      try {
+        await database.query(
+          "UPDATE rework_process_configurations SET unified_execution_required=false WHERE configuration_id=$1",
+          [saved.value.configuration!.configurationId],
+        );
+      } finally {
+        await database.query(
+          "ALTER TABLE rework_process_configurations ENABLE TRIGGER rework_process_configurations_guard_update",
+        );
+      }
+    }
+    await workerPlan.save(
+      tailAssign(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: saved.value.orderVersion,
+        configurationId: saved.value.configuration!.configurationId,
+        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+        assignments: [
+          { configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] },
+          { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
+        ],
+      },
+      randomUUID(),
+    );
+    const queued = await configuration.submit(
+      tailConfigure(),
+      submitted.value.reworkOrderId,
+      SubmitProcessConfigurationSchema.parse({
+        expectedOrderVersion: saved.value.orderVersion,
+        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      }),
+      randomUUID(),
+    );
+    const approved = await configuration.review(
+      ie(),
+      submitted.value.reworkOrderId,
+      ReviewProcessConfigurationSchema.parse({
+        expectedOrderVersion: queued.value.orderVersion,
+        expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
+        decision: "approved",
+      }),
+      randomUUID(),
+    );
+    await workerPlan.activateAfterIeApproval(
+      submitted.value.reworkOrderId,
+      approved.value.configuration!.configurationVersion,
+      randomUUID(),
+    );
+    const started = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    const workerTask = started.tasks.find((task) => task.executionKind === "worker")!;
+    await work.submitReport(worker(), workerTask.workTaskId, CreateWorkReportSchema.parse({
+      expectedOrderVersion: started.orderVersion,
+      actualQuantity: 200,
+      completedAt: new Date().toISOString(),
+    }), randomUUID());
+    const afterWorker = await work.list(tailInspect(), submitted.value.reworkOrderId);
+    const tailTask = started.tasks.find((task) => task.executionKind === "tail_inspection")!;
+    const unifiedWrongTail = await work.submitReport(
+      tailInspect(),
+      tailTask.workTaskId,
+      CreateWorkReportSchema.parse({
+        expectedOrderVersion: afterWorker.orderVersion,
+        actualQuantity: 180,
+        completedAt: new Date().toISOString(),
+      }),
+      randomUUID(),
+    );
+    let wrongTailReportId: string;
+    let correctionTodoKey: string;
+    let waiverVersion: number;
+    let legacyAssignmentId: string | null = null;
+    if (legacy) {
+      const configurationEvent = (await database.query<{
+        actor_id: string;
+        event_id: string;
+        request_id: string;
+      }>(
+        `SELECT actor_id,event_id,request_id
+         FROM operation_events
+         WHERE action='rework.process_configuration.submit'
+           AND entity_id=$1
+         ORDER BY created_at DESC,event_id DESC
+         LIMIT 1`,
+        [submitted.value.reworkOrderId],
+      )).rows[0]!;
+      legacyAssignmentId = randomUUID();
+      await database.query(
+        `INSERT INTO rework_tail_inspection_assignments(
+           tail_inspection_assignment_id,rework_order_id,tail_inspector_user_id,
+           assigned_by,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,$6)`,
+        [
+          legacyAssignmentId,
+          submitted.value.reworkOrderId,
+          ids.tailInspector,
+          configurationEvent.actor_id,
+          configurationEvent.event_id,
+          configurationEvent.request_id,
+        ],
+      );
+      await legacyTailInspection.submit(tailInspect(), legacyAssignmentId, {
+        returnedQuantity: 180,
+        items: [{
+          configurationItemId: workerItem.configurationItemId,
+          inspectedQuantity: 180,
+        }, {
+          configurationItemId: tailItem.configurationItemId,
+          inspectedQuantity: 180,
+        }],
+      }, randomUUID());
+      wrongTailReportId = (await database.query<{ tail_inspection_report_id: string }>(
+        `SELECT tail_inspection_report_id
+         FROM rework_tail_inspection_reports
+         WHERE tail_inspection_assignment_id=$1 AND status='submitted'`,
+        [legacyAssignmentId],
+      )).rows[0]!.tail_inspection_report_id;
+      const beforeWaiver = await work.list(tailAssign(), submitted.value.reworkOrderId);
+      expect(beforeWaiver.reworkStatus).toBe("pending_order_review");
+      await legacyTailInspection.reject(tailAudit(), legacyAssignmentId, {
+        expectedOrderVersion: beforeWaiver.orderVersion,
+        reason: "尾查工序配置错误，该报数无需重报",
+      }, randomUUID());
+      waiverVersion = beforeWaiver.orderVersion;
+      correctionTodoKey = `tail-inspection-return:${wrongTailReportId}`;
+    } else {
+      wrongTailReportId = unifiedWrongTail.value.workReportId;
+      const beforeWaiver = await work.list(tailAssign(), submitted.value.reworkOrderId);
+      expect(beforeWaiver.reworkStatus).toBe("pending_order_review");
+      const rejectedWrongTail = await wholeOrder.rejectReport(
+        tailAudit(),
+        wrongTailReportId,
+        {
+          expectedOrderVersion: beforeWaiver.orderVersion,
+          rejectedPersonId: tailPersonId,
+          reason: "尾查工序配置错误，该报数无需重报",
+        },
+        randomUUID(),
+      );
+      expect(rejectedWrongTail.value.reworkStatus).toBe("in_progress");
+      waiverVersion = rejectedWrongTail.value.orderVersion;
+      correctionTodoKey = `work-report-return:${wrongTailReportId}`;
+    }
+    expect((await database.query<{ status: string }>(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [correctionTodoKey],
+    )).rows[0]).toEqual({ status: "pending" });
+
+    await expect(initiation.waiveTailInspection(
+      actor(ids.qc, ["quality_control"], "tail_inspection:waive"),
+      submitted.value.reworkOrderId,
+      { expectedVersion: waiverVersion, reason: "权限验证" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+    const waived = await initiation.waiveTailInspection(
+      actor(ids.ownerOne, ["owner_group"], "tail_inspection:waive"),
+      submitted.value.reworkOrderId,
+      { expectedVersion: waiverVersion, reason: "工序实际无需尾查，原尾查数上报错误" },
+      randomUUID(),
+    );
+    expect(waived.value).toMatchObject({
+      status: "pending_order_review",
+      tailInspectionRequired: false,
+      version: waiverVersion + 1,
+    });
+    if (legacy) {
+      expect((await database.query(
+        `SELECT report.status,assignment.revoked_at IS NOT NULL AS revoked
+         FROM rework_tail_inspection_reports report
+         JOIN rework_tail_inspection_assignments assignment
+           ON assignment.tail_inspection_assignment_id=report.tail_inspection_assignment_id
+         WHERE report.tail_inspection_report_id=$1
+           AND assignment.tail_inspection_assignment_id=$2`,
+        [wrongTailReportId, legacyAssignmentId],
+      )).rows).toEqual([{ status: "rejected", revoked: true }]);
+    } else {
+      expect((await database.query(
+        `SELECT report.work_report_id,task.status,
+                EXISTS(SELECT 1 FROM rework_work_report_rejections rejection
+                       WHERE rejection.work_report_id=report.work_report_id) AS rejected
+         FROM rework_work_reports report
+         JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+         WHERE report.work_report_id=$1`,
+        [wrongTailReportId],
+      )).rows).toEqual([{
+        work_report_id: wrongTailReportId,
+        status: "superseded",
+        rejected: true,
+      }]);
+    }
+    expect((await database.query<{ status: string }>(
+      "SELECT status FROM rework_todos WHERE dedupe_key=$1",
+      [correctionTodoKey],
+    )).rows[0]).toEqual({ status: "cancelled" });
+    expect((await database.query<{ source_action: string; status: string }>(
+      "SELECT source_action,status FROM rework_todos WHERE dedupe_key=$1",
+      [`whole-order-review:${submitted.value.reworkOrderId}:${waived.value.version}`],
+    )).rows[0]).toEqual({
+      source_action: "rework.tail_inspection.waive",
+      status: "pending",
+    });
+
+    const reviewView = await wholeOrder.get(tailAudit(), submitted.value.reworkOrderId);
+    expect(reviewView).toMatchObject({
+      reworkStatus: "pending_order_review",
+      tailInspectionRequired: false,
+      processes: [expect.objectContaining({
+        configurationItemId: workerItem.configurationItemId,
+        completedQuantity: 200,
+      })],
+    });
+    await wholeOrder.approve(tailAudit(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: reviewView.orderVersion,
+      finalQuantities: [{
+        configurationItemId: workerItem.configurationItemId,
+        finalConfirmedQuantity: 200,
+      }],
+      temporaryCoefficients: [],
+    }, randomUUID());
+    const ieView = await wholeOrder.get(ie(), submitted.value.reworkOrderId);
+    const finalized = await wholeOrder.reviewFinalQuantity(ie(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: ieView.orderVersion,
+      decision: "approved",
+    }, randomUUID());
+    expect((await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM rework_wage_items wage
+       JOIN rework_work_reports report ON report.work_report_id=wage.work_report_id
+       WHERE wage.rework_order_id=$1 AND report.configuration_item_id=$2`,
+      [submitted.value.reworkOrderId, tailItem.configurationItemId],
+    )).rows[0]).toEqual({ count: 0 });
+    await expect(initiation.waiveTailInspection(
+      actor(ids.ownerOne, ["owner_group"], "tail_inspection:waive"),
+      submitted.value.reworkOrderId,
+      { expectedVersion: finalized.value.orderVersion, reason: "不应允许下游重复操作" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
   });
 
   it("submits simplified N01 without retired manual-entry facts", async () => {

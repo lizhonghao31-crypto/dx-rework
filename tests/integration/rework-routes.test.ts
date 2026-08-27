@@ -54,6 +54,7 @@ const create = (
     createDraft: vi.fn(async () => ({ value: response, reused: false })),
     updateDraft: vi.fn(async () => ({ value: { ...response, version: 2 }, reused: false })),
     supplementOrderImages: vi.fn(async () => ({ value: { ...response, attachmentIds: ["00000000-0000-4000-8000-000000000011"], version: 2 }, reused: false })),
+    waiveTailInspection: vi.fn(async () => ({ value: { ...response, tailInspectionRequired: false, version: 2 }, reused: false })),
     submit: vi.fn(async () => ({
       value: { ...response, reworkNo: "RW-2026-0802-001", status: "pending_process_configuration", version: 2 },
       reused: false,
@@ -89,6 +90,78 @@ const create = (
 };
 
 describe("rework initiation routes", () => {
+  it.each(["owner_group", "production_management"])(
+    "allows %s to waive tail inspection with a reason",
+    async (role) => {
+      const { app, service } = create([role], ["tail_inspection:waive"]);
+      const result = await app.inject({
+        method: "POST",
+        url: "/rework-orders/00000000-0000-4000-8000-000000000010/waive-tail-inspection",
+        headers: {
+          cookie: "dx_rework_session=trusted",
+          "idempotency-key": `waive-tail-${role}`,
+        },
+        payload: { expectedVersion: 1, reason: "该订单不需要尾查" },
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(service.waiveTailInspection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorRoles: [role],
+          authorizationCapability: "tail_inspection:waive",
+          authorizationCapabilities: ["tail_inspection:waive"],
+        }),
+        response.reworkOrderId,
+        { expectedVersion: 1, reason: "该订单不需要尾查" },
+        `waive-tail-${role}`,
+      );
+    },
+  );
+
+  it("allows Root to waive tail inspection without a business-role assignment", async () => {
+    const { app, service } = create([], [], true);
+    const result = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${response.reworkOrderId}/waive-tail-inspection`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "waive-tail-root",
+      },
+      payload: { expectedVersion: 1, reason: "Root 纠正旧订单" },
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(service.waiveTailInspection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["root_superuser"],
+        authorizationCapability: "tail_inspection:waive",
+        authorizationCapabilities: ["tail_inspection:waive"],
+      }),
+      response.reworkOrderId,
+      { expectedVersion: 1, reason: "Root 纠正旧订单" },
+      "waive-tail-root",
+    );
+  });
+
+  it.each(["quality_control", "tail_supervisor", "order_merchandiser"])(
+    "rejects tail inspection waiver from %s even if capability is accidentally present",
+    async (role) => {
+      const { app, service } = create([role], ["tail_inspection:waive"]);
+      const result = await app.inject({
+        method: "POST",
+        url: `/rework-orders/${response.reworkOrderId}/waive-tail-inspection`,
+        headers: {
+          cookie: "dx_rework_session=trusted",
+          "idempotency-key": `waive-tail-forbidden-${role}`,
+        },
+        payload: { expectedVersion: 1, reason: "不需要尾查" },
+      });
+
+      expect(result.statusCode).toBe(403);
+      expect(service.waiveTailInspection).not.toHaveBeenCalled();
+    },
+  );
+
   it("derives the initiator from the session and requires an idempotency key", async () => {
     const { app, service } = create();
     const missing = await app.inject({

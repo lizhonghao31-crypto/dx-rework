@@ -16,6 +16,7 @@ import type {
   SupplementReworkOrderImages,
   TransitionReworkOrder,
   UpdateReworkDraft,
+  WaiveTailInspection,
 } from "@dx-rework/contracts";
 import { DomainRuleError, transitionReworkOrder } from "@dx-rework/domain";
 import type { Pool, PoolClient } from "pg";
@@ -427,6 +428,254 @@ export class ReworkInitiationService {
     });
   }
 
+  async waiveTailInspection(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: WaiveTailInspection,
+    idempotencyKey: string,
+  ): Promise<MutationResult<ReworkOrderResponse>> {
+    return this.mutate(
+      actor,
+      "rework.tail_inspection.waive",
+      idempotencyKey,
+      { reworkOrderId, ...input },
+      200,
+      async (client) => {
+        const current = await this.lockAccessible(client, reworkOrderId);
+        this.ensureVersion(current, input.expectedVersion);
+        if (!current.tail_inspection_required) {
+          throw new ApplicationError("CONFLICT", "该返工单已经无需尾查", 409);
+        }
+        if (!(["in_progress", "pending_order_review"] as ReworkOrderStatus[]).includes(current.status)) {
+          throw new ApplicationError(
+            "INVALID_STATE_TRANSITION",
+            "只能在返工执行中或提交最终数量前改为无需尾查；已提交最终数量的订单请先由 IE 驳回",
+            409,
+          );
+        }
+
+        const unifiedReports = await client.query<{
+          work_report_id: string;
+          assignment_mode: "individual" | "collective";
+          rejected_person_id: string | null;
+          report_snapshot: Record<string, unknown>;
+        }>(
+          `SELECT report.work_report_id,task.assignment_mode,
+                  CASE WHEN task.assignment_mode='individual' THEN (
+                    SELECT member.person_id
+                    FROM rework_work_task_members member
+                    WHERE member.work_task_id=task.work_task_id
+                    ORDER BY member.person_id
+                    LIMIT 1
+                  ) END AS rejected_person_id,
+                  to_jsonb(report) AS report_snapshot
+           FROM rework_work_reports report
+           JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=report.configuration_item_id
+           WHERE report.rework_order_id=$1
+             AND report.status='submitted'
+             AND item.execution_kind='tail_inspection'
+             AND NOT EXISTS (
+               SELECT 1 FROM rework_work_report_rejections rejection
+               WHERE rejection.work_report_id=report.work_report_id
+             )
+           ORDER BY report.created_at,report.work_report_id
+           FOR UPDATE OF report`,
+          [reworkOrderId],
+        );
+        const unifiedTailReportIds = await client.query<{ work_report_id: string }>(
+          `SELECT report.work_report_id
+           FROM rework_work_reports report
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=report.configuration_item_id
+           WHERE report.rework_order_id=$1
+             AND item.execution_kind='tail_inspection'
+           ORDER BY report.work_report_id`,
+          [reworkOrderId],
+        );
+        const tailTasks = await client.query<{ work_task_id: string }>(
+          `SELECT task.work_task_id
+           FROM rework_work_tasks task
+           JOIN rework_process_configuration_items item
+             ON item.configuration_item_id=task.configuration_item_id
+           WHERE task.rework_order_id=$1 AND task.status='active'
+             AND item.execution_kind='tail_inspection'
+           ORDER BY task.work_task_id
+           FOR UPDATE OF task`,
+          [reworkOrderId],
+        );
+        const legacyReports = await client.query<{ tail_inspection_report_id: string }>(
+          `SELECT tail_inspection_report_id
+           FROM rework_tail_inspection_reports
+           WHERE rework_order_id=$1 AND status='submitted'
+           ORDER BY tail_inspection_report_id
+           FOR UPDATE`,
+          [reworkOrderId],
+        );
+        const legacyTailReportIds = await client.query<{ tail_inspection_report_id: string }>(
+          `SELECT tail_inspection_report_id
+           FROM rework_tail_inspection_reports
+           WHERE rework_order_id=$1
+           ORDER BY tail_inspection_report_id`,
+          [reworkOrderId],
+        );
+        const legacyAssignments = await client.query<{ tail_inspection_assignment_id: string }>(
+          `SELECT tail_inspection_assignment_id
+           FROM rework_tail_inspection_assignments
+           WHERE rework_order_id=$1 AND revoked_at IS NULL
+           ORDER BY tail_inspection_assignment_id
+           FOR UPDATE`,
+          [reworkOrderId],
+        );
+
+        const workerReadiness = await client.query<{ ready: boolean }>(
+          `SELECT EXISTS(
+             SELECT 1
+             FROM rework_process_configurations configuration
+             JOIN rework_process_configuration_items item
+               ON item.configuration_id=configuration.configuration_id
+             WHERE configuration.rework_order_id=$1
+               AND configuration.status='approved'
+               AND item.execution_kind='worker'
+           )
+           AND NOT EXISTS(
+             SELECT 1
+             FROM rework_process_configurations configuration
+             JOIN rework_process_configuration_items item
+               ON item.configuration_id=configuration.configuration_id
+             WHERE configuration.rework_order_id=$1
+               AND configuration.status='approved'
+               AND item.execution_kind='worker'
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_work_tasks task
+                 WHERE task.rework_order_id=$1
+                   AND task.configuration_item_id=item.configuration_item_id
+                   AND task.status='active'
+               )
+           )
+           AND NOT EXISTS(
+             SELECT 1
+             FROM rework_work_tasks task
+             JOIN rework_process_configuration_items item
+               ON item.configuration_item_id=task.configuration_item_id
+             WHERE task.rework_order_id=$1 AND task.status='active'
+               AND item.execution_kind='worker'
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_work_reports report
+                 WHERE report.work_task_id=task.work_task_id
+                   AND report.status='submitted'
+                   AND NOT EXISTS(
+                     SELECT 1 FROM rework_work_report_rejections rejection
+                     WHERE rejection.work_report_id=report.work_report_id
+                   )
+               )
+           ) AS ready`,
+          [reworkOrderId],
+        );
+        const nextStatus: ReworkOrderStatus = workerReadiness.rows[0]?.ready
+          ? "pending_order_review"
+          : "in_progress";
+        const nextVersion = current.version + 1;
+        const before = await this.auditState(client, current);
+        const after = {
+          ...before,
+          status: nextStatus,
+          tailInspectionRequired: false,
+          version: nextVersion,
+          waiverReason: input.reason,
+          invalidatedTailWorkReportIds: unifiedReports.rows.map((row) => row.work_report_id),
+          retiredTailWorkTaskIds: tailTasks.rows.map((row) => row.work_task_id),
+          invalidatedLegacyTailReportIds: legacyReports.rows.map((row) => row.tail_inspection_report_id),
+          retiredLegacyTailAssignmentIds: legacyAssignments.rows.map((row) => row.tail_inspection_assignment_id),
+        };
+        const eventId = await this.events.append(client, actor, {
+          action: "rework.tail_inspection.waive",
+          entityType: "rework_order",
+          entityId: reworkOrderId,
+          before,
+          after,
+        });
+        await this.setTailWaiverAuditContext(client, eventId, actor.requestId);
+
+        for (const report of unifiedReports.rows) {
+          await client.query(
+            `INSERT INTO rework_work_report_rejections(
+               report_rejection_id,work_report_id,rework_order_id,rejected_person_id,
+               rejected_by,reason,report_snapshot
+             ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+            [
+              randomUUID(), report.work_report_id, reworkOrderId,
+              report.assignment_mode === "individual" ? report.rejected_person_id : null,
+              actor.actorId, input.reason, report.report_snapshot,
+            ],
+          );
+        }
+        await client.query(
+          `UPDATE rework_work_tasks task
+           SET status='superseded',superseded_at=CURRENT_TIMESTAMP
+           FROM rework_process_configuration_items item
+           WHERE task.rework_order_id=$1 AND task.status='active'
+             AND item.configuration_item_id=task.configuration_item_id
+             AND item.execution_kind='tail_inspection'`,
+          [reworkOrderId],
+        );
+        await client.query(
+          `UPDATE rework_tail_inspection_reports
+           SET status='rejected',rejected_at=CURRENT_TIMESTAMP,rejected_by=$2,rejection_reason=$3
+           WHERE rework_order_id=$1 AND status='submitted'`,
+          [reworkOrderId, actor.actorId, input.reason],
+        );
+        await client.query(
+          `UPDATE rework_tail_inspection_assignments
+           SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason=$3
+           WHERE rework_order_id=$1 AND revoked_at IS NULL`,
+          [reworkOrderId, actor.actorId, input.reason],
+        );
+        await client.query(
+          `UPDATE rework_orders
+           SET tail_inspection_required=false,status=$2,updated_by=$3,
+               version=$4,updated_at=CURRENT_TIMESTAMP
+           WHERE rework_order_id=$1`,
+          [reworkOrderId, nextStatus, actor.actorId, nextVersion],
+        );
+
+        const todoReason = `该订单已改为无需尾查：${input.reason}`;
+        await this.todos?.cancelOpenByDedupePrefix(
+          client, actor, `tail-inspection:${reworkOrderId}:`, todoReason,
+        );
+        for (const report of legacyTailReportIds.rows) {
+          await this.todos?.cancelOpenByDedupeKey(
+            client, actor, `tail-inspection-return:${report.tail_inspection_report_id}`, todoReason,
+          );
+        }
+        for (const report of unifiedTailReportIds.rows) {
+          await this.todos?.cancelOpenByDedupeKey(
+            client, actor, `work-report-return:${report.work_report_id}`, todoReason,
+          );
+        }
+        await this.todos?.cancelOpenByDedupePrefix(
+          client, actor, `whole-order-review:${reworkOrderId}:`, todoReason,
+        );
+        if (nextStatus === "pending_order_review") {
+          await this.todos?.actionableForUniqueDirectRole(client, actor, {
+            category: "whole_order_review",
+            sourceEventId: eventId,
+            sourceAction: "rework.tail_inspection.waive",
+            entityType: "rework_order",
+            entityId: reworkOrderId,
+            requiredRole: "tail_supervisor",
+            requiredCapability: "submission:audit",
+            route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "whole_order_review" },
+            policyKey: "general",
+            dedupeKey: `whole-order-review:${reworkOrderId}:${nextVersion}`,
+          });
+        }
+        return this.getAccessibleWithClient(client, reworkOrderId);
+      },
+    );
+  }
+
   async submit(
     actor: TrustedActorContext,
     reworkOrderId: string,
@@ -816,6 +1065,8 @@ export class ReworkInitiationService {
   ): Promise<MutationResult<T>> {
     if (scope === "rework.attachments.supplement") {
       this.ensureSupplementalImageActor(actor);
+    } else if (scope === "rework.tail_inspection.waive") {
+      this.ensureTailInspectionWaiverActor(actor);
     } else {
       this.ensureInitiator(actor);
     }
@@ -892,6 +1143,19 @@ export class ReworkInitiationService {
       || !actor.authorizationCapabilities?.includes("rework:delete")
     ) {
       throw new ApplicationError("FORBIDDEN", "只有超级用户可以删除返工单", 403);
+    }
+  }
+
+  private ensureTailInspectionWaiverActor(actor: TrustedActorContext): void {
+    const allowedRole = actor.actorRoles.includes("root_superuser")
+      || actor.actorRoles.includes("owner_group")
+      || actor.actorRoles.includes("production_management");
+    if (
+      actor.authorizationCapability !== "tail_inspection:waive"
+      || !actor.authorizationCapabilities?.includes("tail_inspection:waive")
+      || !allowedRole
+    ) {
+      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需尾查", 403);
     }
   }
 
@@ -1023,6 +1287,21 @@ export class ReworkInitiationService {
     const result = await client.query<ReworkOrderRow>(
       `${ORDER_SELECT}
        WHERE orders.rework_order_id=$1
+       FOR UPDATE OF orders`,
+      [reworkOrderId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
+    return row;
+  }
+
+  private async lockAccessible(
+    client: PoolClient,
+    reworkOrderId: string,
+  ): Promise<ReworkOrderRow> {
+    const result = await client.query<ReworkOrderRow>(
+      `${ORDER_SELECT}
+       WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'
        FOR UPDATE OF orders`,
       [reworkOrderId],
     );
@@ -1258,6 +1537,21 @@ export class ReworkInitiationService {
       `SELECT
          set_config('dx_rework.rework_event_id',$1,true),
          set_config('dx_rework.rework_request_id',$2,true)`,
+      [eventId, requestId],
+    );
+  }
+
+  private async setTailWaiverAuditContext(
+    client: PoolClient,
+    eventId: string,
+    requestId: string,
+  ): Promise<void> {
+    await client.query(
+      `SELECT
+         set_config('dx_rework.rework_event_id',$1,true),
+         set_config('dx_rework.rework_request_id',$2,true),
+         set_config('dx_rework.work_event_id',$1,true),
+         set_config('dx_rework.work_request_id',$2,true)`,
       [eventId, requestId],
     );
   }

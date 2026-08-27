@@ -10,6 +10,7 @@ import {
   SupplementReworkOrderImagesSchema,
   TransitionReworkOrderSchema,
   UpdateReworkDraftSchema,
+  WaiveTailInspectionSchema,
   type CreateReworkDraft,
   type ReworkInitiationOptionsResponse,
 } from "@dx-rework/contracts";
@@ -163,6 +164,32 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  const tailWaiverActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    const allowedRole = user.businessRoles?.some((role) =>
+      role === "owner_group" || role === "production_management") === true;
+    if (!user.businessRoles?.length && !isRoot) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    if (!isRoot && (!allowedRole || !user.capabilities.includes("tail_inspection:waive"))) {
+      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需尾查", 403);
+    }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    const authorizationCapabilities = [...user.capabilities];
+    if (isRoot && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
+    if (isRoot && !authorizationCapabilities.includes("tail_inspection:waive")) {
+      authorizationCapabilities.push("tail_inspection:waive");
+    }
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability: "tail_inspection:waive",
+      authorizationCapabilities,
+      requestId: request.id,
+    };
+  };
+
   app.post("/rework-orders/drafts", async (request, reply) => {
     const result = await dependencies.service.createDraft(
       await actor(request),
@@ -197,6 +224,17 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
       await supplementalImageActor(request),
       params.reworkOrderId,
       parse(SupplementReworkOrderImagesSchema, request.body),
+      idempotencyKey(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return result.value;
+  });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/waive-tail-inspection", async (request, reply) => {
+    const params = parse(ReworkOrderParamsSchema, request.params);
+    const result = await dependencies.service.waiveTailInspection(
+      await tailWaiverActor(request),
+      params.reworkOrderId,
+      parse(WaiveTailInspectionSchema, request.body),
       idempotencyKey(request),
     );
     if (result.reused) void reply.header("idempotency-replayed", "true");
