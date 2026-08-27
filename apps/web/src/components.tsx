@@ -340,11 +340,26 @@ export function Shell({
     href: "/ui/wages",
   });
 
-  const sourcingNavigation: NavigationEntry[] = currentUser && canAccessSourcing(currentUser) ? [{
-    name: "报价选厂工作台",
-    description: "查看并处理报价与选厂业务",
-    href: "/ui/sourcing",
-  }] : [];
+  const sourcingNavigation: NavigationEntry[] = [];
+  if (currentUser && canAccessSourcing(currentUser)) {
+    if (isRoot || (hasRole("order_merchandiser") && hasCapability("sourcing:inquiry:create"))) {
+      sourcingNavigation.push({
+        name: "创建订单",
+        description: "跟单登记订单资料与照片",
+        href: "/ui/sourcing/create",
+      });
+    }
+    sourcingNavigation.push({
+      name: "待审批订单",
+      description: "查看未完成订单与完整审批流程",
+      href: "/ui/sourcing/pending",
+    });
+    sourcingNavigation.push({
+      name: "历史订单",
+      description: "查询已完成订单与全量证据",
+      href: "/ui/sourcing/history",
+    });
+  }
 
   const platformNavigation: NavigationEntry[] = [];
   if (canManageEmployeeAccess) {
