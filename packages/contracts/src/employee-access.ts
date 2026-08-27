@@ -48,6 +48,7 @@ export const EmployeeAccessEmployeeSchema = z.object({
   manualAccessDisabled: z.boolean(),
   lastVerifiedAt: z.string().datetime(),
   hasLoggedIn: z.boolean(),
+  isRoot: z.boolean().default(false),
   businessRoles: z.array(RoleCodeSchema),
   roleHistory: z.array(EmployeeRoleHistorySchema),
 }).strict();
