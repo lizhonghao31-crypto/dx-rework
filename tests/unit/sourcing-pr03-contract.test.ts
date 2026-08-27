@@ -61,7 +61,7 @@ describe("sourcing PR03 contracts", () => {
   });
 
   it("keeps PR04 UI inside management selection and owner approval", async () => {
-    const page = await readFile("apps/web/src/sourcing-shell-page.tsx", "utf8");
+    const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain("创建并交给 IE");
     expect(page).toContain("确认 IE 价格");
     expect(page).toContain("选择加工厂");
