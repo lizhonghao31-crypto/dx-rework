@@ -457,14 +457,6 @@ export class WorkReportingService {
       if (task.assignment_mode !== "individual") error("执行中只能移除个人任务员工", 409, "CONFLICT");
       const reports = await client.query("SELECT 1 FROM rework_work_reports WHERE work_task_id=$1 LIMIT 1", [workTaskId]);
       if (reports.rows[0]) error("该员工已有上报记录，不能移除", 409, "CONFLICT");
-      const remaining = await client.query(
-        `SELECT 1 FROM rework_work_tasks
-         WHERE rework_order_id=$1 AND configuration_item_id=$2
-           AND status='active' AND work_task_id<>$3
-         LIMIT 1`,
-        [reworkOrderId, task.configuration_item_id, workTaskId],
-      );
-      if (!remaining.rows[0]) error("每道工序至少保留一名员工；请先新增替代人员", 409, "CONFLICT");
       const members = await this.members(client, workTaskId);
       const eventId = await this.events.append(client, actor, {
         action: "rework.work_task.active_remove",
@@ -1047,8 +1039,21 @@ export class WorkReportingService {
   private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskIds: readonly string[]): Promise<boolean> {
     const result = await client.query<{ ready: boolean }>(
       `SELECT EXISTS(
-         SELECT 1 FROM rework_work_tasks task
+       SELECT 1 FROM rework_work_tasks task
          WHERE task.rework_order_id=$1 AND task.status='active'
+       )
+       AND NOT EXISTS(
+         SELECT 1
+         FROM rework_process_configurations configuration
+         JOIN rework_process_configuration_items item
+           ON item.configuration_id=configuration.configuration_id
+         WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_work_tasks active_task
+             WHERE active_task.rework_order_id=$1
+               AND active_task.configuration_item_id=item.configuration_item_id
+               AND active_task.status='active'
+           )
        )
        AND NOT EXISTS(
          SELECT 1 FROM rework_work_tasks task

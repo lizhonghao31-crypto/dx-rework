@@ -273,15 +273,39 @@
 }
 
 .work-reporting-page .n04-progress-group__toolbar .n04-progress-group__heading {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
-.work-reporting-page .n04-progress-group__toolbar > .dx-button {
+.work-reporting-page .n04-progress-group__title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.work-reporting-page .n04-add-worker {
+  appearance: none;
   flex: 0 0 auto;
-  min-height: 32px;
-  padding: 5px 10px;
+  min-width: 0;
+  min-height: 24px;
+  margin: 0;
+  padding: 2px 7px;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: 6px;
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-primary);
+  font: 700 12px/1.2 system-ui, sans-serif;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.work-reporting-page .n04-add-worker:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.work-reporting-page .n04-progress-group__heading--compact {
+  width: auto;
+  margin-left: auto;
 }
 
 .work-reporting-page .n04-progress-summary {
@@ -378,17 +402,33 @@
 }
 
 .work-reporting-page .n04-worker-remove {
-  display: inline-grid;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  place-items: center;
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
   border: 1px solid #d9a6a6;
   border-radius: 999px;
   background: #fff;
   color: #a32121;
-  font: 800 18px/1 system-ui, sans-serif;
+  font: 800 14px/1 system-ui, sans-serif;
+  text-align: center;
   cursor: pointer;
+}
+
+.work-reporting-page .n04-worker-remove > span {
+  display: block;
+  width: 100%;
+  line-height: 1;
+  text-align: center;
+  transform: translateY(-1px);
 }
 
 .work-reporting-page .workforce-adjustment-processes {
