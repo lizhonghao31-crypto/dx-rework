@@ -31,6 +31,7 @@ type EmployeeRow = Readonly<{
   manual_access_disabled: boolean;
   last_verified_at: Date;
   has_logged_in: boolean;
+  is_root: boolean;
   business_roles: string[];
 }>;
 
@@ -119,6 +120,7 @@ export class EmployeeAccessService {
     private readonly authStore: PostgresAuthStore,
     private readonly provider: OfficialDingTalkProvider,
     private readonly bootstrap: OwnerBootstrapConfig,
+    private readonly rootDingtalkUserId: string | undefined,
     private readonly events = new OperationEventRepository(),
   ) {}
 
@@ -136,6 +138,7 @@ export class EmployeeAccessService {
            u.manual_access_disabled,
            i.last_verified_at,
            EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id) has_logged_in,
+           COALESCE(i.provider_user_id=$2,false) is_root,
            COALESCE(
              ARRAY(
                SELECT ura.role_code
@@ -151,7 +154,7 @@ export class EmployeeAccessService {
            ON i.user_id=u.id AND i.provider='dingtalk' AND i.corp_id=$1
          LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
          ORDER BY u.display_name,u.id`,
-        [this.corporationId],
+        [this.corporationId, this.rootDingtalkUserId ?? null],
       ),
       this.database.query<RoleHistoryRow>(
         `SELECT
@@ -195,6 +198,7 @@ export class EmployeeAccessService {
         manualAccessDisabled: row.manual_access_disabled,
         lastVerifiedAt: row.last_verified_at.toISOString(),
         hasLoggedIn: row.has_logged_in,
+        isRoot: row.is_root,
         businessRoles: row.business_roles,
         roleHistory: (historyByUser.get(row.user_id) ?? []).map((item) => ({
           assignmentId: item.assignment_id,
