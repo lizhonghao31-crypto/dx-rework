@@ -30,6 +30,7 @@ import { createClientRequestId } from "./client-request-id.js";
 import { Header, Shell } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
 import "./rework-detail.css";
+import "./rework-detail-compact.css";
 import "./sourcing-workspace.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
