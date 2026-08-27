@@ -116,8 +116,8 @@ describe("rework initiation contracts", () => {
     }).success).toBe(false);
   });
 
-  it("caps one rework order at six unified attachments", () => {
-    expect(MAX_REWORK_ATTACHMENTS).toBe(6);
+  it("caps one rework order at eight unified attachments", () => {
+    expect(MAX_REWORK_ATTACHMENTS).toBe(8);
     const attachmentIds = Array.from({ length: MAX_REWORK_ATTACHMENTS + 1 }, (_value, index) =>
       `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     );
@@ -125,6 +125,16 @@ describe("rework initiation contracts", () => {
       attachmentIds: attachmentIds.slice(0, MAX_REWORK_ATTACHMENTS),
     }).success).toBe(true);
     expect(CreateReworkDraftSchema.safeParse({ attachmentIds }).success).toBe(false);
+  });
+
+  it("keeps the detail image region at six visible slots while all eight remain previewable", async () => {
+    const source = await readFile(
+      new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("const visibleImageAttachments = imageAttachments.slice(0, 6);");
+    expect(source).toContain("index === 5 && imageAttachments.length > 6");
+    expect(source).toContain("imageAttachments.length - 5");
   });
 
   it("requires a non-empty, unique, capped image supplement batch", () => {

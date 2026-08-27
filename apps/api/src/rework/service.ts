@@ -973,8 +973,8 @@ export class ReworkInitiationService {
     );
     const row = result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
-    if (row.status === "completed" || row.status === "cancelled") {
-      throw new ApplicationError("INVALID_STATE_TRANSITION", "已归档或已取消的返工单不能补充图片", 409);
+    if (row.status === "cancelled") {
+      throw new ApplicationError("INVALID_STATE_TRANSITION", "已取消的返工单不能补充图片", 409);
     }
     return row;
   }

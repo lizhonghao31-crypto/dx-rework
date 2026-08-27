@@ -30,6 +30,13 @@ import type { ReworkV2DraftService } from "./v2-draft-service.js";
 import type { ReworkV2SubmissionService } from "./v2-submission-service.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SUPPLEMENTAL_IMAGE_ROLES = new Set([
+  "quality_control",
+  "tail_supervisor",
+  "production_management",
+  "owner_group",
+  "order_merchandiser",
+]);
 type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{ receivingBatchId?: string }>;
 const CreateReworkDraftWithReceivingBatchSchema = {
   safeParse(value: unknown):
@@ -127,6 +134,26 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  const supplementalImageActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    if (!user.businessRoles?.length && !isRoot) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    if (!isRoot && !user.businessRoles?.some((role) => SUPPLEMENTAL_IMAGE_ROLES.has(role))) {
+      throw new ApplicationError("FORBIDDEN", "当前角色无权补充返工单图片", 403);
+    }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability: "tools:user",
+      authorizationCapabilities: user.capabilities,
+      requestId: request.id,
+    };
+  };
+
   const rootDeleteActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
@@ -171,7 +198,7 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/supplemental-images", async (request, reply) => {
     const params = parse(ReworkOrderParamsSchema, request.params);
     const result = await dependencies.service.supplementOrderImages(
-      await actor(request),
+      await supplementalImageActor(request),
       params.reworkOrderId,
       parse(SupplementReworkOrderImagesSchema, request.body),
       idempotencyKey(request),
