@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { shanghaiBusinessDate } from "./business-date.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { SearchSelect } from "./search-select.js";
@@ -166,7 +167,7 @@ export function ExternalResponsibilityPanel({
   const mutationKey = (signature: string): string => {
     const existing = pendingMutationKeys.current[signature];
     if (existing) return existing;
-    const next = crypto.randomUUID();
+    const next = createClientRequestId();
     pendingMutationKeys.current[signature] = next;
     return next;
   };
@@ -207,7 +208,7 @@ export function ExternalResponsibilityPanel({
     }
     const supplierType = requiredSupplierType(item.responsibilityType);
     const signature = `temporary-supplier:${reworkOrderId}:${supplierType}:${supplierName}`;
-    const idempotencyKey = pendingMutationKeys.current[signature] ?? crypto.randomUUID();
+    const idempotencyKey = pendingMutationKeys.current[signature] ?? createClientRequestId();
     pendingMutationKeys.current[signature] = idempotencyKey;
     setBusy(true);
     setMessage("");

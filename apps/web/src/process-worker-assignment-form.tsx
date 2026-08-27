@@ -14,6 +14,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { verifySession } from "./auth.js";
 import { LegacyProcessConfigurationForm } from "./legacy-process-configuration-form.js";
 import { SearchSelect } from "./search-select.js";
@@ -145,7 +146,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
 
   const mutationKey = (signature: string): string => {
     const existing = pendingKeys.current[signature]; if (existing) return existing;
-    const next = crypto.randomUUID(); pendingKeys.current[signature] = next; return next;
+    const next = createClientRequestId(); pendingKeys.current[signature] = next; return next;
   };
   const hydrate = (config: ProcessConfigurationResponse, workerPlan: ProcessWorkerPlanResponse) => {
     setResponse(config); setPlan(workerPlan);
@@ -382,7 +383,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       let attempt = pendingSubmit.current;
       if (!attempt) {
         const saved = await persistMergedDraft(); const savedConfiguration = saved.configuration; if (!savedConfiguration) throw new Error("工序配置不存在");
-        attempt = { reworkOrderId, body: { expectedOrderVersion: saved.orderVersion, expectedConfigurationVersion: savedConfiguration.configurationVersion }, key: crypto.randomUUID() };
+        attempt = { reworkOrderId, body: { expectedOrderVersion: saved.orderVersion, expectedConfigurationVersion: savedConfiguration.configurationVersion }, key: createClientRequestId() };
         pendingSubmit.current = attempt;
       }
       const submitted = await request(`rework-orders/${reworkOrderId}/process-configuration/submit`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(attempt.body) });
@@ -408,7 +409,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     if (!response || !plan?.configurationVersion || busy) return;
     setBusy(true);
     try {
-      await request(`rework-orders/${reworkOrderId}/process-worker-plan/activate`, ProcessWorkerPlanActivationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: plan.configurationVersion }) });
+      await request(`rework-orders/${reworkOrderId}/process-worker-plan/activate`, ProcessWorkerPlanActivationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": createClientRequestId() }, body: JSON.stringify({ expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: plan.configurationVersion }) });
       setMessage(tailInspectionRequired ? "返工人员与尾查任务已生效，返工开始。" : "返工任务已生效，返工开始。"); await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "返工启动失败"); } finally { setBusy(false); }
   };

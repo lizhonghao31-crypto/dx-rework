@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { Shell } from "./components.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { promptInApp } from "./system-dialog.js";
@@ -101,7 +102,7 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 const generatedCode = (prefix: string): string =>
-  `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+  `${prefix}_${createClientRequestId().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
 
 const supplierPrefix = (type: Supplier["supplierType"]): string => {
   if (type === "factory") return "FAC";

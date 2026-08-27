@@ -8,6 +8,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { confirmInApp, promptInApp } from "./system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -130,7 +131,7 @@ export function WholeOrderReviewPanel({
     applyResult?: (result: T) => void,
   ) => {
     const signature = path + JSON.stringify(body);
-    const idempotencyKey = attempts.current[signature] ?? crypto.randomUUID();
+    const idempotencyKey = attempts.current[signature] ?? createClientRequestId();
     attempts.current[signature] = idempotencyKey;
     setBusy(true);
     try {

@@ -17,6 +17,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import {
   currentQcUploadConcurrency,
   currentUploadClientProfile,
@@ -351,7 +352,7 @@ export function ReworkInitiationV2Form({
   const saveKey = (): string => {
     const nextFingerprint = fingerprint();
     if (pendingSave.current?.fingerprint === nextFingerprint) return pendingSave.current.key;
-    const key = crypto.randomUUID();
+    const key = createClientRequestId();
     pendingSave.current = { fingerprint: nextFingerprint, key };
     return key;
   };
@@ -467,7 +468,7 @@ export function ReworkInitiationV2Form({
           const attempt: PendingSubmitAttempt = {
             reworkOrderId: saved.reworkOrderId,
             body: { expectedVersion: saved.version },
-            key: crypto.randomUUID(),
+            key: createClientRequestId(),
           };
           pendingSubmit.current = attempt;
           return attempt;
@@ -520,7 +521,7 @@ export function ReworkInitiationV2Form({
         uploadConcurrency,
         async (file, index) => {
           const baseTiming: AttachmentUploadTimingContext = {
-            diagnosticId: crypto.randomUUID(),
+            diagnosticId: createClientRequestId(),
             ...profile,
             originalBytes: file.size,
             uploadBytes: file.size,

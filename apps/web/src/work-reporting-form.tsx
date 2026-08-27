@@ -11,6 +11,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { verifySession } from "./auth.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
@@ -198,7 +199,7 @@ export function WorkReportingForm({
     setBusy(true);
     try {
       const assigned = await mapWithConcurrency(memberIds, 3, (personId) => request(`rework-orders/${data.reworkOrderId}/work-tasks`, WorkTaskResponseSchema.parse, {
-        method: "POST", headers: { "idempotency-key": crypto.randomUUID() },
+        method: "POST", headers: { "idempotency-key": createClientRequestId() },
         body: JSON.stringify({ expectedOrderVersion: data.orderVersion, configurationItemId, mode: "individual", members: [{ personId }] }),
       }));
       setData({ ...data, tasks: [...data.tasks, ...assigned] });
@@ -216,7 +217,7 @@ export function WorkReportingForm({
     try {
       await requestNoContent(`work-tasks/${removalTask.workTaskId}/remove`, {
         method: "POST",
-        headers: { "idempotency-key": crypto.randomUUID() },
+        headers: { "idempotency-key": createClientRequestId() },
         body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
       });
       await reload();
@@ -272,7 +273,7 @@ export function WorkReportingForm({
     setBusy(true);
     try {
       const confirmed = await request(`rework-orders/${data.reworkOrderId}/work-tasks/confirm`, ReworkWorkTasksResponseSchema.parse, {
-        method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
+        method: "POST", headers: { "idempotency-key": createClientRequestId() }, body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
       });
       setData(confirmed); setMessage("返工已开始。工人只需在真正完工后点击“我已完工&上数”。"); await onOrderChanged?.();
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "无法开始返工"); } finally { setBusy(false); }
@@ -296,7 +297,7 @@ export function WorkReportingForm({
         const quantity = quantities[0]!;
         await request(`work-tasks/${quantity.task.workTaskId}/reports`, WorkReportResponseSchema.parse, {
           method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
+          headers: { "idempotency-key": createClientRequestId() },
           body: JSON.stringify({ expectedOrderVersion: data.orderVersion, actualQuantity: Number(quantity.text) }),
         });
       } else {
@@ -305,7 +306,7 @@ export function WorkReportingForm({
           WorkReportsBatchResponseSchema.parse,
           {
             method: "POST",
-            headers: { "idempotency-key": crypto.randomUUID() },
+            headers: { "idempotency-key": createClientRequestId() },
             body: JSON.stringify({
               expectedOrderVersion: data.orderVersion,
               reports: quantities.map(({ task, text }) => ({
