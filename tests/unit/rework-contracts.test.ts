@@ -160,6 +160,17 @@ describe("rework initiation contracts", () => {
     }).success).toBe(false);
   });
 
+  it("keeps role-based supplements inside the database audit boundary", async () => {
+    const source = await readFile(
+      new URL("../../apps/api/migrations/0103_role_based_rework_image_supplement.sql", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("expected_action:='rework.attachments.supplement'; expected_capability:='tools:user'");
+    expect(source).toContain("order_status NOT IN ('cancelled','deleted')");
+    expect(source).toContain("event.authorization_capability='tools:user'");
+    expect(source).not.toContain("OLD.status IN ('completed','cancelled','deleted')");
+  });
+
   it("permits the PR-05/06 state transitions without unlocking later nodes", () => {
     expect(transitionReworkOrder("draft", "pending_process_configuration"))
       .toBe("pending_process_configuration");
