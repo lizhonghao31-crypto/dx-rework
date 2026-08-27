@@ -22,6 +22,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(accessModuleIdsForRole("owner_group")).toEqual(["rework", "sourcing", "platform"]);
     expect(employeeHasAccessModule(["owner_group"], [], "sourcing")).toBe(true);
     expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
+    expect(employeeHasAccessModule(["tail_inspector"], [], "rework")).toBe(true);
   });
 
   it("renders standalone global entries and permission-gated grouped desktop navigation", async () => {
