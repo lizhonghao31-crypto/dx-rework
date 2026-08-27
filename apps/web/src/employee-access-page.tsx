@@ -8,6 +8,11 @@ import {
   hasEffectiveRoleAccess,
   type EmployeeAccessFilter,
 } from "./employee-access-filter.js";
+import {
+  accessModuleLabelsForCapabilities,
+  employeeHasAccessModule,
+  type PlatformAccessModuleId,
+} from "./platform-access.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { confirmInApp, promptInApp } from "./system-dialog.js";
 import "./employee-access.css";
@@ -64,6 +69,7 @@ export function EmployeeAccessPage() {
   const [roleByUser, setRoleByUser] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [accessFilter, setAccessFilter] = useState<EmployeeAccessFilter>("all");
+  const [moduleFilter, setModuleFilter] = useState<"all" | PlatformAccessModuleId>("all");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -90,6 +96,18 @@ export function EmployeeAccessPage() {
     [roles],
   );
   const roleName = (roleCode: string) => roleNameByCode.get(roleCode) ?? BUILTIN_ROLE_NAMES[roleCode] ?? roleCode;
+  const roleByCode = useMemo(
+    () => new Map(roles.map((role) => [role.roleCode, role])),
+    [roles],
+  );
+  const roleDisplayName = (role: Role): string => {
+    const modules = accessModuleLabelsForCapabilities(role.capabilities);
+    return modules.length ? `${role.displayName}（${modules.join(" / ")}）` : role.displayName;
+  };
+  const assignedRoleDisplayName = (roleCode: string): string => {
+    const role = roleByCode.get(roleCode);
+    return role ? roleDisplayName(role) : roleName(roleCode);
+  };
 
   const usableOwnerCount = useMemo(
     () => directory?.employees.filter((employee) =>
@@ -102,7 +120,9 @@ export function EmployeeAccessPage() {
 
   const filteredEmployees = useMemo(() => {
     if (!directory) return [];
-    const employees = employeesInAccessFilter(directory.employees, accessFilter);
+    const employees = employeesInAccessFilter(directory.employees, accessFilter)
+      .filter((employee) => moduleFilter === "all"
+        || employeeHasAccessModule(employee.businessRoles, roles, moduleFilter));
     const needle = query.trim().toLocaleLowerCase("zh-CN");
     if (!needle) return employees;
     return employees.filter((employee) => {
@@ -116,7 +136,7 @@ export function EmployeeAccessPage() {
       ].join(" ").toLocaleLowerCase("zh-CN");
       return haystack.includes(needle);
     });
-  }, [accessFilter, directory, query, roleNameByCode]);
+  }, [accessFilter, directory, moduleFilter, query, roleNameByCode, roles]);
 
   const effectiveRoleCount = useMemo(
     () => directory?.employees.filter(hasEffectiveRoleAccess).length ?? 0,
@@ -195,12 +215,12 @@ export function EmployeeAccessPage() {
   };
 
   return (
-    <Shell active="系统管理">
+    <Shell active="人员与权限">
       <div className="employee-access-shell">
         <header className="page-heading employee-access-heading">
           <div>
-            <h1>员工权限管理</h1>
-            <p>同步、查询和维护员工的系统访问与业务角色。</p>
+            <h1>人员与权限</h1>
+            <p>在同一个平台入口维护员工、业务角色及其模块权限。</p>
           </div>
           <div className="employee-access-sync">
             <span>最近同步：{directory?.lastDirectorySyncedAt ? new Date(directory.lastDirectorySyncedAt).toLocaleString("zh-CN") : "尚未同步"}</span>
@@ -217,6 +237,16 @@ export function EmployeeAccessPage() {
             >
               <option value="all">全部员工</option>
               <option value="effective-role">当前生效且已分配角色</option>
+            </select>
+            <select
+              value={moduleFilter}
+              aria-label="业务模块"
+              onChange={(event) => setModuleFilter(event.target.value as "all" | PlatformAccessModuleId)}
+            >
+              <option value="all">全部模块</option>
+              <option value="rework">返工</option>
+              <option value="sourcing">报价&amp;选厂</option>
+              <option value="platform">平台管理</option>
             </select>
             <input
               type="search"
@@ -270,7 +300,7 @@ export function EmployeeAccessPage() {
                       <div><dt>组织状态</dt><dd>{employee.employed && employee.active ? "正常在职" : employee.employed ? "组织停用" : "非在职"}</dd></div>
                       <div><dt>系统状态</dt><dd>{employeeStatus(employee)} · {employee.hasLoggedIn ? "已登录过" : "未登录"}</dd></div>
                       <div><dt>最近校验</dt><dd>{new Date(employee.lastVerifiedAt).toLocaleString("zh-CN")}</dd></div>
-                      <div><dt>当前角色</dt><dd>{employee.businessRoles.length ? employee.businessRoles.map(roleName).join("、") : "未分配"}</dd></div>
+                      <div><dt>当前角色 / 模块</dt><dd>{employee.businessRoles.length ? employee.businessRoles.map(assignedRoleDisplayName).join("、") : "未分配"}</dd></div>
                     </dl>
 
                     <label className="employee-access-reason">
@@ -290,7 +320,7 @@ export function EmployeeAccessPage() {
                         disabled={assignableRoles.length === 0}
                         onChange={(event) => setRoleByUser((current) => ({ ...current, [employee.userId]: event.target.value }))}
                       >
-                        {assignableRoles.map((role) => <option key={role.roleCode} value={role.roleCode}>{role.displayName}</option>)}
+                        {assignableRoles.map((role) => <option key={role.roleCode} value={role.roleCode}>{roleDisplayName(role)}</option>)}
                       </select>
                       <Button
                         disabled={Boolean(busy)
