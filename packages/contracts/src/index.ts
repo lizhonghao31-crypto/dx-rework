@@ -676,6 +676,18 @@ export const CreateWorkTaskSchema = z.object({
     context.addIssue({ code: "custom", path: ["members"], message: "An individual task has exactly one worker" });
   }
 });
+export const AddActiveWorkTaskMembersSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  configurationItemId: IdSchema,
+  memberIds: z.array(IdSchema).min(1).max(40),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.memberIds).size !== value.memberIds.length) {
+    context.addIssue({ code: "custom", path: ["memberIds"], message: "Work task members cannot contain duplicates" });
+  }
+});
+export const RemoveActiveWorkTaskSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+}).strict();
 export const WorkTaskParamsSchema = z.object({ workTaskId: IdSchema }).strict();
 export const ReworkWorkTasksParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
 export const FrontlineTaskKindSchema = z.enum(["worker", "tail_inspection"]);
@@ -766,6 +778,8 @@ export const ReworkWorkTasksResponseSchema = z.object({
   tasks: z.array(WorkTaskResponseSchema),
 });
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
+export type AddActiveWorkTaskMembers = z.infer<typeof AddActiveWorkTaskMembersSchema>;
+export type RemoveActiveWorkTask = z.infer<typeof RemoveActiveWorkTaskSchema>;
 export type ConfirmWorkAssignments = z.infer<typeof ConfirmWorkAssignmentsSchema>;
 export type CreateWorkReport = z.infer<typeof CreateWorkReportSchema>;
 export type CreateWorkReportsBatch = z.infer<typeof CreateWorkReportsBatchSchema>;

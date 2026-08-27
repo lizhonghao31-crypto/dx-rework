@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 
+import { AddActiveWorkTaskMembersSchema } from "@dx-rework/contracts";
 import {
   calculateWorkAmount,
   splitAmount,
 } from "../../apps/api/src/rework/work-reporting-service.js";
-import { canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
+import { canAdjustActiveWorkforce, canAssignWork } from "../../apps/web/src/work-reporting-permissions.js";
 import { localDateTimeValue, reportAttempt, reportsArePersisted, taskAttempt, workReportDraft } from "../../apps/web/src/work-reporting-submission.js";
 import { describe, expect, it } from "vitest";
 
@@ -31,8 +32,8 @@ describe("work reporting monetary snapshots", () => {
     expect(canAssignWork({ businessRoles: ["worker"], capabilities: ["work:report"] })).toBe(false);
     expect(canAssignWork({ businessRoles: ["tail_supervisor"], capabilities: ["work:assign"] })).toBe(true);
     const form = await readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8");
-    expect(form).toContain("if (!assignable || !assignmentView) return;");
-    expect(form).toContain("request(\"work-task-options\"");
+    expect(form).toContain("(!activeAdjustable || !adjustmentView)");
+    expect(form).toContain('adjustmentView ? "work-task-adjustment-options" : "work-task-options"');
     expect(form).toContain('effectiveTaskMode === "task_assignment" && data');
     expect(form).toContain("我已完工&上数");
     expect(form).toContain("task.canSubmitReport");
@@ -59,6 +60,71 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain('aria-controls="n04-completed-task-list"');
     const app = await readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8");
     expect(app).toContain("return <AuthGate>{page}</AuthGate>");
+  });
+
+  it("restricts active employee adjustment to tail supervisors, owners, and Root", () => {
+    expect(canAdjustActiveWorkforce({
+      businessRoles: ["tail_supervisor"],
+      capabilities: ["work:assignment_adjust"],
+    })).toBe(true);
+    expect(canAdjustActiveWorkforce({
+      businessRoles: ["owner_group"],
+      capabilities: ["work:assignment_adjust"],
+    })).toBe(true);
+    expect(canAdjustActiveWorkforce({
+      businessRoles: ["production_management"],
+      capabilities: ["work:assignment_adjust"],
+    })).toBe(false);
+    expect(canAdjustActiveWorkforce({
+      businessRoles: ["quality_control"],
+      capabilities: ["work:assignment_adjust"],
+    })).toBe(false);
+    expect(canAdjustActiveWorkforce({
+      businessRoles: ["worker"],
+      capabilities: ["work:assignment_adjust"],
+    })).toBe(false);
+    expect(canAdjustActiveWorkforce({
+      isRoot: true,
+      businessRoles: [],
+      capabilities: [],
+    })).toBe(true);
+  });
+
+  it("validates one atomic active-add batch and rejects duplicate employees", () => {
+    const payload = {
+      expectedOrderVersion: 3,
+      configurationItemId: "00000000-0000-4000-8000-000000000011",
+      memberIds: [
+        "00000000-0000-4000-8000-000000000012",
+        "00000000-0000-4000-8000-000000000013",
+      ],
+    };
+    expect(AddActiveWorkTaskMembersSchema.safeParse(payload).success).toBe(true);
+    expect(AddActiveWorkTaskMembersSchema.safeParse({
+      ...payload,
+      memberIds: [payload.memberIds[0], payload.memberIds[0]],
+    }).success).toBe(false);
+    expect(AddActiveWorkTaskMembersSchema.safeParse({
+      ...payload,
+      memberIds: Array.from({ length: 41 }, (_, index) =>
+        `00000000-0000-4000-8000-${String(index + 100).padStart(12, "0")}`),
+    }).success).toBe(false);
+  });
+
+  it("keeps the requested active-workforce UI actions separate and compact", async () => {
+    const form = await readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8");
+    const styles = await readFile(new URL("../../apps/web/src/work-reporting-form.css", import.meta.url), "utf8");
+    const service = await readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8");
+    expect(form).toContain(">新增员工</Button>");
+    expect(form).toContain('className="n04-worker-remove"');
+    expect(service).toContain("每道工序至少保留一名员工");
+    expect(service).toContain("该员工已有上报记录，不能移除");
+    expect(service).toContain('if (task.assignment_mode !== "individual")');
+    expect(service.indexOf("const task = await this.task(client, workTaskId, true);"))
+      .toBeLessThan(service.indexOf("只能在返工执行中移除员工"));
+    expect(form).toContain("只加入当前订单，不修改默认人员名单");
+    expect(styles).toContain(".n04-progress-group__toolbar");
+    expect(styles).toContain(".n04-worker-remove");
   });
 
   it("keeps assignment as an N03 draft and version-checks the unified start action", async () => {

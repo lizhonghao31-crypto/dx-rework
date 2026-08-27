@@ -14,13 +14,18 @@ import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { verifySession } from "./auth.js";
 import { mapWithConcurrency } from "./concurrency.js";
-import { canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
+import { canAdjustActiveWorkforce, canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
 import { reportsArePersisted } from "./work-reporting-submission.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
 import "./work-reporting-form.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-type Person = { personId: string; displayName: string; personType: "internal" | "temporary" };
+type Person = {
+  personId: string;
+  displayName: string;
+  personType: "internal" | "temporary";
+  eligibleExecutionKinds: Array<"worker" | "tail_inspection">;
+};
 type Task = ReworkWorkTasksResponse["tasks"][number];
 export type FrontlineWorkContext = Readonly<{
   kind: "worker" | "tail_inspection";
@@ -85,9 +90,11 @@ const groupTasksByProcess = (tasks: readonly Task[]): Task[] => {
 function ManagerTaskProgressRow({
   task,
   writable,
+  onRemove,
 }: Readonly<{
   task: Task;
   writable: boolean;
+  onRemove?: () => void;
 }>): ReactElement {
   const completed = task.remainingQuantity === 0;
   const temporary = task.members.some((member) => member.personType === "temporary");
@@ -95,7 +102,7 @@ function ManagerTaskProgressRow({
     <div className="n04-progress-fact"><small>工序</small><b>{taskProcessName(task)}</b></div>
     <div className="n04-progress-fact n04-progress-fact--worker">
       <small>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}</small>
-      <span><b>{task.members.map((member) => member.displayName).join("、")}</b>{temporary ? <em>临时工</em> : null}</span>
+      <span>{onRemove ? <button type="button" className="n04-worker-remove" aria-label={`移除${task.members[0]?.displayName ?? "该员工"}`} onClick={onRemove}>−</button> : null}<b>{task.members.map((member) => member.displayName).join("、")}</b>{temporary ? <em>临时工</em> : null}</span>
     </div>
     <div className="n04-progress-fact"><small>状态</small><StatusBadge tone={completed ? "success" : writable ? "warning" : "info"}>{completed ? "已完成" : writable ? "待上报" : "未完成"}</StatusBadge></div>
     <div className="n04-progress-fact"><small>上报数量</small><b className={completed ? "is-completed" : ""}>{completed ? `${task.submittedQuantity}件` : "—"}</b></div>
@@ -119,12 +126,14 @@ export function WorkReportingForm({
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? new URLSearchParams(window.location.search).get("rework");
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
-  const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string }>>([]);
+  const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string; executionKind: "worker" | "tail_inspection" }>>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleType, setPeopleType] = useState<"internal" | "temporary">("internal");
   const [peopleQuery, setPeopleQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [removalTask, setRemovalTask] = useState<Task | null>(null);
+  const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
+  const [adjustmentConfigurationItemId, setAdjustmentConfigurationItemId] = useState("");
   const [temporaryDialogOpen, setTemporaryDialogOpen] = useState(false);
   const [temporaryName, setTemporaryName] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
@@ -135,6 +144,7 @@ export function WorkReportingForm({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  const [canAdjustActive, setCanAdjustActive] = useState(false);
   const [canCreateTemporary, setCanCreateTemporary] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
@@ -142,11 +152,23 @@ export function WorkReportingForm({
   const [completedTasksExpanded, setCompletedTasksExpanded] = useState(true);
 
   const filteredPeople = useMemo(() => {
-    const typedPeople = people.filter((person) => person.personType === peopleType);
+    const selectedConfiguration = configItems.find((item) => item.configurationItemId === adjustmentConfigurationItemId);
+    const alreadyAssigned = new Set(
+      data?.tasks
+        .filter((task) => task.configurationItemId === adjustmentConfigurationItemId && task.status === "active")
+        .flatMap((task) => task.members.map((member) => member.personId)) ?? [],
+    );
+    const typedPeople = people.filter((person) =>
+      person.personType === peopleType
+      && (!adjustmentDialogOpen || (
+        selectedConfiguration !== undefined
+        && person.eligibleExecutionKinds.includes(selectedConfiguration.executionKind)
+        && !alreadyAssigned.has(person.personId)
+      )));
     const needle = peopleQuery.trim().toLocaleLowerCase("zh-CN");
     if (!needle) return typedPeople;
     return typedPeople.filter((person) => person.displayName.toLocaleLowerCase("zh-CN").includes(needle));
-  }, [people, peopleQuery, peopleType]);
+  }, [adjustmentConfigurationItemId, adjustmentDialogOpen, configItems, data?.tasks, people, peopleQuery, peopleType]);
 
   const reload = async (): Promise<ReworkWorkTasksResponse | null> => {
     if (!reworkOrderId) return null;
@@ -167,21 +189,31 @@ export function WorkReportingForm({
       const session = await verifySession();
       if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
       const assignable = canAssignWork(session.user);
+      const activeAdjustable = canAdjustActiveWorkforce(session.user);
       const root = session.user.isRoot === true;
       const taskReadable = canReadWorkFacts(session.user);
       const orderReviewable = canReviewOrder(session.user);
       const temporaryManageable = root || session.user.capabilities.includes("temporary_worker:manage");
-      setCanAssign(assignable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setReviewEligible(orderReviewable);
+      setCanAssign(assignable); setCanAdjustActive(activeAdjustable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
       const assignmentView = loaded?.reworkStatus === "pending_task_assignment"
         && (taskMode === "task_assignment" || taskMode === "workspace");
-      if (!assignable || !assignmentView) return;
+      const adjustmentView = loaded?.reworkStatus === "in_progress"
+        && (taskMode === "work_reporting" || taskMode === "workspace");
+      if ((!assignable || !assignmentView) && (!activeAdjustable || !adjustmentView)) return;
       const [, configuration] = await Promise.all([
-        reloadPeople(),
+        request(
+          adjustmentView ? "work-task-adjustment-options" : "work-task-options",
+          WorkTaskAssignablePeopleResponseSchema.parse,
+        ).then((result) => setPeople(result.people)),
         request(`rework-orders/${reworkOrderId}/process-configuration`, ProcessConfigurationResponseSchema.parse),
       ]);
-      setConfigItems(configuration.configuration?.items.map((item) => ({ configurationItemId: item.configurationItemId, processName: item.processName })) ?? []);
+      setConfigItems(configuration.configuration?.items.map((item) => ({
+        configurationItemId: item.configurationItemId,
+        processName: item.executionKind === "tail_inspection" ? "尾查" : item.processName,
+        executionKind: item.executionKind,
+      })) ?? []);
     };
     void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"));
   }, [reworkOrderId, taskMode]);
@@ -210,19 +242,75 @@ export function WorkReportingForm({
     } finally { setBusy(false); }
   };
 
+  const openActiveAddition = () => {
+    const firstConfiguration = configItems[0]?.configurationItemId ?? "";
+    setAdjustmentConfigurationItemId(firstConfiguration);
+    setPeopleType("internal");
+    setPeopleQuery("");
+    setSelected({});
+    setAdjustmentDialogOpen(true);
+  };
+
+  const addActiveMembers = async () => {
+    if (!data || data.reworkStatus !== "in_progress" || !canAdjustActive || busy) return;
+    if (!adjustmentConfigurationItemId) { setMessage("请选择要增加员工的工序。"); return; }
+    const memberIds = filteredPeople.filter((person) => selected[person.personId]).map((person) => person.personId);
+    if (memberIds.length === 0) { setMessage("请至少选择一名新增员工。"); return; }
+    setBusy(true);
+    try {
+      const adjusted = await request(
+        `rework-orders/${data.reworkOrderId}/work-tasks/add-members`,
+        ReworkWorkTasksResponseSchema.parse,
+        {
+          method: "POST",
+          headers: { "idempotency-key": createClientRequestId() },
+          body: JSON.stringify({
+            expectedOrderVersion: data.orderVersion,
+            configurationItemId: adjustmentConfigurationItemId,
+            memberIds,
+          }),
+        },
+      );
+      setData(adjusted);
+      setAdjustmentDialogOpen(false);
+      setSelected({});
+      setMessage(`已新增 ${memberIds.length} 名员工，仅应用于当前订单。`);
+    } catch (cause) {
+      await reload().catch(() => null);
+      setMessage(cause instanceof Error ? cause.message : "新增员工失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const confirmRemoval = async () => {
-    if (!data || data.reworkStatus !== "pending_task_assignment" || !removalTask || busy) return;
+    if (!data || !removalTask || busy) return;
     const workerName = removalTask.members[0]?.displayName ?? "该人员";
     setBusy(true);
     try {
-      await requestNoContent(`work-tasks/${removalTask.workTaskId}/remove`, {
-        method: "POST",
-        headers: { "idempotency-key": createClientRequestId() },
-        body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
-      });
-      await reload();
+      if (data.reworkStatus === "in_progress") {
+        const adjusted = await request(
+          `rework-orders/${data.reworkOrderId}/work-tasks/${removalTask.workTaskId}/remove-active`,
+          ReworkWorkTasksResponseSchema.parse,
+          {
+            method: "POST",
+            headers: { "idempotency-key": createClientRequestId() },
+            body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
+          },
+        );
+        setData(adjusted);
+      } else if (data.reworkStatus === "pending_task_assignment") {
+        await requestNoContent(`work-tasks/${removalTask.workTaskId}/remove`, {
+          method: "POST",
+          headers: { "idempotency-key": createClientRequestId() },
+          body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
+        });
+        await reload();
+      } else {
+        throw new Error("当前节点不能移除员工。");
+      }
       setRemovalTask(null);
-      setMessage(`已移除 ${workerName} 的错误分配。`);
+      setMessage(`已从当前订单移除 ${workerName}。`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "无法移除该人员分配");
     } finally {
@@ -355,12 +443,25 @@ export function WorkReportingForm({
   const visibleTasks = groupTasksByProcess(data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? []);
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
   const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
-  const managerProgressView = !frontlineContext && canAssign;
+  const managerProgressView = !frontlineContext && (canAssign || canAdjustActive);
+  const activeAdjustmentWritable = data?.reworkStatus === "in_progress" && canAdjustActive;
   const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
   const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;
   const allProcessesAssigned = configItems.length > 0 && configItems.every((item) => data?.tasks.some((task) => task.configurationItemId === item.configurationItemId));
   const selectedPeopleCount = people.filter((person) => selected[person.personId]).length;
+  const adjustmentSelectedCount = filteredPeople.filter((person) => selected[person.personId]).length;
+  const removableActiveTaskIds = new Set(
+    incompleteTasks
+      .filter((task) =>
+        activeAdjustmentWritable
+        && task.mode === "individual"
+        && task.members.length === 1
+        && incompleteTasks.filter((candidate) =>
+          candidate.configurationItemId === task.configurationItemId
+          && candidate.status === "active").length > 1)
+      .map((task) => task.workTaskId),
+  );
   const reportsReady = Boolean(reportTasks?.length && reportTasks.every((task) => {
     const text = reportQuantities[task.workTaskId]?.trim() ?? "";
     return /^\d+$/.test(text) && Number(text) > 0;
@@ -406,10 +507,13 @@ export function WorkReportingForm({
           <span className="is-completed">已完成 {completedTasks.length}</span>
         </div>
         <Surface className="n04-progress-group n04-progress-group--pending">
-          <button type="button" className={`n04-progress-group__heading${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
-            <h2>未完成</h2><StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
-          </button>
-          {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
+          <div className="n04-progress-group__toolbar">
+            <button type="button" className={`n04-progress-group__heading${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
+              <h2>未完成</h2><StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
+            </button>
+            {activeAdjustmentWritable ? <Button onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</Button> : null}
+          </div>
+          {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
         </Surface>
         <Surface className="n04-progress-group n04-progress-group--completed">
           <button type="button" className={`n04-progress-group__heading${completedTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={completedTasksExpanded} aria-controls="n04-completed-task-list" onClick={() => setCompletedTasksExpanded((expanded) => !expanded)}>
@@ -421,7 +525,8 @@ export function WorkReportingForm({
       {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代报数" : canAssign ? "临时工代报数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "我已完成尾查" : "我已返工完成"}</h2><p>{isRoot ? "为执行人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "填写本人实际尾查数量，提交后计入统一数量事实。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为报数" : canAssign ? "临时工完工上数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "尾查完成&报数" : "我已完工&上数"}</Button></Surface>}
       {visibleTasks.length === 0 && <Surface>当前暂无需要本人处理的任务。</Surface>}
     </>}
-    {removalTask && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”分配？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}
+    {removalTask && (assignmentWritable || activeAdjustmentWritable) && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认从当前订单移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”任务？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}
+    {adjustmentDialogOpen && activeAdjustmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="新增返工员工"><h2>新增员工</h2><p>新增人员只加入当前订单，不修改默认人员名单。</p><div className="workforce-adjustment-processes" role="group" aria-label="选择工序">{configItems.map((item) => <Button key={item.configurationItemId} {...(adjustmentConfigurationItemId === item.configurationItemId ? { variant: "primary" as const } : {})} onClick={() => { setAdjustmentConfigurationItemId(item.configurationItemId); setSelected({}); }} disabled={busy}>{item.processName}</Button>)}</div><div className="workforce-type-tabs" role="tablist" aria-label="员工类别"><button type="button" role="tab" aria-selected={peopleType === "internal"} className={peopleType === "internal" ? "is-active" : ""} onClick={() => choosePeopleType("internal")} disabled={busy}>正式工</button><button type="button" role="tab" aria-selected={peopleType === "temporary"} className={peopleType === "temporary" ? "is-active" : ""} onClick={() => choosePeopleType("temporary")} disabled={busy}>临时工</button></div><InsetField label="搜索员工" type="search" value={peopleQuery} placeholder="输入姓名搜索" disabled={busy} onChange={(event) => setPeopleQuery(event.target.value)} /><div className="workforce-person-list">{filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName}</label>)}</div>{filteredPeople.length === 0 ? <p>当前工序没有其他可新增员工。</p> : null}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setAdjustmentDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void addActiveMembers()} disabled={busy || adjustmentSelectedCount === 0}>{busy ? "新增中…" : `确认新增（${adjustmentSelectedCount}）`}</Button></div></div></Surface></div>}
     {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
     {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? "请输入您的实际尾查件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}{busy && <p role="status">正在提交 {reportTasks.length} 项报数，请勿关闭页面或重复操作。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? reportTasks.length > 1 ? `批量提交中（${reportTasks.length} 项）…` : "提交中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;

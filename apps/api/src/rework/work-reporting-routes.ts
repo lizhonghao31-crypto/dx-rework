@@ -1,4 +1,5 @@
 import {
+  AddActiveWorkTaskMembersSchema,
   CreateWorkReportSchema,
   CreateWorkReportsBatchSchema,
   CreateWorkTaskSchema,
@@ -8,6 +9,7 @@ import {
   IdempotencyKeySchema,
   ReworkWorkTasksParamsSchema,
   ReworkWorkTasksResponseSchema,
+  RemoveActiveWorkTaskSchema,
   WorkTaskAssignablePeopleResponseSchema,
   WorkReportResponseSchema,
   WorkReportsBatchResponseSchema,
@@ -38,7 +40,7 @@ export type WorkReportingHttpDependencies = Readonly<{
 }>;
 
 export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: WorkReportingHttpDependencies): void {
-  const actor = async (request: FastifyRequest, mode: "read" | "assign" | "report"): Promise<TrustedActorContext> => {
+  const actor = async (request: FastifyRequest, mode: "read" | "assign" | "report" | "active_adjustment"): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
     const isRoot = await isRootUser(dependencies.root, user.id);
     const ownerReader = user.businessRoles?.includes("owner_group") === true
@@ -52,10 +54,26 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
       || user.businessRoles?.includes("tail_inspector") === true
     ) && user.capabilities.includes("tail_inspection:report");
     const proxy = user.capabilities.includes("work:report_for_worker");
+    const workforceAdjuster = (
+      user.businessRoles?.includes("tail_supervisor") === true
+      || user.businessRoles?.includes("owner_group") === true
+    ) && user.capabilities.includes("work:assignment_adjust");
 
     if (mode === "assign") {
       if (!isRoot && !supervisor) throw new ApplicationError("FORBIDDEN", "当前角色无权分配返工任务", 403);
       return businessActor(dependencies.root, user, request.id, "work:assign", isRoot ? "tail_supervisor" : undefined);
+    }
+    if (mode === "active_adjustment") {
+      if (!isRoot && !workforceAdjuster) {
+        throw new ApplicationError("FORBIDDEN", "仅尾部主管、老板或超级用户可调整执行中员工", 403);
+      }
+      return businessActor(
+        dependencies.root,
+        user,
+        request.id,
+        "work:assignment_adjust",
+        isRoot ? "tail_supervisor" : undefined,
+      );
     }
     if (mode === "report") {
       if (!isRoot && !worker && !proxy && !tailInspector) throw new ApplicationError("FORBIDDEN", "当前角色无权提交返工执行报数", 403);
@@ -129,7 +147,33 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     const people = await dependencies.service.listAssignablePeople(assignActor);
     return WorkTaskAssignablePeopleResponseSchema.parse({ people });
   });
+  app.get("/work-task-adjustment-options", async (request) => {
+    const adjustmentActor = await actor(request, "active_adjustment");
+    const people = await dependencies.service.listAssignablePeople(adjustmentActor, "active_adjustment");
+    return WorkTaskAssignablePeopleResponseSchema.parse({ people });
+  });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks", async (request, reply) => { const result = await dependencies.service.createTask(await actor(request, "assign"), parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId, parse(CreateWorkTaskSchema, request.body), key(request)); if (result.reused) void reply.header("idempotency-replayed", "true"); return reply.code(201).send(WorkTaskResponseSchema.parse(result.value)); });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks/add-members", async (request, reply) => {
+    const result = await dependencies.service.addActiveTaskMembers(
+      await actor(request, "active_adjustment"),
+      parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId,
+      parse(AddActiveWorkTaskMembersSchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(201).send(ReworkWorkTasksResponseSchema.parse(result.value));
+  });
+  app.post<{ Params: { reworkOrderId: string; workTaskId: string } }>("/rework-orders/:reworkOrderId/work-tasks/:workTaskId/remove-active", async (request, reply) => {
+    const result = await dependencies.service.removeActiveTask(
+      await actor(request, "active_adjustment"),
+      parse(ReworkWorkTasksParamsSchema, { reworkOrderId: request.params.reworkOrderId }).reworkOrderId,
+      parse(WorkTaskParamsSchema, { workTaskId: request.params.workTaskId }).workTaskId,
+      parse(RemoveActiveWorkTaskSchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(200).send(ReworkWorkTasksResponseSchema.parse(result.value));
+  });
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks/confirm", async (request, reply) => {
     const result = await dependencies.service.confirmAssignments(
       await actor(request, "assign"),

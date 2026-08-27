@@ -26,11 +26,20 @@ afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
 const create = (
   businessRoles: readonly string[],
   capabilities: readonly string[],
+  rootUser = false,
 ) => {
   const service = {
     list: vi.fn(async () => ({ reworkOrderId: orderId, reworkStatus: "in_progress", orderVersion: 2, tasks: [] })),
     listAssignablePeople: vi.fn(async () => [{ personId: migratedTailPersonId, displayName: "尾查人员", personType: "internal" as const, eligibleExecutionKinds: ["tail_inspection"] as const }]),
     createTask: vi.fn(),
+    addActiveTaskMembers: vi.fn(async (_actor, submittedOrderId, input) => ({
+      value: { reworkOrderId: submittedOrderId, reworkStatus: "in_progress" as const, orderVersion: input.expectedOrderVersion + 1, tasks: [] },
+      reused: false,
+    })),
+    removeActiveTask: vi.fn(async (_actor, submittedOrderId, _taskId, input) => ({
+      value: { reworkOrderId: submittedOrderId, reworkStatus: "in_progress" as const, orderVersion: input.expectedOrderVersion + 1, tasks: [] },
+      reused: false,
+    })),
     submitReport: vi.fn(async (_actor, submittedTaskId) => ({
       value: {
         workReportId: "00000000-0000-4000-8000-000000000012",
@@ -78,6 +87,7 @@ const create = (
         return { id: "00000000-0000-4000-8000-000000000001", displayName: "兼任主管", businessRoles, capabilities };
       },
       service: service as never,
+      ...(rootUser ? { root: { isRootUser: async () => true } as never } : {}),
     },
   });
   apps.push(app);
@@ -92,6 +102,100 @@ describe("work reporting routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ people: [{ personId: migratedTailPersonId, displayName: "尾查人员", personType: "internal", eligibleExecutionKinds: ["tail_inspection"] }] });
     expect(service.listAssignablePeople).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "work:assign" }));
+  });
+
+  it.each([
+    { role: "tail_supervisor", label: "尾部主管" },
+    { role: "owner_group", label: "老板" },
+  ])("allows $label to add employees during active execution", async ({ role }) => {
+    const { app, service } = create([role], ["work:assignment_adjust"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-tasks/add-members`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": `active-add-${role}` },
+      payload: {
+        expectedOrderVersion: 2,
+        configurationItemId: taskId,
+        memberIds: [taskId],
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(service.addActiveTaskMembers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: [role],
+        authorizationCapability: "work:assignment_adjust",
+      }),
+      orderId,
+      expect.objectContaining({ memberIds: [taskId] }),
+      `active-add-${role}`,
+    );
+  });
+
+  it("allows an owner to remove an unreported active employee task", async () => {
+    const { app, service } = create(["owner_group"], ["work:assignment_adjust"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-tasks/${taskId}/remove-active`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "active-remove-owner" },
+      payload: { expectedOrderVersion: 2 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(service.removeActiveTask).toHaveBeenCalledWith(
+      expect.objectContaining({ actorRoles: ["owner_group"], authorizationCapability: "work:assignment_adjust" }),
+      orderId,
+      taskId,
+      { expectedOrderVersion: 2 },
+      "active-remove-owner",
+    );
+  });
+
+  it("allows Root to adjust active employees without a business-role grant", async () => {
+    const { app, service } = create([], [], true);
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-tasks/add-members`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "active-add-root" },
+      payload: {
+        expectedOrderVersion: 2,
+        configurationItemId: taskId,
+        memberIds: [taskId],
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(service.addActiveTaskMembers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: expect.arrayContaining(["root_superuser"]),
+        authorizationCapability: "work:assignment_adjust",
+      }),
+      orderId,
+      expect.any(Object),
+      "active-add-root",
+    );
+  });
+
+  it.each([
+    ["production_management"],
+    ["quality_control"],
+    ["worker"],
+    ["order_merchandiser"],
+  ])("rejects active workforce adjustment for %s even if the capability is present", async (role) => {
+    const { app, service } = create([role], ["work:assignment_adjust"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-tasks/add-members`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": `active-add-denied-${role}` },
+      payload: {
+        expectedOrderVersion: 2,
+        configurationItemId: taskId,
+        memberIds: [taskId],
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(service.addActiveTaskMembers).not.toHaveBeenCalled();
   });
 
   it("passes both report capabilities to the service for task-specific authorization", async () => {

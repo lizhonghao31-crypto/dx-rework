@@ -266,6 +266,24 @@
   gap: 10px;
 }
 
+.work-reporting-page .n04-progress-group__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.work-reporting-page .n04-progress-group__toolbar .n04-progress-group__heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.work-reporting-page .n04-progress-group__toolbar > .dx-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
 .work-reporting-page .n04-progress-summary {
   padding: 2px 4px;
 }
@@ -357,6 +375,27 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.work-reporting-page .n04-worker-remove {
+  display: inline-grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid #d9a6a6;
+  border-radius: 999px;
+  background: #fff;
+  color: #a32121;
+  font: 800 18px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.work-reporting-page .workforce-adjustment-processes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
 }
 
 .work-reporting-page .n04-progress-fact em {
