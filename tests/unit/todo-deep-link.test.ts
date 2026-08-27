@@ -27,6 +27,11 @@ describe("todo deep links", () => {
       entityId,
       todoId,
     })).toBe(`/ui/wages/${entityId}?todo=${todoId}`);
+    expect(buildTodoDeepLink("/", {
+      routeName: "sourcing_detail",
+      entityId,
+      todoId,
+    })).toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}`);
   });
 
   it("opens whole-order review todos directly in the N05 workspace", () => {
