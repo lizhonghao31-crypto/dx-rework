@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   accessModuleIdsForCapabilities,
+  accessModuleIdsForRole,
   accessModuleLabelsForCapabilities,
   employeeHasAccessModule,
 } from "../../apps/web/src/platform-access.js";
@@ -18,6 +19,9 @@ describe("platform permission and desktop navigation hub", () => {
       [{ roleCode: "ie_reviewer", capabilities: ["sourcing:view", "sourcing:quote:write"] }],
       "sourcing",
     )).toBe(true);
+    expect(accessModuleIdsForRole("owner_group")).toEqual(["rework", "sourcing", "platform"]);
+    expect(employeeHasAccessModule(["owner_group"], [], "sourcing")).toBe(true);
+    expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
   });
 
   it("renders standalone global entries and permission-gated grouped desktop navigation", async () => {
