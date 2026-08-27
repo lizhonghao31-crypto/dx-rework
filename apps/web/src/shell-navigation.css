@@ -59,7 +59,7 @@
 
 .desktop-navigation__global {
   padding-bottom: var(--dx-v2-space-2);
-  border-bottom: 1px solid var(--dx-v2-color-border);
+  border-bottom: 1px solid var(--dx-v2-color-inset);
 }
 
 .desktop-navigation__group {
@@ -85,7 +85,7 @@
 
 .desktop-navigation__group > summary:hover,
 .desktop-navigation__group.is-active > summary {
-  background: var(--dx-v2-color-surface-muted);
+  background: var(--dx-v2-color-surface);
 }
 
 .desktop-navigation__group > summary span {
@@ -114,5 +114,5 @@
 .desktop-navigation__group > .primary-navigation {
   margin-top: var(--dx-v2-space-1);
   padding-left: var(--dx-v2-space-3);
-  border-left: 2px solid var(--dx-v2-color-border);
+  border-left: 2px solid var(--dx-v2-color-inset);
 }
