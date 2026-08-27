@@ -658,8 +658,10 @@ export class SourcingService {
         if (source.status !== "pending_management_decision") {
           fail("该询价当前不在生产管理调价选厂阶段", 409, "INVALID_STATE_TRANSITION");
         }
-        if (!source.sourcing_ie_quote_id || !source.quote_unit_price) {
-          fail("生产管理决定必须引用当前 IE 报价", 409, "INVALID_STATE_TRANSITION");
+        const sourceIeQuoteId = source.sourcing_ie_quote_id;
+        const quoteUnitPrice = source.quote_unit_price;
+        if (!sourceIeQuoteId || !quoteUnitPrice) {
+          return fail("生产管理决定必须引用当前 IE 报价", 409, "INVALID_STATE_TRANSITION");
         }
         if (source.sourcing_decision_id && source.owner_decision !== "rejected") {
           fail("只有老板驳回后才能提交新版本", 409, "INVALID_STATE_TRANSITION");
@@ -675,9 +677,9 @@ export class SourcingService {
            WHERE supplier_id=$1 AND supplier_type='factory' AND active=true`,
           [input.supplierId],
         );
-        const selected = factory.rows[0];
-        if (!selected) fail("请选择当前有效的加工厂", 400, "VALIDATION_ERROR");
-        const adjusted = unitPrice !== normalizeSourcingUnitPrice(source.quote_unit_price);
+        const selected = factory.rows[0]
+          ?? fail("请选择当前有效的加工厂", 400, "VALIDATION_ERROR");
+        const adjusted = unitPrice !== normalizeSourcingUnitPrice(quoteUnitPrice);
         if (adjusted && !suppliedReason) {
           fail("调整 IE 价格时必须填写原因");
         }
@@ -702,7 +704,7 @@ export class SourcingService {
             decisionId,
             decisionVersion,
             sourceType,
-            sourceIeQuoteId: source.sourcing_ie_quote_id,
+            sourceIeQuoteId,
             supplierId: selected.supplier_id,
             supplierCode: selected.supplier_code,
             supplierName: selected.supplier_name,
@@ -725,7 +727,7 @@ export class SourcingService {
             sourcingCaseId,
             decisionVersion,
             sourceType,
-            source.sourcing_ie_quote_id,
+            sourceIeQuoteId,
             source.sourcing_decision_id,
             selected.supplier_id,
             selected.supplier_code,
