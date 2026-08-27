@@ -102,7 +102,7 @@ function ManagerTaskProgressRow({
     <div className="n04-progress-fact"><small>工序</small><b>{taskProcessName(task)}</b></div>
     <div className="n04-progress-fact n04-progress-fact--worker">
       <small>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}</small>
-      <span>{onRemove ? <button type="button" className="n04-worker-remove" aria-label={`移除${task.members[0]?.displayName ?? "该员工"}`} onClick={onRemove}>−</button> : null}<b>{task.members.map((member) => member.displayName).join("、")}</b>{temporary ? <em>临时工</em> : null}</span>
+      <span>{onRemove ? <button type="button" className="n04-worker-remove" aria-label={`移除${task.members[0]?.displayName ?? "该员工"}`} onClick={onRemove}><span aria-hidden="true">−</span></button> : null}<b>{task.members.map((member) => member.displayName).join("、")}</b>{temporary ? <em>临时工</em> : null}</span>
     </div>
     <div className="n04-progress-fact"><small>状态</small><StatusBadge tone={completed ? "success" : writable ? "warning" : "info"}>{completed ? "已完成" : writable ? "待上报" : "未完成"}</StatusBadge></div>
     <div className="n04-progress-fact"><small>上报数量</small><b className={completed ? "is-completed" : ""}>{completed ? `${task.submittedQuantity}件` : "—"}</b></div>
@@ -456,10 +456,7 @@ export function WorkReportingForm({
       .filter((task) =>
         activeAdjustmentWritable
         && task.mode === "individual"
-        && task.members.length === 1
-        && incompleteTasks.filter((candidate) =>
-          candidate.configurationItemId === task.configurationItemId
-          && candidate.status === "active").length > 1)
+        && task.members.length === 1)
       .map((task) => task.workTaskId),
   );
   const reportsReady = Boolean(reportTasks?.length && reportTasks.every((task) => {
@@ -508,10 +505,11 @@ export function WorkReportingForm({
         </div>
         <Surface className="n04-progress-group n04-progress-group--pending">
           <div className="n04-progress-group__toolbar">
-            <button type="button" className={`n04-progress-group__heading${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
-              <h2>未完成</h2><StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
+            <h2 className="n04-progress-group__title">未完成</h2>
+            {activeAdjustmentWritable ? <button type="button" className="n04-add-worker" onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</button> : null}
+            <button type="button" className={`n04-progress-group__heading n04-progress-group__heading--compact${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
+              <StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
             </button>
-            {activeAdjustmentWritable ? <Button onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</Button> : null}
           </div>
           {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
         </Surface>
