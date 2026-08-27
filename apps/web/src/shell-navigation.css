@@ -74,7 +74,7 @@
   min-height: 44px;
   padding: var(--dx-v2-space-2) var(--dx-v2-space-3);
   border-radius: var(--dx-v2-radius-md);
-  color: var(--dx-v2-color-text);
+  color: var(--dx-v2-color-surface);
   cursor: pointer;
   list-style: none;
 }
@@ -86,6 +86,7 @@
 .desktop-navigation__group > summary:hover,
 .desktop-navigation__group.is-active > summary {
   background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-text);
 }
 
 .desktop-navigation__group > summary span {
@@ -99,8 +100,13 @@
 }
 
 .desktop-navigation__group > summary small {
-  color: var(--dx-v2-color-text-secondary);
+  color: var(--dx-v2-color-inset);
   font-size: 11px;
+}
+
+.desktop-navigation__group > summary:hover small,
+.desktop-navigation__group.is-active > summary small {
+  color: var(--dx-v2-color-text-secondary);
 }
 
 .desktop-navigation__group > summary b {
