@@ -298,10 +298,12 @@ export class SourcingService {
   async listCases(
     actor: TrustedActorContext,
     query = "",
+    statusFilter: "all" | "pending" | "closed" = "all",
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
     const normalizedQuery = query.trim();
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
+    if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
     const result = await this.database.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
@@ -345,11 +347,13 @@ export class SourcingService {
        ) decision_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
-       WHERE $1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
-          OR case_view.style_no ILIKE '%'||$1||'%'
+       WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
+          OR case_view.style_no ILIKE '%'||$1||'%')
+         AND ($2='all' OR ($2='closed' AND case_view.status='closed')
+           OR ($2='pending' AND case_view.status<>'closed'))
        ORDER BY case_view.created_at DESC
        LIMIT 200`,
-      [normalizedQuery],
+      [normalizedQuery, statusFilter],
     );
     return { items: result.rows.map(mapCase) };
   }
