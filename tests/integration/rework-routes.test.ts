@@ -261,7 +261,7 @@ describe("rework initiation routes", () => {
     });
     expect(updated.statusCode).toBe(200);
     expect(service.supplementOrderImages).toHaveBeenCalledWith(
-      expect.objectContaining({ authorizationCapability: "rework:initiate" }),
+      expect.objectContaining({ authorizationCapability: "tools:user" }),
       "00000000-0000-4000-8000-000000000010",
       {
         expectedVersion: 1,
@@ -269,6 +269,79 @@ describe("rework initiation routes", () => {
       },
       "supplement-1",
     );
+  });
+
+  it.each([
+    "tail_supervisor",
+    "production_management",
+    "owner_group",
+    "order_merchandiser",
+  ])("allows %s to supplement rework order images", async (role) => {
+    const { app, service } = create([role], ["tools:user"]);
+    const result = await app.inject({
+      method: "POST",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/supplemental-images",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": `supplement-${role}`,
+      },
+      payload: {
+        expectedVersion: 1,
+        attachmentIds: ["00000000-0000-4000-8000-000000000011"],
+      },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(service.supplementOrderImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: [role],
+        authorizationCapability: "tools:user",
+      }),
+      "00000000-0000-4000-8000-000000000010",
+      {
+        expectedVersion: 1,
+        attachmentIds: ["00000000-0000-4000-8000-000000000011"],
+      },
+      `supplement-${role}`,
+    );
+  });
+
+  it("allows Root to supplement images and rejects roles outside the allowlist", async () => {
+    const root = create([], [], true);
+    const rootResult = await root.app.inject({
+      method: "POST",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/supplemental-images",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "supplement-root",
+      },
+      payload: {
+        expectedVersion: 1,
+        attachmentIds: ["00000000-0000-4000-8000-000000000011"],
+      },
+    });
+    expect(rootResult.statusCode).toBe(200);
+    expect(root.service.supplementOrderImages).toHaveBeenCalledWith(
+      expect.objectContaining({ actorRoles: ["root_superuser"] }),
+      expect.any(String),
+      expect.any(Object),
+      "supplement-root",
+    );
+
+    const forbidden = create(["ie_reviewer"], ["tools:user"]);
+    const forbiddenResult = await forbidden.app.inject({
+      method: "POST",
+      url: "/rework-orders/00000000-0000-4000-8000-000000000010/supplemental-images",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "supplement-forbidden",
+      },
+      payload: {
+        expectedVersion: 1,
+        attachmentIds: ["00000000-0000-4000-8000-000000000011"],
+      },
+    });
+    expect(forbiddenResult.statusCode).toBe(403);
+    expect(forbidden.service.supplementOrderImages).not.toHaveBeenCalled();
   });
 
   it("allows only Root to logically delete an order after a normal confirmation request", async () => {

@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { InspectionReportDraftSchema, MAX_REWORK_ATTACHMENTS } from "@dx-rework/contracts";
+import {
+  InspectionReportDraftSchema,
+  MAX_REWORK_ATTACHMENTS,
+  REWORK_IMAGE_SUPPLEMENT_ROLES,
+} from "@dx-rework/contracts";
 import type {
   CreateReworkDraft,
   DeleteReworkOrderResponse,
@@ -810,7 +814,11 @@ export class ReworkInitiationService {
     statusCode: number,
     work: (client: PoolClient) => Promise<T>,
   ): Promise<MutationResult<T>> {
-    this.ensureInitiator(actor);
+    if (scope === "rework.attachments.supplement") {
+      this.ensureSupplementalImageActor(actor);
+    } else {
+      this.ensureInitiator(actor);
+    }
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
@@ -864,6 +872,16 @@ export class ReworkInitiationService {
       || !actor.actorRoles.includes("quality_control")
     ) {
       throw new ApplicationError("FORBIDDEN", "只有品控人员可以发起和维护返工单", 403);
+    }
+  }
+
+  private ensureSupplementalImageActor(actor: TrustedActorContext): void {
+    const hasAllowedRole = actor.actorRoles.includes("root_superuser")
+      || actor.actorRoles.some((role) => REWORK_IMAGE_SUPPLEMENT_ROLES.includes(
+        role as (typeof REWORK_IMAGE_SUPPLEMENT_ROLES)[number],
+      ));
+    if (actor.authorizationCapability !== "tools:user" || !hasAllowedRole) {
+      throw new ApplicationError("FORBIDDEN", "当前角色无权补充返工单图片", 403);
     }
   }
 
@@ -973,8 +991,8 @@ export class ReworkInitiationService {
     );
     const row = result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
-    if (row.status === "completed" || row.status === "cancelled") {
-      throw new ApplicationError("INVALID_STATE_TRANSITION", "已归档或已取消的返工单不能补充图片", 409);
+    if (row.status === "cancelled") {
+      throw new ApplicationError("INVALID_STATE_TRANSITION", "已取消的返工单不能补充图片", 409);
     }
     return row;
   }

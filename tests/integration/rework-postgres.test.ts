@@ -200,7 +200,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     }, randomUUID())).rejects.toMatchObject({ code: "ATTACHMENT_NOT_READY", statusCode: 409 });
     await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
       expectedVersion: supplemented.value.version,
-      attachmentIds: Array.from({ length: 4 }, () => randomUUID()),
+      attachmentIds: Array.from({ length: 7 }, () => randomUUID()),
     }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
 
     const sameStyle = await service.createDraft(qcActor(), {
@@ -265,6 +265,13 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     }, randomUUID());
     expect(cancelled.value.status).toBe("cancelled");
     expect(cancelled.value.attachmentIds).toEqual([]);
+    await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+      expectedVersion: cancelled.value.version,
+      attachmentIds: [randomUUID()],
+    }, randomUUID())).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+      statusCode: 409,
+    });
     await expect(service.withdraw(qcActor(), draft.value.reworkOrderId, {
       expectedVersion: cancelled.value.version,
       reason: "非法恢复",

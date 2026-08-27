@@ -383,7 +383,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       ],
     );
     const supplemented = await initiation.supplementOrderImages(
-      qc(),
+      actor(ids.qc, ["quality_control"], "tools:user"),
       submitted.value.reworkOrderId,
       {
         expectedVersion: submitted.value.version,

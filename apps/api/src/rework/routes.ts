@@ -5,6 +5,7 @@ import {
   IdempotencyKeySchema,
   ReworkOrderParamsSchema,
   ReworkOrdersQuerySchema,
+  REWORK_IMAGE_SUPPLEMENT_ROLES,
   SubmitReworkOrderSchema,
   SupplementReworkOrderImagesSchema,
   TransitionReworkOrderSchema,
@@ -127,6 +128,28 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  const supplementalImageActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    if (!user.businessRoles?.length && !isRoot) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    if (!isRoot && !user.businessRoles?.some((role) => REWORK_IMAGE_SUPPLEMENT_ROLES.includes(
+      role as (typeof REWORK_IMAGE_SUPPLEMENT_ROLES)[number],
+    ))) {
+      throw new ApplicationError("FORBIDDEN", "当前角色无权补充返工单图片", 403);
+    }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability: "tools:user",
+      authorizationCapabilities: user.capabilities,
+      requestId: request.id,
+    };
+  };
+
   const rootDeleteActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
@@ -171,7 +194,7 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
   app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/supplemental-images", async (request, reply) => {
     const params = parse(ReworkOrderParamsSchema, request.params);
     const result = await dependencies.service.supplementOrderImages(
-      await actor(request),
+      await supplementalImageActor(request),
       params.reworkOrderId,
       parse(SupplementReworkOrderImagesSchema, request.body),
       idempotencyKey(request),

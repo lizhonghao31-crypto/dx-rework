@@ -821,6 +821,39 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         [draft.reworkOrderId],
       )).rows[0]?.status).toBe("completed");
 
+      const completedOrder = (await fixture.database.query<{ version: number }>(
+        "SELECT version FROM rework_orders WHERE rework_order_id=$1",
+        [draft.reworkOrderId],
+      )).rows[0]!;
+      const completedImageId = randomUUID();
+      await fixture.database.query(
+        `INSERT INTO attachments(
+           attachment_id,object_key,original_filename,mime_type,size_bytes,
+           sha256,uploaded_by,status,ready_at
+         ) VALUES($1,$2,$3,'image/webp',10,$4,$5,'ready',CURRENT_TIMESTAMP)`,
+        [
+          completedImageId,
+          `private/${completedImageId}.webp`,
+          `root-pass-${pass}-completed.webp`,
+          "c".repeat(64),
+          fixture.rootUserId,
+        ],
+      );
+      const completedSupplement = await http<ReworkOrderResponse>(
+        fixture.app,
+        "POST",
+        `/rework-orders/${draft.reworkOrderId}/supplemental-images`,
+        {
+          expectedVersion: completedOrder.version,
+          attachmentIds: [completedImageId],
+        },
+      );
+      expect(completedSupplement).toMatchObject({
+        status: "completed",
+        version: completedOrder.version + 1,
+        attachmentIds: expect.arrayContaining([completedImageId]),
+      });
+
       await runWages(fixture);
       await assertReconciliation(fixture, draft.reworkOrderId);
 
