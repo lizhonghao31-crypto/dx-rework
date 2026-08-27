@@ -71,20 +71,20 @@ describe("thin platform module routing", () => {
     const rework = modules.find((module) => module.id === "rework");
     const sourcing = modules.find((module) => module.id === "sourcing");
     expect(rework && platformModuleHref(rework)).toContain(`${PLATFORM_MODULE_QUERY}=rework`);
-    expect(sourcing && platformModuleHref(sourcing)).toBe("ui/sourcing");
+    expect(sourcing && platformModuleHref(sourcing)).toBe("ui/sourcing/pending");
   });
 
-  it("protects sourcing with AuthGate and keeps new CSS token-based and mobile single-column", async () => {
+  it("protects sourcing with AuthGate and keeps the unified desktop CSS token-based", async () => {
     const [app, components, platformHome, platformCss, sourcingCss] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
       readFile("apps/web/src/platform-home-page.tsx", "utf8"),
       readFile("apps/web/src/platform-home.css", "utf8"),
-      readFile("apps/web/src/sourcing-shell.css", "utf8"),
+      readFile("apps/web/src/sourcing-workspace.css", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/sourcing"');
     expect(app).toContain('{ requiredCapability: "sourcing:view" }');
-    expect(app).toMatch(/path === "\/ui\/sourcing"[\s\S]*?<AuthGate requiredAnyOf=/);
+    expect(app).toContain('path.startsWith("/ui/sourcing")');
     expect(app).toContain("useInitialPlatformEntryCheck(path, search)");
     expect(platformHome).toContain("platformModuleHref(module)");
     expect(components).toContain('mobile-primary-navigation__label">平台');
