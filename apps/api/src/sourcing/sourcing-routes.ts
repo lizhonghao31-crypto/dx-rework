@@ -96,6 +96,30 @@ export function registerSourcingRoutes(
     return dependencies.service.listCases(await readActor(request), request.query.q ?? "");
   });
 
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId",
+    async (request) => dependencies.service.getCase(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
+
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/attachments",
+    async (request) => dependencies.service.listAttachments(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
+
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/timeline",
+    async (request) => dependencies.service.listTimeline(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
+
   app.post("/sourcing/cases", async (request, reply) => {
     const parsed = CreateSourcingCaseSchema.safeParse(request.body);
     const data = parsed.success
