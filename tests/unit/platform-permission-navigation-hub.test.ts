@@ -1,0 +1,44 @@
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+
+import {
+  accessModuleIdsForCapabilities,
+  accessModuleLabelsForCapabilities,
+  employeeHasAccessModule,
+} from "../../apps/web/src/platform-access.js";
+
+describe("platform permission and desktop navigation hub", () => {
+  it("classifies existing capabilities without creating a second permission system", () => {
+    expect(accessModuleIdsForCapabilities(["rework:initiate", "sourcing:view", "access:admin"]))
+      .toEqual(["rework", "sourcing", "platform"]);
+    expect(accessModuleLabelsForCapabilities(["sourcing:quote:write"]))
+      .toEqual(["报价&选厂"]);
+    expect(employeeHasAccessModule(
+      ["ie_reviewer"],
+      [{ roleCode: "ie_reviewer", capabilities: ["sourcing:view", "sourcing:quote:write"] }],
+      "sourcing",
+    )).toBe(true);
+  });
+
+  it("renders standalone global entries and permission-gated grouped desktop navigation", async () => {
+    const [components, employeeAccess, systemNavigation, css] = await Promise.all([
+      readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/web/src/employee-access-page.tsx", "utf8"),
+      readFile("apps/web/src/system-management-navigation.tsx", "utf8"),
+      readFile("apps/web/src/shell-navigation.css", "utf8"),
+    ]);
+
+    expect(components.indexOf('name: "我的待办"')).toBeLessThan(components.indexOf('name: "订单看板"'));
+    expect(components).toContain('name: "返工"');
+    expect(components).toContain('name: "报价&选厂"');
+    expect(components).toContain('name: "平台管理"');
+    expect(components).toContain("currentUser && canAccessSourcing(currentUser)");
+    expect(components).toContain("Desktop-only sourcing");
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"]');
+    expect(employeeAccess).toContain('<h1>人员与权限</h1>');
+    expect(employeeAccess).toContain('aria-label="业务模块"');
+    expect(systemNavigation).toContain(">人员与权限</a>");
+    expect(css).toContain(".desktop-navigation__group");
+    expect(css).toContain("var(--dx-v2-");
+  });
+});
