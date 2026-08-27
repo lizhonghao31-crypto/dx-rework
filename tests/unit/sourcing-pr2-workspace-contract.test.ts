@@ -35,7 +35,8 @@ describe("sourcing PR2 unified desktop workspace", () => {
     expect(source).toContain('path === "/ui/sourcing/create"');
     expect(source).toContain('path === "/ui/sourcing/pending"');
     expect(source).toContain('path === "/ui/sourcing/history"');
-    expect(source).toContain("/ui/sourcing/orders/");
+    expect(source).toContain("sourcingOrderMatch");
+    expect(source).toContain("ui\\/sourcing\\/orders");
     expect(source).toContain('path.startsWith("/ui/sourcing")');
   });
 
