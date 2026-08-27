@@ -35,6 +35,6 @@ describe("1.0 role entry and navigation closure", () => {
       'const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");',
     );
     expect(navigation).toContain("if (reworkBoardAccess) {");
-    expect(navigation).toContain("if (reportAccess) navigation.push({");
+    expect(navigation).toContain("if (reportAccess) reworkNavigation.push({");
   });
 });
