@@ -10,6 +10,7 @@ const MODULE_ORDER: readonly PlatformAccessModuleId[] = ["rework", "sourcing", "
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
   owner_group: MODULE_ORDER,
   system_admin: ["platform"],
+  tail_inspector: ["rework"],
 };
 
 export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, string> = {
