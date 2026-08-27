@@ -9,7 +9,7 @@ import {
   type EmployeeAccessFilter,
 } from "./employee-access-filter.js";
 import {
-  accessModuleLabelsForCapabilities,
+  accessModuleLabelsForRole,
   employeeHasAccessModule,
   type PlatformAccessModuleId,
 } from "./platform-access.js";
@@ -101,12 +101,16 @@ export function EmployeeAccessPage() {
     [roles],
   );
   const roleDisplayName = (role: Role): string => {
-    const modules = accessModuleLabelsForCapabilities(role.capabilities);
+    const modules = accessModuleLabelsForRole(role.roleCode, role.capabilities);
     return modules.length ? `${role.displayName}（${modules.join(" / ")}）` : role.displayName;
   };
   const assignedRoleDisplayName = (roleCode: string): string => {
     const role = roleByCode.get(roleCode);
-    return role ? roleDisplayName(role) : roleName(roleCode);
+    if (role) return roleDisplayName(role);
+    const modules = accessModuleLabelsForRole(roleCode);
+    return modules.length
+      ? `${roleName(roleCode)}（${modules.join(" / ")}）`
+      : roleName(roleCode);
   };
 
   const usableOwnerCount = useMemo(
