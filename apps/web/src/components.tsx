@@ -110,7 +110,7 @@ function DesktopNavigation({
         return (
           <details
             className={"desktop-navigation__group" + (groupIsActive ? " is-active" : "")}
-            defaultOpen={groupIsActive}
+            open={groupIsActive || undefined}
             key={group.name}
           >
             <summary>
