@@ -107,7 +107,7 @@ const attachments = new AttachmentService(database, storage, {
 const todoService = new TodoService(database);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const receivingService = new ReceivingService(database);
-const sourcingService = new SourcingService(database);
+const sourcingService = new SourcingService(database, undefined, undefined, todoProjection);
 const reworkService = new ReworkInitiationService(
   database,
   config.dingtalk.corpId,
