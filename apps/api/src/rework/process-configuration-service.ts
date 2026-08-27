@@ -36,6 +36,7 @@ type OrderRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
+  tail_inspection_required: boolean;
   created_by: string;
   updated_by: string;
   version: number;
@@ -185,7 +186,7 @@ export class ProcessConfigurationService {
 
   async options(actor: TrustedActorContext): Promise<ProcessConfigurationOptionsResponse> {
     this.ensureConfigure(actor);
-    const result = await this.database.query<{
+    const [result, tailRoster] = await Promise.all([this.database.query<{
       process_id: string; version: number; process_name: string; pricing_unit: "piece" | "hour"; default_worker_person_ids: string[];
     }>(
       `SELECT catalog.process_id,catalog.version,catalog.process_name,catalog.pricing_unit,
@@ -196,9 +197,12 @@ export class ProcessConfigurationService {
          WHERE roster_version.process_id=catalog.process_id
          ORDER BY roster_version.roster_version DESC LIMIT 1
        ) roster ON true
-       WHERE catalog.active=true AND catalog.pricing_unit='piece'
+      WHERE catalog.active=true AND catalog.pricing_unit='piece'
        ORDER BY catalog.process_name,catalog.process_id`,
-    );
+    ), this.database.query<{ person_ids: string[] }>(
+      `SELECT person_ids FROM tail_inspection_default_worker_roster_versions
+       ORDER BY roster_version DESC LIMIT 1`,
+    )]);
     return {
       processes: result.rows.map((row) => ({
         processId: row.process_id,
@@ -207,6 +211,7 @@ export class ProcessConfigurationService {
         pricingUnit: row.pricing_unit,
         defaultWorkerPersonIds: row.default_worker_person_ids,
       })),
+      tailDefaultWorkerPersonIds: tailRoster.rows[0]?.person_ids ?? [],
     };
   }
 
@@ -230,7 +235,7 @@ export class ProcessConfigurationService {
       const current = await this.latestConfiguration(client, reworkOrderId, true);
       const unifiedExecutionRequired = true;
       const workerPreassignmentRequired = true;
-      const items = await this.prepareItems(client, input.items);
+      const items = await this.prepareItems(client, input.items, order.tail_inspection_required);
       const configurationId = randomUUID();
       const configurationVersion = (current?.configuration_version ?? 0) + 1;
       const nextOrderVersion = order.version + 1;
@@ -310,8 +315,13 @@ export class ProcessConfigurationService {
       if (configurationItems.filter((item) => item.execution_kind === "worker").length === 0) {
         throw new ApplicationError("VALIDATION_ERROR", "至少配置一道返工工序后才能提交IE审核", 400);
       }
-      if (configurationItems.filter((item) => item.execution_kind === "tail_inspection").length !== 1) {
-        throw new ApplicationError("VALIDATION_ERROR", "必须且只能包含一道尾查特殊工序", 400);
+      const tailItemCount = configurationItems.filter((item) => item.execution_kind === "tail_inspection").length;
+      if (order.tail_inspection_required ? tailItemCount !== 1 : tailItemCount !== 0) {
+        throw new ApplicationError(
+          "VALIDATION_ERROR",
+          order.tail_inspection_required ? "必须且只能包含一道尾查特殊工序" : "本单不需要整查，不能配置尾查工序",
+          400,
+        );
       }
       const nextOrderVersion = order.version + 1;
       const eventId = await this.events.append(client, actor, {
@@ -540,10 +550,15 @@ export class ProcessConfigurationService {
   private async prepareItems(
     client: PoolClient,
     input: readonly ProcessConfigurationItem[],
+    tailInspectionRequired: boolean,
   ): Promise<PreparedItem[]> {
     const tailItems = input.filter((item) => item.executionKind === "tail_inspection");
-    if (tailItems.length !== 1) {
-      throw new ApplicationError("VALIDATION_ERROR", "必须且只能配置一道尾查特殊工序", 400);
+    if (tailInspectionRequired ? tailItems.length !== 1 : tailItems.length !== 0) {
+      throw new ApplicationError(
+        "VALIDATION_ERROR",
+        tailInspectionRequired ? "必须且只能配置一道尾查特殊工序" : "本单不需要整查，不能配置尾查工序",
+        400,
+      );
     }
     const prepared: PreparedItem[] = [];
     const names = new Set<string>();
@@ -732,6 +747,7 @@ export class ProcessConfigurationService {
       reworkNo: order.rework_no,
       reworkStatus: order.status,
       orderVersion: order.version,
+      tailInspectionRequired: order.tail_inspection_required,
       configuration: configuration ? {
         configurationId: configuration.configuration_id,
         configurationVersion: configuration.configuration_version,

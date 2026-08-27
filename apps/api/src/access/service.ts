@@ -805,6 +805,77 @@ export class AccessMasterDataService {
     });
   }
 
+  async replaceTailInspectionDefaultWorkers(
+    actor: TrustedActorContext,
+    input: ReplaceProcessDefaultWorkers,
+  ): Promise<{ executionKind: "tail_inspection"; rosterVersion: number; personIds: string[] }> {
+    return this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:tail_default_worker_roster'))");
+      const personIds = [...input.personIds].sort();
+      if (personIds.length > 0) {
+        const eligible = await client.query<{ person_id: string }>(
+          `SELECT person.person_id
+           FROM business_people person
+           WHERE person.person_id=ANY($1::uuid[])
+             AND person.active=true
+             AND (
+               person.person_type='temporary'
+               OR (
+                 person.person_type='internal'
+                 AND EXISTS (
+                   SELECT 1
+                   FROM app_users app_user
+                   JOIN identity_mappings identity
+                     ON identity.user_id=app_user.id
+                    AND identity.provider='dingtalk'
+                    AND identity.active=true
+                    AND identity.employed=true
+                   JOIN access_security_policy policy
+                     ON policy.policy_key='primary'
+                    AND policy.dingtalk_corp_id=identity.corp_id
+                   JOIN user_role_assignments assignment
+                     ON assignment.user_id=app_user.id
+                    AND assignment.role_code IN ('worker','tail_inspector')
+                    AND assignment.revoked_at IS NULL
+                   JOIN business_roles role
+                     ON role.role_code=assignment.role_code
+                    AND role.enabled=true
+                   JOIN role_capabilities capability
+                     ON capability.role_code=assignment.role_code
+                    AND capability.capability='tail_inspection:report'
+                   WHERE app_user.id=person.app_user_id
+                     AND app_user.enabled=true
+                 )
+               )
+             )`,
+          [personIds],
+        );
+        if (eligible.rowCount !== personIds.length) {
+          throw new ApplicationError("VALIDATION_ERROR", "尾查默认名单只能包含当前有效的正式工或临时工", 400);
+        }
+      }
+      const latest = await client.query<{ roster_version: number }>(
+        `SELECT roster_version FROM tail_inspection_default_worker_roster_versions
+         ORDER BY roster_version DESC LIMIT 1`,
+      );
+      const rosterVersion = (latest.rows[0]?.roster_version ?? 0) + 1;
+      const operationEventId = await this.events.append(client, actor, {
+        action: "master_data.tail_default_workers.replace",
+        entityType: "tail_inspection_default_worker_roster",
+        entityId: "tail_inspection",
+        after: { executionKind: "tail_inspection", rosterVersion, personIds },
+        reason: input.changeReason,
+      });
+      await client.query(
+        `INSERT INTO tail_inspection_default_worker_roster_versions(
+           roster_version,person_ids,change_reason,changed_by,operation_event_id
+         ) VALUES($1,$2,$3,$4,$5)`,
+        [rosterVersion, personIds, input.changeReason, actor.actorId, operationEventId],
+      );
+      return { executionKind: "tail_inspection", rosterVersion, personIds };
+    });
+  }
+
   async createSupplier(actor: TrustedActorContext, input: CreateSupplier): Promise<{ supplierId: string; version: number }> {
     return this.transaction(async (client) => {
       const supplierId = randomUUID();

@@ -7,6 +7,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
+import { ImageViewer } from "./image-viewer.js";
 import { OrderImageSupplementUploader } from "./order-image-supplement-uploader.js";
 import { ProcessConfigurationForm } from "./process-configuration-form.js";
 import { ReworkInitiationForm } from "./rework-form.js";
@@ -76,6 +77,8 @@ export type ReworkBusinessDetail = Readonly<{
   problemPart: string | null;
   problemDescription: string | null;
   reworkQuantity: number | null;
+  tailInspectionRequired: boolean;
+  singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
   processConfigurationCreatedBy: Readonly<{ userId: string; displayName: string }> | null;
@@ -210,6 +213,9 @@ const formatTime = (value: string | null): string => {
   }).format(new Date(value));
 };
 
+const formatSinglePieceReworkTotal = (value: number): string =>
+  value.toFixed(3).replace(/\.?0+$/, "");
+
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
@@ -280,7 +286,7 @@ const buildWorkflow = (
       title: "发起、配置与核价",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", "一次完成返工工序、候选单价、返工人员与尾查分配；不再设置独立人员分配节点。"),
+        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", detail.tailInspectionRequired ? "一次完成返工工序、候选单价、返工人员与尾查分配；不再设置独立人员分配节点。" : "一次完成返工工序、候选单价与返工人员分配；本单无需整查。"),
         node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后预分配工人自动生效并进入返工执行。"),
       ],
     },
@@ -288,14 +294,14 @@ const buildWorkflow = (
       key: "execution",
       title: "返工执行",
       nodes: [
-        node("work_reporting", "04", "返工执行报数", "返工人员 / 尾查", "待 IE 核价通过并自动激活任务", "返工人员与尾查都在同一执行节点提交本人实际件数；临时工由尾部主管代录。"),
+        node("work_reporting", "04", "返工执行报数", detail.tailInspectionRequired ? "返工人员 / 尾查" : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? "返工人员与尾查都在同一执行节点提交本人实际件数；临时工由尾部主管代录。" : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
       ],
     },
     {
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", "逐工序对照工人原报数与尾查数，提交最终确认数量并保留每版审计。"),
+        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? "逐工序对照工人原报数与尾查数，提交最终确认数量并保留每版审计。" : "系统按工人有效上数生成最终数量，并保留每版审计。"),
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
@@ -725,7 +731,7 @@ export function ReworkDetailPage({
         </div>
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><h2>办理区</h2></div>
+          <div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : `¥${formatSinglePieceReworkTotal(detail.singlePieceReworkTotal)}`}</span></div>
           {renderSelectedTask()}
         </section>
       </div>
@@ -743,7 +749,7 @@ export function ReworkDetailPage({
               <strong>{selectedImage.filename}</strong>
               <button type="button" onClick={() => setSelectedImage(null)}>关闭</button>
             </div>
-            <img src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
+            <ImageViewer src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
             <div className="rework-image-modal__actions">
               {imageAttachments.length > 1 ? <><button type="button" onClick={() => showRelativeImage(-1)}>上一张</button><span>{selectedImageIndex + 1} / {imageAttachments.length}</span><button type="button" onClick={() => showRelativeImage(1)}>下一张</button></> : null}
               <a href={attachmentUrl(selectedImage.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>

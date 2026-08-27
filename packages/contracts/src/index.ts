@@ -376,6 +376,7 @@ const ReworkDraftFieldsSchema = z.object({
   problemPart: DraftTextSchema(200),
   problemDescription: DraftTextSchema(2000),
   reworkQuantity: z.number().int().positive().nullable().optional(),
+  tailInspectionRequired: z.boolean().optional(),
   inspectionReport: InspectionReportDraftSchema.nullable().optional(),
   attachmentIds: ReworkAttachmentIdsSchema().optional(),
 });
@@ -426,6 +427,7 @@ export const ReworkOrderResponseSchema = z.object({
   problemPart: z.string().nullable(),
   problemDescription: z.string().nullable(),
   reworkQuantity: z.number().int().positive().nullable(),
+  tailInspectionRequired: z.boolean().default(true),
   inspectionReport: InspectionReportDraftSchema.nullable(),
   attachmentIds: z.array(IdSchema),
   hasOtherOpenStyleOrder: z.boolean(),
@@ -574,6 +576,7 @@ export const ProcessConfigurationResponseSchema = z.object({
   reworkNo: z.string().nullable(),
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
+  tailInspectionRequired: z.boolean().default(true),
   configuration: z.object({
     configurationId: IdSchema,
     configurationVersion: z.number().int().positive(),
@@ -596,6 +599,7 @@ export const ProcessConfigurationOptionsResponseSchema = z.object({
     pricingUnit: ProcessPricingUnitSchema,
     defaultWorkerPersonIds: z.array(IdSchema),
   }).strict()),
+  tailDefaultWorkerPersonIds: z.array(IdSchema).optional(),
 });
 
 export const TailInspectionAssignmentSchema = z.object({
@@ -872,6 +876,7 @@ export const WholeOrderReviewResponseSchema = z.object({
   canConfirmQuantity: z.boolean(),
   canReviewQuantityIncrease: z.boolean(),
   unifiedExecutionRequired: z.boolean().optional().default(false),
+  tailInspectionRequired: z.boolean().default(true),
   processes: z.array(z.object({
     configurationItemId: IdSchema,
     processName: z.string().min(1),

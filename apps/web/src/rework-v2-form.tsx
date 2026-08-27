@@ -20,11 +20,12 @@ import { createWebUrls } from "../url-contract.js";
 import {
   currentQcUploadConcurrency,
   currentUploadClientProfile,
-  isImageAttachment,
+  isImageUploadCandidate,
   measureAttachmentUploadStage,
   prepareAndUploadWithConcurrency,
-  prepareAttachmentForUpload,
+  prepareImageUploadCandidate,
   sha256Hex,
+  uploadImageWithNormalizationRetry,
   type AttachmentUploadTimingContext,
 } from "./attachment-upload.js";
 import { FactorySearch } from "./factory-search.js";
@@ -63,13 +64,14 @@ type V2FormState = Readonly<{
   styleNo: string;
   factory: string;
   merchandiserUserId: string;
+  tailInspectionRequired: boolean;
   washingSupplierId: string;
   embroiderySupplierId: string;
   fabricSupplierId: string;
   embroideryMerchandiserUserId: string;
 }>;
 type LocalN01Draft = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
   receivingBatchId?: string | null;
   form: V2FormState;
   images: readonly StoredImage[];
@@ -90,6 +92,7 @@ const emptyForm = (useUrlStyle = true): V2FormState => ({
   styleNo: useUrlStyle ? initialStyleNo() : "",
   factory: "",
   merchandiserUserId: "",
+  tailInspectionRequired: true,
   washingSupplierId: "",
   embroiderySupplierId: "",
   fabricSupplierId: "",
@@ -99,7 +102,7 @@ const emptyForm = (useUrlStyle = true): V2FormState => ({
 const isFormState = (value: unknown): value is V2FormState => {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;
-  return [
+  const stringFieldsValid = [
     "styleNo",
     "factory",
     "merchandiserUserId",
@@ -108,6 +111,8 @@ const isFormState = (value: unknown): value is V2FormState => {
     "fabricSupplierId",
     "embroideryMerchandiserUserId",
   ].every((key) => typeof row[key] === "string");
+  return stringFieldsValid
+    && (row.tailInspectionRequired === undefined || typeof row.tailInspectionRequired === "boolean");
 };
 
 const isStoredImage = (value: unknown): value is StoredImage => {
@@ -125,7 +130,7 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (
-      parsed.schemaVersion !== 1
+      (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2)
       || !isFormState(parsed.form)
       || !Array.isArray(parsed.images)
       || !parsed.images.every(isStoredImage)
@@ -138,7 +143,18 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
     if (requestedStyle && parsed.form.styleNo.trim() !== requestedStyle) return null;
     const requestedBatchId = initialReceivingBatchId();
     if (requestedBatchId && parsed.receivingBatchId !== requestedBatchId) return null;
-    return parsed as LocalN01Draft;
+    return {
+      schemaVersion: 2,
+      ...(parsed.receivingBatchId === undefined
+        ? {}
+        : { receivingBatchId: parsed.receivingBatchId as string | null }),
+      form: {
+        ...(parsed.form as V2FormState),
+        tailInspectionRequired: (parsed.form as Record<string, unknown>).tailInspectionRequired !== false,
+      },
+      images: parsed.images as StoredImage[],
+      savedAt: parsed.savedAt,
+    };
   } catch {
     return null;
   }
@@ -151,7 +167,7 @@ const writeLocalN01Draft = (
 ): void => {
   if (typeof window === "undefined") return;
   const draft: LocalN01Draft = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     receivingBatchId: receivingBatchId ?? null,
     form,
     images: images.map(({ attachmentId, filename, mimeType }) => ({ attachmentId, filename, mimeType })),
@@ -274,6 +290,7 @@ export function ReworkInitiationV2Form({
           styleNo: draft.styleNo ?? "",
           factory: factoryValue(draft),
           merchandiserUserId: draft.merchandiserUserId ?? "",
+          tailInspectionRequired: draft.tailInspectionRequired,
           washingSupplierId: context.washingSupplier?.supplierId ?? "",
           embroiderySupplierId: context.embroiderySupplier?.supplierId ?? "",
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
@@ -327,6 +344,7 @@ export function ReworkInitiationV2Form({
     styleNo: form.styleNo.trim(),
     factory: form.factory,
     merchandiserUserId: form.merchandiserUserId,
+    tailInspectionRequired: form.tailInspectionRequired,
     attachmentIds: images.map((image) => image.attachmentId),
   });
 
@@ -379,6 +397,7 @@ export function ReworkInitiationV2Form({
       const payload = {
         styleNo: form.styleNo.trim() || null,
         merchandiserUserId: form.merchandiserUserId || null,
+        tailInspectionRequired: form.tailInspectionRequired,
         processingFactory: processingFactory ?? null,
         attachmentIds: images.map((image) => image.attachmentId),
       };
@@ -487,8 +506,8 @@ export function ReworkInitiationV2Form({
       setMessage(`每张返工单最多上传 ${MAX_REWORK_ATTACHMENTS} 张报告图片`);
       return;
     }
-    if (selected.some((file) => !isImageAttachment(file))) {
-      setMessage("报告仅支持 JPEG / PNG / WebP 图片格式");
+    if (selected.some((file) => !isImageUploadCandidate(file))) {
+      setMessage("报告仅支持图片格式");
       return;
     }
     setUploading(true);
@@ -510,57 +529,69 @@ export function ReworkInitiationV2Form({
           const prepared = await measureAttachmentUploadStage(
             baseTiming,
             "prepare",
-            () => prepareAttachmentForUpload(file),
+            () => prepareImageUploadCandidate(file),
           );
           const timing = { ...baseTiming, uploadBytes: prepared.size };
           const sha256 = await measureAttachmentUploadStage(timing, "hash", () => sha256Hex(prepared));
           return { file: prepared, timing, sha256, index };
         },
-        async ({ file, timing, sha256 }, _source, index): Promise<UploadedImage> => {
+        async ({ file, timing, sha256 }, source, index): Promise<UploadedImage> => {
           setMessage(`正在上传第 ${index + 1}/${selected.length} 张报告图片…`);
-          const intent = await measureAttachmentUploadStage(
-            timing,
-            "intent",
-            () => request(
-              "tools/attachments/upload-intents",
-              UploadIntentResponseSchema,
-              {
-                method: "POST",
-                body: JSON.stringify({
-                  filename: file.name,
-                  mimeType: file.type,
-                  sizeBytes: file.size,
-                  sha256,
-                }),
-              },
-            ),
-          );
-          const upload = new FormData();
-          for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
-          upload.append("file", file);
-          const response = await measureAttachmentUploadStage(
-            timing,
-            "oss",
-            () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
-          );
-          if (!response.ok) throw new Error(`${file.name} 上传失败`);
-          const finalized = await measureAttachmentUploadStage(
-            timing,
-            "finalize",
-            () => request(
-              `tools/attachments/${intent.attachmentId}/finalize`,
-              AttachmentResponseSchema,
-              { method: "POST" },
-            ),
-          );
-          const previewUrl = URL.createObjectURL(file);
-          previewUrls.current.push(previewUrl);
-          return {
-            attachmentId: finalized.attachmentId,
-            filename: finalized.filename,
-            mimeType: finalized.mimeType,
-            previewUrl,
-          };
+          return uploadImageWithNormalizationRetry(source, file, async (candidate) => {
+            const candidateTiming = candidate === file
+              ? timing
+              : { ...timing, uploadBytes: candidate.size, mimeType: candidate.type };
+            const candidateSha256 = candidate === file
+              ? sha256
+              : await measureAttachmentUploadStage(
+                  candidateTiming,
+                  "hash",
+                  () => sha256Hex(candidate),
+                );
+            const intent = await measureAttachmentUploadStage(
+              candidateTiming,
+              "intent",
+              () => request(
+                "tools/attachments/upload-intents",
+                UploadIntentResponseSchema,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    filename: candidate.name,
+                    mimeType: candidate.type,
+                    sizeBytes: candidate.size,
+                    sha256: candidateSha256,
+                  }),
+                },
+              ),
+            );
+            const upload = new FormData();
+            for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
+            upload.append("file", candidate);
+            const response = await measureAttachmentUploadStage(
+              candidateTiming,
+              "oss",
+              () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
+            );
+            if (!response.ok) throw new Error(`${source.name} 上传失败`);
+            const finalized = await measureAttachmentUploadStage(
+              candidateTiming,
+              "finalize",
+              () => request(
+                `tools/attachments/${intent.attachmentId}/finalize`,
+                AttachmentResponseSchema,
+                { method: "POST" },
+              ),
+            );
+            const previewUrl = URL.createObjectURL(candidate);
+            previewUrls.current.push(previewUrl);
+            return {
+              attachmentId: finalized.attachmentId,
+              filename: finalized.filename,
+              mimeType: finalized.mimeType,
+              previewUrl,
+            };
+          });
         },
       );
       setImages((current) => [...current, ...uploaded]);
@@ -614,6 +645,11 @@ export function ReworkInitiationV2Form({
         <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
         <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory }); pendingSubmit.current = null; }} /></div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
+        <fieldset className="rework-v2-tail-choice" disabled={busy}>
+          <legend>是否需要整查？</legend>
+          <label><input type="radio" name="tailInspectionRequired" checked={form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={!form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false }); pendingSubmit.current = null; }} />否</label>
+        </fieldset>
       </div>
       <details className="rework-v2-more">
         <summary>更多信息</summary>
@@ -634,7 +670,7 @@ export function ReworkInitiationV2Form({
       </div>
       <label className="rework-v2-upload">
         <span>{uploading ? "正在上传…" : "＋ 上传报告"}</span>
-        <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || uploading || images.length >= MAX_REWORK_ATTACHMENTS} onChange={(event) => { void uploadFiles(event.target.files); event.target.value = ""; }} />
+        <input type="file" accept="image/*" multiple disabled={busy || uploading || images.length >= MAX_REWORK_ATTACHMENTS} onChange={(event) => { void uploadFiles(event.target.files); event.target.value = ""; }} />
       </label>
       {images.length ? <div className="rework-v2-image-grid">
         {images.map((image) => <article key={image.attachmentId}>

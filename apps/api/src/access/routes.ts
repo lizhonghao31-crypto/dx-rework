@@ -327,6 +327,12 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       parse(ReplaceProcessDefaultWorkersSchema, request.body),
     ));
 
+  app.put("/master-data/tail-inspection/default-workers", async (request) =>
+    dependencies.service.replaceTailInspectionDefaultWorkers(
+      await defaultWorkerRosterActor(request),
+      parse(ReplaceProcessDefaultWorkersSchema, request.body),
+    ));
+
   app.post("/master-data/suppliers", async (request, reply) =>
     reply.code(201).send(
       await dependencies.service.createSupplier(

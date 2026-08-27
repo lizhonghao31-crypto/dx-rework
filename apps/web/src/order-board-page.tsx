@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { verifySession } from "./auth.js";
+import { ImageViewer } from "./image-viewer.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
 
@@ -332,7 +333,7 @@ export function OrderBoardPage() {
           <strong>收货单附件 {attachmentViewer.index + 1}/{attachmentViewer.attachments.length}</strong>
           <button type="button" onClick={() => setAttachmentViewer(null)}>关闭</button>
         </div>
-        <img src={attachmentUrl(selectedAttachment.attachmentId, "preview")} alt={selectedAttachment.filename} />
+        <ImageViewer src={attachmentUrl(selectedAttachment.attachmentId, "preview")} alt={selectedAttachment.filename} />
         <div className="order-board-attachment-modal__actions">
           {attachmentViewer.attachments.length > 1 ? <>
             <button

@@ -94,7 +94,7 @@ export function WholeOrderReviewPanel({
         "rework-orders/" + reworkOrderId + "/whole-order-review",
         WholeOrderReviewResponseSchema.parse,
       );
-      const tail = overview.unifiedExecutionRequired
+      const tail = overview.unifiedExecutionRequired || !overview.tailInspectionRequired
         ? null
         : await request(
           "rework-orders/" + reworkOrderId + "/tail-inspection",
@@ -110,9 +110,9 @@ export function WholeOrderReviewPanel({
           : null;
         setMessage(rejected
           ? `IE 已退回上一版：${rejected}。请修正报数并重新提交。`
-          : "逐工序核对工人与尾查有效数量；全部一致后才能提交。");
+          : overview.tailInspectionRequired ? "逐工序核对工人与尾查有效数量；全部一致后才能提交。" : "本单无需整查；逐工序核对工人有效数量后提交。");
       } else if (overview.reworkStatus === "in_progress") {
-        setMessage("返工人员与尾查全部完成报数后进入尾部确认。");
+        setMessage(overview.tailInspectionRequired ? "返工人员与尾查全部完成报数后进入尾部确认。" : "返工人员全部完成报数后进入尾部确认。");
       } else setMessage("");
     } finally {
       requestInFlight.current = false;
@@ -225,7 +225,7 @@ export function WholeOrderReviewPanel({
       setMessage("临时工实发系数不是 1.0 时，必须填写调整原因。");
       return;
     }
-    if (!(await confirmInApp("确认各工序工人与尾查有效数量完全一致，并提交 IE 复核？"))) return;
+    if (!(await confirmInApp(data.tailInspectionRequired ? "确认各工序工人与尾查有效数量完全一致，并提交 IE 复核？" : "确认各工序工人有效数量无误，并提交 IE 复核？"))) return;
     try {
       await call(
         "rework-orders/" + reworkOrderId + "/whole-order-review/approve",
@@ -339,6 +339,7 @@ export function WholeOrderReviewPanel({
   };
 
   return <div className="whole-order-review-flow">
+    {embedded && message && <p role="status">{message}</p>}
     {!embedded && <Surface>
       <div className="section-title">
         <div>
@@ -379,26 +380,30 @@ export function WholeOrderReviewPanel({
             >
               <span className="quantity-process-name">{process.processName}</span>
               <span><small>工人合计</small><strong>{process.completedQuantity}</strong></span>
-              <span><small>尾查</small><strong>{process.tailCheckedQuantity}</strong></span>
-              <span><small>差异</small><strong>{process.countGap}</strong></span>
+              {data.tailInspectionRequired ? <>
+                <span><small>尾查</small><strong>{process.tailCheckedQuantity}</strong></span>
+                <span><small>差异</small><strong>{process.countGap}</strong></span>
+              </> : null}
               <StatusBadge tone={process.complete ? "success" : "danger"}>
-                {process.complete ? "✓ 一致" : "⚠ 不一致"}
+                {data.tailInspectionRequired
+                  ? process.complete ? "✓ 一致" : "⚠ 不一致"
+                  : process.complete ? "✓ 已上报" : "⚠ 待完成"}
               </StatusBadge>
               <b className="quantity-process-expander">{open ? "−" : "+"}</b>
             </button>
             {open && <div className="quantity-process-detail">
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
-              <div className="quantity-report-row quantity-tail-summary">
+              {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
                 <div className="quantity-report-person"><b>尾查</b><span>有效合计</span></div>
                 <div className="quantity-report-value"><strong>{process.tailCheckedQuantity} 件</strong></div>
-              </div>
+              </div> : null}
             </div>}
           </section>;
         })}
       </div>
     </Surface>
 
-    {data.unifiedExecutionRequired && tailReports.length > 0 && <Surface>
+    {data.tailInspectionRequired && data.unifiedExecutionRequired && tailReports.length > 0 && <Surface>
       <button
         className="quantity-tail-toggle"
         type="button"
@@ -412,7 +417,7 @@ export function WholeOrderReviewPanel({
       {tailExpanded && <div className="quantity-process-detail">{tailReports.map(reportRow)}</div>}
     </Surface>}
 
-    {!data.unifiedExecutionRequired && tailStage && submittedTailAssignments.length > 0 && <Surface>
+    {data.tailInspectionRequired && !data.unifiedExecutionRequired && tailStage && submittedTailAssignments.length > 0 && <Surface>
       <h2>历史尾查报数记录</h2>
       {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>
         <div><b>{assignment.tailInspectorName}</b><p>返件总数 {assignment.returnedQuantity ?? 0} 件</p></div>
@@ -495,13 +500,13 @@ export function WholeOrderReviewPanel({
       <div className="quantity-submit-row">
         <div>
           <h2>提交 IE 复核</h2>
-          <p>系统自动把一致的有效数量生成最终数量，不再重复手工填写。</p>
+          <p>{data.tailInspectionRequired ? "系统自动把一致的有效数量生成最终数量，不再重复手工填写。" : "本单无需整查；系统按工人有效数量生成最终数量。"}</p>
         </div>
         <Button variant="primary" onClick={() => void confirmQuantities()} disabled={busy || !ready}>
-          {busy ? "提交中…" : "确认一致并提交 IE"}
+          {busy ? "提交中…" : data.tailInspectionRequired ? "确认一致并提交 IE" : "确认数量并提交 IE"}
         </Button>
       </div>
-      {!ready && <p role="status">还需完成：消除全部工序数量差异，并检查临时工工资调整。</p>}
+      {!ready && <p role="status">{data.tailInspectionRequired ? "还需完成：消除全部工序数量差异，并检查临时工工资调整。" : "还需完成：等待全部返工报数，并检查临时工工资调整。"}</p>}
     </Surface>}
 
     {ieStage && data.canIeReview && <Surface>

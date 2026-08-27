@@ -53,6 +53,7 @@ type ReworkOrderRow = Readonly<{
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
+  tail_inspection_required: boolean;
   inspection_report: InspectionReportDraft | null;
   source_receiving_batch_id: string | null;
   created_by: string;
@@ -167,6 +168,7 @@ export class ReworkInitiationService {
         problemPart: input.problemPart ?? null,
         problemDescription: input.problemDescription ?? null,
         reworkQuantity: input.reworkQuantity ?? null,
+        tailInspectionRequired: input.tailInspectionRequired ?? true,
         inspectionReport: input.inspectionReport ?? null,
         attachmentIds,
         version: 1,
@@ -184,9 +186,9 @@ export class ReworkInitiationService {
            order_no,order_quantity,merchandiser_user_id,
            processing_factory_type,processing_factory_supplier_id,
            processing_factory_supplier_version,rework_reason,rework_process,
-           problem_part,problem_description,rework_quantity,inspection_report,
+           problem_part,problem_description,rework_quantity,tail_inspection_required,inspection_report,
            source_receiving_batch_id,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18)`,
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19)`,
         [
           reworkOrderId,
           next.styleNo,
@@ -203,6 +205,7 @@ export class ReworkInitiationService {
           next.problemPart,
           next.problemDescription,
           next.reworkQuantity,
+          next.tailInspectionRequired,
           next.inspectionReport,
           sourceReceivingBatchId,
           actor.actorId,
@@ -322,6 +325,9 @@ export class ReworkInitiationService {
         reworkQuantity: input.reworkQuantity === undefined
           ? current.rework_quantity
           : input.reworkQuantity,
+        tailInspectionRequired: input.tailInspectionRequired === undefined
+          ? current.tail_inspection_required
+          : input.tailInspectionRequired,
         inspectionReport: input.inspectionReport === undefined
           ? current.inspection_report
           : input.inspectionReport,
@@ -343,8 +349,8 @@ export class ReworkInitiationService {
              processing_factory_type=$8,processing_factory_supplier_id=$9,
              processing_factory_supplier_version=$10,rework_reason=$11,
              rework_process=$12,problem_part=$13,problem_description=$14,
-             rework_quantity=$15,inspection_report=$16,updated_by=$17,version=$18,
-             source_receiving_batch_id=$19,updated_at=CURRENT_TIMESTAMP
+             rework_quantity=$15,tail_inspection_required=$16,inspection_report=$17,updated_by=$18,version=$19,
+             source_receiving_batch_id=$20,updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
           reworkOrderId,
@@ -362,6 +368,7 @@ export class ReworkInitiationService {
           next.problemPart,
           next.problemDescription,
           next.reworkQuantity,
+          next.tailInspectionRequired,
           next.inspectionReport,
           actor.actorId,
           nextVersion,
@@ -1217,6 +1224,7 @@ export class ReworkInitiationService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
+      tailInspectionRequired: row.tail_inspection_required,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
@@ -1265,6 +1273,7 @@ export class ReworkInitiationService {
       problemPart: row.problem_part,
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
+      tailInspectionRequired: row.tail_inspection_required,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
