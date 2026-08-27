@@ -126,6 +126,7 @@ export function EmployeeAccessPage() {
     if (!directory) return [];
     const employees = employeesInAccessFilter(directory.employees, accessFilter)
       .filter((employee) => moduleFilter === "all"
+        || employee.isRoot
         || employeeHasAccessModule(employee.businessRoles, roles, moduleFilter));
     const needle = query.trim().toLocaleLowerCase("zh-CN");
     if (!needle) return employees;
@@ -280,7 +281,12 @@ export function EmployeeAccessPage() {
                 const canSelfGrantSystemAdmin = isSelf
                   && me?.isRoot === true
                   && selected === "system_admin";
-                const protectedTarget = employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
+                const protectedTarget = employee.isRoot
+                  || employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
+                const assignedRoleNames = employee.businessRoles.map(assignedRoleDisplayName);
+                const accessRoleNames = employee.isRoot
+                  ? ["Root（返工 / 报价&选厂 / 平台管理）", ...assignedRoleNames]
+                  : assignedRoleNames;
                 const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
                 const wouldDisableLastOwner =
                   employee.businessRoles.includes("owner_group")
@@ -304,7 +310,7 @@ export function EmployeeAccessPage() {
                       <div><dt>组织状态</dt><dd>{employee.employed && employee.active ? "正常在职" : employee.employed ? "组织停用" : "非在职"}</dd></div>
                       <div><dt>系统状态</dt><dd>{employeeStatus(employee)} · {employee.hasLoggedIn ? "已登录过" : "未登录"}</dd></div>
                       <div><dt>最近校验</dt><dd>{new Date(employee.lastVerifiedAt).toLocaleString("zh-CN")}</dd></div>
-                      <div><dt>当前角色 / 模块</dt><dd>{employee.businessRoles.length ? employee.businessRoles.map(assignedRoleDisplayName).join("、") : "未分配"}</dd></div>
+                      <div><dt>当前角色 / 模块</dt><dd>{accessRoleNames.length ? accessRoleNames.join("、") : "未分配"}</dd></div>
                     </dl>
 
                     <label className="employee-access-reason">
@@ -382,7 +388,7 @@ export function EmployeeAccessPage() {
                         当前账号仅允许唯一超级用户为自己授予系统管理员；其他自授角色仍禁止。
                       </p>
                     ) : null}
-                    {protectedTargetLocked ? <p className="employee-access-note">老板和系统管理员账号仅可由超级用户维护。</p> : null}
+                    {protectedTargetLocked ? <p className="employee-access-note">Root、老板和系统管理员账号仅可由超级用户维护。</p> : null}
                     {wouldDisableLastOwner ? <p className="employee-access-note">最后一名有效老板不可撤销老板角色或停用访问。</p> : null}
                     {activeAssignments.length === 0 ? <p className="employee-access-note">当前没有业务角色。</p> : null}
                     {activeAssignments.length > 0 && assignableRoles.length === 0 ? <p className="employee-access-note">所有可授予角色均已生效。</p> : null}
