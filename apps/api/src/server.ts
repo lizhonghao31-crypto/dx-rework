@@ -88,6 +88,7 @@ const employeeAccessService = new EmployeeAccessService(
   authStore,
   dingtalkProvider,
   config.ownerBootstrap,
+  config.rootDingtalkUserId,
 );
 const storage = config.objectStorage.enabled
   ? new AliyunPrivateObjectStorage(new AliyunOssV4RestClient({

@@ -45,7 +45,7 @@ export function SystemManagementNavigation({
   if (access === null) return <p className="admin-navigation-loading">正在加载管理权限…</p>;
   const visibleTabs = access.technical ? technicalTabs : [];
   return <nav className="admin-navigation" aria-label="系统管理模块">
-    {access.employee ? <a className={active === "employee-access" ? "active" : ""} href={pageUrl("ui/employee-access")}>员工权限管理</a> : null}
+    {access.employee ? <a className={active === "employee-access" ? "active" : ""} href={pageUrl("ui/employee-access")}>人员与权限</a> : null}
     {access.masterData ? <a className={active === "master-data" ? "active" : ""} href={pageUrl("ui/master-data")}>工厂&amp;工序管理</a> : null}
     {access.masterData ? <a className={active === "workforce" ? "active" : ""} href={pageUrl("ui/people")}>作业人员与临时工</a> : null}
     {visibleTabs.map(([tab, label]) => onTechnicalTabChange ? (

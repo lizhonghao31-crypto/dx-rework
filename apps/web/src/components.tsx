@@ -20,6 +20,12 @@ type NavigationEntry = Readonly<{
   href: string;
 }>;
 
+type NavigationGroup = Readonly<{
+  name: string;
+  description: string;
+  entries: readonly NavigationEntry[];
+}>;
+
 const ROLE_LABELS: Record<string, string> = {
   owner_group: "老板",
   system_admin: "系统管理员",
@@ -79,6 +85,45 @@ function PrimaryNavigation({
           </a>
         </div>
       ))}
+    </nav>
+  );
+}
+
+function DesktopNavigation({
+  globalNavigation,
+  groups,
+  active,
+  basePath,
+}: {
+  globalNavigation: readonly NavigationEntry[];
+  groups: readonly NavigationGroup[];
+  active: string;
+  basePath: string;
+}) {
+  return (
+    <nav className="desktop-navigation" aria-label="桌面端主导航">
+      <div className="desktop-navigation__global">
+        <PrimaryNavigation navigation={globalNavigation} active={active} basePath={basePath} />
+      </div>
+      {groups.filter((group) => group.entries.length > 0).map((group) => {
+        const groupIsActive = group.entries.some((entry) => entry.name === active);
+        return (
+          <details
+            className={"desktop-navigation__group" + (groupIsActive ? " is-active" : "")}
+            open={groupIsActive || undefined}
+            key={group.name}
+          >
+            <summary>
+              <span>
+                <strong>{group.name}</strong>
+                <small>{group.description}</small>
+              </span>
+              <b aria-hidden="true">⌄</b>
+            </summary>
+            <PrimaryNavigation navigation={group.entries} active={active} basePath={basePath} />
+          </details>
+        );
+      })}
     </nav>
   );
 }
@@ -252,53 +297,95 @@ export function Shell({
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
-  const systemManagementAccess = auditAccess || technicalAdminAccess || canManageEmployeeAccess
+  const systemManagementAccess = auditAccess || technicalAdminAccess
     || isRoot || isOwner || hasCapability("master_data:manage");
 
-  const navigation: NavigationEntry[] = [];
+  const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
-    navigation.push({
+    globalNavigation.push({
       name: "我的待办",
-      description: "只看现在轮到你处理的事项",
+      description: "查看所有模块当前轮到你的事项",
       href: "/ui/my-tasks",
     });
   }
-  navigation.push({
+  globalNavigation.push({
     name: "订单看板",
     description: "查看每日收货与数量差异",
     href: "/ui/orders",
   });
+
+  const reworkNavigation: NavigationEntry[] = [];
   if (initiationAccess) {
-    navigation.push({
+    reworkNavigation.push({
       name: "发起返工",
       description: "登记款号、问题、数量和证据",
       href: "/ui/qc/new",
     });
   }
   if (reworkBoardAccess) {
-    navigation.push({
+    reworkNavigation.push({
       name: "返工单看板",
       description: "查看权限范围内返工单及完整流程",
       href: "/ui/tasks",
     });
   }
-  if (systemManagementAccess) {
-    navigation.push({
-      name: "系统管理",
-      description: "权限、人员、资料与审计配置",
-      href: "/ui/admin",
-    });
-  }
-  if (reportAccess) navigation.push({
+  if (reportAccess) reworkNavigation.push({
     name: "财务报表",
     description: "查询返工、责任、工资与扣款报表",
     href: "/ui/reports",
   });
-  if (wageAccess) navigation.push({
+  if (wageAccess) reworkNavigation.push({
     name: "工资管理",
     description: "核对工资、调整、月结和导出",
     href: "/ui/wages",
   });
+
+  const sourcingNavigation: NavigationEntry[] = currentUser && canAccessSourcing(currentUser) ? [{
+    name: "报价选厂工作台",
+    description: "查看并处理报价与选厂业务",
+    href: "/ui/sourcing",
+  }] : [];
+
+  const platformNavigation: NavigationEntry[] = [];
+  if (canManageEmployeeAccess) {
+    platformNavigation.push({
+      name: "人员与权限",
+      description: "统一维护员工、角色与模块权限",
+      href: "/ui/employee-access",
+    });
+  }
+  if (systemManagementAccess) {
+    platformNavigation.push({
+      name: "系统管理",
+      description: "维护基础资料、审计与技术配置",
+      href: "/ui/admin",
+    });
+  }
+
+  // Keep the existing flat collection for the mobile shell. Desktop-only sourcing
+  // navigation is deliberately excluded until the dedicated mobile pass.
+  const navigation: NavigationEntry[] = [
+    ...globalNavigation,
+    ...reworkNavigation,
+    ...platformNavigation,
+  ];
+  const desktopNavigationGroups: NavigationGroup[] = [
+    {
+      name: "返工",
+      description: "尾部返工业务",
+      entries: reworkNavigation,
+    },
+    {
+      name: "报价&选厂",
+      description: "询价、审批与执行",
+      entries: sourcingNavigation,
+    },
+    {
+      name: "平台管理",
+      description: "人员、权限与系统配置",
+      entries: platformNavigation,
+    },
+  ];
 
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
@@ -316,11 +403,13 @@ export function Shell({
         </div>
       ) : null}
       <aside>
-        <h2>达兴 · 质检返工</h2>
-        {currentUser && canAccessSourcing(currentUser) ? (
-          <a className="app-shell__platform-home" href={`${basePath}/ui/home`}>返回业务工作台</a>
-        ) : null}
-        <PrimaryNavigation navigation={navigation} active={active} basePath={basePath} />
+        <h2>达兴 · 业务平台</h2>
+        <DesktopNavigation
+          globalNavigation={globalNavigation}
+          groups={desktopNavigationGroups}
+          active={active}
+          basePath={basePath}
+        />
         <div className="org app-shell__identity">
           {currentUser ? (
             <div className="current-user">
