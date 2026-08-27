@@ -23,6 +23,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
   const managerId = randomUUID();
   const ownerId = randomUUID();
   const factoryId = randomUUID();
+  const evidenceId = randomUUID();
 
   const merchandiserActor = (requestId = randomUUID()): TrustedActorContext => ({
     actorId: merchandiserId,
@@ -96,6 +97,13 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
        ($3,'生产管理',true),($4,'老板',true)`,
       [merchandiserId, ieId, managerId, ownerId],
     );
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+         uploaded_by,status,ready_at
+       ) VALUES($1,$2,'款式照片.jpg','image/jpeg',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [evidenceId, `sourcing-test/${evidenceId}.jpg`, "a".repeat(64), merchandiserId],
+    );
     await database.query(`
       ALTER TABLE supplier_catalog_items
         DISABLE TRIGGER supplier_catalog_items_require_initial_version
@@ -140,6 +148,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-20260826-001",
       styleNo: "DX-260826",
       orderQuantity: 137,
+      attachmentIds: [evidenceId],
     };
 
     const created = await service.createCase(merchandiserActor(), input, createKey);
@@ -159,6 +168,13 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     expect(replay.reused).toBe(true);
     expect(replay.value.sourcingCaseId).toBe(created.value.sourcingCaseId);
     expect((await database.query("SELECT 1 FROM sourcing_cases")).rowCount).toBe(1);
+    expect((await database.query(
+      "SELECT 1 FROM attachments WHERE attachment_id=$1 AND entity_type='sourcing_case' AND entity_id=$2",
+      [evidenceId, created.value.sourcingCaseId],
+    )).rowCount).toBe(1);
+    expect(await service.listAttachments(readerActor(), created.value.sourcingCaseId)).toEqual({
+      items: [{ attachmentId: evidenceId, filename: "款式照片.jpg", mimeType: "image/jpeg" }],
+    });
 
     const quoteKey = randomUUID();
     const quoted = await service.quoteIePrice(
@@ -326,6 +342,25 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       "SELECT 1 FROM sourcing_owner_decisions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
     )).rowCount).toBe(2);
+    const timeline = await service.listTimeline(readerActor(), created.value.sourcingCaseId);
+    expect(timeline.items.map((entry) => entry.kind)).toEqual([
+      "created",
+      "ie_quote",
+      "management_decision",
+      "owner_decision",
+      "management_decision",
+      "owner_decision",
+    ]);
+    expect(timeline.items.find((entry) => entry.kind === "ie_quote")).toMatchObject({
+      unitPrice: "10.8136",
+      totalAmount: "1481.46",
+    });
+    expect(timeline.items.filter((entry) => entry.kind === "management_decision")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ unitPrice: "11.0000", supplierName: "一号加工厂" }),
+        expect.objectContaining({ unitPrice: "10.8136", supplierName: "一号加工厂" }),
+      ]),
+    );
     expect((await database.query(
       "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
