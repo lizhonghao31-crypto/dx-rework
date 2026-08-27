@@ -10,7 +10,7 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
-runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
+runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
   const schema = `sourcing_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({
@@ -20,6 +20,9 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
   const service = new SourcingService(database);
   const merchandiserId = randomUUID();
   const ieId = randomUUID();
+  const managerId = randomUUID();
+  const ownerId = randomUUID();
+  const factoryId = randomUUID();
 
   const merchandiserActor = (requestId = randomUUID()): TrustedActorContext => ({
     actorId: merchandiserId,
@@ -33,6 +36,20 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
     actorRoles: ["ie_reviewer"],
     authorizationCapability: "sourcing:price:quote",
     authorizationCapabilities: ["sourcing:view", "sourcing:price:quote"],
+    requestId,
+  });
+  const managerActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: managerId,
+    actorRoles: ["production_management"],
+    authorizationCapability: "sourcing:decision:record",
+    authorizationCapabilities: ["sourcing:view", "sourcing:decision:record"],
+    requestId,
+  });
+  const ownerActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: ownerId,
+    actorRoles: ["owner_group"],
+    authorizationCapability: "sourcing:owner:approve",
+    authorizationCapabilities: ["sourcing:view", "sourcing:owner:approve"],
     requestId,
   });
   const readerActor = (): TrustedActorContext => ({
@@ -75,9 +92,25 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
     }
     await database.query(
       `INSERT INTO app_users(id,display_name,enabled) VALUES
-       ($1,'订单跟单',true),($2,'IE报价员',true)`,
-      [merchandiserId, ieId],
+       ($1,'订单跟单',true),($2,'IE报价员',true),
+       ($3,'生产管理',true),($4,'老板',true)`,
+      [merchandiserId, ieId, managerId, ownerId],
     );
+    await database.query(`
+      ALTER TABLE supplier_catalog_items
+        DISABLE TRIGGER supplier_catalog_items_require_initial_version;
+      ALTER TABLE supplier_catalog_versions
+        DISABLE TRIGGER supplier_catalog_versions_guard_creation;
+      INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
+      VALUES($1,'FAC-01','factory');
+      INSERT INTO supplier_catalog_versions(
+        supplier_id,version,supplier_name,active,change_reason,changed_by
+      ) VALUES($1,1,'一号加工厂',true,'测试夹具',$2);
+      ALTER TABLE supplier_catalog_versions
+        ENABLE TRIGGER supplier_catalog_versions_guard_creation;
+      ALTER TABLE supplier_catalog_items
+        ENABLE TRIGGER supplier_catalog_items_require_initial_version;
+    `, [factoryId, managerId]);
   });
 
   afterAll(async () => {
@@ -165,6 +198,115 @@ runWithPostgres("sourcing PR03 PostgreSQL business chain", () => {
       ieActor(),
       created.value.sourcingCaseId,
       { unitPrice: "11.0000" },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+      statusCode: 409,
+    });
+
+    const factories = await service.listFactories({
+      ...managerActor(),
+      authorizationCapability: "sourcing:view",
+    });
+    expect(factories.items).toEqual([{
+      supplierId: factoryId,
+      supplierCode: "FAC-01",
+      supplierName: "一号加工厂",
+    }]);
+
+    const firstDecision = await service.recordManagementDecision(
+      managerActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: factoryId,
+        unitPrice: "11.0000",
+        decisionReason: "结合产能与交期调整",
+      },
+      randomUUID(),
+    );
+    expect(firstDecision.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 3,
+      decision: {
+        decisionVersion: 1,
+        sourceType: "initial",
+        supplierId: factoryId,
+        supplierName: "一号加工厂",
+        unitPrice: "11.0000",
+        quantity: 137,
+        totalAmount: "1507.00",
+      },
+      ownerDecision: null,
+    });
+
+    const rejected = await service.decideOwner(
+      ownerActor(),
+      created.value.sourcingCaseId,
+      { decision: "rejected", decisionReason: "价格偏高，请重新核对" },
+      randomUUID(),
+    );
+    expect(rejected.value).toMatchObject({
+      status: "pending_management_decision",
+      version: 4,
+      ownerDecision: {
+        decision: "rejected",
+        decisionReason: "价格偏高，请重新核对",
+      },
+    });
+
+    const revision = await service.recordManagementDecision(
+      managerActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: factoryId,
+        unitPrice: "10.8136",
+        decisionReason: "按老板意见恢复 IE 核价",
+      },
+      randomUUID(),
+    );
+    expect(revision.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 5,
+      decision: {
+        decisionVersion: 2,
+        sourceType: "management_revision",
+        supersedesDecisionId: firstDecision.value.decision?.sourcingDecisionId,
+        totalAmount: "1481.46",
+      },
+      ownerDecision: null,
+    });
+
+    const approved = await service.decideOwner(
+      ownerActor(),
+      created.value.sourcingCaseId,
+      { decision: "approved" },
+      randomUUID(),
+    );
+    expect(approved.value).toMatchObject({
+      status: "pending_contract",
+      version: 6,
+      ownerDecision: {
+        decision: "approved",
+        sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
+      },
+    });
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(2);
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_owner_decisions WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(2);
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(6);
+
+    await expect(service.decideOwner(
+      ownerActor(),
+      created.value.sourcingCaseId,
+      { decision: "approved" },
       randomUUID(),
     )).rejects.toMatchObject({
       code: "INVALID_STATE_TRANSITION",

@@ -2,6 +2,7 @@ import { calculateSourcingTotalExact } from "@dx-rework/contracts";
 import type {
   SourcingCaseListResponse,
   SourcingCaseStatus,
+  SourcingFactoryListResponse,
   SourcingCaseSummary,
 } from "@dx-rework/contracts";
 import { StatusBadge, Surface } from "@dx-rework/ui";
@@ -25,6 +26,11 @@ const STATUS_LABELS: Readonly<Record<SourcingCaseStatus, string>> = {
 };
 
 type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
+type DecisionDraft = Readonly<{
+  supplierId: string;
+  unitPrice: string;
+  decisionReason: string;
+}>;
 
 const errorMessage = async (response: Response): Promise<string> => {
   const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
@@ -85,10 +91,17 @@ export function SourcingShellPage() {
   const [styleNo, setStyleNo] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
   const [quoteDrafts, setQuoteDrafts] = useState<Readonly<Record<string, QuoteDraft>>>({});
+  const [factories, setFactories] = useState<SourcingFactoryListResponse["items"]>([]);
+  const [decisionDrafts, setDecisionDrafts] = useState<
+    Readonly<Record<string, DecisionDraft>>
+  >({});
+  const [ownerReasons, setOwnerReasons] = useState<Readonly<Record<string, string>>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const createKey = useRef<string | null>(null);
   const quoteKeys = useRef(new Map<string, string>());
+  const decisionKeys = useRef(new Map<string, string>());
+  const ownerKeys = useRef(new Map<string, string>());
 
   const loadCases = async (query = search) => {
     setLoading(true);
@@ -118,6 +131,17 @@ export function SourcingShellPage() {
 
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
+  const canManage = canAct(user, "production_management", "sourcing:decision:record");
+  const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
+
+  useEffect(() => {
+    if (!canManage) return;
+    void requestJson<SourcingFactoryListResponse>("sourcing/factories")
+      .then((body) => setFactories(body.items))
+      .catch((error) => {
+        setMessage(error instanceof Error ? error.message : "加工厂列表加载失败");
+      });
+  }, [canManage]);
   const pendingIeCount = useMemo(
     () => cases.filter((item) => item.status === "pending_ie_quote").length,
     [cases],
@@ -217,13 +241,117 @@ export function SourcingShellPage() {
     }
   };
 
+
+  const decisionDraft = (item: SourcingCaseSummary): DecisionDraft =>
+    decisionDrafts[item.sourcingCaseId] ?? {
+      supplierId: "",
+      unitPrice: item.ieQuote?.unitPrice ?? "",
+      decisionReason: "",
+    };
+
+  const updateDecisionDraft = (
+    item: SourcingCaseSummary,
+    field: keyof DecisionDraft,
+    value: string,
+  ) => {
+    setDecisionDrafts((current) => ({
+      ...current,
+      [item.sourcingCaseId]: { ...decisionDraft(item), [field]: value },
+    }));
+    decisionKeys.current.delete(item.sourcingCaseId);
+  };
+
+  const submitManagementDecision = async (item: SourcingCaseSummary) => {
+    const draft = decisionDraft(item);
+    if (!draft.supplierId) { setMessage("请选择加工厂"); return; }
+    if (!/^\d{1,10}(?:\.\d{1,4})?$/.test(draft.unitPrice)
+      || Number(draft.unitPrice) <= 0) {
+      setMessage("生产管理单价必须大于0且最多4位小数");
+      return;
+    }
+    const priceChanged = draft.unitPrice !== item.ieQuote?.unitPrice;
+    if (priceChanged && !draft.decisionReason.trim()) {
+      setMessage("调整 IE 价格时必须填写原因");
+      return;
+    }
+    setBusyAction(`management-${item.sourcingCaseId}`);
+    let key = decisionKeys.current.get(item.sourcingCaseId);
+    if (!key) {
+      key = window.crypto.randomUUID();
+      decisionKeys.current.set(item.sourcingCaseId, key);
+    }
+    try {
+      await requestJson<SourcingCaseSummary>(
+        `sourcing/cases/${item.sourcingCaseId}/management-decisions`,
+        {
+          method: "POST",
+          headers: { "idempotency-key": key },
+          body: JSON.stringify({
+            supplierId: draft.supplierId,
+            unitPrice: draft.unitPrice,
+            ...(draft.decisionReason.trim()
+              ? { decisionReason: draft.decisionReason.trim() }
+              : {}),
+          }),
+        },
+      );
+      decisionKeys.current.delete(item.sourcingCaseId);
+      setMessage("选厂决定已提交老板终审");
+      await loadCases(search);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "选厂决定提交失败");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const submitOwnerDecision = async (
+    item: SourcingCaseSummary,
+    decision: "approved" | "rejected",
+  ) => {
+    const reason = ownerReasons[item.sourcingCaseId]?.trim() ?? "";
+    if (decision === "rejected" && !reason) {
+      setMessage("驳回时必须填写原因");
+      return;
+    }
+    setBusyAction(`owner-${item.sourcingCaseId}`);
+    const keyScope = `${item.sourcingCaseId}:${decision}`;
+    let key = ownerKeys.current.get(keyScope);
+    if (!key) {
+      key = window.crypto.randomUUID();
+      ownerKeys.current.set(keyScope, key);
+    }
+    try {
+      await requestJson<SourcingCaseSummary>(
+        `sourcing/cases/${item.sourcingCaseId}/owner-decisions`,
+        {
+          method: "POST",
+          headers: { "idempotency-key": key },
+          body: JSON.stringify({
+            decision,
+            ...(reason ? { decisionReason: reason } : {}),
+          }),
+        },
+      );
+      ownerKeys.current.delete(keyScope);
+      setMessage(decision === "approved"
+        ? "选厂决定已批准，已转交跟单登记合同"
+        : "已驳回，退回生产管理重新调整");
+      await loadCases(search);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "老板审批提交失败");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   return (
     <main className="sourcing-shell">
       <header className="sourcing-shell__header">
         <div>
           <StatusBadge tone="info">达兴 · 业务平台</StatusBadge>
           <h1>报价&选厂</h1>
-          <p>跟单建立订单询价，IE 提供加工价格；生产管理选厂将在下一阶段开放。</p>
+          <p>跟单发起、IE 报价、生产管理调价选厂，最终由老板批准或驳回。</p>
         </div>
         <a className="dx-button dx-button--secondary" href={`${basePath}/ui/home`}>
           返回业务工作台
@@ -344,6 +472,13 @@ export function SourcingShellPage() {
                         <div><dt>报价版本</dt><dd>V{item.ieQuote.quoteVersion}</dd></div>
                       </>
                     ) : null}
+                    {item.decision ? (
+                      <>
+                        <div><dt>选定工厂</dt><dd>{item.decision.supplierName}</dd></div>
+                        <div><dt>生产单价</dt><dd>¥{item.decision.unitPrice}</dd></div>
+                        <div><dt>决定版本</dt><dd>V{item.decision.decisionVersion}</dd></div>
+                      </>
+                    ) : null}
                   </dl>
 
                   {item.status === "pending_ie_quote" && canQuote ? (
@@ -392,8 +527,127 @@ export function SourcingShellPage() {
                   {item.status === "pending_ie_quote" && !canQuote ? (
                     <p className="sourcing-case__next">已交给 IE，等待填写加工价格。</p>
                   ) : null}
-                  {item.status === "pending_management_decision" ? (
-                    <p className="sourcing-case__next">IE 已报价，等待生产管理调整价格并选择加工厂。</p>
+                  {item.status === "pending_management_decision" && canManage ? (
+                    <div className="sourcing-case__decision">
+                      {item.ownerDecision?.decision === "rejected" ? (
+                        <p className="sourcing-case__rejection">
+                          老板驳回：{item.ownerDecision.decisionReason}
+                        </p>
+                      ) : null}
+                      <label className="sourcing-shell__field">
+                        <span>选择加工厂</span>
+                        <select
+                          value={decisionDraft(item).supplierId}
+                          onChange={(event) => updateDecisionDraft(
+                            item,
+                            "supplierId",
+                            event.target.value,
+                          )}
+                        >
+                          <option value="">请选择当前有效加工厂</option>
+                          {factories.map((factory) => (
+                            <option value={factory.supplierId} key={factory.supplierId}>
+                              {factory.supplierName}（{factory.supplierCode}）
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="sourcing-shell__field">
+                        <span>生产管理单价</span>
+                        <input
+                          value={decisionDraft(item).unitPrice}
+                          inputMode="decimal"
+                          onChange={(event) => updateDecisionDraft(
+                            item,
+                            "unitPrice",
+                            event.target.value,
+                          )}
+                          placeholder="默认使用 IE 单价"
+                        />
+                      </label>
+                      <div className="sourcing-case__total">
+                        <span>决定总额</span>
+                        <strong>
+                          ¥{totalPreview(decisionDraft(item).unitPrice, item.orderQuantity)}
+                        </strong>
+                      </div>
+                      <label className="sourcing-shell__field sourcing-case__reason">
+                        <span>调整说明（价格变化时必填）</span>
+                        <input
+                          value={decisionDraft(item).decisionReason}
+                          maxLength={500}
+                          onChange={(event) => updateDecisionDraft(
+                            item,
+                            "decisionReason",
+                            event.target.value,
+                          )}
+                          placeholder="未调整 IE 价格可不填"
+                        />
+                      </label>
+                      <button
+                        className="dx-button dx-button--primary"
+                        type="button"
+                        disabled={busyAction !== null}
+                        onClick={() => void submitManagementDecision(item)}
+                      >
+                        {busyAction === `management-${item.sourcingCaseId}`
+                          ? "正在提交…"
+                          : "提交老板终审"}
+                      </button>
+                    </div>
+                  ) : null}
+                  {item.status === "pending_management_decision" && !canManage ? (
+                    <p className="sourcing-case__next">
+                      IE 已报价，等待生产管理调整价格并选择加工厂。
+                    </p>
+                  ) : null}
+                  {item.status === "pending_owner_approval" && canOwner ? (
+                    <div className="sourcing-case__owner">
+                      <p>
+                        生产管理已选择 <strong>{item.decision?.supplierName}</strong>，
+                        单价 ¥{item.decision?.unitPrice}，总额 ¥{item.decision?.totalAmount}。
+                      </p>
+                      <label className="sourcing-shell__field">
+                        <span>审批说明（驳回时必填）</span>
+                        <input
+                          value={ownerReasons[item.sourcingCaseId] ?? ""}
+                          maxLength={500}
+                          onChange={(event) => {
+                            setOwnerReasons((current) => ({
+                              ...current,
+                              [item.sourcingCaseId]: event.target.value,
+                            }));
+                            ownerKeys.current.delete(`${item.sourcingCaseId}:approved`);
+                            ownerKeys.current.delete(`${item.sourcingCaseId}:rejected`);
+                          }}
+                          placeholder="批准可不填；驳回必须说明"
+                        />
+                      </label>
+                      <div className="sourcing-case__owner-actions">
+                        <button
+                          className="dx-button dx-button--secondary"
+                          type="button"
+                          disabled={busyAction !== null}
+                          onClick={() => void submitOwnerDecision(item, "rejected")}
+                        >
+                          驳回
+                        </button>
+                        <button
+                          className="dx-button dx-button--primary"
+                          type="button"
+                          disabled={busyAction !== null}
+                          onClick={() => void submitOwnerDecision(item, "approved")}
+                        >
+                          批准
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {item.status === "pending_owner_approval" && !canOwner ? (
+                    <p className="sourcing-case__next">生产管理已提交，等待老板最终审批。</p>
+                  ) : null}
+                  {item.status === "pending_contract" ? (
+                    <p className="sourcing-case__next">老板已批准，等待跟单登记合同。</p>
                   ) : null}
                 </article>
               );
