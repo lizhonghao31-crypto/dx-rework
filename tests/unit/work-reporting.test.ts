@@ -117,6 +117,9 @@ describe("work reporting monetary snapshots", () => {
     const service = await readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8");
     expect(form).toContain('className="n04-add-worker"');
     expect(form).toContain('className="n04-worker-remove"');
+    expect(form).toContain('<h2>未完成</h2><StatusBadge tone="warning">');
+    expect(form).not.toContain("n04-progress-group__title");
+    expect(form).not.toContain("n04-progress-group__heading--compact");
     expect(form).not.toContain("candidate.configurationItemId === task.configurationItemId");
     expect(service).not.toContain("每道工序至少保留一名员工");
     expect(service).toContain("该员工已有上报记录，不能移除");
@@ -128,6 +131,9 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("只加入当前订单，不修改默认人员名单");
     expect(styles).toContain(".n04-progress-group__toolbar");
     expect(styles).toContain(".n04-add-worker");
+    expect(styles).toContain("position: absolute");
+    expect(styles).toContain("left: 56px");
+    expect(styles).toContain("white-space: nowrap");
     expect(styles).toContain(".n04-worker-remove");
     expect(styles).toContain("min-width: 18px");
     expect(styles).toContain("justify-content: center");

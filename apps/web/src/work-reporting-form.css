@@ -267,24 +267,23 @@
 }
 
 .work-reporting-page .n04-progress-group__toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .work-reporting-page .n04-progress-group__toolbar .n04-progress-group__heading {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-.work-reporting-page .n04-progress-group__title {
-  margin: 0;
-  font-size: 16px;
 }
 
 .work-reporting-page .n04-add-worker {
   appearance: none;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0;
+  left: 56px;
+  z-index: 1;
   min-width: 0;
   min-height: 24px;
   margin: 0;
@@ -301,11 +300,6 @@
 .work-reporting-page .n04-add-worker:disabled {
   cursor: not-allowed;
   opacity: .55;
-}
-
-.work-reporting-page .n04-progress-group__heading--compact {
-  width: auto;
-  margin-left: auto;
 }
 
 .work-reporting-page .n04-progress-summary {
@@ -353,6 +347,7 @@
 .work-reporting-page .n04-progress-group__heading h2 {
   margin: 0 auto 0 0;
   font-size: 16px;
+  white-space: nowrap;
 }
 
 .work-reporting-page .n04-progress-group__heading > b {
