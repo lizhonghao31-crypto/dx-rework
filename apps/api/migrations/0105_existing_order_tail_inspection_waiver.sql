@@ -330,7 +330,7 @@ BEGIN
         AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id))
   ) THEN RAISE EXCEPTION 'every active execution task requires a valid report' USING ERRCODE='23514'; END IF;
 
-  IF NOT unified_execution AND EXISTS(
+  IF NOT unified_execution AND tail_required AND EXISTS(
     SELECT 1 FROM rework_tail_inspection_assignments assignment
     WHERE assignment.rework_order_id=NEW.rework_order_id AND assignment.revoked_at IS NULL
       AND NOT EXISTS(SELECT 1 FROM rework_tail_inspection_reports report
@@ -358,7 +358,7 @@ BEGIN
       AND worker.quantity<>tail_total.quantity
   ) THEN RAISE EXCEPTION 'worker count must equal unified tail-inspection count' USING ERRCODE='23514'; END IF;
 
-  IF NOT unified_execution AND EXISTS(
+  IF NOT unified_execution AND tail_required AND EXISTS(
     SELECT 1 FROM rework_process_configurations configuration
     JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
     LEFT JOIN LATERAL (
