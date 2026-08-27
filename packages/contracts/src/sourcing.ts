@@ -46,8 +46,9 @@ export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
   orderQuantity: z.number().int().positive().max(10_000_000),
-  attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS).default([])
-    .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
+  attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
+    .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
+    .optional(),
 }).strict();
 
 export const CreateSourcingIeQuoteSchema = z.object({
