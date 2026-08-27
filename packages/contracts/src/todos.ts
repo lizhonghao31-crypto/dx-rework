@@ -11,6 +11,7 @@ export const TodoRouteDescriptorSchema = z.object({
     "own_factory_approval",
     "external_responsibility_detail",
     "wage_period_detail",
+    "sourcing_detail",
   ]),
   entityId: TodoIdSchema,
   /** External-responsibility routes name a case but open in its rework order. */
@@ -81,7 +82,7 @@ export const TodoResponseSchema = z.object({
   reminderCount: z.number().int().min(0).max(2),
   status: TodoStatusSchema,
   blockedReason: z.string().nullable(),
-  /** Present when the action is attached to a single rework order. */
+  /** Present when the action is attached to a rework or sourcing order. */
   orderContext: TodoOrderContextSchema.nullable(),
   version: z.number().int().positive(),
   createdAt: z.string().datetime(),
