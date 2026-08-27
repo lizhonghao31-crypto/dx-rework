@@ -361,6 +361,7 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
 
 const historyActionLabel = (action: string): string => {
   if (action === "rework.attachments.supplement") return "补充订单图片";
+  if (action === "rework.tail_inspection.waive") return "改为无需尾查";
   if (action === "rework.submit") return "提交返工单";
   if (action === "rework.tail_completion.confirm") return "尾部确认最终数量";
   if (action.startsWith("rework.final_quantity.")) return "IE 复核最终数量";
@@ -522,6 +523,12 @@ export function ReworkDetailPage({
     && canSupplementImagesByRole(currentUser);
   const canHandleInitiation = elevated(currentUser)
     || (hasRole(currentUser, "quality_control") && hasCapability(currentUser, "rework:initiate"));
+  const canWaiveTailInspection = detail.tailInspectionRequired
+    && (detail.status === "in_progress" || detail.status === "pending_order_review")
+    && (elevated(currentUser) || (
+      (hasRole(currentUser, "owner_group") || hasRole(currentUser, "production_management"))
+      && hasCapability(currentUser, "tail_inspection:waive")
+    ));
 
   const renderNodePreview = () => {
     if (!selected) return null;
@@ -734,6 +741,7 @@ export function ReworkDetailPage({
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
           <div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : `¥${formatSinglePieceReworkTotal(detail.singlePieceReworkTotal)}`}</span></div>
+          {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
           {renderSelectedTask()}
         </section>
       </div>
@@ -761,6 +769,58 @@ export function ReworkDetailPage({
       )}
     </Shell>
   );
+}
+
+function TailInspectionWaiverAction({
+  detail,
+  onChanged,
+}: {
+  detail: ReworkBusinessDetail;
+  onChanged: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const waive = async (): Promise<void> => {
+    const reason = (await promptInApp(
+      "请输入改为无需尾查的原因。若已经上过尾查数，该记录会保留但作废，不计入最终数量、工资或责任。",
+      "",
+      { title: "改为无需尾查", confirmLabel: "确认免尾查" },
+    ))?.trim();
+    if (!reason) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(apiUrl(`rework-orders/${detail.reworkOrderId}/waive-tail-inspection`), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "idempotency-key": createClientRequestId(),
+        },
+        body: JSON.stringify({ expectedVersion: detail.version, reason }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(body?.error?.message ?? "免尾查失败");
+      }
+      setMessage("已改为无需尾查；原尾查报数已保留为历史并从结算中作废。");
+      await onChanged();
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "免尾查失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <Surface className="rework-detail-node-preview">
+    <StatusBadge tone="info">旧订单纠正</StatusBadge>
+    <h2>改为无需尾查</h2>
+    <p>仅老板、生产管理和超级用户可操作。已上报的尾查数会保留审计记录，但不再计入最终数量、工资和责任。</p>
+    <Button disabled={busy} onClick={() => { void waive(); }}>{busy ? "处理中…" : "改为无需尾查"}</Button>
+    {message ? <p role="status">{message}</p> : null}
+  </Surface>;
 }
 
 function InitiationFollowUpActions({

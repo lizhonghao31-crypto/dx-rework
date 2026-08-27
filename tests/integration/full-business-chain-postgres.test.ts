@@ -1094,6 +1094,179 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(openBusinessTodos.rows).toEqual([{ category: "wage_month_close" }]);
   });
 
+  it("waives an existing wrong tail report without deleting audit facts or paying tail wages", async () => {
+    const imageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'tail-waiver.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [imageId, `private/${imageId}.webp`, "a".repeat(64), ids.qc],
+    );
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "UAT-TAIL-WAIVER",
+      orderQuantity: 500,
+      orderNo: "ORDER-TAIL-WAIVER",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      inspectionReport: n01CoreInspectionReport("免尾查测试款"),
+      problemPart: "后幅",
+      problemDescription: "历史订单实际无需尾查",
+      reworkQuantity: 200,
+      attachmentIds: [imageId],
+    }, randomUUID());
+    const submitted = await initiation.submit(
+      qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID(),
+    );
+    const saved = await configuration.saveDraft(
+      tailConfigure(),
+      submitted.value.reworkOrderId,
+      SaveProcessConfigurationSchema.parse({
+        expectedOrderVersion: submitted.value.version,
+        items: [{
+          source: "catalog",
+          processId: publicProcessId,
+          executionKind: "worker",
+          plannedQuantity: 200,
+          pricingUnit: "piece",
+          unitPrice: 0.55,
+        }, {
+          source: "custom",
+          customProcessName: "尾查",
+          executionKind: "tail_inspection",
+          plannedQuantity: 1,
+          pricingUnit: "piece",
+          unitPrice: 0.2,
+        }],
+      }),
+      randomUUID(),
+    );
+    const workerItem = saved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const tailItem = saved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
+    await workerPlan.save(
+      tailAssign(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: saved.value.orderVersion,
+        configurationId: saved.value.configuration!.configurationId,
+        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+        assignments: [
+          { configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] },
+          { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
+        ],
+      },
+      randomUUID(),
+    );
+    const queued = await configuration.submit(
+      tailConfigure(),
+      submitted.value.reworkOrderId,
+      SubmitProcessConfigurationSchema.parse({
+        expectedOrderVersion: saved.value.orderVersion,
+        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      }),
+      randomUUID(),
+    );
+    const approved = await configuration.review(
+      ie(),
+      submitted.value.reworkOrderId,
+      ReviewProcessConfigurationSchema.parse({
+        expectedOrderVersion: queued.value.orderVersion,
+        expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
+        decision: "approved",
+      }),
+      randomUUID(),
+    );
+    await workerPlan.activateAfterIeApproval(
+      submitted.value.reworkOrderId,
+      approved.value.configuration!.configurationVersion,
+      randomUUID(),
+    );
+    const started = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    const workerTask = started.tasks.find((task) => task.executionKind === "worker")!;
+    const tailTask = started.tasks.find((task) => task.executionKind === "tail_inspection")!;
+    await work.submitReport(worker(), workerTask.workTaskId, CreateWorkReportSchema.parse({
+      expectedOrderVersion: started.orderVersion,
+      actualQuantity: 200,
+      completedAt: new Date().toISOString(),
+    }), randomUUID());
+    const afterWorker = await work.list(tailInspect(), submitted.value.reworkOrderId);
+    const wrongTail = await work.submitReport(tailInspect(), tailTask.workTaskId, CreateWorkReportSchema.parse({
+      expectedOrderVersion: afterWorker.orderVersion,
+      actualQuantity: 180,
+      completedAt: new Date().toISOString(),
+    }), randomUUID());
+    const beforeWaiver = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    expect(beforeWaiver.reworkStatus).toBe("pending_order_review");
+
+    await expect(initiation.waiveTailInspection(
+      actor(ids.qc, ["quality_control"], "tail_inspection:waive"),
+      submitted.value.reworkOrderId,
+      { expectedVersion: beforeWaiver.orderVersion, reason: "权限验证" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+    const waived = await initiation.waiveTailInspection(
+      actor(ids.ownerOne, ["owner_group"], "tail_inspection:waive"),
+      submitted.value.reworkOrderId,
+      { expectedVersion: beforeWaiver.orderVersion, reason: "工序实际无需尾查，原尾查数上报错误" },
+      randomUUID(),
+    );
+    expect(waived.value).toMatchObject({
+      status: "pending_order_review",
+      tailInspectionRequired: false,
+      version: beforeWaiver.orderVersion + 1,
+    });
+    expect((await database.query(
+      `SELECT report.work_report_id,task.status,
+              EXISTS(SELECT 1 FROM rework_work_report_rejections rejection
+                     WHERE rejection.work_report_id=report.work_report_id) AS rejected
+       FROM rework_work_reports report
+       JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+       WHERE report.work_report_id=$1`,
+      [wrongTail.value.workReportId],
+    )).rows).toEqual([{
+      work_report_id: wrongTail.value.workReportId,
+      status: "superseded",
+      rejected: true,
+    }]);
+
+    const reviewView = await wholeOrder.get(tailAudit(), submitted.value.reworkOrderId);
+    expect(reviewView).toMatchObject({
+      reworkStatus: "pending_order_review",
+      tailInspectionRequired: false,
+      processes: [expect.objectContaining({
+        configurationItemId: workerItem.configurationItemId,
+        completedQuantity: 200,
+      })],
+    });
+    await wholeOrder.approve(tailAudit(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: reviewView.orderVersion,
+      finalQuantities: [{
+        configurationItemId: workerItem.configurationItemId,
+        finalConfirmedQuantity: 200,
+      }],
+      temporaryCoefficients: [],
+    }, randomUUID());
+    const ieView = await wholeOrder.get(ie(), submitted.value.reworkOrderId);
+    const finalized = await wholeOrder.reviewFinalQuantity(ie(), submitted.value.reworkOrderId, {
+      expectedOrderVersion: ieView.orderVersion,
+      decision: "approved",
+    }, randomUUID());
+    expect((await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM rework_wage_items wage
+       JOIN rework_work_reports report ON report.work_report_id=wage.work_report_id
+       WHERE wage.rework_order_id=$1 AND report.configuration_item_id=$2`,
+      [submitted.value.reworkOrderId, tailItem.configurationItemId],
+    )).rows[0]).toEqual({ count: 0 });
+    await expect(initiation.waiveTailInspection(
+      actor(ids.ownerOne, ["owner_group"], "tail_inspection:waive"),
+      submitted.value.reworkOrderId,
+      { expectedVersion: finalized.value.orderVersion, reason: "不应允许下游重复操作" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+  });
+
   it("submits simplified N01 without retired manual-entry facts", async () => {
     const initialImageId = randomUUID();
     await database.query(
