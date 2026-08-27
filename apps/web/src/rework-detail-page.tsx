@@ -1,5 +1,5 @@
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
-import type { InspectionReportDraft } from "@dx-rework/contracts";
+import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -222,12 +222,8 @@ const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): stri
 const hasRole = (user: AuthorizedUser | null, role: string): boolean => user?.businessRoles?.includes(role) === true;
 const hasCapability = (user: AuthorizedUser | null, capability: string): boolean => user?.capabilities.includes(capability) === true;
 const elevated = (user: AuthorizedUser | null): boolean => user?.isRoot === true || hasRole(user, "owner_group");
-const canSupplementImagesByRole = (user: AuthorizedUser | null): boolean => elevated(user) || [
-  "quality_control",
-  "tail_supervisor",
-  "production_management",
-  "order_merchandiser",
-].some((role) => hasRole(user, role));
+const canSupplementImagesByRole = (user: AuthorizedUser | null): boolean => elevated(user)
+  || REWORK_IMAGE_SUPPLEMENT_ROLES.some((role) => hasRole(user, role));
 
 const canUseProcessWorkspace = (user: AuthorizedUser | null): boolean => elevated(user)
   || (hasRole(user, "tail_supervisor") && hasCapability(user, "process:configure"))

@@ -216,6 +216,13 @@ export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("supplier"), supplierId: IdSchema }).strict(),
 ]);
 export const MAX_REWORK_ATTACHMENTS = 8;
+export const REWORK_IMAGE_SUPPLEMENT_ROLES = [
+  "quality_control",
+  "tail_supervisor",
+  "production_management",
+  "owner_group",
+  "order_merchandiser",
+] as const;
 
 const ReworkAttachmentIdsSchema = (minimum = 0) => z.array(IdSchema)
   .min(minimum)
