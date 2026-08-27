@@ -61,10 +61,13 @@ describe("PR-31 employee access contracts", () => {
     expect(app).toContain('{ requiredRole: "owner_group" }');
     expect(components).toContain('hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })');
     expect(components).toContain("const systemManagementAccess = auditAccess || technicalAdminAccess");
-    expect(components).toContain("|| canManageEmployeeAccess");
-    const link = components.indexOf('name: "系统管理"');
-    expect(link).toBeGreaterThan(-1);
-    expect(components.slice(link, link + 180)).toContain('href: "/ui/admin"');
+    expect(components).toContain("if (canManageEmployeeAccess) {");
+    const personnelLink = components.indexOf('name: "人员与权限"');
+    expect(personnelLink).toBeGreaterThan(-1);
+    expect(components.slice(personnelLink, personnelLink + 180)).toContain('href: "/ui/employee-access"');
+    const systemLink = components.indexOf('name: "系统管理"');
+    expect(systemLink).toBeGreaterThan(-1);
+    expect(components.slice(systemLink, systemLink + 180)).toContain('href: "/ui/admin"');
   });
 
   it("keeps owner and system administrator as root-only protected roles", async () => {
