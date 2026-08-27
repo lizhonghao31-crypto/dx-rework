@@ -23,7 +23,31 @@ const isPlatformCapability = (capability: string): boolean =>
   capability.startsWith("access:")
   || capability.startsWith("admin:")
   || capability.startsWith("audit:")
-  || capability.startsWith("master_data:");
+  || capability.startsWith("master_data:")
+  || capability.startsWith("delegation:");
+
+const REWORK_CAPABILITY_PREFIXES = [
+  "dashboard:",
+  "rework:",
+  "process:",
+  "task:",
+  "submission:",
+  "quantity:",
+  "liability:",
+  "own_factory:",
+  "external_liability:",
+  "deduction:",
+  "payroll:",
+  "finance:",
+  "wage:",
+  "work:",
+  "tail_inspection:",
+  "responsibility:",
+  "settlement:",
+] as const;
+
+const isReworkCapability = (capability: string): boolean =>
+  REWORK_CAPABILITY_PREFIXES.some((prefix) => capability.startsWith(prefix));
 
 export function accessModuleIdsForCapabilities(
   capabilities: readonly string[],
@@ -34,7 +58,7 @@ export function accessModuleIdsForCapabilities(
       modules.add("sourcing");
     } else if (isPlatformCapability(capability)) {
       modules.add("platform");
-    } else {
+    } else if (isReworkCapability(capability)) {
       modules.add("rework");
     }
   }
