@@ -213,6 +213,13 @@ const app = buildApp({
         ["rework_order", "receiving_batch"].includes(binding.entityType)
         && binding.mimeType.startsWith("image/")
       ) return true;
+      if (binding.entityType === "sourcing_case" && sourcingService.canDownloadBoundAttachment({
+        actorId: actor.actorId,
+        actorRoles: actor.actorRoles,
+        authorizationCapability: "sourcing:view",
+        authorizationCapabilities: actor.capabilities,
+        requestId: "sourcing-attachment-download",
+      }, binding)) return true;
       const businessReader = {
         actorId: actor.actorId,
         actorRoles: actor.actorRoles,
