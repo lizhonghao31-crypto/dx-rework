@@ -97,9 +97,10 @@ export function registerSourcingRoutes(
     if (status !== undefined && status !== "pending" && status !== "closed") {
       validationError("订单状态筛选无效");
     }
+    const statusFilter = status === "pending" || status === "closed" ? status : undefined;
     const actor = await readActor(request);
-    return status
-      ? dependencies.service.listCases(actor, request.query.q ?? "", status)
+    return statusFilter
+      ? dependencies.service.listCases(actor, request.query.q ?? "", statusFilter)
       : dependencies.service.listCases(actor, request.query.q ?? "");
   });
 
