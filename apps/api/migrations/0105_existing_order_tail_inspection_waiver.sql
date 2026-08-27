@@ -277,7 +277,7 @@ END $$;
 -- Keep the approved tail configuration item as immutable planning evidence after
 -- a waiver. A no-tail order may therefore have zero current tail configuration
 -- items (created no-tail) or one retired historical item (waived existing order).
-+CREATE OR REPLACE FUNCTION guard_rework_order_review_insert()
+CREATE OR REPLACE FUNCTION guard_rework_order_review_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   unified_execution boolean;
