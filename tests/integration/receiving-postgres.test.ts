@@ -440,6 +440,38 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(twoDays.kpis.receivedQuantity).toBe(70);
   });
 
+  it("assigns Root quantity corrections to the audited correction date instead of prior receipts", async () => {
+    const today = businessDate();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-RANGE-CORRECTION-01",
+      documentQuantity: 100,
+      actualQuantity: 100,
+      defectiveQuantity: 4,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const before = (await service.board(today)).rows.find(
+      (row) => row.receivingBatchId === receipt.value.receivingBatchId,
+    )!;
+
+    await service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
+      expectedVersion: before.version,
+      styleNo: before.styleNo,
+      documentQuantity: before.documentQuantity,
+      actualQuantity: 50,
+      defectiveQuantity: 2,
+    });
+
+    const corrected = (await service.board(today)).rows.find(
+      (row) => row.receivingBatchId === receipt.value.receivingBatchId,
+    );
+    expect(corrected).toMatchObject({
+      priorActualQuantity: 0,
+      actualQuantity: 50,
+      defectiveQuantity: 2,
+      differenceQuantity: -50,
+    });
+  });
+
   it("rejects unaudited receiving evidence rebinding", async () => {
     const image = await readyImage();
     const receipt = await service.create(receiver(), {

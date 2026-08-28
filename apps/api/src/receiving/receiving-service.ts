@@ -706,26 +706,68 @@ export class ReceivingService {
          WHERE receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
            AND receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
            AND ($3::text='' OR batch.style_no ILIKE '%' || $3 || '%')
+       ), correction_adjustments AS (
+         SELECT event.entity_id::uuid AS receiving_batch_id,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS prior_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS period_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS through_end_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ),0)::bigint AS all_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'defectiveQuantity')::bigint
+                  -(event.before_state->>'defectiveQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS period_defective_adjustment
+         FROM operation_events event
+         JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
+         WHERE event.action='receiving.batch.correct'
+           AND event.entity_type='receiving_batch'
+         GROUP BY event.entity_id
        ), totals AS (
          SELECT r.receiving_batch_id,
                 batch.style_no,
                 batch.delivery_note_quantity::bigint AS document_quantity,
                 (COALESCE(sum(r.actual_quantity) FILTER (
                    WHERE r.received_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-                 ),0)+batch.actual_quantity_adjustment)::bigint AS prior_actual_quantity,
-                COALESCE(sum(r.actual_quantity) FILTER (
+                 ),0)
+                  +COALESCE(adjustments.prior_actual_adjustment,0)
+                  +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
+                )::bigint AS prior_actual_quantity,
+                (COALESCE(sum(r.actual_quantity) FILTER (
                   WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                ),0)::bigint AS actual_quantity,
-                COALESCE(sum(r.defective_quantity) FILTER (
+                ),0)+COALESCE(adjustments.period_actual_adjustment,0))::bigint AS actual_quantity,
+                (COALESCE(sum(r.defective_quantity) FILTER (
                   WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                ),0)::bigint AS defective_quantity,
+                ),0)+COALESCE(adjustments.period_defective_adjustment,0))::bigint AS defective_quantity,
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS current_actual_quantity,
                 (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS current_defective_quantity,
                 (COALESCE(sum(r.actual_quantity) FILTER (
                    WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                 ),0)+batch.actual_quantity_adjustment
+                 ),0)
+                  +COALESCE(adjustments.through_end_actual_adjustment,0)
+                  +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
                   -batch.delivery_note_quantity)::bigint AS difference_quantity,
                 (count(*) FILTER (
                   WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
@@ -740,7 +782,12 @@ export class ReceivingService {
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=r.receiving_batch_id
           AND batch.deleted_at IS NULL
-         GROUP BY r.receiving_batch_id,batch.receiving_batch_id
+         LEFT JOIN correction_adjustments adjustments
+           ON adjustments.receiving_batch_id=r.receiving_batch_id
+         GROUP BY r.receiving_batch_id,batch.receiving_batch_id,
+                  adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
+                  adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
+                  adjustments.period_defective_adjustment
        )
        SELECT totals.receiving_batch_id,totals.style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,

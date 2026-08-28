@@ -63,6 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           migration_sensitive=false
+          receiving_sensitive=false
           business_chain_sensitive=false
           deployment_sensitive=false
           git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
@@ -70,6 +71,11 @@ jobs:
             case "$path" in
               apps/api/migrations/*|apps/api/src/platform/migration-manifest.json|scripts/seed-base-migrations.sh|scripts/migrate.mjs|scripts/migration-integration-check.mjs|scripts/check-migrations.mjs)
                 migration_sensitive=true
+                ;;
+            esac
+            case "$path" in
+              apps/api/src/receiving/*|tests/integration/receiving-postgres.test.ts)
+                receiving_sensitive=true
                 ;;
             esac
             case "$path" in
@@ -84,17 +90,18 @@ jobs:
             esac
           done < "$RUNNER_TEMP/full-gate-changed-files.txt"
           db_required=false
-          if [[ "$migration_sensitive" == true || "$business_chain_sensitive" == true || "$deployment_sensitive" == true ]]; then
+          if [[ "$migration_sensitive" == true || "$receiving_sensitive" == true || "$business_chain_sensitive" == true || "$deployment_sensitive" == true ]]; then
             db_required=true
           fi
           {
             echo "MIGRATION_SENSITIVE=$migration_sensitive"
+            echo "RECEIVING_SENSITIVE=$receiving_sensitive"
             echo "BUSINESS_CHAIN_SENSITIVE=$business_chain_sensitive"
             echo "DEPLOYMENT_SENSITIVE=$deployment_sensitive"
             echo "DB_REQUIRED=$db_required"
           } >> "$GITHUB_ENV"
-          printf 'migration_sensitive=%s\nbusiness_chain_sensitive=%s\ndeployment_sensitive=%s\ndb_required=%s\n' \
-            "$migration_sensitive" "$business_chain_sensitive" "$deployment_sensitive" "$db_required"
+          printf 'migration_sensitive=%s\nreceiving_sensitive=%s\nbusiness_chain_sensitive=%s\ndeployment_sensitive=%s\ndb_required=%s\n' \
+            "$migration_sensitive" "$receiving_sensitive" "$business_chain_sensitive" "$deployment_sensitive" "$db_required"
 
       - name: Install locked dependencies
         run: npm ci
@@ -159,6 +166,10 @@ jobs:
       - name: Apply and validate exact Head migration history against PostgreSQL
         if: env.DB_REQUIRED == 'true'
         run: npm run db:migrate:check
+
+      - name: Run PostgreSQL receiving regressions for receiving changes
+        if: env.RECEIVING_SENSITIVE == 'true'
+        run: npx vitest run tests/integration/receiving-postgres.test.ts
 
       - name: Run PostgreSQL Root audit control-boundary regressions for migration changes
         if: env.MIGRATION_SENSITIVE == 'true'
