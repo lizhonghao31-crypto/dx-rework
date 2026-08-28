@@ -200,14 +200,21 @@ BEGIN
       CONTINUE;
     END IF;
     FOR recipient IN
-      SELECT DISTINCT assignment.user_id
-      FROM user_role_assignments assignment
-      WHERE assignment.role_code=candidate.required_role
-        AND assignment.revoked_at IS NULL
-        AND todo_user_has_direct_role(
-          assignment.user_id,candidate.required_role,candidate.required_capability
-        )
-      ORDER BY assignment.user_id
+      SELECT DISTINCT recipient_source.user_id
+      FROM (
+        SELECT assignment.user_id
+        FROM user_role_assignments assignment
+        WHERE assignment.role_code=candidate.required_role
+          AND assignment.revoked_at IS NULL
+        UNION
+        SELECT root.user_id
+        FROM owner_bootstrap_consumptions root
+        WHERE root.singleton=true
+      ) recipient_source
+      WHERE todo_user_has_direct_role(
+        recipient_source.user_id,candidate.required_role,candidate.required_capability
+      )
+      ORDER BY recipient_source.user_id
     LOOP
       dedupe_key_value := candidate.dedupe_prefix||':'||recipient.user_id;
       IF EXISTS (SELECT 1 FROM rework_todos WHERE dedupe_key=dedupe_key_value) THEN
