@@ -701,7 +701,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     }, randomUUID());
 
     expect(backfilled.value.receivingBatchId).not.toBe(current.value.receivingBatchId);
-    const historicalBoard = await service.board(yesterday);
+    const historicalBoard = await service.board(yesterday, yesterday, "STYLE-BACKFILL-01");
     expect(historicalBoard.rows).toHaveLength(1);
     expect(historicalBoard.rows[0]).toMatchObject({
       receivingBatchId: backfilled.value.receivingBatchId,
@@ -710,12 +710,12 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receiptCount: 1,
     });
 
-    const globalSearch = await service.board(businessDate(), "STYLE-BACKFILL-01");
-    expect(globalSearch.rows).toHaveLength(2);
-    expect(globalSearch.rows.map((row) => row.receivingBatchId)).toEqual(expect.arrayContaining([
-      current.value.receivingBatchId,
-      backfilled.value.receivingBatchId,
-    ]));
+    const currentSearch = await service.board(businessDate(), businessDate(), "STYLE-BACKFILL-01");
+    expect(currentSearch.rows).toHaveLength(1);
+    expect(currentSearch.rows[0]?.receivingBatchId).toBe(current.value.receivingBatchId);
+    expect(currentSearch.rows.some(
+      (row) => row.receivingBatchId === backfilled.value.receivingBatchId,
+    )).toBe(false);
 
     const stored = await database.query<{
       received_date: string;
