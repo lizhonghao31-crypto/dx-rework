@@ -435,6 +435,32 @@ export function WorkReportingForm({
     }
   };
 
+
+  const completeExecution = async () => {
+    if (!data || data.reworkStatus !== "in_progress" || busy) return;
+    setBusy(true);
+    setMessage("正在核验返工与尾查报数…");
+    try {
+      const completed = await request(
+        `rework-orders/${data.reworkOrderId}/work-tasks/complete`,
+        ReworkWorkTasksResponseSchema.parse,
+        {
+          method: "POST",
+          headers: { "idempotency-key": createClientRequestId() },
+          body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
+        },
+      );
+      setData(completed);
+      setMessage("全部任务已核验，已流转至 N05 · 尾部最终数量确认。");
+      try { await onOrderChanged?.(); } catch { /* The committed transition remains successful if the outer refresh fails. */ }
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "无法进入最终数量确认");
+      await reload().catch(() => null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const effectiveTaskMode = taskMode === "workspace"
     ? data?.reworkStatus === "pending_task_assignment" ? "task_assignment" : ["pending_order_review", "pending_final_quantity_ie_review"].includes(data?.reworkStatus ?? "") ? "whole_order_review" : "work_reporting"
     : taskMode;
@@ -512,6 +538,11 @@ export function WorkReportingForm({
           </div>
           {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
         </Surface>
+        {workReportingWritable && canAssign && incompleteTasks.length === 0 && completedTasks.length > 0 ? <Surface className="work-reporting-primary-action">
+          <h2>返工执行已全部完成</h2>
+          <p>系统会再次核验普通返工和尾查的有效报数，核验通过后进入节点05。</p>
+          <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>{busy ? "核验中…" : "全部完成，进入节点05"}</Button>
+        </Surface> : null}
         <Surface className="n04-progress-group n04-progress-group--completed">
           <button type="button" className={`n04-progress-group__heading${completedTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={completedTasksExpanded} aria-controls="n04-completed-task-list" onClick={() => setCompletedTasksExpanded((expanded) => !expanded)}>
             <h2>已完成</h2><StatusBadge tone="success">{completedTasks.length} 项</StatusBadge><b aria-hidden="true">{completedTasksExpanded ? "收起 −" : "展开 +"}</b>
