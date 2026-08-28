@@ -10,7 +10,7 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
-runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
+runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const schema = `sourcing_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({
@@ -27,6 +27,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
   const ieId = randomUUID();
   const managerId = randomUUID();
   const ownerId = randomUUID();
+  const financeId = randomUUID();
   const factoryId = randomUUID();
   const replacementFactoryId = randomUUID();
   const evidenceId = randomUUID();
@@ -74,6 +75,18 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     authorizationCapability: "sourcing:factory_change:verify",
     authorizationCapabilities: ["sourcing:view", "sourcing:factory_change:verify"],
   });
+  const financeActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: financeId,
+    actorRoles: ["factory_payables"],
+    authorizationCapability: "sourcing:finance:reconcile",
+    authorizationCapabilities: ["sourcing:view", "sourcing:finance:reconcile"],
+    requestId,
+  });
+  const exceptionVerifier = (requestId = randomUUID()): TrustedActorContext => ({
+    ...managerActor(requestId),
+    authorizationCapability: "sourcing:exception:verify",
+    authorizationCapabilities: ["sourcing:view", "sourcing:exception:verify"],
+  });
   const readerActor = (): TrustedActorContext => ({
     ...merchandiserActor(),
     authorizationCapability: "sourcing:view",
@@ -106,6 +119,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       "0096_sourcing_view_capability.sql",
       "0097_sourcing_foundation.sql",
       "0102_sourcing_ie_view_grant.sql",
+      "0108_sourcing_finance_closure.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -115,8 +129,8 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     await database.query(
       `INSERT INTO app_users(id,display_name,enabled) VALUES
        ($1,'订单跟单',true),($2,'IE报价员',true),
-       ($3,'生产管理',true),($4,'老板',true)`,
-      [merchandiserId, ieId, managerId, ownerId],
+       ($3,'生产管理',true),($4,'老板',true),($5,'应付财务',true)`,
+      [merchandiserId, ieId, managerId, ownerId, financeId],
     );
     await database.query(
       `INSERT INTO attachments(
@@ -470,6 +484,61 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       },
     });
 
+    const financeDifference = await service.recordFinanceReconciliation(
+      financeActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "10.5000",
+        quantity: 137,
+        totalAmount: "1400.00",
+        differenceReason: "发票总额与合同决定不一致",
+      },
+      randomUUID(),
+    );
+    expect(financeDifference.value).toMatchObject({
+      status: "pending_exception_verification",
+      version: 13,
+    });
+    expect((await database.query<{
+      result: string;
+      difference_fields: string[];
+      actual_supplier_name_snapshot: string;
+    }>(
+      `SELECT result,difference_fields,actual_supplier_name_snapshot
+       FROM sourcing_finance_reconciliations
+       WHERE sourcing_case_id=$1 AND reconciliation_version=1`,
+      [created.value.sourcingCaseId],
+    )).rows[0]).toEqual({
+      result: "difference",
+      difference_fields: ["total_amount"],
+      actual_supplier_name_snapshot: "二号加工厂",
+    });
+
+    const reopened = await service.decideException(
+      exceptionVerifier(),
+      created.value.sourcingCaseId,
+      { resolution: "reconcile_again", resolutionReason: "请财务按合同金额重新核对" },
+      randomUUID(),
+    );
+    expect(reopened.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 14,
+    });
+
+    const financeMatched = await service.recordFinanceReconciliation(
+      financeActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "10.5000",
+        quantity: 137,
+        totalAmount: "1438.50",
+      },
+      randomUUID(),
+    );
+    expect(financeMatched.value).toMatchObject({ status: "closed", version: 15 });
+
     expect((await database.query(
       "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
@@ -486,6 +555,18 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         expect.objectContaining({ decision: "approved" }),
         expect.objectContaining({ decision: "rejected" }),
       ]));
+    expect(timeline.items.filter((entry) => entry.kind === "finance_reconciliation"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          version: 1,
+          result: "difference",
+          differenceFields: ["total_amount"],
+          totalAmount: "1400.00",
+        }),
+        expect.objectContaining({ version: 2, result: "match", totalAmount: "1438.50" }),
+      ]));
+    expect(timeline.items.filter((entry) => entry.kind === "exception_verification"))
+      .toEqual([expect.objectContaining({ resolution: "reconcile_again" })]);
     expect(timeline.items.find((entry) => entry.contractReference === "HT-2026-001"))
       .toMatchObject({ signedOn: "2026-08-28" });
     expect(timeline.items.find((entry) => entry.contractReference === "HT-2026-002"))
@@ -503,7 +584,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     expect((await database.query(
       "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
-    )).rowCount).toBe(12);
+    )).rowCount).toBe(15);
 
     await expect(service.decideOwner(
       ownerActor(),
@@ -523,9 +604,14 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         "sourcing_management_decision",
         "sourcing_owner_approval",
         "sourcing_contract_record",
+        "sourcing_finance_reconcile",
         "sourcing_factory_change_verify",
         "sourcing_contract_record",
+        "sourcing_finance_reconcile",
         "sourcing_factory_change_verify",
+        "sourcing_finance_reconcile",
+        "sourcing_exception_verify",
+        "sourcing_finance_reconcile",
       ]);
     expect(todoProjection.information).toHaveBeenCalledWith(
       expect.anything(),
@@ -544,9 +630,14 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         `sourcing:${created.value.sourcingCaseId}:management:2:`,
         `sourcing:${created.value.sourcingCaseId}:owner:2:`,
         `sourcing:${created.value.sourcingCaseId}:contract:2:`,
+        `sourcing:${created.value.sourcingCaseId}:finance:2:1:`,
         `sourcing:${created.value.sourcingCaseId}:factory_change:${requestedChange!.entryId}:`,
         `sourcing:${created.value.sourcingCaseId}:contract:3:`,
+        `sourcing:${created.value.sourcingCaseId}:finance:3:1:`,
         `sourcing:${created.value.sourcingCaseId}:factory_change:${latestRequest!.entryId}:`,
+        `sourcing:${created.value.sourcingCaseId}:finance:3:1:`,
+        `sourcing:${created.value.sourcingCaseId}:exception:1:`,
+        `sourcing:${created.value.sourcingCaseId}:finance:3:2:`,
       ]);
   });
 });
