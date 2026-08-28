@@ -319,7 +319,7 @@ export class ProcessConfigurationService {
       if (order.tail_inspection_required ? tailItemCount !== 1 : tailItemCount !== 0) {
         throw new ApplicationError(
           "VALIDATION_ERROR",
-          order.tail_inspection_required ? "必须且只能包含一道尾查特殊工序" : "本单不需要整查，不能配置尾查工序",
+          order.tail_inspection_required ? "必须且只能包含一道整查特殊工序" : "本单不需要整查，不能配置整查工序",
           400,
         );
       }
@@ -556,7 +556,7 @@ export class ProcessConfigurationService {
     if (tailInspectionRequired ? tailItems.length !== 1 : tailItems.length !== 0) {
       throw new ApplicationError(
         "VALIDATION_ERROR",
-        tailInspectionRequired ? "必须且只能配置一道尾查特殊工序" : "本单不需要整查，不能配置尾查工序",
+        tailInspectionRequired ? "必须且只能配置一道整查特殊工序" : "本单不需要整查，不能配置整查工序",
         400,
       );
     }
@@ -564,8 +564,9 @@ export class ProcessConfigurationService {
     const names = new Set<string>();
     for (const item of input) {
       const executionKind = item.executionKind ?? "worker";
-      if (executionKind === "tail_inspection" && (item.source !== "custom" || item.customProcessName.trim() !== "尾查")) {
-        throw new ApplicationError("VALIDATION_ERROR", "尾查特殊工序必须使用系统固定名称“尾查”", 400);
+      const submittedProcessName = item.source === "custom" ? item.customProcessName.trim() : "";
+      if (executionKind === "tail_inspection" && (item.source !== "custom" || !["整查", "尾查"].includes(submittedProcessName))) {
+        throw new ApplicationError("VALIDATION_ERROR", "整查特殊工序必须使用系统固定名称“整查”", 400);
       }
       const plannedQuantity = item.plannedQuantity;
       const unitPrice = truncateDecimal(item.unitPrice, 3);
@@ -599,7 +600,7 @@ export class ProcessConfigurationService {
         processVersion = row.version;
         processName = row.process_name;
       } else {
-        customProcessName = item.customProcessName.trim();
+        customProcessName = executionKind === "tail_inspection" ? "整查" : submittedProcessName;
         processName = customProcessName;
       }
       const key = processName.toLocaleLowerCase("zh-CN");
@@ -764,7 +765,7 @@ export class ProcessConfigurationService {
           source: item.source,
           processId: item.catalog_process_id,
           processVersion: item.catalog_process_version,
-          processName: item.process_name,
+          processName: item.execution_kind === "tail_inspection" ? "整查" : item.process_name,
           executionKind: item.execution_kind,
           pricingUnit: item.pricing_unit,
           plannedQuantity: numberValue(item.planned_quantity),

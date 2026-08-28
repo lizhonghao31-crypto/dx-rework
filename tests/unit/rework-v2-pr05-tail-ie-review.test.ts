@@ -50,7 +50,7 @@ describe("PR-05 final quantity and IE review", () => {
     expect(detail).toContain('node("whole_order_review", "05", "尾部最终数量确认"');
     expect(detail).toContain('node("final_quantity_ie_review", "06", "IE 最终数量复核"');
     expect(panel).toContain("工人合计");
-    expect(panel).toContain("尾查");
+    expect(panel).toContain("整查");
     expect(panel).toContain("退回尾部主管");
     expect(panel).toContain("IE 复核决定");
   });

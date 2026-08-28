@@ -130,15 +130,15 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const itemIssue = validateItems(items);
   const workerIssue = items.findIndex((_, index) => (workerIds[String(index)] ?? []).length === 0);
   const tailPriceIssue = !tailUnitPrice.trim()
-    ? "请填写尾查候选单价"
+    ? "请填写整查候选单价"
     : !threeDecimals.test(tailUnitPrice.trim()) || Number(tailUnitPrice) < 0.001
-      ? "尾查单价最低 0.001 元，最多三位小数"
+      ? "整查单价最低 0.001 元，最多三位小数"
       : null;
   const readinessIssues = assignmentOptionsLoading && editable ? [] : [
     ...(itemIssue ? [itemIssue] : []),
     ...(workerIssue >= 0 ? [`工序 ${workerIssue + 1} 至少分配 1 名工人`] : []),
     ...(tailInspectionRequired && tailPriceIssue ? [tailPriceIssue] : []),
-    ...(tailInspectionRequired && tailPersonIds.length === 0 ? ["至少分配 1 名尾查"] : []),
+    ...(tailInspectionRequired && tailPersonIds.length === 0 ? ["至少分配 1 名整查"] : []),
   ];
   const saveReady = editable && !assignmentOptionsLoading && itemIssue === null && workerIssue < 0
     && (!tailInspectionRequired || (tailPriceIssue === null && tailPersonIds.length > 0));
@@ -312,14 +312,14 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       const saved = await request(
         "master-data/tail-inspection/default-workers",
         (value) => value as { executionKind: "tail_inspection"; rosterVersion: number; personIds: string[] },
-        { method: "PUT", body: JSON.stringify({ personIds: tailPersonIds, changeReason: "尾部主管在工序分配区维护尾查默认工人" }) },
+        { method: "PUT", body: JSON.stringify({ personIds: tailPersonIds, changeReason: "尾部主管在工序分配区维护整查默认工人" }) },
       );
       setTailPersonIds(saved.personIds);
       setTailDefaultCandidateCount(saved.personIds.length);
       setTailDefaultRosterDirty(false);
-      setMessage("尾查默认工人已保存；以后新建返工单时会自动带入这份名单。");
+      setMessage("整查默认工人已保存；以后新建返工单时会自动带入这份名单。");
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "尾查默认工人保存失败");
+      setMessage(error instanceof Error ? error.message : "整查默认工人保存失败");
     } finally {
       setSavingTailDefault(false);
       setBusy(false);
@@ -331,7 +331,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       throw new Error("请先补完整返工工序和人员分配");
     }
     if (tailInspectionRequired && (tailPriceIssue || tailPersonIds.length === 0)) {
-      throw new Error("请先补完整尾查计件信息");
+      throw new Error("请先补完整整查计件信息");
     }
     const configItems = items.map((item) => ({
       source: item.source,
@@ -341,7 +341,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     const configBody = {
       expectedOrderVersion: response.orderVersion,
       items: tailInspectionRequired
-        ? [...configItems, { source: "custom" as const, customProcessName: "尾查", executionKind: "tail_inspection" as const, plannedQuantity: 1, pricingUnit: "piece" as const, unitPrice: Number(tailUnitPrice) }]
+        ? [...configItems, { source: "custom" as const, customProcessName: "整查", executionKind: "tail_inspection" as const, plannedQuantity: 1, pricingUnit: "piece" as const, unitPrice: Number(tailUnitPrice) }]
         : configItems,
     };
     const configSignature = `config:${JSON.stringify(configBody)}`;
@@ -387,13 +387,13 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         pendingSubmit.current = attempt;
       }
       const submitted = await request(`rework-orders/${reworkOrderId}/process-configuration/submit`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(attempt.body) });
-      pendingSubmit.current = null; setResponse(submitted); setMessage(tailInspectionRequired ? "已提交 IE 核价；返工人员与尾查方案已锁定，IE 通过后统一开始执行。" : "已提交 IE 核价；返工人员方案已锁定，IE 通过后开始执行。"); await onOrderChanged?.();
+      pendingSubmit.current = null; setResponse(submitted); setMessage(tailInspectionRequired ? "已提交 IE 核价；返工人员与整查方案已锁定，IE 通过后统一开始执行。" : "已提交 IE 核价；返工人员方案已锁定，IE 通过后开始执行。"); await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "提交 IE 核价失败"); } finally { setBusy(false); }
   };
   const review = async (decision: "approved" | "rejected") => {
     if (!response || !configuration || !reviewable || busy) return;
     if (decision === "rejected" && !reviewReason.trim()) { setMessage("IE 驳回必须填写原因"); return; }
-    if (!(await confirmInApp(decision === "approved" ? (tailInspectionRequired ? "确认核价通过？通过后返工人员与尾查任务会统一生效并开始执行。" : "确认核价通过？通过后返工任务会生效并开始执行。") : "确认驳回并退回尾部主管修改？"))) return;
+    if (!(await confirmInApp(decision === "approved" ? (tailInspectionRequired ? "确认核价通过？通过后返工人员与整查任务会统一生效并开始执行。" : "确认核价通过？通过后返工任务会生效并开始执行。") : "确认驳回并退回尾部主管修改？"))) return;
     setBusy(true);
     try {
       const reviewBody = { expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: configuration.configurationVersion, decision, reason: reviewReason.trim() || undefined };
@@ -401,7 +401,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       const reviewed = await request(`rework-orders/${reworkOrderId}/process-configuration/review`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": mutationKey(reviewSignature) }, body: JSON.stringify(reviewBody) });
       delete pendingKeys.current[reviewSignature];
       const latestPlan = await request(`rework-orders/${reworkOrderId}/process-worker-plan`, ProcessWorkerPlanResponseSchema.parse); hydrate(reviewed, latestPlan);
-      setMessage(decision === "approved" ? reviewed.reworkStatus === "in_progress" ? (tailInspectionRequired ? "IE 已通过；返工人员与尾查任务已统一生效，返工开始。" : "IE 已通过；返工任务已生效，返工开始。") : "IE 已通过；自动启动未完成，尾部主管可在本节点重试启动。" : "IE 已驳回，等待尾部主管重新配置工序与工人。");
+      setMessage(decision === "approved" ? reviewed.reworkStatus === "in_progress" ? (tailInspectionRequired ? "IE 已通过；返工人员与整查任务已统一生效，返工开始。" : "IE 已通过；返工任务已生效，返工开始。") : "IE 已通过；自动启动未完成，尾部主管可在本节点重试启动。" : "IE 已驳回，等待尾部主管重新配置工序与工人。");
       await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "IE 核价提交失败"); } finally { setBusy(false); }
   };
@@ -410,7 +410,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     setBusy(true);
     try {
       await request(`rework-orders/${reworkOrderId}/process-worker-plan/activate`, ProcessWorkerPlanActivationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": createClientRequestId() }, body: JSON.stringify({ expectedOrderVersion: response.orderVersion, expectedConfigurationVersion: plan.configurationVersion }) });
-      setMessage(tailInspectionRequired ? "返工人员与尾查任务已生效，返工开始。" : "返工任务已生效，返工开始。"); await onOrderChanged?.();
+      setMessage(tailInspectionRequired ? "返工人员与整查任务已生效，返工开始。" : "返工任务已生效，返工开始。"); await onOrderChanged?.();
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "返工启动失败"); } finally { setBusy(false); }
   };
   const reloadPeople = async () => {
@@ -532,7 +532,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   }
   if (editable) {
     return <div className={`process-worker-page${embedded ? " is-embedded" : ""}`}>
-      {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>{tailInspectionRequired ? "返工工序与尾查一次分配；IE 只核价，通过后全部执行任务统一生效。" : "本单无需整查；只需分配返工工序与人员，IE 核价通过后开始执行。"}</p></div>}
+      {!embedded && <div className="mobile-hero"><div className="mobile-title"><h1>分配工序 &工人</h1><StatusBadge tone="info">N02</StatusBadge></div><p>{tailInspectionRequired ? "返工工序与整查一次分配；IE 只核价，通过后全部执行任务统一生效。" : "本单无需整查；只需分配返工工序与人员，IE 核价通过后开始执行。"}</p></div>}
       <Surface>
         <div className="section-title"><div><h2>工序与人员</h2><p>左侧设置工序与价格，右侧快速分配正式工或临时工；每道工序至少 1 人。</p></div><Button disabled={busy} onClick={() => { setItems((current) => [...current, emptyItem()]); setWorkerIds((current) => ({ ...current, [String(items.length)]: [] })); }}>增加工序</Button></div>
         {optionLoadIssue ? <p className="process-worker-option-alert" role="alert">{optionLoadIssue}</p> : null}
@@ -558,12 +558,12 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         })}</div>
       </Surface>
       {tailInspectionRequired ? <Surface className="process-worker-tail-card">
-        <div className="section-title"><div><h2>尾查工序</h2><p>尾查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : assignmentOptionsLoading ? "加载中" : "至少 1 人"}</StatusBadge></div>
+        <div className="section-title"><div><h2>整查工序</h2><p>整查作为特殊计件工序，与返工人员统一分配、统一报数。</p></div><StatusBadge tone={tailPersonIds.length ? "success" : "warning"}>{tailPersonIds.length ? `已分配 ${tailPersonIds.length} 人` : assignmentOptionsLoading ? "加载中" : "至少 1 人"}</StatusBadge></div>
         <div className="process-worker-tail-body">
-          <div className="process-worker-tail-work"><div className="process-worker-tail-title-row"><b>尾查</b></div><InsetField label="尾查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
+          <div className="process-worker-tail-work"><div className="process-worker-tail-title-row"><b>整查</b></div><InsetField label="整查候选单价（元/件）" type="number" min="0.001" step="0.001" inputMode="decimal" value={tailUnitPrice} disabled={busy} onChange={(event) => { setTailUnitPrice(event.target.value); pendingSubmit.current = null; }} /></div>
           <div className="process-worker-picker">
-            <div className="process-worker-picker__heading"><b>尾查人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy || assignmentOptionsLoading} onClick={openMobileTailAssignment}>选择本单工人</Button><Button className="process-worker-save-default" {...(tailDefaultRosterDirty ? { variant: "primary" as const } : {})} disabled={busy || assignmentOptionsLoading || !tailDefaultRosterDirty || tailPersonIds.length === 0} onClick={() => void saveTailDefaultWorkers()}>{savingTailDefault ? "保存中…" : "保存为默认名单"}</Button></div></div>
-            <div className="process-worker-default-list" aria-label="已分配人员">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); const name = person?.displayName ?? "尾查人员"; const temporary = person?.personType === "temporary"; return <span key={personId}><button type="button" aria-label={`移除 ${name}`} disabled={busy} onClick={() => removeTailWorker(personId)}>−</button><small>{temporary && canCreateTemporary ? <button type="button" className="process-worker-temporary-name" aria-label={`补录或修改 ${name} 的临时工资料`} disabled={busy} onClick={() => void openTemporaryWorkerProfile(personId)}>{name}</button> : name}{temporary ? " · 临时工" : ""}</small></span>; }) : <small>{assignmentOptionsLoading ? "正在加载默认名单…" : "至少选择 1 名尾查人员"}</small>}</div>
+            <div className="process-worker-picker__heading"><b>整查人员 *</b><div className="process-worker-roster-actions"><Button className="process-worker-add-default" variant="primary" disabled={busy || assignmentOptionsLoading} onClick={openMobileTailAssignment}>选择本单工人</Button><Button className="process-worker-save-default" {...(tailDefaultRosterDirty ? { variant: "primary" as const } : {})} disabled={busy || assignmentOptionsLoading || !tailDefaultRosterDirty || tailPersonIds.length === 0} onClick={() => void saveTailDefaultWorkers()}>{savingTailDefault ? "保存中…" : "保存为默认名单"}</Button></div></div>
+            <div className="process-worker-default-list" aria-label="已分配人员">{tailPersonIds.length ? tailPersonIds.map((personId) => { const person = peopleById.get(personId); const name = person?.displayName ?? "整查人员"; const temporary = person?.personType === "temporary"; return <span key={personId}><button type="button" aria-label={`移除 ${name}`} disabled={busy} onClick={() => removeTailWorker(personId)}>−</button><small>{temporary && canCreateTemporary ? <button type="button" className="process-worker-temporary-name" aria-label={`补录或修改 ${name} 的临时工资料`} disabled={busy} onClick={() => void openTemporaryWorkerProfile(personId)}>{name}</button> : name}{temporary ? " · 临时工" : ""}</small></span>; }) : <small>{assignmentOptionsLoading ? "正在加载默认名单…" : "至少选择 1 名整查人员"}</small>}</div>
             {tailDefaultCandidateCount > 0 ? <small className="process-worker-default-candidates">已自动带入 {tailDefaultCandidateCount} 名默认候选人</small> : null}
           </div>
         </div>
@@ -586,5 +586,5 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
 }
 
 function PlanReadonly({ plan, configuration }: { plan: ProcessWorkerPlanResponse; configuration?: ProcessConfigurationResponse["configuration"] }) {
-  return <div className="process-worker-summary">{plan.assignments.map((assignment) => { const item = configuration?.items.find((candidate) => candidate.configurationItemId === assignment.configurationItemId); return <div key={assignment.configurationItemId}><div><b>{assignment.executionKind === "tail_inspection" ? "尾查 · 特殊工序" : assignment.processName}</b>{item?.unitPrice ? <small>¥{formatPrice(item.unitPrice)} / 件</small> : null}</div><span>{assignment.members.length ? assignment.members.map((member) => `${member.displayName}${member.personType === "temporary" ? "（临时）" : ""}`).join("、") : "未分配人员"}</span></div>; })}</div>;
+  return <div className="process-worker-summary">{plan.assignments.map((assignment) => { const item = configuration?.items.find((candidate) => candidate.configurationItemId === assignment.configurationItemId); return <div key={assignment.configurationItemId}><div><b>{assignment.executionKind === "tail_inspection" ? "整查 · 特殊工序" : assignment.processName}</b>{item?.unitPrice ? <small>¥{formatPrice(item.unitPrice)} / 件</small> : null}</div><span>{assignment.members.length ? assignment.members.map((member) => `${member.displayName}${member.personType === "temporary" ? "（临时）" : ""}`).join("、") : "未分配人员"}</span></div>; })}</div>;
 }

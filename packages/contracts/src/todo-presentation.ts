@@ -24,7 +24,7 @@ const catalog: Readonly<Record<string, TodoPresentation>> = {
   ie_review: { title: "审核返工方案", action: "请审核工序、数量、单位和单价。" },
   task_assignment: { title: "分配返工人员", action: "请为返工工序分配作业人员。" },
   work_reporting: { title: "登记返工完成数量", action: "请登记本次实际完成数量和时间。" },
-  whole_order_review: { title: "确认返工最终数量", action: "请核对工人上数、尾查数并提交最终确认数量。" },
+  whole_order_review: { title: "确认返工最终数量", action: "请核对工人上数、整查数并提交最终确认数量。" },
   final_quantity_ie_review: { title: "IE 复核最终数量", action: "请复核尾部确认的数量与质量事实，或填写原因退回。" },
   work_report_return: { title: "返工上数被退回", action: "请修正被退回的完成数量记录后重新提交。" },
   quantity_adjustment: { title: "审核返工数量调整", action: "请核对异常数量调整申请。" },

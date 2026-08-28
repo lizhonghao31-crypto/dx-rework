@@ -851,7 +851,7 @@ export class AccessMasterDataService {
           [personIds],
         );
         if (eligible.rowCount !== personIds.length) {
-          throw new ApplicationError("VALIDATION_ERROR", "尾查默认名单只能包含当前有效的正式工或临时工", 400);
+          throw new ApplicationError("VALIDATION_ERROR", "整查默认名单只能包含当前有效的正式工或临时工", 400);
         }
       }
       const latest = await client.query<{ roster_version: number }>(

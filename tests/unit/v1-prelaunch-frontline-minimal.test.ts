@@ -76,7 +76,7 @@ describe("v1 prelaunch frontline minimal tasks and mobile density", () => {
     expect(page).toContain("工序");
     expect(page).toContain("<b>进入</b>");
     expect(form).toContain('task.executionKind === frontlineContext.kind');
-    expect(form).toContain('"尾查完成&报数" : "我已完工&上数"');
+    expect(form).toContain('"整查完成&报数" : "我已完工&上数"');
     expect(routes).toContain('app.get("/frontline/work-tasks"');
   });
 

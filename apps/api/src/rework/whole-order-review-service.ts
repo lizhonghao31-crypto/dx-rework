@@ -892,7 +892,9 @@ export class WholeOrderReviewService {
         originalTailCheckedQuantity: numberValue(plan.original_tail_checked_quantity), tailCheckedQuantity: numberValue(plan.tail_checked_quantity),
         countGap: order.tail_inspection_required ? numberValue(plan.completed_quantity) - numberValue(plan.tail_checked_quantity) : 0,
         complete: order.tail_inspection_required
-          ? numberValue(plan.completed_quantity) === numberValue(plan.tail_checked_quantity)
+          ? numberValue(plan.completed_quantity) > 0
+            && numberValue(plan.tail_checked_quantity) > 0
+            && numberValue(plan.completed_quantity) <= numberValue(plan.tail_checked_quantity)
           : numberValue(plan.completed_quantity) > 0,
         finalUnitPrice: plan.unit_price === null ? null : numberValue(plan.unit_price),
       })),
@@ -1050,7 +1052,7 @@ export class WholeOrderReviewService {
       [reworkOrderId, usesUnifiedTailReports],
     );
     if (pending.rows[0]?.execution_pending) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
-    if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
+    if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有整查报数未完成，不能整单确认", 409, "CONFLICT");
     const overLimit = await client.query<{ process_name: string }>(
       `WITH active_configuration AS (
          SELECT configuration_id,unified_execution_required
@@ -1092,16 +1094,16 @@ export class WholeOrderReviewService {
     );
     if (!usesUnifiedTailReports) {
       if (overLimit.rows.length > 0) {
-        error(`返工上数超过尾查数量：${overLimit.rows.map((row) => row.process_name).join("、")}；请驳回并调整报数`, 409, "CONFLICT");
+        error(`返工上数超过整查数量：${overLimit.rows.map((row) => row.process_name).join("、")}；请驳回并调整报数`, 409, "CONFLICT");
       }
       return;
     }
     const mismatches = (await this.plans(client, reworkOrderId)).filter((plan) =>
       numberValue(plan.completed_quantity) <= 0
       || numberValue(plan.tail_checked_quantity) <= 0
-      || numberValue(plan.completed_quantity) !== numberValue(plan.tail_checked_quantity));
+      || numberValue(plan.completed_quantity) > numberValue(plan.tail_checked_quantity));
     if (mismatches.length > 0) {
-      error(`工人与尾查有效数量不一致：${mismatches.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
+      error(`工序有效数量超过整查数量或报数无效：${mismatches.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
     }
   }
 
@@ -1283,7 +1285,7 @@ export class WholeOrderReviewService {
       [reworkOrderId, configurationItemId],
     );
     const item = result.rows[0] ?? error("工序不存在或尚未生效", 404, "NOT_FOUND");
-    if (item.execution_kind === "tail_inspection") error("尾查工序使用实际报数，不参与计划数量调整", 409, "INVALID_STATE_TRANSITION");
+    if (item.execution_kind === "tail_inspection") error("整查工序使用实际报数，不参与计划数量调整", 409, "INVALID_STATE_TRANSITION");
     return item;
   }
 

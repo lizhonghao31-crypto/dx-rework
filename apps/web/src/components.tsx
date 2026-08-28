@@ -43,7 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
   wage_month_close_accountant: "工资月结会计",
   finance_read: "财务全局查看",
   finance_director: "财务总监",
-  tail_inspector: "尾查",
+  tail_inspector: "整查",
   worker: "员工",
 };
 

@@ -173,7 +173,7 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
     }
     if (!isRoot && (!allowedRole || !user.capabilities.includes("tail_inspection:waive"))) {
-      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需尾查", 403);
+      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需整查", 403);
     }
     const actorRoles = [...(user.businessRoles ?? [])];
     const authorizationCapabilities = [...user.capabilities];

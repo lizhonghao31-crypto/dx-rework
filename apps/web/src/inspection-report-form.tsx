@@ -164,7 +164,7 @@ export function InspectionReportStepOne({
               >
                 <option value="">请选择</option>
                 <option value="midline">中查</option>
-                <option value="final">尾查</option>
+                <option value="final">整查</option>
                 <option value="warehouse">仓检</option>
                 <option value="reinspection">复检</option>
               </select>
