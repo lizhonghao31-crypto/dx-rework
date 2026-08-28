@@ -34,6 +34,8 @@ describe("sourcing PR4 contract and factory change", () => {
     expect(service).toContain("supersedes_decision_id");
     expect(service).toContain('"sourcing_contract_record"');
     expect(service).toContain('"sourcing_factory_change_verify"');
+    expect(service).toContain('"sourcing_factory_change_notice"');
+    expect(service).toContain("todoProjection?.information");
   });
 
   it("backfills pre-release actionable todos and keeps the desktop page practical", async () => {
@@ -47,6 +49,8 @@ describe("sourcing PR4 contract and factory change", () => {
     expect(page).toContain("登记合同");
     expect(page).toContain("发起中途换厂");
     expect(page).toContain("生产管理核实换厂");
+    expect(page).toContain("localDateInputValue()");
+    expect(page).toContain('item.status === "pending_contract"');
     expect(page).not.toContain("移动端报价选厂");
   });
 });
