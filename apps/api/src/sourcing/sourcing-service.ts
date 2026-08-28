@@ -540,7 +540,7 @@ export class SourcingService {
               timeline.handled_at,timeline.reason,
               timeline.unit_price::text,timeline.total_amount::text,
               timeline.supplier_name,timeline.decision,
-              timeline.contract_reference,timeline.signed_on,
+              timeline.contract_reference,timeline.signed_on::text AS signed_on,
               timeline.quantity,timeline.difference_fields,timeline.result,timeline.resolution
        FROM timeline
        LEFT JOIN app_users app_user ON app_user.id=timeline.actor_id
