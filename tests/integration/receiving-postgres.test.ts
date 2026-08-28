@@ -780,25 +780,28 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       expectedVersion: sourceRow.version,
       styleNo: "STYLE-MERGE-CANONICAL",
       documentQuantity: sourceRow.documentQuantity,
-      actualQuantity: sourceRow.currentActualQuantity,
-      defectiveQuantity: sourceRow.currentDefectiveQuantity,
+      actualQuantity: 30,
+      defectiveQuantity: 0,
     });
 
     expect(merged).toMatchObject({
       receivingBatchId: target.value.receivingBatchId,
       styleNo: "STYLE-MERGE-CANONICAL",
       documentQuantity: 100,
-      actualQuantity: 95,
-      defectiveQuantity: 3,
-      differenceQuantity: -5,
+      actualQuantity: 90,
+      defectiveQuantity: 2,
+      differenceQuantity: -10,
     });
     const board = await service.board(businessDate(), businessDate(), "STYLE-MERGE-CANONICAL");
     expect(board.rows).toHaveLength(1);
     expect(board.rows[0]).toMatchObject({
       receivingBatchId: target.value.receivingBatchId,
       documentQuantity: 100,
-      actualQuantity: 95,
-      defectiveQuantity: 3,
+      actualQuantity: 90,
+      defectiveQuantity: 2,
+      currentActualQuantity: 90,
+      currentDefectiveQuantity: 2,
+      differenceQuantity: -10,
       receiptCount: 2,
     });
     expect(board.rows[0]?.attachments.map((item) => item.attachmentId).sort()).toEqual(

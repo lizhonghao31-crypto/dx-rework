@@ -428,6 +428,7 @@ export class ReceivingService {
                 ) AS has_rework_history
          FROM receiving_batches target
          WHERE target.style_no=$1
+           AND $1<>$3
            AND target.receiving_batch_id<>$2
            AND target.deleted_at IS NULL
            AND NOT EXISTS(
@@ -439,7 +440,7 @@ export class ReceivingService {
            )
          ORDER BY target.created_at DESC,target.receiving_batch_id DESC
          LIMIT 1`,
-        [normalized.styleNo, receivingBatchId],
+        [normalized.styleNo, receivingBatchId, current.style_no],
       );
       const targetRow = targetResult.rows[0];
       if (targetRow?.has_rework_history) {
@@ -468,6 +469,19 @@ export class ReceivingService {
           version: target.version + 1,
         };
         if (after.defectiveQuantity > after.actualQuantity) fail("合并后的次品数量不能超过实际收货数量");
+        const sourceFacts = await client.query<{
+          actual_quantity: string;
+          defective_quantity: string;
+        }>(
+          `SELECT sum(actual_quantity)::bigint AS actual_quantity,
+                  sum(defective_quantity)::bigint AS defective_quantity
+           FROM receiving_receipts WHERE receiving_batch_id=$1`,
+          [receivingBatchId],
+        );
+        const sourceActualAdjustment = normalized.actualQuantity
+          - Number(sourceFacts.rows[0]?.actual_quantity ?? 0);
+        const sourceDefectiveAdjustment = defectiveQuantity
+          - Number(sourceFacts.rows[0]?.defective_quantity ?? 0);
         const mergeEventId = await this.events.append(client, actor, {
           action: "receiving.batch.merge",
           entityType: "receiving_batch",
@@ -477,6 +491,8 @@ export class ReceivingService {
             ...after,
             sourceReceivingBatchId: receivingBatchId,
             targetReceivingBatchId: targetId,
+            actualQuantityAdjustment: sourceActualAdjustment,
+            defectiveQuantityAdjustment: sourceDefectiveAdjustment,
             source: { ...before, correctedStyleNo: normalized.styleNo },
           },
         });
@@ -901,38 +917,53 @@ export class ReceivingService {
        ), correction_adjustments AS (
          SELECT event.entity_id::uuid AS receiving_batch_id,
                 COALESCE(sum(
-                  (event.after_state->>'actualQuantity')::bigint
-                  -(event.before_state->>'actualQuantity')::bigint
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'actualQuantity')::bigint
+                      -(event.before_state->>'actualQuantity')::bigint
+                  END
                 ) FILTER (
                   WHERE event.created_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS prior_actual_adjustment,
                 COALESCE(sum(
-                  (event.after_state->>'actualQuantity')::bigint
-                  -(event.before_state->>'actualQuantity')::bigint
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'actualQuantity')::bigint
+                      -(event.before_state->>'actualQuantity')::bigint
+                  END
                 ) FILTER (
                   WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS period_actual_adjustment,
                 COALESCE(sum(
-                  (event.after_state->>'actualQuantity')::bigint
-                  -(event.before_state->>'actualQuantity')::bigint
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'actualQuantity')::bigint
+                      -(event.before_state->>'actualQuantity')::bigint
+                  END
                 ) FILTER (
                   WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS through_end_actual_adjustment,
                 COALESCE(sum(
-                  (event.after_state->>'actualQuantity')::bigint
-                  -(event.before_state->>'actualQuantity')::bigint
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'actualQuantity')::bigint
+                      -(event.before_state->>'actualQuantity')::bigint
+                  END
                 ),0)::bigint AS all_actual_adjustment,
                 COALESCE(sum(
-                  (event.after_state->>'defectiveQuantity')::bigint
-                  -(event.before_state->>'defectiveQuantity')::bigint
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'defectiveQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'defectiveQuantity')::bigint
+                      -(event.before_state->>'defectiveQuantity')::bigint
+                  END
                 ) FILTER (
                   WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS period_defective_adjustment
          FROM operation_events event
          JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
-         WHERE event.action='receiving.batch.correct'
+         WHERE event.action IN ('receiving.batch.correct','receiving.batch.merge')
            AND event.entity_type='receiving_batch'
          GROUP BY event.entity_id
        ), totals AS (
