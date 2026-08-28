@@ -395,7 +395,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     const requestedChange = (await service.listTimeline(
       readerActor(),
       created.value.sourcingCaseId,
-    )).items.findLast((entry) => entry.kind === "factory_change_request");
+    )).items.reverse().find((entry) => entry.kind === "factory_change_request");
     expect(requestedChange).toMatchObject({
       supplierName: "二号加工厂",
       unitPrice: "10.5000",
