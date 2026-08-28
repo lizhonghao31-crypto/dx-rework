@@ -533,6 +533,58 @@ export class WorkReportingService {
     });
   }
 
+
+  async completeExecution(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: ConfirmWorkAssignments,
+    key: string,
+  ): Promise<Result<ReworkWorkTasksResponse>> {
+    this.ensure(actor, "work:assign");
+    return this.mutate(actor, "rework.execution.complete", key, { reworkOrderId, ...input }, 200, async (client) => {
+      const order = await this.order(client, reworkOrderId, true);
+      if (order.status !== "in_progress") error("当前返工单不在返工执行节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
+      if (!await this.readyForWholeOrderReview(client, reworkOrderId, [], true)) {
+        error("仍有返工人员或尾查任务未完成，不能进入最终数量确认", 409, "INVALID_STATE_TRANSITION");
+      }
+      const eventId = await this.events.append(client, actor, {
+        action: "rework.execution.complete",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        before: this.orderAuditState(order, order.status, order.version),
+        after: {
+          ...this.orderAuditState(order, "pending_order_review", order.version + 1),
+          completionRecoveredFromEffectiveReports: true,
+        },
+        reason: "全部有效返工与尾查任务已完成，恢复进入最终数量确认",
+      });
+      await this.context(client, eventId, actor.requestId);
+      await client.query(
+        "UPDATE rework_orders SET status='pending_order_review',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1 AND version=$3",
+        [reworkOrderId, actor.actorId, order.version],
+      );
+      await this.todos?.actionableForUniqueDirectRole(client, actor, {
+        category: "whole_order_review",
+        sourceEventId: eventId,
+        sourceAction: "rework.execution.complete",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        requiredRole: "tail_supervisor",
+        requiredCapability: "submission:audit",
+        route: { routeName: "rework_detail", entityId: reworkOrderId, tab: "whole_order_review" },
+        policyKey: "general",
+        dedupeKey: `whole-order-review:${reworkOrderId}:${order.version + 1}`,
+      });
+      return {
+        reworkOrderId,
+        reworkStatus: "pending_order_review",
+        orderVersion: order.version + 1,
+        tasks: await this.tasks(client, reworkOrderId, actor),
+      };
+    });
+  }
+
   async submitReport(actor: TrustedActorContext, workTaskId: string, input: CreateWorkReport, key: string): Promise<Result<WorkReportResponse>> {
     return this.mutate(actor, "rework.work_report.submit", key, { workTaskId, ...input }, 201, async (client) => {
       const task = await this.task(client, workTaskId, true);
@@ -1036,7 +1088,7 @@ export class WorkReportingService {
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
   }
 
-  private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskIds: readonly string[]): Promise<boolean> {
+  private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskIds: readonly string[], allowReportedTaskRecovery = false): Promise<boolean> {
     const result = await client.query<{ ready: boolean }>(
       `SELECT EXISTS(
        SELECT 1 FROM rework_work_tasks task
@@ -1092,8 +1144,32 @@ export class WorkReportingService {
                )
            )
          )
+         OR (
+           $3::boolean
+           AND (
+             NOT (SELECT target.tail_inspection_required FROM rework_orders target WHERE target.rework_order_id=$1)
+             OR EXISTS(
+               SELECT 1
+               FROM rework_work_tasks tail_task
+               JOIN rework_process_configuration_items tail_item
+                 ON tail_item.configuration_item_id=tail_task.configuration_item_id
+               WHERE tail_task.rework_order_id=$1
+                 AND tail_task.status='active'
+                 AND tail_item.execution_kind='tail_inspection'
+                 AND EXISTS(
+                   SELECT 1 FROM rework_work_reports report
+                   WHERE report.work_task_id=tail_task.work_task_id
+                     AND report.status='submitted'
+                     AND NOT EXISTS(
+                       SELECT 1 FROM rework_work_report_rejections rejection
+                       WHERE rejection.work_report_id=report.work_report_id
+                     )
+                 )
+             )
+           )
+         )
        ) AS ready`,
-      [reworkOrderId, submittedWorkTaskIds],
+      [reworkOrderId, submittedWorkTaskIds, allowReportedTaskRecovery],
     );
     return result.rows[0]?.ready === true;
   }
