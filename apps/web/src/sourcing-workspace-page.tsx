@@ -113,6 +113,13 @@ const totalPreview = (unitPrice: string, quantity: number): string => {
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
+const localDateInputValue = (): string => {
+  const now = new Date();
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+
 const detailHref = (item: SourcingCaseSummary): string =>
   pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
 
@@ -388,7 +395,7 @@ function OrderDetailPage({
   const [ownerReason, setOwnerReason] = useState("");
   const [contract, setContract] = useState<ContractDraft>({
     contractReference: "",
-    signedOn: new Date().toISOString().slice(0, 10),
+    signedOn: localDateInputValue(),
     executionReason: "",
   });
   const [factoryChange, setFactoryChange] = useState<FactoryChangeDraft>({
@@ -473,7 +480,9 @@ function OrderDetailPage({
   const priceAdjusted = item.ieQuote && item.decision
     ? Number(item.ieQuote.unitPrice) !== Number(item.decision.unitPrice)
     : false;
-  const latestContract = [...timeline].reverse().find((entry) => entry.kind === "contract");
+  const latestContract = item.status === "pending_contract"
+    ? undefined
+    : [...timeline].reverse().find((entry) => entry.kind === "contract");
   const pendingFactoryChange = [...timeline].reverse()
     .find((entry) => entry.kind === "factory_change_request");
 
