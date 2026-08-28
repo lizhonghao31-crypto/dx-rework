@@ -112,6 +112,59 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     return attachmentId;
   };
 
+  const insertReceiptAt = async (
+    receivingBatchId: string,
+    styleNo: string,
+    documentQuantity: number,
+    actualQuantity: number,
+    defectiveQuantity: number,
+    receivedAt: string,
+  ): Promise<void> => {
+    const receiptId = randomUUID();
+    const eventId = randomUUID();
+    const requestId = randomUUID();
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO operation_events(
+           event_id,request_id,actor_id,actor_roles,authorization_capability,
+           action,entity_type,entity_id,after_state
+         ) VALUES($1,$2,$3,ARRAY['warehouse_receiver'],'receiving:create',
+                  'receiving.receipt.create','receiving_receipt',$4,$5::jsonb)`,
+        [eventId, requestId, receiverId, receiptId, JSON.stringify({ receiptId, receivingBatchId })],
+      );
+      await client.query(
+        "SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
+        [eventId, requestId],
+      );
+      await client.query(
+        `INSERT INTO receiving_receipts(
+           receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,
+           defective_quantity,received_by,received_at,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8::timestamptz,$9,$10)`,
+        [
+          receiptId,
+          receivingBatchId,
+          styleNo,
+          documentQuantity,
+          actualQuantity,
+          defectiveQuantity,
+          receiverId,
+          receivedAt,
+          eventId,
+          requestId,
+        ],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
   const draftAfterState = (reworkOrderId: string, styleNo: string, status: "draft" | "cancelled", version: number, cancelReason?: string) => ({
     reworkOrderId,
     reworkNo: null,
@@ -254,7 +307,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       documentQuantity: 100,
       actualQuantity: 80,
       attachmentIds: [],
-    }, randomUUID())).rejects.toThrow("收货单图片必传");
+    }, randomUUID())).rejects.toThrow("送货单图片必传");
 
     const firstImage = await readyImage();
     const firstKey = randomUUID();
@@ -343,6 +396,48 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
       [first.value.receiptId],
     )).rejects.toThrow();
+  });
+
+  it("separates prior and in-range receipts while keeping the cumulative delivery-note difference", async () => {
+    const today = businessDate();
+    const yesterday = pastBusinessDate(1);
+    const current = await service.create(receiver(), {
+      styleNo: "STYLE-RANGE-01",
+      documentQuantity: 100,
+      actualQuantity: 30,
+      defectiveQuantity: 1,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    await insertReceiptAt(
+      current.value.receivingBatchId,
+      "STYLE-RANGE-01",
+      100,
+      40,
+      2,
+      `${yesterday}T12:00:00+08:00`,
+    );
+
+    const todayOnly = await service.board(today);
+    expect(todayOnly.rows.find((row) => row.receivingBatchId === current.value.receivingBatchId)).toMatchObject({
+      documentQuantity: 100,
+      priorActualQuantity: 40,
+      actualQuantity: 30,
+      defectiveQuantity: 1,
+      differenceQuantity: -30,
+      receiptCount: 2,
+    });
+    expect(todayOnly.kpis.receivedQuantity).toBeGreaterThanOrEqual(30);
+
+    const twoDays = await service.board(yesterday, today, "STYLE-RANGE-01");
+    expect(twoDays.rows).toHaveLength(1);
+    expect(twoDays.rows[0]).toMatchObject({
+      priorActualQuantity: 0,
+      actualQuantity: 70,
+      defectiveQuantity: 3,
+      differenceQuantity: -30,
+      receiptCount: 2,
+    });
+    expect(twoDays.kpis.receivedQuantity).toBe(70);
   });
 
   it("rejects unaudited receiving evidence rebinding", async () => {

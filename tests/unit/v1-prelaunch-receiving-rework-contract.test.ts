@@ -44,7 +44,7 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
       read("apps/api/src/receiving/receiving-routes.ts"),
       read("apps/api/src/receiving/receiving-service.ts"),
     ]);
-    expect(page).toContain("收货单图片");
+    expect(page).toContain("送货单图片");
     expect(page).toContain("最多3张");
     expect(page).toContain('accept="image/*"');
     expect(upload).toContain("image/jpeg");

@@ -16,8 +16,11 @@ type BoardRow = Readonly<{
   styleNo: string;
   documentQuantity: number;
   attachments: readonly ReceivingAttachment[];
+  priorActualQuantity: number;
   actualQuantity: number;
   defectiveQuantity: number;
+  currentActualQuantity: number;
+  currentDefectiveQuantity: number;
   differenceQuantity: number;
   receiptCount: number;
   lastReceivedAt: string;
@@ -30,6 +33,8 @@ type BoardRow = Readonly<{
 
 type BoardResult = Readonly<{
   date: string;
+  startDate: string;
+  endDate: string;
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -75,7 +80,8 @@ const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): stri
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
 export function OrderBoardPage() {
-  const [date, setDate] = useState(localDate);
+  const [startDate, setStartDate] = useState(localDate);
+  const [endDate, setEndDate] = useState(localDate);
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 180);
   const [data, setData] = useState<BoardResult | null>(null);
@@ -124,7 +130,7 @@ export function OrderBoardPage() {
 
   useEffect(() => {
     let active = true;
-    const params = new URLSearchParams({ date });
+    const params = new URLSearchParams({ startDate, endDate });
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
@@ -134,14 +140,14 @@ export function OrderBoardPage() {
       .then((body) => {
         if (!active) return;
         setData(body);
-        setMessage(body.rows.length ? "" : debouncedQuery.trim() ? "没有匹配的收货记录" : "当天没有匹配的收货记录");
+        setMessage(body.rows.length ? "" : debouncedQuery.trim() ? "选中日期内没有匹配的收货记录" : "选中日期内没有收货记录");
       })
       .catch(() => {
         if (!active) return;
         setMessage("订单看板加载失败，请刷新后重试");
       });
     return () => { active = false; };
-  }, [date, debouncedQuery, refreshToken]);
+  }, [startDate, endDate, debouncedQuery, refreshToken]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
@@ -150,8 +156,8 @@ export function OrderBoardPage() {
     differenceQuantity: 0,
     differenceRate: 0,
   }, [data]);
-  const globalSearch = Boolean(query.trim());
   const selectedAttachment = attachmentViewer?.attachments[attachmentViewer.index] ?? null;
+  const dateRangeLabel = startDate === endDate ? startDate : `${startDate} 至 ${endDate}`;
 
   const reworkControl = (row: BoardRow, mobile: boolean) => {
     const className = `order-board-rework-link ${mobile ? "order-board-rework-link--mobile" : "order-board-rework-link--desktop"}`;
@@ -172,8 +178,8 @@ export function OrderBoardPage() {
     setEditing(row);
     setEditStyleNo(row.styleNo);
     setEditDocumentQuantity(String(row.documentQuantity));
-    setEditActualQuantity(String(row.actualQuantity));
-    setEditDefectiveQuantity(String(row.defectiveQuantity));
+    setEditActualQuantity(String(row.currentActualQuantity));
+    setEditDefectiveQuantity(String(row.currentDefectiveQuantity));
     setMutationMessage("");
   };
 
@@ -256,7 +262,8 @@ export function OrderBoardPage() {
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">
-        <label>日期<input type="date" value={date} disabled={globalSearch} onChange={(event) => setDate(event.target.value)} /></label>
+        <label>开始日期<input type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+        <label>结束日期<input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} /></label>
         <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       </div>
       <div className="order-board-heading__action">
@@ -265,9 +272,9 @@ export function OrderBoardPage() {
     </div>
 
     <div className="order-board-kpis">
-      <KpiInstrument label={globalSearch ? "匹配订单数" : "今日收货订单数"} value={kpis.orderCount} detail={globalSearch ? "全历史收货" : date} tone="info" />
-      <KpiInstrument label={globalSearch ? "匹配收货数量" : "今日收货数量"} value={`${kpis.receivedQuantity}件`} detail={globalSearch ? "全历史 · 实际收货" : `${date} · 实际收货`} tone="info" />
-      <KpiInstrument label="异常订单数量" value={kpis.abnormalOrderCount} detail="累计收货与单据数量不一致" tone={kpis.abnormalOrderCount ? "warning" : "success"} />
+      <KpiInstrument label="期间收货订单数" value={kpis.orderCount} detail={dateRangeLabel} tone="info" />
+      <KpiInstrument label="期间实收数量" value={`${kpis.receivedQuantity}件`} detail={`${dateRangeLabel} · 本期实收`} tone="info" />
+      <KpiInstrument label="异常订单数量" value={kpis.abnormalOrderCount} detail="截至结束日期累计实收与送货单数量不一致" tone={kpis.abnormalOrderCount ? "warning" : "success"} />
       <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail={`绝对差异 ${kpis.differenceQuantity} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
     </div>
 
@@ -292,13 +299,14 @@ export function OrderBoardPage() {
             </div>
           </div>
           <div className="order-board-row__document">
-            <span>收货单</span>
+            <span>送货单数量</span>
             <div className="order-board-row__document-value">
               <strong>{row.documentQuantity}件</strong>
+              <small>第{row.receiptCount}次收货</small>
               {row.attachments.length ? <button
                 type="button"
                 className="order-board-attachment-button"
-                aria-label={`查看${row.styleNo}的收货单附件，共${row.attachments.length}张`}
+                aria-label={`查看${row.styleNo}的送货单附件，共${row.attachments.length}张`}
                 onClick={() => setAttachmentViewer({ attachments: row.attachments, index: 0 })}
               >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
             </div>
@@ -306,7 +314,7 @@ export function OrderBoardPage() {
           <div className="order-board-row__actual"><span>实收</span><strong>{row.actualQuantity}件</strong></div>
           <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
           <div className="order-board-row__difference"><span>差异</span><strong>{signed}件</strong></div>
-          <div className="order-board-row__count"><span>收货次数</span><strong>{row.receiptCount}次</strong></div>
+          <div className="order-board-row__count"><span>原收货</span><strong>{row.priorActualQuantity}件</strong></div>
           <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
           <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
           {actionControls(row, false)}
@@ -326,11 +334,11 @@ export function OrderBoardPage() {
         className="order-board-attachment-modal__content"
         role="dialog"
         aria-modal="true"
-        aria-label="查看收货单附件"
+        aria-label="查看送货单附件"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="order-board-attachment-modal__heading">
-          <strong>收货单附件 {attachmentViewer.index + 1}/{attachmentViewer.attachments.length}</strong>
+          <strong>送货单附件 {attachmentViewer.index + 1}/{attachmentViewer.attachments.length}</strong>
           <button type="button" onClick={() => setAttachmentViewer(null)}>关闭</button>
         </div>
         <ImageViewer src={attachmentUrl(selectedAttachment.attachmentId, "preview")} alt={selectedAttachment.filename} />
@@ -358,7 +366,7 @@ export function OrderBoardPage() {
         <p>修改后用于看板和后续返工；原始收货记录与图片继续保留。</p>
         <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value)} /></label>
         <div className="order-board-dialog__quantity-grid">
-          <label>收货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
+          <label>送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
           <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
           <label>次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setEditDefectiveQuantity(event.target.value)} /></label>
         </div>
