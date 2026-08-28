@@ -184,6 +184,16 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(ReworkWorkTasksResponseSchema.parse(result.value));
   });
+  app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/work-tasks/complete", async (request, reply) => {
+    const result = await dependencies.service.completeExecution(
+      await actor(request, "assign"),
+      parse(ReworkWorkTasksParamsSchema, request.params).reworkOrderId,
+      parse(ConfirmWorkAssignmentsSchema, request.body),
+      key(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(200).send(ReworkWorkTasksResponseSchema.parse(result.value));
+  });
   app.post<{ Params: { workTaskId: string } }>("/work-tasks/:workTaskId/reports", async (request, reply) => {
     const input = parse(CreateWorkReportSchema, request.body);
     if (!Number.isInteger(input.actualQuantity)) {
