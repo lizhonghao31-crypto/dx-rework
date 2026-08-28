@@ -1123,25 +1123,30 @@ export class WorkReportingService {
            )
        )
        AND (
-         COALESCE((
-           SELECT configuration.unified_execution_required
-           FROM rework_process_configurations configuration
-           WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
-           LIMIT 1
-         ),false)
-         OR (
-           EXISTS(
-             SELECT 1 FROM rework_tail_inspection_assignments assignment
-             WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
-           )
-           AND NOT EXISTS(
-             SELECT 1 FROM rework_tail_inspection_assignments assignment
-             WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
-               AND NOT EXISTS(
-                 SELECT 1 FROM rework_tail_inspection_reports report
-                 WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
-                   AND report.status='submitted'
+         (
+           NOT $3::boolean
+           AND (
+             COALESCE((
+               SELECT configuration.unified_execution_required
+               FROM rework_process_configurations configuration
+               WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+               LIMIT 1
+             ),false)
+             OR (
+               EXISTS(
+                 SELECT 1 FROM rework_tail_inspection_assignments assignment
+                 WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
                )
+               AND NOT EXISTS(
+                 SELECT 1 FROM rework_tail_inspection_assignments assignment
+                 WHERE assignment.rework_order_id=$1 AND assignment.revoked_at IS NULL
+                   AND NOT EXISTS(
+                     SELECT 1 FROM rework_tail_inspection_reports report
+                     WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id
+                       AND report.status='submitted'
+                   )
+               )
+             )
            )
          )
          OR (
