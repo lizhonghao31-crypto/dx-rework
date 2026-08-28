@@ -247,7 +247,7 @@ export class ReceivingService {
       has_rework_history: boolean;
     }>(
       `SELECT batch.style_no,batch.version,batch.deleted_at,
-              (totals.document_quantity+batch.document_quantity_adjustment)::bigint AS document_quantity,
+              batch.delivery_note_quantity::bigint AS document_quantity,
               (totals.actual_quantity+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
               (totals.defective_quantity+batch.defective_quantity_adjustment)::bigint AS defective_quantity,
               EXISTS(
@@ -338,6 +338,7 @@ export class ReceivingService {
       const updated = await client.query(
         `UPDATE receiving_batches batch
          SET style_no=$2,
+             delivery_note_quantity=$3,
              document_quantity_adjustment=$3-(
                SELECT sum(receipt.document_quantity)
                FROM receiving_receipts receipt
@@ -452,6 +453,7 @@ export class ReceivingService {
     client: PoolClient,
     actor: TrustedActorContext,
     styleNo: string,
+    documentQuantity: number,
     receivedDate: string | null,
   ): Promise<{ receivingBatchId: string; isNew: boolean }> {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [styleNo]);
@@ -490,12 +492,13 @@ export class ReceivingService {
 
     const receivingBatchId = randomUUID();
     await client.query(
-      `INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,created_at)
-       VALUES($1,$2,$3,COALESCE(
-         ($4::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+      `INSERT INTO receiving_batches(
+         receiving_batch_id,style_no,delivery_note_quantity,created_by,created_at
+       ) VALUES($1,$2,$3,$4,COALESCE(
+         ($5::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
          CURRENT_TIMESTAMP
        ))`,
-      [receivingBatchId, styleNo, actor.actorId, receivedDate],
+      [receivingBatchId, styleNo, documentQuantity, actor.actorId, receivedDate],
     );
     return { receivingBatchId, isNew: true };
   }
@@ -560,7 +563,13 @@ export class ReceivingService {
     actor: TrustedActorContext,
     input: NormalizedCreateReceivingInput,
   ): Promise<ReceivingReceipt> {
-    const { receivingBatchId } = await this.resolveReceivingBatch(client, actor, input.styleNo, input.receivedDate);
+    const { receivingBatchId } = await this.resolveReceivingBatch(
+      client,
+      actor,
+      input.styleNo,
+      input.documentQuantity,
+      input.receivedDate,
+    );
     const receiptId = randomUUID();
     const eventId = await this.events.append(client, actor, {
       action: "receiving.receipt.create",
@@ -678,11 +687,11 @@ export class ReceivingService {
        ), totals AS (
          SELECT r.receiving_batch_id,
                 batch.style_no,
-                (sum(r.document_quantity)+batch.document_quantity_adjustment)::bigint AS document_quantity,
+                batch.delivery_note_quantity::bigint AS document_quantity,
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
                 (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS defective_quantity,
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment
-                  -sum(r.document_quantity)-batch.document_quantity_adjustment)::bigint AS difference_quantity,
+                  -batch.delivery_note_quantity)::bigint AS difference_quantity,
                 count(*)::bigint AS receipt_count,
                 max(r.received_at) AS last_received_at,
                 batch.version
