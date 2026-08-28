@@ -12,8 +12,8 @@ describe("tail inspection foundation", () => {
     expect(migration).toContain("('tail_inspector','tail_inspection:report')");
     expect(migration).not.toContain("('tail_inspector','process:configure')");
     expect(migration).not.toContain("('tail_inspector','submission:audit')");
-    expect(display).toContain('tail_inspector: "尾查"');
-    expect(display).toContain('"tail_inspection:report": "尾查报数"');
+    expect(display).toContain('tail_inspector: "整查"');
+    expect(display).toContain('"tail_inspection:report": "整查报数"');
   });
 
   it("stores independent, audited assignments and per-process physical counts", async () => {

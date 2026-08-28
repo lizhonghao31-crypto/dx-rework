@@ -28,7 +28,7 @@ const taskTitle = (todo: TodoResponse): string =>
   todo.category === "owner_signature"
     ? "老板确认签字"
     : todo.category === "tail_inspection"
-      ? "历史尾查报数"
+      ? "历史整查报数"
     : todo.category === "external_supplier_selection"
       ? "历史供应商选择"
       : taskLabel[todo.route.routeName];
@@ -41,7 +41,7 @@ const categoryLabel = (todo: TodoResponse): string => {
     ie_review: "IE 审核",
     task_assignment: "分配返工人员",
     work_reporting: "登记返工完成",
-    tail_inspection: "历史尾查报数",
+    tail_inspection: "历史整查报数",
     whole_order_review: "整单审核",
     quantity_adjustment: "数量调整审核",
     responsibility_determination: "责任判定与资料核验",

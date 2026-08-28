@@ -16,7 +16,7 @@ describe("N02 mobile personnel assignment", () => {
     expect(source).toContain('onClick={() => removeWorker(index, personId)}>−</button>');
     expect(source).toContain('className="process-worker-temporary-name"');
     expect(styles).toContain(".process-worker-picker__heading{justify-content:flex-start}");
-    expect(source).toContain('<div className="process-worker-picker__heading"><b>尾查人员 *</b>');
+    expect(source).toContain('<div className="process-worker-picker__heading"><b>整查人员 *</b>');
     expect(source).toContain('onClick={openMobileTailAssignment}>选择本单工人</Button>');
   });
 

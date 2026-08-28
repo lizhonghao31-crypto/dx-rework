@@ -3,7 +3,7 @@ import type { InspectionReportDraft } from "@dx-rework/contracts";
 import "./rework-detail-compact.css";
 
 const labels = {
-  stage: { midline: "中查", final: "尾查", warehouse: "仓检", reinspection: "复检" },
+  stage: { midline: "中查", final: "整查", warehouse: "仓检", reinspection: "复检" },
   check: { pass: "合格", fail: "不合格" },
   fabric: { match: "匹配", mismatch: "不匹配" },
   fit: { accepted: "接受", recheck_after_rework: "返工后复查", rejected: "不接受" },

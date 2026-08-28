@@ -126,7 +126,7 @@ export class ProcessWorkerPlanService {
         if (eligible.length !== assignment.memberIds.length) {
           fail(
             item.execution_kind === "tail_inspection"
-              ? "尾查特殊工序只能分配已启用且已授权的尾查人员"
+              ? "整查特殊工序只能分配已启用且已授权的整查人员"
               : "存在无效、停用或未获工人上数资格的人员",
             400,
             "VALIDATION_ERROR",
@@ -472,7 +472,7 @@ export class ProcessWorkerPlanService {
     const members = plan ? await this.planMembers(client, plan.plan_id) : [];
     const assignments = items.map((item) => ({
       configurationItemId: item.configuration_item_id,
-      processName: item.process_name,
+      processName: item.execution_kind === "tail_inspection" ? "整查" : item.process_name,
       executionKind: item.execution_kind,
       members: members.filter((member) => member.configuration_item_id === item.configuration_item_id).map((member) => ({
         personId: member.person_id,

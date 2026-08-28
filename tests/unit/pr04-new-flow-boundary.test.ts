@@ -14,9 +14,9 @@ describe("PR-04 new-flow boundary", () => {
       readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/api/src/rework/process-configuration-service.ts", "utf8"),
     ]);
-    expect(form).not.toContain("分配尾查");
+    expect(form).not.toContain("分配整查");
     expect(form).not.toContain("tail-inspection-options");
-    expect(form).not.toContain("历史尾查分配");
+    expect(form).not.toContain("历史整查分配");
     expect(service).not.toContain("INSERT INTO rework_tail_inspection_assignments");
     expect(service).not.toContain('category: "tail_inspection"');
     expect(service).not.toContain('tab: "tail_inspection"');

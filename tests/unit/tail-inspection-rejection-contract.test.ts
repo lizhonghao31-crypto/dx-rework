@@ -19,8 +19,8 @@ describe("legacy tail inspection rejection", () => {
     expect(service).toContain("tail-inspection-return:");
     expect(migration).toContain("guard_rework_tail_inspection_report_rejection");
     expect(migration).not.toContain("DELETE FROM rework_tail_inspection_reports");
-    expect(panel).toContain("驳回尾查");
-    expect(panel).toContain("尾查可重新报数");
+    expect(panel).toContain("驳回整查");
+    expect(panel).toContain("整查可重新报数");
   });
 
   it("keeps the rejection todo on the same assignment entity as its source event", async () => {

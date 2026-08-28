@@ -20,7 +20,7 @@ describe("1.0 role entry and navigation closure", () => {
     ]);
     expect(app).not.toContain('path === "/ui/management"');
     expect(navigation).toContain('finance_director: "财务总监"');
-    expect(navigation).toContain('tail_inspector: "尾查"');
+    expect(navigation).toContain('tail_inspector: "整查"');
   });
 
   it("shows the rework board to tail supervisors without granting finance reports", async () => {

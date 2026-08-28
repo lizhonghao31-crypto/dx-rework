@@ -153,7 +153,7 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/work-reporting-form.css"),
     ]);
     expect(source).toContain("工人合计");
-    expect(source).toContain("确认一致并提交 IE");
+    expect(source).toContain("确认数量并提交 IE");
     expect(source).toContain("主管可修正个人有效数量；原始上数始终保留");
     expect(source).not.toContain("finalQuantities");
     expect(source).not.toContain("quantity-adjustments");

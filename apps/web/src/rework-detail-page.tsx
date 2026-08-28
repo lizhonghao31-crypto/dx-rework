@@ -125,11 +125,11 @@ type WorkflowStage = Readonly<{ key: string; title: string; nodes: readonly Work
 
 const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   draft: { label: "草稿", next: "等待发起人补充并提交" },
-  pending_process_configuration: { label: "待分配工序 &工人", next: "下一步由尾部主管一次完成工序、候选单价、返工人员与尾查分配" },
-  pending_ie_review: { label: "待 IE 核价", next: "IE 通过后返工人员与尾查任务统一生效并进入执行" },
+  pending_process_configuration: { label: "待分配工序 &工人", next: "下一步由尾部主管一次完成工序、候选单价、返工人员与整查分配" },
+  pending_ie_review: { label: "待 IE 核价", next: "IE 通过后返工人员与整查任务统一生效并进入执行" },
   pending_task_assignment: { label: "待启动执行任务", next: "IE 已通过；预分配执行任务等待自动启动，可在节点02重试启动" },
-  in_progress: { label: "返工执行中", next: "返工人员与尾查统一登记实际完成数量，全部完成后由尾部主管核量" },
-  pending_order_review: { label: "待尾部确认最终数量", next: "核对工人上数与尾查数量，提交每道工序最终确认数量" },
+  in_progress: { label: "返工执行中", next: "返工人员与整查统一登记实际完成数量，全部完成后由尾部主管核量" },
+  pending_order_review: { label: "待尾部确认最终数量", next: "核对工人上数与整查数量，提交每道工序最终确认数量" },
   pending_final_quantity_ie_review: { label: "最终数量待 IE 复核", next: "IE 核对数量与质量事实；通过后生成正式工资并进入责任判定" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
@@ -289,7 +289,7 @@ const buildWorkflow = (
       title: "发起、配置与核价",
       nodes: [
         node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", detail.tailInspectionRequired ? "一次完成返工工序、候选单价、返工人员与尾查分配；不再设置独立人员分配节点。" : "一次完成返工工序、候选单价与返工人员分配；本单无需整查。"),
+        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", detail.tailInspectionRequired ? "一次完成返工工序、候选单价、返工人员与整查分配；不再设置独立人员分配节点。" : "一次完成返工工序、候选单价与返工人员分配；本单无需整查。"),
         node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后预分配工人自动生效并进入返工执行。"),
       ],
     },
@@ -297,14 +297,14 @@ const buildWorkflow = (
       key: "execution",
       title: "返工执行",
       nodes: [
-        node("work_reporting", "04", "返工执行报数", detail.tailInspectionRequired ? "返工人员 / 尾查" : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? "返工人员与尾查都在同一执行节点提交本人实际件数；临时工由尾部主管代录。" : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
+        node("work_reporting", "04", "返工执行报数", detail.tailInspectionRequired ? "返工人员 / 整查" : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? "返工人员与整查都在同一执行节点提交本人实际件数；临时工由尾部主管代录。" : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
       ],
     },
     {
       key: "responsibility",
       title: "责任与结算",
       nodes: [
-        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? "逐工序对照工人原报数与尾查数，提交最终确认数量并保留每版审计。" : "系统按工人有效上数生成最终数量，并保留每版审计。"),
+        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? "逐工序对照工人原报数与整查数，提交最终确认数量并保留每版审计。" : "系统按工人有效上数生成最终数量，并保留每版审计。"),
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
@@ -361,7 +361,7 @@ const historyNode = (action: string): WorkflowNodeKey | null => {
 
 const historyActionLabel = (action: string): string => {
   if (action === "rework.attachments.supplement") return "补充订单图片";
-  if (action === "rework.tail_inspection.waive") return "改为无需尾查";
+  if (action === "rework.tail_inspection.waive") return "改为无需整查";
   if (action === "rework.submit") return "提交返工单";
   if (action === "rework.tail_completion.confirm") return "尾部确认最终数量";
   if (action.startsWith("rework.final_quantity.")) return "IE 复核最终数量";
@@ -783,9 +783,9 @@ function TailInspectionWaiverAction({
 
   const waive = async (): Promise<void> => {
     const reason = (await promptInApp(
-      "请输入改为无需尾查的原因。若已经上过尾查数，该记录会保留但作废，不计入最终数量、工资或责任。",
+      "请输入改为无需整查的原因。若已经上过整查数，该记录会保留但作废，不计入最终数量、工资或责任。",
       "",
-      { title: "改为无需尾查", confirmLabel: "确认免尾查" },
+      { title: "改为无需整查", confirmLabel: "确认免整查" },
     ))?.trim();
     if (!reason) return;
     setBusy(true);
@@ -803,12 +803,12 @@ function TailInspectionWaiverAction({
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(body?.error?.message ?? "免尾查失败");
+        throw new Error(body?.error?.message ?? "免整查失败");
       }
-      setMessage("已改为无需尾查；原尾查报数已保留为历史并从结算中作废。");
+      setMessage("已改为无需整查；原整查报数已保留为历史并从结算中作废。");
       await onChanged();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "免尾查失败");
+      setMessage(error instanceof Error ? error.message : "免整查失败");
     } finally {
       setBusy(false);
     }
@@ -816,9 +816,9 @@ function TailInspectionWaiverAction({
 
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone="info">旧订单纠正</StatusBadge>
-    <h2>改为无需尾查</h2>
-    <p>仅老板、生产管理和超级用户可操作。已上报的尾查数会保留审计记录，但不再计入最终数量、工资和责任。</p>
-    <Button disabled={busy} onClick={() => { void waive(); }}>{busy ? "处理中…" : "改为无需尾查"}</Button>
+    <h2>改为无需整查</h2>
+    <p>仅老板、生产管理和超级用户可操作。已上报的整查数会保留审计记录，但不再计入最终数量、工资和责任。</p>
+    <Button disabled={busy} onClick={() => { void waive(); }}>{busy ? "处理中…" : "改为无需整查"}</Button>
     {message ? <p role="status">{message}</p> : null}
   </Surface>;
 }

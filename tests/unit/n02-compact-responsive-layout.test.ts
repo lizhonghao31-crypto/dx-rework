@@ -33,7 +33,7 @@ describe("N02 compact responsive layout", () => {
     expect(css).toContain("@media(max-width:380px)");
     expect(form).toContain("mobileAssignmentSearch");
     expect(form).toContain('placeholder="搜索正式工或临时工"');
-    expect(form).not.toContain('placeholder="搜索尾查人员"');
+    expect(form).not.toContain('placeholder="搜索整查人员"');
     expect(form).not.toContain("workerSearches");
   });
 });

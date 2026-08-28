@@ -23,7 +23,7 @@ const token = (request: FastifyRequest): string | undefined => request.headers.c
 
 const parse = <T>(schema: { safeParse(input: unknown): { success: true; data: T } | { success: false } }, input: unknown): T => {
   const result = schema.safeParse(input);
-  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "尾查参数不完整或格式不正确", 400);
+  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "整查参数不完整或格式不正确", 400);
   return result.data;
 };
 
@@ -31,14 +31,14 @@ const idempotencyKey = (request: FastifyRequest): string => parse(IdempotencyKey
 
 const rejectBody = (input: unknown): { expectedOrderVersion: number; reason: string } => {
   if (typeof input !== "object" || input === null) {
-    throw new ApplicationError("VALIDATION_ERROR", "驳回尾查参数不完整", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "驳回整查参数不完整", 400);
   }
   const body = input as Record<string, unknown>;
   if (!Number.isInteger(body.expectedOrderVersion) || Number(body.expectedOrderVersion) <= 0) {
     throw new ApplicationError("VALIDATION_ERROR", "返工单版本无效", 400);
   }
   if (typeof body.reason !== "string" || !body.reason.trim() || body.reason.trim().length > 500) {
-    throw new ApplicationError("VALIDATION_ERROR", "驳回尾查必须填写原因", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "驳回整查必须填写原因", 400);
   }
   return { expectedOrderVersion: Number(body.expectedOrderVersion), reason: body.reason.trim() };
 };
@@ -60,22 +60,22 @@ export function registerTailInspectionRoutes(app: FastifyInstance, dependencies:
     const inspector = user.businessRoles?.includes("tail_inspector") === true
       && user.capabilities.includes("tail_inspection:report");
     if (mode === "options") {
-      if (!root && !supervisorConfigure) throw new ApplicationError("FORBIDDEN", "当前角色无权分配尾查人员", 403);
+      if (!root && !supervisorConfigure) throw new ApplicationError("FORBIDDEN", "当前角色无权分配整查人员", 403);
       return businessActor(dependencies.root, user, request.id, "process:configure", root ? "tail_supervisor" : undefined);
     }
     if (mode === "report") {
-      if (!root && !inspector) throw new ApplicationError("FORBIDDEN", "当前角色无权提交尾查报数", 403);
+      if (!root && !inspector) throw new ApplicationError("FORBIDDEN", "当前角色无权提交整查报数", 403);
       return businessActor(dependencies.root, user, request.id, "tail_inspection:report", root ? "tail_inspector" : undefined);
     }
     if (mode === "review") {
-      if (!root && !supervisorReview) throw new ApplicationError("FORBIDDEN", "当前角色无权驳回尾查报数", 403);
+      if (!root && !supervisorReview) throw new ApplicationError("FORBIDDEN", "当前角色无权驳回整查报数", 403);
       return businessActor(dependencies.root, user, request.id, "submission:audit", root ? "tail_supervisor" : undefined);
     }
     if (root) return businessActor(dependencies.root, user, request.id, "process:configure", "tail_supervisor");
     if (supervisorConfigure) return businessActor(dependencies.root, user, request.id, "process:configure");
     if (supervisorReview) return businessActor(dependencies.root, user, request.id, "submission:audit");
     if (inspector) return businessActor(dependencies.root, user, request.id, "tail_inspection:report");
-    throw new ApplicationError("FORBIDDEN", "当前角色无权查看尾查报数", 403);
+    throw new ApplicationError("FORBIDDEN", "当前角色无权查看整查报数", 403);
   };
 
   app.get("/tail-inspection-options", async (request) => TailInspectionOptionsResponseSchema.parse(

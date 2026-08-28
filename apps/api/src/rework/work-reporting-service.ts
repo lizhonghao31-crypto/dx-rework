@@ -123,7 +123,7 @@ export class WorkReportingService {
   async listFrontlineTasks(actor: TrustedActorContext, kind: FrontlineTaskKind): Promise<FrontlineTasksResponse> {
     const allowed = kind === "worker" ? this.isWorker(actor) : this.isTailInspector(actor);
     if (!allowed && !isRootActor(actor)) {
-      error(kind === "worker" ? "当前账号没有本人返工任务权限" : "当前账号没有本人尾查任务权限", 403, "FORBIDDEN");
+      error(kind === "worker" ? "当前账号没有本人返工任务权限" : "当前账号没有本人整查任务权限", 403, "FORBIDDEN");
     }
     const result = await this.database.query<FrontlineTaskRow>(
       `SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
@@ -546,7 +546,7 @@ export class WorkReportingService {
       if (order.status !== "in_progress") error("当前返工单不在返工执行节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
       if (!await this.readyForWholeOrderReview(client, reworkOrderId, [], true)) {
-        error("仍有返工人员或尾查任务未完成，不能进入最终数量确认", 409, "INVALID_STATE_TRANSITION");
+        error("仍有返工人员或整查任务未完成，不能进入最终数量确认", 409, "INVALID_STATE_TRANSITION");
       }
       const eventId = await this.events.append(client, actor, {
         action: "rework.execution.complete",
@@ -557,7 +557,7 @@ export class WorkReportingService {
           ...this.orderAuditState(order, "pending_order_review", order.version + 1),
           completionRecoveredFromEffectiveReports: true,
         },
-        reason: "全部有效返工与尾查任务已完成，恢复进入最终数量确认",
+        reason: "全部有效返工与整查任务已完成，恢复进入最终数量确认",
       });
       await this.context(client, eventId, actor.requestId);
       await client.query(
@@ -1198,7 +1198,7 @@ export class WorkReportingService {
     const visibleMembers = personalView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
     return {
       workTaskId: task.work_task_id, reworkOrderId: task.rework_order_id, configurationItemId: task.configuration_item_id,
-      processName: task.process_name, executionKind: task.execution_kind, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
+      processName: task.execution_kind === "tail_inspection" ? "整查" : task.process_name, executionKind: task.execution_kind, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
       unitPrice: task.unit_price === null ? null : numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
       canSubmitReport: this.canSubmitReport(actor, task, members) && submittedQuantity === 0,
       members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),

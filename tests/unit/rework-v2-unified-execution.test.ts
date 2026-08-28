@@ -41,12 +41,12 @@ describe("PR-04 unified rework execution", () => {
       read("apps/api/src/rework/process-configuration-service.ts"),
       read("packages/contracts/src/index.ts"),
     ]);
-    expect(form).toContain('customProcessName: "尾查"');
+    expect(form).toContain('customProcessName: "整查"');
     expect(form).toContain('executionKind: "tail_inspection" as const');
-    expect(form).toContain("尾查候选单价（元/件）");
+    expect(form).toContain("整查候选单价（元/件）");
     expect(form).toContain('eligibleExecutionKinds.includes("tail_inspection")');
     expect(form).not.toContain("tail-inspection-options");
-    expect(form).not.toContain("历史尾查分配");
+    expect(form).not.toContain("历史整查分配");
     expect(configuration).not.toContain("INSERT INTO rework_tail_inspection_assignments");
     expect(configuration).not.toContain('category: "tail_inspection"');
     expect(contracts).not.toContain("tailInspectors: z.array");
@@ -74,7 +74,7 @@ describe("PR-04 unified rework execution", () => {
     ]);
     expect(reviewService).toContain("tail_item.execution_kind='tail_inspection'");
     expect(reviewService).toContain("item.execution_kind='worker'");
-    expect(reviewPanel).toContain("历史尾查报数记录");
+    expect(reviewPanel).toContain("历史整查报数记录");
     expect(reviewPanel).toContain('report.executionKind === "tail_inspection"');
     expect(reporting).toContain('task.execution_kind === "tail_inspection"');
     expect(reporting).toContain("rework_work_reports");

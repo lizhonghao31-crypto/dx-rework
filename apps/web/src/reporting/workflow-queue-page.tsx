@@ -51,7 +51,7 @@ const queueMeta: Record<WorkflowStatus, QueueMeta> = {
   in_progress: {
     node: "N04",
     label: "返工执行报数",
-    owner: "返工人员 / 尾查 / 已授权代录人",
+    owner: "返工人员 / 整查 / 已授权代录人",
     action: "按本人执行任务登记实际完成数量",
     next: "全部执行报数完成后自动流转到 N05 · 尾部确认最终数量",
   },
@@ -59,7 +59,7 @@ const queueMeta: Record<WorkflowStatus, QueueMeta> = {
     node: "N05",
     label: "待最终数量确认",
     owner: "尾部主管",
-    action: "核对工人上数与尾查数量，填写每道工序最终确认数量",
+    action: "核对工人上数与整查数量，填写每道工序最终确认数量",
     next: "确认后流转到 N06 · IE 复核",
   },
   pending_final_quantity_ie_review: {

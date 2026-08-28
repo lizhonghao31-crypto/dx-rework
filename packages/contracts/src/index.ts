@@ -511,7 +511,7 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("catalog"),
     processId: IdSchema,
-    // 计划数量已由尾查实物清点取代；保留该字段仅兼容历史审计结构。
+    // 计划数量已由整查实物清点取代；保留该字段仅兼容历史审计结构。
     plannedQuantity: z.number().finite().positive().optional().default(1),
     pricingUnit: z.literal("piece"),
     unitPrice: z.number().finite().positive(),

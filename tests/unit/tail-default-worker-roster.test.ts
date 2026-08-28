@@ -21,7 +21,7 @@ describe("tail inspection default worker roster", () => {
     const options = read("apps/api/src/rework/process-configuration-service.ts");
     expect(form).toContain("tailDefaultWorkerPersonIds");
     expect(form).toContain("saveTailDefaultWorkers");
-    expect(form).toContain("尾查默认工人已保存");
+    expect(form).toContain("整查默认工人已保存");
     expect(form).toContain("保存为默认名单");
     expect(service).toContain("replaceTailInspectionDefaultWorkers");
     expect(routes).toContain('"/master-data/tail-inspection/default-workers"');

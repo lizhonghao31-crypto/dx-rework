@@ -25,7 +25,7 @@ describe("optional tail inspection", () => {
   it("rejects tail payloads for no-tail orders and still requires one tail item otherwise", async () => {
     const configuration = await read("apps/api/src/rework/process-configuration-service.ts");
     expect(configuration).toContain("tailInspectionRequired ? tailItems.length !== 1 : tailItems.length !== 0");
-    expect(configuration).toContain("本单不需要整查，不能配置尾查工序");
+    expect(configuration).toContain("本单不需要整查，不能配置整查工序");
   });
 
   it("removes tail assignment and reconciliation only for explicitly no-tail orders", async () => {
@@ -72,7 +72,7 @@ describe("optional tail inspection", () => {
       read("apps/web/src/process-worker-assignment-form.tsx"),
       read("apps/api/src/rework/rework-business-detail-service.ts"),
     ]);
-    expect(detail).toContain('detail.tailInspectionRequired ? "返工人员 / 尾查" : "返工人员"');
+    expect(detail).toContain('detail.tailInspectionRequired ? "返工人员 / 整查" : "返工人员"');
     expect(detail).toContain("系统按工人有效上数生成最终数量");
     expect(assignment).toContain("assignmentOptionsLoading && editable ? []");
     expect(assignment).toContain("正在加载默认名单…");

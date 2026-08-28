@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import { InspectionImageExtractionService } from "../../apps/api/src/rework/inspection-image-extraction-service.js";
@@ -14,6 +16,11 @@ const validResult = {
 };
 
 describe("inspection image extraction", () => {
+  it("keeps current and legacy final-inspection labels in the OCR mapping", async () => {
+    const source = await readFile(new URL("../../apps/api/src/rework/inspection-image-extraction-service.ts", import.meta.url), "utf8");
+    expect(source).toContain("整查或尾查=final");
+  });
+
   it("accepts only the eight constrained paper-report fields", async () => {
     const service = new InspectionImageExtractionService(
       { apiKey: "test-key", model: "gpt-5.6" },

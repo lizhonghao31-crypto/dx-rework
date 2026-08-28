@@ -105,8 +105,8 @@ export function FrontlineTaskPage() {
 
   return <main className="frontline-task-page">
     <header>
-      <StatusBadge tone="info">{kind === "tail_inspection" ? "本人尾查任务" : "本人返工任务"}</StatusBadge>
-      <h1>{kind === "tail_inspection" ? "待尾查报数" : "待完工上数"}</h1>
+      <StatusBadge tone="info">{kind === "tail_inspection" ? "本人整查任务" : "本人返工任务"}</StatusBadge>
+      <h1>{kind === "tail_inspection" ? "待整查报数" : "待完工上数"}</h1>
       <p>只显示分配给本人且尚未报数的当前任务。</p>
     </header>
     {state.kind === "loading" ? <Surface>正在读取本人任务…</Surface> : null}
@@ -117,7 +117,7 @@ export function FrontlineTaskPage() {
         <span className="frontline-task-list__identity"><small>款号</small><strong>{item.styleNo ?? "款号未填写"}</strong><small>{item.reworkNo ?? "返工单号待生成"}</small></span>
         {item.images[0] ? <img className="frontline-task-list__image" src={imageUrl(item.images[0].attachmentId)} alt={item.images[0].filename} loading="lazy" /> : null}
         <span><small>工序</small><strong>{item.processNames.join("、")}</strong></span>
-        <StatusBadge tone="warning">{kind === "tail_inspection" ? "待尾查报数" : "待完工上数"}</StatusBadge>
+        <StatusBadge tone="warning">{kind === "tail_inspection" ? "待整查报数" : "待完工上数"}</StatusBadge>
         <b>进入</b>
       </button>)}
     </div> : null}

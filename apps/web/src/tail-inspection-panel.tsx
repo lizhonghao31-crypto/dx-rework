@@ -44,7 +44,7 @@ export function TailInspectionPanel({
   const [returnedQuantity, setReturnedQuantity] = useState("");
   const [processQuantities, setProcessQuantities] = useState<Record<string, string>>({});
   const [autoFilledFor, setAutoFilledFor] = useState("");
-  const [message, setMessage] = useState("正在加载尾查任务…");
+  const [message, setMessage] = useState("正在加载整查任务…");
   const [busy, setBusy] = useState(false);
 
   const load = async (): Promise<TailInspectionResponse> => {
@@ -55,16 +55,16 @@ export function TailInspectionPanel({
     setData(result);
     setMessage(result.assignments.some((assignment) => assignment.canSubmit)
       ? isRoot
-        ? "请选择可代报的尾查任务并填写实际清点数量。"
+        ? "请选择可代报的整查任务并填写实际清点数量。"
         : "先填本次返件总数；每道工序会默认同步总数，按实际清点结果修改即可。"
-      : "当前尾查报数已提交，或尚未到本人处理。"
+      : "当前整查报数已提交，或尚未到本人处理。"
     );
     return result;
   };
 
   useEffect(() => {
     void load().catch((error: unknown) => {
-      setMessage(error instanceof Error ? error.message : "尾查任务加载失败");
+      setMessage(error instanceof Error ? error.message : "整查任务加载失败");
     });
   }, [isRoot, reworkOrderId]);
 
@@ -83,7 +83,7 @@ export function TailInspectionPanel({
     if (!data || busy) return;
     const assignment = data.assignments.find((item) => item.canSubmit);
     if (!assignment) {
-      setMessage("当前没有可提交的尾查任务。 ");
+      setMessage("当前没有可提交的整查任务。 ");
       return;
     }
     const returned = returnedQuantity.trim();
@@ -105,8 +105,8 @@ export function TailInspectionPanel({
       return;
     }
     const confirmation = isRoot
-      ? `确认代 ${assignment.tailInspectorName} 提交尾查报数？提交后如需调整，请由尾部主管退回后重新报数。`
-      : "确认提交本人的尾查报数？提交后如需调整，请由尾部主管退回后重新报数。";
+      ? `确认代 ${assignment.tailInspectorName} 提交整查报数？提交后如需调整，请由尾部主管退回后重新报数。`
+      : "确认提交本人的整查报数？提交后如需调整，请由尾部主管退回后重新报数。";
     if (!(await confirmInApp(confirmation))) return;
     setBusy(true);
     try {
@@ -123,10 +123,10 @@ export function TailInspectionPanel({
         },
       );
       setData(submitted);
-      setMessage("历史尾查报数已提交；旧订单会继续按原兼容链路进入尾部主管整单确认。 ");
+      setMessage("历史整查报数已提交；旧订单会继续按原兼容链路进入尾部主管整单确认。 ");
       await onOrderChanged?.();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "尾查报数提交失败");
+      setMessage(error instanceof Error ? error.message : "整查报数提交失败");
     } finally {
       setBusy(false);
     }
@@ -153,10 +153,10 @@ export function TailInspectionPanel({
   return <div className="mobile-page tail-inspection-page">
     <div className="mobile-hero">
       <div className="mobile-title">
-        <h1>历史尾查报数</h1>
+        <h1>历史整查报数</h1>
         <StatusBadge tone="warning">历史流程</StatusBadge>
       </div>
-      <p>仅用于旧订单兼容；新订单的尾查已作为特殊返工工序并入 N04「返工执行报数」。</p>
+      <p>仅用于旧订单兼容；新订单的整查已作为特殊返工工序并入 N04「返工执行报数」。</p>
     </div>
 
     {message ? <p className="tail-inspection-feedback" role="status">{message}</p> : null}
@@ -164,7 +164,7 @@ export function TailInspectionPanel({
     {data && <Surface>
       <div className="section-title">
         <div>
-          <h2>本单尾查进度</h2>
+          <h2>本单整查进度</h2>
           <p>多人清点时，下方已提交人员的各工序数量会自动相加。</p>
         </div>
         <StatusBadge tone={actionableAssignment ? "warning" : "success"}>{actionableAssignment ? isRoot ? "可代报" : "待本人报数" : isRoot ? "暂无可代报" : "本人已完成"}</StatusBadge>
@@ -188,16 +188,16 @@ export function TailInspectionPanel({
       <InsetField label="返件总数（件）" type="number" min="1" step="1" inputMode="numeric" value={returnedQuantity} disabled={busy} onChange={(event) => updateReturnedQuantity(event.target.value)} />
       <div className="tail-inspection-processes">
         {data.processes.map((process) => <div className="tail-inspection-process" key={process.configurationItemId}>
-          <div><b>{process.processName}</b><small>全部尾查累计：{process.inspectedQuantity} 件</small></div>
+          <div><b>{process.processName}</b><small>全部整查累计：{process.inspectedQuantity} 件</small></div>
           <InsetField label="本次工序数量（件）" type="number" min="0" step="1" inputMode="numeric" value={processQuantities[process.configurationItemId] ?? ""} disabled={busy} onChange={(event) => setProcessQuantities((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} />
         </div>)}
       </div>
       <div className="mobile-actions tail-inspection-actions">
-        <Button variant="primary" disabled={busy || !tailSubmitReady} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "代报尾查数量" : "提交尾查报数"}</Button>
+        <Button variant="primary" disabled={busy || !tailSubmitReady} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "代报整查数量" : "提交整查报数"}</Button>
       </div>
       {tailReadinessMessage && <p className="tail-inspection-readiness" role="status">{tailReadinessMessage}</p>}
     </Surface>}
 
-    {data && !actionableAssignment && submittedAssignments.length === 0 ? <Surface>{isRoot ? "本单暂无可代报的尾查任务。" : "本单尚未分配到您的尾查任务。"}</Surface> : null}
+    {data && !actionableAssignment && submittedAssignments.length === 0 ? <Surface>{isRoot ? "本单暂无可代报的整查任务。" : "本单尚未分配到您的整查任务。"}</Surface> : null}
   </div>;
 }

@@ -41,7 +41,7 @@ const extractionSchema = {
 const instruction = [
   "你是服装纸质验货报告的结构化识别器。",
   "仅从图片读取手写或印刷内容及勾选框；不要根据常识补全。无法清晰确认时必须填 null。",
-  "inspectionStage 必须映射为：中查=midline、尾查=final、仓检=warehouse、复检=reinspection。",
+  "inspectionStage 必须映射为：中查=midline、整查或尾查=final、仓检=warehouse、复检=reinspection。",
   "只返回规定 JSON，不要解释。",
 ].join("\n");
 

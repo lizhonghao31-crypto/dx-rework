@@ -157,21 +157,21 @@ export class TailInspectionService {
     return this.mutate(actor, "rework.tail_inspection.submit", idempotencyKey, { assignmentId, ...input }, 201, async (client) => {
       const assignment = await this.assignment(client, assignmentId, true);
       const order = await this.order(client, assignment.rework_order_id, true);
-      if (assignment.revoked_at !== null) fail("该尾查分配已失效，请联系尾部主管重新分配", 409, "INVALID_STATE_TRANSITION");
+      if (assignment.revoked_at !== null) fail("该整查分配已失效，请联系尾部主管重新分配", 409, "INVALID_STATE_TRANSITION");
       if (!isRootActor(actor) && assignment.tail_inspector_user_id !== actor.actorId) {
-        fail("只能提交本人被分配的尾查报数", 403, "FORBIDDEN");
+        fail("只能提交本人被分配的整查报数", 403, "FORBIDDEN");
       }
-      if (!isOpenForTailInspection(order.status)) fail("当前返工单不在尾查报数范围", 409, "INVALID_STATE_TRANSITION");
+      if (!isOpenForTailInspection(order.status)) fail("当前返工单不在整查报数范围", 409, "INVALID_STATE_TRANSITION");
       const existing = await client.query(
         `SELECT 1 FROM rework_tail_inspection_reports
          WHERE tail_inspection_assignment_id=$1 AND status='submitted' FOR UPDATE`,
         [assignmentId],
       );
-      if (existing.rowCount) fail("该尾查人员已提交报数；如需调整请由尾部主管退回", 409, "CONFLICT");
+      if (existing.rowCount) fail("该整查人员已提交报数；如需调整请由尾部主管退回", 409, "CONFLICT");
       const processes = await this.processes(client, assignment.rework_order_id, true);
       const expected = new Set(processes.map((item) => item.configuration_item_id));
       if (input.items.length !== expected.size || input.items.some((item) => !expected.has(item.configurationItemId))) {
-        fail("尾查报数必须覆盖当前工序且不能包含其他工序", 400, "VALIDATION_ERROR");
+        fail("整查报数必须覆盖当前工序且不能包含其他工序", 400, "VALIDATION_ERROR");
       }
       const readyAfterSubmit = order.status === "in_progress"
         && await this.readyForWholeOrderReview(client, assignment.rework_order_id, assignmentId);
@@ -252,8 +252,8 @@ export class TailInspectionService {
       const assignment = await this.assignment(client, assignmentId, true);
       const order = await this.order(client, assignment.rework_order_id, true);
       if (order.version !== input.expectedOrderVersion) fail("返工单版本冲突，请刷新后重试");
-      if (order.status !== "pending_order_review") fail("只有 N07 整单确认阶段可以驳回尾查报数", 409, "INVALID_STATE_TRANSITION");
-      if (assignment.revoked_at !== null) fail("该尾查分配已失效", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "pending_order_review") fail("只有 N07 整单确认阶段可以驳回整查报数", 409, "INVALID_STATE_TRANSITION");
+      if (assignment.revoked_at !== null) fail("该整查分配已失效", 409, "INVALID_STATE_TRANSITION");
       const report = await client.query<{ tail_inspection_report_id: string; returned_quantity: string }>(
         `SELECT tail_inspection_report_id,returned_quantity
          FROM rework_tail_inspection_reports
@@ -262,9 +262,9 @@ export class TailInspectionService {
          LIMIT 1 FOR UPDATE`,
         [assignmentId],
       );
-      const current = report.rows[0] ?? fail("当前没有可驳回的尾查报数", 409, "CONFLICT");
+      const current = report.rows[0] ?? fail("当前没有可驳回的整查报数", 409, "CONFLICT");
       const reason = input.reason.trim();
-      if (!reason) fail("驳回尾查必须填写原因", 400, "VALIDATION_ERROR");
+      if (!reason) fail("驳回整查必须填写原因", 400, "VALIDATION_ERROR");
       const eventId = await this.events.append(client, actor, {
         action: "rework.tail_inspection.reject",
         entityType: "rework_tail_inspection_assignment",
@@ -314,19 +314,19 @@ export class TailInspectionService {
 
   private ensureSupervisor(actor: TrustedActorContext): void {
     if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_supervisor") || actor.authorizationCapability !== "process:configure")) {
-      fail("只有尾部主管可以分配尾查人员", 403, "FORBIDDEN");
+      fail("只有尾部主管可以分配整查人员", 403, "FORBIDDEN");
     }
   }
 
   private ensureReporter(actor: TrustedActorContext): void {
     if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_inspector") || actor.authorizationCapability !== "tail_inspection:report")) {
-      fail("只有尾查可以提交尾查报数", 403, "FORBIDDEN");
+      fail("只有整查可以提交整查报数", 403, "FORBIDDEN");
     }
   }
 
   private ensureReviewer(actor: TrustedActorContext): void {
     if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_supervisor") || actor.authorizationCapability !== "submission:audit")) {
-      fail("只有尾部主管可以驳回尾查报数", 403, "FORBIDDEN");
+      fail("只有尾部主管可以驳回整查报数", 403, "FORBIDDEN");
     }
   }
 
@@ -334,7 +334,7 @@ export class TailInspectionService {
     if (isRootActor(actor)) return;
     const reporter = actor.actorRoles.includes("tail_inspector") && actor.authorizationCapability === "tail_inspection:report";
     const supervisor = actor.actorRoles.includes("tail_supervisor") && ["process:configure", "submission:audit"].includes(actor.authorizationCapability);
-    if (!reporter && !supervisor) fail("当前角色无权查看尾查报数", 403, "FORBIDDEN");
+    if (!reporter && !supervisor) fail("当前角色无权查看整查报数", 403, "FORBIDDEN");
   }
 
   private async order(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<OrderRow> {
@@ -366,7 +366,7 @@ export class TailInspectionService {
        WHERE assignment.tail_inspection_assignment_id=$1${locked ? " FOR UPDATE OF assignment" : ""}`,
       [assignmentId],
     );
-    return result.rows[0] ?? fail("尾查分配不存在", 404, "NOT_FOUND");
+    return result.rows[0] ?? fail("整查分配不存在", 404, "NOT_FOUND");
   }
 
   private async assignments(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, actor: TrustedActorContext): Promise<AssignmentRow[]> {

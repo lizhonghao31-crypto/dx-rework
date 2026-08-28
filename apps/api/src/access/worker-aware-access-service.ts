@@ -38,7 +38,7 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
   ): Promise<{ assignmentId: string }> {
     const assignment = await super.assignRole(actor, input);
     if (!(["worker", "tail_inspector"] as const).includes(input.roleCode as "worker" | "tail_inspector")) return assignment;
-    const roleLabel = input.roleCode === "tail_inspector" ? "尾查" : "工人";
+    const roleLabel = input.roleCode === "tail_inspector" ? "整查" : "工人";
 
     try {
       const people = await this.listPeople({ includeInactive: true });

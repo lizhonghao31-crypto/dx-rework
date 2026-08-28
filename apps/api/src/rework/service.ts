@@ -444,12 +444,12 @@ export class ReworkInitiationService {
         const current = await this.lockAccessible(client, reworkOrderId);
         this.ensureVersion(current, input.expectedVersion);
         if (!current.tail_inspection_required) {
-          throw new ApplicationError("CONFLICT", "该返工单已经无需尾查", 409);
+          throw new ApplicationError("CONFLICT", "该返工单已经无需整查", 409);
         }
         if (!(["in_progress", "pending_order_review"] as ReworkOrderStatus[]).includes(current.status)) {
           throw new ApplicationError(
             "INVALID_STATE_TRANSITION",
-            "只能在返工执行中或提交最终数量前改为无需尾查；已提交最终数量的订单请先由 IE 驳回",
+            "只能在返工执行中或提交最终数量前改为无需整查；已提交最终数量的订单请先由 IE 驳回",
             409,
           );
         }
@@ -640,7 +640,7 @@ export class ReworkInitiationService {
           [reworkOrderId, nextStatus, actor.actorId, nextVersion],
         );
 
-        const todoReason = `该订单已改为无需尾查：${input.reason}`;
+        const todoReason = `该订单已改为无需整查：${input.reason}`;
         await this.todos?.cancelOpenByDedupePrefix(
           client, actor, `tail-inspection:${reworkOrderId}:`, todoReason,
         );
@@ -1155,7 +1155,7 @@ export class ReworkInitiationService {
       || !actor.authorizationCapabilities?.includes("tail_inspection:waive")
       || !allowedRole
     ) {
-      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需尾查", 403);
+      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需整查", 403);
     }
   }
 
