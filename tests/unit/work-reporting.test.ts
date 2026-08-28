@@ -164,6 +164,12 @@ describe("work reporting monetary snapshots", () => {
     expect(service).toContain("仍有返工人员或尾查任务未完成");
     expect(routes).toContain("/work-tasks/complete");
     expect(form).toContain("全部完成，进入节点05");
+    const completedSectionIndex = form.indexOf('className="n04-progress-group n04-progress-group--completed"');
+    const completionActionIndex = form.indexOf('className="n04-completion-action"');
+    expect(completedSectionIndex).toBeGreaterThan(-1);
+    expect(completionActionIndex).toBeGreaterThan(completedSectionIndex);
+    expect(form).not.toContain("返工执行已全部完成");
+    expect(form).not.toContain("系统会再次核验普通返工和尾查的有效报数");
     expect(migration).toContain("alternative_action_two:='rework.execution.complete'");
     expect(migration).toContain("alternative_capability_two:='work:assign'");
   });

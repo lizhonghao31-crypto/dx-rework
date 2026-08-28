@@ -538,17 +538,15 @@ export function WorkReportingForm({
           </div>
           {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
         </Surface>
-        {workReportingWritable && canAssign && incompleteTasks.length === 0 && completedTasks.length > 0 ? <Surface className="work-reporting-primary-action">
-          <h2>返工执行已全部完成</h2>
-          <p>系统会再次核验普通返工和尾查的有效报数，核验通过后进入节点05。</p>
-          <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>{busy ? "核验中…" : "全部完成，进入节点05"}</Button>
-        </Surface> : null}
         <Surface className="n04-progress-group n04-progress-group--completed">
           <button type="button" className={`n04-progress-group__heading${completedTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={completedTasksExpanded} aria-controls="n04-completed-task-list" onClick={() => setCompletedTasksExpanded((expanded) => !expanded)}>
             <h2>已完成</h2><StatusBadge tone="success">{completedTasks.length} 项</StatusBadge><b aria-hidden="true">{completedTasksExpanded ? "收起 −" : "展开 +"}</b>
           </button>
           {completedTasksExpanded ? <div id="n04-completed-task-list">{completedTasks.length > 0 ? <div className="n04-progress-list">{completedTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} task={task} writable={workReportingWritable} />)}</div> : <p className="n04-progress-empty">暂无已完成任务。</p>}</div> : null}
         </Surface>
+        {workReportingWritable && canAssign && incompleteTasks.length === 0 && completedTasks.length > 0 ? <div className="n04-completion-action">
+          <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>{busy ? "核验中…" : "全部完成，进入节点05"}</Button>
+        </div> : null}
       </div> : visibleTasks.map((task) => <Surface {...(frontlineContext ? { className: "frontline-work-task" } : {})} key={task.workTaskId}><div className="section-title"><div><h2>{taskProcessName(task)}</h2><p>{task.executionKind === "tail_inspection" ? "尾查人员" : "返工人员"}：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>{task.remainingQuantity === 0 ? "已完成" : workReportingWritable ? "待上报" : "未完成"}</StatusBadge></div>{task.unitPrice !== null ? <small className="work-reporting-approved-price">IE 核准单价：¥{formatApprovedUnitPrice(task.unitPrice)} / {task.pricingUnit === "piece" ? "件" : "小时"}</small> : null}<p>{task.remainingQuantity === 0 ? `已上报 ${task.submittedQuantity} 件` : workReportingWritable ? "按实际完成件数报数" : "该节点已结束"}</p></Surface>)}
       {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代报数" : canAssign ? "临时工代报数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "我已完成尾查" : "我已返工完成"}</h2><p>{isRoot ? "为执行人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "填写本人实际尾查数量，提交后计入统一数量事实。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为报数" : canAssign ? "临时工完工上数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "尾查完成&报数" : "我已完工&上数"}</Button></Surface>}
       {visibleTasks.length === 0 && <Surface>当前暂无需要本人处理的任务。</Surface>}
