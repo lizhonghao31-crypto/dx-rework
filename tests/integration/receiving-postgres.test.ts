@@ -273,6 +273,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0095_receiving_defective_quantity.sql");
     await migration("0099_optional_tail_inspection.sql");
     await migration("0111_receiving_delivery_note_total.sql");
+    await migration("0112_receiving_root_merge_image_replacement.sql");
   });
 
   afterAll(async () => {
@@ -754,6 +755,124 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       attachmentIds: [],
       receivedDate: pastBusinessDate(3),
     }, randomUUID())).rejects.toThrow("仅支持昨天和前天");
+  });
+
+  it("lets Root merge a typo style into the existing pre-rework batch without rewriting receipt facts", async () => {
+    const targetImage = await readyImage();
+    const sourceImage = await readyImage();
+    const target = await service.create(receiver(), {
+      styleNo: "STYLE-MERGE-CANONICAL",
+      documentQuantity: 100,
+      actualQuantity: 60,
+      defectiveQuantity: 2,
+      attachmentIds: [targetImage],
+    }, randomUUID());
+    const source = await service.create(receiver(), {
+      styleNo: "STYLE-MERGE-TYPO",
+      documentQuantity: 100,
+      actualQuantity: 35,
+      defectiveQuantity: 1,
+      attachmentIds: [sourceImage],
+    }, randomUUID());
+
+    const sourceRow = (await service.board(businessDate(), businessDate(), "STYLE-MERGE-TYPO")).rows[0]!;
+    const merged = await service.correctBatch(rootCorrector(), source.value.receivingBatchId, {
+      expectedVersion: sourceRow.version,
+      styleNo: "STYLE-MERGE-CANONICAL",
+      documentQuantity: sourceRow.documentQuantity,
+      actualQuantity: 30,
+      defectiveQuantity: 0,
+    });
+
+    expect(merged).toMatchObject({
+      receivingBatchId: target.value.receivingBatchId,
+      styleNo: "STYLE-MERGE-CANONICAL",
+      documentQuantity: 100,
+      actualQuantity: 90,
+      defectiveQuantity: 2,
+      differenceQuantity: -10,
+    });
+    const board = await service.board(businessDate(), businessDate(), "STYLE-MERGE-CANONICAL");
+    expect(board.rows).toHaveLength(1);
+    expect(board.rows[0]).toMatchObject({
+      receivingBatchId: target.value.receivingBatchId,
+      documentQuantity: 100,
+      actualQuantity: 90,
+      defectiveQuantity: 2,
+      currentActualQuantity: 90,
+      currentDefectiveQuantity: 2,
+      differenceQuantity: -10,
+      receiptCount: 2,
+    });
+    expect(board.rows[0]?.attachments.map((item) => item.attachmentId).sort()).toEqual(
+      [targetImage, sourceImage].sort(),
+    );
+
+    const facts = await database.query<{ receiving_batch_id: string; style_no: string }>(
+      `SELECT receiving_batch_id,style_no FROM receiving_receipts
+       WHERE receipt_id=ANY($1::uuid[]) ORDER BY receipt_id`,
+      [[target.value.receiptId, source.value.receiptId]],
+    );
+    expect(facts.rows).toHaveLength(2);
+    expect(facts.rows.every((row) => row.receiving_batch_id === target.value.receivingBatchId)).toBe(true);
+    expect(facts.rows.map((row) => row.style_no).sort()).toEqual(
+      ["STYLE-MERGE-CANONICAL", "STYLE-MERGE-TYPO"].sort(),
+    );
+    const sourceBatch = await database.query<{ deleted_at: Date | null }>(
+      "SELECT deleted_at FROM receiving_batches WHERE receiving_batch_id=$1",
+      [source.value.receivingBatchId],
+    );
+    expect(sourceBatch.rows[0]?.deleted_at).toBeInstanceOf(Date);
+    const mergeAudit = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM operation_events
+       WHERE action='receiving.batch.merge' AND entity_id=$1`,
+      [target.value.receivingBatchId],
+    );
+    expect(mergeAudit.rows[0]?.count).toBe("1");
+  });
+
+  it("lets Root replace receiving images while retaining retired objects and audit", async () => {
+    const original = await readyImage();
+    const receipt = await service.create(receiver(), {
+      styleNo: "STYLE-IMAGE-REPLACE",
+      documentQuantity: 20,
+      actualQuantity: 20,
+      attachmentIds: [original],
+    }, randomUUID());
+    const before = (await service.board(businessDate(), businessDate(), "STYLE-IMAGE-REPLACE")).rows[0]!;
+    const replacements = [await readyImage(), await readyImage()];
+
+    await service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
+      expectedVersion: before.version,
+      styleNo: before.styleNo,
+      documentQuantity: before.documentQuantity,
+      actualQuantity: before.currentActualQuantity,
+      defectiveQuantity: before.currentDefectiveQuantity,
+      attachmentIds: replacements,
+    });
+
+    const after = (await service.board(businessDate(), businessDate(), "STYLE-IMAGE-REPLACE")).rows[0]!;
+    expect(after.attachments.map((item) => item.attachmentId).sort()).toEqual(replacements.sort());
+    const retained = await database.query<{ status: string; retired: boolean }>(
+      `SELECT attachment.status,(retirement.attachment_id IS NOT NULL) AS retired
+       FROM attachments attachment
+       LEFT JOIN receiving_attachment_retirements retirement
+         ON retirement.attachment_id=attachment.attachment_id
+       WHERE attachment.attachment_id=$1`,
+      [original],
+    );
+    expect(retained.rows[0]).toEqual({ status: "ready", retired: true });
+    const audit = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM operation_events
+       WHERE action='receiving.batch.images.replace' AND entity_id=$1`,
+      [receipt.value.receivingBatchId],
+    );
+    expect(audit.rows[0]?.count).toBe("1");
+
+    await expect(database.query(
+      "DELETE FROM receiving_attachment_retirements WHERE attachment_id=$1",
+      [original],
+    )).rejects.toThrow();
   });
 
   it("searches known style numbers without forcing a second manual spelling", async () => {

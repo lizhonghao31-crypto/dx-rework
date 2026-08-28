@@ -60,6 +60,7 @@ const mutationBody = (input: unknown): {
   documentQuantity: number;
   actualQuantity: number;
   defectiveQuantity?: number;
+  attachmentIds?: readonly string[];
 } => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "收货订单修改信息不完整", 400);
@@ -67,6 +68,12 @@ const mutationBody = (input: unknown): {
   const body = input as Record<string, unknown>;
   if (typeof body.styleNo !== "string") {
     throw new ApplicationError("VALIDATION_ERROR", "款号不能为空", 400);
+  }
+  if (body.attachmentIds !== undefined && (
+    !Array.isArray(body.attachmentIds)
+    || body.attachmentIds.some((value) => typeof value !== "string")
+  )) {
+    throw new ApplicationError("VALIDATION_ERROR", "替换送货单图片信息无效", 400);
   }
   return {
     expectedVersion: Number(body.expectedVersion),
@@ -76,6 +83,9 @@ const mutationBody = (input: unknown): {
     ...(body.defectiveQuantity === undefined
       ? {}
       : { defectiveQuantity: Number(body.defectiveQuantity) }),
+    ...(body.attachmentIds === undefined
+      ? {}
+      : { attachmentIds: body.attachmentIds as string[] }),
   };
 };
 
