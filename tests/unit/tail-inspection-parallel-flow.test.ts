@@ -48,7 +48,9 @@ describe("legacy tail inspection parallel flow", () => {
     expect(service).toContain("assertTailReconciliation");
     expect(service).toContain("tail_item.execution_kind='tail_inspection'");
     expect(service).toContain("item.execution_kind='worker'");
-    expect(service).toContain("worker.quantity > CASE WHEN active.unified_execution_required");
+    expect(service).toContain("usesUnifiedTailReports");
+    expect(service).toContain("worker.quantity > CASE WHEN $2::boolean");
+    expect(service).toContain("ELSE legacy_tail.quantity END");
     expect(workerService).toContain("rework_tail_inspection_assignments");
     expect(workerService).toContain("返工执行报数只能填写整数件数");
     expect(configurationService).not.toContain('category: "tail_inspection"');
