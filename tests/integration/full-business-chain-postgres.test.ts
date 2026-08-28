@@ -1238,6 +1238,52 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       "SELECT source_action,status FROM rework_todos WHERE dedupe_key=$1",
       [`whole-order-review:${submitted.value.reworkOrderId}:${recovered.value.orderVersion}`],
     )).rows[0]).toEqual({ source_action: "rework.execution.complete", status: "pending" });
+
+    const n05View = await wholeOrder.get(tailAudit(), submitted.value.reworkOrderId);
+    expect(n05View).toMatchObject({
+      reworkStatus: "pending_order_review",
+      unifiedExecutionRequired: false,
+      tailInspectionRequired: true,
+      processes: [expect.objectContaining({
+        configurationItemId: workerItem.configurationItemId,
+        completedQuantity: 200,
+        tailCheckedQuantity: 200,
+        countGap: 0,
+        complete: true,
+      })],
+    });
+    const n05Confirmed = await wholeOrder.approve(
+      tailAudit(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: n05View.orderVersion,
+        finalQuantities: n05View.processes.map((process) => ({
+          configurationItemId: process.configurationItemId,
+          finalConfirmedQuantity: process.completedQuantity,
+        })),
+        temporaryCoefficients: [],
+      },
+      randomUUID(),
+    );
+    expect(n05Confirmed.value.reworkStatus).toBe("pending_final_quantity_ie_review");
+    expect((await database.query<{
+      worker_reported_quantity: string;
+      tail_reported_quantity: string;
+      final_confirmed_quantity: string;
+    }>(
+      `SELECT quantity.worker_reported_quantity::text,
+              quantity.tail_reported_quantity::text,
+              quantity.final_confirmed_quantity::text
+       FROM rework_tail_completion_quantities quantity
+       JOIN rework_tail_completion_confirmations confirmation
+         ON confirmation.confirmation_id=quantity.confirmation_id
+       WHERE confirmation.rework_order_id=$1`,
+      [submitted.value.reworkOrderId],
+    )).rows).toEqual([{
+      worker_reported_quantity: "200",
+      tail_reported_quantity: "200",
+      final_confirmed_quantity: "200",
+    }]);
   });
 
   it.each([
