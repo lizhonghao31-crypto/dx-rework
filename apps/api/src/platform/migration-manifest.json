@@ -105,6 +105,6 @@
     { "version": "0103_role_based_rework_image_supplement", "checksum": "6aec184b234d9bcf50d4a9a4e650758784f76d3d945a19806bcd5255138aada0" },
     { "version": "0104_in_progress_workforce_adjustment", "checksum": "050c7694060fdc17cddc4bcb4eb24af2bdaada407c77eae7d51c307bdcc081b3" },
     { "version": "0105_existing_order_tail_inspection_waiver", "checksum": "6557ff08c2ccbebaaf4a560041e7ce7aed394e9aeb041f51712742ec1cc77374" },
-    { "version": "0106_sourcing_todo_route", "checksum": "c9dc2f2c70daf6fc607d67bf59a6978a22bb250032624a82141e59908e9a4c77" }
+    { "version": "0106_sourcing_todo_route", "checksum": "2e526b391b7baf539550c928c08aee71f7d083b38c60d5568ca628711f6adffd" }
   ]
 }
