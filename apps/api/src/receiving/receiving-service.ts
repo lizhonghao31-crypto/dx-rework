@@ -58,8 +58,11 @@ type BoardRow = Readonly<{
   styleNo: string;
   documentQuantity: number;
   attachments: readonly Readonly<{ attachmentId: string; filename: string }>[];
+  priorActualQuantity: number;
   actualQuantity: number;
   defectiveQuantity: number;
+  currentActualQuantity: number;
+  currentDefectiveQuantity: number;
   differenceQuantity: number;
   receiptCount: number;
   lastReceivedAt: string;
@@ -82,6 +85,8 @@ type ReceivingBatchSnapshot = Readonly<{
 
 type BoardResult = Readonly<{
   date: string;
+  startDate: string;
+  endDate: string;
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -116,9 +121,9 @@ const validateQuantity = (value: number, label: string, allowZero: boolean): num
 
 const normalizeAttachmentIds = (values: readonly string[] | undefined): readonly string[] => {
   const attachmentIds = values ?? [];
-  if (attachmentIds.length > MAX_RECEIVING_IMAGES) fail("收货单图片最多3张");
-  if (new Set(attachmentIds).size !== attachmentIds.length) fail("收货单图片不能重复");
-  if (attachmentIds.some((value) => !UUID_PATTERN.test(value))) fail("收货单图片标识无效");
+  if (attachmentIds.length > MAX_RECEIVING_IMAGES) fail("送货单图片最多3张");
+  if (new Set(attachmentIds).size !== attachmentIds.length) fail("送货单图片不能重复");
+  if (attachmentIds.some((value) => !UUID_PATTERN.test(value))) fail("送货单图片标识无效");
   return attachmentIds;
 };
 
@@ -132,6 +137,16 @@ const businessDate = (now: Date): string => new Intl.DateTimeFormat("en-CA", {
 const shiftDate = (date: string, days: number): string => {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(Date.UTC(year!, month! - 1, day! + days)).toISOString().slice(0, 10);
+};
+
+const normalizeBoardDate = (value: string): string => {
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)
+      || !Number.isFinite(parsed)
+      || new Date(parsed).toISOString().slice(0, 10) !== value) {
+    fail("日期格式必须为YYYY-MM-DD");
+  }
+  return value;
 };
 
 const normalizeReceivingBackfillDate = (value: string | undefined, now = new Date()): string | null => {
@@ -171,7 +186,7 @@ export class ReceivingService {
     if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     const normalized = {
       styleNo: normalizeStyleNo(input.styleNo),
-      documentQuantity: validateQuantity(input.documentQuantity, "收货单数量", false),
+      documentQuantity: validateQuantity(input.documentQuantity, "送货单数量", false),
       actualQuantity,
       defectiveQuantity,
       attachmentIds: normalizeAttachmentIds(input.attachmentIds),
@@ -285,7 +300,7 @@ export class ReceivingService {
     const normalized = {
       expectedVersion: this.validateExpectedVersion(input.expectedVersion),
       styleNo: normalizeStyleNo(input.styleNo),
-      documentQuantity: validateQuantity(input.documentQuantity, "收货单数量", false),
+      documentQuantity: validateQuantity(input.documentQuantity, "送货单数量", false),
       actualQuantity: validateQuantity(input.actualQuantity, "实际收货数量", true),
       defectiveQuantity: input.defectiveQuantity === undefined
         ? undefined
@@ -518,7 +533,7 @@ export class ReceivingService {
     const existingCount = Number(existing.rows[0]?.count ?? 0);
 
     if (attachmentIds.length === 0) {
-      if (existingCount === 0) fail("收货单图片必传，最多3张");
+      if (existingCount === 0) fail("送货单图片必传，最多3张");
       return;
     }
 
@@ -536,18 +551,18 @@ export class ReceivingService {
        FOR UPDATE`,
       [attachmentIds],
     );
-    if (candidates.rows.length !== attachmentIds.length) fail("收货单图片不存在或不可用");
+    if (candidates.rows.length !== attachmentIds.length) fail("送货单图片不存在或不可用");
 
     let newBindings = 0;
     for (const row of candidates.rows) {
-      if (row.status !== "ready") fail("收货单图片尚未上传完成");
-      if (row.uploaded_by !== actor.actorId) fail("只能使用本人上传的收货单图片", 403, "FORBIDDEN");
-      if (!RECEIVING_IMAGE_MIME_TYPES.has(row.mime_type)) fail("收货单图片仅支持JPEG、PNG、WebP");
+      if (row.status !== "ready") fail("送货单图片尚未上传完成");
+      if (row.uploaded_by !== actor.actorId) fail("只能使用本人上传的送货单图片", 403, "FORBIDDEN");
+      if (!RECEIVING_IMAGE_MIME_TYPES.has(row.mime_type)) fail("送货单图片仅支持JPEG、PNG、WebP");
       const alreadyBound = row.entity_type === "receiving_batch" && row.entity_id === receivingBatchId;
-      if (row.entity_type !== null && !alreadyBound) fail("收货单图片已绑定到其他业务记录", 409, "CONFLICT");
+      if (row.entity_type !== null && !alreadyBound) fail("送货单图片已绑定到其他业务记录", 409, "CONFLICT");
       if (!alreadyBound) newBindings += 1;
     }
-    if (existingCount + newBindings > MAX_RECEIVING_IMAGES) fail("收货单图片最多3张");
+    if (existingCount + newBindings > MAX_RECEIVING_IMAGES) fail("送货单图片最多3张");
 
     await client.query(
       `UPDATE attachments
@@ -657,16 +672,22 @@ export class ReceivingService {
     return result.rows.map((row) => row.style_no);
   }
 
-  async board(date: string, query = ""): Promise<BoardResult> {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail("日期格式必须为YYYY-MM-DD");
-    const needle = query.trim();
+  async board(startDateInput: string, endDateOrQuery = startDateInput, query = ""): Promise<BoardResult> {
+    const startDate = normalizeBoardDate(startDateInput);
+    const hasExplicitEndDate = /^\d{4}-\d{2}-\d{2}$/.test(endDateOrQuery);
+    const endDate = normalizeBoardDate(hasExplicitEndDate ? endDateOrQuery : startDate);
+    if (endDate < startDate) fail("结束日期不能早于开始日期");
+    const needle = (hasExplicitEndDate ? query : endDateOrQuery).trim();
     const rowsResult = await this.database.query<{
       receiving_batch_id: string;
       style_no: string;
       document_quantity: string;
       receiving_attachments: { attachmentId: string; filename: string }[];
+      prior_actual_quantity: string;
       actual_quantity: string;
       defective_quantity: string;
+      current_actual_quantity: string;
+      current_defective_quantity: string;
       difference_quantity: string;
       receipt_count: string;
       last_received_at: Date;
@@ -682,29 +703,96 @@ export class ReceivingService {
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=receipt.receiving_batch_id
           AND batch.deleted_at IS NULL
-         WHERE ($2::text<>'' OR (receipt.received_at AT TIME ZONE 'Asia/Shanghai')::date=$1::date)
-           AND ($2::text='' OR batch.style_no ILIKE '%' || $2 || '%')
+         WHERE receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+           AND receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+           AND ($3::text='' OR batch.style_no ILIKE '%' || $3 || '%')
+       ), correction_adjustments AS (
+         SELECT event.entity_id::uuid AS receiving_batch_id,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS prior_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS period_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS through_end_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'actualQuantity')::bigint
+                  -(event.before_state->>'actualQuantity')::bigint
+                ),0)::bigint AS all_actual_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'defectiveQuantity')::bigint
+                  -(event.before_state->>'defectiveQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS period_defective_adjustment
+         FROM operation_events event
+         JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
+         WHERE event.action='receiving.batch.correct'
+           AND event.entity_type='receiving_batch'
+         GROUP BY event.entity_id
        ), totals AS (
          SELECT r.receiving_batch_id,
                 batch.style_no,
                 batch.delivery_note_quantity::bigint AS document_quantity,
-                (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS actual_quantity,
-                (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS defective_quantity,
-                (sum(r.actual_quantity)+batch.actual_quantity_adjustment
+                (COALESCE(sum(r.actual_quantity) FILTER (
+                   WHERE r.received_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                 ),0)
+                  +COALESCE(adjustments.prior_actual_adjustment,0)
+                  +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
+                )::bigint AS prior_actual_quantity,
+                (COALESCE(sum(r.actual_quantity) FILTER (
+                  WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)+COALESCE(adjustments.period_actual_adjustment,0))::bigint AS actual_quantity,
+                (COALESCE(sum(r.defective_quantity) FILTER (
+                  WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)+COALESCE(adjustments.period_defective_adjustment,0))::bigint AS defective_quantity,
+                (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS current_actual_quantity,
+                (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS current_defective_quantity,
+                (COALESCE(sum(r.actual_quantity) FILTER (
+                   WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                 ),0)
+                  +COALESCE(adjustments.through_end_actual_adjustment,0)
+                  +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
                   -batch.delivery_note_quantity)::bigint AS difference_quantity,
-                count(*)::bigint AS receipt_count,
-                max(r.received_at) AS last_received_at,
+                (count(*) FILTER (
+                  WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ))::bigint AS receipt_count,
+                max(r.received_at) FILTER (
+                  WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ) AS last_received_at,
                 batch.version
          FROM receiving_receipts r
          JOIN scoped_batches scope ON scope.receiving_batch_id=r.receiving_batch_id
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=r.receiving_batch_id
           AND batch.deleted_at IS NULL
-         WHERE ($2::text<>'' OR (r.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date)
-         GROUP BY r.receiving_batch_id,batch.receiving_batch_id
+         LEFT JOIN correction_adjustments adjustments
+           ON adjustments.receiving_batch_id=r.receiving_batch_id
+         GROUP BY r.receiving_batch_id,batch.receiving_batch_id,
+                  adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
+                  adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
+                  adjustments.period_defective_adjustment
        )
        SELECT totals.receiving_batch_id,totals.style_no,totals.document_quantity,
-              totals.actual_quantity,totals.defective_quantity,totals.difference_quantity,totals.receipt_count,
+              totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
+              totals.current_actual_quantity,totals.current_defective_quantity,
+              totals.difference_quantity,totals.receipt_count,
               totals.last_received_at,receiver.display_name AS last_receiver_name,
               rework.rework_order_id,rework.status AS rework_status,
               COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments,
@@ -719,7 +807,8 @@ export class ReceivingService {
          FROM receiving_receipts latest
          JOIN app_users u ON u.id=latest.received_by
          WHERE latest.receiving_batch_id=totals.receiving_batch_id
-           AND ($2::text<>'' OR (latest.received_at AT TIME ZONE 'Asia/Shanghai')::date<=$1::date)
+           AND latest.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+           AND latest.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
          ORDER BY latest.received_at DESC,latest.receipt_id DESC
          LIMIT 1
        ) receiver ON true
@@ -747,15 +836,18 @@ export class ReceivingService {
        ) receiving_attachments ON true
        ORDER BY CASE WHEN totals.difference_quantity<0 THEN 0 WHEN totals.difference_quantity>0 THEN 1 ELSE 2 END,
                 abs(totals.difference_quantity) DESC,totals.last_received_at DESC,totals.style_no`,
-      [date, needle],
+      [startDate, endDate, needle],
     );
     const rows: BoardRow[] = rowsResult.rows.map((row) => ({
       receivingBatchId: row.receiving_batch_id,
       styleNo: row.style_no,
       documentQuantity: Number(row.document_quantity),
       attachments: row.receiving_attachments,
+      priorActualQuantity: Number(row.prior_actual_quantity),
       actualQuantity: Number(row.actual_quantity),
       defectiveQuantity: Number(row.defective_quantity),
+      currentActualQuantity: Number(row.current_actual_quantity),
+      currentDefectiveQuantity: Number(row.current_defective_quantity),
       differenceQuantity: Number(row.difference_quantity),
       receiptCount: Number(row.receipt_count),
       lastReceivedAt: row.last_received_at.toISOString(),
@@ -769,7 +861,9 @@ export class ReceivingService {
     const abnormalOrderCount = rows.filter((row) => row.differenceQuantity !== 0).length;
     const documentQuantity = rows.reduce((sum, row) => sum + row.documentQuantity, 0);
     return {
-      date,
+      date: endDate,
+      startDate,
+      endDate,
       kpis: {
         orderCount: rows.length,
         receivedQuantity: rows.reduce((sum, row) => sum + row.actualQuantity, 0),

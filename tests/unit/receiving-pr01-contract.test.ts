@@ -10,7 +10,7 @@ describe("PR-01 receiving fact layer", () => {
     expect(page).toContain("点击收货");
     expect(page).toContain("款号");
     expect(page).toContain("搜索或填写款号");
-    expect(page).toContain("收货单数量");
+    expect(page).toContain("送货单数量");
     expect(page).toContain("实际收货数量");
     expect(page).toContain("提交收货");
     expect(page).not.toContain("订单跟单");

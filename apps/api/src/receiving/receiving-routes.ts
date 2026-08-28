@@ -39,7 +39,7 @@ const createBody = (input: unknown): {
     !Array.isArray(body.attachmentIds)
     || body.attachmentIds.some((value) => typeof value !== "string")
   )) {
-    throw new ApplicationError("VALIDATION_ERROR", "收货单图片信息无效", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "送货单图片信息无效", 400);
   }
   if (body.receivedDate !== undefined && typeof body.receivedDate !== "string") {
     throw new ApplicationError("VALIDATION_ERROR", "补录日期无效", 400);
@@ -144,15 +144,17 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     return { styles: await dependencies.service.listStyleOptions(request.query.q ?? "") };
   });
 
-  app.get<{ Querystring: { date?: string; q?: string } }>("/receiving/board", async (request) => {
+  app.get<{ Querystring: { date?: string; startDate?: string; endDate?: string; q?: string } }>("/receiving/board", async (request) => {
     await readUser(request);
-    const date = request.query.date ?? new Intl.DateTimeFormat("en-CA", {
+    const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Shanghai",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }).format(new Date());
-    return dependencies.service.board(date, request.query.q ?? "");
+    const startDate = request.query.startDate ?? request.query.date ?? today;
+    const endDate = request.query.endDate ?? request.query.date ?? startDate;
+    return dependencies.service.board(startDate, endDate, request.query.q ?? "");
   });
 
   app.post("/receiving/receipts", async (request, reply) => {

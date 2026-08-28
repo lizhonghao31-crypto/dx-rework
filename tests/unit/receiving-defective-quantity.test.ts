@@ -46,7 +46,7 @@ describe("receiving defective quantity", () => {
       receivingPage.indexOf("<span>实际收货数量</span>"),
     );
     expect(receivingPage.indexOf("<span>次品数量</span>")).toBeLessThan(
-      receivingPage.indexOf("<span>收货单图片</span>"),
+      receivingPage.indexOf("<span>送货单图片</span>"),
     );
     expect(boardPage).toContain("<span>次品</span><strong>{row.defectiveQuantity}件</strong>");
     expect(boardStyles).toContain("repeat(7,minmax(82px,1fr))");

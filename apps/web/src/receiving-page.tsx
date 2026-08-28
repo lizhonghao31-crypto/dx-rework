@@ -165,7 +165,7 @@ export function ReceivingPage() {
     if (!files || files.length === 0) return;
     const selected = Array.from(files);
     if (images.length + selected.length > MAX_RECEIVING_IMAGES) {
-      setMessage("收货单图片最多3张");
+      setMessage("送货单图片最多3张");
       return;
     }
     if (selected.some((file) => !isReceivingImageCandidate(file))) {
@@ -201,7 +201,7 @@ export function ReceivingPage() {
     const actualCount = Number(actualQuantity);
     const defectiveCount = Number(defectiveQuantity);
     if (!trimmedStyle) { setMessage("请选择或填写款号"); return; }
-    if (!/^\d+$/.test(documentQuantity) || documentCount <= 0) { setMessage("收货单数量请输入大于0的整数"); return; }
+    if (!/^\d+$/.test(documentQuantity) || documentCount <= 0) { setMessage("送货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
     if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
     if (defectiveCount > actualCount) { setMessage("次品数量不能超过实际收货数量"); return; }
@@ -211,7 +211,7 @@ export function ReceivingPage() {
     }
 
     setBusy(true);
-    setMessage(images.length ? `正在上传 ${images.length} 张收货单图片…` : "正在提交收货…");
+    setMessage(images.length ? `正在上传 ${images.length} 张送货单图片…` : "正在提交收货…");
     try {
       const attachmentIds = await mapWithConcurrency(images, 2, async (image) => {
         let attachmentId = uploadedIds.current.get(image.previewUrl);
@@ -310,7 +310,7 @@ export function ReceivingPage() {
             </div>
           </label>
           <label className="receiving-field">
-            <span>收货单数量</span>
+            <span>送货单数量</span>
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">
@@ -323,8 +323,8 @@ export function ReceivingPage() {
           </label>
           <div className="receiving-images">
             <div className="receiving-images-heading">
-              <span>收货单图片</span>
-              <small>{backfill ? "补录订单必须上传收货单图片，最多3张" : "首次收货必传，最多3张；同款追加收货可复用已上传单据"}</small>
+              <span>送货单图片</span>
+              <small>{backfill ? "补录订单必须上传送货单图片，最多3张" : "首次收货必传，最多3张；同款追加收货可复用已上传单据"}</small>
             </div>
             <label className="receiving-image-upload">
               <span>{images.length >= MAX_RECEIVING_IMAGES ? "已达3张" : "＋ 选择图片"}</span>
@@ -338,7 +338,7 @@ export function ReceivingPage() {
             </label>
             {images.length ? <div className="receiving-image-list">
               {images.map((image, index) => <article key={`${image.file.name}-${image.file.lastModified}-${index}`}>
-                <img src={image.previewUrl} alt={`收货单图片 ${index + 1}`} />
+                <img src={image.previewUrl} alt={`送货单图片 ${index + 1}`} />
                 <button type="button" disabled={busy} onClick={() => removeImage(index)}>移除</button>
               </article>)}
             </div> : null}
@@ -351,4 +351,3 @@ export function ReceivingPage() {
     </section>
   </main>;
 }
-
