@@ -20,7 +20,7 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(reviewCss).toContain(".quantity-report-value");
     expect(review).toContain("<small>工人合计</small>");
     expect(review).toContain("<small>整查</small>");
-    expect(review).toContain("<small>差异</small>");
+    expect(review).toContain("<small>整查余量</small>");
     expect(review).toContain("主管修改，原值");
   });
 });

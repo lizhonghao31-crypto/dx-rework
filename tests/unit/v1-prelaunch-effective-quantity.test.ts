@@ -64,7 +64,7 @@ describe("1.0 prelaunch effective quantity", () => {
     expect(panel).toContain('className="quantity-report-row quantity-tail-summary"');
     expect(panel).toContain("effective-quantity");
     expect(panel).toContain("IE 只读核对系统锁定的数量事实");
-    expect(panel).toContain("确认一致并提交 IE");
+    expect(panel).toContain("确认数量并提交 IE");
     expect(panel).toContain("const [coefficientExpanded, setCoefficientExpanded] = useState<Record<string, boolean>>({})");
     expect(panel).toContain("const [coefficientSectionExpanded, setCoefficientSectionExpanded] = useState(false)");
     expect(panel).toContain("<strong>临时工工资调整</strong>");

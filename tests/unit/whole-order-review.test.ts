@@ -49,7 +49,7 @@ describe("whole-order review contracts", () => {
       readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/api/migrations/0065_ie_pricing_before_assignment.sql", import.meta.url), "utf8"),
     ]);
-    expect(panel).toContain("确认一致并提交 IE");
+    expect(panel).toContain("确认数量并提交 IE");
     expect(panel).toContain("临时工实发系数");
     expect(panel).toContain("IE 复核决定");
     expect(panel).toContain("系统自动把一致的有效数量生成最终数量");
