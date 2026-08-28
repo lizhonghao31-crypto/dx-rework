@@ -225,6 +225,13 @@ export class ReworkBusinessDetailService {
       `SELECT attachment.attachment_id,attachment.original_filename,attachment.mime_type,attachment.entity_type
        FROM attachments attachment
        WHERE attachment.status='ready'
+         AND NOT (
+           attachment.entity_type='receiving_batch'
+           AND EXISTS(
+             SELECT 1 FROM receiving_attachment_retirements retired
+             WHERE retired.attachment_id=attachment.attachment_id
+           )
+         )
          AND (
            (attachment.entity_type='rework_order' AND attachment.entity_id=$1::text)
            OR (

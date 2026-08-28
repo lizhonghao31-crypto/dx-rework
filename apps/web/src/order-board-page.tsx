@@ -2,6 +2,13 @@ import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import {
+  isImageAttachment,
+  isReceivingImageCandidate,
+  normalizeReceivingImageForUpload,
+  prepareAttachmentForUpload,
+  sha256Hex,
+} from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
 import { ImageViewer } from "./image-viewer.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
@@ -11,6 +18,12 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
 type ReceivingAttachment = Readonly<{ attachmentId: string; filename: string }>;
+type UploadIntent = Readonly<{
+  attachmentId: string;
+  uploadUrl: string;
+  uploadFields: Readonly<Record<string, string>>;
+}>;
+type FinalizedAttachment = Readonly<{ attachmentId: string }>;
 type BoardRow = Readonly<{
   receivingBatchId: string;
   styleNo: string;
@@ -79,6 +92,47 @@ const responseError = async (response: Response, fallback: string): Promise<stri
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
+const uploadReplacementImage = async (source: File): Promise<string> => {
+  const upload = async (file: File): Promise<string> => {
+    const intentResponse = await fetch(apiUrl("tools/attachments/upload-intents"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        sha256: await sha256Hex(file),
+      }),
+    });
+    if (!intentResponse.ok) throw new Error(await responseError(intentResponse, "替换图片上传准备失败"));
+    const intent = await intentResponse.json() as UploadIntent;
+    const body = new FormData();
+    for (const [name, value] of Object.entries(intent.uploadFields)) body.append(name, value);
+    body.append("file", file);
+    const uploaded = await fetch(intent.uploadUrl, { method: "POST", body });
+    if (!uploaded.ok) throw new Error(`${source.name} 上传失败`);
+    const finalizedResponse = await fetch(apiUrl(`tools/attachments/${intent.attachmentId}/finalize`), {
+      method: "POST",
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+    if (!finalizedResponse.ok) throw new Error(await responseError(finalizedResponse, "替换图片确认失败"));
+    return ((await finalizedResponse.json()) as FinalizedAttachment).attachmentId;
+  };
+  const prepared = isImageAttachment(source)
+    ? await prepareAttachmentForUpload(source)
+    : await normalizeReceivingImageForUpload(source);
+  try {
+    return await upload(prepared);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "Uploaded object is not a valid file of the declared type") {
+      throw error;
+    }
+    return upload(await normalizeReceivingImageForUpload(source));
+  }
+};
+
 export function OrderBoardPage() {
   const [startDate, setStartDate] = useState(localDate);
   const [endDate, setEndDate] = useState(localDate);
@@ -96,6 +150,7 @@ export function OrderBoardPage() {
   const [editDocumentQuantity, setEditDocumentQuantity] = useState("");
   const [editActualQuantity, setEditActualQuantity] = useState("");
   const [editDefectiveQuantity, setEditDefectiveQuantity] = useState("");
+  const [editImages, setEditImages] = useState<readonly File[]>([]);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
   const [attachmentViewer, setAttachmentViewer] = useState<Readonly<{
@@ -180,6 +235,7 @@ export function OrderBoardPage() {
     setEditDocumentQuantity(String(row.documentQuantity));
     setEditActualQuantity(String(row.currentActualQuantity));
     setEditDefectiveQuantity(String(row.currentDefectiveQuantity));
+    setEditImages([]);
     setMutationMessage("");
   };
 
@@ -207,9 +263,16 @@ export function OrderBoardPage() {
       setMutationMessage("次品数量不能超过实际收货数量");
       return;
     }
+    if (editImages.some((file) => !isReceivingImageCandidate(file))) {
+      setMutationMessage("请选择手机相册中的图片文件");
+      return;
+    }
     setMutationBusy(true);
     setMutationMessage("");
     try {
+      const attachmentIds = editImages.length > 0
+        ? await Promise.all(editImages.map(uploadReplacementImage))
+        : undefined;
       const response = await fetch(apiUrl(`receiving/batches/${editing.receivingBatchId}`), {
         method: "PATCH",
         credentials: "include",
@@ -220,6 +283,7 @@ export function OrderBoardPage() {
           documentQuantity: Number(editDocumentQuantity),
           actualQuantity: Number(editActualQuantity),
           defectiveQuantity: Number(editDefectiveQuantity),
+          ...(attachmentIds ? { attachmentIds } : {}),
         }),
       });
       if (!response.ok) throw new Error(await responseError(response, "收货订单修改失败"));
@@ -363,13 +427,32 @@ export function OrderBoardPage() {
     {editing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setEditing(null)}>
       <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>
         <h2>修改收货订单</h2>
-        <p>修改后用于看板和后续返工；原始收货记录与图片继续保留。</p>
+        <p>款号改成已有款号时会自动合并；原始收货记录与被替换图片继续保留审计。</p>
         <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value)} /></label>
         <div className="order-board-dialog__quantity-grid">
           <label>送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
           <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
           <label>次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setEditDefectiveQuantity(event.target.value)} /></label>
         </div>
+        <label>替换送货单图片（可选，1–3张）
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={mutationBusy}
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              if (files.length > 3) {
+                setMutationMessage("替换送货单图片最多3张");
+                event.target.value = "";
+                return;
+              }
+              setEditImages(files);
+              setMutationMessage("");
+            }}
+          />
+        </label>
+        {editImages.length > 0 ? <small>已选择{editImages.length}张；保存后整体替换当前图片。</small> : <small>不选择新图则保留当前图片。</small>}
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setEditing(null)}>取消</button>

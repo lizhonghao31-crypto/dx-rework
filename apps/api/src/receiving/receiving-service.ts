@@ -37,6 +37,7 @@ type CorrectReceivingBatchInput = Readonly<{
   documentQuantity: number;
   actualQuantity: number;
   defectiveQuantity?: number;
+  attachmentIds?: readonly string[];
 }>;
 
 type ReceivingReceipt = Readonly<{
@@ -124,6 +125,15 @@ const normalizeAttachmentIds = (values: readonly string[] | undefined): readonly
   if (attachmentIds.length > MAX_RECEIVING_IMAGES) fail("送货单图片最多3张");
   if (new Set(attachmentIds).size !== attachmentIds.length) fail("送货单图片不能重复");
   if (attachmentIds.some((value) => !UUID_PATTERN.test(value))) fail("送货单图片标识无效");
+  return attachmentIds;
+};
+
+const normalizeReplacementAttachmentIds = (
+  values: readonly string[] | undefined,
+): readonly string[] | undefined => {
+  if (values === undefined) return undefined;
+  const attachmentIds = normalizeAttachmentIds(values);
+  if (attachmentIds.length === 0) fail("替换送货单图片至少选择1张");
   return attachmentIds;
 };
 
@@ -290,6 +300,80 @@ export class ReceivingService {
     return row;
   }
 
+  private async replaceReceivingImages(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    receivingBatchId: string,
+    attachmentIds: readonly string[] | undefined,
+  ): Promise<void> {
+    if (attachmentIds === undefined) return;
+    const candidates = await client.query<{
+      attachment_id: string;
+      uploaded_by: string;
+      mime_type: string;
+      status: string;
+      entity_type: string | null;
+      entity_id: string | null;
+    }>(
+      `SELECT attachment_id,uploaded_by,mime_type,status,entity_type,entity_id
+       FROM attachments
+       WHERE attachment_id=ANY($1::uuid[])
+       FOR UPDATE`,
+      [attachmentIds],
+    );
+    if (candidates.rows.length !== attachmentIds.length) fail("送货单图片不存在或不可用");
+    for (const row of candidates.rows) {
+      if (row.status !== "ready") fail("送货单图片尚未上传完成");
+      if (row.uploaded_by !== actor.actorId) fail("只能使用本人上传的送货单图片", 403, "FORBIDDEN");
+      if (!RECEIVING_IMAGE_MIME_TYPES.has(row.mime_type)) fail("送货单图片仅支持JPEG、PNG、WebP");
+      if (row.entity_type !== null || row.entity_id !== null) {
+        fail("替换图片已绑定到其他业务记录", 409, "CONFLICT");
+      }
+    }
+    const current = await client.query<{ attachment_id: string }>(
+      `SELECT attachment.attachment_id
+       FROM attachments attachment
+       WHERE attachment.entity_type='receiving_batch'
+         AND attachment.entity_id=$1
+         AND attachment.status='ready'
+         AND attachment.mime_type LIKE 'image/%'
+         AND NOT EXISTS(
+           SELECT 1 FROM receiving_attachment_retirements retired
+           WHERE retired.attachment_id=attachment.attachment_id
+         )
+       FOR UPDATE`,
+      [receivingBatchId],
+    );
+    const replacedAttachmentIds = current.rows.map((row) => row.attachment_id);
+    const eventId = await this.events.append(client, actor, {
+      action: "receiving.batch.images.replace",
+      entityType: "receiving_batch",
+      entityId: receivingBatchId,
+      before: { receivingBatchId, attachmentIds: replacedAttachmentIds },
+      after: { receivingBatchId, attachmentIds, replacedAttachmentIds },
+    });
+    await client.query(
+      "SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
+      [eventId, actor.requestId],
+    );
+    await client.query(
+      `UPDATE attachments
+       SET entity_type='receiving_batch',entity_id=$2
+       WHERE attachment_id=ANY($1::uuid[])
+         AND entity_type IS NULL AND entity_id IS NULL`,
+      [attachmentIds, receivingBatchId],
+    );
+    if (replacedAttachmentIds.length > 0) {
+      await client.query(
+        `INSERT INTO receiving_attachment_retirements(
+           attachment_id,receiving_batch_id,operation_event_id,retired_by,request_id
+         )
+         SELECT unnest($1::uuid[]),$2,$3,$4,$5`,
+        [replacedAttachmentIds, receivingBatchId, eventId, actor.actorId, actor.requestId],
+      );
+    }
+  }
+
   async correctBatch(
     actor: TrustedActorContext,
     receivingBatchId: string,
@@ -305,6 +389,7 @@ export class ReceivingService {
       defectiveQuantity: input.defectiveQuantity === undefined
         ? undefined
         : validateQuantity(input.defectiveQuantity, "次品数量", true),
+      attachmentIds: normalizeReplacementAttachmentIds(input.attachmentIds),
     };
     const client = await this.database.connect();
     try {
@@ -322,7 +407,7 @@ export class ReceivingService {
       }
       const defectiveQuantity = normalized.defectiveQuantity ?? Number(current.defective_quantity);
       if (defectiveQuantity > normalized.actualQuantity) fail("次品数量不能超过实际收货数量");
-      const before = {
+      const before: ReceivingBatchSnapshot = {
         receivingBatchId,
         styleNo: current.style_no,
         documentQuantity: Number(current.document_quantity),
@@ -331,6 +416,137 @@ export class ReceivingService {
         differenceQuantity: Number(current.actual_quantity) - Number(current.document_quantity),
         version: current.version,
       };
+
+      const targetResult = await client.query<{
+        receiving_batch_id: string;
+        has_rework_history: boolean;
+      }>(
+        `SELECT target.receiving_batch_id,
+                EXISTS(
+                  SELECT 1 FROM rework_orders history
+                  WHERE history.source_receiving_batch_id=target.receiving_batch_id
+                ) AS has_rework_history
+         FROM receiving_batches target
+         WHERE target.style_no=$1
+           AND target.receiving_batch_id<>$2
+           AND target.deleted_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1
+             FROM receiving_receipts receipt
+             JOIN operation_events event ON event.event_id=receipt.operation_event_id
+             WHERE receipt.receiving_batch_id=target.receiving_batch_id
+               AND event.after_state->>'backfilled'='true'
+           )
+         ORDER BY target.created_at DESC,target.receiving_batch_id DESC
+         LIMIT 1`,
+        [normalized.styleNo, receivingBatchId],
+      );
+      const targetRow = targetResult.rows[0];
+      if (targetRow?.has_rework_history) {
+        fail("同款号目标订单已经发起过返工，不能自动合并", 409, "INVALID_STATE_TRANSITION");
+      }
+      const targetId = targetRow?.receiving_batch_id;
+      if (targetId) {
+        const target = await this.mutableBatch(client, targetId);
+        const targetBefore: ReceivingBatchSnapshot = {
+          receivingBatchId: targetId,
+          styleNo: target.style_no,
+          documentQuantity: Number(target.document_quantity),
+          actualQuantity: Number(target.actual_quantity),
+          defectiveQuantity: Number(target.defective_quantity),
+          differenceQuantity: Number(target.actual_quantity) - Number(target.document_quantity),
+          version: target.version,
+        };
+        const after: ReceivingBatchSnapshot = {
+          receivingBatchId: targetId,
+          styleNo: target.style_no,
+          documentQuantity: Number(target.document_quantity),
+          actualQuantity: Number(target.actual_quantity) + normalized.actualQuantity,
+          defectiveQuantity: Number(target.defective_quantity) + defectiveQuantity,
+          differenceQuantity: Number(target.actual_quantity) + normalized.actualQuantity
+            - Number(target.document_quantity),
+          version: target.version + 1,
+        };
+        if (after.defectiveQuantity > after.actualQuantity) fail("合并后的次品数量不能超过实际收货数量");
+        const mergeEventId = await this.events.append(client, actor, {
+          action: "receiving.batch.merge",
+          entityType: "receiving_batch",
+          entityId: targetId,
+          before: targetBefore,
+          after: {
+            ...after,
+            sourceReceivingBatchId: receivingBatchId,
+            targetReceivingBatchId: targetId,
+            source: { ...before, correctedStyleNo: normalized.styleNo },
+          },
+        });
+        await client.query(
+          "SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
+          [mergeEventId, actor.requestId],
+        );
+        await client.query(
+          "UPDATE receiving_receipts SET receiving_batch_id=$2 WHERE receiving_batch_id=$1",
+          [receivingBatchId, targetId],
+        );
+        await client.query(
+          `UPDATE attachments SET entity_id=$2
+           WHERE entity_type='receiving_batch' AND entity_id=$1`,
+          [receivingBatchId, targetId],
+        );
+        await client.query("SELECT set_config('dx_rework.receiving_root_action','merge',true)");
+        const merged = await client.query(
+          `UPDATE receiving_batches batch
+           SET document_quantity_adjustment=$2-(
+                 SELECT sum(receipt.document_quantity) FROM receiving_receipts receipt
+                 WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+               ),
+               actual_quantity_adjustment=$3-(
+                 SELECT sum(receipt.actual_quantity) FROM receiving_receipts receipt
+                 WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+               ),
+               defective_quantity_adjustment=$4-(
+                 SELECT sum(receipt.defective_quantity) FROM receiving_receipts receipt
+                 WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+               ),
+               version=batch.version+1,updated_by=$5,updated_at=clock_timestamp(),
+               last_operation_event_id=$6,last_request_id=$7
+           WHERE batch.receiving_batch_id=$1 AND batch.version=$8 AND batch.deleted_at IS NULL`,
+          [
+            targetId,
+            after.documentQuantity,
+            after.actualQuantity,
+            after.defectiveQuantity,
+            actor.actorId,
+            mergeEventId,
+            actor.requestId,
+            target.version,
+          ],
+        );
+        if (merged.rowCount !== 1) fail("目标收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+
+        const deleteAfter = { ...before, version: current.version + 1, deleted: true as const, mergedInto: targetId };
+        const deleteEventId = await this.events.append(client, actor, {
+          action: "receiving.batch.delete",
+          entityType: "receiving_batch",
+          entityId: receivingBatchId,
+          before,
+          after: deleteAfter,
+        });
+        await client.query("SELECT set_config('dx_rework.receiving_root_action','delete',true)");
+        const deleted = await client.query(
+          `UPDATE receiving_batches
+           SET deleted_at=clock_timestamp(),deleted_by=$2,version=version+1,
+               updated_by=$2,updated_at=clock_timestamp(),
+               last_operation_event_id=$3,last_request_id=$4
+           WHERE receiving_batch_id=$1 AND version=$5 AND deleted_at IS NULL`,
+          [receivingBatchId, actor.actorId, deleteEventId, actor.requestId, current.version],
+        );
+        if (deleted.rowCount !== 1) fail("来源收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+        await this.replaceReceivingImages(client, actor, targetId, normalized.attachmentIds);
+        await client.query("COMMIT");
+        return after;
+      }
+
       const after: ReceivingBatchSnapshot = {
         receivingBatchId,
         styleNo: normalized.styleNo,
@@ -347,50 +563,22 @@ export class ReceivingService {
         before,
         after,
       });
-      await client.query(
-        "SELECT set_config('dx_rework.receiving_root_action','correct',true)",
-      );
+      await client.query("SELECT set_config('dx_rework.receiving_root_action','correct',true)");
       const updated = await client.query(
         `UPDATE receiving_batches batch
-         SET style_no=$2,
-             delivery_note_quantity=$3,
-             document_quantity_adjustment=$3-(
-               SELECT sum(receipt.document_quantity)
-               FROM receiving_receipts receipt
-               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
-             ),
-             actual_quantity_adjustment=$4-(
-               SELECT sum(receipt.actual_quantity)
-               FROM receiving_receipts receipt
-               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
-             ),
-             defective_quantity_adjustment=$5-(
-               SELECT sum(receipt.defective_quantity)
-               FROM receiving_receipts receipt
-               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
-             ),
+         SET style_no=$2,delivery_note_quantity=$3,
+             document_quantity_adjustment=$3-(SELECT sum(document_quantity) FROM receiving_receipts WHERE receiving_batch_id=batch.receiving_batch_id),
+             actual_quantity_adjustment=$4-(SELECT sum(actual_quantity) FROM receiving_receipts WHERE receiving_batch_id=batch.receiving_batch_id),
+             defective_quantity_adjustment=$5-(SELECT sum(defective_quantity) FROM receiving_receipts WHERE receiving_batch_id=batch.receiving_batch_id),
              version=batch.version+1,updated_by=$6,updated_at=clock_timestamp(),
              last_operation_event_id=$7,last_request_id=$8
-         WHERE batch.receiving_batch_id=$1
-           AND batch.version=$9
-           AND batch.deleted_at IS NULL
-           AND NOT EXISTS(
-             SELECT 1 FROM rework_orders rework
-             WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
-           )`,
-        [
-          receivingBatchId,
-          normalized.styleNo,
-          normalized.documentQuantity,
-          normalized.actualQuantity,
-          defectiveQuantity,
-          actor.actorId,
-          eventId,
-          actor.requestId,
-          normalized.expectedVersion,
-        ],
+         WHERE batch.receiving_batch_id=$1 AND batch.version=$9 AND batch.deleted_at IS NULL
+           AND NOT EXISTS(SELECT 1 FROM rework_orders WHERE source_receiving_batch_id=batch.receiving_batch_id)`,
+        [receivingBatchId, normalized.styleNo, normalized.documentQuantity, normalized.actualQuantity,
+          defectiveQuantity, actor.actorId, eventId, actor.requestId, normalized.expectedVersion],
       );
       if (updated.rowCount !== 1) fail("收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+      await this.replaceReceivingImages(client, actor, receivingBatchId, normalized.attachmentIds);
       await client.query("COMMIT");
       return after;
     } catch (error) {
@@ -527,7 +715,11 @@ export class ReceivingService {
     const existing = await client.query<{ count: string }>(
       `SELECT count(*)::text AS count
        FROM attachments
-       WHERE entity_type='receiving_batch' AND entity_id=$1 AND status='ready'`,
+       WHERE entity_type='receiving_batch' AND entity_id=$1 AND status='ready'
+         AND NOT EXISTS(
+           SELECT 1 FROM receiving_attachment_retirements retired
+           WHERE retired.attachment_id=attachments.attachment_id
+         )`,
       [receivingBatchId],
     );
     const existingCount = Number(existing.rows[0]?.count ?? 0);
@@ -833,6 +1025,10 @@ export class ReceivingService {
            AND attachment.entity_id=totals.receiving_batch_id::text
            AND attachment.status='ready'
            AND attachment.mime_type LIKE 'image/%'
+           AND NOT EXISTS(
+             SELECT 1 FROM receiving_attachment_retirements retired
+             WHERE retired.attachment_id=attachment.attachment_id
+           )
        ) receiving_attachments ON true
        ORDER BY CASE WHEN totals.difference_quantity<0 THEN 0 WHEN totals.difference_quantity>0 THEN 1 ELSE 2 END,
                 abs(totals.difference_quantity) DESC,totals.last_received_at DESC,totals.style_no`,
