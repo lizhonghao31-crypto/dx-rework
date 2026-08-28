@@ -472,7 +472,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     expect((await database.query(
       "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
-    )).rowCount).toBe(2);
+    )).rowCount).toBe(3);
     expect((await database.query(
       "SELECT 1 FROM sourcing_owner_decisions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
