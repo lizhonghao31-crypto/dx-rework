@@ -1101,6 +1101,145 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(openBusinessTodos.rows).toEqual([{ category: "wage_month_close" }]);
   });
 
+  it("recovers a required-tail order only after every unified worker and tail task has a valid report", async () => {
+    const imageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'n04-required-tail-recovery.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [imageId, `private/${imageId}.webp`, "b".repeat(64), ids.qc],
+    );
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "UAT-N04-REQUIRED-TAIL-RECOVERY",
+      orderQuantity: 500,
+      orderNo: "ORDER-N04-REQUIRED-TAIL-RECOVERY",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      inspectionReport: n01CoreInspectionReport("节点04需要尾查恢复测试款"),
+      problemPart: "后幅",
+      problemDescription: "普通返工与尾查均已上数但状态仍停在节点04",
+      reworkQuantity: 200,
+      attachmentIds: [imageId],
+    }, randomUUID());
+    const submitted = await initiation.submit(
+      qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID(),
+    );
+    const saved = await configuration.saveDraft(
+      tailConfigure(),
+      submitted.value.reworkOrderId,
+      SaveProcessConfigurationSchema.parse({
+        expectedOrderVersion: submitted.value.version,
+        items: [{
+          source: "catalog",
+          processId: publicProcessId,
+          executionKind: "worker",
+          plannedQuantity: 200,
+          pricingUnit: "piece",
+          unitPrice: 0.55,
+        }, {
+          source: "custom",
+          customProcessName: "尾查",
+          executionKind: "tail_inspection",
+          plannedQuantity: 1,
+          pricingUnit: "piece",
+          unitPrice: 0.2,
+        }],
+      }),
+      randomUUID(),
+    );
+    const workerItem = saved.value.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const tailItem = saved.value.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
+    await database.query(
+      "ALTER TABLE rework_process_configurations DISABLE TRIGGER rework_process_configurations_guard_update",
+    );
+    try {
+      await database.query(
+        "UPDATE rework_process_configurations SET unified_execution_required=false WHERE configuration_id=$1",
+        [saved.value.configuration!.configurationId],
+      );
+    } finally {
+      await database.query(
+        "ALTER TABLE rework_process_configurations ENABLE TRIGGER rework_process_configurations_guard_update",
+      );
+    }
+    await workerPlan.save(
+      tailAssign(),
+      submitted.value.reworkOrderId,
+      {
+        expectedOrderVersion: saved.value.orderVersion,
+        configurationId: saved.value.configuration!.configurationId,
+        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+        assignments: [
+          { configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] },
+          { configurationItemId: tailItem.configurationItemId, memberIds: [tailPersonId] },
+        ],
+      },
+      randomUUID(),
+    );
+    const queued = await configuration.submit(
+      tailConfigure(),
+      submitted.value.reworkOrderId,
+      SubmitProcessConfigurationSchema.parse({
+        expectedOrderVersion: saved.value.orderVersion,
+        expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      }),
+      randomUUID(),
+    );
+    const approved = await configuration.review(
+      ie(),
+      submitted.value.reworkOrderId,
+      ReviewProcessConfigurationSchema.parse({
+        expectedOrderVersion: queued.value.orderVersion,
+        expectedConfigurationVersion: queued.value.configuration!.configurationVersion,
+        decision: "approved",
+      }),
+      randomUUID(),
+    );
+    await workerPlan.activateAfterIeApproval(
+      submitted.value.reworkOrderId,
+      approved.value.configuration!.configurationVersion,
+      randomUUID(),
+    );
+    const started = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    const workerTask = started.tasks.find((task) => task.executionKind === "worker")!;
+    const tailTask = started.tasks.find((task) => task.executionKind === "tail_inspection")!;
+    await work.submitReport(worker(), workerTask.workTaskId, CreateWorkReportSchema.parse({
+      expectedOrderVersion: started.orderVersion,
+      actualQuantity: 200,
+      completedAt: new Date().toISOString(),
+    }), randomUUID());
+    const afterWorker = await work.list(tailInspect(), submitted.value.reworkOrderId);
+    await work.submitReport(tailInspect(), tailTask.workTaskId, CreateWorkReportSchema.parse({
+      expectedOrderVersion: afterWorker.orderVersion,
+      actualQuantity: 200,
+      completedAt: new Date().toISOString(),
+    }), randomUUID());
+
+    const stuck = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    expect(stuck).toMatchObject({ reworkStatus: "in_progress" });
+    expect(stuck.tasks.every((task) => task.remainingQuantity === 0)).toBe(true);
+
+    const recovered = await work.completeExecution(
+      tailAssign(),
+      submitted.value.reworkOrderId,
+      { expectedOrderVersion: stuck.orderVersion },
+      randomUUID(),
+    );
+    expect(recovered.value).toMatchObject({
+      reworkStatus: "pending_order_review",
+      orderVersion: stuck.orderVersion + 1,
+    });
+    expect((await database.query<{ tail_inspection_required: boolean }>(
+      "SELECT tail_inspection_required FROM rework_orders WHERE rework_order_id=$1",
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({ tail_inspection_required: true });
+    expect((await database.query<{ source_action: string; status: string }>(
+      "SELECT source_action,status FROM rework_todos WHERE dedupe_key=$1",
+      [`whole-order-review:${submitted.value.reworkOrderId}:${recovered.value.orderVersion}`],
+    )).rows[0]).toEqual({ source_action: "rework.execution.complete", status: "pending" });
+  });
+
   it.each([
     { executionModel: "unified", legacy: false },
     { executionModel: "legacy", legacy: true },
