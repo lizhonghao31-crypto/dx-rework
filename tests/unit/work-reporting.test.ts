@@ -159,6 +159,7 @@ describe("work reporting monetary snapshots", () => {
     ]);
     expect(service).toContain("async completeExecution");
     expect(service).toContain("allowReportedTaskRecovery = false");
+    expect(service).toContain("NOT $3::boolean");
     expect(service).toContain("tail_item.execution_kind='tail_inspection'");
     expect(service).toContain("仍有返工人员或尾查任务未完成");
     expect(routes).toContain("/work-tasks/complete");
