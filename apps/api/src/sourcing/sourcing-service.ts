@@ -223,7 +223,7 @@ export class SourcingService {
     private readonly events = new OperationEventRepository(),
     private readonly todoProjection?: Pick<
       TodoProjectionService,
-      "actionableForAllDirectRole" | "completeOpenByDedupePrefix"
+      "actionableForAllDirectRole" | "completeOpenByDedupePrefix" | "information"
     >,
   ) {}
 
@@ -1186,6 +1186,7 @@ export class SourcingService {
     const signedOn = input.signedOn.trim();
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(signedOn)
+      || Number.isNaN(new Date(`${signedOn}T00:00:00.000Z`).getTime())
       || new Date(`${signedOn}T00:00:00.000Z`).toISOString().slice(0, 10) !== signedOn
     ) fail("合同日期格式无效");
     const executionReason = input.executionReason?.trim() || DEFAULT_CONTRACT_REASON;
@@ -1586,6 +1587,26 @@ export class SourcingService {
             policyKey: "general",
             dedupeKey: `sourcing:${sourcingCaseId}:contract:${nextDecisionVersion}`,
           });
+          const approvingOwners = await client.query<{ user_id: string }>(
+            `SELECT DISTINCT decided_by AS user_id
+             FROM sourcing_owner_decisions
+             WHERE sourcing_case_id=$1 AND decision='approved'
+             ORDER BY decided_by`,
+            [sourcingCaseId],
+          );
+          for (const owner of approvingOwners.rows) {
+            await this.todoProjection?.information(client, actor, {
+              category: "sourcing_factory_change_notice",
+              sourceEventId: eventId,
+              sourceAction: action,
+              entityType: "sourcing_case",
+              entityId: sourcingCaseId,
+              recipientUserId: owner.user_id,
+              route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+              dedupeKey:
+                `sourcing:${sourcingCaseId}:factory_change_notice:${factoryChangeRequestId}:${owner.user_id}`,
+            });
+          }
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
