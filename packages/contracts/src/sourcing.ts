@@ -73,6 +73,23 @@ export const DecideSourcingOwnerSchema = z.discriminatedUnion("decision", [
   }).strict(),
 ]);
 
+export const RecordSourcingContractSchema = z.object({
+  contractReference: z.string().trim().min(1).max(200),
+  signedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "合同日期格式无效"),
+  executionReason: z.string().trim().max(500).optional(),
+}).strict();
+
+export const RequestSourcingFactoryChangeSchema = z.object({
+  supplierId: IdSchema,
+  unitPrice: MoneyInputSchema,
+  changeReason: z.string().trim().min(1, "换厂原因不能为空").max(500),
+}).strict();
+
+export const DecideSourcingFactoryChangeSchema = z.object({
+  decision: z.enum(["approved", "rejected"]),
+  verificationReason: z.string().trim().min(1, "核实说明不能为空").max(500),
+}).strict();
+
 export const SourcingIeQuoteSchema = z.object({
   sourcingIeQuoteId: IdSchema,
   quoteVersion: z.number().int().positive(),
@@ -153,7 +170,15 @@ export const SourcingAttachmentListResponseSchema = z.object({
 
 export const SourcingTimelineEntrySchema = z.object({
   entryId: IdSchema,
-  kind: z.enum(["created", "ie_quote", "management_decision", "owner_decision"]),
+  kind: z.enum([
+    "created",
+    "ie_quote",
+    "management_decision",
+    "owner_decision",
+    "contract",
+    "factory_change_request",
+    "factory_change_verification",
+  ]),
   version: z.number().int().positive(),
   handledBy: z.string(),
   handledAt: z.string().datetime(),
@@ -162,6 +187,8 @@ export const SourcingTimelineEntrySchema = z.object({
   totalAmount: z.string().nullable(),
   supplierName: z.string().nullable(),
   decision: z.enum(["approved", "rejected"]).nullable(),
+  contractReference: z.string().nullable(),
+  signedOn: z.string().nullable(),
 }).strict();
 
 export const SourcingTimelineResponseSchema = z.object({
@@ -170,6 +197,9 @@ export const SourcingTimelineResponseSchema = z.object({
 
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
 export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
+export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema>;
+export type RequestSourcingFactoryChange = z.infer<typeof RequestSourcingFactoryChangeSchema>;
+export type DecideSourcingFactoryChange = z.infer<typeof DecideSourcingFactoryChangeSchema>;
 export type RecordSourcingManagementDecision = z.infer<
   typeof RecordSourcingManagementDecisionSchema
 >;

@@ -60,15 +60,16 @@ describe("sourcing PR03 contracts", () => {
     expect(() => DecideSourcingOwnerSchema.parse({ decision: "rejected" })).toThrow();
   });
 
-  it("keeps PR04 UI inside management selection and owner approval", async () => {
+  it("keeps PR03 approvals and exposes the planned PR4 contract actions", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain("提交并进入审批");
     expect(page).toContain("提交 IE 价格");
     expect(page).toContain("请选择加工厂");
     expect(page).toContain("提交调价与选厂");
     expect(page).toContain("审批说明 / 驳回原因");
-    expect(page).not.toContain("登记合同执行");
-    expect(page).not.toContain("中途换厂");
+    expect(page).toContain("登记合同");
+    expect(page).toContain("发起中途换厂");
+    expect(page).toContain("生产管理核实换厂");
     expect(page).not.toContain("提交财务核对");
   });
 });
