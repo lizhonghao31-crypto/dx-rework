@@ -55,7 +55,15 @@ DECLARE
   audit_event_id text:=nullif(current_setting('dx_rework.receiving_event_id',true),'');
   audit_request_id text:=nullif(current_setting('dx_rework.receiving_request_id',true),'');
 BEGIN
-  IF to_jsonb(NEW)-'receiving_batch_id' IS DISTINCT FROM to_jsonb(OLD)-'receiving_batch_id'
+  IF NEW.receipt_id IS DISTINCT FROM OLD.receipt_id
+     OR NEW.style_no IS DISTINCT FROM OLD.style_no
+     OR NEW.document_quantity IS DISTINCT FROM OLD.document_quantity
+     OR NEW.actual_quantity IS DISTINCT FROM OLD.actual_quantity
+     OR NEW.defective_quantity IS DISTINCT FROM OLD.defective_quantity
+     OR NEW.received_by IS DISTINCT FROM OLD.received_by
+     OR NEW.received_at IS DISTINCT FROM OLD.received_at
+     OR NEW.operation_event_id IS DISTINCT FROM OLD.operation_event_id
+     OR NEW.request_id IS DISTINCT FROM OLD.request_id
      OR NEW.receiving_batch_id IS NOT DISTINCT FROM OLD.receiving_batch_id
   THEN
     RAISE EXCEPTION 'receiving receipt facts are immutable' USING ERRCODE='55000';
