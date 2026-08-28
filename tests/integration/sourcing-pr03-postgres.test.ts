@@ -438,7 +438,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       version: 10,
     });
 
-    const rejectedRequest = await service.requestFactoryChange(
+    await service.requestFactoryChange(
       factoryChangeActor(),
       created.value.sourcingCaseId,
       {
