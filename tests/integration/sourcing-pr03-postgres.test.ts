@@ -27,6 +27,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
   const managerId = randomUUID();
   const ownerId = randomUUID();
   const factoryId = randomUUID();
+  const replacementFactoryId = randomUUID();
   const evidenceId = randomUUID();
 
   const merchandiserActor = (requestId = randomUUID()): TrustedActorContext => ({
@@ -56,6 +57,21 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     authorizationCapability: "sourcing:owner:approve",
     authorizationCapabilities: ["sourcing:view", "sourcing:owner:approve"],
     requestId,
+  });
+  const contractActor = (requestId = randomUUID()): TrustedActorContext => ({
+    ...merchandiserActor(requestId),
+    authorizationCapability: "sourcing:contract:record",
+    authorizationCapabilities: ["sourcing:view", "sourcing:contract:record"],
+  });
+  const factoryChangeActor = (requestId = randomUUID()): TrustedActorContext => ({
+    ...merchandiserActor(requestId),
+    authorizationCapability: "sourcing:factory_change:request",
+    authorizationCapabilities: ["sourcing:view", "sourcing:factory_change:request"],
+  });
+  const factoryChangeVerifier = (requestId = randomUUID()): TrustedActorContext => ({
+    ...managerActor(requestId),
+    authorizationCapability: "sourcing:factory_change:verify",
+    authorizationCapabilities: ["sourcing:view", "sourcing:factory_change:verify"],
   });
   const readerActor = (): TrustedActorContext => ({
     ...merchandiserActor(),
@@ -119,14 +135,16 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     try {
       await database.query(
         `INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
-         VALUES($1,'FAC-01','factory')`,
-        [factoryId],
+         VALUES($1,'FAC-01','factory'),($2,'FAC-02','factory')`,
+        [factoryId, replacementFactoryId],
       );
       await database.query(
         `INSERT INTO supplier_catalog_versions(
            supplier_id,version,supplier_name,active,change_reason,changed_by
-         ) VALUES($1,1,'一号加工厂',true,'测试夹具',$2)`,
-        [factoryId, managerId],
+         ) VALUES
+           ($1,1,'一号加工厂',true,'测试夹具',$3),
+           ($2,1,'二号加工厂',true,'测试夹具',$3)`,
+        [factoryId, replacementFactoryId, managerId],
       );
     } finally {
       await database.query(`
@@ -243,11 +261,18 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       ...managerActor(),
       authorizationCapability: "sourcing:view",
     });
-    expect(factories.items).toEqual([{
-      supplierId: factoryId,
-      supplierCode: "FAC-01",
-      supplierName: "一号加工厂",
-    }]);
+    expect(factories.items).toEqual([
+      {
+        supplierId: factoryId,
+        supplierCode: "FAC-01",
+        supplierName: "一号加工厂",
+      },
+      {
+        supplierId: replacementFactoryId,
+        supplierCode: "FAC-02",
+        supplierName: "二号加工厂",
+      },
+    ]);
 
     await expect(service.recordManagementDecision(
       managerActor(),
@@ -338,6 +363,112 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
       },
     });
+    const firstContract = await service.recordContract(
+      contractActor(),
+      created.value.sourcingCaseId,
+      {
+        contractReference: "HT-2026-001",
+        signedOn: "2026-08-28",
+        executionReason: "跟单登记老板批准后的加工合同",
+      },
+      randomUUID(),
+    );
+    expect(firstContract.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 7,
+    });
+
+    const changeRequest = await service.requestFactoryChange(
+      factoryChangeActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "10.5000",
+        changeReason: "一号加工厂排期冲突，申请转二号加工厂",
+      },
+      randomUUID(),
+    );
+    expect(changeRequest.value).toMatchObject({
+      status: "pending_factory_change_verification",
+      version: 8,
+    });
+    const requestedChange = (await service.listTimeline(
+      readerActor(),
+      created.value.sourcingCaseId,
+    )).items.findLast((entry) => entry.kind === "factory_change_request");
+    expect(requestedChange).toMatchObject({
+      supplierName: "二号加工厂",
+      unitPrice: "10.5000",
+      totalAmount: "1438.50",
+    });
+
+    const changeApproved = await service.decideFactoryChange(
+      factoryChangeVerifier(),
+      created.value.sourcingCaseId,
+      requestedChange!.entryId,
+      { decision: "approved", verificationReason: "已核实二号加工厂产能与交期" },
+      randomUUID(),
+    );
+    expect(changeApproved.value).toMatchObject({
+      status: "pending_contract",
+      version: 9,
+      decision: {
+        decisionVersion: 3,
+        sourceType: "factory_change",
+        supplierId: replacementFactoryId,
+        supplierName: "二号加工厂",
+        unitPrice: "10.5000",
+        totalAmount: "1438.50",
+      },
+    });
+    expect(changeApproved.value.ownerDecision).toBeNull();
+
+    const secondContract = await service.recordContract(
+      contractActor(),
+      created.value.sourcingCaseId,
+      {
+        contractReference: "HT-2026-002",
+        signedOn: "2026-08-29",
+        executionReason: "换厂核实通过后登记新合同",
+      },
+      randomUUID(),
+    );
+    expect(secondContract.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 10,
+    });
+
+    const rejectedRequest = await service.requestFactoryChange(
+      factoryChangeActor(),
+      created.value.sourcingCaseId,
+      {
+        supplierId: factoryId,
+        unitPrice: "10.7000",
+        changeReason: "测试第二次换厂驳回历史",
+      },
+      randomUUID(),
+    );
+    const latestRequest = (await service.listTimeline(
+      readerActor(),
+      created.value.sourcingCaseId,
+    )).items.findLast((entry) => entry.kind === "factory_change_request");
+    expect(latestRequest?.entryId).not.toBe(requestedChange?.entryId);
+    const changeRejected = await service.decideFactoryChange(
+      factoryChangeVerifier(),
+      created.value.sourcingCaseId,
+      latestRequest!.entryId,
+      { decision: "rejected", verificationReason: "原厂排期仍不满足，不同意回切" },
+      randomUUID(),
+    );
+    expect(changeRejected.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 12,
+      decision: {
+        decisionVersion: 3,
+        supplierId: replacementFactoryId,
+      },
+    });
+
     expect((await database.query(
       "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
@@ -347,14 +478,17 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       [created.value.sourcingCaseId],
     )).rowCount).toBe(2);
     const timeline = await service.listTimeline(readerActor(), created.value.sourcingCaseId);
-    expect(timeline.items.map((entry) => entry.kind)).toEqual([
-      "created",
-      "ie_quote",
-      "management_decision",
-      "owner_decision",
-      "management_decision",
-      "owner_decision",
-    ]);
+    expect(timeline.items.filter((entry) => entry.kind === "contract")).toHaveLength(2);
+    expect(timeline.items.filter((entry) => entry.kind === "factory_change_request")).toHaveLength(2);
+    expect(timeline.items.filter((entry) => entry.kind === "factory_change_verification"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ decision: "approved" }),
+        expect.objectContaining({ decision: "rejected" }),
+      ]));
+    expect(timeline.items.find((entry) => entry.contractReference === "HT-2026-001"))
+      .toMatchObject({ signedOn: "2026-08-28" });
+    expect(timeline.items.find((entry) => entry.contractReference === "HT-2026-002"))
+      .toMatchObject({ signedOn: "2026-08-29" });
     expect(timeline.items.find((entry) => entry.kind === "ie_quote")).toMatchObject({
       unitPrice: "10.8136",
       totalAmount: "1481.46",
@@ -368,7 +502,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     expect((await database.query(
       "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
-    )).rowCount).toBe(6);
+    )).rowCount).toBe(12);
 
     await expect(service.decideOwner(
       ownerActor(),
@@ -387,6 +521,10 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         "sourcing_owner_approval",
         "sourcing_management_decision",
         "sourcing_owner_approval",
+        "sourcing_contract_record",
+        "sourcing_factory_change_verify",
+        "sourcing_contract_record",
+        "sourcing_factory_change_verify",
       ]);
     expect(todoProjection.completeOpenByDedupePrefix.mock.calls.map((call) => call[2]))
       .toEqual([
@@ -395,6 +533,10 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         `sourcing:${created.value.sourcingCaseId}:owner:1:`,
         `sourcing:${created.value.sourcingCaseId}:management:2:`,
         `sourcing:${created.value.sourcingCaseId}:owner:2:`,
+        `sourcing:${created.value.sourcingCaseId}:contract:2:`,
+        `sourcing:${created.value.sourcingCaseId}:factory_change:${requestedChange!.entryId}:`,
+        `sourcing:${created.value.sourcingCaseId}:contract:3:`,
+        `sourcing:${created.value.sourcingCaseId}:factory_change:${latestRequest!.entryId}:`,
       ]);
   });
 });
