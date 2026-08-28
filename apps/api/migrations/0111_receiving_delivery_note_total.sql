@@ -4,6 +4,11 @@
 ALTER TABLE receiving_batches
   ADD COLUMN delivery_note_quantity bigint;
 
+-- Existing batches are protected by audited runtime UPDATE guards. Temporarily
+-- suspend only those guards for this one transactional historical backfill.
+ALTER TABLE receiving_batches DISABLE TRIGGER receiving_batches_no_update;
+ALTER TABLE receiving_batches DISABLE TRIGGER receiving_batches_defective_update_guard;
+
 UPDATE receiving_batches batch
 SET delivery_note_quantity=totals.document_quantity+batch.document_quantity_adjustment
 FROM (
@@ -12,6 +17,9 @@ FROM (
   GROUP BY receipt.receiving_batch_id
 ) totals
 WHERE totals.receiving_batch_id=batch.receiving_batch_id;
+
+ALTER TABLE receiving_batches ENABLE TRIGGER receiving_batches_defective_update_guard;
+ALTER TABLE receiving_batches ENABLE TRIGGER receiving_batches_no_update;
 
 ALTER TABLE receiving_batches
   ALTER COLUMN delivery_note_quantity SET NOT NULL,
