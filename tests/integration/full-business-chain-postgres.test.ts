@@ -495,7 +495,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     });
 
     expect(approvedTailItem).toMatchObject({
-      processName: "尾查",
+      processName: "整查",
       executionKind: "tail_inspection",
       plannedQuantity: 1,
       unitPrice: 0.2,
@@ -519,7 +519,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       members: [{ personId: workerPersonId, displayName: "工人" }],
     });
     expect(tailTask).toMatchObject({
-      processName: "尾查",
+      processName: "整查",
       executionKind: "tail_inspection",
       members: [{ personId: tailPersonId, displayName: "尾查" }],
     });
