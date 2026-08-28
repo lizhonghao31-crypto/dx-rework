@@ -20,6 +20,7 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
   const todoProjection = {
     actionableForAllDirectRole: vi.fn(async () => [] as string[]),
     completeOpenByDedupePrefix: vi.fn(async () => 0),
+    information: vi.fn(async () => undefined),
   };
   const service = new SourcingService(database, undefined, undefined, todoProjection);
   const merchandiserId = randomUUID();
@@ -526,6 +527,15 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
         "sourcing_contract_record",
         "sourcing_factory_change_verify",
       ]);
+    expect(todoProjection.information).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        category: "sourcing_factory_change_notice",
+        recipientUserId: ownerId,
+        sourceAction: "sourcing.factory_change.approved",
+      }),
+    );
     expect(todoProjection.completeOpenByDedupePrefix.mock.calls.map((call) => call[2]))
       .toEqual([
         `sourcing:${created.value.sourcingCaseId}:ie_quote:1:`,
