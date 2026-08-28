@@ -219,6 +219,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0088_root_receiving_correction.sql");
     await migration("0095_receiving_defective_quantity.sql");
     await migration("0099_optional_tail_inspection.sql");
+    await migration("0111_receiving_delivery_note_total.sql");
   });
 
   afterAll(async () => {
@@ -247,7 +248,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(legacy.rows[0]?.receiving_batch_id).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
-  it("requires receiving-note evidence on a new batch, reuses it on later receipts, and keeps cumulative facts", async () => {
+  it("keeps one delivery-note total while accumulating immutable same-style receipt facts", async () => {
     await expect(service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
@@ -295,20 +296,20 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const second = await service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
-      actualQuantity: 120,
+      actualQuantity: 20,
       defectiveQuantity: 2,
       attachmentIds: [],
     }, randomUUID());
     expect(second.value.receivingBatchId).toBe(first.value.receivingBatchId);
-    expect(second.value.differenceQuantity).toBe(20);
+    expect(second.value.differenceQuantity).toBe(-80);
 
     const board = await service.board(businessDate());
     const row = board.rows.find((item) => item.receivingBatchId === first.value.receivingBatchId);
     expect(row).toMatchObject({
       styleNo: "STYLE-RECEIVING-01",
-      documentQuantity: 200,
+      documentQuantity: 100,
       attachments: [{ attachmentId: firstImage, filename: `${firstImage}.jpg` }],
-      actualQuantity: 200,
+      actualQuantity: 100,
       defectiveQuantity: 7,
       differenceQuantity: 0,
       receiptCount: 2,
@@ -331,11 +332,12 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       attachmentIds: [],
     }, randomUUID())).rejects.toThrow("次品数量不能超过实际收货数量");
 
-    const facts = await database.query<{ difference_quantity: number; defective_quantity: number }>(
-      "SELECT difference_quantity,defective_quantity FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
+    const facts = await database.query<{ document_quantity: number; difference_quantity: number; defective_quantity: number }>(
+      "SELECT document_quantity,difference_quantity,defective_quantity FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
       [first.value.receivingBatchId],
     );
-    expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-20, 20]);
+    expect(facts.rows.map((item) => item.document_quantity)).toEqual([100, 100]);
+    expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-80, -20]);
     expect(facts.rows.map((item) => item.defective_quantity).sort((left, right) => left - right)).toEqual([2, 5]);
     await expect(database.query(
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
