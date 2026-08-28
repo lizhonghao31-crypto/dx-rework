@@ -5,6 +5,8 @@ import {
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
   DecideSourcingOwnerSchema,
+  DecideSourcingExceptionSchema,
+  RecordSourcingFinanceReconciliationSchema,
   RecordSourcingManagementDecisionSchema,
 } from "@dx-rework/contracts";
 import { describe, expect, it } from "vitest";
@@ -60,7 +62,18 @@ describe("sourcing PR03 contracts", () => {
     expect(() => DecideSourcingOwnerSchema.parse({ decision: "rejected" })).toThrow();
   });
 
-  it("keeps PR03 approvals and exposes the planned PR4 contract actions", async () => {
+  it("validates independent finance totals and explicit exception closure", () => {
+    expect(RecordSourcingFinanceReconciliationSchema.parse({
+      supplierId: "00000000-0000-4000-8000-000000000200",
+      unitPrice: "12.5000",
+      quantity: 100,
+      totalAmount: "1300.00",
+      differenceReason: "实际总额含合同约定调整",
+    })).toMatchObject({ totalAmount: "1300.00" });
+    expect(() => DecideSourcingExceptionSchema.parse({ resolution: "close" })).toThrow();
+  });
+
+  it("keeps the full sourcing flow visible through finance closure", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain("提交并进入审批");
     expect(page).toContain("提交 IE 价格");
@@ -70,6 +83,8 @@ describe("sourcing PR03 contracts", () => {
     expect(page).toContain("登记合同");
     expect(page).toContain("发起中途换厂");
     expect(page).toContain("生产管理核实换厂");
-    expect(page).not.toContain("提交财务核对");
+    expect(page).toContain("提交财务核对");
+    expect(page).toContain("确认差异并闭环");
+    expect(page).toContain("退回财务重核");
   });
 });

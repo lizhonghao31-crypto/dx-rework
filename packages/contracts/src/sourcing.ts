@@ -6,6 +6,10 @@ const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
+const TotalAmountInputSchema = z.string().trim().regex(
+  /^\d{1,16}(?:\.\d{1,2})?$/,
+  "实际总额必须是大于0且最多2位小数的数字",
+).refine((value) => Number(value) > 0, "实际总额必须大于0");
 
 const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
 
@@ -88,6 +92,19 @@ export const RequestSourcingFactoryChangeSchema = z.object({
 export const DecideSourcingFactoryChangeSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
   verificationReason: z.string().trim().min(1, "核实说明不能为空").max(500),
+}).strict();
+
+export const RecordSourcingFinanceReconciliationSchema = z.object({
+  supplierId: IdSchema,
+  unitPrice: MoneyInputSchema,
+  quantity: z.number().int().positive().max(10_000_000),
+  totalAmount: TotalAmountInputSchema,
+  differenceReason: z.string().trim().max(500).optional(),
+}).strict();
+
+export const DecideSourcingExceptionSchema = z.object({
+  resolution: z.enum(["close", "reconcile_again"]),
+  resolutionReason: z.string().trim().min(1, "差异处理说明不能为空").max(500),
 }).strict();
 
 export const SourcingIeQuoteSchema = z.object({
@@ -178,6 +195,8 @@ export const SourcingTimelineEntrySchema = z.object({
     "contract",
     "factory_change_request",
     "factory_change_verification",
+    "finance_reconciliation",
+    "exception_verification",
   ]),
   version: z.number().int().positive(),
   handledBy: z.string(),
@@ -189,6 +208,10 @@ export const SourcingTimelineEntrySchema = z.object({
   decision: z.enum(["approved", "rejected"]).nullable(),
   contractReference: z.string().nullable(),
   signedOn: z.string().nullable(),
+  quantity: z.number().int().positive().nullable(),
+  differenceFields: z.array(z.enum(["supplier", "unit_price", "quantity", "total_amount"])),
+  result: z.enum(["match", "difference"]).nullable(),
+  resolution: z.enum(["close", "reconcile_again"]).nullable(),
 }).strict();
 
 export const SourcingTimelineResponseSchema = z.object({
@@ -200,6 +223,10 @@ export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
 export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema>;
 export type RequestSourcingFactoryChange = z.infer<typeof RequestSourcingFactoryChangeSchema>;
 export type DecideSourcingFactoryChange = z.infer<typeof DecideSourcingFactoryChangeSchema>;
+export type RecordSourcingFinanceReconciliation = z.infer<
+  typeof RecordSourcingFinanceReconciliationSchema
+>;
+export type DecideSourcingException = z.infer<typeof DecideSourcingExceptionSchema>;
 export type RecordSourcingManagementDecision = z.infer<
   typeof RecordSourcingManagementDecisionSchema
 >;

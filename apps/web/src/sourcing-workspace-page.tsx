@@ -65,6 +65,13 @@ type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; unitPrice: string; decisionReason: string }>;
 type ContractDraft = Readonly<{ contractReference: string; signedOn: string; executionReason: string }>;
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
+type FinanceDraft = Readonly<{
+  supplierId: string;
+  unitPrice: string;
+  quantity: string;
+  totalAmount: string;
+  differenceReason: string;
+}>;
 
 const request = async <T,>(
   path: string,
@@ -108,6 +115,20 @@ const totalPreview = (unitPrice: string, quantity: number): string => {
   } catch {
     return "—";
   }
+};
+
+const canonicalUnitPrice = (value: string): string => {
+  const normalized = value.trim();
+  if (!/^\d{1,10}(?:\.\d{1,4})?$/.test(normalized)) return "";
+  const [whole, fraction = ""] = normalized.split(".");
+  return `${BigInt(whole!)}.${fraction.padEnd(4, "0")}`;
+};
+
+const canonicalTotalAmount = (value: string): string => {
+  const normalized = value.trim();
+  if (!/^\d{1,16}(?:\.\d{1,2})?$/.test(normalized)) return "";
+  const [whole, fraction = ""] = normalized.split(".");
+  return `${BigInt(whole!)}.${fraction.padEnd(2, "0")}`;
 };
 
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
@@ -377,6 +398,10 @@ const timelineLabel = (entry: SourcingTimelineEntry): string => ({
   contract: `合同登记 V${entry.version}`,
   factory_change_request: `换厂申请 V${entry.version}`,
   factory_change_verification: entry.decision === "approved" ? "换厂核实通过" : "换厂申请驳回",
+  finance_reconciliation: entry.result === "match"
+    ? `财务核对一致 V${entry.version}`
+    : `财务发现差异 V${entry.version}`,
+  exception_verification: entry.resolution === "close" ? "差异确认闭环" : "退回财务重核",
 })[entry.kind];
 
 function OrderDetailPage({
@@ -404,6 +429,14 @@ function OrderDetailPage({
     changeReason: "",
   });
   const [verificationReason, setVerificationReason] = useState("");
+  const [finance, setFinance] = useState<FinanceDraft>({
+    supplierId: "",
+    unitPrice: "",
+    quantity: "",
+    totalAmount: "",
+    differenceReason: "",
+  });
+  const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在加载订单…");
@@ -424,6 +457,13 @@ function OrderDetailPage({
         unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
         decisionReason: current.decisionReason,
       }));
+      setFinance((current) => ({
+        supplierId: current.supplierId || detail.decision?.supplierId || "",
+        unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
+        quantity: current.quantity || String(detail.decision?.quantity ?? detail.orderQuantity),
+        totalAmount: current.totalAmount || detail.decision?.totalAmount || "",
+        differenceReason: current.differenceReason,
+      }));
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单加载失败");
@@ -441,13 +481,15 @@ function OrderDetailPage({
     "production_management",
     "sourcing:factory_change:verify",
   );
+  const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
 
   useEffect(() => {
-    if (!canManage && !canChangeFactory) return;
+    if (!canManage && !canChangeFactory && !canFinance) return;
     void request("sourcing/factories", SourcingFactoryListResponseSchema)
       .then((body) => setFactories(body.items))
       .catch((error) => setMessage(error instanceof Error ? error.message : "加工厂加载失败"));
-  }, [canManage, canChangeFactory]);
+  }, [canManage, canChangeFactory, canFinance]);
 
   const submit = async (
     path: string,
@@ -485,6 +527,24 @@ function OrderDetailPage({
     : [...timeline].reverse().find((entry) => entry.kind === "contract");
   const pendingFactoryChange = [...timeline].reverse()
     .find((entry) => entry.kind === "factory_change_request");
+  const latestFinance = [...timeline].reverse()
+    .find((entry) => entry.kind === "finance_reconciliation");
+  const financeDifferences = item.decision ? [
+    ...(finance.supplierId && finance.supplierId !== item.decision.supplierId ? ["供应商"] : []),
+    ...(canonicalUnitPrice(finance.unitPrice)
+      && canonicalUnitPrice(finance.unitPrice) !== item.decision.unitPrice ? ["单价"] : []),
+    ...(Number.isInteger(Number(finance.quantity))
+      && Number(finance.quantity) !== item.decision.quantity ? ["数量"] : []),
+    ...(canonicalTotalAmount(finance.totalAmount)
+      && canonicalTotalAmount(finance.totalAmount) !== item.decision.totalAmount ? ["总额"] : []),
+  ] : [];
+  const financeComplete = Boolean(
+    finance.supplierId
+    && canonicalUnitPrice(finance.unitPrice)
+    && Number.isInteger(Number(finance.quantity))
+    && Number(finance.quantity) > 0
+    && canonicalTotalAmount(finance.totalAmount),
+  );
 
   return (
     <div className="sourcing-workspace sourcing-order-detail">
@@ -552,10 +612,13 @@ function OrderDetailPage({
               <dl>
                 {entry.unitPrice ? <div><dt>单价</dt><dd>¥{entry.unitPrice}</dd></div> : null}
                 {entry.totalAmount ? <div><dt>总额</dt><dd>¥{entry.totalAmount}</dd></div> : null}
+                {entry.quantity ? <div><dt>数量</dt><dd>{entry.quantity.toLocaleString("zh-CN")} 件</dd></div> : null}
                 {entry.supplierName ? <div><dt>加工厂</dt><dd>{entry.supplierName}</dd></div> : null}
                 {entry.contractReference ? <div><dt>合同编号</dt><dd>{entry.contractReference}</dd></div> : null}
                 {entry.signedOn ? <div><dt>签署日期</dt><dd>{entry.signedOn}</dd></div> : null}
                 {entry.decision ? <div><dt>结论</dt><dd>{entry.decision === "approved" ? "通过" : "驳回"}</dd></div> : null}
+                {entry.result ? <div><dt>核对结果</dt><dd>{entry.result === "match" ? "四项一致" : `差异：${entry.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、")}`}</dd></div> : null}
+                {entry.resolution ? <div><dt>处理结果</dt><dd>{entry.resolution === "close" ? "确认差异并闭环" : "退回财务重核"}</dd></div> : null}
               </dl>
             </article>)}
           </div>
@@ -616,7 +679,25 @@ function OrderDetailPage({
 
           {item.status === "pending_finance_reconciliation" ? <Surface className="rework-detail-node-preview">
             <h2>06 · 待财务核对</h2>
-            <p>当前合同已登记。财务核对将在 PR5 接入；如生产中确需改厂，跟单可先发起换厂核实。</p>
+            <p>逐项核对合同执行的供应商、单价、数量和总额；一致即归档，有差异则自动交生产管理核实并通知老板。</p>
+            {canFinance ? <div className="sourcing-form-grid">
+              <label><span>实际加工厂</span><select value={finance.supplierId} onChange={(event) => { setFinance({ ...finance, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择实际加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
+              <label><span>实际单价</span><input value={finance.unitPrice} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
+              <label><span>实际数量</span><input value={finance.quantity} inputMode="numeric" onChange={(event) => { setFinance({ ...finance, quantity: event.target.value }); actionKey.current = null; }} /></label>
+              <label><span>实际总额</span><input value={finance.totalAmount} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, totalAmount: event.target.value }); actionKey.current = null; }} /></label>
+              <label className="sourcing-form-wide"><span>差异说明</span><input value={finance.differenceReason} maxLength={500} onChange={(event) => { setFinance({ ...finance, differenceReason: event.target.value }); actionKey.current = null; }} placeholder={financeDifferences.length ? `存在差异：${financeDifferences.join("、")}，请说明` : "四项一致时无需填写"} /></label>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || !financeComplete || (financeDifferences.length > 0 && !finance.differenceReason.trim())} onClick={() => void submit(
+                `sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`,
+                {
+                  supplierId: finance.supplierId,
+                  unitPrice: finance.unitPrice,
+                  quantity: Number(finance.quantity),
+                  totalAmount: finance.totalAmount,
+                  ...(finance.differenceReason.trim() ? { differenceReason: finance.differenceReason.trim() } : {}),
+                },
+                financeDifferences.length ? "财务差异已提交生产管理核实" : "四项核对一致，订单已归档",
+              )}>提交财务核对</button>
+            </div> : <p>当前账号仅可查看，本节点由应付财务办理。</p>}
             {canChangeFactory ? <div className="sourcing-form-grid">
               <label><span>新加工厂</span><select value={factoryChange.supplierId} onChange={(event) => { setFactoryChange({ ...factoryChange, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               <label><span>新加工单价</span><input value={factoryChange.unitPrice} inputMode="decimal" onChange={(event) => { setFactoryChange({ ...factoryChange, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
@@ -651,7 +732,22 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
           </Surface> : null}
 
-          {item.status === "pending_exception_verification" ? <Surface className="rework-detail-node-preview"><h2>06 · 财务差异核实</h2><p>本节点将在 PR5 接入差异通报与闭环。</p></Surface> : null}
+          {item.status === "pending_exception_verification" ? <Surface className="rework-detail-node-preview">
+            <h2>06 · 财务差异核实</h2>
+            <p>财务发现：{latestFinance?.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、") || "差异项待确认"}。记录和证据已保留，老板已收到信息通知。</p>
+            {canVerifyException ? <div className="sourcing-owner-actions">
+              <label><span>处理说明</span><input value={exceptionReason} maxLength={500} onChange={(event) => { setExceptionReason(event.target.value); actionKey.current = null; }} /></label>
+              <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !exceptionReason.trim()} onClick={() => void submit(
+                `sourcing/cases/${item.sourcingCaseId}/exception-decisions`,
+                { resolution: "close", resolutionReason: exceptionReason.trim() },
+                "差异已确认并归档",
+              )}>确认差异并闭环</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !exceptionReason.trim()} onClick={() => void submit(
+                `sourcing/cases/${item.sourcingCaseId}/exception-decisions`,
+                { resolution: "reconcile_again", resolutionReason: exceptionReason.trim() },
+                "已退回财务重新核对",
+              )}>退回财务重核</button></div>
+            </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
+          </Surface> : null}
           {item.status === "closed" ? <Surface className="rework-detail-node-preview"><h2>订单已完成</h2><p>报价、调价、选厂、审批、合同和财务记录已完整归档。</p></Surface> : null}
           {message ? <p className="sourcing-action-message" role="status">{message}</p> : null}
         </section>

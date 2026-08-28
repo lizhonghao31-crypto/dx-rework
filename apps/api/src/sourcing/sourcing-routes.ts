@@ -1,9 +1,11 @@
 import {
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
+  DecideSourcingExceptionSchema,
   DecideSourcingFactoryChangeSchema,
   DecideSourcingOwnerSchema,
   RecordSourcingContractSchema,
+  RecordSourcingFinanceReconciliationSchema,
   RecordSourcingManagementDecisionSchema,
   RequestSourcingFactoryChangeSchema,
 } from "@dx-rework/contracts";
@@ -66,7 +68,7 @@ export function registerSourcingRoutes(
 
   const actionActor = async (
     request: FastifyRequest,
-    role: "order_merchandiser" | "ie_reviewer" | "production_management" | "owner_group",
+    role: "order_merchandiser" | "ie_reviewer" | "production_management" | "owner_group" | "factory_payables",
     capability:
       | "sourcing:inquiry:create"
       | "sourcing:price:quote"
@@ -74,7 +76,9 @@ export function registerSourcingRoutes(
       | "sourcing:owner:approve"
       | "sourcing:contract:record"
       | "sourcing:factory_change:request"
-      | "sourcing:factory_change:verify",
+      | "sourcing:factory_change:verify"
+      | "sourcing:finance:reconcile"
+      | "sourcing:exception:verify",
   ) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
@@ -253,6 +257,42 @@ export function registerSourcingRoutes(
         await actionActor(request, "production_management", "sourcing:factory_change:verify"),
         caseId(request.params.sourcingCaseId),
         caseId(request.params.factoryChangeRequestId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/finance-reconciliations",
+    async (request, reply) => {
+      const parsed = RecordSourcingFinanceReconciliationSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "财务核对信息不完整");
+      const result = await dependencies.service.recordFinanceReconciliation(
+        await actionActor(request, "factory_payables", "sourcing:finance:reconcile"),
+        caseId(request.params.sourcingCaseId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/exception-decisions",
+    async (request, reply) => {
+      const parsed = DecideSourcingExceptionSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "差异处理信息不完整");
+      const result = await dependencies.service.decideException(
+        await actionActor(request, "production_management", "sourcing:exception:verify"),
+        caseId(request.params.sourcingCaseId),
         data,
         idempotencyKey(request),
       );
