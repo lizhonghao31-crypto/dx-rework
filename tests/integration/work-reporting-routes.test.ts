@@ -40,6 +40,10 @@ const create = (
       value: { reworkOrderId: submittedOrderId, reworkStatus: "in_progress" as const, orderVersion: input.expectedOrderVersion + 1, tasks: [] },
       reused: false,
     })),
+    completeExecution: vi.fn(async (_actor, submittedOrderId, input) => ({
+      value: { reworkOrderId: submittedOrderId, reworkStatus: "pending_order_review" as const, orderVersion: input.expectedOrderVersion + 1, tasks: [] },
+      reused: false,
+    })),
     submitReport: vi.fn(async (_actor, submittedTaskId) => ({
       value: {
         workReportId: "00000000-0000-4000-8000-000000000012",
@@ -196,6 +200,36 @@ describe("work reporting routes", () => {
 
     expect(response.statusCode).toBe(403);
     expect(service.addActiveTaskMembers).not.toHaveBeenCalled();
+  });
+
+  it("allows the tail supervisor to recover an all-reported N04 order", async () => {
+    const { app, service } = create(["tail_supervisor"], ["work:assign"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-tasks/complete`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "complete-reported-n04" },
+      payload: { expectedOrderVersion: 2 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ reworkStatus: "pending_order_review", orderVersion: 3 });
+    expect(service.completeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ actorRoles: ["tail_supervisor"], authorizationCapability: "work:assign" }),
+      orderId,
+      { expectedOrderVersion: 2 },
+      "complete-reported-n04",
+    );
+  });
+
+  it("rejects N04 completion recovery for an unrelated role", async () => {
+    const { app, service } = create(["worker"], ["work:report", "work:assign"]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/rework-orders/${orderId}/work-tasks/complete`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "complete-reported-denied" },
+      payload: { expectedOrderVersion: 2 },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(service.completeExecution).not.toHaveBeenCalled();
   });
 
   it("passes both report capabilities to the service for task-specific authorization", async () => {

@@ -957,14 +957,15 @@ export class WholeOrderReviewService {
   }
 
   private async plans(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string): Promise<PlanRow[]> {
+    const usesUnifiedTailReports = await this.usesUnifiedTailReports(client, reworkOrderId);
     const result = await client.query<PlanRow>(
       `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.unit_price,
               item.planned_quantity::text AS planned_quantity,
               COALESCE(completed.original_quantity,0)::text AS original_completed_quantity,
               COALESCE(completed.effective_quantity,0)::text AS completed_quantity,
-              COALESCE(CASE WHEN configuration.unified_execution_required
+              COALESCE(CASE WHEN $2::boolean
                 THEN unified_tail.original_quantity ELSE legacy_tail.quantity END,0)::text AS original_tail_checked_quantity,
-              COALESCE(CASE WHEN configuration.unified_execution_required
+              COALESCE(CASE WHEN $2::boolean
                 THEN unified_tail.effective_quantity ELSE legacy_tail.quantity END,0)::text AS tail_checked_quantity
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id
@@ -1000,7 +1001,7 @@ export class WholeOrderReviewService {
        WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
          AND item.execution_kind='worker'
        ORDER BY item.position,item.configuration_item_id`,
-      [reworkOrderId],
+      [reworkOrderId, usesUnifiedTailReports],
     );
     return result.rows;
   }
@@ -1024,6 +1025,7 @@ export class WholeOrderReviewService {
       if (pendingExecution.rowCount) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
       return;
     }
+    const usesUnifiedTailReports = await this.usesUnifiedTailReports(client, reworkOrderId);
     const pending = await client.query<{ execution_pending: boolean; legacy_tail_pending: boolean }>(
       `SELECT
          EXISTS(
@@ -1039,13 +1041,13 @@ export class WholeOrderReviewService {
            SELECT 1 FROM rework_process_configurations configuration
            JOIN rework_tail_inspection_assignments assignment ON assignment.rework_order_id=configuration.rework_order_id
            WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
-             AND configuration.unified_execution_required=false AND assignment.revoked_at IS NULL
+             AND NOT $2::boolean AND assignment.revoked_at IS NULL
              AND NOT EXISTS(
                SELECT 1 FROM rework_tail_inspection_reports report
                WHERE report.tail_inspection_assignment_id=assignment.tail_inspection_assignment_id AND report.status='submitted'
              )
          ) AS legacy_tail_pending`,
-      [reworkOrderId],
+      [reworkOrderId, usesUnifiedTailReports],
     );
     if (pending.rows[0]?.execution_pending) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
     if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有尾查报数未完成，不能整单确认", 409, "CONFLICT");
@@ -1085,10 +1087,10 @@ export class WholeOrderReviewService {
        ) legacy_tail ON true
        CROSS JOIN unified_tail
        WHERE item.execution_kind='worker'
-         AND worker.quantity > CASE WHEN active.unified_execution_required THEN unified_tail.quantity ELSE legacy_tail.quantity END`,
-      [reworkOrderId],
+         AND worker.quantity > CASE WHEN $2::boolean THEN unified_tail.quantity ELSE legacy_tail.quantity END`,
+      [reworkOrderId, usesUnifiedTailReports],
     );
-    if (!(await this.unifiedExecutionRequired(client, reworkOrderId))) {
+    if (!usesUnifiedTailReports) {
       if (overLimit.rows.length > 0) {
         error(`返工上数超过尾查数量：${overLimit.rows.map((row) => row.process_name).join("、")}；请驳回并调整报数`, 409, "CONFLICT");
       }
@@ -1164,6 +1166,37 @@ export class WholeOrderReviewService {
       [reworkOrderId],
     );
     return result.rows[0]?.unified_execution_required === true;
+  }
+
+  private async usesUnifiedTailReports(
+    client: Pick<Pool, "query"> | PoolClient,
+    reworkOrderId: string,
+  ): Promise<boolean> {
+    const result = await client.query<{ uses_unified_tail_reports: boolean }>(
+      `SELECT COALESCE((
+         SELECT configuration.unified_execution_required
+         FROM rework_process_configurations configuration
+         WHERE configuration.rework_order_id=$1 AND configuration.status='approved'
+         LIMIT 1
+       ),false) OR EXISTS(
+         SELECT 1
+         FROM rework_work_reports report
+         JOIN rework_process_configuration_items item
+           ON item.configuration_item_id=report.configuration_item_id
+          AND item.execution_kind='tail_inspection'
+         JOIN rework_process_configurations configuration
+           ON configuration.configuration_id=item.configuration_id
+          AND configuration.rework_order_id=report.rework_order_id
+          AND configuration.status='approved'
+         WHERE report.rework_order_id=$1 AND report.status='submitted'
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_work_report_rejections rejection
+             WHERE rejection.work_report_id=report.work_report_id
+           )
+       ) AS uses_unified_tail_reports`,
+      [reworkOrderId],
+    );
+    return result.rows[0]?.uses_unified_tail_reports === true;
   }
 
   private async adjustments(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, configurationItemId?: string): Promise<QuantityAdjustmentResponse[]> {
