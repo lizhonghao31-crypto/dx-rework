@@ -150,6 +150,23 @@ describe("work reporting monetary snapshots", () => {
     expect(service).toContain("该人员已经分配到这道工序");
   });
 
+  it("keeps required-tail recovery explicit and server-validated", async () => {
+    const [service, routes, form, migration] = await Promise.all([
+      readFile(new URL("../../apps/api/src/rework/work-reporting-service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/src/rework/work-reporting-routes.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/work-reporting-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/migrations/0109_n04_explicit_execution_completion.sql", import.meta.url), "utf8"),
+    ]);
+    expect(service).toContain("async completeExecution");
+    expect(service).toContain("allowReportedTaskRecovery = false");
+    expect(service).toContain("tail_item.execution_kind='tail_inspection'");
+    expect(service).toContain("仍有返工人员或尾查任务未完成");
+    expect(routes).toContain("/work-tasks/complete");
+    expect(form).toContain("全部完成，进入节点05");
+    expect(migration).toContain("alternative_action_two:='rework.execution.complete'");
+    expect(migration).toContain("alternative_capability_two:='work:assign'");
+  });
+
   it("reuses the idempotency key only while a report payload remains unresolved", () => {
     const payload = { expectedOrderVersion: 2, actualQuantity: 1, completedAt: "2026-08-02T12:00:00.000Z" };
     const first = reportAttempt(undefined, payload, () => "first-key");
