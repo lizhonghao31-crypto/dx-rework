@@ -1280,9 +1280,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        WHERE confirmation.rework_order_id=$1`,
       [submitted.value.reworkOrderId],
     )).rows).toEqual([{
-      worker_reported_quantity: "200",
-      tail_reported_quantity: "200",
-      final_confirmed_quantity: "200",
+      worker_reported_quantity: "200.00",
+      tail_reported_quantity: "200.00",
+      final_confirmed_quantity: "200.00",
     }]);
   });
 
