@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -17,7 +17,11 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
     connectionString: databaseUrl!,
     options: `-c search_path=${schema}`,
   });
-  const service = new SourcingService(database);
+  const todoProjection = {
+    actionableForAllDirectRole: vi.fn(async () => [] as string[]),
+    completeOpenByDedupePrefix: vi.fn(async () => 0),
+  };
+  const service = new SourcingService(database, undefined, undefined, todoProjection);
   const merchandiserId = randomUUID();
   const ieId = randomUUID();
   const managerId = randomUUID();
@@ -375,5 +379,22 @@ runWithPostgres("sourcing PR03-PR04 PostgreSQL business chain", () => {
       code: "INVALID_STATE_TRANSITION",
       statusCode: 409,
     });
+
+    expect(todoProjection.actionableForAllDirectRole.mock.calls.map((call) => call[2].category))
+      .toEqual([
+        "sourcing_ie_quote",
+        "sourcing_management_decision",
+        "sourcing_owner_approval",
+        "sourcing_management_decision",
+        "sourcing_owner_approval",
+      ]);
+    expect(todoProjection.completeOpenByDedupePrefix.mock.calls.map((call) => call[2]))
+      .toEqual([
+        `sourcing:${created.value.sourcingCaseId}:ie_quote:1:`,
+        `sourcing:${created.value.sourcingCaseId}:management:1:`,
+        `sourcing:${created.value.sourcingCaseId}:owner:1:`,
+        `sourcing:${created.value.sourcingCaseId}:management:2:`,
+        `sourcing:${created.value.sourcingCaseId}:owner:2:`,
+      ]);
   });
 });

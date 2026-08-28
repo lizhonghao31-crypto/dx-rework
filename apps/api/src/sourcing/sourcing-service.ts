@@ -16,6 +16,7 @@ import type {
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import {
   IdempotencyService,
   OperationEventRepository,
@@ -210,6 +211,10 @@ export class SourcingService {
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
+    private readonly todoProjection?: Pick<
+      TodoProjectionService,
+      "actionableForAllDirectRole" | "completeOpenByDedupePrefix"
+    >,
   ) {}
 
   private assertActor(
@@ -589,6 +594,18 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          category: "sourcing_ie_quote",
+          sourceEventId: eventId,
+          sourceAction: "sourcing.case.create",
+          entityType: "sourcing_case",
+          entityId: sourcingCaseId,
+          requiredRole: IE_QUOTE_ROLE,
+          requiredCapability: IE_QUOTE_CAPABILITY,
+          route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+          policyKey: "general",
+          dedupeKey: `sourcing:${sourcingCaseId}:ie_quote:1`,
+        });
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
       await client.query("COMMIT");
@@ -712,6 +729,24 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        await this.todoProjection?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `sourcing:${sourcingCaseId}:ie_quote:${quoteVersion}:`,
+          "IE 报价已完成",
+        );
+        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          category: "sourcing_management_decision",
+          sourceEventId: eventId,
+          sourceAction: "sourcing.ie_price.quote",
+          entityType: "sourcing_case",
+          entityId: sourcingCaseId,
+          requiredRole: MANAGEMENT_DECISION_ROLE,
+          requiredCapability: MANAGEMENT_DECISION_CAPABILITY,
+          route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+          policyKey: "general",
+          dedupeKey: `sourcing:${sourcingCaseId}:management:${quoteVersion}`,
+        });
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
       await client.query("COMMIT");
@@ -903,6 +938,24 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        await this.todoProjection?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `sourcing:${sourcingCaseId}:management:${decisionVersion}:`,
+          "生产管理已完成调价选厂",
+        );
+        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          category: "sourcing_owner_approval",
+          sourceEventId: eventId,
+          sourceAction: "sourcing.management_decision.record",
+          entityType: "sourcing_case",
+          entityId: sourcingCaseId,
+          requiredRole: OWNER_DECISION_ROLE,
+          requiredCapability: OWNER_DECISION_CAPABILITY,
+          route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+          policyKey: "general",
+          dedupeKey: `sourcing:${sourcingCaseId}:owner:${decisionVersion}`,
+        });
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
       await client.query("COMMIT");
@@ -1029,6 +1082,27 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        const decisionVersion = Number(source.decision_version);
+        await this.todoProjection?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `sourcing:${sourcingCaseId}:owner:${decisionVersion}:`,
+          approved ? "老板已批准" : "老板已驳回",
+        );
+        if (!approved) {
+          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+            category: "sourcing_management_decision",
+            sourceEventId: eventId,
+            sourceAction: "sourcing.owner.reject",
+            entityType: "sourcing_case",
+            entityId: sourcingCaseId,
+            requiredRole: MANAGEMENT_DECISION_ROLE,
+            requiredCapability: MANAGEMENT_DECISION_CAPABILITY,
+            route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+            policyKey: "general",
+            dedupeKey: `sourcing:${sourcingCaseId}:management:${decisionVersion + 1}`,
+          });
+        }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
       await client.query("COMMIT");

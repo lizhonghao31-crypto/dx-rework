@@ -17,7 +17,7 @@ export function canAccessSourcing(user: AuthorizedUser): boolean {
 export function accessiblePlatformModules(user: AuthorizedUser): readonly PlatformModule[] {
   const modules: PlatformModule[] = [];
   const reworkHref = landingTarget(user);
-  if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing" });
+  if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing/pending" });
   if (reworkHref) modules.push({ id: "rework", href: reworkHref });
   return modules;
 }
