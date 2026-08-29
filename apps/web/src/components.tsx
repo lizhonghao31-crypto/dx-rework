@@ -172,7 +172,8 @@ function MobilePrimaryNavigation({
   active: string;
   basePath: string;
 }) {
-  const primaryNavigation = navigation.filter(isMobilePrimaryNavigation);
+  const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);
+  const primaryNavigation = mobileCandidates;
   const moreNavigation = navigation.filter((entry) => !isMobilePrimaryNavigation(entry));
   const moreIsActive = moreNavigation.some((entry) => entry.name === active);
 
