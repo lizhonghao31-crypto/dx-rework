@@ -553,7 +553,7 @@ export class ReworkBusinessDetailService {
   async addIePrecount(
     actor: TrustedActorContext,
     reworkOrderId: string,
-    input: Readonly<{ configurationItemId: string; quantity: number; note?: string }>,
+    input: Readonly<{ configurationItemId: string; quantity: number; note?: string | undefined }>,
     idempotencyKey: string,
   ): Promise<Readonly<{ value: ReworkBusinessDetail; reused: boolean }>> {
     if (!canRecordIePrecount(actor)) {
@@ -589,7 +589,7 @@ export class ReworkBusinessDetailService {
     client: PoolClient,
     actor: TrustedActorContext,
     reworkOrderId: string,
-    input: Readonly<{ configurationItemId: string; quantity: number; note?: string }>,
+    input: Readonly<{ configurationItemId: string; quantity: number; note?: string | undefined }>,
   ): Promise<Readonly<{ entryId: string }>> {
     const target = await client.query<{ status: ReworkOrderStatus; process_name: string }>(
       `SELECT target.status,item.process_name
