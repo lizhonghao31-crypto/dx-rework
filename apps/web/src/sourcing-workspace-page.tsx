@@ -436,7 +436,7 @@ const timelineNode = (entry: SourcingTimelineEntry): SourcingWorkflowNodeKey => 
   factory_change_verification: "contract",
   finance_reconciliation: "finance",
   exception_verification: "finance",
-})[entry.kind];
+} as const)[entry.kind];
 
 const WORKFLOW_PREVIEWS: Readonly<Record<SourcingWorkflowNodeKey, string>> = {
   created: "查看跟单创建订单时提交的订单资料与图片。",
