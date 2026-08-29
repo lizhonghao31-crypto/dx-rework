@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 
 describe("order board global style search", () => {
   it("keeps date KPIs range-scoped while making non-empty style search all-time", async () => {
-    const [service, routes, page, rework, migration] = await Promise.all([
+    const [service, routes, page, receivingPage, rework, migration] = await Promise.all([
       readFile("apps/api/src/receiving/receiving-service.ts", "utf8"),
       readFile("apps/api/src/receiving/receiving-routes.ts", "utf8"),
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
+      readFile("apps/web/src/receiving-page.tsx", "utf8"),
       readFile("apps/api/src/rework/service.ts", "utf8"),
       readFile("apps/api/migrations/0115_receiving_style_identity_canonicalization.sql", "utf8"),
     ]);
@@ -23,6 +24,13 @@ describe("order board global style search", () => {
     expect(page).toContain('data?.mode === "search"');
     expect(page).toContain("全时间 · 不受所选日期影响");
     expect(page).toContain("全时间范围内没有匹配的收货记录");
+    expect(page).toContain('params.set("status", status)');
+    expect(page).toContain('<option value="normal">正常</option>');
+    expect(page).toContain('<option value="short">少收</option>');
+    expect(page).toContain('<option value="extra">多收</option>');
+    expect(page).toContain("event.target.value.toUpperCase()");
+    expect(receivingPage).toContain("styleNo.trim().toUpperCase()");
+    expect(receivingPage).toContain("setStyleNo(event.target.value.toUpperCase())");
     expect(rework).toContain("styleNo?.trim().toUpperCase()");
     expect(rework).toContain("upper(btrim(batch.style_no))=$1");
     expect(rework).toContain("row.style_no.trim().toUpperCase() !== normalizedStyleNo");
