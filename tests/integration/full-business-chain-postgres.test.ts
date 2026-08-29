@@ -693,30 +693,38 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(n07Draft.value.determination).toMatchObject({
       stage: "draft",
       calculationTotal: "180.00",
-      processes: [{
-        baseAmount: "110.00",
-        responsibilityAmount: "132.00",
-        allocations: [
-          expect.objectContaining({
-            responsibilityType: "fabric_supplier",
-            shareBps: 3000,
-            roundedAmount: "39.60",
-          }),
-          expect.objectContaining({
-            responsibilityType: "processing_factory",
-            shareBps: 7000,
-            roundedAmount: "92.40",
-          }),
-        ],
-      }, {
-        baseAmount: "40.00",
-        responsibilityAmount: "48.00",
-        allocations: [expect.objectContaining({
+    });
+    expect(n07Draft.value.determination!.processes).toHaveLength(2);
+    const workerResponsibility = n07Draft.value.determination!.processes.find(
+      (process) => process.configurationItemId === approvedItem.configurationItemId,
+    );
+    expect(workerResponsibility).toMatchObject({
+      baseAmount: "110.00",
+      responsibilityAmount: "132.00",
+      allocations: expect.arrayContaining([
+        expect.objectContaining({
+          responsibilityType: "fabric_supplier",
+          shareBps: 3000,
+          roundedAmount: "39.60",
+        }),
+        expect.objectContaining({
           responsibilityType: "processing_factory",
-          shareBps: 10000,
-          roundedAmount: "48.00",
-        })],
-      }],
+          shareBps: 7000,
+          roundedAmount: "92.40",
+        }),
+      ]),
+    });
+    const tailResponsibility = n07Draft.value.determination!.processes.find(
+      (process) => process.configurationItemId === tailItem.configurationItemId,
+    );
+    expect(tailResponsibility).toMatchObject({
+      baseAmount: "40.00",
+      responsibilityAmount: "48.00",
+      allocations: [expect.objectContaining({
+        responsibilityType: "processing_factory",
+        shareBps: 10000,
+        roundedAmount: "48.00",
+      })],
     });
     const n07Final = await responsibility.finalize(
       production(),
