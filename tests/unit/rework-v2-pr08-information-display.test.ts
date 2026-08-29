@@ -20,8 +20,12 @@ describe("PR-08 information display", () => {
     expect(page).toContain("全时间 · 不受所选日期影响");
     expect(page).toContain("startDate");
     expect(page).toContain("endDate");
-    expect(page).toContain("原收货");
+    expect(page).not.toContain("<span>原收货</span>");
     expect(page).toContain("第{row.receiptCount}次收货");
+    expect(page).toContain("查看记录");
+    expect(page).toContain("累计实收 {item.cumulativeActualQuantity}件");
+    expect(page).toContain("historyDateTime(item.receivedAt)");
+    expect(page).not.toContain("待收");
   });
 
   it("keeps supplier and temporary-worker wage facts visible without changing deduction math", async () => {
@@ -35,4 +39,3 @@ describe("PR-08 information display", () => {
     expect(exportService).toContain("temporary_wage_multiplier");
   });
 });
-

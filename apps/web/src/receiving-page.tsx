@@ -196,7 +196,7 @@ export function ReceivingPage() {
   };
 
   const submit = async () => {
-    const trimmedStyle = styleNo.trim();
+    const trimmedStyle = styleNo.trim().toUpperCase();
     const documentCount = Number(documentQuantity);
     const actualCount = Number(actualQuantity);
     const defectiveCount = Number(defectiveQuantity);
@@ -297,7 +297,7 @@ export function ReceivingPage() {
                 disabled={busy}
                 onFocus={() => setStyleMenuOpen(true)}
                 onBlur={() => window.setTimeout(() => setStyleMenuOpen(false), 120)}
-                onChange={(event) => { setStyleNo(event.target.value); setStyleMenuOpen(true); pendingKey.current = null; }}
+                onChange={(event) => { setStyleNo(event.target.value.toUpperCase()); setStyleMenuOpen(true); pendingKey.current = null; }}
               />
               {styleMenuOpen && matches.length > 0 ? <div className="receiving-style-menu" role="listbox">
                 {matches.map((item) => <button

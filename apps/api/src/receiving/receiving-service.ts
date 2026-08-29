@@ -53,6 +53,18 @@ type ReceivingReceipt = Readonly<{
 }>;
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
+
+type ReceivingHistoryItem = Readonly<{
+  receiptId: string;
+  sequence: number;
+  documentQuantity: number;
+  actualQuantity: number;
+  defectiveQuantity: number;
+  cumulativeActualQuantity: number;
+  differenceQuantity: number;
+  receivedAt: string;
+  receiverName: string;
+}>;
 type BoardStatus = "all" | "normal" | "extra" | "short";
 
 type BoardRow = Readonly<{
@@ -69,6 +81,7 @@ type BoardRow = Readonly<{
   differenceQuantity: number;
   receiptCount: number;
   batchCount: number;
+  receivingHistory: readonly ReceivingHistoryItem[];
   lastReceivedAt: string;
   lastReceiverName: string;
   reworkOrderId: string | null;
@@ -918,6 +931,7 @@ export class ReceivingService {
       difference_quantity: string;
       receipt_count: string;
       batch_count: string;
+      receiving_history: ReceivingHistoryItem[];
       last_received_at: Date;
       last_receiver_name: string;
       rework_order_id: string | null;
@@ -1093,6 +1107,7 @@ export class ReceivingService {
               totals.cumulative_actual_quantity,
               totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
               totals.receipt_count,totals.batch_count,
+              COALESCE(receiving_history.items,'[]'::jsonb) AS receiving_history,
               totals.last_received_at,receiver.display_name AS last_receiver_name,
               rework.rework_order_id,rework.status AS rework_status,
               COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments,
@@ -1158,6 +1173,46 @@ export class ReceivingService {
              WHERE retired.attachment_id=attachment.attachment_id
            )
        ) receiving_attachments ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'receiptId',history.receipt_id,
+                    'sequence',history.sequence,
+                    'documentQuantity',totals.document_quantity,
+                    'actualQuantity',history.actual_quantity,
+                    'defectiveQuantity',history.defective_quantity,
+                    'cumulativeActualQuantity',history.cumulative_actual_quantity,
+                    'differenceQuantity',history.cumulative_actual_quantity-totals.document_quantity,
+                    'receivedAt',history.received_at,
+                    'receiverName',history.receiver_name
+                  )
+                  ORDER BY history.received_at DESC,history.receipt_id DESC
+                ) AS items
+         FROM (
+           SELECT receipt.receipt_id,
+                  receipt.actual_quantity::bigint AS actual_quantity,
+                  receipt.defective_quantity::bigint AS defective_quantity,
+                  receipt.received_at,
+                  users.display_name AS receiver_name,
+                  row_number() OVER (
+                    ORDER BY receipt.received_at,receipt.receipt_id
+                  )::int AS sequence,
+                  sum(receipt.actual_quantity) OVER (
+                    ORDER BY receipt.received_at,receipt.receipt_id
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                  )::bigint AS cumulative_actual_quantity
+           FROM receiving_receipts receipt
+           JOIN receiving_batches history_batch
+             ON history_batch.receiving_batch_id=receipt.receiving_batch_id
+            AND history_batch.deleted_at IS NULL
+           JOIN app_users users ON users.id=receipt.received_by
+           WHERE upper(btrim(history_batch.style_no))=totals.style_key
+             AND (
+               $3::text<>''
+               OR receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+             )
+         ) history
+       ) receiving_history ON true
        ORDER BY CASE
                   WHEN totals.cumulative_actual_quantity-totals.document_quantity<0 THEN 0
                   WHEN totals.cumulative_actual_quantity-totals.document_quantity>0 THEN 1
@@ -1181,6 +1236,15 @@ export class ReceivingService {
       differenceQuantity: Number(row.difference_quantity),
       receiptCount: Number(row.receipt_count),
       batchCount: Number(row.batch_count),
+      receivingHistory: row.receiving_history.map((item) => ({
+        ...item,
+        sequence: Number(item.sequence),
+        documentQuantity: Number(item.documentQuantity),
+        actualQuantity: Number(item.actualQuantity),
+        defectiveQuantity: Number(item.defectiveQuantity),
+        cumulativeActualQuantity: Number(item.cumulativeActualQuantity),
+        differenceQuantity: Number(item.differenceQuantity),
+      })),
       lastReceivedAt: row.last_received_at.toISOString(),
       lastReceiverName: row.last_receiver_name,
       reworkOrderId: row.rework_order_id,

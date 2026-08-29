@@ -523,6 +523,25 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receiptCount: 2,
       batchCount: 2,
     });
+    expect(allTimeSearch.rows[0]?.receivingHistory).toHaveLength(2);
+    expect(allTimeSearch.rows[0]?.receivingHistory).toMatchObject([
+      {
+        sequence: 2,
+        documentQuantity: 4017,
+        actualQuantity: 2040,
+        cumulativeActualQuantity: 3658,
+        differenceQuantity: -359,
+      },
+      {
+        sequence: 1,
+        documentQuantity: 4017,
+        actualQuantity: 1618,
+        cumulativeActualQuantity: 1618,
+        differenceQuantity: -2399,
+      },
+    ]);
+    expect(Date.parse(allTimeSearch.rows[0]!.receivingHistory[0]!.receivedAt)).not.toBeNaN();
+    expect(allTimeSearch.rows[0]!.receivingHistory[0]!.receiverName).toBeTruthy();
 
     const shortOnly = await service.board(today, today, "in20546664", "short");
     expect(shortOnly.rows).toHaveLength(1);

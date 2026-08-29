@@ -17,6 +17,19 @@ import "./order-board-page.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
+type BoardStatus = "all" | "normal" | "extra" | "short";
+
+type ReceivingHistoryItem = Readonly<{
+  receiptId: string;
+  sequence: number;
+  documentQuantity: number;
+  actualQuantity: number;
+  defectiveQuantity: number;
+  cumulativeActualQuantity: number;
+  differenceQuantity: number;
+  receivedAt: string;
+  receiverName: string;
+}>;
 type ReceivingAttachment = Readonly<{ attachmentId: string; filename: string }>;
 type UploadIntent = Readonly<{
   attachmentId: string;
@@ -36,6 +49,7 @@ type BoardRow = Readonly<{
   currentDefectiveQuantity: number;
   differenceQuantity: number;
   receiptCount: number;
+  receivingHistory: readonly ReceivingHistoryItem[];
   lastReceivedAt: string;
   lastReceiverName: string;
   reworkOrderId: string | null;
@@ -69,6 +83,15 @@ const localDate = (): string => {
 };
 
 const dateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+}).format(new Date(value));
+
+const historyDateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",
@@ -139,6 +162,7 @@ export function OrderBoardPage() {
   const [startDate, setStartDate] = useState(localDate);
   const [endDate, setEndDate] = useState(localDate);
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<BoardStatus>("all");
   const debouncedQuery = useDebouncedValue(query, 180);
   const [data, setData] = useState<BoardResult | null>(null);
   const [message, setMessage] = useState("正在加载订单看板…");
@@ -146,6 +170,7 @@ export function OrderBoardPage() {
   const [canInitiate, setCanInitiate] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [expandedStyles, setExpandedStyles] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<BoardRow | null>(null);
   const [deleting, setDeleting] = useState<BoardRow | null>(null);
   const [editStyleNo, setEditStyleNo] = useState("");
@@ -188,7 +213,8 @@ export function OrderBoardPage() {
   useEffect(() => {
     let active = true;
     const params = new URLSearchParams({ startDate, endDate });
-    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    params.set("status", status);
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
     void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("订单看板加载失败");
@@ -208,7 +234,7 @@ export function OrderBoardPage() {
         setMessage("订单看板加载失败，请刷新后重试");
       });
     return () => { active = false; };
-  }, [startDate, endDate, debouncedQuery, refreshToken]);
+  }, [startDate, endDate, debouncedQuery, status, refreshToken]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
@@ -222,8 +248,8 @@ export function OrderBoardPage() {
   const searchMode = data?.mode === "search";
   const kpiRangeLabel = searchMode ? "全时间 · 不受所选日期影响" : dateRangeLabel;
 
-  const reworkControl = (row: BoardRow, mobile: boolean) => {
-    const className = `order-board-rework-link ${mobile ? "order-board-rework-link--mobile" : "order-board-rework-link--desktop"}`;
+  const reworkControl = (row: BoardRow) => {
+    const className = "order-board-rework-link";
     const label = reworkLabel(row.reworkStatus);
     if (row.reworkStatus === null) {
       if (!canInitiate) return null;
@@ -256,13 +282,20 @@ export function OrderBoardPage() {
   };
 
   const actionControls = (row: BoardRow, mobile: boolean) => {
-    const rework = reworkControl(row, mobile);
     const root = rootControls(row, mobile);
-    if (!rework && !root) return null;
+    if (!root) return null;
     return <div className={`order-board-actions order-board-actions--${mobile ? "mobile" : "desktop"}`}>
-      {rework}
       {root}
     </div>;
+  };
+
+  const toggleHistory = (styleNo: string) => {
+    setExpandedStyles((current) => {
+      const next = new Set(current);
+      if (next.has(styleNo)) next.delete(styleNo);
+      else next.add(styleNo);
+      return next;
+    });
   };
 
   const submitCorrection = async () => {
@@ -336,7 +369,13 @@ export function OrderBoardPage() {
       <div className="order-board-filters">
         <label>开始日期<input type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} /></label>
         <label>结束日期<input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-        <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+        <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => setQuery(event.target.value.toUpperCase())} /></label>
+        <label>状态<select value={status} onChange={(event) => setStatus(event.target.value as BoardStatus)}>
+          <option value="all">全部状态</option>
+          <option value="normal">正常</option>
+          <option value="short">少收</option>
+          <option value="extra">多收</option>
+        </select></label>
       </div>
       <div className="order-board-heading__action">
         {canReceive ? <a className="order-board-receiving-link" href={pageUrl("ui/receiving")}>＋ 仓库收货</a> : null}
@@ -375,21 +414,28 @@ export function OrderBoardPage() {
       {data?.rows.map((row) => {
         const tone = row.differenceQuantity < 0 ? "short" : row.differenceQuantity > 0 ? "extra" : "even";
         const signed = row.differenceQuantity > 0 ? `+${row.differenceQuantity}` : String(row.differenceQuantity);
-        return <Surface className={`order-board-row is-${tone}`} key={row.receivingBatchId}>
+        const historyExpanded = expandedStyles.has(row.styleNo);
+        return <div className="order-board-item" key={row.receivingBatchId}>
+        <Surface className={`order-board-row is-${tone}`}>
           <div className="order-board-row__style">
-            <span>款号</span>
+            <div className="order-board-row__style-heading"><span>款号</span>{reworkControl(row)}</div>
             <div className="order-board-row__style-line">
               <strong>{row.styleNo}</strong>
               <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
             </div>
+            <button
+              type="button"
+              className="order-board-history-toggle"
+              aria-expanded={historyExpanded}
+              onClick={() => toggleHistory(row.styleNo)}
+            >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button>
           </div>
           <div className="order-board-row__document">
             <span>送货单数量</span>
             <div className="order-board-row__document-value">
               <strong>{row.documentQuantity}件</strong>
-              <small>第{row.receiptCount}次收货</small>
               {row.attachments.length ? <button
                 type="button"
                 className="order-board-attachment-button"
@@ -401,12 +447,31 @@ export function OrderBoardPage() {
           <div className="order-board-row__actual"><span>实收</span><strong>{row.actualQuantity}件</strong></div>
           <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
           <div className="order-board-row__difference"><span>差异</span><strong>{signed}件</strong></div>
-          <div className="order-board-row__count"><span>原收货</span><strong>{row.priorActualQuantity}件</strong></div>
           <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
           <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
           {actionControls(row, false)}
           {actionControls(row, true)}
-        </Surface>;
+        </Surface>
+        {historyExpanded ? <section className="order-board-history" aria-label={`${row.styleNo}多次收货记录`}>
+          {row.receivingHistory.map((item) => {
+            const historyTone = item.differenceQuantity < 0 ? "short" : item.differenceQuantity > 0 ? "extra" : "even";
+            const historyStatus = item.differenceQuantity < 0
+              ? `少收${Math.abs(item.differenceQuantity)}件`
+              : item.differenceQuantity > 0
+                ? `多收${item.differenceQuantity}件`
+                : "正常";
+            return <article className={`order-board-history__entry is-${historyTone}`} key={item.receiptId}>
+              <strong>第{item.sequence}次收货</strong>
+              <span>送货单 {item.documentQuantity}件</span>
+              <span>本次实收 {item.actualQuantity}件</span>
+              <span>累计实收 {item.cumulativeActualQuantity}件</span>
+              <span className="order-board-history__status">{historyStatus}</span>
+              <span>收货人 {item.receiverName}</span>
+              <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>
+            </article>;
+          })}
+        </section> : null}
+        </div>;
       })}
     </div>
     {message ? <p className="order-board-message" role="status">{message}</p> : null}
@@ -451,7 +516,7 @@ export function OrderBoardPage() {
       <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>
         <h2>修改收货订单</h2>
         <p>款号改成已有款号时会自动合并；原始收货记录与被替换图片继续保留审计。</p>
-        <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value)} /></label>
+        <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value.toUpperCase())} /></label>
         <div className="order-board-dialog__quantity-grid">
           <label>送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
           <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
@@ -498,4 +563,3 @@ export function OrderBoardPage() {
     </div> : null}
   </div>;
 }
-
