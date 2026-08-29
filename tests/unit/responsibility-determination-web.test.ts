@@ -52,6 +52,25 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("扣款倍率（最低 1.2）");
   });
 
+  it("batch-applies one responsibility to selected worker processes before the existing submit", async () => {
+    const source = await readFile(panelUrl, "utf8");
+    expect(source).toContain("selectedProcessIds");
+    expect(source).toContain("批量判责");
+    expect(source).toContain("应用到已选工序");
+    expect(source).toContain("确认覆盖已勾选的");
+    expect(source).toContain("仍需点击“提交责任判定”才会保存");
+    expect(source).toContain('process.executionKind === "worker"');
+  });
+
+  it("treats the N01 tail bearer as an initial judgment that N07 confirms or explicitly changes", async () => {
+    const source = await readFile(panelUrl, "utf8");
+    expect(source).toContain("质检初判");
+    expect(source).toContain("生产主管复核");
+    expect(source).toContain("修改承担方");
+    expect(source).toContain("只有初判有误时才需要修改");
+    expect(source).not.toContain("<legend>谁承担整查费用？</legend>");
+  });
+
   it("does not hardcode responsibility money and labels the browser value as an estimate", async () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).not.toContain("154.55");
@@ -83,6 +102,7 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("@media (max-width: 800px)");
     expect(source).toContain("@media (max-width: 480px)");
     expect(source).toContain(".responsibility-party");
+    expect(source).toContain(".responsibility-batch-dialog");
     expect(source).toContain("grid-template-columns: 1fr");
   });
 });
