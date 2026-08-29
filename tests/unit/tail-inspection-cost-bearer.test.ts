@@ -35,7 +35,7 @@ describe("tail inspection cost bearer", () => {
     expect(provenanceMigration).toContain("'production_override'");
     expect(provenanceMigration).toContain("'pending_final_quantity_ie_review'");
     expect(provenanceMigration).toContain("THEN 'processing_factory'");
-    expect(provenanceMigration).toContain("SELECT procedure.prosrc");
+    expect(provenanceMigration).toContain("SELECT proc.prosrc");
     expect(provenanceMigration).toContain(
       "position('rework.tail_inspection.waive' IN guard_source)>0",
     );
