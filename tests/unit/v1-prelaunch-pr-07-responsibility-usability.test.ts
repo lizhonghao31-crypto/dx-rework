@@ -54,13 +54,14 @@ describe("1.0 prelaunch PR-07 responsibility usability", () => {
     const partyRule = styles.match(/\.responsibility-party \{[\s\S]*?\}/)?.[0] ?? "";
 
     expect(styles).toContain(".responsibility-process-list {");
-    expect(processRule).toContain("padding: 18px 0;");
+    expect(processRule).toContain("padding: var(--dx-v2-space-5) 0;");
     expect(processRule).toContain("border: 0;");
     expect(processRule).toContain("background: transparent;");
     expect(processRule).toContain("box-shadow: none;");
     expect(styles).toContain(".responsibility-process + .responsibility-process {");
     expect(styles).toContain("border-top: 1px solid var(--dx-v2-color-border);");
-    expect(partyRule).toContain("padding: 10px;");
+    expect(partyRule).toContain("padding: var(--dx-v2-space-3);");
+    expect(partyRule).toContain("border-radius: var(--dx-v2-radius-md);");
     expect(partyRule).toContain("background: var(--dx-v2-color-inset);");
     expect(styles).toContain("min-height: 38px;");
   });
