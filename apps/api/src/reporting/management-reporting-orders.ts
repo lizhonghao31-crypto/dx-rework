@@ -15,6 +15,7 @@ export async function fetchFacts(source: Queryable, options: {
   siteOnly?: boolean;
   workTaskActorUserId?: string;
   includeTemporaryProxyTasks?: boolean;
+  relatedOrderActorUserId?: string;
 }) {
   const values: unknown[] = [];
   const bind = (value: unknown): string => { values.push(value); return `$${values.length}`; };
@@ -45,6 +46,18 @@ export async function fetchFacts(source: Queryable, options: {
     where.push(`(order_record.updated_at,order_record.rework_order_id)<(${date}::timestamptz,${id}::uuid)`);
   }
   if (options.siteOnly) where.push(`order_record.status IN ('pending_process_configuration','pending_ie_review','pending_task_assignment','in_progress','pending_order_review','pending_final_quantity_ie_review','pending_quantity_adjustment_ie_review')`);
+  if (options.relatedOrderActorUserId) {
+    const actorId = bind(options.relatedOrderActorUserId);
+    where.push(`(
+      order_record.merchandiser_user_id=${actorId}::uuid
+      OR EXISTS(
+        SELECT 1
+        FROM rework_order_supply_context related_supply
+        WHERE related_supply.rework_order_id=order_record.rework_order_id
+          AND related_supply.embroidery_merchandiser_user_id=${actorId}::uuid
+      )
+    )`);
+  }
   if (options.workTaskActorUserId || options.includeTemporaryProxyTasks) {
     const visibility: string[] = [];
     if (options.workTaskActorUserId) {

@@ -535,12 +535,13 @@ export class ResponsibilityDeterminationService {
         const nextStatus: ReworkStatus = draft.settlement_schema_version === 2 && hasOwnFactory
           ? "pending_owner_signature"
           : "pending_responsibility_action";
+        const sourceAction = draft.settlement_schema_version === 2 && hasOwnFactory
+          ? "rework.responsibility.submit_owner_signature"
+          : "rework.responsibility.finalize";
         const eventId = await this.appendEvent(
           client,
           actor,
-          draft.settlement_schema_version === 2 && hasOwnFactory
-            ? "rework.responsibility.submit_owner_signature"
-            : "rework.responsibility.finalize",
+          sourceAction,
           orderId,
           undefined,
           order,
@@ -608,6 +609,12 @@ export class ResponsibilityDeterminationService {
                updated_by=$2,updated_at=CURRENT_TIMESTAMP
            WHERE rework_order_id=$1`,
           [orderId, actor.actorId, nextStatus],
+        );
+        await this.todos?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `responsibility-entry:${orderId}:`,
+          "Responsibility determination was finalized",
         );
         return this.get(actor, orderId, client);
       },
@@ -1038,6 +1045,12 @@ export class ResponsibilityDeterminationService {
         "A newer responsibility draft superseded this version",
       );
     }
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `responsibility-entry:${orderId}:`,
+      "A production manager took responsibility for N07",
+    );
     await this.todos?.actionableForResponsibilityHandler(client, actor, {
       category: "responsibility_determination",
       sourceEventId: eventId,

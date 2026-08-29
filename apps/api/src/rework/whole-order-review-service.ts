@@ -318,10 +318,17 @@ export class WholeOrderReviewService {
         [reworkOrderId, actor.actorId],
       );
       await this.todos?.completeOpenByDedupePrefix(client, actor, `final-quantity-ie-review:${reworkOrderId}:`, "IE approved the final quantities");
-      await this.outbox.enqueue(client, {
-        topic: "rework.pending_responsibility_determination", aggregateType: "rework_order", aggregateId: reworkOrderId,
-        payload: { reworkOrderId, reworkNo: order.rework_no, orderReviewId, confirmationId: pendingConfirmation.confirmation_id },
-        recipientKey: "role:production_management", idempotencyKey: `${reworkOrderId}:final-quantity:${reviewId}:approved`,
+      await this.todos?.actionableForAllDirectRole(client, actor, {
+        category: "responsibility_determination",
+        sourceEventId: eventId,
+        sourceAction: "rework.final_quantity.ie_review",
+        entityType: "rework_order",
+        entityId: reworkOrderId,
+        requiredRole: "production_management",
+        requiredCapability: "responsibility:determine",
+        route: { routeName: "responsibility_detail", entityId: reworkOrderId },
+        policyKey: "general",
+        dedupeKey: `responsibility-entry:${reworkOrderId}:${orderReviewId}`,
       });
       return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
     });
@@ -486,11 +493,20 @@ export class WholeOrderReviewService {
           );
         }
       }
-      await this.outbox.enqueue(client, {
-        topic: "rework.pending_responsibility_determination", aggregateType: "rework_order", aggregateId: reworkOrderId,
-        payload: { reworkOrderId, reworkNo: order.rework_no, orderReviewId: reviewId }, recipientKey: "role:production_management",
-        idempotencyKey: reworkOrderId + ":whole-order-review:" + reviewId,
-      });
+      if (todoFoundationAvailable) {
+        await this.todos!.actionableForAllDirectRole(client, actor, {
+          category: "responsibility_determination",
+          sourceEventId: eventId,
+          sourceAction: "rework.whole_order.approve",
+          entityType: "rework_order",
+          entityId: reworkOrderId,
+          requiredRole: "production_management",
+          requiredCapability: "responsibility:determine",
+          route: { routeName: "responsibility_detail", entityId: reworkOrderId },
+          policyKey: "general",
+          dedupeKey: `responsibility-entry:${reworkOrderId}:${reviewId}`,
+        });
+      }
       return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
     });
   }

@@ -161,8 +161,12 @@ export class ManagementReportingService {
         : currentCapabilities.includes("report:view")
           ? "report:view"
           : undefined;
+    const relatedOrderScoped = !broadCapability
+      && currentCapabilities.includes("rework:related_orders:view");
     if (broadCapability) {
       await this.require(actor, broadCapability);
+    } else if (relatedOrderScoped) {
+      await this.require(actor, "rework:related_orders:view");
     } else {
       const workflowStatus = query.status;
       if (!workflowStatus) {
@@ -202,6 +206,7 @@ export class ManagementReportingService {
       ...(query.to ? { to: query.to } : {}),
       ...(ownTaskScoped ? { workTaskActorUserId: actor.actorId } : {}),
       ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
+      ...(relatedOrderScoped ? { relatedOrderActorUserId: actor.actorId } : {}),
       limit: query.limit + 1,
       ...(cursor ? { cursor } : {}),
     }), this.db.query<{ as_of: Date }>("SELECT CURRENT_TIMESTAMP as_of")]);

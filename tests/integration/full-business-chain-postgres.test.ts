@@ -25,6 +25,7 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { ReworkSupplyContextService } from "../../apps/api/src/rework/supply-context-service.js";
 import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
@@ -117,6 +118,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     database,
     todoProjection,
   );
+  const supplyContext = new ReworkSupplyContextService(database, "corp");
   const external = new ExternalResponsibilityApplicationService(database, todoProjection);
   const wages = new WageService(database, undefined, undefined, todoProjection);
 
@@ -361,6 +363,12 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "draft",
       reworkQuantity: 200,
       reworkNo: null,
+    });
+    await supplyContext.save(qc(), draft.value.reworkOrderId, {
+      washingSupplierId: null,
+      embroiderySupplierId: null,
+      fabricSupplierId: null,
+      embroideryMerchandiserUserId: ids.embroideryMerchandiser,
     });
     const submitted = await initiation.submit(
       qc(),
@@ -678,6 +686,28 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(n07Final.value.reworkStatus).toBe("completed");
     expect(n07Final.value.canOwnerSign).toBe(false);
     expect(n07Final.value.ownerSignature).toBeNull();
+    const N07Notices = await database.query<{
+      recipient_user_id: string;
+      todo_type: string;
+      category: string;
+      status: string;
+    }>(
+      `SELECT recipient_user_id,todo_type,category,status
+       FROM rework_todos
+       WHERE entity_type='rework_order' AND entity_id=$1
+         AND category='responsibility_finalized_notice'
+       ORDER BY recipient_user_id`,
+      [submitted.value.reworkOrderId],
+    );
+    expect(N07Notices.rows).toEqual([
+      ids.embroideryMerchandiser,
+      ids.merchandiser,
+    ].sort().map((recipient_user_id) => ({
+      recipient_user_id,
+      todo_type: "information",
+      category: "responsibility_finalized_notice",
+      status: "pending",
+    })));
 
     const externalCases = await database.query<{
       caseId: string;

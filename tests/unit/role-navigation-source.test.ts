@@ -32,8 +32,9 @@ describe("1.0 role entry and navigation closure", () => {
       "('tail_supervisor', 'tools:user'), ('tail_supervisor', 'dashboard:site:read')",
     );
     expect(navigation).toContain(
-      'const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");',
+      'const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")',
     );
+    expect(navigation).toContain('hasCapability("rework:related_orders:view")');
     expect(navigation).toContain("if (reworkBoardAccess) {");
     expect(navigation).toContain("if (reportAccess) reworkNavigation.push({");
   });

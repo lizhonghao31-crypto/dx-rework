@@ -29,6 +29,7 @@ const catalog: Readonly<Record<string, TodoPresentation>> = {
   work_report_return: { title: "返工上数被退回", action: "请修正被退回的完成数量记录后重新提交。" },
   quantity_adjustment: { title: "审核返工数量调整", action: "请核对异常数量调整申请。" },
   responsibility_determination: { title: "责任判定与资料核验", action: "请核对责任方、比例、供应商和倍率。" },
+  responsibility_finalized_notice: { title: "返工责任判定已完成", action: "请查看本单责任方、比例和后续处理状态。" },
   high_multiplier_confirmation: { title: "确认高倍率责任", action: "请核对高倍率责任项目并作出确认。" },
   owner_signature: { title: "老板确认签字", action: "请确认整套责任事实，或直接驳回生产管理。" },
   own_factory_approval: { title: "查看历史本厂审批", action: "请查看历史本厂责任审批记录。" },
