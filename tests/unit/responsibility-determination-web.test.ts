@@ -29,7 +29,7 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("responsibility-determinations/drafts");
     expect(source).toContain("responsibility-determinations/finalize");
     expect(source).toContain("responsibility-determinations/takeover");
-    expect(source).not.toContain("responsibility-determinations/transfer\`");
+    expect(source).not.toContain("responsibility-determinations/transfer`");
     expect(routes).toContain("responsibility-determinations/transfer");
     expect(source).toContain("responsibility-determinations/supplier-options");
     expect(source).toContain("responsibility-owner-signature/${decision}");
