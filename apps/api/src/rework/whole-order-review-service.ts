@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type {
   ConfirmQuantityIncrease,
+  CorrectWorkReportQuantities,
   CorrectWorkReportQuantity,
   CreateQuantityDecrease,
   CreateQuantityIncrease,
@@ -612,6 +613,115 @@ export class WholeOrderReviewService {
         [correctionId, workReportId, row.rework_order_id, row.configuration_item_id, member.person_id,
           correctionVersion, numberValue(row.actual_quantity), input.effectiveQuantity, actor.actorId, eventId, actor.requestId],
       );
+      return this.dto(client, order, await this.permissions(client, actor, order));
+    });
+  }
+
+  async correctReportQuantities(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: CorrectWorkReportQuantities,
+    key: string,
+  ): Promise<Result<WholeOrderReviewResponse>> {
+    return this.mutate(actor, "rework.work_report.quantity_correct", key, { reworkOrderId, ...input }, 200, async (client) => {
+      const reportIds = input.corrections.map((correction) => correction.workReportId);
+      const reports = await client.query<{
+        work_report_id: string; work_task_id: string; rework_order_id: string; configuration_item_id: string;
+        actual_quantity: string; assignment_mode: "individual" | "collective"; rejected: boolean;
+      }>(
+        `SELECT report.work_report_id,report.work_task_id,report.rework_order_id,report.configuration_item_id,
+                report.actual_quantity::text,task.assignment_mode,
+                EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id) AS rejected
+         FROM rework_work_reports report
+         JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
+         WHERE report.work_report_id=ANY($1::uuid[]) AND report.status='submitted'`,
+        [reportIds],
+      );
+      if (reports.rows.length !== reportIds.length) error("部分上数记录不存在", 404, "NOT_FOUND");
+      if (reports.rows.some((row) =>
+        row.rework_order_id !== reworkOrderId || row.configuration_item_id !== input.configurationItemId)) {
+        error("只能批量修正同一订单、同一工序的上数记录", 400, "VALIDATION_ERROR");
+      }
+
+      const order = await this.order(client, reworkOrderId, true);
+      await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
+      this.ensureOrderVersion(order, input.expectedOrderVersion);
+      if (order.status !== "pending_order_review") {
+        error("只有 N05 尾部最终数量确认可以修正有效上数", 409, "INVALID_STATE_TRANSITION");
+      }
+
+      const members = await client.query<{ work_task_id: string; person_id: string | null; member_count: number }>(
+        `SELECT task.work_task_id,
+                (array_agg(member.person_id ORDER BY member.person_id))[1] AS person_id,
+                count(member.person_id)::int AS member_count
+         FROM rework_work_tasks task
+         LEFT JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
+         WHERE task.work_task_id=ANY($1::uuid[])
+         GROUP BY task.work_task_id`,
+        [reports.rows.map((row) => row.work_task_id)],
+      );
+      const memberByTask = new Map(members.rows.map((member) => [member.work_task_id, member]));
+      const latestCorrections = await client.query<{
+        work_report_id: string; revision_version: number; effective_quantity: string;
+      }>(
+        `SELECT DISTINCT ON (work_report_id) work_report_id,revision_version,effective_quantity::text
+         FROM rework_work_report_quantity_revisions
+         WHERE work_report_id=ANY($1::uuid[])
+         ORDER BY work_report_id,revision_version DESC`,
+        [reportIds],
+      );
+      const latestByReport = new Map(latestCorrections.rows.map((revision) => [revision.work_report_id, revision]));
+      const reportById = new Map(reports.rows.map((row) => [row.work_report_id, row]));
+
+      for (const correction of input.corrections) {
+        const row = reportById.get(correction.workReportId)!;
+        if (row.rejected) error("已驳回的上数记录不能再修正", 409, "CONFLICT");
+        const member = memberByTask.get(row.work_task_id) ?? { person_id: null, member_count: 0 };
+        if (row.assignment_mode !== "individual" || member.member_count !== 1 || !member.person_id) {
+          error("历史集体报数无法拆分到个人，请使用原有驳回流程", 409, "CONFLICT");
+        }
+        const latestCorrection = latestByReport.get(correction.workReportId);
+        const previousEffectiveQuantity = numberValue(latestCorrection?.effective_quantity ?? row.actual_quantity);
+        if (previousEffectiveQuantity === correction.effectiveQuantity) {
+          error("批量修正包含未变化的有效数量", 409, "CONFLICT");
+        }
+        const correctionVersion = (latestCorrection?.revision_version ?? 0) + 1;
+        const correctionId = randomUUID();
+        const eventId = await this.events.append(client, this.withCapability(actor, "submission:audit"), {
+          action: "rework.work_report.quantity_correct",
+          entityType: "work_report",
+          entityId: correction.workReportId,
+          before: {
+            workReportId: correction.workReportId,
+            reworkOrderId,
+            configurationItemId: row.configuration_item_id,
+            personId: member.person_id,
+            originalQuantity: numberValue(row.actual_quantity),
+            effectiveQuantity: previousEffectiveQuantity,
+            correctionVersion: latestCorrection?.revision_version ?? 0,
+          },
+          after: {
+            workReportId: correction.workReportId,
+            reworkOrderId,
+            configurationItemId: row.configuration_item_id,
+            personId: member.person_id,
+            originalQuantity: numberValue(row.actual_quantity),
+            effectiveQuantity: correction.effectiveQuantity,
+            correctionVersion,
+          },
+        });
+        await this.context(client, eventId, actor.requestId, "quantity_correction");
+        await client.query(
+          `INSERT INTO rework_work_report_quantity_revisions(
+             quantity_revision_id,work_report_id,rework_order_id,configuration_item_id,person_id,
+             revision_version,original_quantity,effective_quantity,corrected_by,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [correctionId, correction.workReportId, reworkOrderId, row.configuration_item_id, member.person_id,
+            correctionVersion, numberValue(row.actual_quantity), correction.effectiveQuantity,
+            actor.actorId, eventId, actor.requestId],
+        );
+      }
+
       return this.dto(client, order, await this.permissions(client, actor, order));
     });
   }
