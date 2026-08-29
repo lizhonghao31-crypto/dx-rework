@@ -442,6 +442,80 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(twoDays.kpis.receivedQuantity).toBe(70);
   });
 
+  it("consolidates repeated style batches before status filtering and KPI calculation", async () => {
+    const today = businessDate();
+    const yesterday = pastBusinessDate(1);
+    const current = await service.create(receiver(), {
+      styleNo: "in20546664",
+      documentQuantity: 4017,
+      actualQuantity: 2040,
+      defectiveQuantity: 0,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const backfilled = await service.create(receiver(), {
+      styleNo: "in20546664",
+      documentQuantity: 4017,
+      actualQuantity: 1618,
+      defectiveQuantity: 0,
+      attachmentIds: [await readyImage()],
+      receivedDate: yesterday,
+    }, randomUUID());
+    expect(current.value.styleNo).toBe("IN20546664");
+    expect(backfilled.value.styleNo).toBe("IN20546664");
+    expect(backfilled.value.receivingBatchId).not.toBe(current.value.receivingBatchId);
+
+    const todayOnly = await service.board(today, today);
+    const todayRow = todayOnly.rows.find((row) => row.styleNo === "IN20546664");
+    expect(todayRow).toMatchObject({
+      documentQuantity: 4017,
+      priorActualQuantity: 1618,
+      actualQuantity: 2040,
+      cumulativeActualQuantity: 3658,
+      differenceQuantity: -359,
+      receiptCount: 2,
+      batchCount: 2,
+      rootMutable: false,
+    });
+
+    const allTimeSearch = await service.board(today, today, "in20546664");
+    expect(allTimeSearch).toMatchObject({
+      mode: "search",
+      status: "all",
+      kpis: {
+        orderCount: 1,
+        receivedQuantity: 3658,
+        abnormalOrderCount: 1,
+        differenceQuantity: 359,
+        differenceRate: 8.94,
+      },
+    });
+    expect(allTimeSearch.rows).toHaveLength(1);
+    expect(allTimeSearch.rows[0]).toMatchObject({
+      styleNo: "IN20546664",
+      documentQuantity: 4017,
+      actualQuantity: 3658,
+      cumulativeActualQuantity: 3658,
+      differenceQuantity: -359,
+      receiptCount: 2,
+      batchCount: 2,
+    });
+
+    const shortOnly = await service.board(today, today, "in20546664", "short");
+    expect(shortOnly.rows).toHaveLength(1);
+    expect(shortOnly.kpis).toEqual(allTimeSearch.kpis);
+    const normalOnly = await service.board(today, today, "in20546664", "normal");
+    expect(normalOnly.rows).toHaveLength(0);
+    expect(normalOnly.kpis).toEqual({
+      orderCount: 0,
+      receivedQuantity: 0,
+      abnormalOrderCount: 0,
+      differenceQuantity: 0,
+      differenceRate: 0,
+    });
+    await expect(service.board(today, today, "in20546664", "unknown"))
+      .rejects.toThrow("收货状态筛选无效");
+  });
+
   it("assigns Root quantity corrections to the audited correction date instead of prior receipts", async () => {
     const today = businessDate();
     const receipt = await service.create(receiver(), {
@@ -686,38 +760,45 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     });
   });
 
-  it("backfills a missed order into its own batch for yesterday or the day before only", async () => {
+  it("keeps backfill facts in their own batch while consolidating the same style on the board", async () => {
     const current = await service.create(receiver(), {
       styleNo: "STYLE-BACKFILL-01",
       documentQuantity: 20,
-      actualQuantity: 20,
+      actualQuantity: 3,
       attachmentIds: [await readyImage()],
     }, randomUUID());
     const yesterday = pastBusinessDate(1);
     const backfilled = await service.create(receiver(), {
       styleNo: "STYLE-BACKFILL-01",
-      documentQuantity: 18,
+      documentQuantity: 20,
       actualQuantity: 17,
       attachmentIds: [await readyImage()],
       receivedDate: yesterday,
     }, randomUUID());
 
     expect(backfilled.value.receivingBatchId).not.toBe(current.value.receivingBatchId);
-    const historicalBoard = await service.board(yesterday, yesterday, "STYLE-BACKFILL-01");
-    expect(historicalBoard.rows).toHaveLength(1);
-    expect(historicalBoard.rows[0]).toMatchObject({
+    const historicalBoard = await service.board(yesterday, yesterday);
+    expect(historicalBoard.rows.find((row) => row.styleNo === "STYLE-BACKFILL-01")).toMatchObject({
       receivingBatchId: backfilled.value.receivingBatchId,
-      documentQuantity: 18,
+      styleNo: "STYLE-BACKFILL-01",
+      documentQuantity: 20,
       actualQuantity: 17,
+      cumulativeActualQuantity: 17,
+      differenceQuantity: -3,
       receiptCount: 1,
     });
 
     const currentSearch = await service.board(businessDate(), businessDate(), "STYLE-BACKFILL-01");
     expect(currentSearch.rows).toHaveLength(1);
     expect(currentSearch.rows[0]?.receivingBatchId).toBe(current.value.receivingBatchId);
-    expect(currentSearch.rows.some(
-      (row) => row.receivingBatchId === backfilled.value.receivingBatchId,
-    )).toBe(false);
+    expect(currentSearch.rows[0]).toMatchObject({
+      documentQuantity: 20,
+      actualQuantity: 20,
+      cumulativeActualQuantity: 20,
+      differenceQuantity: 0,
+      receiptCount: 2,
+      batchCount: 2,
+    });
 
     const stored = await database.query<{
       received_date: string;
@@ -736,14 +817,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
 
     const isolatedBackfill = await service.create(receiver(), {
       styleNo: "STYLE-BACKFILL-ISOLATED",
-      documentQuantity: 7,
+      documentQuantity: 15,
       actualQuantity: 7,
       attachmentIds: [await readyImage()],
       receivedDate: yesterday,
     }, randomUUID());
     const laterNormalReceipt = await service.create(receiver(), {
       styleNo: "STYLE-BACKFILL-ISOLATED",
-      documentQuantity: 8,
+      documentQuantity: 15,
       actualQuantity: 8,
       attachmentIds: [await readyImage()],
     }, randomUUID());

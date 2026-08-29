@@ -53,6 +53,7 @@ type ReceivingReceipt = Readonly<{
 }>;
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
+type BoardStatus = "all" | "normal" | "extra" | "short";
 
 type BoardRow = Readonly<{
   receivingBatchId: string;
@@ -64,8 +65,10 @@ type BoardRow = Readonly<{
   defectiveQuantity: number;
   currentActualQuantity: number;
   currentDefectiveQuantity: number;
+  cumulativeActualQuantity: number;
   differenceQuantity: number;
   receiptCount: number;
+  batchCount: number;
   lastReceivedAt: string;
   lastReceiverName: string;
   reworkOrderId: string | null;
@@ -88,6 +91,8 @@ type BoardResult = Readonly<{
   date: string;
   startDate: string;
   endDate: string;
+  mode: "range" | "search";
+  status: BoardStatus;
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -108,9 +113,15 @@ const fail = (message: string, status = 400, code = "VALIDATION_ERROR"): never =
 };
 
 const normalizeStyleNo = (value: string): string => {
-  const normalized = value.trim();
+  const normalized = value.trim().toUpperCase();
   if (!normalized || normalized.length > 100) fail("款号不能为空且不能超过100个字符");
   return normalized;
+};
+
+const normalizeBoardStatus = (value: string): BoardStatus => {
+  if (value === "" || value === "all") return "all";
+  if (value === "normal" || value === "extra" || value === "short") return value;
+  return fail("收货状态筛选无效");
 };
 
 const validateQuantity = (value: number, label: string, allowZero: boolean): number => {
@@ -427,8 +438,8 @@ export class ReceivingService {
                   WHERE history.source_receiving_batch_id=target.receiving_batch_id
                 ) AS has_rework_history
          FROM receiving_batches target
-         WHERE target.style_no=$1
-           AND $1<>$3
+         WHERE upper(btrim(target.style_no))=$1
+           AND $1<>upper(btrim($3))
            AND target.receiving_batch_id<>$2
            AND target.deleted_at IS NULL
            AND NOT EXISTS(
@@ -692,7 +703,7 @@ export class ReceivingService {
                   )
               ) AS closed
        FROM receiving_batches batch
-       WHERE batch.style_no=$1
+       WHERE upper(btrim(batch.style_no))=$1
          AND batch.deleted_at IS NULL
          AND NOT EXISTS(
            SELECT 1
@@ -864,28 +875,35 @@ export class ReceivingService {
   }
 
   async listStyleOptions(query = ""): Promise<readonly string[]> {
-    const needle = query.trim();
+    const needle = query.trim().toUpperCase();
     const result = await this.database.query<{ style_no: string }>(
-      `SELECT source.style_no
+      `SELECT DISTINCT upper(btrim(source.style_no)) AS style_no
        FROM (
          SELECT style_no FROM receiving_batches WHERE deleted_at IS NULL
          UNION
          SELECT style_no FROM rework_orders WHERE style_no IS NOT NULL AND status<>'deleted'
        ) source
-       WHERE ($1::text='' OR source.style_no ILIKE '%' || $1 || '%')
-       ORDER BY source.style_no
+       WHERE ($1::text='' OR upper(btrim(source.style_no)) LIKE '%' || $1 || '%')
+       ORDER BY style_no
        LIMIT 100`,
       [needle],
     );
     return result.rows.map((row) => row.style_no);
   }
 
-  async board(startDateInput: string, endDateOrQuery = startDateInput, query = ""): Promise<BoardResult> {
+  async board(
+    startDateInput: string,
+    endDateOrQuery = startDateInput,
+    query = "",
+    statusInput = "all",
+  ): Promise<BoardResult> {
     const startDate = normalizeBoardDate(startDateInput);
     const hasExplicitEndDate = /^\d{4}-\d{2}-\d{2}$/.test(endDateOrQuery);
     const endDate = normalizeBoardDate(hasExplicitEndDate ? endDateOrQuery : startDate);
     if (endDate < startDate) fail("结束日期不能早于开始日期");
-    const needle = (hasExplicitEndDate ? query : endDateOrQuery).trim();
+    const needle = (hasExplicitEndDate ? query : endDateOrQuery).trim().toUpperCase();
+    const status = normalizeBoardStatus(statusInput);
+    const mode = needle ? "search" : "range";
     const rowsResult = await this.database.query<{
       receiving_batch_id: string;
       style_no: string;
@@ -896,8 +914,10 @@ export class ReceivingService {
       defective_quantity: string;
       current_actual_quantity: string;
       current_defective_quantity: string;
+      cumulative_actual_quantity: string;
       difference_quantity: string;
       receipt_count: string;
+      batch_count: string;
       last_received_at: Date;
       last_receiver_name: string;
       rework_order_id: string | null;
@@ -905,15 +925,27 @@ export class ReceivingService {
       version: number;
       root_mutable: boolean;
     }>(
-      `WITH scoped_batches AS (
-         SELECT DISTINCT receipt.receiving_batch_id
+      `WITH scoped_styles AS (
+         SELECT DISTINCT upper(btrim(batch.style_no)) AS style_key
          FROM receiving_receipts receipt
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=receipt.receiving_batch_id
           AND batch.deleted_at IS NULL
-         WHERE receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         WHERE (
+           $3::text<>''
+           AND upper(btrim(batch.style_no)) LIKE '%' || $3 || '%'
+         ) OR (
+           $3::text=''
+           AND receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
            AND receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-           AND ($3::text='' OR batch.style_no ILIKE '%' || $3 || '%')
+         )
+       ), scoped_batches AS (
+         SELECT batch.receiving_batch_id,
+                upper(btrim(batch.style_no)) AS style_key
+         FROM receiving_batches batch
+         JOIN scoped_styles scope
+           ON scope.style_key=upper(btrim(batch.style_no))
+         WHERE batch.deleted_at IS NULL
        ), correction_adjustments AS (
          SELECT event.entity_id::uuid AS receiving_batch_id,
                 COALESCE(sum(
@@ -966,79 +998,140 @@ export class ReceivingService {
          WHERE event.action IN ('receiving.batch.correct','receiving.batch.merge')
            AND event.entity_type='receiving_batch'
          GROUP BY event.entity_id
-       ), totals AS (
+       ), batch_totals AS (
          SELECT r.receiving_batch_id,
-                batch.style_no,
+                scope.style_key,
                 batch.delivery_note_quantity::bigint AS document_quantity,
-                (COALESCE(sum(r.actual_quantity) FILTER (
-                   WHERE r.received_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-                 ),0)
-                  +COALESCE(adjustments.prior_actual_adjustment,0)
-                  +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
-                )::bigint AS prior_actual_quantity,
-                (COALESCE(sum(r.actual_quantity) FILTER (
-                  WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-                    AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                ),0)+COALESCE(adjustments.period_actual_adjustment,0))::bigint AS actual_quantity,
-                (COALESCE(sum(r.defective_quantity) FILTER (
-                  WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-                    AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                ),0)+COALESCE(adjustments.period_defective_adjustment,0))::bigint AS defective_quantity,
+                min(r.received_at) AS first_received_at,
+                max(r.received_at) AS last_all_received_at,
+                max(r.received_at) FILTER (
+                  WHERE $3::text<>''
+                     OR r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ) AS last_through_end_received_at,
+                CASE WHEN $3::text<>'' THEN 0
+                  ELSE (
+                    COALESCE(sum(r.actual_quantity) FILTER (
+                      WHERE r.received_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    ),0)
+                    +COALESCE(adjustments.prior_actual_adjustment,0)
+                    +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
+                  )
+                END::bigint AS prior_actual_quantity,
+                CASE WHEN $3::text<>'' THEN
+                  sum(r.actual_quantity)+batch.actual_quantity_adjustment
+                ELSE
+                  COALESCE(sum(r.actual_quantity) FILTER (
+                    WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                      AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                  ),0)+COALESCE(adjustments.period_actual_adjustment,0)
+                END::bigint AS actual_quantity,
+                CASE WHEN $3::text<>'' THEN
+                  sum(r.defective_quantity)+batch.defective_quantity_adjustment
+                ELSE
+                  COALESCE(sum(r.defective_quantity) FILTER (
+                    WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                      AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                  ),0)+COALESCE(adjustments.period_defective_adjustment,0)
+                END::bigint AS defective_quantity,
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS current_actual_quantity,
                 (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS current_defective_quantity,
-                (COALESCE(sum(r.actual_quantity) FILTER (
-                   WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                 ),0)
+                CASE WHEN $3::text<>'' THEN
+                  sum(r.actual_quantity)+batch.actual_quantity_adjustment
+                ELSE
+                  COALESCE(sum(r.actual_quantity) FILTER (
+                    WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                  ),0)
                   +COALESCE(adjustments.through_end_actual_adjustment,0)
                   +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
-                  -batch.delivery_note_quantity)::bigint AS difference_quantity,
+                END::bigint AS cumulative_actual_quantity,
                 (count(*) FILTER (
-                  WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                  WHERE $3::text<>''
+                     OR r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ))::bigint AS receipt_count,
                 max(r.received_at) FILTER (
-                  WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-                    AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                  WHERE $3::text<>''
+                     OR (
+                       r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+                       AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                     )
                 ) AS last_received_at,
                 batch.version
          FROM receiving_receipts r
-         JOIN scoped_batches scope ON scope.receiving_batch_id=r.receiving_batch_id
+         JOIN scoped_batches scope
+           ON scope.receiving_batch_id=r.receiving_batch_id
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=r.receiving_batch_id
           AND batch.deleted_at IS NULL
          LEFT JOIN correction_adjustments adjustments
            ON adjustments.receiving_batch_id=r.receiving_batch_id
          GROUP BY r.receiving_batch_id,batch.receiving_batch_id,
+                  scope.style_key,
                   adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
                   adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
                   adjustments.period_defective_adjustment
+       ), style_totals AS (
+         SELECT totals.style_key,
+                (array_agg(
+                  totals.document_quantity
+                  ORDER BY totals.first_received_at,totals.receiving_batch_id
+                ))[1]::bigint AS document_quantity,
+                sum(totals.prior_actual_quantity)::bigint AS prior_actual_quantity,
+                sum(totals.actual_quantity)::bigint AS actual_quantity,
+                sum(totals.defective_quantity)::bigint AS defective_quantity,
+                sum(totals.current_actual_quantity)::bigint AS current_actual_quantity,
+                sum(totals.current_defective_quantity)::bigint AS current_defective_quantity,
+                sum(totals.cumulative_actual_quantity)::bigint AS cumulative_actual_quantity,
+                sum(totals.receipt_count)::bigint AS receipt_count,
+                count(*)::bigint AS batch_count,
+                max(totals.last_received_at) AS last_received_at
+         FROM batch_totals totals
+         GROUP BY totals.style_key
        )
-       SELECT totals.receiving_batch_id,totals.style_no,totals.document_quantity,
+       SELECT action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
               totals.current_actual_quantity,totals.current_defective_quantity,
-              totals.difference_quantity,totals.receipt_count,
+              totals.cumulative_actual_quantity,
+              totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
+              totals.receipt_count,totals.batch_count,
               totals.last_received_at,receiver.display_name AS last_receiver_name,
               rework.rework_order_id,rework.status AS rework_status,
               COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments,
-              totals.version,
-              NOT EXISTS(
+              action.version,
+              totals.batch_count=1 AND NOT EXISTS(
                 SELECT 1 FROM rework_orders history
-                WHERE history.source_receiving_batch_id=totals.receiving_batch_id
+                WHERE history.source_receiving_batch_id=action.receiving_batch_id
               ) AS root_mutable
-       FROM totals
+       FROM style_totals totals
+       JOIN LATERAL (
+         SELECT batch.receiving_batch_id,batch.version
+         FROM batch_totals batch
+         WHERE batch.style_key=totals.style_key
+         ORDER BY batch.last_through_end_received_at DESC NULLS LAST,
+                  batch.receiving_batch_id DESC
+         LIMIT 1
+       ) action ON true
        JOIN LATERAL (
          SELECT u.display_name
          FROM receiving_receipts latest
+         JOIN receiving_batches latest_batch
+           ON latest_batch.receiving_batch_id=latest.receiving_batch_id
+          AND latest_batch.deleted_at IS NULL
          JOIN app_users u ON u.id=latest.received_by
-         WHERE latest.receiving_batch_id=totals.receiving_batch_id
-           AND latest.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-           AND latest.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+         WHERE upper(btrim(latest_batch.style_no))=totals.style_key
+           AND (
+             $3::text<>''
+             OR (
+               latest.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+               AND latest.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+             )
+           )
          ORDER BY latest.received_at DESC,latest.receipt_id DESC
          LIMIT 1
        ) receiver ON true
        LEFT JOIN LATERAL (
          SELECT item.rework_order_id,item.status
          FROM rework_orders item
-         WHERE item.source_receiving_batch_id=totals.receiving_batch_id
+         WHERE item.source_receiving_batch_id=action.receiving_batch_id
            AND item.status<>'deleted'
          ORDER BY item.updated_at DESC,item.rework_order_id DESC
          LIMIT 1
@@ -1053,7 +1146,11 @@ export class ReceivingService {
                 ) AS items
          FROM attachments attachment
          WHERE attachment.entity_type='receiving_batch'
-           AND attachment.entity_id=totals.receiving_batch_id::text
+           AND attachment.entity_id IN (
+             SELECT scope.receiving_batch_id::text
+             FROM scoped_batches scope
+             WHERE scope.style_key=totals.style_key
+           )
            AND attachment.status='ready'
            AND attachment.mime_type LIKE 'image/%'
            AND NOT EXISTS(
@@ -1061,11 +1158,16 @@ export class ReceivingService {
              WHERE retired.attachment_id=attachment.attachment_id
            )
        ) receiving_attachments ON true
-       ORDER BY CASE WHEN totals.difference_quantity<0 THEN 0 WHEN totals.difference_quantity>0 THEN 1 ELSE 2 END,
-                abs(totals.difference_quantity) DESC,totals.last_received_at DESC,totals.style_no`,
+       ORDER BY CASE
+                  WHEN totals.cumulative_actual_quantity-totals.document_quantity<0 THEN 0
+                  WHEN totals.cumulative_actual_quantity-totals.document_quantity>0 THEN 1
+                  ELSE 2
+                END,
+                abs(totals.cumulative_actual_quantity-totals.document_quantity) DESC,
+                totals.last_received_at DESC,totals.style_key`,
       [startDate, endDate, needle],
     );
-    const rows: BoardRow[] = rowsResult.rows.map((row) => ({
+    const allRows: BoardRow[] = rowsResult.rows.map((row) => ({
       receivingBatchId: row.receiving_batch_id,
       styleNo: row.style_no,
       documentQuantity: Number(row.document_quantity),
@@ -1075,8 +1177,10 @@ export class ReceivingService {
       defectiveQuantity: Number(row.defective_quantity),
       currentActualQuantity: Number(row.current_actual_quantity),
       currentDefectiveQuantity: Number(row.current_defective_quantity),
+      cumulativeActualQuantity: Number(row.cumulative_actual_quantity),
       differenceQuantity: Number(row.difference_quantity),
       receiptCount: Number(row.receipt_count),
+      batchCount: Number(row.batch_count),
       lastReceivedAt: row.last_received_at.toISOString(),
       lastReceiverName: row.last_receiver_name,
       reworkOrderId: row.rework_order_id,
@@ -1084,6 +1188,12 @@ export class ReceivingService {
       version: row.version,
       rootMutable: row.root_mutable,
     }));
+    const rows = allRows.filter((row) => {
+      if (status === "normal") return row.differenceQuantity === 0;
+      if (status === "short") return row.differenceQuantity < 0;
+      if (status === "extra") return row.differenceQuantity > 0;
+      return true;
+    });
     const differenceQuantity = rows.reduce((sum, row) => sum + Math.abs(row.differenceQuantity), 0);
     const abnormalOrderCount = rows.filter((row) => row.differenceQuantity !== 0).length;
     const documentQuantity = rows.reduce((sum, row) => sum + row.documentQuantity, 0);
@@ -1091,6 +1201,8 @@ export class ReceivingService {
       date: endDate,
       startDate,
       endDate,
+      mode,
+      status,
       kpis: {
         orderCount: rows.length,
         receivedQuantity: rows.reduce((sum, row) => sum + row.actualQuantity, 0),
