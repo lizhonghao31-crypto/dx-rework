@@ -220,7 +220,7 @@ export const AddIePrecountSchema = z.object({
 
 const DraftTextSchema = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable().optional();
-export const TailInspectionCostBearerSchema = z.enum(["own_factory", "processing_factory"]);
+export const TailInspectionCostBearerSchema = z.enum(["own_factory", "processing_factory"]);\nexport const TailInspectionCostBearerSourceSchema = z.enum(["legacy_default", "quality_inspection", "production_override"]);
 
 export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("own_factory") }).strict(),
