@@ -1174,7 +1174,7 @@ export class SourcingService {
             decisionVersion: Number(source.decision_version),
           },
           after: {
-            status: approved ? "pending_contract" : "pending_management_decision",
+            status: approved ? "pending_finance_reconciliation" : "pending_management_decision",
             decision: input.decision,
           },
           reason: decisionReason,
@@ -1204,7 +1204,7 @@ export class SourcingService {
             randomUUID(),
             sourcingCaseId,
             Number(source.sequence) + 1,
-            approved ? "pending_contract" : "pending_management_decision",
+            approved ? "pending_finance_reconciliation" : "pending_management_decision",
             approved ? "owner_approved" : "owner_rejected",
             decisionReason,
             actor.actorId,
@@ -1234,16 +1234,16 @@ export class SourcingService {
           });
         } else {
           await this.todoProjection?.actionableForAllDirectRole(client, actor, {
-            category: "sourcing_contract_record",
+            category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
             sourceAction: "sourcing.owner.approve",
             entityType: "sourcing_case",
             entityId: sourcingCaseId,
-            requiredRole: CONTRACT_ROLE,
-            requiredCapability: CONTRACT_CAPABILITY,
+            requiredRole: FINANCE_RECONCILE_ROLE,
+            requiredCapability: FINANCE_RECONCILE_CAPABILITY,
             route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
             policyKey: "general",
-            dedupeKey: `sourcing:${sourcingCaseId}:contract:${decisionVersion}`,
+            dedupeKey: `sourcing:${sourcingCaseId}:finance:${decisionVersion}:1`,
           });
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
@@ -1460,7 +1460,7 @@ export class SourcingService {
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_finance_reconciliation" || !source.sourcing_decision_id) {
-          fail("只有已登记合同且待财务核对的订单可以发起换厂", 409, "INVALID_STATE_TRANSITION");
+          fail("只有待财务核对的订单可以发起换厂", 409, "INVALID_STATE_TRANSITION");
         }
         if (source.supplier_id === input.supplierId) fail("新加工厂不能与当前加工厂相同");
         const factory = await client.query<{
@@ -1647,7 +1647,7 @@ export class SourcingService {
             factoryChangeRequestId,
           },
           after: {
-            status: approved ? "pending_contract" : "pending_finance_reconciliation",
+            status: "pending_finance_reconciliation",
             decision: input.decision,
             supplierId: source.proposed_supplier_id,
             unitPrice: source.proposed_unit_price,
@@ -1692,7 +1692,7 @@ export class SourcingService {
            ) VALUES($1,$2,$3,'pending_factory_change_verification',$4,$5,$6,$7,$8,$9)`,
           [
             randomUUID(),sourcingCaseId,Number(source.sequence)+1,
-            approved ? "pending_contract" : "pending_finance_reconciliation",
+            "pending_finance_reconciliation",
             approved ? "factory_change_approved" : "factory_change_rejected",
             verificationReason,actor.actorId,eventId,actor.requestId,
           ],
@@ -1705,16 +1705,16 @@ export class SourcingService {
         );
         if (approved) {
           await this.todoProjection?.actionableForAllDirectRole(client, actor, {
-            category: "sourcing_contract_record",
+            category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
             sourceAction: action,
             entityType: "sourcing_case",
             entityId: sourcingCaseId,
-            requiredRole: CONTRACT_ROLE,
-            requiredCapability: CONTRACT_CAPABILITY,
+            requiredRole: FINANCE_RECONCILE_ROLE,
+            requiredCapability: FINANCE_RECONCILE_CAPABILITY,
             route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
             policyKey: "general",
-            dedupeKey: `sourcing:${sourcingCaseId}:contract:${nextDecisionVersion}`,
+            dedupeKey: `sourcing:${sourcingCaseId}:finance:${nextDecisionVersion}:${Number(source.reconciliation_version)+1}`,
           });
           const approvingOwners = await client.query<{ user_id: string }>(
             `SELECT DISTINCT decided_by AS user_id
@@ -1802,7 +1802,7 @@ export class SourcingService {
           expected_unit_price: string;
           expected_quantity: number | string;
           expected_total_amount: string;
-          sourcing_contract_id: string;
+          sourcing_contract_id: string | null;
           reconciliation_version: number | string;
         }>(
           `SELECT transition_row.to_status AS status,transition_row.sequence,
@@ -1824,7 +1824,7 @@ export class SourcingService {
              WHERE decision.sourcing_case_id=source_case.sourcing_case_id
              ORDER BY decision.decision_version DESC LIMIT 1
            ) decision_row ON true
-           JOIN LATERAL (
+           LEFT JOIN LATERAL (
              SELECT contract.sourcing_contract_id
              FROM sourcing_contract_executions contract
              WHERE contract.sourcing_case_id=source_case.sourcing_case_id
@@ -1842,7 +1842,7 @@ export class SourcingService {
           [sourcingCaseId],
         );
         const source = current.rows[0];
-        if (!source) return fail("报价选厂询价或当前合同不存在", 404, "NOT_FOUND");
+        if (!source) return fail("报价选厂询价或当前选厂决定不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_finance_reconciliation") {
           fail("该订单当前不在财务核对阶段", 409, "INVALID_STATE_TRANSITION");
         }

@@ -4,7 +4,6 @@ import {
   DecideSourcingExceptionSchema,
   DecideSourcingFactoryChangeSchema,
   DecideSourcingOwnerSchema,
-  RecordSourcingContractSchema,
   RecordSourcingFinanceReconciliationSchema,
   RecordSourcingManagementDecisionSchema,
   RequestSourcingFactoryChangeSchema,
@@ -201,24 +200,6 @@ export function registerSourcingRoutes(
         : validationError(parsed.error.issues[0]?.message ?? "老板审批信息不完整");
       const result = await dependencies.service.decideOwner(
         await actionActor(request, "owner_group", "sourcing:owner:approve"),
-        caseId(request.params.sourcingCaseId),
-        data,
-        idempotencyKey(request),
-      );
-      if (result.reused) void reply.header("idempotency-replayed", "true");
-      return reply.code(201).send(result.value);
-    },
-  );
-
-  app.post<{ Params: { sourcingCaseId: string } }>(
-    "/sourcing/cases/:sourcingCaseId/contracts",
-    async (request, reply) => {
-      const parsed = RecordSourcingContractSchema.safeParse(request.body);
-      const data = parsed.success
-        ? parsed.data
-        : validationError(parsed.error.issues[0]?.message ?? "合同信息不完整");
-      const result = await dependencies.service.recordContract(
-        await actionActor(request, "order_merchandiser", "sourcing:contract:record"),
         caseId(request.params.sourcingCaseId),
         data,
         idempotencyKey(request),
