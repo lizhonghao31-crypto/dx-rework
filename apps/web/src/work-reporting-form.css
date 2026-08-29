@@ -253,57 +253,19 @@
 }
 
 
-/* N04 supervisor progress board: unfinished first, completed second. */
-.work-reporting-page .n04-progress-board {
+/* N04: one process category with collapsible worker details. */
+.work-reporting-page .n04-progress-board,
+.work-reporting-page .n04-process-list {
   display: grid;
-  gap: 10px;
-}
-
-.work-reporting-page .n04-progress-summary,
-.work-reporting-page .n04-progress-group__heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.work-reporting-page .n04-progress-group__toolbar {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.work-reporting-page .n04-progress-group__toolbar .n04-progress-group__heading {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.work-reporting-page .n04-add-worker {
-  appearance: none;
-  position: absolute;
-  top: 0;
-  left: 56px;
-  z-index: 1;
-  min-width: 0;
-  min-height: 24px;
-  margin: 0;
-  padding: 2px 7px;
-  border: 1px solid var(--dx-v2-color-border);
-  border-radius: 6px;
-  background: var(--dx-v2-color-surface);
-  color: var(--dx-v2-color-primary);
-  font: 700 12px/1.2 system-ui, sans-serif;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.work-reporting-page .n04-add-worker:disabled {
-  cursor: not-allowed;
-  opacity: .55;
+  gap: var(--dx-v2-space-3);
 }
 
 .work-reporting-page .n04-progress-summary {
-  padding: 2px 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dx-v2-space-3);
+  padding: var(--dx-v2-space-2) 4px;
 }
 
 .work-reporting-page .n04-progress-summary strong {
@@ -324,14 +286,54 @@
   color: #28733b;
 }
 
-.work-reporting-page .n04-progress-group {
-  gap: 0;
-  padding: 12px 14px;
+.work-reporting-page .n04-add-worker {
+  appearance: none;
+  min-height: 30px;
+  padding: 0 var(--dx-v2-space-2);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-primary);
+  font: 700 12px/1.2 system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.work-reporting-page .n04-progress-group__heading {
-  width: 100%;
-  padding: 0 0 8px;
+.work-reporting-page .n04-add-worker:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.work-reporting-page .n04-process-group {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.work-reporting-page .n04-process-group__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--dx-v2-space-2);
+  min-height: 66px;
+  padding: var(--dx-v2-space-2) var(--dx-v2-space-3);
+  background: var(--dx-v2-color-surface);
+  box-shadow: 0 8px 24px rgb(15 35 52 / 10%);
+}
+
+.work-reporting-page .n04-process-group.is-completed .n04-process-group__header {
+  background: color-mix(in srgb, var(--dx-v2-color-surface) 88%, #e7f5ec);
+}
+
+.work-reporting-page .n04-process-group__main {
+  appearance: none;
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) repeat(3, minmax(76px, .65fr)) auto;
+  align-items: center;
+  gap: var(--dx-v2-space-3);
+  min-width: 0;
+  min-height: 48px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -340,46 +342,101 @@
   cursor: pointer;
 }
 
-.work-reporting-page .n04-progress-group__heading.is-collapsed {
-  padding-bottom: 0;
-}
-
-.work-reporting-page .n04-progress-group__heading h2 {
-  margin: 0 auto 0 0;
+.work-reporting-page .n04-process-group__main > strong {
+  overflow: hidden;
   font-size: 16px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.work-reporting-page .n04-progress-group__heading > b {
+.work-reporting-page .n04-process-group__main > span {
+  display: grid;
+  gap: 2px;
+}
+
+.work-reporting-page .n04-process-group__main small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+
+.work-reporting-page .n04-process-group__main b {
+  font-size: 14px;
+}
+
+.work-reporting-page .n04-process-group__expander {
+  appearance: none;
+  min-width: 54px;
+  min-height: 30px;
+  padding: 0 var(--dx-v2-space-2);
+  border: 0;
+  background: transparent;
   color: var(--dx-v2-color-primary);
-  font-size: 12px;
+  font: 800 12px/1.2 system-ui, sans-serif;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.work-reporting-page .n04-progress-list {
+.work-reporting-page .n04-process-workers {
   display: grid;
+  padding: 0 var(--dx-v2-space-3);
+  border-top: 1px solid #dbe3ea;
+  background: var(--dx-v2-color-inset);
 }
 
-.work-reporting-page .n04-progress-row {
+.work-reporting-page .n04-worker-row {
   display: grid;
-  grid-template-columns: minmax(100px, 1.2fr) minmax(150px, 1.6fr) minmax(90px, .8fr) minmax(90px, .8fr);
-  gap: 10px;
+  grid-template-columns: minmax(150px, 1.6fr) minmax(90px, .8fr) minmax(90px, .8fr);
+  gap: var(--dx-v2-space-3);
   align-items: center;
   min-width: 0;
-  padding: 9px 0;
-  border-top: 1px solid #dbe3ea;
+  padding: var(--dx-v2-space-3) 0;
+  border-bottom: 1px solid #dbe3ea;
 }
 
-.work-reporting-page .n04-progress-row.has-ie-precount {
-  grid-template-columns: minmax(100px, 1.1fr) minmax(150px, 1.4fr) minmax(90px, .7fr) minmax(90px, .7fr) minmax(250px, 1.5fr);
+.work-reporting-page .n04-worker-row:last-child {
+  border-bottom: 0;
+}
+
+.work-reporting-page .n04-progress-fact {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.work-reporting-page .n04-progress-fact small {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+
+.work-reporting-page .n04-progress-fact b {
+  overflow: hidden;
+  color: var(--dx-v2-color-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-reporting-page .n04-progress-fact > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .work-reporting-page .n04-progress-ie-precount {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--dx-v2-space-2);
-  min-width: 0;
+  min-width: 150px;
+}
+
+.work-reporting-page .n04-progress-ie-precount.is-editing {
+  grid-column: 1 / -1;
+  justify-content: stretch;
+  padding-top: var(--dx-v2-space-2);
+  border-top: 1px solid var(--dx-v2-color-border);
 }
 
 .work-reporting-page .n04-ie-precount-button,
@@ -409,7 +466,7 @@
 
 .work-reporting-page .n04-ie-precount-editor {
   display: grid;
-  grid-template-columns: minmax(70px, .55fr) minmax(110px, 1fr) auto auto;
+  grid-template-columns: minmax(90px, .55fr) minmax(140px, 1fr) auto auto;
   gap: var(--dx-v2-space-2);
   width: 100%;
 }
@@ -437,32 +494,7 @@
   margin: 0;
   color: var(--dx-v2-color-text-secondary);
   font-size: 11px;
-}
-
-.work-reporting-page .n04-progress-fact {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.work-reporting-page .n04-progress-fact small {
-  color: var(--dx-v2-color-text-secondary);
-  font-size: 11px;
-}
-
-.work-reporting-page .n04-progress-fact b {
-  overflow: hidden;
-  color: var(--dx-v2-color-text);
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.work-reporting-page .n04-progress-fact > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  text-align: right;
 }
 
 .work-reporting-page .n04-worker-remove {
@@ -495,13 +527,6 @@
   transform: translateY(-1px);
 }
 
-.work-reporting-page .workforce-adjustment-processes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
-}
-
 .work-reporting-page .n04-progress-fact em {
   flex: 0 0 auto;
   border-radius: 999px;
@@ -519,39 +544,87 @@
 
 .work-reporting-page .n04-progress-empty {
   margin: 0;
-  padding: 8px 0 2px;
+  padding: var(--dx-v2-space-3);
   color: var(--dx-v2-color-text-secondary);
   font-size: 13px;
 }
 
+.work-reporting-page .workforce-adjustment-processes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
 @media (max-width: 640px) {
   .work-reporting-page .n04-progress-summary {
-    align-items: baseline;
+    gap: var(--dx-v2-space-2);
   }
 
-  .work-reporting-page .n04-progress-group {
-    padding: 10px;
+  .work-reporting-page .n04-progress-summary strong {
+    flex: 1 1 100%;
   }
 
-  .work-reporting-page .n04-progress-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 12px;
-    padding: 9px 0;
+  .work-reporting-page .n04-add-worker {
+    margin-left: auto;
   }
 
-  .work-reporting-page .n04-progress-row.has-ie-precount {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .work-reporting-page .n04-process-list {
+    gap: var(--dx-v2-space-2);
+  }
+
+  .work-reporting-page .n04-process-group__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--dx-v2-space-2);
+    padding: var(--dx-v2-space-2);
+  }
+
+  .work-reporting-page .n04-process-group__main {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) repeat(2, minmax(54px, auto));
+    gap: var(--dx-v2-space-2);
+  }
+
+  .work-reporting-page .n04-process-group__main > span:nth-of-type(3),
+  .work-reporting-page .n04-process-group__main > .dx-badge {
+    grid-column: auto;
+  }
+
+  .work-reporting-page .n04-process-group__main > strong {
+    font-size: 15px;
+  }
+
+  .work-reporting-page .n04-process-group__expander {
+    justify-self: end;
   }
 
   .work-reporting-page .n04-progress-ie-precount {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .work-reporting-page .n04-progress-ie-precount.is-editing {
     grid-column: 1 / -1;
   }
 
   .work-reporting-page .n04-ie-precount-editor {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-}
 
+  .work-reporting-page .n04-process-workers {
+    padding: 0 var(--dx-v2-space-2);
+  }
+
+  .work-reporting-page .n04-worker-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--dx-v2-space-2);
+    padding: var(--dx-v2-space-2) 0;
+  }
+
+  .work-reporting-page .n04-worker-row .n04-progress-fact--worker {
+    grid-column: 1 / -1;
+  }
+}
 
 .work-reporting-page .work-reporting-approved-price {
   display: block;
