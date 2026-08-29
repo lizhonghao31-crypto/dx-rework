@@ -1,4 +1,5 @@
 import {
+  AddTailDefectiveQuantitySchema,
   CreateReworkDraftSchema,
   DeleteReworkOrderResponseSchema,
   ExtractInspectionReportImageSchema,
@@ -311,6 +312,18 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
         await authenticatedActor(request),
         parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
       ));
+    app.post<{
+      Params: { reworkOrderId: string };
+      Body: unknown;
+    }>("/rework-orders/:reworkOrderId/tail-defective-quantity", async (request, reply) => {
+      const result = await dependencies.businessDetailService!.addTailDefectiveQuantity(
+        await authenticatedActor(request),
+        parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
+        parse(AddTailDefectiveQuantitySchema, request.body),
+        idempotencyKey(request),
+      );
+      return reply.code(result.reused ? 200 : 201).send(result.value);
+    });
   }
   app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId", async (request) => dependencies.service.getOwn(await actor(request), parse(ReworkOrderParamsSchema, request.params).reworkOrderId));
   app.get("/rework-orders", async (request) => {
