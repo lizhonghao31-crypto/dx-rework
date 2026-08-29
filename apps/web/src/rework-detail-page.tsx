@@ -399,7 +399,7 @@ const historyActionLabel = (action: string): string => {
   if (action.includes("process_configuration")) return "工序配置处理";
   if (action.includes("tail_defective_quantity")) return "尾部次品追加";
   if (action.includes("tail_inspection")) return "返工执行报数";
-  if (action.includes("ie_precount")) return "IE预核数";
+  if (action.includes("ie_precount")) return "数量记录";
   if (action.includes("work_task")) return "返工人员分配";
   if (action.includes("work_report")) return "执行报数";
   if (action.includes("whole_order")) return "整单审核";
@@ -653,7 +653,16 @@ export function ReworkDetailPage({
       if (selected.state === "current" || selected.state === "followup") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "task_assignment" || selected.key === "work_reporting")) {
-      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode={selected.key} embedded onOrderChanged={syncAfterNodeAction} />;
+      if (canUseWorkWorkspace(currentUser)) return <WorkReportingForm
+        reworkOrderId={detail.reworkOrderId}
+        taskMode={selected.key}
+        embedded
+        onOrderChanged={syncAfterNodeAction}
+        {...(selected.key === "work_reporting"
+          && (detail.iePrecounts.canRecord || currentUser?.isRoot === true || hasRole(currentUser, "ie_reviewer"))
+          ? { iePrecounts: detail.iePrecounts }
+          : {})}
+      />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review" || selected.key === "quantity_adjustment")) {
@@ -819,10 +828,6 @@ export function ReworkDetailPage({
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
           <div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : `¥${formatSinglePieceReworkTotal(detail.singlePieceReworkTotal)}`}</span></div>
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
-          {selected && ["work_reporting", "whole_order_review", "final_quantity_ie_review"].includes(selected.key)
-            && (detail.iePrecounts.canRecord || detail.iePrecounts.entries.length > 0)
-            ? <IePrecountPanel detail={detail} onChanged={async () => { await load(); }} />
-            : null}
           {renderSelectedTask()}
         </section>
       </div>
@@ -873,107 +878,6 @@ export function ReworkDetailPage({
       )}
     </Shell>
   );
-}
-
-function IePrecountPanel({
-  detail,
-  onChanged,
-}: {
-  detail: ReworkBusinessDetail;
-  onChanged: () => Promise<void>;
-}) {
-  const [configurationItemId, setConfigurationItemId] = useState(
-    detail.iePrecounts.processes[0]?.configurationItemId ?? "",
-  );
-  const [quantity, setQuantity] = useState("");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (!detail.iePrecounts.processes.some((process) =>
-      process.configurationItemId === configurationItemId)) {
-      setConfigurationItemId(detail.iePrecounts.processes[0]?.configurationItemId ?? "");
-    }
-  }, [configurationItemId, detail.iePrecounts.processes]);
-
-  const record = async (): Promise<void> => {
-    const parsedQuantity = Number(quantity);
-    if (!configurationItemId) {
-      setMessage("请选择工序");
-      return;
-    }
-    if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
-      setMessage("预核数量必须是大于0的整数");
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    try {
-      const response = await fetch(apiUrl(`rework-orders/${detail.reworkOrderId}/ie-precounts`), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          "idempotency-key": createClientRequestId(),
-        },
-        body: JSON.stringify({
-          configurationItemId,
-          quantity: parsedQuantity,
-          ...(note.trim() ? { note: note.trim() } : {}),
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(body?.error?.message ?? "IE预核数保存失败");
-      }
-      setQuantity("");
-      setNote("");
-      setMessage("IE预核数已记录；仅作参考，不影响最终数量和工资。");
-      await onChanged();
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "IE预核数保存失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return <Surface className="ie-precount-panel">
-    <div className="section-title">
-      <div><h2>IE预核数</h2><p>用于走货前临时记数；不替代N06复核，不计入工资和责任。</p></div>
-      <StatusBadge tone={detail.iePrecounts.canRecord ? "warning" : "info"}>
-        {detail.iePrecounts.canRecord ? "可记录" : "只读"}
-      </StatusBadge>
-    </div>
-    {detail.iePrecounts.canRecord ? <div className="ie-precount-form">
-      <label>工序
-        <select value={configurationItemId} disabled={busy} onChange={(event) => setConfigurationItemId(event.target.value)}>
-          {detail.iePrecounts.processes.map((process) => <option value={process.configurationItemId} key={process.configurationItemId}>
-            {process.processName}
-          </option>)}
-        </select>
-      </label>
-      <label>预核数量
-        <input type="number" inputMode="numeric" min="1" step="1" value={quantity} disabled={busy} onChange={(event) => setQuantity(event.target.value)} />
-      </label>
-      <label>备注（选填）
-        <input maxLength={200} value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} />
-      </label>
-      <Button variant="primary" disabled={busy || !configurationItemId} onClick={() => void record()}>
-        {busy ? "保存中…" : "记录预核数"}
-      </Button>
-    </div> : null}
-    {message ? <p role="status">{message}</p> : null}
-    {detail.iePrecounts.entries.length > 0 ? <div className="ie-precount-history">
-      <h3>预核记录（最新在上）</h3>
-      {detail.iePrecounts.entries.map((entry) => <div key={entry.entryId}>
-        <strong>{entry.processName} · {entry.quantity} 件</strong>
-        <span>{entry.recordedBy} · {formatTime(entry.recordedAt)}</span>
-        {entry.note ? <small>{entry.note}</small> : null}
-      </div>)}
-    </div> : <p>暂无IE预核记录。</p>}
-  </Surface>;
 }
 
 function TailInspectionWaiverAction({
