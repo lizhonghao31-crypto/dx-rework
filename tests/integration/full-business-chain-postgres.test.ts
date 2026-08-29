@@ -653,7 +653,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
           ],
         }, {
           configurationItemId: tailItem.configurationItemId,
-          multiplier: "1.200",
+          multiplier: "1.000",
           allocations: [{
             responsibilityType: "processing_factory",
             shareBps: 10000,
