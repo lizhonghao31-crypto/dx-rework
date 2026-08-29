@@ -63,7 +63,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     ));
   };
 
-  const insertLegacyReceipt = async (): Promise<string> => {
+  const insertLegacyReceipt = async (styleNo = "STYLE-LEGACY-01"): Promise<string> => {
     const receiptId = randomUUID();
     const eventId = randomUUID();
     const requestId = randomUUID();
@@ -86,8 +86,8 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
         `INSERT INTO receiving_receipts(
            receipt_id,style_no,document_quantity,actual_quantity,
            received_by,operation_event_id,request_id
-         ) VALUES($1,'STYLE-LEGACY-01',50,45,$2,$3,$4)`,
-        [receiptId, receiverId, eventId, requestId],
+         ) VALUES($1,$2,50,45,$3,$4,$5)`,
+        [receiptId, styleNo, receiverId, eventId, requestId],
       );
       await client.query("COMMIT");
       return receiptId;
@@ -268,6 +268,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       [receiverId],
     );
     await insertLegacyReceipt();
+    await insertLegacyReceipt(" style-legacy-case-01 ");
     await migration("0086_receiving_rework_evidence_link.sql");
     await migration("0088_root_receiving_correction.sql");
     await migration("0095_receiving_defective_quantity.sql");
@@ -275,6 +276,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0111_receiving_delivery_note_total.sql");
     await migration("0112_receiving_root_merge_image_replacement.sql");
     await migration("0113_tail_inspection_cost_bearer.sql");
+    await migration("0115_receiving_style_identity_canonicalization.sql");
   });
 
   afterAll(async () => {
@@ -301,6 +303,26 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       difference_quantity: -5,
     });
     expect(legacy.rows[0]?.receiving_batch_id).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it("opens rework from a canonical board row backed by a legacy cased batch", async () => {
+    const board = await service.board(businessDate(), businessDate(), "style-legacy-case-01");
+    expect(board.rows).toHaveLength(1);
+    expect(board.rows[0]).toMatchObject({
+      styleNo: "STYLE-LEGACY-CASE-01",
+      documentQuantity: 50,
+      actualQuantity: 45,
+      differenceQuantity: -5,
+    });
+
+    const draft = await reworkService.createDraft(initiator(), {
+      receivingBatchId: board.rows[0]!.receivingBatchId,
+      styleNo: board.rows[0]!.styleNo,
+    }, randomUUID());
+    expect(draft.value).toMatchObject({
+      receivingBatchId: board.rows[0]!.receivingBatchId,
+      styleNo: "STYLE-LEGACY-CASE-01",
+    });
   });
 
   it("keeps one delivery-note total while accumulating immutable same-style receipt facts", async () => {
