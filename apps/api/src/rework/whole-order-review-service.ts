@@ -326,7 +326,7 @@ export class WholeOrderReviewService {
         entityId: reworkOrderId,
         requiredRole: "production_management",
         requiredCapability: "responsibility:determine",
-        route: { routeName: "responsibility_determination", entityId: reworkOrderId },
+        route: { routeName: "responsibility_detail", entityId: reworkOrderId },
         policyKey: "general",
         dedupeKey: `responsibility-entry:${reworkOrderId}:${orderReviewId}`,
       });
@@ -502,7 +502,7 @@ export class WholeOrderReviewService {
           entityId: reworkOrderId,
           requiredRole: "production_management",
           requiredCapability: "responsibility:determine",
-          route: { routeName: "responsibility_determination", entityId: reworkOrderId },
+          route: { routeName: "responsibility_detail", entityId: reworkOrderId },
           policyKey: "general",
           dedupeKey: `responsibility-entry:${reworkOrderId}:${reviewId}`,
         });
