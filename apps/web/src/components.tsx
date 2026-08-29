@@ -295,7 +295,8 @@ export function Shell({
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
   const todoAccess = hasCapability("todo:view");
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
-  const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read");
+  const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
+    || hasCapability("rework:related_orders:view");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const systemManagementAccess = auditAccess || technicalAdminAccess
     || isRoot || isOwner || hasCapability("master_data:manage");
