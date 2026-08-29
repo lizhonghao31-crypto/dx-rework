@@ -5,7 +5,7 @@ import {
   type ResponsibilityType,
   type TailInspectionCostBearer,
 } from "@dx-rework/contracts";
-import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { Button, InsetField, StatusBadge } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -465,7 +465,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
 
   const ownerSigning = response?.reworkStatus === "pending_owner_signature";
   const statusText = ownerSigning || determination?.stage === "finalized" ? "已提交" : editable ? "待提交" : "待处理";
-  return <Surface className="responsibility-panel">
+  return <div className="responsibility-panel">
     {!embedded && <div className="section-title responsibility-heading">
       <div>
         <h2>{ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"}</h2>
@@ -475,7 +475,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     </div>}
     {message && <p className="responsibility-message" role="status">{message}</p>}
 
-    {response?.tailInspectionRequired ? <section className="responsibility-process responsibility-tail-review">
+    {response?.tailInspectionRequired ? <section className="responsibility-tail-review">
       <div className="responsibility-process__title">
         <div>
           <h3>整查费用承担</h3>
@@ -504,6 +504,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       <Button variant="primary" disabled={selectedProcessIds.length === 0 || Boolean(busyAction)} onClick={openBatchDialog}>批量判责</Button>
     </div>}
 
+    <div className="responsibility-process-list">
     {processes.map((process) => {
       const persisted = determination?.processes.find((item) => item.configurationItemId === process.configurationItemId);
       const totalBps = shareTotalBps(process.allocations);
@@ -552,6 +553,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
         </div>}
       </section>;
     })}
+    </div>
 
     {batchDialogOpen && <div className="responsibility-batch-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setBatchDialogOpen(false);
@@ -599,5 +601,5 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       <Button disabled={Boolean(busyAction)} onClick={() => void ownerDecision("reject")}>{busyAction === "owner-reject" ? "驳回中…" : "驳回，返回判责"}</Button>
     </div>}
     {ownerSigning && !response?.canOwnerSign && <p>等待有审批权限的老板处理。</p>}
-  </Surface>;
+  </div>;
 }

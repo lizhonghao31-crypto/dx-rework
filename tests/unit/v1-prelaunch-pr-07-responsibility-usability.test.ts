@@ -48,13 +48,21 @@ describe("1.0 prelaunch PR-07 responsibility usability", () => {
     expect(panel).toContain("onChange={(supplierId: string) => setAllocation");
   });
 
-  it("uses one neutral process layer and compact responsibility rows", async () => {
+  it("uses flat process sections and compact responsibility rows", async () => {
     const styles = await read("apps/web/src/responsibility-determination.css");
+    const processRule = styles.match(/\.responsibility-process \{[\s\S]*?\}/)?.[0] ?? "";
+    const partyRule = styles.match(/\.responsibility-party \{[\s\S]*?\}/)?.[0] ?? "";
 
-    expect(styles).toContain(".responsibility-process {");
-    expect(styles).toContain("background: var(--dx-v2-color-surface);");
-    expect(styles).toContain("padding: 10px;");
-    expect(styles).toContain("min-height: 38px;");
+    expect(styles).toContain(".responsibility-process-list {");
+    expect(processRule).toContain("padding: var(--dx-v2-space-5) 0;");
+    expect(processRule).toContain("border: 0;");
+    expect(processRule).toContain("background: transparent;");
+    expect(processRule).toContain("box-shadow: none;");
+    expect(styles).toContain(".responsibility-process + .responsibility-process {");
     expect(styles).toContain("border-top: 1px solid var(--dx-v2-color-border);");
+    expect(partyRule).toContain("padding: var(--dx-v2-space-3);");
+    expect(partyRule).toContain("border-radius: var(--dx-v2-radius-md);");
+    expect(partyRule).toContain("background: var(--dx-v2-color-inset);");
+    expect(styles).toContain("min-height: 38px;");
   });
 });
