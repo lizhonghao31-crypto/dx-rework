@@ -39,7 +39,7 @@ const STATUS_LABELS: Readonly<Record<SourcingCaseStatus, string>> = {
   pending_ie_quote: "待 IE 报价",
   pending_management_decision: "待生产管理调价选厂",
   pending_owner_approval: "待老板终审",
-  pending_contract: "待登记合同",
+  pending_contract: "待财务核对",
   pending_finance_reconciliation: "待财务核对",
   pending_factory_change_verification: "待核实换厂",
   pending_exception_verification: "待核实差异",
@@ -63,7 +63,6 @@ type UploadedImage = Readonly<{
 }>;
 type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; unitPrice: string; decisionReason: string }>;
-type ContractDraft = Readonly<{ contractReference: string; signedOn: string; executionReason: string }>;
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
 type FinanceDraft = Readonly<{
   supplierId: string;
@@ -133,13 +132,6 @@ const canonicalTotalAmount = (value: string): string => {
 
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
-
-const localDateInputValue = (): string => {
-  const now = new Date();
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-};
-
 
 const detailHref = (item: SourcingCaseSummary): string =>
   pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
@@ -382,8 +374,7 @@ const WORKFLOW = [
   { key: "ie_quote", number: "02", label: "IE 给价", role: "IE" },
   { key: "management", number: "03", label: "调价与选厂", role: "生产管理" },
   { key: "owner", number: "04", label: "最终审批", role: "老板" },
-  { key: "contract", number: "05", label: "合同执行", role: "跟单" },
-  { key: "finance", number: "06", label: "财务核对", role: "财务" },
+  { key: "finance", number: "05", label: "财务核对", role: "财务" },
 ] as const;
 
 const statusStep = (status: SourcingCaseStatus): number => ({
@@ -392,9 +383,9 @@ const statusStep = (status: SourcingCaseStatus): number => ({
   pending_owner_approval: 3,
   pending_contract: 4,
   pending_factory_change_verification: 4,
-  pending_finance_reconciliation: 5,
-  pending_exception_verification: 5,
-  closed: 6,
+  pending_finance_reconciliation: 4,
+  pending_exception_verification: 4,
+  closed: 5,
 })[status];
 
 const timelineLabel = (entry: SourcingTimelineEntry): string => ({
@@ -431,9 +422,9 @@ const timelineNode = (entry: SourcingTimelineEntry): SourcingWorkflowNodeKey => 
   ie_quote: "ie_quote",
   management_decision: "management",
   owner_decision: "owner",
-  contract: "contract",
-  factory_change_request: "contract",
-  factory_change_verification: "contract",
+  contract: "finance",
+  factory_change_request: "finance",
+  factory_change_verification: "finance",
   finance_reconciliation: "finance",
   exception_verification: "finance",
 } as const)[entry.kind];
@@ -443,8 +434,7 @@ const WORKFLOW_PREVIEWS: Readonly<Record<SourcingWorkflowNodeKey, string>> = {
   ie_quote: "查看 IE 核定的加工单价、数量、总额和说明。",
   management: "查看生产管理的调价、选厂及决定依据。",
   owner: "查看老板最终审批结论与审批说明。",
-  contract: "查看合同登记以及中途换厂的处理记录。",
-  finance: "查看财务四项核对、差异处理和闭环记录。",
+  finance: "查看换厂、财务四项核对、差异处理和闭环记录。",
 };
 
 function OrderDetailPage({
@@ -461,11 +451,6 @@ function OrderDetailPage({
   const [quote, setQuote] = useState<QuoteDraft>({ unitPrice: "", quoteReason: "" });
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", unitPrice: "", decisionReason: "" });
   const [ownerReason, setOwnerReason] = useState("");
-  const [contract, setContract] = useState<ContractDraft>({
-    contractReference: "",
-    signedOn: localDateInputValue(),
-    executionReason: "",
-  });
   const [factoryChange, setFactoryChange] = useState<FactoryChangeDraft>({
     supplierId: "",
     unitPrice: "",
@@ -517,7 +502,6 @@ function OrderDetailPage({
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
   const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
-  const canContract = canAct(user, "order_merchandiser", "sourcing:contract:record");
   const canChangeFactory = canAct(user, "order_merchandiser", "sourcing:factory_change:request");
   const canVerifyFactoryChange = canAct(
     user,
@@ -573,9 +557,6 @@ function OrderDetailPage({
   const priceAdjusted = item.ieQuote && item.decision
     ? Number(item.ieQuote.unitPrice) !== Number(item.decision.unitPrice)
     : false;
-  const latestContract = item.status === "pending_contract"
-    ? undefined
-    : [...timeline].reverse().find((entry) => entry.kind === "contract");
   const pendingFactoryChange = [...timeline].reverse()
     .find((entry) => entry.kind === "factory_change_request");
   const latestFinance = [...timeline].reverse()
@@ -617,8 +598,6 @@ function OrderDetailPage({
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? `¥${item.decision.totalAmount}` : item.ieQuote ? `¥${item.ieQuote.totalAmount}` : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>合同编号</dt><dd>{latestContract?.contractReference ?? "待登记"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>签署日期</dt><dd>{latestContract?.signedOn ?? "—"}</dd></div>
         </dl>
 
         <div className="rework-detail-overview-grid">
@@ -712,28 +691,9 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
-          {item.status === "pending_contract" && selectedNode === "contract" ? <Surface className="rework-detail-node-preview">
-            <h2>05 · 登记合同</h2>
-            <p>合同必须绑定当前已批准的选厂决定；换厂通过后需登记新合同。</p>
-            {canContract ? <div className="sourcing-form-grid">
-              <label><span>合同编号</span><input value={contract.contractReference} maxLength={200} onChange={(event) => { setContract({ ...contract, contractReference: event.target.value }); actionKey.current = null; }} /></label>
-              <label><span>签署日期</span><input type="date" value={contract.signedOn} onChange={(event) => { setContract({ ...contract, signedOn: event.target.value }); actionKey.current = null; }} /></label>
-              <label className="sourcing-form-wide"><span>合同说明</span><input value={contract.executionReason} maxLength={500} onChange={(event) => { setContract({ ...contract, executionReason: event.target.value }); actionKey.current = null; }} placeholder="可选" /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || !contract.contractReference.trim() || !contract.signedOn} onClick={() => void submit(
-                `sourcing/cases/${item.sourcingCaseId}/contracts`,
-                {
-                  contractReference: contract.contractReference.trim(),
-                  signedOn: contract.signedOn,
-                  ...(contract.executionReason.trim() ? { executionReason: contract.executionReason.trim() } : {}),
-                },
-                "合同已登记，订单进入财务核对",
-              )}>登记合同</button>
-            </div> : <p>当前账号仅可查看，本节点由跟单办理。</p>}
-          </Surface> : null}
-
           {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
-            <h2>06 · 待财务核对</h2>
-            <p>逐项核对合同执行的供应商、单价、数量和总额；一致即归档，有差异则自动交生产管理核实并通知老板。</p>
+            <h2>05 · 待财务核对</h2>
+            <p>逐项核对已批准选厂决定的供应商、单价、数量和总额；一致即归档，有差异则自动交生产管理核实并通知老板。</p>
             {canFinance ? <div className="sourcing-form-grid">
               <label><span>实际加工厂</span><select value={finance.supplierId} onChange={(event) => { setFinance({ ...finance, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择实际加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               <label><span>实际单价</span><input value={finance.unitPrice} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
@@ -769,15 +729,15 @@ function OrderDetailPage({
             </div> : null}
           </Surface> : null}
 
-          {item.status === "pending_factory_change_verification" && selectedNode === "contract" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_factory_change_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 生产管理核实换厂</h2>
-            <p>新加工厂：{pendingFactoryChange?.supplierName ?? "—"}；新单价：{pendingFactoryChange?.unitPrice ? `¥${pendingFactoryChange.unitPrice}` : "—"}。通过后无需老板复审，但必须登记新合同。</p>
+            <p>新加工厂：{pendingFactoryChange?.supplierName ?? "—"}；新单价：{pendingFactoryChange?.unitPrice ? `¥${pendingFactoryChange.unitPrice}` : "—"}。通过后无需老板复审，直接返回财务核对。</p>
             {canVerifyFactoryChange && pendingFactoryChange ? <div className="sourcing-owner-actions">
               <label><span>核实说明</span><input value={verificationReason} maxLength={500} onChange={(event) => { setVerificationReason(event.target.value); actionKey.current = null; }} /></label>
               <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !verificationReason.trim()} onClick={() => void submit(
                 `sourcing/cases/${item.sourcingCaseId}/factory-changes/${pendingFactoryChange.entryId}/decision`,
                 { decision: "approved", verificationReason: verificationReason.trim() },
-                "换厂已核实通过，请跟单登记新合同",
+                "换厂已核实通过，订单返回财务核对",
               )}>通过换厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !verificationReason.trim()} onClick={() => void submit(
                 `sourcing/cases/${item.sourcingCaseId}/factory-changes/${pendingFactoryChange.entryId}/decision`,
                 { decision: "rejected", verificationReason: verificationReason.trim() },
@@ -787,7 +747,7 @@ function OrderDetailPage({
           </Surface> : null}
 
           {item.status === "pending_exception_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
-            <h2>06 · 财务差异核实</h2>
+            <h2>05 · 财务差异核实</h2>
             <p>财务发现：{latestFinance?.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、") || "差异项待确认"}。记录和证据已保留，老板已收到信息通知。</p>
             {canVerifyException ? <div className="sourcing-owner-actions">
               <label><span>处理说明</span><input value={exceptionReason} maxLength={500} onChange={(event) => { setExceptionReason(event.target.value); actionKey.current = null; }} /></label>

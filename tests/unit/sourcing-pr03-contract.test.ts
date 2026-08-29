@@ -81,14 +81,14 @@ describe("sourcing PR03 contracts", () => {
     expect(() => DecideSourcingExceptionSchema.parse({ resolution: "close" })).toThrow();
   });
 
-  it("keeps the full sourcing flow visible through finance closure", async () => {
+  it("keeps the five-stage sourcing flow visible through finance closure", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain("提交并进入审批");
     expect(page).toContain("提交 IE 价格");
     expect(page).toContain("请选择加工厂");
     expect(page).toContain("提交调价与选厂");
     expect(page).toContain("审批说明 / 驳回原因");
-    expect(page).toContain("登记合同");
+    expect(page).not.toContain(">登记合同</button>");
     expect(page).toContain("发起中途换厂");
     expect(page).toContain("生产管理核实换厂");
     expect(page).toContain("提交财务核对");

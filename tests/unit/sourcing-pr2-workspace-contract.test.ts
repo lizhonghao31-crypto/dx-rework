@@ -19,7 +19,6 @@ describe("sourcing PR2 unified desktop workspace", () => {
       "IE 给价",
       "调价与选厂",
       "最终审批",
-      "合同执行",
       "财务核对",
       "交货日期",
       "工艺",
@@ -29,6 +28,8 @@ describe("sourcing PR2 unified desktop workspace", () => {
     expect(source).toContain("MAX_SOURCING_ATTACHMENTS");
     expect(source).toContain("SourcingTimelineResponseSchema");
     expect(source).toContain("sourcingWorkflowNodeHref");
+    expect(source).toContain('{ key: "finance", number: "05"');
+    expect(source).not.toContain('{ key: "contract"');
     expect(source).toContain("rework-detail-node-history");
     expect(source).toContain('rework-detail-layout rework-detail-target-layout');
     expect(source).not.toContain('<h2>流程记录</h2>');

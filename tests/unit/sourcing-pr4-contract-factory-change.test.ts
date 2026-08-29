@@ -7,7 +7,7 @@ import {
 } from "@dx-rework/contracts";
 import { describe, expect, it } from "vitest";
 
-describe("sourcing PR4 contract and factory change", () => {
+describe("sourcing five-stage factory change compatibility", () => {
   it("validates the three desktop actions at the contract boundary", () => {
     expect(RecordSourcingContractSchema.parse({
       contractReference: "HT-2026-001",
@@ -24,7 +24,7 @@ describe("sourcing PR4 contract and factory change", () => {
     }).success).toBe(true);
   });
 
-  it("keeps contract and factory changes audited, versioned and owner-free", async () => {
+  it("keeps historical contracts and factory changes audited while routing new work to finance", async () => {
     const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
     expect(service).toContain('"sourcing.contract.record"');
     expect(service).toContain('"sourcing.factory_change.request"');
@@ -32,25 +32,26 @@ describe("sourcing PR4 contract and factory change", () => {
     expect(service).toContain('"sourcing.factory_change.rejected"');
     expect(service).toContain('"factory_change"');
     expect(service).toContain("supersedes_decision_id");
-    expect(service).toContain('"sourcing_contract_record"');
+    expect(service).not.toContain('category: "sourcing_contract_record"');
+    expect(service).toContain('category: "sourcing_finance_reconcile"');
     expect(service).toContain('"sourcing_factory_change_verify"');
     expect(service).toContain('"sourcing_factory_change_notice"');
     expect(service).toContain("todoProjection?.information");
   });
 
-  it("backfills pre-release actionable todos and keeps the desktop page practical", async () => {
+  it("migrates old contract-stage work and keeps the five-stage desktop page practical", async () => {
     const [migration, page] = await Promise.all([
-      readFile("apps/api/migrations/0107_sourcing_contract_factory_change_todos.sql", "utf8"),
+      readFile("apps/api/migrations/0121_sourcing_remove_contract_stage.sql", "utf8"),
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
     ]);
-    expect(migration).toContain("pending_contract");
-    expect(migration).toContain("pending_factory_change_verification");
-    expect(migration).toContain("existing.dedupe_key=dedupe_key_value");
-    expect(page).toContain("登记合同");
+    expect(migration).toContain("contract_stage_retired");
+    expect(migration).toContain("'pending_contract','pending_finance_reconciliation'");
+    expect(migration).toContain("sourcing_finance_reconcile");
+    expect(page).not.toContain('{ key: "contract"');
+    expect(page).not.toContain(">登记合同</button>");
     expect(page).toContain("发起中途换厂");
     expect(page).toContain("生产管理核实换厂");
-    expect(page).toContain("localDateInputValue()");
-    expect(page).toContain('item.status === "pending_contract"');
+    expect(page).toContain('{ key: "finance", number: "05"');
     expect(page).not.toContain("移动端报价选厂");
   });
 });

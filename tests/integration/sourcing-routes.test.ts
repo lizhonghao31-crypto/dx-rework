@@ -78,7 +78,7 @@ const create = (
       reused: false,
     })),
     decideOwner: vi.fn(async () => ({
-      value: { ...caseSummary, status: "pending_contract" as const, version: 4 },
+      value: { ...caseSummary, status: "pending_finance_reconciliation" as const, version: 4 },
       reused: false,
     })),
   };
