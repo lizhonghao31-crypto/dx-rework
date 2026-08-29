@@ -353,6 +353,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       orderNo: "ORDER-FULL-001",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       inspectionReport: n01CoreInspectionReport("全链测试款"),
       problemPart: "袖口",
       problemDescription: "全链自动验收",
@@ -1146,6 +1147,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       orderNo: "ORDER-N04-REQUIRED-TAIL-RECOVERY",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       inspectionReport: n01CoreInspectionReport("节点04需要尾查恢复测试款"),
       problemPart: "后幅",
       problemDescription: "普通返工与尾查均已上数但状态仍停在节点04",
@@ -1336,6 +1338,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       orderNo: "ORDER-TAIL-WAIVER",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       inspectionReport: n01CoreInspectionReport("免尾查测试款"),
       problemPart: "后幅",
       problemDescription: "历史订单实际无需尾查",
@@ -1627,6 +1630,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       styleNo: "UAT-N01-V2-MINIMAL",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       attachmentIds: [initialImageId],
     }, randomUUID());
 
