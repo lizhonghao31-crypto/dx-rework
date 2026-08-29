@@ -38,6 +38,7 @@ type OrderRow = Readonly<{
   rework_quantity: number | null;
   tail_inspection_required: boolean;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
+  tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: ReworkOrderResponse["inspectionReport"];
   created_by: string;
   updated_by: string;
@@ -153,13 +154,16 @@ export class ReworkV2DraftService {
     const nextFactory = await this.resolveFactory(client, input.processingFactory);
     const currentFactory = factoryFromRow(current);
     const nextStyleNo = input.styleNo?.trim() || null;
+    const nextTailCostBearer = input.tailInspectionRequired ? input.tailInspectionCostBearer : null;
+    const nextTailCostBearerSource = nextTailCostBearer ? "quality_inspection" as const : null;
     const unchanged = current.style_no === nextStyleNo
       && current.merchandiser_user_id === input.merchandiserUserId
       && currentFactory?.type === nextFactory?.type
       && currentFactory?.supplierId === nextFactory?.supplierId
       && currentFactory?.supplierVersion === nextFactory?.supplierVersion
       && current.tail_inspection_required === input.tailInspectionRequired
-      && current.tail_inspection_cost_bearer === input.tailInspectionCostBearer;
+      && current.tail_inspection_cost_bearer === nextTailCostBearer
+      && current.tail_inspection_cost_bearer_source === nextTailCostBearerSource;
     if (unchanged) return this.dto(client, current);
 
     const nextVersion = current.version + 1;
@@ -170,7 +174,8 @@ export class ReworkV2DraftService {
       merchandiserUserId: input.merchandiserUserId,
       processingFactory: nextFactory,
       tailInspectionRequired: input.tailInspectionRequired,
-      tailInspectionCostBearer: input.tailInspectionRequired ? input.tailInspectionCostBearer : null,
+      tailInspectionCostBearer: nextTailCostBearer,
+      tailInspectionCostBearerSource: nextTailCostBearerSource,
       version: nextVersion,
     };
     const eventId = await this.events.append(client, actor, {
@@ -189,7 +194,8 @@ export class ReworkV2DraftService {
            processing_factory_supplier_id=$5,
            processing_factory_supplier_version=$6,
            tail_inspection_required=$7,tail_inspection_cost_bearer=$8,
-           updated_by=$9,version=$10,updated_at=CURRENT_TIMESTAMP
+           tail_inspection_cost_bearer_source=$9,
+           updated_by=$10,version=$11,updated_at=CURRENT_TIMESTAMP
        WHERE rework_order_id=$1`,
       [
         reworkOrderId,
@@ -199,7 +205,8 @@ export class ReworkV2DraftService {
         nextFactory?.supplierId ?? null,
         nextFactory?.supplierVersion ?? null,
         input.tailInspectionRequired,
-        input.tailInspectionRequired ? input.tailInspectionCostBearer : null,
+        nextTailCostBearer,
+        nextTailCostBearerSource,
         actor.actorId,
         nextVersion,
       ],
@@ -335,6 +342,7 @@ export class ReworkV2DraftService {
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
