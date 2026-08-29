@@ -319,10 +319,12 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receivingBatchId: board.rows[0]!.receivingBatchId,
       styleNo: board.rows[0]!.styleNo,
     }, randomUUID());
-    expect(draft.value).toMatchObject({
-      receivingBatchId: board.rows[0]!.receivingBatchId,
-      styleNo: "STYLE-LEGACY-CASE-01",
-    });
+    expect(draft.value.styleNo).toBe("STYLE-LEGACY-CASE-01");
+    const stored = await database.query<{ source_receiving_batch_id: string }>(
+      "SELECT source_receiving_batch_id FROM rework_orders WHERE rework_order_id=$1",
+      [draft.value.reworkOrderId],
+    );
+    expect(stored.rows[0]?.source_receiving_batch_id).toBe(board.rows[0]!.receivingBatchId);
   });
 
   it("keeps one delivery-note total while accumulating immutable same-style receipt facts", async () => {
