@@ -1,4 +1,5 @@
 import {
+  AddIePrecountSchema,
   AddTailDefectiveQuantitySchema,
   CreateReworkDraftSchema,
   DeleteReworkOrderResponseSchema,
@@ -191,6 +192,36 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  const iePrecountActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    const isIe = user.businessRoles?.includes("ie_reviewer") === true
+      && user.capabilities.includes("process:review");
+    if (!user.businessRoles?.length && !isRoot) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    if (!isRoot && !isIe) {
+      throw new ApplicationError("FORBIDDEN", "只有IE或Root可以记录IE预核数", 403);
+    }
+    return {
+      actorId: user.id,
+      actorRoles: [
+        ...new Set([
+          ...(user.businessRoles ?? []),
+          ...(isRoot ? ["root_superuser", "ie_reviewer"] : []),
+        ]),
+      ],
+      authorizationCapability: "process:review",
+      authorizationCapabilities: [
+        ...new Set([
+          ...user.capabilities,
+          ...(isRoot ? ["process:review"] : []),
+        ]),
+      ],
+      requestId: request.id,
+    };
+  };
+
   app.post("/rework-orders/drafts", async (request, reply) => {
     const result = await dependencies.service.createDraft(
       await actor(request),
@@ -312,6 +343,18 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
         await authenticatedActor(request),
         parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
       ));
+    app.post<{
+      Params: { reworkOrderId: string };
+      Body: unknown;
+    }>("/rework-orders/:reworkOrderId/ie-precounts", async (request, reply) => {
+      const result = await dependencies.businessDetailService!.addIePrecount(
+        await iePrecountActor(request),
+        parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
+        parse(AddIePrecountSchema, request.body),
+        idempotencyKey(request),
+      );
+      return reply.code(result.reused ? 200 : 201).send(result.value);
+    });
     app.post<{
       Params: { reworkOrderId: string };
       Body: unknown;
