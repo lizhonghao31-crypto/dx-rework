@@ -119,14 +119,6 @@ type WorkflowHistoryRow = Readonly<{
   reason: string | null;
 }>;
 
-type TailDefectiveQuantityEntryRow = Readonly<{
-  entry_id: string;
-  quantity: number;
-  recorded_by_name: string | null;
-  recorded_by: string;
-  recorded_at: Date;
-}>;
-
 type DetailRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
@@ -140,6 +132,12 @@ type DetailRow = Readonly<{
   source_receiving_actual_quantity: string | null;
   source_receiving_defective_quantity: string | null;
   tail_defective_quantity: string;
+  tail_defective_quantity_entries: Array<{
+    entryId: string;
+    quantity: number;
+    recordedBy: string;
+    recordedAt: string;
+  }>;
   washing_supplier_name: string | null;
   embroidery_supplier_name: string | null;
   fabric_supplier_name: string | null;
@@ -205,6 +203,7 @@ export class ReworkBusinessDetailService {
            ELSE COALESCE(receiving.defective_quantity,0)::text
          END source_receiving_defective_quantity,
          COALESCE(tail_defects.defective_quantity,0)::text tail_defective_quantity,
+         COALESCE(tail_defects.entries,'[]'::jsonb) tail_defective_quantity_entries,
          washing_supplier.supplier_name washing_supplier_name,
          embroidery_supplier.supplier_name embroidery_supplier_name,
          fabric_supplier.supplier_name fabric_supplier_name,
@@ -270,8 +269,16 @@ export class ReworkBusinessDetailService {
          GROUP BY batch.receiving_batch_id
        ) receiving ON true
        LEFT JOIN LATERAL (
-         SELECT COALESCE(sum(entry.quantity),0)::bigint defective_quantity
+         SELECT COALESCE(sum(entry.quantity),0)::bigint defective_quantity,
+                COALESCE(jsonb_agg(jsonb_build_object(
+                  'entryId',entry.entry_id,
+                  'quantity',entry.quantity,
+                  'recordedBy',COALESCE(actor.display_name,entry.recorded_by::text),
+                  'recordedAt',entry.recorded_at
+                ) ORDER BY entry.recorded_at DESC,entry.entry_id DESC)
+                FILTER (WHERE entry.entry_id IS NOT NULL),'[]'::jsonb) entries
          FROM rework_tail_defective_quantity_entries entry
+         LEFT JOIN app_users actor ON actor.id=entry.recorded_by
          WHERE entry.rework_order_id=orders.rework_order_id
        ) tail_defects ON true
        WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
@@ -316,16 +323,6 @@ export class ReworkBusinessDetailService {
            )
          )
        ORDER BY attachment.created_at,attachment.attachment_id`,
-      [reworkOrderId],
-    );
-
-    const tailDefectiveQuantityEntries = await this.database.query<TailDefectiveQuantityEntryRow>(
-      `SELECT entry.entry_id,entry.quantity,entry.recorded_by,entry.recorded_at,
-              actor.display_name recorded_by_name
-       FROM rework_tail_defective_quantity_entries entry
-       LEFT JOIN app_users actor ON actor.id=entry.recorded_by
-       WHERE entry.rework_order_id=$1
-       ORDER BY entry.recorded_at DESC,entry.entry_id DESC`,
       [reworkOrderId],
     );
 
@@ -405,14 +402,14 @@ export class ReworkBusinessDetailService {
         : Number(row.source_receiving_actual_quantity),
       defectiveQuantity: {
         receiving: Number(row.source_receiving_defective_quantity ?? 0),
-        tail: Number(row.tail_defective_quantity),
-        total: Number(row.source_receiving_defective_quantity ?? 0) + Number(row.tail_defective_quantity),
+        tail: Number(row.tail_defective_quantity ?? 0),
+        total: Number(row.source_receiving_defective_quantity ?? 0) + Number(row.tail_defective_quantity ?? 0),
         canAddTail: canAddTailDefectiveQuantity(actor) && tailDefectMutableStatuses.has(row.status),
-        tailEntries: tailDefectiveQuantityEntries.rows.map((entry) => ({
-          entryId: entry.entry_id,
+        tailEntries: (row.tail_defective_quantity_entries ?? []).map((entry) => ({
+          entryId: entry.entryId,
           quantity: entry.quantity,
-          recordedBy: entry.recorded_by_name ?? entry.recorded_by,
-          recordedAt: entry.recorded_at.toISOString(),
+          recordedBy: entry.recordedBy,
+          recordedAt: entry.recordedAt,
         })),
       },
       supplyContext: {
