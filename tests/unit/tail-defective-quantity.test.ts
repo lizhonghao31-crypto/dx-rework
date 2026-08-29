@@ -26,7 +26,7 @@ describe("tail defective quantity ledger", () => {
     expect(service).toContain('["tail_supervisor", "owner_group", "root_superuser"]');
     expect(service).toContain("只有尾部主管、老板或Root可以增加尾部次品数量");
     expect(service).toContain("receiving: Number(row.source_receiving_defective_quantity ?? 0)");
-    expect(service).toContain("tail: Number(row.tail_defective_quantity)");
+    expect(service).toContain("tail: Number(row.tail_defective_quantity ?? 0)");
     expect(service).toContain("tailEntries:");
   });
 
