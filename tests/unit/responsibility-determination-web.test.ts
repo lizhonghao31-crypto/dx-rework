@@ -77,7 +77,9 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("质检初判");
     expect(source).toContain("生产主管复核");
     expect(source).toContain("修改承担方");
-    expect(source).toContain("只有初判有误时才需要修改");
+    expect(source).toContain("历史系统默认（非质检判断）");
+    expect(source).toContain("历史订单未记录质检判断");
+    expect(source).toContain('response.tailInspectionCostBearerSource === "legacy_default"');
     expect(source).not.toContain("<legend>谁承担整查费用？</legend>");
   });
 

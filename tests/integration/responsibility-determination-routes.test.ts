@@ -30,6 +30,7 @@ const response: ResponsibilityDeterminationResponse = {
   orderVersion: 8,
   tailInspectionRequired: true,
   tailInspectionCostBearer: "own_factory",
+  tailInspectionCostBearerSource: "quality_inspection",
   handlerUserId: actorId,
   canDetermine: true,
   canTakeover: false,

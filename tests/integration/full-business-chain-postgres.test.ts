@@ -353,6 +353,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       orderNo: "ORDER-FULL-001",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       inspectionReport: n01CoreInspectionReport("全链测试款"),
       problemPart: "袖口",
       problemDescription: "全链自动验收",
@@ -625,6 +626,58 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
     // N09 splits one process between two external responsible parties. Because
     // no own-factory share exists, finalization must skip owner confirmation.
+    const n07Processes = [{
+      configurationItemId: approvedItem.configurationItemId,
+      multiplier: "1.000",
+      allocations: [
+        {
+          responsibilityType: "processing_factory",
+          shareBps: 7000,
+          multiplier: "1.200",
+          supplierId: factorySupplierId,
+        },
+        {
+          responsibilityType: "fabric_supplier",
+          shareBps: 3000,
+          multiplier: "1.200",
+          supplierId: fabricSupplierId,
+        },
+      ],
+    }, {
+      configurationItemId: tailItem.configurationItemId,
+      multiplier: "1.000",
+      allocations: [{
+        responsibilityType: "processing_factory",
+        shareBps: 10000,
+        multiplier: "1.200",
+        supplierId: factorySupplierId,
+      }],
+    }];
+
+    await expect(responsibility.saveDraft(
+      production(),
+      submitted.value.reworkOrderId,
+      CreateResponsibilityDraftSchema.parse({
+        expectedOrderVersion: n06Approved.value.orderVersion,
+        expectedCurrentDeterminationVersion: null,
+        handlerUserId: ids.production,
+        tailInspectionCostBearer: null,
+        processes: n07Processes,
+      }),
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect((await database.query<{
+      tail_inspection_cost_bearer: string;
+      tail_inspection_cost_bearer_source: string;
+    }>(
+      `SELECT tail_inspection_cost_bearer,tail_inspection_cost_bearer_source
+       FROM rework_orders WHERE rework_order_id=$1`,
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({
+      tail_inspection_cost_bearer: "processing_factory",
+      tail_inspection_cost_bearer_source: "quality_inspection",
+    });
+
     const n07Draft = await responsibility.saveDraft(
       production(),
       submitted.value.reworkOrderId,
@@ -632,46 +685,46 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         expectedOrderVersion: n06Approved.value.orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
-        processes: [{
-          configurationItemId: approvedItem.configurationItemId,
-          multiplier: "1.000",
-          allocations: [
-            {
-              responsibilityType: "processing_factory",
-              shareBps: 7000,
-              multiplier: "1.200",
-              supplierId: factorySupplierId,
-            },
-            {
-              responsibilityType: "fabric_supplier",
-              shareBps: 3000,
-              multiplier: "1.200",
-              supplierId: fabricSupplierId,
-            },
-          ],
-        }],
+        tailInspectionCostBearer: "processing_factory",
+        processes: n07Processes,
       }),
       randomUUID(),
     );
     expect(n07Draft.value.determination).toMatchObject({
       stage: "draft",
-      calculationTotal: "132.00",
-      processes: [{
-        baseAmount: "110.00",
-        responsibilityAmount: "132.00",
-        allocations: [
-          expect.objectContaining({
-            responsibilityType: "fabric_supplier",
-            shareBps: 3000,
-            roundedAmount: "39.60",
-          }),
-          expect.objectContaining({
-            responsibilityType: "processing_factory",
-            shareBps: 7000,
-            roundedAmount: "92.40",
-          }),
-        ],
-      }],
+      calculationTotal: "180.00",
+    });
+    expect(n07Draft.value.determination!.processes).toHaveLength(2);
+    const workerResponsibility = n07Draft.value.determination!.processes.find(
+      (process) => process.configurationItemId === approvedItem.configurationItemId,
+    );
+    expect(workerResponsibility).toMatchObject({
+      baseAmount: "110.00",
+      responsibilityAmount: "132.00",
+      allocations: expect.arrayContaining([
+        expect.objectContaining({
+          responsibilityType: "fabric_supplier",
+          shareBps: 3000,
+          roundedAmount: "39.60",
+        }),
+        expect.objectContaining({
+          responsibilityType: "processing_factory",
+          shareBps: 7000,
+          roundedAmount: "92.40",
+        }),
+      ]),
+    });
+    const tailResponsibility = n07Draft.value.determination!.processes.find(
+      (process) => process.configurationItemId === tailItem.configurationItemId,
+    );
+    expect(tailResponsibility).toMatchObject({
+      baseAmount: "40.00",
+      responsibilityAmount: "48.00",
+      allocations: [expect.objectContaining({
+        responsibilityType: "processing_factory",
+        shareBps: 10000,
+        roundedAmount: "48.00",
+      })],
     });
     const n07Final = await responsibility.finalize(
       production(),
@@ -741,7 +794,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       {
         responsibilityType: "processing_factory",
         supplierId: factorySupplierId,
-        proposedAmount: "92.40",
+        proposedAmount: "140.40",
         status: "deduction_follow_up",
       },
     ]);
@@ -800,9 +853,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       canRequestSpecialApproval: false,
       specialApproval: {
         requestVersion: 1,
-        proposedAmount: "92.40",
+        proposedAmount: "140.40",
         actualDeductedAmount: "80.00",
-        remainingAmount: "12.40",
+        remainingAmount: "60.40",
         decision: null,
       },
     });
@@ -867,9 +920,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "closed",
       closure: {
         result: "partial",
-        proposedAmount: "92.40",
+        proposedAmount: "140.40",
         actualDeductedAmount: "80.00",
-        remainingAmount: "12.40",
+        remainingAmount: "60.40",
       },
       specialApproval: { decision: { decision: "approved" } },
     });
@@ -1116,9 +1169,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(totals.rows[0]).toEqual({
       report_total: "150.00",
-      responsibility_total: "132.00",
+      responsibility_total: "180.00",
       own_factory_total: "0.00",
-      external_total: "132.00",
+      external_total: "180.00",
       wage_total: "150.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(
@@ -1146,6 +1199,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       orderNo: "ORDER-N04-REQUIRED-TAIL-RECOVERY",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       inspectionReport: n01CoreInspectionReport("节点04需要尾查恢复测试款"),
       problemPart: "后幅",
       problemDescription: "普通返工与尾查均已上数但状态仍停在节点04",
@@ -1336,6 +1390,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       orderNo: "ORDER-TAIL-WAIVER",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       inspectionReport: n01CoreInspectionReport("免尾查测试款"),
       problemPart: "后幅",
       problemDescription: "历史订单实际无需尾查",
@@ -1538,6 +1593,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(waived.value).toMatchObject({
       status: "pending_order_review",
       tailInspectionRequired: false,
+      tailInspectionCostBearer: null,
+      tailInspectionCostBearerSource: null,
       version: waiverVersion + 1,
     });
     if (legacy) {
@@ -1627,6 +1684,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       styleNo: "UAT-N01-V2-MINIMAL",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       attachmentIds: [initialImageId],
     }, randomUUID());
 

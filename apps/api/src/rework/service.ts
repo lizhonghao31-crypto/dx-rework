@@ -60,6 +60,7 @@ type ReworkOrderRow = Readonly<{
   rework_quantity: number | null;
   tail_inspection_required: boolean;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
+  tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: InspectionReportDraft | null;
   source_receiving_batch_id: string | null;
   created_by: string;
@@ -177,7 +178,11 @@ export class ReworkInitiationService {
         tailInspectionRequired: input.tailInspectionRequired ?? true,
         tailInspectionCostBearer: input.tailInspectionRequired === false
           ? null
-          : input.tailInspectionCostBearer ?? "own_factory",
+          : input.tailInspectionCostBearer ?? null,
+        tailInspectionCostBearerSource: input.tailInspectionRequired !== false
+          && input.tailInspectionCostBearer
+          ? "quality_inspection" as const
+          : null,
         inspectionReport: input.inspectionReport ?? null,
         attachmentIds,
         version: 1,
@@ -196,9 +201,9 @@ export class ReworkInitiationService {
            processing_factory_type,processing_factory_supplier_id,
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
-           tail_inspection_cost_bearer,inspection_report,
+           tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
            source_receiving_batch_id,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)`,
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21)`,
         [
           reworkOrderId,
           next.styleNo,
@@ -217,6 +222,7 @@ export class ReworkInitiationService {
           next.reworkQuantity,
           next.tailInspectionRequired,
           next.tailInspectionCostBearer,
+          next.tailInspectionCostBearerSource,
           next.inspectionReport,
           sourceReceivingBatchId,
           actor.actorId,
@@ -305,6 +311,18 @@ export class ReworkInitiationService {
       const sourceReceivingBatchId = current.source_receiving_batch_id
         ?? await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
       const nextVersion = current.version + 1;
+      const nextTailInspectionRequired = input.tailInspectionRequired
+        ?? current.tail_inspection_required;
+      const nextTailInspectionCostBearer = nextTailInspectionRequired
+        ? (input.tailInspectionCostBearer === undefined
+            ? current.tail_inspection_cost_bearer
+            : input.tailInspectionCostBearer)
+        : null;
+      const nextTailInspectionCostBearerSource = nextTailInspectionCostBearer === null
+        ? null
+        : input.tailInspectionCostBearer !== undefined
+          ? "quality_inspection" as const
+          : current.tail_inspection_cost_bearer_source;
       const next = {
         reworkOrderId,
         reworkNo: current.rework_no,
@@ -336,14 +354,9 @@ export class ReworkInitiationService {
         reworkQuantity: input.reworkQuantity === undefined
           ? current.rework_quantity
           : input.reworkQuantity,
-        tailInspectionRequired: input.tailInspectionRequired === undefined
-          ? current.tail_inspection_required
-          : input.tailInspectionRequired,
-        tailInspectionCostBearer: (input.tailInspectionRequired ?? current.tail_inspection_required)
-          ? (input.tailInspectionCostBearer === undefined
-              ? current.tail_inspection_cost_bearer
-              : input.tailInspectionCostBearer)
-          : null,
+        tailInspectionRequired: nextTailInspectionRequired,
+        tailInspectionCostBearer: nextTailInspectionCostBearer,
+        tailInspectionCostBearerSource: nextTailInspectionCostBearerSource,
         inspectionReport: input.inspectionReport === undefined
           ? current.inspection_report
           : input.inspectionReport,
@@ -366,8 +379,8 @@ export class ReworkInitiationService {
              processing_factory_supplier_version=$10,rework_reason=$11,
              rework_process=$12,problem_part=$13,problem_description=$14,
              rework_quantity=$15,tail_inspection_required=$16,
-             tail_inspection_cost_bearer=$17,inspection_report=$18,
-             updated_by=$19,version=$20,source_receiving_batch_id=$21,
+             tail_inspection_cost_bearer=$17,tail_inspection_cost_bearer_source=$18,
+             inspection_report=$19,updated_by=$20,version=$21,source_receiving_batch_id=$22,
              updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
@@ -388,6 +401,7 @@ export class ReworkInitiationService {
           next.reworkQuantity,
           next.tailInspectionRequired,
           next.tailInspectionCostBearer,
+          next.tailInspectionCostBearerSource,
           next.inspectionReport,
           actor.actorId,
           nextVersion,
@@ -596,6 +610,8 @@ export class ReworkInitiationService {
           ...before,
           status: nextStatus,
           tailInspectionRequired: false,
+          tailInspectionCostBearer: null,
+          tailInspectionCostBearerSource: null,
           version: nextVersion,
           waiverReason: input.reason,
           invalidatedTailWorkReportIds: unifiedReports.rows.map((row) => row.work_report_id),
@@ -648,7 +664,8 @@ export class ReworkInitiationService {
         );
         await client.query(
           `UPDATE rework_orders
-           SET tail_inspection_required=false,status=$2,updated_by=$3,
+           SET tail_inspection_required=false,tail_inspection_cost_bearer=NULL,
+               tail_inspection_cost_bearer_source=NULL,status=$2,updated_by=$3,
                version=$4,updated_at=CURRENT_TIMESTAMP
            WHERE rework_order_id=$1`,
           [reworkOrderId, nextStatus, actor.actorId, nextVersion],
@@ -1187,8 +1204,11 @@ export class ReworkInitiationService {
     ) {
       throw new ApplicationError("VALIDATION_ERROR", "请完整填写供应商、款号和订单数量", 400);
     }
-    if (row.tail_inspection_required && !row.tail_inspection_cost_bearer) {
-      throw new ApplicationError("VALIDATION_ERROR", "请选择整查费用承担方", 400);
+    if (row.tail_inspection_required && (
+      !row.tail_inspection_cost_bearer
+      || row.tail_inspection_cost_bearer_source !== "quality_inspection"
+    )) {
+      throw new ApplicationError("VALIDATION_ERROR", "请由质检明确选择整查费用承担方", 400);
     }
     if (row.tail_inspection_cost_bearer === "processing_factory"
       && row.processing_factory_type !== "supplier") {
@@ -1544,6 +1564,7 @@ export class ReworkInitiationService {
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
@@ -1609,6 +1630,7 @@ export class ReworkInitiationService {
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),

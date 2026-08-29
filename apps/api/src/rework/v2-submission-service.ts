@@ -33,6 +33,7 @@ type OrderRow = Readonly<{
   rework_quantity: number | null;
   tail_inspection_required: boolean;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
+  tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: ReworkOrderResponse["inspectionReport"];
   created_by: string;
   updated_by: string;
@@ -147,8 +148,11 @@ export class ReworkV2SubmissionService {
     if (!current.style_no || !current.processing_factory_type || !current.merchandiser_user_id) {
       throw new ApplicationError("VALIDATION_ERROR", "请完整填写款号、加工厂和订单跟单", 400);
     }
-    if (current.tail_inspection_required && !current.tail_inspection_cost_bearer) {
-      throw new ApplicationError("VALIDATION_ERROR", "请选择整查费用承担方", 400);
+    if (current.tail_inspection_required && (
+      !current.tail_inspection_cost_bearer
+      || current.tail_inspection_cost_bearer_source !== "quality_inspection"
+    )) {
+      throw new ApplicationError("VALIDATION_ERROR", "请由质检明确选择整查费用承担方", 400);
     }
     if (current.tail_inspection_cost_bearer === "processing_factory"
       && current.processing_factory_type !== "supplier") {
@@ -337,6 +341,7 @@ export class ReworkV2SubmissionService {
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
@@ -371,6 +376,7 @@ export class ReworkV2SubmissionService {
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
       attachmentIds: [...attachmentIds],
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),

@@ -358,6 +358,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         orderNo: `ROOT-ORDER-${pass}`,
         merchandiserUserId: fixture.merchandiserUserId,
         processingFactory: { type: "supplier", supplierId: fixture.supplierId },
+        tailInspectionCostBearer: "processing_factory",
         inspectionReport: n01CoreInspectionReport(`Root 全链测试款 ${pass}`),
         problemPart: "袖口",
         problemDescription: `Root 单账号第 ${pass} 遍完整业务链`,
@@ -491,6 +492,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     );
     expect(approved.reworkStatus).toBe("in_progress");
     const approvedWorkerItem = approved.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const approvedTailItem = approved.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
     expect(approvedWorkerItem).toMatchObject({
       plannedQuantity: fixture.plannedQuantity,
       unitPrice: fixture.unitPrice,
@@ -499,6 +501,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       draft,
       approved,
       item: approvedWorkerItem,
+      tailItem: approvedTailItem,
     };
   }
 
@@ -506,6 +509,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     fixture: PassFixture,
     reworkOrderId: string,
     itemId: string,
+    tailItemId: string,
     orderVersion: number,
     expectedDeductionAmount: string,
   ): Promise<void> {
@@ -517,8 +521,18 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedOrderVersion: orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: fixture.rootUserId,
+        tailInspectionCostBearer: "processing_factory",
         processes: [{
           configurationItemId: itemId,
+          multiplier: "1.000",
+          allocations: [{
+            responsibilityType: "processing_factory",
+            shareBps: 10000,
+            multiplier: "1.200",
+            supplierId: fixture.supplierId,
+          }],
+        }, {
+          configurationItemId: tailItemId,
           multiplier: "1.000",
           allocations: [{
             responsibilityType: "processing_factory",
@@ -655,20 +669,16 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
               SELECT 1 FROM rework_work_report_rejections rejection
               WHERE rejection.work_report_id=report.work_report_id
             )) AS "reportTotal",
-         (SELECT COALESCE(sum(round(
-                    wage.actual_quantity_snapshot*wage.unit_price_snapshot*
-                    CASE WHEN wage.assignment_mode='collective'
-                      THEN 1::numeric/NULLIF(wage.member_count,0)
-                      ELSE 1
-                    END,
-                    8
-                  )),0)::numeric(18,2)::text
-          FROM rework_wage_items wage
-          JOIN rework_process_configuration_items item
-            ON item.configuration_item_id=wage.configuration_item_id
-           AND item.execution_kind='worker'
-          WHERE wage.rework_order_id=$1
-            AND wage.invalidated_at IS NULL) AS "responsibilityBaseTotal",
+         (SELECT COALESCE(sum(process.base_amount),0)::numeric(18,2)::text
+          FROM rework_responsibility_processes process
+          WHERE process.determination_id=(
+            SELECT determination.determination_id
+            FROM rework_responsibility_determinations determination
+            WHERE determination.rework_order_id=$1
+              AND determination.stage='finalized'
+            ORDER BY determination.determination_version DESC
+            LIMIT 1
+          )) AS "responsibilityBaseTotal",
          (SELECT calculation_total::numeric(18,2)::text
           FROM rework_responsibility_determinations
           WHERE rework_order_id=$1 AND stage='finalized'
@@ -689,7 +699,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   async function runPass(pass: 1 | 2): Promise<void> {
     const fixture = await setup(pass);
     try {
-      const { draft, item } = await startOrder(pass, fixture);
+      const { draft, item, tailItem } = await startOrder(pass, fixture);
       const started = await http<ReworkWorkTasksResponse>(
         fixture.app,
         "GET",
@@ -813,8 +823,9 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         fixture,
         draft.reworkOrderId,
         item.configurationItemId,
+        tailItem.configurationItemId,
         n06Approved.orderVersion,
-        pass === 2 ? "10.80" : "7.20",
+        pass === 2 ? "11.04" : "9.60",
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",

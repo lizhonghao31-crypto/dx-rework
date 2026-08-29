@@ -220,7 +220,15 @@ export const AddIePrecountSchema = z.object({
 
 const DraftTextSchema = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable().optional();
-export const TailInspectionCostBearerSchema = z.enum(["own_factory", "processing_factory"]);
+export const TailInspectionCostBearerSchema = z.enum([
+  "own_factory",
+  "processing_factory",
+]);
+export const TailInspectionCostBearerSourceSchema = z.enum([
+  "legacy_default",
+  "quality_inspection",
+  "production_override",
+]);
 
 export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("own_factory") }).strict(),
@@ -452,6 +460,8 @@ export const ReworkOrderResponseSchema = z.object({
   reworkQuantity: z.number().int().positive().nullable(),
   tailInspectionRequired: z.boolean().default(true),
   tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().default(null),
+  tailInspectionCostBearerSource:
+    TailInspectionCostBearerSourceSchema.nullable().default(null),
   inspectionReport: InspectionReportDraftSchema.nullable(),
   attachmentIds: z.array(IdSchema),
   hasOtherOpenStyleOrder: z.boolean(),
@@ -1078,6 +1088,8 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
   processingFactory: ReworkProcessingFactorySchema.nullable().optional(),
   tailInspectionRequired: z.boolean().default(true),
   tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().default(null),
+  tailInspectionCostBearerSource:
+    TailInspectionCostBearerSourceSchema.nullable().default(null),
   handlerUserId: IdSchema.nullable(), canDetermine: z.boolean(), canTakeover: z.boolean(), canConfirmHighMultiplier: z.boolean(),
   canOwnerSign: z.boolean().default(false),
   ownerSignature: z.object({
@@ -1106,6 +1118,8 @@ export const OwnerSignatureCommandSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
 }).strict();
 export type TailInspectionCostBearer = z.infer<typeof TailInspectionCostBearerSchema>;
+export type TailInspectionCostBearerSource =
+  z.infer<typeof TailInspectionCostBearerSourceSchema>;
 export type ResponsibilityType = z.infer<typeof ResponsibilityTypeSchema>;
 export type ResponsibilitySupplierOptionsResponse = z.infer<typeof ResponsibilitySupplierOptionsResponseSchema>;
 export type CreateResponsibilityDraft = z.infer<typeof CreateResponsibilityDraftSchema>;
