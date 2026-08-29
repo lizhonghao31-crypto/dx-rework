@@ -70,12 +70,14 @@ describe("PR-06 responsibility 2.0", () => {
     expect(engine).not.toContain("wage.payable_amount::text amount");
   });
 
-  it("excludes tail-check execution from the N07 source-process payload", async () => {
+  it("includes tail-check execution only when the processing factory bears its cost", async () => {
     const engine = await readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8");
     const sourceRows = engine.slice(
       engine.indexOf("const sourceRows"),
       engine.indexOf("const actorCapabilities"),
     );
-    expect(sourceRows.match(/AND item\.execution_kind='worker'/g)).toHaveLength(2);
+    expect(sourceRows.match(/item\.execution_kind IN \('worker','tail_inspection'\)/g)).toHaveLength(2);
+    expect(sourceRows).toContain('includedInResponsibility: row.execution_kind === "worker"');
+    expect(sourceRows).toContain('|| order.tail_inspection_cost_bearer === "processing_factory"');
   });
 });

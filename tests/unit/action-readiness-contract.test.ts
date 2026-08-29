@@ -11,7 +11,7 @@ describe("business action readiness contract", () => {
     expect(initiation).toContain("const complete = Boolean(");
     expect(initiation).toContain("availableImageCount > 0");
     expect(initiation).toContain('disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)}');
-    expect(responsibility).toContain("const allProcessesValid = processes.length > 0 && processes.every(processValid);");
+    expect(responsibility).toContain("const allProcessesValid = processes.length > 0 && processes.every(processValid) && tailBearerValid;");
     expect(responsibility).toContain("!response || !editable || !allProcessesValid || !handlerUserId || busyAction");
     expect(responsibility).toContain('disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}');
     expect(responsibility).toContain('const needsSave = determination === null || determination.stage === "finalized" || hasUnsavedChanges');
