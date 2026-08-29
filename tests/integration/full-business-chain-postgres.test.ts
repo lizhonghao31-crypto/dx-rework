@@ -626,6 +626,58 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
     // N09 splits one process between two external responsible parties. Because
     // no own-factory share exists, finalization must skip owner confirmation.
+    const n07Processes = [{
+      configurationItemId: approvedItem.configurationItemId,
+      multiplier: "1.000",
+      allocations: [
+        {
+          responsibilityType: "processing_factory",
+          shareBps: 7000,
+          multiplier: "1.200",
+          supplierId: factorySupplierId,
+        },
+        {
+          responsibilityType: "fabric_supplier",
+          shareBps: 3000,
+          multiplier: "1.200",
+          supplierId: fabricSupplierId,
+        },
+      ],
+    }, {
+      configurationItemId: tailItem.configurationItemId,
+      multiplier: "1.000",
+      allocations: [{
+        responsibilityType: "processing_factory",
+        shareBps: 10000,
+        multiplier: "1.200",
+        supplierId: factorySupplierId,
+      }],
+    }];
+
+    await expect(responsibility.saveDraft(
+      production(),
+      submitted.value.reworkOrderId,
+      CreateResponsibilityDraftSchema.parse({
+        expectedOrderVersion: n06Approved.value.orderVersion,
+        expectedCurrentDeterminationVersion: null,
+        handlerUserId: ids.production,
+        tailInspectionCostBearer: null,
+        processes: n07Processes,
+      }),
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect((await database.query<{
+      tail_inspection_cost_bearer: string;
+      tail_inspection_cost_bearer_source: string;
+    }>(
+      `SELECT tail_inspection_cost_bearer,tail_inspection_cost_bearer_source
+       FROM rework_orders WHERE rework_order_id=$1`,
+      [submitted.value.reworkOrderId],
+    )).rows[0]).toEqual({
+      tail_inspection_cost_bearer: "processing_factory",
+      tail_inspection_cost_bearer_source: "quality_inspection",
+    });
+
     const n07Draft = await responsibility.saveDraft(
       production(),
       submitted.value.reworkOrderId,
@@ -634,33 +686,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
         tailInspectionCostBearer: "processing_factory",
-        processes: [{
-          configurationItemId: approvedItem.configurationItemId,
-          multiplier: "1.000",
-          allocations: [
-            {
-              responsibilityType: "processing_factory",
-              shareBps: 7000,
-              multiplier: "1.200",
-              supplierId: factorySupplierId,
-            },
-            {
-              responsibilityType: "fabric_supplier",
-              shareBps: 3000,
-              multiplier: "1.200",
-              supplierId: fabricSupplierId,
-            },
-          ],
-        }, {
-          configurationItemId: tailItem.configurationItemId,
-          multiplier: "1.000",
-          allocations: [{
-            responsibilityType: "processing_factory",
-            shareBps: 10000,
-            multiplier: "1.200",
-            supplierId: factorySupplierId,
-          }],
-        }],
+        processes: n07Processes,
       }),
       randomUUID(),
     );
