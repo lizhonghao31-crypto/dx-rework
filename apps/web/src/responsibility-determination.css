@@ -103,7 +103,7 @@
 .responsibility-batch-dialog {
   display: grid;
   gap: var(--dx-v2-space-3);
-  width: min(520px, 100%);
+  width: min(920px, 100%);
   max-height: calc(100vh - 32px);
   overflow: auto;
   padding: var(--dx-v2-space-4);
@@ -115,6 +115,15 @@
 .responsibility-batch-dialog h3,
 .responsibility-batch-dialog p {
   margin: 0;
+}
+
+.responsibility-batch-party {
+  grid-template-columns:
+    minmax(140px, 0.9fr)
+    minmax(100px, 0.6fr)
+    minmax(210px, 1.3fr)
+    minmax(130px, 0.7fr)
+    auto;
 }
 
 .responsibility-party-list {
