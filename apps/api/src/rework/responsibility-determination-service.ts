@@ -94,6 +94,11 @@ type OrderRow = Readonly<{
   processing_factory_supplier_version: number | null;
   tail_inspection_required: boolean;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
+  tail_inspection_cost_bearer_source:
+    | "legacy_default"
+    | "quality_inspection"
+    | "production_override"
+    | null;
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
@@ -195,6 +200,7 @@ export class ResponsibilityDeterminationService {
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,processing_factory_supplier_version,
               tail_inspection_required,tail_inspection_cost_bearer,
+              tail_inspection_cost_bearer_source,
               problem_part,problem_description,rework_quantity
        FROM rework_orders
        WHERE rework_order_id=$1 AND status<>'deleted'`, [
@@ -397,6 +403,8 @@ export class ResponsibilityDeterminationService {
           : null,
       tailInspectionRequired: order.tail_inspection_required,
       tailInspectionCostBearer: order.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource:
+        order.tail_inspection_cost_bearer_source ?? null,
       handlerUserId: determination?.handler_user_id ?? null,
       canDetermine: actorCapabilities.includes("responsibility:determine"),
       canTakeover: actorCapabilities.includes("responsibility:takeover"),
@@ -474,6 +482,20 @@ export class ResponsibilityDeterminationService {
         );
         if (order.status !== "pending_responsibility_determination") {
           fail("返工单不在待判责状态");
+        }
+        if (
+          order.tail_inspection_required
+          && (
+            order.tail_inspection_cost_bearer === null
+            || order.tail_inspection_cost_bearer_source === null
+            || order.tail_inspection_cost_bearer_source === "legacy_default"
+          )
+        ) {
+          fail(
+            "历史整查费用承担方未经生产主管确认，请先保存本次判责",
+            400,
+            "VALIDATION_ERROR",
+          );
         }
 
         const determinationResult = await client.query<DeterminationRow>(
@@ -685,8 +707,17 @@ export class ResponsibilityDeterminationService {
     // production handler to invent a second reason merely to make the revised
     // N07 draft writable again.
     const targetTailCostBearer = order.tail_inspection_required
-      ? (input.tailInspectionCostBearer ?? order.tail_inspection_cost_bearer ?? "own_factory")
+      ? (input.tailInspectionCostBearer ?? order.tail_inspection_cost_bearer)
       : null;
+    if (order.tail_inspection_required && targetTailCostBearer === null) {
+      fail("请确认整查费用承担方", 400, "VALIDATION_ERROR");
+    }
+    const targetTailCostBearerSource =
+      targetTailCostBearer === null
+        ? null
+        : targetTailCostBearer !== order.tail_inspection_cost_bearer
+          ? "production_override"
+          : order.tail_inspection_cost_bearer_source ?? "legacy_default";
     if (targetTailCostBearer === "processing_factory"
       && (order.processing_factory_type !== "supplier"
         || !order.processing_factory_supplier_id)) {
@@ -763,6 +794,7 @@ export class ResponsibilityDeterminationService {
       order,
       order.status,
       targetTailCostBearer,
+      targetTailCostBearerSource,
     );
     const settledWageItemsAvailable = await this.settledWageItemsAvailable(client);
     const determinationId = randomUUID();
@@ -1026,10 +1058,17 @@ export class ResponsibilityDeterminationService {
 
     await client.query(
       `UPDATE rework_orders
-       SET tail_inspection_cost_bearer=$3,version=version+1,
+       SET tail_inspection_cost_bearer=$3,
+           tail_inspection_cost_bearer_source=$4,
+           version=version+1,
            updated_by=$2,updated_at=CURRENT_TIMESTAMP
        WHERE rework_order_id=$1`,
-      [orderId, actor.actorId, targetTailCostBearer],
+      [
+        orderId,
+        actor.actorId,
+        targetTailCostBearer,
+        targetTailCostBearerSource,
+      ],
     );
     if (previous) {
       await this.todos?.cancelOpenByDedupeKey(
@@ -1083,7 +1122,8 @@ export class ResponsibilityDeterminationService {
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,
               processing_factory_supplier_version,
-              tail_inspection_required,tail_inspection_cost_bearer,problem_part,
+              tail_inspection_required,tail_inspection_cost_bearer,
+              tail_inspection_cost_bearer_source,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
        WHERE rework_order_id=$1 AND status<>'deleted'
@@ -1122,6 +1162,8 @@ export class ResponsibilityDeterminationService {
               },
       tailInspectionRequired: order.tail_inspection_required,
       tailInspectionCostBearer: order.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource:
+        order.tail_inspection_cost_bearer_source ?? null,
       problemPart: order.problem_part,
       problemDescription: order.problem_description,
       reworkQuantity: order.rework_quantity,
@@ -1137,7 +1179,11 @@ export class ResponsibilityDeterminationService {
     reason: string | undefined,
     order: OrderRow,
     status: ReworkStatus,
-    tailInspectionCostBearer: OrderRow["tail_inspection_cost_bearer"] = order.tail_inspection_cost_bearer,
+    tailInspectionCostBearer: OrderRow["tail_inspection_cost_bearer"] =
+      order.tail_inspection_cost_bearer,
+    tailInspectionCostBearerSource:
+      OrderRow["tail_inspection_cost_bearer_source"] =
+        order.tail_inspection_cost_bearer_source,
   ): Promise<string> {
     const eventId = await this.events.append(
       client,
@@ -1150,6 +1196,8 @@ export class ResponsibilityDeterminationService {
         after: {
           ...this.orderAudit(order, status, order.version + 1),
           tailInspectionCostBearer,
+          tailInspectionCostBearerSource:
+            tailInspectionCostBearerSource ?? null,
         },
         ...(reason ? { reason } : {}),
       },
