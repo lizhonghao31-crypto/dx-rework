@@ -25,6 +25,8 @@ const caseSummary: SourcingCaseSummary = {
   styleNo: "DX-100",
   laneKey: "garment_processing",
   orderQuantity: 120,
+  deliveryDate: "2026-09-15",
+  processDescription: "净色车缝并整烫",
   status: "pending_ie_quote",
   version: 1,
   createdBy: "00000000-0000-4000-8000-000000000001",
@@ -122,6 +124,8 @@ describe("sourcing PR03 routes", () => {
       payload: {
         erpOrderNo: "ERP-100",
         styleNo: "DX-100",
+        deliveryDate: "2026-09-15",
+        processDescription: "净色车缝并整烫",
         orderQuantity: 120,
       },
     });
@@ -137,6 +141,8 @@ describe("sourcing PR03 routes", () => {
       {
         erpOrderNo: "ERP-100",
         styleNo: "DX-100",
+        deliveryDate: "2026-09-15",
+        processDescription: "净色车缝并整烫",
         orderQuantity: 120,
       },
       "sourcing-create-key-1",
@@ -180,6 +186,8 @@ describe("sourcing PR03 routes", () => {
       payload: {
         erpOrderNo: "ERP-101",
         styleNo: "DX-101",
+        deliveryDate: "2026-09-16",
+        processDescription: "洗水后整烫",
         orderQuantity: 50,
       },
     });
@@ -225,6 +233,8 @@ describe("sourcing PR03 routes", () => {
       payload: {
         erpOrderNo: "ERP-ROOT",
         styleNo: "DX-ROOT",
+        deliveryDate: "2026-09-17",
+        processDescription: "Root 验收工艺",
         orderQuantity: 10,
       },
     })).statusCode).toBe(201);

@@ -29,29 +29,20 @@ export function platformModuleHref(module: PlatformModule): string {
 }
 
 export function shouldRedirectLegacyLandingToPlatformHome(
-  user: AuthorizedUser,
-  path: string,
-  search: string,
-  selectedModule: string | null,
+  _user: AuthorizedUser,
+  _path: string,
+  _search: string,
+  _selectedModule: string | null,
 ): boolean {
-  const query = new URLSearchParams(search);
-  if (selectedModule === "rework" || query.get(PLATFORM_MODULE_QUERY) === "rework") return false;
-  if (accessiblePlatformModules(user).length < 2) return false;
-
-  const target = landingTarget(user);
-  if (!target) return false;
-
-  const targetUrl = new URL(target, "https://dx-rework.local/");
-  const currentPath = path.replace(/^\//, "");
-  const targetPath = targetUrl.pathname.replace(/^\//, "");
-  if (currentPath !== targetPath) return false;
-
-  return [...targetUrl.searchParams.entries()]
-    .every(([key, value]) => query.get(key) === value);
+  void _user;
+  void _path;
+  void _search;
+  void _selectedModule;
+  return false;
 }
 
 export function platformLandingTarget(user: AuthorizedUser): string | null {
   const modules = accessiblePlatformModules(user);
-  if (modules.length >= 2) return "ui/home";
+  if (modules.length >= 2) return user.isRoot || user.capabilities.includes("todo:view") ? "ui/my-tasks" : modules[0]?.href ?? null;
   return modules[0]?.href ?? null;
 }

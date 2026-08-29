@@ -122,3 +122,10 @@
   padding-left: var(--dx-v2-space-3);
   border-left: 2px solid var(--dx-v2-color-inset);
 }
+
+.primary-navigation__entry .dx-nav-item.is-active,
+.primary-navigation__entry .dx-nav-item.is-active .primary-navigation__copy strong,
+.primary-navigation__entry .dx-nav-item.is-active .primary-navigation__copy small,
+.primary-navigation__entry .dx-nav-item.is-active > b {
+  color: #fff;
+}
