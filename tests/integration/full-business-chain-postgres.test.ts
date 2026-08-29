@@ -633,6 +633,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         expectedOrderVersion: n06Approved.value.orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: ids.production,
+        tailInspectionCostBearer: "processing_factory",
         processes: [{
           configurationItemId: approvedItem.configurationItemId,
           multiplier: "1.000",
@@ -650,13 +651,22 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
               supplierId: fabricSupplierId,
             },
           ],
+        }, {
+          configurationItemId: tailItem.configurationItemId,
+          multiplier: "1.200",
+          allocations: [{
+            responsibilityType: "processing_factory",
+            shareBps: 10000,
+            multiplier: "1.200",
+            supplierId: factorySupplierId,
+          }],
         }],
       }),
       randomUUID(),
     );
     expect(n07Draft.value.determination).toMatchObject({
       stage: "draft",
-      calculationTotal: "132.00",
+      calculationTotal: "180.00",
       processes: [{
         baseAmount: "110.00",
         responsibilityAmount: "132.00",
@@ -672,6 +682,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
             roundedAmount: "92.40",
           }),
         ],
+      }, {
+        baseAmount: "40.00",
+        responsibilityAmount: "48.00",
+        allocations: [expect.objectContaining({
+          responsibilityType: "processing_factory",
+          shareBps: 10000,
+          roundedAmount: "48.00",
+        })],
       }],
     });
     const n07Final = await responsibility.finalize(
@@ -742,7 +760,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       {
         responsibilityType: "processing_factory",
         supplierId: factorySupplierId,
-        proposedAmount: "92.40",
+        proposedAmount: "140.40",
         status: "deduction_follow_up",
       },
     ]);
@@ -801,9 +819,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       canRequestSpecialApproval: false,
       specialApproval: {
         requestVersion: 1,
-        proposedAmount: "92.40",
+        proposedAmount: "140.40",
         actualDeductedAmount: "80.00",
-        remainingAmount: "12.40",
+        remainingAmount: "60.40",
         decision: null,
       },
     });
@@ -868,9 +886,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "closed",
       closure: {
         result: "partial",
-        proposedAmount: "92.40",
+        proposedAmount: "140.40",
         actualDeductedAmount: "80.00",
-        remainingAmount: "12.40",
+        remainingAmount: "60.40",
       },
       specialApproval: { decision: { decision: "approved" } },
     });
@@ -1117,9 +1135,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(totals.rows[0]).toEqual({
       report_total: "150.00",
-      responsibility_total: "132.00",
+      responsibility_total: "180.00",
       own_factory_total: "0.00",
-      external_total: "132.00",
+      external_total: "180.00",
       wage_total: "150.00",
     });
     const openBusinessTodos = await database.query<{ category: string }>(
