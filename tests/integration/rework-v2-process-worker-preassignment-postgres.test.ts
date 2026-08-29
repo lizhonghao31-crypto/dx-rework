@@ -171,6 +171,7 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
       styleNo,
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "own_factory" },
+      tailInspectionCostBearer: "own_factory",
       problemPart: "袖口",
       problemDescription: "PR-04 统一执行验收",
       reworkQuantity: 10,
