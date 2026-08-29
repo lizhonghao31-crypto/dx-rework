@@ -706,16 +706,29 @@ export class ResponsibilityDeterminationService {
     // A boss rejection is itself an immutable audit fact.  Do not force the
     // production handler to invent a second reason merely to make the revised
     // N07 draft writable again.
+    const requestedTailCostBearer = input.tailInspectionCostBearer;
+    if (order.tail_inspection_required && requestedTailCostBearer === null) {
+      fail(
+        "整查订单必须明确选择本厂或加工厂承担，不能提交空值",
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
     const targetTailCostBearer = order.tail_inspection_required
-      ? (input.tailInspectionCostBearer ?? order.tail_inspection_cost_bearer)
+      ? (requestedTailCostBearer === undefined
+          ? order.tail_inspection_cost_bearer
+          : requestedTailCostBearer)
       : null;
     if (order.tail_inspection_required && targetTailCostBearer === null) {
       fail("请确认整查费用承担方", 400, "VALIDATION_ERROR");
     }
+    const hasExplicitTailCostBearer =
+      requestedTailCostBearer === "own_factory"
+      || requestedTailCostBearer === "processing_factory";
     const targetTailCostBearerSource =
       targetTailCostBearer === null
         ? null
-        : input.tailInspectionCostBearer !== undefined
+        : hasExplicitTailCostBearer
           ? "production_override"
           : order.tail_inspection_cost_bearer_source ?? "legacy_default";
     if (targetTailCostBearer === "processing_factory"
