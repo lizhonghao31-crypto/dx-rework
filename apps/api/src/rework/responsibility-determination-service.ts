@@ -1067,6 +1067,12 @@ export class ResponsibilityDeterminationService {
         "A newer responsibility draft superseded this version",
       );
     }
+    await this.todos?.completeOpenByDedupePrefix(
+      client,
+      actor,
+      `responsibility-entry:${orderId}:`,
+      "A production manager took responsibility for N07",
+    );
     await this.todos?.actionableForResponsibilityHandler(client, actor, {
       category: "responsibility_determination",
       sourceEventId: eventId,
