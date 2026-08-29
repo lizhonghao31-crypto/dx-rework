@@ -1630,6 +1630,7 @@ export class ReworkInitiationService {
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
+      tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
