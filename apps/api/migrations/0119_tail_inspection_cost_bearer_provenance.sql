@@ -111,14 +111,14 @@ DECLARE
     'ARRAY[''status'',''tail_inspection_required'',''tail_inspection_cost_bearer'',''tail_inspection_cost_bearer_source'',''updated_by'',''version'',''updated_at'']';
   old_count integer;
 BEGIN
-  SELECT procedure.prosrc
+  SELECT proc.prosrc
   INTO guard_source
-  FROM pg_proc procedure
-  JOIN pg_namespace namespace ON namespace.oid=procedure.pronamespace
-  WHERE namespace.nspname=current_schema()
-    AND procedure.proname='guard_rework_order_write'
-    AND pg_get_function_identity_arguments(procedure.oid)=''
-  ORDER BY procedure.oid DESC
+  FROM pg_proc proc
+  JOIN pg_namespace ns ON ns.oid=proc.pronamespace
+  WHERE ns.nspname=current_schema()
+    AND proc.proname='guard_rework_order_write'
+    AND pg_get_function_identity_arguments(proc.oid)=''
+  ORDER BY proc.oid DESC
   LIMIT 1;
 
   IF guard_source IS NULL THEN
