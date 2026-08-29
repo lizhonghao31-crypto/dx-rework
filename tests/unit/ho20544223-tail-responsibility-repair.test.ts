@@ -18,6 +18,8 @@ describe("HO20544223 tail responsibility repair", () => {
     expect(migration).toContain("added_responsibility IS DISTINCT FROM 468.48");
     expect(migration).toContain("corrected_responsibility IS DISTINCT FROM 1544.64");
     expect(migration).toContain("recorded deductions or closure");
+    expect(migration).toContain("FOR UPDATE OF case_record");
+    expect(migration).toContain("refuses a concurrent deduction or closure");
     expect(migration).not.toMatch(/DELETE\s+FROM\s+rework_/i);
     expect(migration).not.toContain("UPDATE rework_orders");
   });
@@ -34,6 +36,8 @@ describe("HO20544223 tail responsibility repair", () => {
     expect(migration).toContain("target_order.tail_inspection_cost_bearer = 'processing_factory'");
     expect(migration).toContain("CREATE TABLE rework_responsibility_business_corrections");
     expect(migration).toContain("responsibility_business_correction_no_update");
+    expect(migration).toContain("authorized_by uuid NOT NULL REFERENCES app_users(id)");
+    expect(migration).toContain("ARRAY['root','owner_group']");
+    expect(migration).toContain("requires exactly one Root owner to authorize the correction");
   });
 });
-

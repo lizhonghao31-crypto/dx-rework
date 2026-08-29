@@ -19,6 +19,11 @@ CREATE TABLE rework_responsibility_business_corrections (
     CHECK (added_responsibility_amount > 0),
   corrected_responsibility_amount numeric(18,2) NOT NULL,
   corrected_external_amount numeric(18,2) NOT NULL,
+  authorized_by uuid NOT NULL REFERENCES app_users(id),
+  authorized_role_snapshot text[] NOT NULL
+    CHECK (cardinality(authorized_role_snapshot) > 0),
+  authorization_basis text NOT NULL
+    CHECK (length(btrim(authorization_basis)) BETWEEN 1 AND 500),
   reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 500),
   applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (migration_version, rework_order_id)
@@ -197,6 +202,8 @@ DECLARE
   tail_item_count integer;
   tail_wage_item_count integer;
   tail_item_ids uuid[];
+  correction_authorizer_ids uuid[];
+  correction_authorizer_id uuid;
 BEGIN
   SELECT * INTO target_order
   FROM rework_orders
@@ -249,7 +256,8 @@ BEGIN
   WHERE case_record.batch_id = target_batch.batch_id
     AND case_record.responsibility_type = 'processing_factory'
     AND case_record.supplier_id = target_order.processing_factory_supplier_id
-    AND case_record.status NOT IN ('closed','superseded');
+    AND case_record.status NOT IN ('closed','superseded')
+  FOR UPDATE OF case_record;
 
   IF target_batch.batch_id IS NULL OR target_case.case_id IS NULL
      OR target_case.status <> 'deduction_follow_up' THEN
@@ -278,6 +286,19 @@ BEGIN
      OR supplier_allocation.multiplier IS DISTINCT FROM 1.200 THEN
     RAISE EXCEPTION '0114 target processing-factory allocation snapshot is missing or not 1.2';
   END IF;
+
+  SELECT array_agg(user_record.id ORDER BY user_record.id)
+  INTO correction_authorizer_ids
+  FROM app_users user_record
+  WHERE access_is_root_actor(user_record.id)
+    AND responsibility_actor_has_direct_role(
+      user_record.id,'responsibility:owner_sign',ARRAY['owner_group']
+    );
+
+  IF cardinality(correction_authorizer_ids) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION '0114 requires exactly one Root owner to authorize the correction';
+  END IF;
+  correction_authorizer_id := correction_authorizer_ids[1];
 
   SELECT coalesce(sum(allocation.effective_rounded_amount),0)
   INTO original_responsibility
@@ -512,6 +533,19 @@ BEGIN
   corrected_responsibility := original_responsibility + added_responsibility;
   corrected_external := original_external + added_responsibility;
 
+  -- The case row was locked FOR UPDATE before the first absence check. Recheck
+  -- immediately before changing its amount so deduction writers cannot race
+  -- this correction between validation and persistence.
+  IF EXISTS (
+    SELECT 1 FROM rework_external_deduction_entries entry
+    WHERE entry.case_id = target_case.case_id
+  ) OR EXISTS (
+    SELECT 1 FROM rework_external_deduction_closures closure
+    WHERE closure.case_id = target_case.case_id
+  ) THEN
+    RAISE EXCEPTION '0114 refuses a concurrent deduction or closure';
+  END IF;
+
   UPDATE rework_responsibility_determinations
   SET calculation_total = corrected_responsibility
   WHERE determination_id = target_determination.determination_id;
@@ -544,13 +578,16 @@ BEGIN
     correction_id,migration_version,rework_order_id,determination_id,batch_id,
     case_id,tail_configuration_item_ids,original_responsibility_amount,
     original_external_amount,added_tail_wage_base,added_responsibility_amount,
-    corrected_responsibility_amount,corrected_external_amount,reason
+    corrected_responsibility_amount,corrected_external_amount,authorized_by,
+    authorized_role_snapshot,authorization_basis,reason
   ) VALUES(
     gen_random_uuid(),'0114_ho20544223_tail_responsibility_repair',
     target_order.rework_order_id,target_determination.determination_id,
     target_batch.batch_id,target_case.case_id,tail_item_ids,
     original_responsibility,original_external,added_tail_base,
     added_responsibility,corrected_responsibility,corrected_external,
+    correction_authorizer_id,ARRAY['root','owner_group'],
+    '业务负责人以 Root/老板身份明确批准 HO20544223 整查由加工厂承担并修复历史责任与外扣金额',
     'HO20544223 回货返工，整查费用由加工厂承担；补入整查工资基数并按 100% × 1.2 修正责任与外扣'
   );
 END
