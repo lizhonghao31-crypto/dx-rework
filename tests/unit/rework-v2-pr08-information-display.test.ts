@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("PR-08 information display", () => {
-  it("uses range-driven receiving KPIs without turning style search into a global query", async () => {
+  it("keeps range KPIs while labeling all-time style search explicitly", async () => {
     const [service, page] = await Promise.all([
       readFile("apps/api/src/receiving/receiving-service.ts", "utf8"),
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
@@ -12,15 +12,16 @@ describe("PR-08 information display", () => {
     expect(service).toContain("row.differenceQuantity !== 0");
     expect(service).toContain("prior_actual_quantity");
     expect(service).toContain("delivery_note_quantity");
-    expect(page).toContain('label="期间收货订单数"');
-    expect(page).toContain('label="期间实收数量"');
+    expect(service).toContain('const mode = needle ? "search" : "range"');
+    expect(page).toContain('"搜索结果订单数" : "期间收货订单数"');
+    expect(page).toContain('"搜索结果累计实收" : "期间实收数量"');
     expect(page).toContain('label="异常订单数量"');
     expect(page).toContain('label="差异率"');
+    expect(page).toContain("全时间 · 不受所选日期影响");
     expect(page).toContain("startDate");
     expect(page).toContain("endDate");
     expect(page).toContain("原收货");
     expect(page).toContain("第{row.receiptCount}次收货");
-    expect(page).not.toContain("全历史收货");
   });
 
   it("keeps supplier and temporary-worker wage facts visible without changing deduction math", async () => {
@@ -34,3 +35,4 @@ describe("PR-08 information display", () => {
     expect(exportService).toContain("temporary_wage_multiplier");
   });
 });
+
