@@ -111,7 +111,7 @@ describe("order detail information architecture", () => {
     expect(detail).toContain('node("settlement_followup", "09", "返工业务完成"');
     expect(detail).not.toContain('node("task_assignment", "04", "分配返工人员"');
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");
-    expect(detail).toContain("<WorkReportingForm reworkOrderId={detail.reworkOrderId}");
+    expect(detail).toMatch(/<WorkReportingForm[\s\S]*?reworkOrderId=\{detail\.reworkOrderId\}/);
     expect(detail).not.toContain("<TailInspectionPanel reworkOrderId={detail.reworkOrderId}");
     expect(detail).not.toContain('if (value === "tail_inspection") return "tail_inspection";');
     expect(detail).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId}");

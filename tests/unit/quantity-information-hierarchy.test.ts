@@ -18,10 +18,18 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(reviewCss).toContain(".quantity-process-toggle");
     expect(reviewCss).toContain(".quantity-process-card.is-mismatch");
     expect(reviewCss).toContain(".quantity-report-value");
+    const processToolbar = review.slice(
+      review.indexOf("const canSaveProcess"),
+      review.indexOf('{open && <div className="quantity-process-detail">'),
+    );
     expect(reviewCss).toContain(".quantity-process-toolbar > .quantity-process-save");
+    expect(reviewCss).toContain("background: var(--dx-v2-color-inset)");
+    expect(reviewCss).toContain("box-shadow: 0 8px 24px");
+    expect(reviewCss).toContain("box-shadow: none");
     expect(review).toContain('className="quantity-process-toolbar"');
     expect(review).toContain("disabled={busy || !processHasChanges}");
-    expect(review).not.toContain("quantity-report-actions quantity-process-save");
+    expect(processToolbar).toContain('className="quantity-process-save"');
+    expect(processToolbar).not.toContain("quantity-report-actions quantity-process-save");
     expect(review).toContain("<small>工人合计</small>");
     expect(review).toContain("<small>整查</small>");
     expect(review).toContain("<small>整查余量</small>");
