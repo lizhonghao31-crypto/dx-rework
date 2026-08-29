@@ -55,11 +55,21 @@ describe("responsibility determination web integration", () => {
   it("batch-applies one responsibility to selected worker processes before the existing submit", async () => {
     const source = await readFile(panelUrl, "utf8");
     expect(source).toContain("selectedProcessIds");
+    expect(source).toContain("batchAllocations");
     expect(source).toContain("批量判责");
-    expect(source).toContain("应用到已选工序");
-    expect(source).toContain("确认覆盖已勾选的");
+    expect(source).toContain("确认覆盖并应用");
+    expect(source).toContain("完整责任配置");
     expect(source).toContain("仍需点击“提交责任判定”才会保存");
     expect(source).toContain('process.executionKind === "worker"');
+  });
+
+  it("keeps the batch dialog keyboard-contained and restores focus", async () => {
+    const source = await readFile(panelUrl, "utf8");
+    expect(source).toContain("batchDialogRef");
+    expect(source).toContain("batchReturnFocusRef");
+    expect(source).toContain('event.key === "Escape"');
+    expect(source).toContain('event.key !== "Tab"');
+    expect(source).toContain("batchReturnFocusRef.current?.focus()");
   });
 
   it("treats the N01 tail bearer as an initial judgment that N07 confirms or explicitly changes", async () => {
