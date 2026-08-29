@@ -625,7 +625,7 @@ export class ResponsibilityDeterminationService {
         const merchandiserRecipients = new Set([
           order.merchandiser_user_id,
           order.embroidery_merchandiser_user_id,
-        ].filter((recipient): recipient is string => recipient !== null));
+        ].filter((recipient): recipient is string => typeof recipient === "string"));
         for (const recipientUserId of merchandiserRecipients) {
           await this.todos?.information(client, actor, {
             category: "responsibility_finalized_notice",
