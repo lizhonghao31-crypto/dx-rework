@@ -21,12 +21,17 @@ describe("sourcing PR2 unified desktop workspace", () => {
       "最终审批",
       "合同执行",
       "财务核对",
-      "流程记录",
+      "交货日期",
+      "工艺",
       "订单图片",
       "办理区",
     ]) expect(source).toContain(label);
     expect(source).toContain("MAX_SOURCING_ATTACHMENTS");
     expect(source).toContain("SourcingTimelineResponseSchema");
+    expect(source).toContain("sourcingWorkflowNodeHref");
+    expect(source).toContain("rework-detail-node-history");
+    expect(source).toContain('rework-detail-layout rework-detail-target-layout');
+    expect(source).not.toContain('<h2>流程记录</h2>');
     expect(source).toContain('import "./rework-detail.css"');
   });
 

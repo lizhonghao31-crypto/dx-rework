@@ -34,10 +34,10 @@ describe("thin platform module routing", () => {
     expect(platformLandingTarget(user([role], capabilities))).toBe(expected);
   });
 
-  it("keeps a rework-only office user direct and sends dual-module users home", () => {
+  it("keeps a rework-only office user direct and sends dual-module users into the unified shell", () => {
     const office = user(["quality_control"], ["todo:view", "rework:initiate"]);
     expect(platformLandingTarget(office)).toBe(landingTarget(office));
-    expect(platformLandingTarget(user(["production_management"], ["todo:view", "sourcing:view"]))).toBe("ui/home");
+    expect(platformLandingTarget(user(["production_management"], ["todo:view", "sourcing:view"]))).toBe("ui/my-tasks");
   });
 
   it("derives the rework card href from the established landing function", () => {
@@ -49,9 +49,9 @@ describe("thin platform module routing", () => {
   });
 
 
-  it("redirects only an unselected legacy default landing and preserves deep links", () => {
+  it("retires the legacy module selector without redirecting valid unified-shell links", () => {
     const dual = user(["order_merchandiser"], ["todo:view", "sourcing:view"]);
-    expect(shouldRedirectLegacyLandingToPlatformHome(dual, "/ui/my-tasks", "", null)).toBe(true);
+    expect(shouldRedirectLegacyLandingToPlatformHome(dual, "/ui/my-tasks", "", null)).toBe(false);
     expect(shouldRedirectLegacyLandingToPlatformHome(
       dual,
       "/ui/my-tasks",
@@ -75,23 +75,21 @@ describe("thin platform module routing", () => {
   });
 
   it("protects sourcing with AuthGate and keeps the unified desktop CSS token-based", async () => {
-    const [app, components, platformHome, platformCss, sourcingCss] = await Promise.all([
+    const [app, components, shellCss, sourcingCss] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
-      readFile("apps/web/src/platform-home-page.tsx", "utf8"),
-      readFile("apps/web/src/platform-home.css", "utf8"),
+      readFile("apps/web/src/shell-navigation.css", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/sourcing"');
     expect(app).toContain('{ requiredCapability: "sourcing:view" }');
     expect(app).toContain('path.startsWith("/ui/sourcing")');
     expect(app).toContain("useInitialPlatformEntryCheck(path, search)");
-    expect(platformHome).toContain("platformModuleHref(module)");
-    expect(components).toContain('mobile-primary-navigation__label">平台');
-    expect(components).toContain("showPlatformHome={currentUser ? canAccessSourcing(currentUser) : false}");
-    expect(platformCss).toContain("var(--dx-v2-");
-    expect(platformCss).toContain("@media (max-width: 640px)");
-    expect(platformCss).toContain("grid-template-columns: minmax(0, 1fr)");
-    expect(sourcingCss).toContain("var(--dx-v2-");
+    expect(app).not.toContain("PlatformHomePage");
+    expect(app).toContain('if (path === "/ui/home") page = <HomeLanding />');
+    expect(components).not.toContain('mobile-primary-navigation__label">平台');
+    expect(shellCss).toContain(".dx-nav-item.is-active .primary-navigation__copy small");
+    expect(shellCss).toContain("color: #fff");
+    expect(sourcingCss).toContain("border: 1px solid #c9ced6");
   });
 });

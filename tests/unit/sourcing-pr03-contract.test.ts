@@ -21,21 +21,29 @@ describe("sourcing PR03 contracts", () => {
     expect(CreateSourcingCaseSchema.parse({
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
+      deliveryDate: "2026-09-15",
+      processDescription: "净色车缝并整烫",
       orderQuantity: 120,
     })).toEqual({
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
+      deliveryDate: "2026-09-15",
+      processDescription: "净色车缝并整烫",
       orderQuantity: 120,
     });
     expect(() => CreateSourcingCaseSchema.parse({
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
+      deliveryDate: "2026-09-15",
+      processDescription: "净色车缝并整烫",
       orderQuantity: 1.5,
     })).toThrow();
     expect(() => CreateSourcingCaseSchema.parse({
       erpOrderId: "caller-controlled-id",
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
+      deliveryDate: "2026-09-15",
+      processDescription: "净色车缝并整烫",
       orderQuantity: 120,
     })).toThrow();
   });

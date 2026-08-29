@@ -175,6 +175,8 @@ export function SourcingWorkspacePage({
 function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [erpOrderNo, setErpOrderNo] = useState("");
   const [styleNo, setStyleNo] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [processDescription, setProcessDescription] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -248,6 +250,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const quantity = Number(orderQuantity);
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
     if (!erpOrderNo.trim() || !styleNo.trim()) { setMessage("请填写 ERP 订单号和款号"); return; }
+    if (!deliveryDate || !processDescription.trim()) { setMessage("请填写交货日期和工艺"); return; }
     if (!/^\d+$/.test(orderQuantity) || quantity < 1 || quantity > 10_000_000) {
       setMessage("订单数量必须是1至10000000之间的整数");
       return;
@@ -262,6 +265,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         body: JSON.stringify({
           erpOrderNo: erpOrderNo.trim(),
           styleNo: styleNo.trim(),
+          deliveryDate,
+          processDescription: processDescription.trim(),
           orderQuantity: quantity,
           attachmentIds: images.map((image) => image.attachmentId),
         }),
@@ -289,6 +294,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           <label><span>ERP 订单号</span><input value={erpOrderNo} maxLength={100} onChange={(event) => { setErpOrderNo(event.target.value); createKey.current = null; }} placeholder="请输入正式 ERP 订单号" /></label>
           <label><span>款号</span><input value={styleNo} maxLength={100} onChange={(event) => { setStyleNo(event.target.value); createKey.current = null; }} placeholder="请输入款号" /></label>
           <label><span>订单数量</span><input value={orderQuantity} inputMode="numeric" onChange={(event) => { setOrderQuantity(event.target.value); createKey.current = null; }} placeholder="请输入整数" /></label>
+          <label><span>交货日期</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label className="sourcing-form-wide"><span>工艺</span><input value={processDescription} maxLength={500} onChange={(event) => { setProcessDescription(event.target.value); createKey.current = null; }} placeholder="请输入订单工艺要求" /></label>
         </div>
         <section className="sourcing-photo-field" aria-label="订单照片">
           <div className="section-title">
@@ -350,7 +357,7 @@ function OrderListPage({ mode }: { mode: "pending" | "history" }) {
       />
       <Surface className="sourcing-list-card">
         <form className="sourcing-search" onSubmit={(event) => { event.preventDefault(); void load(search); }}>
-          <input value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} placeholder="搜索 ERP 订单号或款号" />
+          <input value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} placeholder="搜索 ERP、款号、跟单、供应商、工艺或合同编号" />
           <button className="dx-button dx-button--secondary" type="submit">搜索</button>
         </form>
         {message ? <p className="sourcing-list-message" role="status">{message}</p> : null}
@@ -403,6 +410,42 @@ const timelineLabel = (entry: SourcingTimelineEntry): string => ({
     : `财务发现差异 V${entry.version}`,
   exception_verification: entry.resolution === "close" ? "差异确认闭环" : "退回财务重核",
 })[entry.kind];
+
+type SourcingWorkflowNodeKey = typeof WORKFLOW[number]["key"];
+type SourcingWorkflowNodeState = "completed" | "current" | "future";
+
+const sourcingWorkflowNodeKeys = new Set<SourcingWorkflowNodeKey>(WORKFLOW.map((node) => node.key));
+
+const sourcingWorkflowNodeFromSearch = (): SourcingWorkflowNodeKey | null => {
+  const value = new URLSearchParams(window.location.search).get("node");
+  return value && sourcingWorkflowNodeKeys.has(value as SourcingWorkflowNodeKey)
+    ? value as SourcingWorkflowNodeKey
+    : null;
+};
+
+const sourcingWorkflowNodeHref = (sourcingCaseId: string, key: SourcingWorkflowNodeKey): string =>
+  `${pageUrl(`ui/sourcing/orders/${sourcingCaseId}`)}?node=${key}#node-workspace`;
+
+const timelineNode = (entry: SourcingTimelineEntry): SourcingWorkflowNodeKey => ({
+  created: "created",
+  ie_quote: "ie_quote",
+  management_decision: "management",
+  owner_decision: "owner",
+  contract: "contract",
+  factory_change_request: "contract",
+  factory_change_verification: "contract",
+  finance_reconciliation: "finance",
+  exception_verification: "finance",
+})[entry.kind];
+
+const WORKFLOW_PREVIEWS: Readonly<Record<SourcingWorkflowNodeKey, string>> = {
+  created: "查看跟单创建订单时提交的订单资料与图片。",
+  ie_quote: "查看 IE 核定的加工单价、数量、总额和说明。",
+  management: "查看生产管理的调价、选厂及决定依据。",
+  owner: "查看老板最终审批结论与审批说明。",
+  contract: "查看合同登记以及中途换厂的处理记录。",
+  finance: "查看财务四项核对、差异处理和闭环记录。",
+};
 
 function OrderDetailPage({
   sourcingCaseId,
@@ -519,6 +562,14 @@ function OrderDetailPage({
   }
 
   const step = statusStep(item.status);
+  const activeNode = WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.key ?? "finance";
+  const selectedNode = sourcingWorkflowNodeFromSearch() ?? activeNode;
+  const selectedIndex = WORKFLOW.findIndex((node) => node.key === selectedNode);
+  const selectedState: SourcingWorkflowNodeState = item.status === "closed" || selectedIndex < step
+    ? "completed"
+    : selectedIndex === step ? "current" : "future";
+  const selectedTimeline = timeline.filter((entry) => timelineNode(entry) === selectedNode);
+  const selectedWorkflow = WORKFLOW[selectedIndex] ?? WORKFLOW[WORKFLOW.length - 1]!;
   const priceAdjusted = item.ieQuote && item.decision
     ? Number(item.ieQuote.unitPrice) !== Number(item.decision.unitPrice)
     : false;
@@ -556,9 +607,11 @@ function OrderDetailPage({
         action="返回订单列表"
         actionHref={item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending"}
       />
-      <div className="rework-detail-layout">
+      <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="报价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{item.orderQuantity.toLocaleString("zh-CN")} 件</dd></div>
+          <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>工艺</dt><dd>{item.processDescription ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? `¥${item.ieQuote.unitPrice}` : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? `¥${item.decision.unitPrice}` : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
@@ -585,48 +638,49 @@ function OrderDetailPage({
           <section className="rework-workflow" aria-label="订单流程">
             <div className="rework-workflow__heading rework-detail-panel-title">
               <div><h2>订单流程</h2><p>所有节点始终可见，当前环节不会遮住前序事实。</p></div>
-              <span className="rework-workflow__step-count">当前步骤 {Math.min(step + 1, 6)} / 6</span>
+              <span className="rework-workflow__step-count">当前步骤 {Math.min(step + 1, WORKFLOW.length)} / {WORKFLOW.length}</span>
             </div>
             <div className="rework-workflow__desktop-grid">
               {WORKFLOW.map((node, index) => {
-                const state = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
-                return <div className={`rework-workflow__node is-${state}`} key={node.key}>
+                const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
+                return <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key)} key={node.key}>
                   <b>{node.number}</b>
                   <span><strong>{node.label}</strong><small>{node.role}</small></span>
                   <em>{state === "completed" ? "已完成" : state === "current" ? "处理中" : "未开始"}</em>
-                </div>;
+                </a>;
               })}
             </div>
           </section>
         </div>
 
-        <Surface className="sourcing-history-panel">
-          <div className="section-title">
-            <div><h2>流程记录</h2><p>每次报价、调价、选厂和审批都按版本保留。</p></div>
-            <StatusBadge tone="info">{timeline.length} 条</StatusBadge>
-          </div>
-          <div className="sourcing-timeline">
-            {timeline.map((entry) => <article key={entry.entryId}>
-              <div><strong>{timelineLabel(entry)}</strong><small>{formatDateTime(entry.handledAt)} · {entry.handledBy}</small></div>
-              <p>{entry.reason}</p>
-              <dl>
-                {entry.unitPrice ? <div><dt>单价</dt><dd>¥{entry.unitPrice}</dd></div> : null}
-                {entry.totalAmount ? <div><dt>总额</dt><dd>¥{entry.totalAmount}</dd></div> : null}
-                {entry.quantity ? <div><dt>数量</dt><dd>{entry.quantity.toLocaleString("zh-CN")} 件</dd></div> : null}
-                {entry.supplierName ? <div><dt>加工厂</dt><dd>{entry.supplierName}</dd></div> : null}
-                {entry.contractReference ? <div><dt>合同编号</dt><dd>{entry.contractReference}</dd></div> : null}
-                {entry.signedOn ? <div><dt>签署日期</dt><dd>{entry.signedOn}</dd></div> : null}
-                {entry.decision ? <div><dt>结论</dt><dd>{entry.decision === "approved" ? "通过" : "驳回"}</dd></div> : null}
-                {entry.result ? <div><dt>核对结果</dt><dd>{entry.result === "match" ? "四项一致" : `差异：${entry.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、")}`}</dd></div> : null}
-                {entry.resolution ? <div><dt>处理结果</dt><dd>{entry.resolution === "close" ? "确认差异并闭环" : "退回财务重核"}</dd></div> : null}
-              </dl>
-            </article>)}
-          </div>
-        </Surface>
-
-        <section className="rework-detail-task sourcing-action-panel" aria-label="节点办理区">
-          <div className="rework-detail-task__heading"><h2>办理区</h2><StatusBadge tone="info">{STATUS_LABELS[item.status]}</StatusBadge></div>
-          {item.status === "pending_ie_quote" ? <Surface className="rework-detail-node-preview">
+        <section id="node-workspace" className="rework-detail-task rework-detail-workspace sourcing-action-panel" aria-label="节点办理区">
+          <div className="rework-detail-task__heading"><h2>办理区</h2><StatusBadge tone={selectedState === "completed" ? "success" : "info"}>{selectedState === "completed" ? "已完成 · 可只读" : selectedState === "current" ? STATUS_LABELS[item.status] : "未开始 · 可预览"}</StatusBadge></div>
+          {selectedState !== "current" ? <Surface className="rework-detail-node-preview">
+            <h2>{selectedWorkflow.number} · {selectedWorkflow.label}</h2>
+            <p>{WORKFLOW_PREVIEWS[selectedWorkflow.key]}</p>
+            <p>负责角色：{selectedWorkflow.role}</p>
+            {selectedState === "completed" ? <details className="rework-detail-node-history">
+              <summary>处理历史{selectedTimeline.length ? ` · ${selectedTimeline.length} 条` : ""}</summary>
+              {selectedTimeline.length ? <div className="sourcing-timeline">
+                {selectedTimeline.map((entry) => <article key={entry.entryId}>
+                  <div><strong>{timelineLabel(entry)}</strong><small>{formatDateTime(entry.handledAt)} · {entry.handledBy}</small></div>
+                  <p>{entry.reason}</p>
+                  <dl>
+                    {entry.unitPrice ? <div><dt>单价</dt><dd>¥{entry.unitPrice}</dd></div> : null}
+                    {entry.totalAmount ? <div><dt>总额</dt><dd>¥{entry.totalAmount}</dd></div> : null}
+                    {entry.quantity ? <div><dt>数量</dt><dd>{entry.quantity.toLocaleString("zh-CN")} 件</dd></div> : null}
+                    {entry.supplierName ? <div><dt>加工厂</dt><dd>{entry.supplierName}</dd></div> : null}
+                    {entry.contractReference ? <div><dt>合同编号</dt><dd>{entry.contractReference}</dd></div> : null}
+                    {entry.signedOn ? <div><dt>签署日期</dt><dd>{entry.signedOn}</dd></div> : null}
+                    {entry.decision ? <div><dt>结论</dt><dd>{entry.decision === "approved" ? "通过" : "驳回"}</dd></div> : null}
+                    {entry.result ? <div><dt>核对结果</dt><dd>{entry.result === "match" ? "四项一致" : `差异：${entry.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、")}`}</dd></div> : null}
+                    {entry.resolution ? <div><dt>处理结果</dt><dd>{entry.resolution === "close" ? "确认差异并闭环" : "退回财务重核"}</dd></div> : null}
+                  </dl>
+                </article>)}
+              </div> : <p>该节点暂无历史记录。</p>}
+            </details> : null}
+          </Surface> : null}
+          {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
             <h2>02 · IE 给价</h2>
             <p>输入加工单价，系统按订单数量精确计算总额。</p>
             {canQuote ? <div className="sourcing-form-grid">
@@ -637,7 +691,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
           </Surface> : null}
 
-          {item.status === "pending_management_decision" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_management_decision" && selectedNode === "management" ? <Surface className="rework-detail-node-preview">
             <h2>03 · 生产管理调价与选厂</h2>
             <p>IE 原价：¥{item.ieQuote?.unitPrice ?? "—"}。如调整价格，必须填写原因。</p>
             {canManage ? <div className="sourcing-form-grid">
@@ -649,7 +703,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
-          {item.status === "pending_owner_approval" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview">
             <h2>04 · 老板最终审批</h2>
             <p>IE 原价 ¥{item.ieQuote?.unitPrice ?? "—"}；生产管理价格 ¥{item.decision?.unitPrice ?? "—"}；加工厂 {item.decision?.supplierName ?? "—"}。</p>
             {canOwner ? <div className="sourcing-owner-actions">
@@ -658,7 +712,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
-          {item.status === "pending_contract" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_contract" && selectedNode === "contract" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 登记合同</h2>
             <p>合同必须绑定当前已批准的选厂决定；换厂通过后需登记新合同。</p>
             {canContract ? <div className="sourcing-form-grid">
@@ -677,7 +731,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由跟单办理。</p>}
           </Surface> : null}
 
-          {item.status === "pending_finance_reconciliation" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>06 · 待财务核对</h2>
             <p>逐项核对合同执行的供应商、单价、数量和总额；一致即归档，有差异则自动交生产管理核实并通知老板。</p>
             {canFinance ? <div className="sourcing-form-grid">
@@ -715,7 +769,7 @@ function OrderDetailPage({
             </div> : null}
           </Surface> : null}
 
-          {item.status === "pending_factory_change_verification" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_factory_change_verification" && selectedNode === "contract" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 生产管理核实换厂</h2>
             <p>新加工厂：{pendingFactoryChange?.supplierName ?? "—"}；新单价：{pendingFactoryChange?.unitPrice ? `¥${pendingFactoryChange.unitPrice}` : "—"}。通过后无需老板复审，但必须登记新合同。</p>
             {canVerifyFactoryChange && pendingFactoryChange ? <div className="sourcing-owner-actions">
@@ -732,7 +786,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
           </Surface> : null}
 
-          {item.status === "pending_exception_verification" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_exception_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>06 · 财务差异核实</h2>
             <p>财务发现：{latestFinance?.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、") || "差异项待确认"}。记录和证据已保留，老板已收到信息通知。</p>
             {canVerifyException ? <div className="sourcing-owner-actions">
@@ -748,7 +802,6 @@ function OrderDetailPage({
               )}>退回财务重核</button></div>
             </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
           </Surface> : null}
-          {item.status === "closed" ? <Surface className="rework-detail-node-preview"><h2>订单已完成</h2><p>报价、调价、选厂、审批、合同和财务记录已完整归档。</p></Surface> : null}
           {message ? <p className="sourcing-action-message" role="status">{message}</p> : null}
         </section>
       </div>

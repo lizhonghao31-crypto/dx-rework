@@ -49,6 +49,8 @@ export const MAX_SOURCING_ATTACHMENTS = 8;
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
+  processDescription: z.string().trim().min(1).max(500),
   orderQuantity: z.number().int().positive().max(10_000_000),
   attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
@@ -161,6 +163,8 @@ export const SourcingCaseSummarySchema = z.object({
   styleNo: z.string(),
   laneKey: z.literal("garment_processing"),
   orderQuantity: z.number().int().positive(),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  processDescription: z.string().nullable(),
   status: SourcingCaseStatusSchema,
   version: z.number().int().positive(),
   createdBy: IdSchema,

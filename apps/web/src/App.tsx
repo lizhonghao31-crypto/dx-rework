@@ -41,7 +41,6 @@ import {
   platformLandingTarget,
   shouldRedirectLegacyLandingToPlatformHome,
 } from "./platform-modules.js";
-import { PlatformHomePage } from "./platform-home-page.js";
 import { SourcingWorkspacePage } from "./sourcing-workspace-page.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -272,7 +271,7 @@ export function App() {
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   let page;
-  if (path === "/ui/home") page = <PlatformHomePage />;
+  if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
   else if (path === "/ui/sourcing/create") page = <SourcingWorkspacePage view="create" />;
   else if (path === "/ui/sourcing/history") page = <SourcingWorkspacePage view="history" />;

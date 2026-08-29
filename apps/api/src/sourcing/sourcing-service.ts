@@ -68,6 +68,8 @@ type SourcingCaseRow = Readonly<{
   style_no: string;
   lane_key: string;
   order_quantity: number | string;
+  delivery_date: string | null;
+  process_description: string | null;
   status: string;
   version: number | string;
   created_by: string;
@@ -174,6 +176,8 @@ const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => ({
   styleNo: row.style_no,
   laneKey: LANE_KEY,
   orderQuantity: Number(row.order_quantity),
+  deliveryDate: row.delivery_date,
+  processDescription: row.process_description,
   status: row.status as SourcingCaseStatus,
   version: Number(row.version),
   createdBy: row.created_by,
@@ -281,6 +285,8 @@ export class SourcingService {
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
+         case_view.process_description,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -304,6 +310,7 @@ export class SourcingService {
          owner_row.decided_by AS owner_decided_by,
          owner_row.decided_at AS owner_decided_at
        FROM current_sourcing_cases case_view
+       JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT quote.*
          FROM sourcing_ie_quotes quote
@@ -341,6 +348,8 @@ export class SourcingService {
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
+         case_view.process_description,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -364,6 +373,7 @@ export class SourcingService {
          owner_row.decided_by AS owner_decided_by,
          owner_row.decided_at AS owner_decided_at
        FROM current_sourcing_cases case_view
+       JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT quote.*
          FROM sourcing_ie_quotes quote
@@ -381,7 +391,17 @@ export class SourcingService {
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
        WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
-          OR case_view.style_no ILIKE '%'||$1||'%')
+          OR case_view.style_no ILIKE '%'||$1||'%'
+          OR creator_user.display_name ILIKE '%'||$1||'%'
+          OR decision_row.supplier_name_snapshot ILIKE '%'||$1||'%'
+          OR decision_row.supplier_code_snapshot ILIKE '%'||$1||'%'
+          OR case_view.process_description ILIKE '%'||$1||'%'
+          OR EXISTS (
+            SELECT 1
+            FROM sourcing_contract_executions contract_row
+            WHERE contract_row.sourcing_case_id=case_view.sourcing_case_id
+              AND contract_row.contract_reference ILIKE '%'||$1||'%'
+          ))
          AND ($2='all' OR ($2='closed' AND case_view.status='closed')
            OR ($2='pending' AND case_view.status<>'closed'))
        ORDER BY case_view.created_at DESC
@@ -620,6 +640,8 @@ export class SourcingService {
       erpOrderNo,
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
+      deliveryDate: input.deliveryDate,
+      processDescription: normalizeText(input.processDescription, "工艺", 500),
       orderQuantity: normalizeQuantity(input.orderQuantity),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
@@ -650,8 +672,9 @@ export class SourcingService {
         await client.query(
           `INSERT INTO sourcing_cases(
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
-             order_quantity,created_by,operation_event_id,request_id,creation_reason
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+             order_quantity,delivery_date,process_description,
+             created_by,operation_event_id,request_id,creation_reason
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
           [
             sourcingCaseId,
             normalized.erpOrderId,
@@ -659,6 +682,8 @@ export class SourcingService {
             normalized.styleNo,
             LANE_KEY,
             normalized.orderQuantity,
+            normalized.deliveryDate,
+            normalized.processDescription,
             actor.actorId,
             eventId,
             actor.requestId,

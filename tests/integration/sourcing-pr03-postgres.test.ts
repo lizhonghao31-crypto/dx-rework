@@ -120,6 +120,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0097_sourcing_foundation.sql",
       "0102_sourcing_ie_view_grant.sql",
       "0108_sourcing_finance_closure.sql",
+      "0120_sourcing_order_facts.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -184,6 +185,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const input = {
       erpOrderNo: "ERP-20260826-001",
       styleNo: "DX-260826",
+      deliveryDate: "2026-09-15",
+      processDescription: "净色车缝、整烫并按样衣复核",
       orderQuantity: 137,
       attachmentIds: [evidenceId],
     };
@@ -196,6 +199,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       styleNo: input.styleNo,
       laneKey: "garment_processing",
       orderQuantity: 137,
+      deliveryDate: "2026-09-15",
+      processDescription: "净色车缝、整烫并按样衣复核",
       status: "pending_ie_quote",
       version: 1,
       ieQuote: null,
@@ -248,6 +253,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const listed = await service.listCases(readerActor(), "260826");
     expect(listed.items).toHaveLength(1);
     expect(listed.items[0]?.sourcingCaseId).toBe(created.value.sourcingCaseId);
+    expect((await service.listCases(readerActor(), "订单跟单")).items).toHaveLength(1);
+    expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(1);
 
     expect((await database.query(
       "SELECT 1 FROM sourcing_ie_quotes WHERE sourcing_case_id=$1",
@@ -326,6 +333,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       },
       ownerDecision: null,
     });
+    expect((await service.listCases(readerActor(), "一号加工厂")).items).toHaveLength(1);
+    expect((await service.listCases(readerActor(), "FAC-01")).items).toHaveLength(1);
 
     const rejected = await service.decideOwner(
       ownerActor(),

@@ -118,7 +118,8 @@
     { "version": "0116_tail_defective_quantity_ledger", "checksum": "f3c64fc764f3af6add0fe5c27e2455a4aea90a37426318d6834b3348eda0131d" },
     { "version": "0117_related_merchandiser_rework_access", "checksum": "75bb5ab9744d3bcd56fa3b0e6df11beaaca9c80c765cb1a95378587184c080cb" },
     { "version": "0118_ie_precount_ledger", "checksum": "29a9c21baab5adc75be5b661e310f732028d746817e21f69f24e494e73d917a3" },
-    { "version": "0119_tail_inspection_cost_bearer_provenance", "checksum": "026f3c812b4258ef118c9d87059a1dd4b6a97cdb0c6b2293962a06a4e7facef4" }
+    { "version": "0119_tail_inspection_cost_bearer_provenance", "checksum": "026f3c812b4258ef118c9d87059a1dd4b6a97cdb0c6b2293962a06a4e7facef4" },
+    { "version": "0120_sourcing_order_facts", "checksum": "382c99bc1c667d04dd8a58f2679c9b2e716cda0aad60cea41ef4adc3d301fa6a" }
   ]
 }
 
