@@ -49,13 +49,33 @@ describe("IE pre-count reference ledger", () => {
     expect(method).not.toContain("outbox");
   });
 
-  it("shows the reference record in N04, N05 and N06 without affecting final facts", async () => {
-    const page = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
-    expect(page).toContain("IE预核数");
-    expect(page).toContain('["work_reporting", "whole_order_review", "final_quantity_ie_review"]');
-    expect(page).toContain("用于走货前临时记数");
-    expect(page).toContain("不替代N06复核，不计入工资和责任");
-    expect(page).toContain("预核记录（最新在上）");
+  it("keeps one compact entry beside submitted quantity without another panel", async () => {
+    const [page, form, detailStyles, formStyles] = await Promise.all([
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+      readFile("apps/web/src/work-reporting-form.css", "utf8"),
+    ]);
+    const row = form.slice(
+      form.indexOf("function ManagerTaskProgressRow"),
+      form.indexOf("export function WorkReportingForm"),
+    );
+    expect(page).not.toContain("IePrecountPanel");
+    expect(page).not.toContain("用于走货前临时记数");
+    expect(page).not.toContain("不替代N06复核");
+    expect(page).not.toContain("预核记录（最新在上）");
+    expect(page).not.toContain("暂无IE预核记录");
+    expect(form).toContain(">IE预核</button>");
+    expect(form).toContain('className="n04-ie-precount-editor"');
+    expect(form).toContain('placeholder="数量"');
+    expect(form).toContain('placeholder="备注（选填）"');
+    expect(form).toContain('type="submit"');
+    expect(form).toContain('"确认"');
+    expect(form).toContain(">取消</button>");
+    expect(row.indexOf("n04-progress-fact--quantity")).toBeLessThan(row.indexOf("<IePrecountCell"));
+    expect(formStyles).toContain(".n04-progress-row.has-ie-precount");
+    expect(formStyles).toContain(".n04-progress-ie-precount");
+    expect(detailStyles).not.toContain(".ie-precount-panel");
     expect(page).not.toContain("请IE核数");
   });
 
