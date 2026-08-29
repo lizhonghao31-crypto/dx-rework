@@ -73,6 +73,9 @@ describe("IE pre-count reference ledger", () => {
     expect(form).toContain('"确认"');
     expect(form).toContain(">取消</button>");
     expect(row.indexOf("n04-progress-fact--quantity")).toBeLessThan(row.indexOf("<IePrecountCell"));
+    expect(form).toContain("const iePrecountConfigurations = new Set<string>();");
+    expect(form).toContain("showIePrecount: iePrecountTaskIds.has(task.workTaskId)");
+    expect(row).toContain("iePrecounts && showIePrecount");
     expect(formStyles).toContain(".n04-progress-row.has-ie-precount");
     expect(formStyles).toContain(".n04-progress-ie-precount");
     expect(detailStyles).not.toContain(".ie-precount-panel");
@@ -89,8 +92,9 @@ describe("IE pre-count reference ledger", () => {
     expect(form).toContain("{...(iePrecounts ? { iePrecounts } : {})}");
     expect(review).toContain("<small>IE预核</small>");
     expect(review).toContain('iePrecount?.quantity ?? "—"');
-    expect(review).toContain("formatIePrecountTime(iePrecount.recordedAt)");
-    expect(review).toContain("{iePrecount.note ? <small>{iePrecount.note}</small> : null}");
+    expect(review).not.toContain("formatIePrecountTime");
+    expect(review).not.toContain("<b>IE预核</b>");
+    expect(review).not.toContain("iePrecount.recordedBy");
   });
 
   it("registers an append-only, audited migration with the exact checksum", async () => {
