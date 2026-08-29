@@ -1559,6 +1559,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(waived.value).toMatchObject({
       status: "pending_order_review",
       tailInspectionRequired: false,
+      tailInspectionCostBearer: null,
+      tailInspectionCostBearerSource: null,
       version: waiverVersion + 1,
     });
     if (legacy) {
