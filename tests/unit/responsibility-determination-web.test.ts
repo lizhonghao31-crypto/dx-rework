@@ -29,7 +29,7 @@ describe("responsibility determination web integration", () => {
     expect(source).toContain("responsibility-determinations/drafts");
     expect(source).toContain("responsibility-determinations/finalize");
     expect(source).toContain("responsibility-determinations/takeover");
-    expect(source).not.toContain("responsibility-determinations/transfer`");
+    expect(source).not.toContain("responsibility-determinations/transfer\`");
     expect(routes).toContain("responsibility-determinations/transfer");
     expect(source).toContain("responsibility-determinations/supplier-options");
     expect(source).toContain("responsibility-owner-signature/${decision}");
@@ -107,6 +107,30 @@ describe("responsibility determination web integration", () => {
     expect(panel).toContain("response?.canTakeover");
     expect(panel).toContain("response?.canOwnerSign");
     expect(panel).toContain("requestCurrentUserId");
+  });
+
+  it("flattens large N07 containers while retaining the small responsibility cards", async () => {
+    const [panel, styles] = await Promise.all([
+      readFile(panelUrl, "utf8"),
+      readFile(styleUrl, "utf8"),
+    ]);
+    const panelRule = styles.match(/\.responsibility-panel \{[\s\S]*?\}/)?.[0] ?? "";
+    const processRule = styles.match(/\.responsibility-process \{[\s\S]*?\}/)?.[0] ?? "";
+    const partyRule = styles.match(/\.responsibility-party \{[\s\S]*?\}/)?.[0] ?? "";
+
+    expect(panel).toContain('<div className="responsibility-panel">');
+    expect(panel).toContain('<div className="responsibility-process-list">');
+    expect(panel).toContain('<section className="responsibility-tail-review">');
+    expect(panel).not.toContain("Surface");
+    expect(panelRule).toContain("background: transparent;");
+    expect(panelRule).toContain("box-shadow: none;");
+    expect(processRule).toContain("border: 0;");
+    expect(processRule).toContain("border-radius: 0;");
+    expect(processRule).toContain("background: transparent;");
+    expect(processRule).toContain("box-shadow: none;");
+    expect(styles).toContain(".responsibility-process + .responsibility-process {");
+    expect(partyRule).toContain("border: 1px solid var(--dx-v2-color-border);");
+    expect(partyRule).toContain("background: var(--dx-v2-color-inset);");
   });
 
   it("keeps the responsibility workspace usable on narrow screens", async () => {
