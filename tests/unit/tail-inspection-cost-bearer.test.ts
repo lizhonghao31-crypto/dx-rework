@@ -54,6 +54,8 @@ describe("tail inspection cost bearer", () => {
     expect(responsibility).not.toContain('order.tail_inspection_cost_bearer ?? "own_factory"');
     expect(responsibility).toContain('"legacy_default"');
     expect(responsibility).toContain('"production_override"');
+    expect(responsibility).toContain("requestedTailCostBearer === null");
+    expect(responsibility).toContain("hasExplicitTailCostBearer");
     expect(responsibility).toContain("历史整查费用承担方未经生产主管确认");
     expect(responsibility).toContain("item.execution_kind IN ('worker','tail_inspection')");
     expect(responsibility).toContain("整查费用由加工厂承担时必须按加工厂 100%、倍率 1.2 扣款");
