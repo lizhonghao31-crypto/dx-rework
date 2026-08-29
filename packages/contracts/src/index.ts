@@ -211,6 +211,8 @@ export const IdempotencyKeySchema = z.string().min(1).max(200)
 
 const DraftTextSchema = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable().optional();
+export const TailInspectionCostBearerSchema = z.enum(["own_factory", "processing_factory"]);
+
 export const ReworkProcessingFactorySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("own_factory") }).strict(),
   z.object({ type: z.literal("supplier"), supplierId: IdSchema }).strict(),
@@ -384,6 +386,7 @@ const ReworkDraftFieldsSchema = z.object({
   problemDescription: DraftTextSchema(2000),
   reworkQuantity: z.number().int().positive().nullable().optional(),
   tailInspectionRequired: z.boolean().optional(),
+  tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().optional(),
   inspectionReport: InspectionReportDraftSchema.nullable().optional(),
   attachmentIds: ReworkAttachmentIdsSchema().optional(),
 });
@@ -439,6 +442,7 @@ export const ReworkOrderResponseSchema = z.object({
   problemDescription: z.string().nullable(),
   reworkQuantity: z.number().int().positive().nullable(),
   tailInspectionRequired: z.boolean().default(true),
+  tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().default(null),
   inspectionReport: InspectionReportDraftSchema.nullable(),
   attachmentIds: z.array(IdSchema),
   hasOtherOpenStyleOrder: z.boolean(),
@@ -1037,6 +1041,7 @@ export const CreateResponsibilityDraftSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   expectedCurrentDeterminationVersion: z.number().int().positive().nullable(),
   handlerUserId: IdSchema,
+  tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().optional(),
   reason: ReasonSchema.optional(),
   processes: z.array(ResponsibilityProcessInputSchema).min(1),
 }).strict();
@@ -1047,6 +1052,8 @@ export const ConfirmHighMultiplierSchema = z.object({ expectedOrderVersion: z.nu
 export const ResponsibilityDeterminationResponseSchema = z.object({
   reworkOrderId: IdSchema, reworkStatus: ReworkOrderStatusSchema, orderVersion: z.number().int().positive(),
   processingFactory: ReworkProcessingFactorySchema.nullable().optional(),
+  tailInspectionRequired: z.boolean().default(true),
+  tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().default(null),
   handlerUserId: IdSchema.nullable(), canDetermine: z.boolean(), canTakeover: z.boolean(), canConfirmHighMultiplier: z.boolean(),
   canOwnerSign: z.boolean().default(false),
   ownerSignature: z.object({
@@ -1061,12 +1068,20 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
       reason: z.string(),
     }).strict()).default([]),
   }).strict().nullable().default(null),
-  sourceProcesses: z.array(z.object({ configurationItemId: IdSchema, processName: z.string().min(1), pricingUnit: ProcessPricingUnitSchema, baseAmount: z.string() }).strict()),
+  sourceProcesses: z.array(z.object({
+    configurationItemId: IdSchema,
+    processName: z.string().min(1),
+    pricingUnit: ProcessPricingUnitSchema,
+    executionKind: ProcessExecutionKindSchema,
+    includedInResponsibility: z.boolean(),
+    baseAmount: z.string(),
+  }).strict()),
   determination: z.object({ determinationId: IdSchema, version: z.number().int().positive(), stage: z.enum(["draft", "finalized"]), reason: z.string().nullable(), calculationTotal: z.string(), highMultiplierConfirmed: z.boolean(), processes: z.array(z.object({ configurationItemId: IdSchema, processName: z.string(), pricingUnit: ProcessPricingUnitSchema, multiplier: z.string(), highMultiplierReason: z.string().nullable(), baseAmount: z.string(), responsibilityAmount: z.string(), allocations: z.array(z.object({ responsibilityType: ResponsibilityTypeSchema, shareBps: z.number().int(), roundedAmount: z.string(), multiplier: z.string().default("1.000"), supplier: z.object({ supplierId: IdSchema, version: z.number().int().positive(), code: z.string(), name: z.string(), type: z.enum(["factory", "embroidery_washing", "fabric"]) }).strict().nullable().default(null) })) })) }).nullable(),
 });
 export const OwnerSignatureCommandSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
 }).strict();
+export type TailInspectionCostBearer = z.infer<typeof TailInspectionCostBearerSchema>;
 export type ResponsibilityType = z.infer<typeof ResponsibilityTypeSchema>;
 export type ResponsibilitySupplierOptionsResponse = z.infer<typeof ResponsibilitySupplierOptionsResponseSchema>;
 export type CreateResponsibilityDraft = z.infer<typeof CreateResponsibilityDraftSchema>;

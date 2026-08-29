@@ -1098,7 +1098,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
          AND status IN ('pending','blocked_recipient')
        ORDER BY category,todo_id`,
     );
-    expect(openBusinessTodos.rows).toEqual([{ category: "wage_month_close" }]);
+    expect(openBusinessTodos.rows).toEqual([]);
   });
 
   it("recovers a required-tail order only after every unified worker and tail task has a valid report", async () => {

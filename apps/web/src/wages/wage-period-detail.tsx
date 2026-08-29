@@ -12,6 +12,7 @@ import { createClientRequestId } from "../client-request-id.js";
 import { confirmInApp } from "../system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const WAGE_MONTH_CLOSE_ENABLED: boolean = false;
 
 const responseError = async (response: Response): Promise<string> => {
   try {
@@ -115,10 +116,10 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
     <div className="wage-page">
       <header className="page-heading">
         <div>
-          <h1>返工工资月结</h1>
+          <h1>返工工资对数明细</h1>
           <p>工资期间：{period.periodMonth.slice(0, 7)}</p>
         </div>
-        <StatusBadge tone={period.status === "locked" ? "success" : "info"}>{statusLabel}</StatusBadge>
+        {WAGE_MONTH_CLOSE_ENABLED ? <StatusBadge tone={period.status === "locked" ? "success" : "info"}>{statusLabel}</StatusBadge> : null}
       </header>
 
       <Surface className="wage-summary">
@@ -127,7 +128,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
           <dt>工资总额</dt><dd><strong>¥{period.totalAmount}</strong></dd>
         </dl>
         <div className="wage-actions">
-          {period.canLock ? (
+          {WAGE_MONTH_CLOSE_ENABLED && period.canLock ? (
             <Button variant="primary" disabled={busy} onClick={() => void lockPeriod(period)}>月结锁定</Button>
           ) : null}
           {period.canExport ? (
@@ -156,12 +157,12 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
         ))}
       </section>
 
-      <Surface>
+      {WAGE_MONTH_CLOSE_ENABLED ? <Surface>
         <h2>月结状态</h2>
         {period.lockedAt
           ? <p>已月结，锁定时间：{formatBusinessTime(period.lockedAt)}</p>
           : <p>工资已经汇总，可在自然月结束后直接月结锁定。</p>}
-      </Surface>
+      </Surface> : null}
     </div>
   );
 }

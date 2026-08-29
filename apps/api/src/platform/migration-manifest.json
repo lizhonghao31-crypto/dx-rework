@@ -111,6 +111,7 @@
     { "version": "0109_n04_explicit_execution_completion", "checksum": "6f4bd82b699fff0c40da55e269ba5e78b34c4e075d9d315a4e8a5e0486a478b0" },
     { "version": "0110_whole_inspection_quantity_ceiling", "checksum": "02019355c5cf957b39398589bb901e804625ab53f88a669ae04671a84e2687d4" },
     { "version": "0111_receiving_delivery_note_total", "checksum": "35dab59aca687ddcf48bd36b0cc92a1473fdf8f88371edb69f4e90629857b9f1" },
-    { "version": "0112_receiving_root_merge_image_replacement", "checksum": "832881378537f145a626d2c7d2b667cc76fdfc3d7d3e64c9493a56fe25dae248" }
+    { "version": "0112_receiving_root_merge_image_replacement", "checksum": "832881378537f145a626d2c7d2b667cc76fdfc3d7d3e64c9493a56fe25dae248" },
+    { "version": "0113_tail_inspection_cost_bearer", "checksum": "4d7c5b95b207bb86e3e7b401560c1da4999c80a0b943f56901c7f87ab5395846" }
   ]
 }

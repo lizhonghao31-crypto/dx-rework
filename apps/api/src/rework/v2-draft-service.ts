@@ -37,6 +37,7 @@ type OrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   tail_inspection_required: boolean;
+  tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   inspection_report: ReworkOrderResponse["inspectionReport"];
   created_by: string;
   updated_by: string;
@@ -156,7 +157,9 @@ export class ReworkV2DraftService {
       && current.merchandiser_user_id === input.merchandiserUserId
       && currentFactory?.type === nextFactory?.type
       && currentFactory?.supplierId === nextFactory?.supplierId
-      && currentFactory?.supplierVersion === nextFactory?.supplierVersion;
+      && currentFactory?.supplierVersion === nextFactory?.supplierVersion
+      && current.tail_inspection_required === input.tailInspectionRequired
+      && current.tail_inspection_cost_bearer === input.tailInspectionCostBearer;
     if (unchanged) return this.dto(client, current);
 
     const nextVersion = current.version + 1;
@@ -166,6 +169,8 @@ export class ReworkV2DraftService {
       styleNo: nextStyleNo,
       merchandiserUserId: input.merchandiserUserId,
       processingFactory: nextFactory,
+      tailInspectionRequired: input.tailInspectionRequired,
+      tailInspectionCostBearer: input.tailInspectionRequired ? input.tailInspectionCostBearer : null,
       version: nextVersion,
     };
     const eventId = await this.events.append(client, actor, {
@@ -183,7 +188,8 @@ export class ReworkV2DraftService {
            processing_factory_type=$4,
            processing_factory_supplier_id=$5,
            processing_factory_supplier_version=$6,
-           updated_by=$7,version=$8,updated_at=CURRENT_TIMESTAMP
+           tail_inspection_required=$7,tail_inspection_cost_bearer=$8,
+           updated_by=$9,version=$10,updated_at=CURRENT_TIMESTAMP
        WHERE rework_order_id=$1`,
       [
         reworkOrderId,
@@ -192,6 +198,8 @@ export class ReworkV2DraftService {
         nextFactory?.type ?? null,
         nextFactory?.supplierId ?? null,
         nextFactory?.supplierVersion ?? null,
+        input.tailInspectionRequired,
+        input.tailInspectionRequired ? input.tailInspectionCostBearer : null,
         actor.actorId,
         nextVersion,
       ],
@@ -326,6 +334,7 @@ export class ReworkV2DraftService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
@@ -362,6 +371,7 @@ export class ReworkV2DraftService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),

@@ -184,6 +184,7 @@ export class TodoService {
            CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
          )
        WHERE todos.recipient_user_id=$1
+         AND todos.category<>'wage_month_close'
          AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')
        ORDER BY CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END,
                 due_at NULLS LAST,todos.created_at DESC,todos.todo_id DESC`,

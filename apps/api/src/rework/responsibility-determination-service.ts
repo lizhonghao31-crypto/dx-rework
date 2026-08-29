@@ -92,6 +92,8 @@ type OrderRow = Readonly<{
   processing_factory_type: "own_factory" | "supplier" | null;
   processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null;
+  tail_inspection_required: boolean;
+  tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   problem_part: string | null;
   problem_description: string | null;
   rework_quantity: number | null;
@@ -127,6 +129,7 @@ type SourceProcessRow = Readonly<{
   configuration_item_id: string;
   process_name: string;
   pricing_unit: PricingUnit;
+  execution_kind: "worker" | "tail_inspection";
   base_amount: string;
 }>;
 
@@ -134,6 +137,7 @@ type ApprovedProcessRow = Readonly<{
   configuration_item_id: string;
   process_name: string;
   pricing_unit: PricingUnit;
+  execution_kind: "worker" | "tail_inspection";
 }>;
 
 type WorkReportShareRow = Readonly<{
@@ -190,6 +194,7 @@ export class ResponsibilityDeterminationService {
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,processing_factory_supplier_version,
+              tail_inspection_required,tail_inspection_cost_bearer,
               problem_part,problem_description,rework_quantity
        FROM rework_orders
        WHERE rework_order_id=$1 AND status<>'deleted'`, [
@@ -333,6 +338,7 @@ export class ResponsibilityDeterminationService {
     const sourceRows = await executor.query<SourceProcessRow>(
       settledWageItemsAvailable
         ? `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
+                  item.execution_kind,
                   COALESCE(sum(round(
                     wage.actual_quantity_snapshot*wage.unit_price_snapshot*
                     CASE WHEN wage.assignment_mode='collective'
@@ -349,10 +355,11 @@ export class ResponsibilityDeterminationService {
             AND wage.invalidated_at IS NULL
            WHERE configuration.rework_order_id=$1
              AND configuration.status='approved'
-             AND item.execution_kind='worker'
-           GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit
+             AND item.execution_kind IN ('worker','tail_inspection')
+           GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit,item.execution_kind
            ORDER BY item.configuration_item_id`
         : `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
+                  item.execution_kind,
                   COALESCE(sum(share.amount),0)::text base_amount
            FROM rework_process_configurations configuration
            JOIN rework_process_configuration_items item USING(configuration_id)
@@ -367,8 +374,8 @@ export class ResponsibilityDeterminationService {
            LEFT JOIN rework_work_report_member_shares share USING(work_report_id)
            WHERE configuration.rework_order_id=$1
              AND configuration.status='approved'
-             AND item.execution_kind='worker'
-           GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit
+             AND item.execution_kind IN ('worker','tail_inspection')
+           GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit,item.execution_kind
            ORDER BY item.configuration_item_id`,
       [orderId],
     );
@@ -388,6 +395,8 @@ export class ResponsibilityDeterminationService {
               supplierId: order.processing_factory_supplier_id,
             }
           : null,
+      tailInspectionRequired: order.tail_inspection_required,
+      tailInspectionCostBearer: order.tail_inspection_cost_bearer,
       handlerUserId: determination?.handler_user_id ?? null,
       canDetermine: actorCapabilities.includes("responsibility:determine"),
       canTakeover: actorCapabilities.includes("responsibility:takeover"),
@@ -400,6 +409,9 @@ export class ResponsibilityDeterminationService {
         configurationItemId: row.configuration_item_id,
         processName: row.process_name,
         pricingUnit: row.pricing_unit,
+        executionKind: row.execution_kind,
+        includedInResponsibility: row.execution_kind === "worker"
+          || order.tail_inspection_cost_bearer === "processing_factory",
         baseAmount: row.base_amount,
       })),
       determination: determination
@@ -665,15 +677,26 @@ export class ResponsibilityDeterminationService {
     // A boss rejection is itself an immutable audit fact.  Do not force the
     // production handler to invent a second reason merely to make the revised
     // N07 draft writable again.
+    const targetTailCostBearer = order.tail_inspection_required
+      ? (input.tailInspectionCostBearer ?? order.tail_inspection_cost_bearer ?? "own_factory")
+      : null;
+    if (targetTailCostBearer === "processing_factory"
+      && (order.processing_factory_type !== "supplier"
+        || !order.processing_factory_supplier_id)) {
+      fail("加工厂承担整查费用时必须绑定外发加工厂", 400, "VALIDATION_ERROR");
+    }
 
     const approvedResult = await client.query<ApprovedProcessRow>(
-      `SELECT item.configuration_item_id,item.process_name,item.pricing_unit
+      `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,item.execution_kind
        FROM rework_process_configurations configuration
        JOIN rework_process_configuration_items item USING(configuration_id)
        WHERE configuration.rework_order_id=$1
          AND configuration.status='approved'
-         AND item.execution_kind='worker'`,
-      [orderId],
+         AND (
+           item.execution_kind='worker'
+           OR (item.execution_kind='tail_inspection' AND $2='processing_factory')
+         )`,
+      [orderId, targetTailCostBearer],
     );
     if (
       new Set(input.processes.map((row) => row.configurationItemId)).size !==
@@ -692,6 +715,19 @@ export class ResponsibilityDeterminationService {
       validateBps(row.allocations);
       if (new Set(row.allocations.map((allocation) => allocation.responsibilityType)).size !== row.allocations.length) {
         fail("同一道工序不能重复选择相同责任类型", 400, "VALIDATION_ERROR");
+      }
+      const approved = approvedResult.rows.find(
+        (item) => item.configuration_item_id === row.configurationItemId,
+      );
+      if (approved?.execution_kind === "tail_inspection") {
+        const allocation = row.allocations[0];
+        if (row.allocations.length !== 1
+          || allocation?.responsibilityType !== "processing_factory"
+          || allocation.shareBps !== 10000
+          || decimalToScaled(allocation.multiplier ?? "1.200", 3) !== 1_200n
+          || allocation.supplierId !== order.processing_factory_supplier_id) {
+          fail("整查费用由加工厂承担时必须按加工厂 100%、倍率 1.2 扣款", 400, "VALIDATION_ERROR");
+        }
       }
     });
     if (input.processes.some((row) => decimalToScaled(row.multiplier, 3) !== 1_000n || row.highMultiplierReason != null)) {
@@ -719,6 +755,7 @@ export class ResponsibilityDeterminationService {
       input.reason,
       order,
       order.status,
+      targetTailCostBearer,
     );
     const settledWageItemsAvailable = await this.settledWageItemsAvailable(client);
     const determinationId = randomUUID();
@@ -982,9 +1019,10 @@ export class ResponsibilityDeterminationService {
 
     await client.query(
       `UPDATE rework_orders
-       SET version=version+1,updated_by=$2,updated_at=CURRENT_TIMESTAMP
+       SET tail_inspection_cost_bearer=$3,version=version+1,
+           updated_by=$2,updated_at=CURRENT_TIMESTAMP
        WHERE rework_order_id=$1`,
-      [orderId, actor.actorId],
+      [orderId, actor.actorId, targetTailCostBearer],
     );
     if (previous) {
       await this.todos?.cancelOpenByDedupeKey(
@@ -1031,7 +1069,8 @@ export class ResponsibilityDeterminationService {
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,
-              processing_factory_supplier_version,problem_part,
+              processing_factory_supplier_version,
+              tail_inspection_required,tail_inspection_cost_bearer,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
        WHERE rework_order_id=$1 AND status<>'deleted'
@@ -1068,6 +1107,8 @@ export class ResponsibilityDeterminationService {
                 supplierVersion:
                   order.processing_factory_supplier_version,
               },
+      tailInspectionRequired: order.tail_inspection_required,
+      tailInspectionCostBearer: order.tail_inspection_cost_bearer,
       problemPart: order.problem_part,
       problemDescription: order.problem_description,
       reworkQuantity: order.rework_quantity,
@@ -1083,6 +1124,7 @@ export class ResponsibilityDeterminationService {
     reason: string | undefined,
     order: OrderRow,
     status: ReworkStatus,
+    tailInspectionCostBearer: OrderRow["tail_inspection_cost_bearer"] = order.tail_inspection_cost_bearer,
   ): Promise<string> {
     const eventId = await this.events.append(
       client,
@@ -1092,7 +1134,10 @@ export class ResponsibilityDeterminationService {
         entityType: "rework_order",
         entityId: orderId,
         before: this.orderAudit(order),
-        after: this.orderAudit(order, status, order.version + 1),
+        after: {
+          ...this.orderAudit(order, status, order.version + 1),
+          tailInspectionCostBearer,
+        },
         ...(reason ? { reason } : {}),
       },
     );

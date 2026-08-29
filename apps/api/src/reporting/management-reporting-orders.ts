@@ -125,6 +125,7 @@ export async function fetchFacts(source: Queryable, options: {
        LEFT JOIN rework_own_factory_approvals approval ON todo.entity_type='own_factory_approval' AND approval.approval_id::text=todo.entity_id
        LEFT JOIN rework_external_responsibility_cases external_case ON todo.entity_type='external_responsibility_case' AND external_case.case_id::text=todo.entity_id
        LEFT JOIN rework_responsibility_determinations determination ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
+       WHERE todo.category<>'wage_month_close'
      ), todo_stats AS (
        SELECT mapped.rework_order_id,
          bool_or(mapped.status='pending' AND mapped.due_at<CURRENT_TIMESTAMP) overdue,
