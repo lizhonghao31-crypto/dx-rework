@@ -297,6 +297,7 @@ DO $$
 DECLARE
   candidate record;
   open_todo record;
+  routing_exception record;
   recipient record;
   transition_event_id uuid;
   transition_request_id text;
@@ -304,6 +305,7 @@ DECLARE
   todo_request_id text;
   todo_id_value uuid;
   todo_dedupe_key text;
+  recipient_count integer;
   transition_reason text := '合同节点已按业务决定下线，订单直接进入财务核对';
 BEGIN
   FOR candidate IN
@@ -341,6 +343,28 @@ BEGIN
     WHERE case_view.status='pending_contract'
     ORDER BY case_view.sourcing_case_id
   LOOP
+    SELECT count(DISTINCT recipient_source.user_id)
+    INTO recipient_count
+    FROM (
+      SELECT assignment.user_id
+      FROM user_role_assignments assignment
+      WHERE assignment.role_code='factory_payables'
+        AND assignment.revoked_at IS NULL
+      UNION
+      SELECT root.user_id
+      FROM owner_bootstrap_consumptions root
+      WHERE root.singleton=true
+    ) recipient_source
+    WHERE todo_user_has_direct_role(
+      recipient_source.user_id,'factory_payables','sourcing:finance:reconcile'
+    );
+
+    IF recipient_count=0 THEN
+      RAISE EXCEPTION
+        'cannot retire sourcing contract stage without a routable finance recipient'
+        USING ERRCODE='23514';
+    END IF;
+
     transition_event_id := gen_random_uuid();
     transition_request_id :=
       'migration-0121-sourcing-five-stage-'||candidate.sourcing_case_id;
@@ -378,6 +402,51 @@ BEGIN
       ORDER BY todo.todo_id
       FOR UPDATE
     LOOP
+      FOR routing_exception IN
+        SELECT routing.routing_exception_id,routing.routing_todo_id,
+               routing_todo.status AS routing_todo_status
+        FROM todo_recipient_routing_exceptions routing
+        JOIN rework_todos routing_todo
+          ON routing_todo.todo_id=routing.routing_todo_id
+        WHERE routing.todo_id=open_todo.todo_id
+          AND routing.status='pending'
+        ORDER BY routing.routing_exception_id
+        FOR UPDATE OF routing,routing_todo
+      LOOP
+        todo_event_id := gen_random_uuid();
+        todo_request_id :=
+          'migration-0121-cancel-contract-routing-'||routing_exception.routing_todo_id;
+        INSERT INTO operation_events(
+          event_id,request_id,actor_id,actor_roles,authorization_capability,
+          action,entity_type,entity_id,before_state,after_state,reason
+        ) VALUES(
+          todo_event_id,todo_request_id,candidate.actor_id,candidate.actor_roles,
+          'todo:backfill','todo.cancel','rework_todo',
+          routing_exception.routing_todo_id::text,
+          jsonb_build_object('status',routing_exception.routing_todo_status),
+          jsonb_build_object('status','cancelled'),
+          transition_reason
+        );
+        PERFORM set_config('dx_rework.todo_event_id',todo_event_id::text,true);
+        PERFORM set_config('dx_rework.todo_request_id',todo_request_id,true);
+        UPDATE rework_todos
+        SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP,
+            cancelled_reason=transition_reason,
+            cancelled_operation_event_id=todo_event_id,
+            blocked_at=NULL,blocked_reason=NULL
+        WHERE todo_id=routing_exception.routing_todo_id
+          AND status IN ('pending','blocked_recipient');
+        IF NOT FOUND THEN
+          RAISE EXCEPTION
+            'pending sourcing contract routing exception has no open routing todo'
+            USING ERRCODE='23514';
+        END IF;
+        UPDATE todo_recipient_routing_exceptions
+        SET status='cancelled',cancelled_operation_event_id=todo_event_id
+        WHERE routing_exception_id=routing_exception.routing_exception_id
+          AND status='pending';
+      END LOOP;
+
       todo_event_id := gen_random_uuid();
       todo_request_id :=
         'migration-0121-cancel-contract-todo-'||open_todo.todo_id;

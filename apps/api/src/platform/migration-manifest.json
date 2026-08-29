@@ -120,7 +120,7 @@
     { "version": "0118_ie_precount_ledger", "checksum": "29a9c21baab5adc75be5b661e310f732028d746817e21f69f24e494e73d917a3" },
     { "version": "0119_tail_inspection_cost_bearer_provenance", "checksum": "026f3c812b4258ef118c9d87059a1dd4b6a97cdb0c6b2293962a06a4e7facef4" },
     { "version": "0120_sourcing_order_facts", "checksum": "382c99bc1c667d04dd8a58f2679c9b2e716cda0aad60cea41ef4adc3d301fa6a" },
-    { "version": "0121_sourcing_remove_contract_stage", "checksum": "1dcb629b2ebd1f7b8ddf89f8e0c0144d8f043b45294df3f4c6ae8681afbe7ee6" }
+    { "version": "0121_sourcing_remove_contract_stage", "checksum": "43b3c7e4f49e45d9cf7651fa60e0503a0db132c2cd8589e3cc2dcfcaa98e2b27" }
   ]
 }
 

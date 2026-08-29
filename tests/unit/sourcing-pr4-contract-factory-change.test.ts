@@ -49,6 +49,9 @@ describe("sourcing five-stage factory change compatibility", () => {
     expect(migration).toContain("factory change must replace the current approved factory");
     expect(migration).toContain("'pending_contract','pending_finance_reconciliation'");
     expect(migration).toContain("sourcing_finance_reconcile");
+    expect(migration).toContain("cannot retire sourcing contract stage without a routable finance recipient");
+    expect(migration).toContain("todo_recipient_routing_exceptions");
+    expect(migration).toContain("cancel-contract-routing");
     expect(page).not.toContain('{ key: "contract"');
     expect(page).not.toContain(">登记合同</button>");
     expect(page).toContain("发起中途换厂");
