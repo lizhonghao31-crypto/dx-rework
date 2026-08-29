@@ -36,5 +36,3 @@ ALTER TABLE rework_orders
 COMMENT ON COLUMN rework_orders.tail_inspection_cost_bearer IS
   'Required business decision when tail inspection is enabled: own_factory keeps the wage internal; processing_factory adds the tail wage to external responsibility at the controlled multiplier.';
 
-COMMENT ON TABLE rework_wage_periods IS
-  'Legacy month-close storage retained for possible future finance settlement use; current finance use is report reconciliation only.';
