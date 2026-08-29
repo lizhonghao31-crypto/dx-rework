@@ -30,7 +30,8 @@ describe("order board global style search", () => {
     expect(page).toContain('<option value="extra">多收</option>');
     expect(page).toContain("event.target.value.toUpperCase()");
     expect(receivingPage).toContain("styleNo.trim().toUpperCase()");
-    expect(receivingPage).toContain("setStyleNo(event.target.value.toUpperCase())");
+    expect(receivingPage).toContain("setStyleNo(event.target.value)");
+    expect(receivingPage).not.toContain("setStyleNo(event.target.value.toUpperCase())");
     expect(rework).toContain("styleNo?.trim().toUpperCase()");
     expect(rework).toContain("upper(btrim(batch.style_no))=$1");
     expect(rework).toContain("row.style_no.trim().toUpperCase() !== normalizedStyleNo");
