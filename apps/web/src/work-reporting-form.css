@@ -370,6 +370,75 @@
   border-top: 1px solid #dbe3ea;
 }
 
+.work-reporting-page .n04-progress-row.has-ie-precount {
+  grid-template-columns: minmax(100px, 1.1fr) minmax(150px, 1.4fr) minmax(90px, .7fr) minmax(90px, .7fr) minmax(250px, 1.5fr);
+}
+
+.work-reporting-page .n04-progress-ie-precount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dx-v2-space-2);
+  min-width: 0;
+}
+
+.work-reporting-page .n04-ie-precount-button,
+.work-reporting-page .n04-ie-precount-latest,
+.work-reporting-page .n04-ie-precount-editor button {
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 0 var(--dx-v2-space-2);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-text);
+  font: 700 13px/1 system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.work-reporting-page .n04-ie-precount-button {
+  color: var(--dx-v2-color-primary);
+}
+
+.work-reporting-page .n04-ie-precount-latest {
+  border-color: transparent;
+  background: transparent;
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.work-reporting-page .n04-ie-precount-editor {
+  display: grid;
+  grid-template-columns: minmax(70px, .55fr) minmax(110px, 1fr) auto auto;
+  gap: var(--dx-v2-space-2);
+  width: 100%;
+}
+
+.work-reporting-page .n04-ie-precount-editor input {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 var(--dx-v2-space-2);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-text);
+  font: inherit;
+}
+
+.work-reporting-page .n04-ie-precount-editor button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.work-reporting-page .n04-ie-precount-detail,
+.work-reporting-page .n04-ie-precount-message {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+
 .work-reporting-page .n04-progress-fact {
   display: grid;
   gap: 3px;
@@ -468,6 +537,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 12px;
     padding: 9px 0;
+  }
+
+  .work-reporting-page .n04-progress-row.has-ie-precount {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .work-reporting-page .n04-progress-ie-precount {
+    grid-column: 1 / -1;
+  }
+
+  .work-reporting-page .n04-ie-precount-editor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
