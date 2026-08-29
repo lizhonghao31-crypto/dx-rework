@@ -114,7 +114,8 @@
     { "version": "0112_receiving_root_merge_image_replacement", "checksum": "832881378537f145a626d2c7d2b667cc76fdfc3d7d3e64c9493a56fe25dae248" },
     { "version": "0113_tail_inspection_cost_bearer", "checksum": "4d7c5b95b207bb86e3e7b401560c1da4999c80a0b943f56901c7f87ab5395846" },
     { "version": "0114_ho20544223_tail_responsibility_repair", "checksum": "7fe2a88f0c3035179ce23252297150c7374c7d012db37386429b4b24bfa37a9f" },
-    { "version": "0115_receiving_style_identity_canonicalization", "checksum": "c663266784042c7ce0bffbcab7048ba49a28fe6766b6b2ff3f134ac918a0935d" }
+    { "version": "0115_receiving_style_identity_canonicalization", "checksum": "c663266784042c7ce0bffbcab7048ba49a28fe6766b6b2ff3f134ac918a0935d" },
+    { "version": "0116_tail_defective_quantity_ledger", "checksum": "f3c64fc764f3af6add0fe5c27e2455a4aea90a37426318d6834b3348eda0131d" }
   ]
 }
 
