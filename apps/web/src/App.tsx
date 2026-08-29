@@ -425,6 +425,7 @@ export function App() {
       { requiredCapability: "dashboard:management:read" },
       { requiredCapability: "dashboard:site:read" },
       { requiredCapability: "report:view" },
+      { requiredCapability: "rework:related_orders:view" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/reports") {
