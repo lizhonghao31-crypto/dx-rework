@@ -200,6 +200,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
       styleNo: "V2-N01-001",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       attachmentIds: [attachmentId],
     }, randomUUID());
     expect(draft.value).toMatchObject({
@@ -282,6 +283,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
       styleNo: "V2-N01-NO-IMAGE",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
     }, randomUUID());
     await expect(v2Submission.submit(
       qc(),
@@ -301,6 +303,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
       styleNo: "V2-N01-ROOT",
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
       attachmentIds: [attachmentId],
     }, randomUUID());
 
