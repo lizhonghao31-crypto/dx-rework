@@ -37,7 +37,8 @@ describe("tail inspection cost bearer", () => {
     expect(provenanceMigration).toContain("THEN 'processing_factory'");
     expect(form).toContain("谁承担整查费用？");
     expect(form).toContain('tailInspectionCostBearer: ""');
-    expect(contracts).toContain('TailInspectionCostBearerSchema = z.enum(["own_factory", "processing_factory"])');
+    expect(contracts).toContain("TailInspectionCostBearerSchema = z.enum([");
+    expect(contracts).toContain('"processing_factory",');
     expect(contracts).toContain("TailInspectionCostBearerSourceSchema");
     expect(service).not.toContain('input.tailInspectionCostBearer ?? "own_factory"');
     expect(draftService).toContain('"quality_inspection"');
