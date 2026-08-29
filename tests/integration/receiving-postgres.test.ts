@@ -277,6 +277,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0112_receiving_root_merge_image_replacement.sql");
     await migration("0113_tail_inspection_cost_bearer.sql");
     await migration("0115_receiving_style_identity_canonicalization.sql");
+    await migration("0119_tail_inspection_cost_bearer_provenance.sql");
   });
 
   afterAll(async () => {
