@@ -56,16 +56,6 @@ type IePrecountEntry = Readonly<{
 }>;
 type IePrecountOverview = Readonly<{ entries: readonly IePrecountEntry[] }>;
 
-const formatIePrecountTime = (value: string): string =>
-  new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Shanghai",
-  }).format(new Date(value));
-
 export function WholeOrderReviewPanel({
   reworkOrderId,
   onChanged,
@@ -423,7 +413,10 @@ export function WholeOrderReviewPanel({
             if (!latest || Date.parse(entry.recordedAt) > Date.parse(latest.recordedAt)) return entry;
             return latest;
           }, undefined);
+          const canSaveProcess = tailStage && data.canReview && reports.some(canCorrectReport);
+          const processHasChanges = reports.some(hasChangedCorrection);
           return <section className={`quantity-process-card${process.complete ? " is-complete" : " is-mismatch"}`} key={process.configurationItemId}>
+            <div className="quantity-process-toolbar">
             <button
               className="quantity-process-toggle"
               type="button"
@@ -447,25 +440,15 @@ export function WholeOrderReviewPanel({
               </StatusBadge>
               <b className="quantity-process-expander">{open ? "−" : "+"}</b>
             </button>
+            {canSaveProcess ? <Button
+              className="quantity-process-save"
+              variant="primary"
+              disabled={busy || !processHasChanges}
+              onClick={() => void correctProcess(process.configurationItemId, reports, process.processName)}
+            >保存修正</Button> : null}
+            </div>
             {open && <div className="quantity-process-detail">
-              {tailStage && data.canReview && reports.some(canCorrectReport) && <div className="quantity-report-actions quantity-process-save">
-                <strong>{process.completedQuantity} 件</strong>
-                <Button
-                  disabled={busy || !reports.some(hasChangedCorrection)}
-                  onClick={() => void correctProcess(process.configurationItemId, reports, process.processName)}
-                >保存修正</Button>
-              </div>}
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
-              {iePrecount ? <div className="quantity-report-row">
-                <div className="quantity-report-person">
-                  <b>IE预核</b>
-                  <span>{iePrecount.recordedBy} · {formatIePrecountTime(iePrecount.recordedAt)}</span>
-                </div>
-                <div className="quantity-report-value">
-                  <strong>{iePrecount.quantity} 件</strong>
-                  {iePrecount.note ? <small>{iePrecount.note}</small> : null}
-                </div>
-              </div> : null}
               {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
                 <div className="quantity-report-person"><b>整查</b><span>有效合计</span></div>
                 <div className="quantity-report-value"><strong>{process.tailCheckedQuantity} 件</strong></div>
