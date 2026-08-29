@@ -818,6 +818,19 @@ export const CorrectWorkReportQuantitySchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   effectiveQuantity: z.number().int().positive(),
 }).strict();
+export const CorrectWorkReportQuantitiesSchema = z.object({
+  expectedOrderVersion: z.number().int().positive(),
+  configurationItemId: IdSchema,
+  corrections: z.array(z.object({
+    workReportId: IdSchema,
+    effectiveQuantity: z.number().int().positive(),
+  }).strict()).min(1).max(200),
+}).strict().superRefine((value, context) => {
+  const reportIds = value.corrections.map((correction) => correction.workReportId);
+  if (new Set(reportIds).size !== reportIds.length) {
+    context.addIssue({ code: "custom", path: ["corrections"], message: "Work reports cannot be corrected twice in one batch" });
+  }
+});
 export const ReviewWholeOrderSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
   temporaryCoefficients: z.array(z.object({
@@ -975,6 +988,7 @@ export const WholeOrderReviewResponseSchema = z.object({
 });
 export type RejectWorkReport = z.infer<typeof RejectWorkReportSchema>;
 export type CorrectWorkReportQuantity = z.infer<typeof CorrectWorkReportQuantitySchema>;
+export type CorrectWorkReportQuantities = z.infer<typeof CorrectWorkReportQuantitiesSchema>;
 export type ReviewWholeOrder = z.infer<typeof ReviewWholeOrderSchema>;
 export type ReviewFinalQuantity = z.infer<typeof ReviewFinalQuantitySchema>;
 export type CreateQuantityDecrease = z.infer<typeof CreateQuantityDecreaseSchema>;

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import {
+  CorrectWorkReportQuantitiesSchema,
   CorrectWorkReportQuantitySchema,
   ReviewWholeOrderSchema,
 } from "@dx-rework/contracts";
@@ -19,6 +20,11 @@ describe("1.0 prelaunch effective quantity", () => {
       expectedOrderVersion: 7,
       effectiveQuantity: 0,
     }).success).toBe(false);
+    expect(CorrectWorkReportQuantitiesSchema.parse({
+      expectedOrderVersion: 7,
+      configurationItemId: id,
+      corrections: [{ workReportId: id, effectiveQuantity: 4800 }],
+    }).corrections).toHaveLength(1);
     expect(ReviewWholeOrderSchema.safeParse({
       expectedOrderVersion: 7,
       temporaryCoefficients: [{
@@ -59,10 +65,14 @@ describe("1.0 prelaunch effective quantity", () => {
   });
 
   it("keeps N05 editable and N06 read-only in the existing panel", async () => {
-    const panel = await read("apps/web/src/whole-order-review-panel.tsx");
+    const [panel, routes, service] = await Promise.all([
+      read("apps/web/src/whole-order-review-panel.tsx"),
+      read("apps/api/src/rework/whole-order-review-routes.ts"),
+      read("apps/api/src/rework/whole-order-review-service.ts"),
+    ]);
     expect(panel).toContain("主管修改，原值");
     expect(panel).toContain('className="quantity-report-row quantity-tail-summary"');
-    expect(panel).toContain("effective-quantity");
+    expect(panel).toContain("work-report-quantity-corrections");
     expect(panel).toContain("IE 只读核对系统锁定的数量事实");
     expect(panel).toContain("确认数量并提交 IE");
     expect(panel).toContain("const [coefficientExpanded, setCoefficientExpanded] = useState<Record<string, boolean>>({})");
@@ -70,5 +80,13 @@ describe("1.0 prelaunch effective quantity", () => {
     expect(panel).toContain("<strong>临时工工资调整</strong>");
     expect(panel).toContain("temporaryWorkerGroups.map");
     expect(panel).not.toContain("finalQuantities");
+    expect(panel).toContain("work-report-quantity-corrections");
+    expect(panel).toContain(">保存修正</Button>");
+    expect(panel).not.toContain("onClick={() => void correct(report)}");
+    expect(routes).toContain("CorrectWorkReportQuantitiesSchema");
+    expect(routes).toContain("correctReportQuantities");
+    expect(service).toContain("async correctReportQuantities");
+    expect(service).toContain("WHERE report.work_report_id=ANY($1::uuid[])");
+    expect(service).toContain("await this.order(client, reworkOrderId, true)");
   });
 });
