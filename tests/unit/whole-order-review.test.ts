@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import {
   ConfirmQuantityIncreaseSchema,
+  CorrectWorkReportQuantitiesSchema,
   CorrectWorkReportQuantitySchema,
   CreateQuantityDecreaseSchema,
   CreateQuantityIncreaseSchema,
@@ -33,6 +34,22 @@ describe("whole-order review contracts", () => {
     expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, finalQuantities: [{ configurationItemId: id, finalConfirmedQuantity: 1 }], temporaryCoefficients: [] }).success).toBe(false);
     expect(CorrectWorkReportQuantitySchema.safeParse({ expectedOrderVersion: 2, effectiveQuantity: 4800 }).success).toBe(true);
     expect(CorrectWorkReportQuantitySchema.safeParse({ expectedOrderVersion: 2, effectiveQuantity: 4800.5 }).success).toBe(false);
+    expect(CorrectWorkReportQuantitiesSchema.safeParse({
+      expectedOrderVersion: 2,
+      configurationItemId: id,
+      corrections: [
+        { workReportId: id, effectiveQuantity: 4800 },
+        { workReportId: "00000000-0000-4000-8000-000000000011", effectiveQuantity: 4799 },
+      ],
+    }).success).toBe(true);
+    expect(CorrectWorkReportQuantitiesSchema.safeParse({
+      expectedOrderVersion: 2,
+      configurationItemId: id,
+      corrections: [
+        { workReportId: id, effectiveQuantity: 4800 },
+        { workReportId: id, effectiveQuantity: 4799 },
+      ],
+    }).success).toBe(false);
   });
 
   it("keeps whole-order transitions explicit and terminal responsibility work out of PR-08", () => {
