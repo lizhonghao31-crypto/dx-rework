@@ -123,7 +123,7 @@ BEGIN
          OR NEW.tail_inspection_required IS NOT FALSE
          OR (to_jsonb(NEW)-ARRAY['status','tail_inspection_required','tail_inspection_cost_bearer','tail_inspection_cost_bearer_source','updated_by','version','updated_at'])
               IS DISTINCT FROM
-            (to_jsonb(OLD)-ARRAY['status','tail_inspection_required','updated_by','version','updated_at'])
+            (to_jsonb(OLD)-ARRAY['status','tail_inspection_required','tail_inspection_cost_bearer','tail_inspection_cost_bearer_source','updated_by','version','updated_at'])
       THEN RAISE EXCEPTION 'tail inspection waiver may only retire tail inspection before final quantity submission' USING ERRCODE='23514'; END IF;
       expected_action:='rework.tail_inspection.waive'; expected_capability:='tail_inspection:waive';
     ELSE
