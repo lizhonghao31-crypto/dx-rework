@@ -49,15 +49,15 @@ describe("IE pre-count reference ledger", () => {
     expect(method).not.toContain("outbox");
   });
 
-  it("keeps one compact entry beside submitted quantity without another panel", async () => {
+  it("keeps one process-level pre-count entry above collapsible worker rows", async () => {
     const [page, form, detailStyles, formStyles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/rework-detail.css", "utf8"),
       readFile("apps/web/src/work-reporting-form.css", "utf8"),
     ]);
-    const row = form.slice(
-      form.indexOf("function ManagerTaskProgressRow"),
+    const processGroup = form.slice(
+      form.indexOf("function ManagerProcessProgressGroup"),
       form.indexOf("export function WorkReportingForm"),
     );
     expect(page).not.toContain("IePrecountPanel");
@@ -72,12 +72,19 @@ describe("IE pre-count reference ledger", () => {
     expect(form).toContain('type="submit"');
     expect(form).toContain('"确认"');
     expect(form).toContain(">取消</button>");
-    expect(row.indexOf("n04-progress-fact--quantity")).toBeLessThan(row.indexOf("<IePrecountCell"));
-    expect(form).toContain("const iePrecountConfigurations = new Set<string>();");
-    expect(form).toContain("showIePrecount: iePrecountTaskIds.has(task.workTaskId)");
-    expect(row).toContain("iePrecounts && showIePrecount");
-    expect(formStyles).toContain(".n04-progress-row.has-ie-precount");
-    expect(formStyles).toContain(".n04-progress-ie-precount");
+    expect(form).toContain("buildProgressProcessGroups");
+    expect(form).toContain("const progressProcessGroups = buildProgressProcessGroups(visibleTasks);");
+    expect(processGroup).toContain('className="n04-process-group__header"');
+    expect(processGroup).toContain("configurationItemId={group.configurationItemId}");
+    expect(processGroup).toContain("processName={group.processName}");
+    expect(processGroup).toContain("group.tasks.map((task) => <ManagerWorkerProgressRow");
+    expect(processGroup.indexOf("n04-process-group__main")).toBeLessThan(processGroup.indexOf("<IePrecountCell"));
+    expect(processGroup.indexOf("<IePrecountCell")).toBeLessThan(processGroup.indexOf("n04-process-group__expander"));
+    expect(processGroup).not.toContain("showIePrecount");
+    expect(form).not.toContain("ManagerTaskProgressRow");
+    expect(formStyles).toContain(".n04-process-group__header");
+    expect(formStyles).toContain(".n04-process-workers");
+    expect(formStyles).toContain(".n04-worker-row");
     expect(detailStyles).not.toContain(".ie-precount-panel");
     expect(page).not.toContain("请IE核数");
   });
