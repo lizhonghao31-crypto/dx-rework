@@ -1460,7 +1460,7 @@ export class SourcingService {
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_finance_reconciliation" || !source.sourcing_decision_id) {
-          fail("只有已登记合同且待财务核对的订单可以发起换厂", 409, "INVALID_STATE_TRANSITION");
+          fail("只有待财务核对的订单可以发起换厂", 409, "INVALID_STATE_TRANSITION");
         }
         if (source.supplier_id === input.supplierId) fail("新加工厂不能与当前加工厂相同");
         const factory = await client.query<{

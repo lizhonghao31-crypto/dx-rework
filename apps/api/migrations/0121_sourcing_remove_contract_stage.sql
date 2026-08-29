@@ -190,6 +190,41 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION guard_sourcing_factory_change_request_insert()
+RETURNS trigger LANGUAGE plpgsql AS $
+DECLARE
+  source_case sourcing_cases%ROWTYPE;
+  current_decision sourcing_decisions%ROWTYPE;
+BEGIN
+  SELECT * INTO source_case FROM sourcing_cases
+  WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
+  SELECT * INTO current_decision
+  FROM sourcing_decisions
+  WHERE sourcing_case_id=NEW.sourcing_case_id
+  ORDER BY decision_version DESC
+  LIMIT 1;
+  IF sourcing_current_status(NEW.sourcing_case_id)<>'pending_finance_reconciliation'
+    OR current_decision.sourcing_decision_id IS NULL
+    OR NEW.from_decision_id<>current_decision.sourcing_decision_id
+    OR NEW.proposed_supplier_id=current_decision.supplier_id
+    OR NEW.proposed_quantity<>source_case.order_quantity THEN
+    RAISE EXCEPTION 'factory change must replace the current approved factory'
+      USING ERRCODE='23514';
+  END IF;
+  PERFORM sourcing_require_active_factory(
+    NEW.proposed_supplier_id,
+    NEW.proposed_supplier_code_snapshot,
+    NEW.proposed_supplier_name_snapshot
+  );
+  PERFORM sourcing_require_operation_event(
+    NEW.operation_event_id,NEW.request_id,NEW.requested_by,
+    'sourcing.factory_change.request','sourcing:factory_change:request',
+    NEW.sourcing_case_id,NEW.change_reason
+  );
+  RETURN NEW;
+END;
+$;
+
 CREATE OR REPLACE FUNCTION guard_sourcing_reconciliation_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE

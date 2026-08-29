@@ -45,6 +45,8 @@ describe("sourcing five-stage factory change compatibility", () => {
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
     ]);
     expect(migration).toContain("contract_stage_retired");
+    expect(migration).toContain("guard_sourcing_factory_change_request_insert");
+    expect(migration).toContain("factory change must replace the current approved factory");
     expect(migration).toContain("'pending_contract','pending_finance_reconciliation'");
     expect(migration).toContain("sourcing_finance_reconcile");
     expect(page).not.toContain('{ key: "contract"');
