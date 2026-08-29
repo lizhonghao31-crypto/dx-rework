@@ -161,6 +161,19 @@ type DetailRow = Readonly<{
     recordedBy: string;
     recordedAt: string;
   }>;
+  ie_precount_processes: Array<{
+    configurationItemId: string;
+    processName: string;
+  }>;
+  ie_precount_entries: Array<{
+    entryId: string;
+    configurationItemId: string;
+    processName: string;
+    quantity: number;
+    note: string | null;
+    recordedBy: string;
+    recordedAt: string;
+  }>;
   washing_supplier_name: string | null;
   embroidery_supplier_name: string | null;
   fabric_supplier_name: string | null;
@@ -241,6 +254,8 @@ export class ReworkBusinessDetailService {
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
          orders.tail_inspection_required,
          latest_configuration.single_piece_rework_total,
+         COALESCE(ie_precounts.processes,'[]'::jsonb) ie_precount_processes,
+         COALESCE(ie_precounts.entries,'[]'::jsonb) ie_precount_entries,
          orders.inspection_report,
          orders.created_by,creator.display_name creator_name,
          latest_configuration.created_by configuration_created_by,
@@ -266,7 +281,7 @@ export class ReworkBusinessDetailService {
          ON supplier.supplier_id=orders.processing_factory_supplier_id
         AND supplier.version=orders.processing_factory_supplier_version
        LEFT JOIN LATERAL (
-         SELECT configuration.created_by,
+         SELECT configuration.configuration_id,configuration.created_by,
                 (
                   SELECT string_agg(item.process_name,'、' ORDER BY item.position)
                   FROM rework_process_configuration_items item
@@ -284,6 +299,41 @@ export class ReworkBusinessDetailService {
        ) latest_configuration ON true
        LEFT JOIN app_users configuration_creator
          ON configuration_creator.id=latest_configuration.created_by
+       LEFT JOIN LATERAL (
+         SELECT COALESCE((
+                  SELECT jsonb_agg(jsonb_build_object(
+                    'configurationItemId',item.configuration_item_id,
+                    'processName',item.process_name
+                  ) ORDER BY item.position,item.configuration_item_id)
+                  FROM rework_process_configuration_items item
+                  WHERE item.configuration_id=latest_configuration.configuration_id
+                    AND item.execution_kind='worker'
+                ),'[]'::jsonb) processes,
+                COALESCE((
+                  SELECT jsonb_agg(jsonb_build_object(
+                    'entryId',recent.ie_precount_entry_id,
+                    'configurationItemId',recent.configuration_item_id,
+                    'processName',recent.process_name,
+                    'quantity',recent.quantity,
+                    'note',recent.note,
+                    'recordedBy',recent.recorded_by_name,
+                    'recordedAt',recent.recorded_at
+                  ) ORDER BY recent.recorded_at DESC,recent.ie_precount_entry_id DESC)
+                  FROM (
+                    SELECT entry.ie_precount_entry_id,entry.configuration_item_id,item.process_name,
+                           entry.quantity,entry.note,
+                           COALESCE(actor.display_name,entry.recorded_by::text) recorded_by_name,
+                           entry.recorded_at
+                    FROM rework_ie_precount_entries entry
+                    JOIN rework_process_configuration_items item
+                      ON item.configuration_item_id=entry.configuration_item_id
+                    LEFT JOIN app_users actor ON actor.id=entry.recorded_by
+                    WHERE entry.rework_order_id=orders.rework_order_id
+                    ORDER BY entry.recorded_at DESC,entry.ie_precount_entry_id DESC
+                    LIMIT 200
+                  ) recent
+                ),'[]'::jsonb) entries
+       ) ie_precounts ON true
        LEFT JOIN LATERAL (
          SELECT (sum(receipt.actual_quantity)+batch.actual_quantity_adjustment)::bigint actual_quantity,
                 (sum(receipt.defective_quantity)+batch.defective_quantity_adjustment)::bigint defective_quantity
@@ -412,45 +462,6 @@ export class ReworkBusinessDetailService {
       [reworkOrderId, canViewWagePeriods(actor)],
     );
 
-    const iePrecountFoundation = (await this.database.query<{ available: boolean }>(
-      "SELECT to_regclass('rework_ie_precount_entries') IS NOT NULL AS available",
-    )).rows[0]?.available === true;
-    const iePrecountProcesses = iePrecountFoundation
-      ? await this.database.query<{ configuration_item_id: string; process_name: string }>(
-        `WITH latest AS (
-           SELECT configuration_id
-           FROM rework_process_configurations
-           WHERE rework_order_id=$1 AND status='approved'
-           ORDER BY configuration_version DESC
-           LIMIT 1
-         )
-         SELECT item.configuration_item_id,item.process_name
-         FROM latest
-         JOIN rework_process_configuration_items item USING(configuration_id)
-         WHERE item.execution_kind='worker'
-         ORDER BY item.position,item.configuration_item_id`,
-        [reworkOrderId],
-      )
-      : { rows: [] };
-    const iePrecountEntries = iePrecountFoundation
-      ? await this.database.query<{
-        ie_precount_entry_id: string; configuration_item_id: string; process_name: string;
-        quantity: number; note: string | null; recorded_by_name: string; recorded_at: Date;
-      }>(
-        `SELECT entry.ie_precount_entry_id,entry.configuration_item_id,item.process_name,
-                entry.quantity,entry.note,COALESCE(actor.display_name,entry.recorded_by::text) recorded_by_name,
-                entry.recorded_at
-         FROM rework_ie_precount_entries entry
-         JOIN rework_process_configuration_items item
-           ON item.configuration_item_id=entry.configuration_item_id
-         LEFT JOIN app_users actor ON actor.id=entry.recorded_by
-         WHERE entry.rework_order_id=$1
-         ORDER BY entry.recorded_at DESC,entry.ie_precount_entry_id DESC
-         LIMIT 200`,
-        [reworkOrderId],
-      )
-      : { rows: [] };
-
     return {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
@@ -465,22 +476,10 @@ export class ReworkBusinessDetailService {
         ? null
         : Number(row.source_receiving_actual_quantity),
       iePrecounts: {
-        canRecord: iePrecountFoundation
-          && canRecordIePrecount(actor)
+        canRecord: canRecordIePrecount(actor)
           && ["in_progress", "pending_order_review"].includes(row.status),
-        processes: iePrecountProcesses.rows.map((process) => ({
-          configurationItemId: process.configuration_item_id,
-          processName: process.process_name,
-        })),
-        entries: iePrecountEntries.rows.map((entry) => ({
-          entryId: entry.ie_precount_entry_id,
-          configurationItemId: entry.configuration_item_id,
-          processName: entry.process_name,
-          quantity: entry.quantity,
-          note: entry.note,
-          recordedBy: entry.recorded_by_name,
-          recordedAt: entry.recorded_at.toISOString(),
-        })),
+        processes: row.ie_precount_processes ?? [],
+        entries: row.ie_precount_entries ?? [],
       },
       defectiveQuantity: {
         receiving: Number(row.source_receiving_defective_quantity ?? 0),
