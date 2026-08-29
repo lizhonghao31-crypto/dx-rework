@@ -1,8 +1,34 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import type { InspectionReportDraft, ReworkOrderStatus } from "@dx-rework/contracts";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
-import type { TrustedActorContext } from "../tools/repositories.js";
+import {
+  IdempotencyService,
+  OperationEventRepository,
+  type TrustedActorContext,
+} from "../tools/repositories.js";
+
+const tailDefectMutableStatuses = new Set<ReworkOrderStatus>([
+  "pending_process_configuration",
+  "pending_ie_review",
+  "pending_task_assignment",
+  "in_progress",
+  "pending_order_review",
+  "pending_final_quantity_ie_review",
+  "pending_quantity_adjustment_ie_review",
+  "pending_responsibility_determination",
+  "pending_owner_signature",
+  "pending_responsibility_action",
+]);
+
+const canAddTailDefectiveQuantity = (actor: TrustedActorContext): boolean =>
+  actor.actorRoles.some((role) => ["tail_supervisor", "owner_group", "root_superuser"].includes(role));
+
+const requestHash = (scope: string, input: unknown): string => createHash("sha256")
+  .update(JSON.stringify({ scope, input }))
+  .digest("hex");
 
 export type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
@@ -15,6 +41,18 @@ export type ReworkBusinessDetail = Readonly<{
   orderNo: string | null;
   orderQuantity: number | null;
   sourceReceivingActualQuantity: number | null;
+  defectiveQuantity: Readonly<{
+    receiving: number;
+    tail: number;
+    total: number;
+    canAddTail: boolean;
+    tailEntries: readonly Readonly<{
+      entryId: string;
+      quantity: number;
+      recordedBy: string;
+      recordedAt: string;
+    }>[];
+  }>;
   supplyContext: Readonly<{
     washingSupplierName: string | null;
     embroiderySupplierName: string | null;
@@ -81,6 +119,14 @@ type WorkflowHistoryRow = Readonly<{
   reason: string | null;
 }>;
 
+type TailDefectiveQuantityEntryRow = Readonly<{
+  entry_id: string;
+  quantity: number;
+  recorded_by_name: string | null;
+  recorded_by: string;
+  recorded_at: Date;
+}>;
+
 type DetailRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
@@ -92,6 +138,8 @@ type DetailRow = Readonly<{
   order_no: string | null;
   order_quantity: string | null;
   source_receiving_actual_quantity: string | null;
+  source_receiving_defective_quantity: string | null;
+  tail_defective_quantity: string;
   washing_supplier_name: string | null;
   embroidery_supplier_name: string | null;
   fabric_supplier_name: string | null;
@@ -136,7 +184,11 @@ const canViewWagePeriods = (actor: TrustedActorContext): boolean =>
   || actorCapabilities(actor).includes("wage:view");
 
 export class ReworkBusinessDetailService {
-  constructor(private readonly database: Pool) {}
+  constructor(
+    private readonly database: Pool,
+    private readonly idempotency = new IdempotencyService(),
+    private readonly events = new OperationEventRepository(),
+  ) {}
 
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkBusinessDetail> {
     const result = await this.database.query<DetailRow>(
@@ -149,6 +201,10 @@ export class ReworkBusinessDetailService {
          CASE WHEN orders.source_receiving_batch_id IS NULL THEN NULL
            ELSE COALESCE(receiving.actual_quantity,0)::text
          END source_receiving_actual_quantity,
+         CASE WHEN orders.source_receiving_batch_id IS NULL THEN NULL
+           ELSE COALESCE(receiving.defective_quantity,0)::text
+         END source_receiving_defective_quantity,
+         COALESCE(tail_defects.defective_quantity,0)::text tail_defective_quantity,
          washing_supplier.supplier_name washing_supplier_name,
          embroidery_supplier.supplier_name embroidery_supplier_name,
          fabric_supplier.supplier_name fabric_supplier_name,
@@ -205,13 +261,19 @@ export class ReworkBusinessDetailService {
        LEFT JOIN app_users configuration_creator
          ON configuration_creator.id=latest_configuration.created_by
        LEFT JOIN LATERAL (
-         SELECT (sum(receipt.actual_quantity)+batch.actual_quantity_adjustment)::bigint actual_quantity
+         SELECT (sum(receipt.actual_quantity)+batch.actual_quantity_adjustment)::bigint actual_quantity,
+                (sum(receipt.defective_quantity)+batch.defective_quantity_adjustment)::bigint defective_quantity
          FROM receiving_batches batch
          JOIN receiving_receipts receipt
            ON receipt.receiving_batch_id=batch.receiving_batch_id
          WHERE batch.receiving_batch_id=orders.source_receiving_batch_id
          GROUP BY batch.receiving_batch_id
        ) receiving ON true
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(sum(entry.quantity),0)::bigint defective_quantity
+         FROM rework_tail_defective_quantity_entries entry
+         WHERE entry.rework_order_id=orders.rework_order_id
+       ) tail_defects ON true
        WHERE orders.rework_order_id=$1 AND orders.status<>'deleted'`,
       [reworkOrderId],
     );
@@ -254,6 +316,16 @@ export class ReworkBusinessDetailService {
            )
          )
        ORDER BY attachment.created_at,attachment.attachment_id`,
+      [reworkOrderId],
+    );
+
+    const tailDefectiveQuantityEntries = await this.database.query<TailDefectiveQuantityEntryRow>(
+      `SELECT entry.entry_id,entry.quantity,entry.recorded_by,entry.recorded_at,
+              actor.display_name recorded_by_name
+       FROM rework_tail_defective_quantity_entries entry
+       LEFT JOIN app_users actor ON actor.id=entry.recorded_by
+       WHERE entry.rework_order_id=$1
+       ORDER BY entry.recorded_at DESC,entry.entry_id DESC`,
       [reworkOrderId],
     );
 
@@ -331,6 +403,18 @@ export class ReworkBusinessDetailService {
       sourceReceivingActualQuantity: row.source_receiving_actual_quantity == null
         ? null
         : Number(row.source_receiving_actual_quantity),
+      defectiveQuantity: {
+        receiving: Number(row.source_receiving_defective_quantity ?? 0),
+        tail: Number(row.tail_defective_quantity),
+        total: Number(row.source_receiving_defective_quantity ?? 0) + Number(row.tail_defective_quantity),
+        canAddTail: canAddTailDefectiveQuantity(actor) && tailDefectMutableStatuses.has(row.status),
+        tailEntries: tailDefectiveQuantityEntries.rows.map((entry) => ({
+          entryId: entry.entry_id,
+          quantity: entry.quantity,
+          recordedBy: entry.recorded_by_name ?? entry.recorded_by,
+          recordedAt: entry.recorded_at.toISOString(),
+        })),
+      },
       supplyContext: {
         washingSupplierName: row.washing_supplier_name ?? null,
         embroiderySupplierName: row.embroidery_supplier_name ?? null,
@@ -385,6 +469,140 @@ export class ReworkBusinessDetailService {
         remark: event.reason,
       })),
     };
+  }
+
+  async addTailDefectiveQuantity(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: Readonly<{ expectedVersion: number; quantity: number }>,
+    idempotencyKey: string,
+  ): Promise<Readonly<{ value: ReworkBusinessDetail; reused: boolean }>> {
+    if (!canAddTailDefectiveQuantity(actor)) {
+      throw new ApplicationError("FORBIDDEN", "只有尾部主管、老板或Root可以增加尾部次品数量", 403);
+    }
+    if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw new ApplicationError("VALIDATION_ERROR", "返工单版本无效", 400);
+    }
+    if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 1_000_000) {
+      throw new ApplicationError("VALIDATION_ERROR", "新增次品数量必须为正整数", 400);
+    }
+    const scope = "rework.tail_defective_quantity.add";
+    const client = await this.database.connect();
+    let reused = false;
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: requestHash(scope, { reworkOrderId, ...input }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => ({
+        statusCode: 201,
+        response: await this.addTailDefectiveQuantityInTransaction(client, actor, reworkOrderId, input),
+      }));
+      await client.query("COMMIT");
+      reused = outcome.reused;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    return { value: await this.get(actor, reworkOrderId), reused };
+  }
+
+  private async addTailDefectiveQuantityInTransaction(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: Readonly<{ expectedVersion: number; quantity: number }>,
+  ): Promise<Readonly<{ entryId: string; reworkOrderId: string; quantity: number; version: number }>> {
+    const orderResult = await client.query<{
+      status: ReworkOrderStatus;
+      version: number;
+      source_receiving_batch_id: string | null;
+      rework_quantity: string | null;
+    }>(
+      `SELECT status,version,source_receiving_batch_id,rework_quantity::text
+       FROM rework_orders
+       WHERE rework_order_id=$1 AND status<>'deleted'
+       FOR UPDATE`,
+      [reworkOrderId],
+    );
+    const order = orderResult.rows[0];
+    if (!order) throw new ApplicationError("NOT_FOUND", "返工单不存在", 404);
+    if (!tailDefectMutableStatuses.has(order.status)) {
+      throw new ApplicationError("CONFLICT", "当前返工状态不能再增加尾部次品数量", 409);
+    }
+    if (order.version !== input.expectedVersion) {
+      throw new ApplicationError("CONFLICT", "返工单已被其他人更新，请刷新后重试", 409);
+    }
+
+    let availableQuantity = Number(order.rework_quantity ?? 0);
+    let receivingDefectiveQuantity = 0;
+    if (order.source_receiving_batch_id) {
+      const receiving = await client.query<{ actual_quantity: string; defective_quantity: string }>(
+        `SELECT (COALESCE(sum(receipt.actual_quantity),0)+batch.actual_quantity_adjustment)::text actual_quantity,
+                (COALESCE(sum(receipt.defective_quantity),0)+batch.defective_quantity_adjustment)::text defective_quantity
+         FROM receiving_batches batch
+         LEFT JOIN receiving_receipts receipt ON receipt.receiving_batch_id=batch.receiving_batch_id
+         WHERE batch.receiving_batch_id=$1
+         GROUP BY batch.receiving_batch_id`,
+        [order.source_receiving_batch_id],
+      );
+      availableQuantity = Number(receiving.rows[0]?.actual_quantity ?? 0);
+      receivingDefectiveQuantity = Number(receiving.rows[0]?.defective_quantity ?? 0);
+    }
+    const tail = await client.query<{ quantity: string }>(
+      "SELECT COALESCE(sum(quantity),0)::text quantity FROM rework_tail_defective_quantity_entries WHERE rework_order_id=$1",
+      [reworkOrderId],
+    );
+    const previousTailQuantity = Number(tail.rows[0]?.quantity ?? 0);
+    const nextTotal = receivingDefectiveQuantity + previousTailQuantity + input.quantity;
+    if (nextTotal > availableQuantity) {
+      throw new ApplicationError("VALIDATION_ERROR", `次品总数不能超过实际数量 ${availableQuantity} 件`, 400);
+    }
+
+    const entryId = randomUUID();
+    const eventId = await this.events.append(client, actor, {
+      action: "rework.tail_defective_quantity.add",
+      entityType: "rework_order",
+      entityId: reworkOrderId,
+      before: {
+        reworkOrderId,
+        receivingDefectiveQuantity,
+        tailDefectiveQuantity: previousTailQuantity,
+        totalDefectiveQuantity: receivingDefectiveQuantity + previousTailQuantity,
+        version: order.version,
+      },
+      after: {
+        reworkOrderId,
+        entryId,
+        addedQuantity: input.quantity,
+        receivingDefectiveQuantity,
+        tailDefectiveQuantity: previousTailQuantity + input.quantity,
+        totalDefectiveQuantity: nextTotal,
+        version: order.version + 1,
+      },
+    });
+    await client.query(
+      "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
+      [eventId, actor.requestId],
+    );
+    await client.query(
+      `INSERT INTO rework_tail_defective_quantity_entries(
+         entry_id,rework_order_id,quantity,recorded_by,operation_event_id,request_id
+       ) VALUES($1,$2,$3,$4,$5,$6)`,
+      [entryId, reworkOrderId, input.quantity, actor.actorId, eventId, actor.requestId],
+    );
+    await client.query(
+      `UPDATE rework_orders
+       SET version=version+1,updated_at=CURRENT_TIMESTAMP
+       WHERE rework_order_id=$1 AND version=$2`,
+      [reworkOrderId, order.version],
+    );
+    return { entryId, reworkOrderId, quantity: input.quantity, version: order.version + 1 };
   }
 
   async canDownloadBoundAttachment(
