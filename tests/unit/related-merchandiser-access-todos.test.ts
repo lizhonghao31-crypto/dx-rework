@@ -7,6 +7,7 @@ const reportingOrdersUrl = new URL("../../apps/api/src/reporting/management-repo
 const reportingServiceUrl = new URL("../../apps/api/src/reporting/management-reporting-service.ts", import.meta.url);
 const detailServiceUrl = new URL("../../apps/api/src/rework/rework-business-detail-service.ts", import.meta.url);
 const responsibilityUrl = new URL("../../apps/api/src/rework/responsibility-determination-service.ts", import.meta.url);
+const authorizedResponsibilityUrl = new URL("../../apps/api/src/rework/responsibility-determination-authorized-service.ts", import.meta.url);
 const wholeOrderUrl = new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url);
 const shellUrl = new URL("../../apps/web/src/components.tsx", import.meta.url);
 const appUrl = new URL("../../apps/web/src/App.tsx", import.meta.url);
@@ -58,15 +59,16 @@ describe("related merchandiser access and N07 notifications", () => {
     expect(responsibility).toContain("A production manager took responsibility for N07");
   });
 
-  it("notifies both assigned merchandisers once after N07 finalization", async () => {
-    const [responsibility, presentation] = await Promise.all([
-      readFile(responsibilityUrl, "utf8"),
+  it("wires both assigned merchandisers into the production finalizer", async () => {
+    const [authorized, presentation] = await Promise.all([
+      readFile(authorizedResponsibilityUrl, "utf8"),
       readFile(presentationUrl, "utf8"),
     ]);
-    expect(responsibility).toContain("order.merchandiser_user_id");
-    expect(responsibility).toContain("order.embroidery_merchandiser_user_id");
-    expect(responsibility).toContain('category: "responsibility_finalized_notice"');
-    expect(responsibility).toContain("new Set([");
+    expect(authorized).toContain("await this.notifyMerchandisers(");
+    expect(authorized).toContain("order.merchandiser_user_id");
+    expect(authorized).toContain("order.embroidery_merchandiser_user_id");
+    expect(authorized).toContain('category: "responsibility_finalized_notice"');
+    expect(authorized).toContain("new Set([");
     expect(presentation).toContain("返工责任判定已完成");
   });
 
