@@ -492,6 +492,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     );
     expect(approved.reworkStatus).toBe("in_progress");
     const approvedWorkerItem = approved.configuration!.items.find((item) => item.executionKind === "worker")!;
+    const approvedTailItem = approved.configuration!.items.find((item) => item.executionKind === "tail_inspection")!;
     expect(approvedWorkerItem).toMatchObject({
       plannedQuantity: fixture.plannedQuantity,
       unitPrice: fixture.unitPrice,
@@ -500,6 +501,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       draft,
       approved,
       item: approvedWorkerItem,
+      tailItem: approvedTailItem,
     };
   }
 
@@ -507,6 +509,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     fixture: PassFixture,
     reworkOrderId: string,
     itemId: string,
+    tailItemId: string,
     orderVersion: number,
     expectedDeductionAmount: string,
   ): Promise<void> {
@@ -518,9 +521,19 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         expectedOrderVersion: orderVersion,
         expectedCurrentDeterminationVersion: null,
         handlerUserId: fixture.rootUserId,
+        tailInspectionCostBearer: "processing_factory",
         processes: [{
           configurationItemId: itemId,
           multiplier: "1.000",
+          allocations: [{
+            responsibilityType: "processing_factory",
+            shareBps: 10000,
+            multiplier: "1.200",
+            supplierId: fixture.supplierId,
+          }],
+        }, {
+          configurationItemId: tailItemId,
+          multiplier: "1.200",
           allocations: [{
             responsibilityType: "processing_factory",
             shareBps: 10000,
@@ -690,7 +703,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   async function runPass(pass: 1 | 2): Promise<void> {
     const fixture = await setup(pass);
     try {
-      const { draft, item } = await startOrder(pass, fixture);
+      const { draft, item, tailItem } = await startOrder(pass, fixture);
       const started = await http<ReworkWorkTasksResponse>(
         fixture.app,
         "GET",
@@ -814,8 +827,9 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         fixture,
         draft.reworkOrderId,
         item.configurationItemId,
+        tailItem.configurationItemId,
         n06Approved.orderVersion,
-        pass === 2 ? "10.80" : "7.20",
+        pass === 2 ? "11.04" : "9.60",
       );
       expect((await fixture.database.query<{ status: string }>(
         "SELECT status FROM rework_orders WHERE rework_order_id=$1",
