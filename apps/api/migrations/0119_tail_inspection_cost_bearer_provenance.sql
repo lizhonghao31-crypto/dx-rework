@@ -138,5 +138,5 @@ BEGIN
       guard_source
     );
   END IF;
-END
+END;
 $migration$;
