@@ -358,6 +358,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
         orderNo: `ROOT-ORDER-${pass}`,
         merchandiserUserId: fixture.merchandiserUserId,
         processingFactory: { type: "supplier", supplierId: fixture.supplierId },
+        tailInspectionCostBearer: "processing_factory",
         inspectionReport: n01CoreInspectionReport(`Root 全链测试款 ${pass}`),
         problemPart: "袖口",
         problemDescription: `Root 单账号第 ${pass} 遍完整业务链`,
