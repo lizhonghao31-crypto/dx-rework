@@ -30,6 +30,7 @@ type OrderRow = {
   style_no: string | null;
   order_no: string | null;
   merchandiser_user_id: string | null;
+  embroidery_merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
   processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null;
@@ -178,12 +179,13 @@ export class AuthorizedResponsibilityDeterminationService {
       const nextStatus = requiresOwnerSignature
         ? "pending_owner_signature" as const
         : "pending_responsibility_action" as const;
+      const sourceAction = requiresOwnerSignature
+        ? "rework.responsibility.submit_owner_signature"
+        : "rework.responsibility.finalize";
       const eventId = await this.event(
         client,
         actor,
-        requiresOwnerSignature
-          ? "rework.responsibility.submit_owner_signature"
-          : "rework.responsibility.finalize",
+        sourceAction,
         "responsibility:determine",
         order,
         nextStatus,
@@ -255,6 +257,9 @@ export class AuthorizedResponsibilityDeterminationService {
           policyKey: "general",
           dedupeKey: `owner-signature:${orderId}:${current.determination_version + 1}`,
         });
+        await this.notifyMerchandisers(
+          client, actor, order, eventId, sourceAction, id,
+        );
         return this.get(actor, orderId, client);
       }
       const ownFactoryApprovalId = await this.ownFactoryApprovals.ensureForFinalized(
@@ -286,6 +291,9 @@ export class AuthorizedResponsibilityDeterminationService {
         actor,
         `responsibility:${orderId}:`,
         "Responsibility determination was finalized",
+      );
+      await this.notifyMerchandisers(
+        client, actor, order, eventId, sourceAction, id,
       );
       return this.get(actor, orderId, client);
     });
@@ -562,9 +570,43 @@ export class AuthorizedResponsibilityDeterminationService {
     return result.rows[0] ?? null;
   }
 
+  private async notifyMerchandisers(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    order: OrderRow,
+    sourceEventId: string,
+    sourceAction: string,
+    finalizedDeterminationId: string,
+  ): Promise<void> {
+    const recipients = new Set([
+      order.merchandiser_user_id,
+      order.embroidery_merchandiser_user_id,
+    ].filter((recipient): recipient is string => typeof recipient === "string"));
+    for (const recipientUserId of recipients) {
+      await this.todos?.information(client, actor, {
+        category: "responsibility_finalized_notice",
+        sourceEventId,
+        sourceAction,
+        entityType: "rework_order",
+        entityId: order.rework_order_id,
+        recipientUserId,
+        route: {
+          routeName: "rework_detail",
+          entityId: order.rework_order_id,
+          tab: "responsibility",
+        },
+        dedupeKey: `responsibility-finalized-notice:${finalizedDeterminationId}:${recipientUserId}`,
+      });
+    }
+  }
+
   private async order(client: Queryable, orderId: string, locked: boolean): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,
+              (SELECT supply.embroidery_merchandiser_user_id
+               FROM rework_order_supply_context supply
+               WHERE supply.rework_order_id=rework_orders.rework_order_id)
+                embroidery_merchandiser_user_id,
               processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,
               problem_part,problem_description,rework_quantity
        FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted' ${locked ? "FOR UPDATE" : ""}`,
