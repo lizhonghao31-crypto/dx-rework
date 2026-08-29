@@ -48,6 +48,8 @@ type BoardResult = Readonly<{
   date: string;
   startDate: string;
   endDate: string;
+  mode: "range" | "search";
+  status: "all" | "normal" | "extra" | "short";
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -195,7 +197,11 @@ export function OrderBoardPage() {
       .then((body) => {
         if (!active) return;
         setData(body);
-        setMessage(body.rows.length ? "" : debouncedQuery.trim() ? "选中日期内没有匹配的收货记录" : "选中日期内没有收货记录");
+        setMessage(body.rows.length
+          ? ""
+          : body.mode === "search"
+            ? "全时间范围内没有匹配的收货记录"
+            : "选中日期内没有收货记录");
       })
       .catch(() => {
         if (!active) return;
@@ -213,6 +219,8 @@ export function OrderBoardPage() {
   }, [data]);
   const selectedAttachment = attachmentViewer?.attachments[attachmentViewer.index] ?? null;
   const dateRangeLabel = startDate === endDate ? startDate : `${startDate} 至 ${endDate}`;
+  const searchMode = data?.mode === "search";
+  const kpiRangeLabel = searchMode ? "全时间 · 不受所选日期影响" : dateRangeLabel;
 
   const reworkControl = (row: BoardRow, mobile: boolean) => {
     const className = `order-board-rework-link ${mobile ? "order-board-rework-link--mobile" : "order-board-rework-link--desktop"}`;
@@ -336,9 +344,24 @@ export function OrderBoardPage() {
     </div>
 
     <div className="order-board-kpis">
-      <KpiInstrument label="期间收货订单数" value={kpis.orderCount} detail={dateRangeLabel} tone="info" />
-      <KpiInstrument label="期间实收数量" value={`${kpis.receivedQuantity}件`} detail={`${dateRangeLabel} · 本期实收`} tone="info" />
-      <KpiInstrument label="异常订单数量" value={kpis.abnormalOrderCount} detail="截至结束日期累计实收与送货单数量不一致" tone={kpis.abnormalOrderCount ? "warning" : "success"} />
+      <KpiInstrument
+        label={searchMode ? "搜索结果订单数" : "期间收货订单数"}
+        value={kpis.orderCount}
+        detail={kpiRangeLabel}
+        tone="info"
+      />
+      <KpiInstrument
+        label={searchMode ? "搜索结果累计实收" : "期间实收数量"}
+        value={`${kpis.receivedQuantity}件`}
+        detail={searchMode ? kpiRangeLabel : `${kpiRangeLabel} · 本期实收`}
+        tone="info"
+      />
+      <KpiInstrument
+        label="异常订单数量"
+        value={kpis.abnormalOrderCount}
+        detail={searchMode ? "全时间累计实收与送货单数量不一致" : "截至结束日期累计实收与送货单数量不一致"}
+        tone={kpis.abnormalOrderCount ? "warning" : "success"}
+      />
       <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail={`绝对差异 ${kpis.differenceQuantity} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
     </div>
 
@@ -475,3 +498,4 @@ export function OrderBoardPage() {
     </div> : null}
   </div>;
 }
+

@@ -232,14 +232,14 @@ export class ReworkInitiationService {
     receivingBatchId: string | undefined,
     styleNo: string | null,
   ): Promise<string | null> {
-    const normalizedStyleNo = styleNo?.trim();
+    const normalizedStyleNo = styleNo?.trim().toUpperCase();
     if (!receivingBatchId) {
       if (!normalizedStyleNo) return null;
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
       const fallback = await client.query<{ receiving_batch_id: string }>(
         `SELECT batch.receiving_batch_id
          FROM receiving_batches batch
-         WHERE batch.style_no=$1
+         WHERE upper(btrim(batch.style_no))=$1
            AND NOT EXISTS (
              SELECT 1 FROM rework_orders completed_order
              WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
@@ -269,7 +269,7 @@ export class ReworkInitiationService {
     );
     const row = batch.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
-    if (row.style_no !== normalizedStyleNo) {
+    if (row.style_no.trim().toUpperCase() !== normalizedStyleNo) {
       throw new ApplicationError("VALIDATION_ERROR", "收货批次与款号不一致", 400);
     }
     if (row.closed) {
@@ -1621,3 +1621,4 @@ export class ReworkInitiationService {
     };
   }
 }
+

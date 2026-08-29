@@ -154,7 +154,13 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     return { styles: await dependencies.service.listStyleOptions(request.query.q ?? "") };
   });
 
-  app.get<{ Querystring: { date?: string; startDate?: string; endDate?: string; q?: string } }>("/receiving/board", async (request) => {
+  app.get<{ Querystring: {
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    q?: string;
+    status?: string;
+  } }>("/receiving/board", async (request) => {
     await readUser(request);
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Shanghai",
@@ -164,7 +170,12 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     }).format(new Date());
     const startDate = request.query.startDate ?? request.query.date ?? today;
     const endDate = request.query.endDate ?? request.query.date ?? startDate;
-    return dependencies.service.board(startDate, endDate, request.query.q ?? "");
+    return dependencies.service.board(
+      startDate,
+      endDate,
+      request.query.q ?? "",
+      request.query.status ?? "all",
+    );
   });
 
   app.post("/receiving/receipts", async (request, reply) => {
