@@ -474,6 +474,9 @@ export function WorkReportingForm({
   const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
   const reportableTasks = isRoot ? pendingTasks : canAssign ? temporaryTasks : pendingTasks;
+  const selfReportableTaskIds = new Set(
+    !isRoot && !canAssign ? reportableTasks.map((task) => task.workTaskId) : [],
+  );
   const allProcessesAssigned = configItems.length > 0 && configItems.every((item) => data?.tasks.some((task) => task.configurationItemId === item.configurationItemId));
   const selectedPeopleCount = people.filter((person) => selected[person.personId]).length;
   const adjustmentSelectedCount = filteredPeople.filter((person) => selected[person.personId]).length;
@@ -547,8 +550,27 @@ export function WorkReportingForm({
         {workReportingWritable && canAssign && incompleteTasks.length === 0 && completedTasks.length > 0 ? <div className="n04-completion-action">
           <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>{busy ? "核验中…" : "全部完成，进入节点05"}</Button>
         </div> : null}
-      </div> : visibleTasks.map((task) => <Surface {...(frontlineContext ? { className: "frontline-work-task" } : {})} key={task.workTaskId}><div className="section-title"><div><h2>{taskProcessName(task)}</h2><p>{task.executionKind === "tail_inspection" ? "整查人员" : "返工人员"}：{task.members.map((member) => member.displayName).join("、")}</p></div><StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>{task.remainingQuantity === 0 ? "已完成" : workReportingWritable ? "待上报" : "未完成"}</StatusBadge></div>{task.unitPrice !== null ? <small className="work-reporting-approved-price">IE 核准单价：¥{formatApprovedUnitPrice(task.unitPrice)} / {task.pricingUnit === "piece" ? "件" : "小时"}</small> : null}<p>{task.remainingQuantity === 0 ? `已上报 ${task.submittedQuantity} 件` : workReportingWritable ? "按实际完成件数报数" : "该节点已结束"}</p></Surface>)}
-      {reportableTasks.length > 0 && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代报数" : canAssign ? "临时工代报数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "我已完成整查" : "我已返工完成"}</h2><p>{isRoot ? "为执行人员代录最终数量。" : canAssign ? "为临时工填写最终返工数量。正式工由本人确认上数。" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "填写本人实际整查数量，提交后计入统一数量事实。" : "确认后即视为本次返工完工；如还要继续返工，请先返回。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为报数" : canAssign ? "临时工完工上数" : reportableTasks.every((task) => task.executionKind === "tail_inspection") ? "整查完成&报数" : "我已完工&上数"}</Button></Surface>}
+      </div> : visibleTasks.map((task) => <Surface {...(frontlineContext ? { className: "frontline-work-task" } : {})} key={task.workTaskId}>
+        <div className="section-title">
+          <div>
+            <h2>{taskProcessName(task)}</h2>
+            <p>{task.executionKind === "tail_inspection" ? "整查人员" : "返工人员"}：{task.members.map((member) => member.displayName).join("、")}</p>
+          </div>
+          <StatusBadge tone={task.remainingQuantity === 0 ? "success" : workReportingWritable ? "warning" : "info"}>
+            {task.remainingQuantity === 0 ? "已完成" : workReportingWritable ? "待上报" : "未完成"}
+          </StatusBadge>
+        </div>
+        {task.unitPrice !== null ? <small className="work-reporting-approved-price">
+          IE 核准单价：¥{formatApprovedUnitPrice(task.unitPrice)} / {task.pricingUnit === "piece" ? "件" : "小时"}
+        </small> : null}
+        <p>{task.remainingQuantity === 0 ? `已上报 ${task.submittedQuantity} 件` : workReportingWritable ? "按实际完成件数报数" : "该节点已结束"}</p>
+        {selfReportableTaskIds.has(task.workTaskId) ? <div className="mobile-actions work-reporting-actions">
+          <Button variant="primary" onClick={() => openReporting([task])} disabled={busy}>
+            {task.executionKind === "tail_inspection" ? "整查完成&报数" : "我已完工&上数"}
+          </Button>
+        </div> : null}
+      </Surface>)}
+      {reportableTasks.length > 0 && (isRoot || canAssign) && <Surface className="work-reporting-primary-action"><h2>{isRoot ? "代报数" : "临时工代报数"}</h2><p>{isRoot ? "为执行人员代录最终数量。" : "为临时工填写最终返工数量。正式工由本人逐工序确认上数。"}</p><Button variant="primary" onClick={() => openReporting(reportableTasks)} disabled={busy}>{isRoot ? "代为报数" : "临时工完工上数"}</Button></Surface>}
       {visibleTasks.length === 0 && <Surface>当前暂无需要本人处理的任务。</Surface>}
     </>}
     {removalTask && (assignmentWritable || activeAdjustmentWritable) && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认从当前订单移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”任务？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}

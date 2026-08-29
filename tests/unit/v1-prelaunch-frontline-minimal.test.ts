@@ -77,6 +77,10 @@ describe("v1 prelaunch frontline minimal tasks and mobile density", () => {
     expect(page).toContain("<b>进入</b>");
     expect(form).toContain('task.executionKind === frontlineContext.kind');
     expect(form).toContain('"整查完成&报数" : "我已完工&上数"');
+    expect(form).toContain("selfReportableTaskIds.has(task.workTaskId)");
+    expect(form).toContain("openReporting([task])");
+    expect(form).toContain("reportableTasks.length > 0 && (isRoot || canAssign)");
+    expect(form).not.toContain("reportableTasks.length > 0 && <Surface className=\"work-reporting-primary-action\"");
     expect(routes).toContain('app.get("/frontline/work-tasks"');
   });
 
