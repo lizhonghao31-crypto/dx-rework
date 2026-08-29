@@ -597,7 +597,7 @@ export function WorkReportingForm({
 
   if (effectiveTaskMode === "whole_order_review") return <div className="mobile-page work-reporting-page">
     {!reviewEligible && <Surface>{message}</Surface>}
-    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { await onOrderChanged?.(); }} />}
+    {reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { await onOrderChanged?.(); }} {...(iePrecounts ? { iePrecounts } : {})} />}
   </div>;
 
   return <div className={`mobile-page work-reporting-page${embedded ? " is-embedded" : ""}${frontlineContext ? " is-frontline" : ""}`}>
