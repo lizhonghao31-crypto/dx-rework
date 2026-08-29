@@ -533,7 +533,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
           }],
         }, {
           configurationItemId: tailItemId,
-          multiplier: "1.200",
+          multiplier: "1.000",
           allocations: [{
             responsibilityType: "processing_factory",
             shareBps: 10000,
