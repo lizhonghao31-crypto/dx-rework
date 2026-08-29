@@ -84,6 +84,24 @@ const multiplierScaled = (value: string): bigint | null => {
 const isExternal = (type: ResponsibilityType): boolean => type !== "own_factory";
 const typeMeta = (type: ResponsibilityType) => responsibilityTypes.find((item) => item.value === type)!;
 const displayMoney = (value: string): string => `¥${value}`;
+const tailCostBearerLabel = (
+  bearer: TailInspectionCostBearer | null,
+): string =>
+  bearer === "own_factory"
+    ? "本厂"
+    : bearer === "processing_factory"
+      ? "加工厂"
+      : "未填写";
+const tailCostBearerSourceLabel = (
+  response: ResponsibilityDeterminationResponse,
+): string =>
+  response.tailInspectionCostBearerSource === "quality_inspection"
+    ? "质检初判"
+    : response.tailInspectionCostBearerSource === "production_override"
+      ? "生产主管确认"
+      : response.tailInspectionCostBearerSource === "legacy_default"
+        ? "历史系统默认（非质检判断）"
+        : "尚未判断";
 const preferredProcessingFactoryId = (response: ResponsibilityDeterminationResponse): string =>
   response.processingFactory?.type === "supplier" ? response.processingFactory.supplierId : "";
 const estimatedAllocationAmount = (baseAmount: string, allocation: AllocationForm): string => {
@@ -175,7 +193,13 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next);
     setTailCostBearer(next.tailInspectionCostBearer);
-    setTailBearerEditing(next.tailInspectionRequired && next.tailInspectionCostBearer === null);
+    setTailBearerEditing(
+      next.tailInspectionRequired
+        && (
+          next.tailInspectionCostBearer === null
+          || next.tailInspectionCostBearerSource === "legacy_default"
+        ),
+    );
     setSelectedProcessIds([]);
     setBatchDialogOpen(false);
     setProcesses(formsFromResponse(next));
@@ -255,6 +279,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const hasUnsavedChanges = useMemo(
     () => response !== null && (
       tailCostBearer !== response.tailInspectionCostBearer
+      || response.tailInspectionCostBearerSource === "legacy_default"
       || JSON.stringify(processes) !== JSON.stringify(formsFromResponse(response))
     ),
     [processes, response, tailCostBearer],
@@ -454,9 +479,11 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       <div className="responsibility-process__title">
         <div>
           <h3>整查费用承担</h3>
-          <p>质检发起返工时已完成初判；生产主管在本节点确认，只有初判有误时才需要修改。</p>
+          <p>{response.tailInspectionCostBearerSource === "legacy_default"
+            ? "历史订单未记录质检判断；系统按安全口径预置，生产主管须在本节点确认。"
+            : "质检发起返工时完成初判；生产主管在本节点复核并确认。"}</p>
         </div>
-        <b>质检初判：{response.tailInspectionCostBearer === "own_factory" ? "本厂" : response.tailInspectionCostBearer === "processing_factory" ? "加工厂" : "未填写"}</b>
+        <b>{tailCostBearerSourceLabel(response)}：{tailCostBearerLabel(response.tailInspectionCostBearer)}</b>
       </div>
       <div className="responsibility-tail-review__summary">
         <span>工资基础 {tailSource ? displayMoney(tailSource.baseAmount) : "待生成"}</span>
