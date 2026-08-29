@@ -191,7 +191,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION guard_sourcing_factory_change_request_insert()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   source_case sourcing_cases%ROWTYPE;
   current_decision sourcing_decisions%ROWTYPE;
@@ -223,7 +223,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION guard_sourcing_reconciliation_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
