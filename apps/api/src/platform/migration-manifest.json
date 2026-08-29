@@ -117,7 +117,8 @@
     { "version": "0115_receiving_style_identity_canonicalization", "checksum": "c663266784042c7ce0bffbcab7048ba49a28fe6766b6b2ff3f134ac918a0935d" },
     { "version": "0116_tail_defective_quantity_ledger", "checksum": "f3c64fc764f3af6add0fe5c27e2455a4aea90a37426318d6834b3348eda0131d" },
     { "version": "0117_related_merchandiser_rework_access", "checksum": "75bb5ab9744d3bcd56fa3b0e6df11beaaca9c80c765cb1a95378587184c080cb" },
-    { "version": "0118_ie_precount_ledger", "checksum": "29a9c21baab5adc75be5b661e310f732028d746817e21f69f24e494e73d917a3" },\n    { "version": "0119_tail_inspection_cost_bearer_provenance", "checksum": "4c93478c048caff70946ac8eb408db6ffee0489ee87f250f60b483bd6e42d1ea" }
+    { "version": "0118_ie_precount_ledger", "checksum": "29a9c21baab5adc75be5b661e310f732028d746817e21f69f24e494e73d917a3" },
+    { "version": "0119_tail_inspection_cost_bearer_provenance", "checksum": "a631739c994b0b6aa494059458f707b567d2f056e37b2e8690343c852ac1549b" }
   ]
 }
 
