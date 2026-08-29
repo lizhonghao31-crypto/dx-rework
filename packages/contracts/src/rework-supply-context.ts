@@ -48,6 +48,8 @@ export const SaveReworkV2DraftSchema = z.object({
   styleNo: z.string().trim().min(1).max(80).nullable(),
   merchandiserUserId: IdSchema.nullable(),
   processingFactory: ReworkV2ProcessingFactoryInputSchema.nullable(),
+  tailInspectionRequired: z.boolean(),
+  tailInspectionCostBearer: z.enum(["own_factory", "processing_factory"]).nullable(),
 }).strict();
 
 export type SaveReworkSupplyContext = z.infer<typeof SaveReworkSupplyContextSchema>;

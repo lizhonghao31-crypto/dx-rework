@@ -17,6 +17,7 @@ import "./wage-period-list.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const PeriodListSchema = z.array(WagePeriodSchema);
+const WAGE_MONTH_CLOSE_ENABLED: boolean = false;
 
 const statusLabel: Record<WagePeriod["status"], string> = {
   ready_to_lock: "可月结",
@@ -156,7 +157,7 @@ export function WagePeriodList() {
           />
           <label>开始日期<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
           <label>结束日期<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
-          <label>月结状态<select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions.map(([item, label]) => <option key={item} value={item}>{label}</option>)}</select></label>
+          {WAGE_MONTH_CLOSE_ENABLED ? <label>月结状态<select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions.map(([item, label]) => <option key={item} value={item}>{label}</option>)}</select></label> : null}
           {value?.canExport ? <a href={reportExportUrl("wages", filters)}><Button variant="primary">导出当前工资明细</Button></a> : null}
         </div>
       </Surface>
@@ -206,7 +207,7 @@ export function WagePeriodList() {
         </>
       ) : null}
 
-      <section className="wage-period-section">
+      {WAGE_MONTH_CLOSE_ENABLED ? <section className="wage-period-section">
         <div className="wage-section-heading">
           <div><h2>月结批次</h2><p>系统自动汇总返工工资；月底直接月结锁定。</p></div>
         </div>
@@ -226,7 +227,7 @@ export function WagePeriodList() {
           ))}
         </div>
         {periods.length === 0 && !message ? <Surface><p>暂无已生成的返工工资。</p></Surface> : null}
-      </section>
+      </section> : null}
     </div>
   );
 }

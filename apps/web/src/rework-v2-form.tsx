@@ -66,6 +66,7 @@ type V2FormState = Readonly<{
   factory: string;
   merchandiserUserId: string;
   tailInspectionRequired: boolean;
+  tailInspectionCostBearer: "" | "own_factory" | "processing_factory";
   washingSupplierId: string;
   embroiderySupplierId: string;
   fabricSupplierId: string;
@@ -94,6 +95,7 @@ const emptyForm = (useUrlStyle = true): V2FormState => ({
   factory: "",
   merchandiserUserId: "",
   tailInspectionRequired: true,
+  tailInspectionCostBearer: "",
   washingSupplierId: "",
   embroiderySupplierId: "",
   fabricSupplierId: "",
@@ -113,7 +115,11 @@ const isFormState = (value: unknown): value is V2FormState => {
     "embroideryMerchandiserUserId",
   ].every((key) => typeof row[key] === "string");
   return stringFieldsValid
-    && (row.tailInspectionRequired === undefined || typeof row.tailInspectionRequired === "boolean");
+    && (row.tailInspectionRequired === undefined || typeof row.tailInspectionRequired === "boolean")
+    && (row.tailInspectionCostBearer === undefined
+      || row.tailInspectionCostBearer === ""
+      || row.tailInspectionCostBearer === "own_factory"
+      || row.tailInspectionCostBearer === "processing_factory");
 };
 
 const isStoredImage = (value: unknown): value is StoredImage => {
@@ -152,6 +158,10 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
       form: {
         ...(parsed.form as V2FormState),
         tailInspectionRequired: (parsed.form as Record<string, unknown>).tailInspectionRequired !== false,
+        tailInspectionCostBearer: (
+          (parsed.form as Record<string, unknown>).tailInspectionCostBearer === "own_factory"
+          || (parsed.form as Record<string, unknown>).tailInspectionCostBearer === "processing_factory"
+        ) ? (parsed.form as V2FormState).tailInspectionCostBearer : "",
       },
       images: parsed.images as StoredImage[],
       savedAt: parsed.savedAt,
@@ -292,6 +302,7 @@ export function ReworkInitiationV2Form({
           factory: factoryValue(draft),
           merchandiserUserId: draft.merchandiserUserId ?? "",
           tailInspectionRequired: draft.tailInspectionRequired,
+          tailInspectionCostBearer: draft.tailInspectionCostBearer ?? "",
           washingSupplierId: context.washingSupplier?.supplierId ?? "",
           embroiderySupplierId: context.embroiderySupplier?.supplierId ?? "",
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
@@ -328,6 +339,7 @@ export function ReworkInitiationV2Form({
     form.styleNo.trim()
     && form.factory
     && form.merchandiserUserId
+    && (!form.tailInspectionRequired || form.tailInspectionCostBearer)
     && availableImageCount > 0,
   );
 
@@ -346,6 +358,7 @@ export function ReworkInitiationV2Form({
     factory: form.factory,
     merchandiserUserId: form.merchandiserUserId,
     tailInspectionRequired: form.tailInspectionRequired,
+    tailInspectionCostBearer: form.tailInspectionRequired ? form.tailInspectionCostBearer : null,
     attachmentIds: images.map((image) => image.attachmentId),
   });
 
@@ -391,6 +404,10 @@ export function ReworkInitiationV2Form({
             styleNo: form.styleNo.trim() || null,
             merchandiserUserId: form.merchandiserUserId || null,
             processingFactory: processingFactory ?? null,
+            tailInspectionRequired: form.tailInspectionRequired,
+            tailInspectionCostBearer: form.tailInspectionRequired
+              ? form.tailInspectionCostBearer || null
+              : null,
           }),
         },
       );
@@ -399,6 +416,9 @@ export function ReworkInitiationV2Form({
         styleNo: form.styleNo.trim() || null,
         merchandiserUserId: form.merchandiserUserId || null,
         tailInspectionRequired: form.tailInspectionRequired,
+        tailInspectionCostBearer: form.tailInspectionRequired
+          ? form.tailInspectionCostBearer || null
+          : null,
         processingFactory: processingFactory ?? null,
         attachmentIds: images.map((image) => image.attachmentId),
       };
@@ -644,13 +664,18 @@ export function ReworkInitiationV2Form({
       </div>
       <div className="rework-v2-grid">
         <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
-        <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory }); pendingSubmit.current = null; }} /></div></label>
+        <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory, tailInspectionCostBearer: factory === "own_factory" && form.tailInspectionCostBearer === "processing_factory" ? "" : form.tailInspectionCostBearer }); pendingSubmit.current = null; }} /></div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
         <fieldset className="rework-v2-tail-choice" disabled={busy}>
           <legend>是否需要整查？</legend>
           <label><input type="radio" name="tailInspectionRequired" checked={form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
-          <label><input type="radio" name="tailInspectionRequired" checked={!form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false }); pendingSubmit.current = null; }} />否</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={!form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false, tailInspectionCostBearer: "" }); pendingSubmit.current = null; }} />否</label>
         </fieldset>
+        {form.tailInspectionRequired ? <fieldset className="rework-v2-tail-choice" disabled={busy}>
+          <legend>谁承担整查费用？ <b>*</b></legend>
+          <label><input type="radio" name="tailInspectionCostBearer" checked={form.tailInspectionCostBearer === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "own_factory" }); pendingSubmit.current = null; }} />本厂</label>
+          <label><input type="radio" name="tailInspectionCostBearer" checked={form.tailInspectionCostBearer === "processing_factory"} disabled={form.factory === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "processing_factory" }); pendingSubmit.current = null; }} />加工厂</label>
+        </fieldset> : null}
       </div>
       <details className="rework-v2-more">
         <summary>更多信息</summary>

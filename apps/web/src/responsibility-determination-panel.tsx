@@ -3,6 +3,7 @@ import {
   ResponsibilitySupplierOptionsResponseSchema,
   type ResponsibilityDeterminationResponse,
   type ResponsibilityType,
+  type TailInspectionCostBearer,
 } from "@dx-rework/contracts";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -31,7 +32,7 @@ type Supplier = Readonly<{
   supplierName: string;
 }>;
 type AllocationForm = { responsibilityType: ResponsibilityType; sharePercent: string; multiplier: string; supplierId: string };
-type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; baseAmount: string; allocations: AllocationForm[] };
+type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; executionKind: "worker" | "tail_inspection"; baseAmount: string; allocations: AllocationForm[] };
 
 const requestError = async (response: Response): Promise<string> => {
   try { return ((await response.json()) as { error?: { message?: string } }).error?.message ?? "请求未完成，请稍后重试"; }
@@ -85,31 +86,45 @@ const estimatedAllocationAmount = (baseAmount: string, allocation: AllocationFor
   if (shareBps === null || !Number.isFinite(multiplier) || !Number.isFinite(base)) return "—";
   return displayMoney((base * Number(shareBps) / 10_000 * multiplier).toFixed(2));
 };
-const formsFromResponse = (response: ResponsibilityDeterminationResponse): ProcessForm[] => {
+const formsFromResponse = (
+  response: ResponsibilityDeterminationResponse,
+  tailCostBearer: TailInspectionCostBearer | null = response.tailInspectionCostBearer,
+): ProcessForm[] => {
   const persisted = response.determination?.processes ?? [];
-  return response.sourceProcesses.map((source) => {
-    const current = persisted.find((process) => process.configurationItemId === source.configurationItemId);
-    return {
-      configurationItemId: source.configurationItemId,
-      processName: source.processName,
-      pricingUnit: source.pricingUnit,
-      baseAmount: source.baseAmount,
-      allocations: current?.allocations.length
-        ? current.allocations.map((allocation) => ({
-            responsibilityType: allocation.responsibilityType,
-            sharePercent: String(allocation.shareBps / 100),
-            multiplier: allocation.multiplier,
-            supplierId: allocation.supplier?.supplierId
-              ?? (allocation.responsibilityType === "processing_factory" ? preferredProcessingFactoryId(response) : ""),
-          }))
-        : [{
-            responsibilityType: "own_factory",
-            sharePercent: "100",
-            multiplier: "1.000",
-            supplierId: "",
-          }],
-    };
-  });
+  return response.sourceProcesses
+    .filter((source) => source.executionKind === "worker" || tailCostBearer === "processing_factory")
+    .map((source) => {
+      const current = persisted.find((process) => process.configurationItemId === source.configurationItemId);
+      const tailAllocation: AllocationForm = {
+        responsibilityType: "processing_factory",
+        sharePercent: "100",
+        multiplier: "1.200",
+        supplierId: preferredProcessingFactoryId(response),
+      };
+      return {
+        configurationItemId: source.configurationItemId,
+        processName: source.processName,
+        pricingUnit: source.pricingUnit,
+        executionKind: source.executionKind,
+        baseAmount: source.baseAmount,
+        allocations: source.executionKind === "tail_inspection"
+          ? [tailAllocation]
+          : current?.allocations.length
+            ? current.allocations.map((allocation) => ({
+                responsibilityType: allocation.responsibilityType,
+                sharePercent: String(allocation.shareBps / 100),
+                multiplier: allocation.multiplier,
+                supplierId: allocation.supplier?.supplierId
+                  ?? (allocation.responsibilityType === "processing_factory" ? preferredProcessingFactoryId(response) : ""),
+              }))
+            : [{
+                responsibilityType: "own_factory",
+                sharePercent: "100",
+                multiplier: "1.000",
+                supplierId: "",
+              }],
+      };
+    });
 };
 const canEditDetermination = (response: ResponsibilityDeterminationResponse): boolean => {
   const determination = response.determination;
@@ -136,6 +151,7 @@ const processValid = (process: ProcessForm): boolean => {
 export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false }: { reworkOrderId: string | null; onOrderChanged?: () => void; embedded?: boolean }) {
   const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(null);
   const [processes, setProcesses] = useState<ProcessForm[]>([]);
+  const [tailCostBearer, setTailCostBearer] = useState<TailInspectionCostBearer | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [changeReason, setChangeReason] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
@@ -145,6 +161,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
 
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next);
+    setTailCostBearer(next.tailInspectionCostBearer);
     setProcesses(formsFromResponse(next));
     setChangeReason(next.determination?.reason ?? "");
     if (canEditDetermination(next)) {
@@ -184,12 +201,23 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
 
   const determination = response?.determination ?? null;
   const editable = response !== null && canEditDetermination(response);
-  const allProcessesValid = processes.length > 0 && processes.every(processValid);
+  const tailBearerValid = response !== null
+    && (!response.tailInspectionRequired || tailCostBearer !== null);
+  const allProcessesValid = processes.length > 0 && processes.every(processValid) && tailBearerValid;
   const hasUnsavedChanges = useMemo(
-    () => response !== null && JSON.stringify(processes) !== JSON.stringify(formsFromResponse(response)),
-    [processes, response],
+    () => response !== null && (
+      tailCostBearer !== response.tailInspectionCostBearer
+      || JSON.stringify(processes) !== JSON.stringify(formsFromResponse(response))
+    ),
+    [processes, response, tailCostBearer],
   );
   const handlerUserId = response?.handlerUserId ?? currentUserId;
+  const tailSource = response?.sourceProcesses.find((source) => source.executionKind === "tail_inspection");
+  const selectTailCostBearer = (next: TailInspectionCostBearer): void => {
+    if (!response) return;
+    setTailCostBearer(next);
+    setProcesses(formsFromResponse(response, next));
+  };
 
   const setAllocation = (configurationItemId: string, allocationIndex: number, update: Partial<AllocationForm>): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : {
     ...process,
@@ -270,6 +298,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
             expectedOrderVersion: response.orderVersion,
             expectedCurrentDeterminationVersion: determination?.version ?? null,
             handlerUserId,
+            tailInspectionCostBearer: tailCostBearer,
             ...(changeReason.trim() ? { reason: changeReason.trim() } : {}),
             processes: payloadProcesses(),
           },
@@ -333,6 +362,20 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     </div>}
     {message && <p className="responsibility-message" role="status">{message}</p>}
 
+    {response?.tailInspectionRequired ? <section className="responsibility-process">
+      <div className="responsibility-process__title">
+        <div>
+          <h3>整查费用承担</h3>
+          <p>工资基础 {tailSource ? displayMoney(tailSource.baseAmount) : "待生成"}；选择加工厂后自动按 100% × 1.2 纳入外部扣款。</p>
+        </div>
+      </div>
+      <fieldset className="rework-v2-tail-choice" disabled={!editable || Boolean(busyAction)}>
+        <legend>谁承担整查费用？</legend>
+        <label><input type="radio" name="responsibilityTailCostBearer" checked={tailCostBearer === "own_factory"} onChange={() => selectTailCostBearer("own_factory")} />本厂</label>
+        <label><input type="radio" name="responsibilityTailCostBearer" checked={tailCostBearer === "processing_factory"} disabled={response.processingFactory?.type !== "supplier"} onChange={() => selectTailCostBearer("processing_factory")} />加工厂</label>
+      </fieldset>
+    </section> : null}
+
     {processes.map((process) => {
       const persisted = determination?.processes.find((item) => item.configurationItemId === process.configurationItemId);
       const totalBps = shareTotalBps(process.allocations);
@@ -348,7 +391,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
             const persistedAllocation = persisted?.allocations.find((item) => item.responsibilityType === allocation.responsibilityType);
             const availableTypes = responsibilityTypes.filter((item) => item.value === allocation.responsibilityType || !process.allocations.some((current) => current.responsibilityType === item.value));
             return <div className="responsibility-party" key={`${process.configurationItemId}:${allocation.responsibilityType}`}>
-              {editable ? <>
+              {editable && process.executionKind !== "tail_inspection" ? <>
                 <label className="dx-field"><span>责任方</span><span className="dx-field__control"><select value={allocation.responsibilityType} disabled={Boolean(busyAction)} onChange={(event) => {
                   const nextType = event.target.value as ResponsibilityType;
                   setAllocation(process.configurationItemId, allocationIndex, {
@@ -372,7 +415,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
             </div>;
           })}
         </div>
-        {editable && <div className="responsibility-process__footer">
+        {editable && process.executionKind !== "tail_inspection" && <div className="responsibility-process__footer">
           <Button disabled={Boolean(busyAction) || process.allocations.length === responsibilityTypes.length} onClick={() => addAllocation(process.configurationItemId)}>+ 添加责任方</Button>
           <span className={totalBps === 10000n ? "share-ok" : "share-error"}>{totalBps === 10000n ? "比例合计正确，可以提交" : "比例合计必须为 100%"}</span>
         </div>}

@@ -318,21 +318,6 @@ export class WholeOrderReviewService {
         [reworkOrderId, actor.actorId],
       );
       await this.todos?.completeOpenByDedupePrefix(client, actor, `final-quantity-ie-review:${reworkOrderId}:`, "IE approved the final quantities");
-      const wagePeriods = await client.query<{ period_id: string; period_version: number }>(
-        `SELECT DISTINCT period.period_id,period.period_version
-         FROM rework_wage_periods period JOIN rework_wage_items item ON item.period_id=period.period_id
-         WHERE item.order_review_id=$1 AND period.status='ready_to_lock' ORDER BY period.period_id`,
-        [orderReviewId],
-      );
-      for (const wagePeriod of wagePeriods.rows) {
-        await this.todos?.actionableForUniqueDirectRole(client, actor, {
-          category: "wage_month_close", sourceEventId: eventId, sourceAction: "rework.final_quantity.ie_review",
-          entityType: "rework_order", entityId: reworkOrderId, requiredRole: "wage_month_close_accountant",
-          requiredCapability: "wage:month_close", route: { routeName: "wage_period_detail", entityId: wagePeriod.period_id },
-          policyKey: "finance_return_or_wage_review",
-          dedupeKey: `wage-month-lock:${wagePeriod.period_id}:${wagePeriod.period_version}`,
-        });
-      }
       await this.outbox.enqueue(client, {
         topic: "rework.pending_responsibility_determination", aggregateType: "rework_order", aggregateId: reworkOrderId,
         payload: { reworkOrderId, reworkNo: order.rework_no, orderReviewId, confirmationId: pendingConfirmation.confirmation_id },
@@ -497,23 +482,8 @@ export class WholeOrderReviewService {
             client,
             actor,
             `wage-month-lock:${wagePeriod.period_id}:`,
-            "Newly materialized wage facts require a fresh month-close task",
+            "工资月结已退出当前流程；报表继续用于财务对数",
           );
-          await this.todos.actionableForUniqueDirectRole(client, actor, {
-            category: "wage_month_close",
-            sourceEventId: eventId,
-            sourceAction: "rework.whole_order.approve",
-            entityType: "rework_order",
-            entityId: reworkOrderId,
-            requiredRole: "wage_month_close_accountant",
-            requiredCapability: "wage:month_close",
-            route: {
-              routeName: "wage_period_detail",
-              entityId: wagePeriod.period_id,
-            },
-            policyKey: "finance_return_or_wage_review",
-            dedupeKey: `wage-month-lock:${wagePeriod.period_id}:${wagePeriod.period_version}`,
-          });
         }
       }
       await this.outbox.enqueue(client, {

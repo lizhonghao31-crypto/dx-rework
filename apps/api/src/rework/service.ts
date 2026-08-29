@@ -59,6 +59,7 @@ type ReworkOrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   tail_inspection_required: boolean;
+  tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   inspection_report: InspectionReportDraft | null;
   source_receiving_batch_id: string | null;
   created_by: string;
@@ -174,6 +175,9 @@ export class ReworkInitiationService {
         problemDescription: input.problemDescription ?? null,
         reworkQuantity: input.reworkQuantity ?? null,
         tailInspectionRequired: input.tailInspectionRequired ?? true,
+        tailInspectionCostBearer: input.tailInspectionRequired === false
+          ? null
+          : input.tailInspectionCostBearer ?? "own_factory",
         inspectionReport: input.inspectionReport ?? null,
         attachmentIds,
         version: 1,
@@ -191,9 +195,10 @@ export class ReworkInitiationService {
            order_no,order_quantity,merchandiser_user_id,
            processing_factory_type,processing_factory_supplier_id,
            processing_factory_supplier_version,rework_reason,rework_process,
-           problem_part,problem_description,rework_quantity,tail_inspection_required,inspection_report,
+           problem_part,problem_description,rework_quantity,tail_inspection_required,
+           tail_inspection_cost_bearer,inspection_report,
            source_receiving_batch_id,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19)`,
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)`,
         [
           reworkOrderId,
           next.styleNo,
@@ -211,6 +216,7 @@ export class ReworkInitiationService {
           next.problemDescription,
           next.reworkQuantity,
           next.tailInspectionRequired,
+          next.tailInspectionCostBearer,
           next.inspectionReport,
           sourceReceivingBatchId,
           actor.actorId,
@@ -333,6 +339,11 @@ export class ReworkInitiationService {
         tailInspectionRequired: input.tailInspectionRequired === undefined
           ? current.tail_inspection_required
           : input.tailInspectionRequired,
+        tailInspectionCostBearer: (input.tailInspectionRequired ?? current.tail_inspection_required)
+          ? (input.tailInspectionCostBearer === undefined
+              ? current.tail_inspection_cost_bearer
+              : input.tailInspectionCostBearer)
+          : null,
         inspectionReport: input.inspectionReport === undefined
           ? current.inspection_report
           : input.inspectionReport,
@@ -354,8 +365,10 @@ export class ReworkInitiationService {
              processing_factory_type=$8,processing_factory_supplier_id=$9,
              processing_factory_supplier_version=$10,rework_reason=$11,
              rework_process=$12,problem_part=$13,problem_description=$14,
-             rework_quantity=$15,tail_inspection_required=$16,inspection_report=$17,updated_by=$18,version=$19,
-             source_receiving_batch_id=$20,updated_at=CURRENT_TIMESTAMP
+             rework_quantity=$15,tail_inspection_required=$16,
+             tail_inspection_cost_bearer=$17,inspection_report=$18,
+             updated_by=$19,version=$20,source_receiving_batch_id=$21,
+             updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
           reworkOrderId,
@@ -374,6 +387,7 @@ export class ReworkInitiationService {
           next.problemDescription,
           next.reworkQuantity,
           next.tailInspectionRequired,
+          next.tailInspectionCostBearer,
           next.inspectionReport,
           actor.actorId,
           nextVersion,
@@ -1173,6 +1187,13 @@ export class ReworkInitiationService {
     ) {
       throw new ApplicationError("VALIDATION_ERROR", "请完整填写供应商、款号和订单数量", 400);
     }
+    if (row.tail_inspection_required && !row.tail_inspection_cost_bearer) {
+      throw new ApplicationError("VALIDATION_ERROR", "请选择整查费用承担方", 400);
+    }
+    if (row.tail_inspection_cost_bearer === "processing_factory"
+      && row.processing_factory_type !== "supplier") {
+      throw new ApplicationError("VALIDATION_ERROR", "加工厂承担整查费用时必须选择外发加工厂", 400);
+    }
     const report = InspectionReportDraftSchema.safeParse(row.inspection_report);
     if (
       !report.success
@@ -1522,6 +1543,7 @@ export class ReworkInitiationService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       version: row.version,
@@ -1586,6 +1608,7 @@ export class ReworkInitiationService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       inspectionReport: row.inspection_report,
       attachmentIds: await this.attachmentIds(client, row.rework_order_id),
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
