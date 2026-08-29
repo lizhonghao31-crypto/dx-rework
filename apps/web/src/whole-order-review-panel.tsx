@@ -172,27 +172,61 @@ export function WholeOrderReviewPanel({
     }
   };
 
-  const correct = async (report: ReviewReport) => {
+  const canCorrectReport = (report: ReviewReport): boolean =>
+    data?.reworkStatus === "pending_order_review"
+    && data.canReview
+    && !report.rejected
+    && report.assignmentMode === "individual"
+    && report.members.length === 1;
+
+  const hasChangedCorrection = (report: ReviewReport): boolean =>
+    canCorrectReport(report)
+    && (correctionInputs[report.workReportId]?.trim() ?? "") !== String(report.effectiveQuantity);
+
+  const correctProcess = async (
+    configurationItemId: string,
+    reports: ReviewReport[],
+    processName: string,
+  ) => {
     if (!data || data.reworkStatus !== "pending_order_review") return;
-    const value = correctionInputs[report.workReportId]?.trim() ?? "";
-    if (!/^\d+$/.test(value) || Number(value) <= 0) {
-      setMessage("有效数量必须是正整数。");
+    const editableReports = reports.filter(canCorrectReport);
+    const invalid = editableReports.find((report) => {
+      const value = correctionInputs[report.workReportId]?.trim() ?? "";
+      return !/^\d+$/.test(value) || Number(value) <= 0;
+    });
+    if (invalid) {
+      setMessage(`${invalid.members[0]?.displayName ?? "执行人"}的有效数量必须是正整数。`);
       return;
     }
-    if (Number(value) === report.effectiveQuantity) {
-      setMessage("有效数量没有变化，无需保存。");
+    const corrections = editableReports
+      .filter(hasChangedCorrection)
+      .map((report) => ({
+        workReportId: report.workReportId,
+        effectiveQuantity: Number(correctionInputs[report.workReportId]!.trim()),
+      }));
+    if (corrections.length === 0) {
+      setMessage("本工序的有效数量没有变化，无需保存。");
       return;
     }
     try {
       await call(
-        "work-reports/" + report.workReportId + "/effective-quantity",
+        "rework-orders/" + reworkOrderId + "/work-report-quantity-corrections",
         WholeOrderReviewResponseSchema.parse,
-        { expectedOrderVersion: data.orderVersion, effectiveQuantity: Number(value) },
-        applyOverview,
+        { expectedOrderVersion: data.orderVersion, configurationItemId, corrections },
+        (overview) => {
+          applyOverview(overview);
+          const savedIds = new Set(corrections.map((correction) => correction.workReportId));
+          setCorrectionInputs((current) => ({
+            ...current,
+            ...Object.fromEntries(overview.reports
+              .filter((report) => savedIds.has(report.workReportId))
+              .map((report) => [report.workReportId, String(report.effectiveQuantity)])),
+          }));
+        },
       );
-      setMessage(`已修正 ${report.members[0]?.displayName ?? "执行人"} 的有效数量；原值永久保留。`);
+      setMessage(`已一次保存${processName}的 ${corrections.length} 条数量修正；原值永久保留。`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "有效数量修正失败");
+      setMessage(cause instanceof Error ? cause.message : "整组有效数量修正失败");
     }
   };
 
@@ -296,11 +330,7 @@ export function WholeOrderReviewPanel({
   }, []);
 
   const reportRow = (report: ReviewReport) => {
-    const canCorrect = tailStage
-      && data.canReview
-      && !report.rejected
-      && report.assignmentMode === "individual"
-      && report.members.length === 1;
+    const canCorrect = canCorrectReport(report);
     return <div className="quantity-report-row" key={report.workReportId}>
       <div className="quantity-report-person">
         <b>{report.members.map((member) => member.displayName).join("、") || "执行人员"}</b>
@@ -326,7 +356,6 @@ export function WholeOrderReviewPanel({
             [report.workReportId]: event.target.value,
           }))}
         />
-        <Button disabled={busy} onClick={() => void correct(report)}>保存修正</Button>
         <Button
           disabled={busy}
           onClick={() => void reject(report.workReportId, report.members[0]?.personId ?? null, report.executionKind)}
@@ -393,6 +422,13 @@ export function WholeOrderReviewPanel({
               <b className="quantity-process-expander">{open ? "−" : "+"}</b>
             </button>
             {open && <div className="quantity-process-detail">
+              {tailStage && data.canReview && reports.some(canCorrectReport) && <div className="quantity-report-actions quantity-process-save">
+                <strong>{process.completedQuantity} 件</strong>
+                <Button
+                  disabled={busy || !reports.some(hasChangedCorrection)}
+                  onClick={() => void correctProcess(process.configurationItemId, reports, process.processName)}
+                >保存修正</Button>
+              </div>}
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
               {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
                 <div className="quantity-report-person"><b>整查</b><span>有效合计</span></div>
@@ -415,7 +451,16 @@ export function WholeOrderReviewPanel({
         <strong>{data.processes[0]?.tailCheckedQuantity ?? 0} 件</strong>
         <b>{tailExpanded ? "−" : "+"}</b>
       </button>
-      {tailExpanded && <div className="quantity-process-detail">{tailReports.map(reportRow)}</div>}
+      {tailExpanded && <div className="quantity-process-detail">
+        {tailStage && data.canReview && tailReports.some(canCorrectReport) && <div className="quantity-report-actions quantity-process-save">
+          <strong>{data.processes[0]?.tailCheckedQuantity ?? 0} 件</strong>
+          <Button
+            disabled={busy || !tailReports.some(hasChangedCorrection)}
+            onClick={() => void correctProcess(tailReports[0]!.configurationItemId, tailReports, "整查报数")}
+          >保存修正</Button>
+        </div>}
+        {tailReports.map(reportRow)}
+      </div>}
     </Surface>}
 
     {data.tailInspectionRequired && !data.unifiedExecutionRequired && tailStage && submittedTailAssignments.length > 0 && <Surface>
