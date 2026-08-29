@@ -212,6 +212,11 @@ export const AddTailDefectiveQuantitySchema = z.object({
   expectedVersion: z.number().int().positive(),
   quantity: z.number().int().positive().max(1_000_000),
 }).strict();
+export const AddIePrecountSchema = z.object({
+  configurationItemId: IdSchema,
+  quantity: z.number().int().positive().max(1_000_000),
+  note: z.string().trim().min(1).max(200).optional(),
+}).strict();
 
 const DraftTextSchema = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable().optional();
