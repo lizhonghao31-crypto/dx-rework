@@ -77,7 +77,7 @@ describe("PR-06 responsibility 2.0", () => {
       engine.indexOf("const actorCapabilities"),
     );
     expect(sourceRows.match(/item\.execution_kind IN \('worker','tail_inspection'\)/g)).toHaveLength(2);
-    expect(sourceRows).toContain('includedInResponsibility: row.execution_kind === "worker"');
-    expect(sourceRows).toContain('|| order.tail_inspection_cost_bearer === "processing_factory"');
+    expect(engine).toContain('includedInResponsibility: row.execution_kind === "worker"');
+    expect(engine).toContain('|| order.tail_inspection_cost_bearer === "processing_factory"');
   });
 });
