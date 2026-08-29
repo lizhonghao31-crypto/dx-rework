@@ -573,11 +573,12 @@ export function WorkReportingForm({
   const visibleTasks = groupTasksByProcess(data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? []);
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
   const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
+  const iePrecountConfigurations = new Set<string>();
   const iePrecountTaskIds = new Set<string>();
   if (iePrecounts) {
     for (const task of [...incompleteTasks, ...completedTasks]) {
-      if (!iePrecountTaskIds.has(task.configurationItemId)) {
-        iePrecountTaskIds.add(task.configurationItemId);
+      if (!iePrecountConfigurations.has(task.configurationItemId)) {
+        iePrecountConfigurations.add(task.configurationItemId);
         iePrecountTaskIds.add(task.workTaskId);
       }
     }
