@@ -25,7 +25,7 @@ describe("order detail information architecture", () => {
     expect(detail).toContain("<dt>实收数量</dt>");
     expect(detail).toContain("sourceReceivingActualQuantity");
     expect(styles).toContain(".rework-detail-core-facts");
-    expect(styles).toContain("grid-template-columns: repeat(6, minmax(0, 1fr));");
+    expect(styles).toContain("grid-template-columns: repeat(7, minmax(0, 1fr));");
     expect(styles).not.toContain("nth-child");
     expect(styles).not.toContain("display: contents");
   });
