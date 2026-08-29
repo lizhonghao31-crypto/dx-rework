@@ -1,6 +1,6 @@
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -61,6 +61,18 @@ export type ReworkBusinessDetail = Readonly<{
   orderNo: string | null;
   orderQuantity: number | null;
   sourceReceivingActualQuantity: number | null;
+  defectiveQuantity: Readonly<{
+    receiving: number;
+    tail: number;
+    total: number;
+    canAddTail: boolean;
+    tailEntries: readonly Readonly<{
+      entryId: string;
+      quantity: number;
+      recordedBy: string;
+      recordedAt: string;
+    }>[];
+  }>;
   supplyContext: Readonly<{
     washingSupplierName: string | null;
     embroiderySupplierName: string | null;
@@ -368,6 +380,7 @@ const historyActionLabel = (action: string): string => {
   if (action.includes("process_configuration.review") || action.includes("ie_review")) return "IE 审核";
   if (action.includes("process_worker_plan")) return "返工人员预分配";
   if (action.includes("process_configuration")) return "工序配置处理";
+  if (action.includes("tail_defective_quantity")) return "尾部次品追加";
   if (action.includes("tail_inspection")) return "返工执行报数";
   if (action.includes("work_task")) return "返工人员分配";
   if (action.includes("work_report")) return "执行报数";
@@ -397,6 +410,11 @@ export function ReworkDetailPage({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
+  const [defectDialogOpen, setDefectDialogOpen] = useState(false);
+  const [tailDefectQuantity, setTailDefectQuantity] = useState("");
+  const [tailDefectMessage, setTailDefectMessage] = useState("");
+  const [tailDefectBusy, setTailDefectBusy] = useState(false);
+  const defectDialogRef = useRef<HTMLDialogElement | null>(null);
   const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false);
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
@@ -450,6 +468,13 @@ export function ReworkDetailPage({
   }, [selectedImage]);
 
   useEffect(() => {
+    const dialog = defectDialogRef.current;
+    if (!dialog) return;
+    if (defectDialogOpen && !dialog.open) dialog.showModal();
+    if (!defectDialogOpen && dialog.open) dialog.close();
+  }, [defectDialogOpen]);
+
+  useEffect(() => {
     if (!reworkOrderId) {
       setState({ kind: "error", message: "返工单链接无效" });
       return;
@@ -472,6 +497,39 @@ export function ReworkDetailPage({
   }
 
   const detail = state.value;
+  const addTailDefectiveQuantity = async (): Promise<void> => {
+    const quantity = Number(tailDefectQuantity);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setTailDefectMessage("请输入大于 0 的整数");
+      return;
+    }
+    setTailDefectBusy(true);
+    setTailDefectMessage("");
+    try {
+      const response = await fetch(apiUrl(`rework-orders/${detail.reworkOrderId}/tail-defective-quantity`), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "idempotency-key": createClientRequestId(),
+        },
+        body: JSON.stringify({ expectedVersion: detail.version, quantity }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(body?.error?.message ?? "尾部次品数量保存失败");
+      }
+      const latest = await response.json() as ReworkBusinessDetail;
+      setState({ kind: "ready", value: latest });
+      setTailDefectQuantity("");
+      setTailDefectMessage(`已增加 ${quantity} 件尾部次品`);
+    } catch (error: unknown) {
+      setTailDefectMessage(error instanceof Error ? error.message : "尾部次品数量保存失败");
+    } finally {
+      setTailDefectBusy(false);
+    }
+  };
   const orderAttachments = detail.attachments.filter((attachment) =>
     attachment.entityType === "rework_order" || attachment.entityType === "receiving_batch");
   const imageAttachments = orderAttachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
@@ -624,6 +682,7 @@ export function ReworkDetailPage({
           <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${detail.sourceReceivingActualQuantity} 件`}</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--defective"><dt>次品数量</dt><dd><button type="button" onClick={() => { setTailDefectMessage(""); setDefectDialogOpen(true); }}>{detail.defectiveQuantity.total} 件 · 查看</button></dd></div>
         </dl>
 
         {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
@@ -745,6 +804,29 @@ export function ReworkDetailPage({
           {renderSelectedTask()}
         </section>
       </div>
+
+      <dialog ref={defectDialogRef} className="rework-defect-dialog" onCancel={() => setDefectDialogOpen(false)} onClose={() => setDefectDialogOpen(false)}>
+        <div className="rework-defect-dialog__heading">
+          <div><h2>次品数量明细</h2><p>总数 = 收货阶段 + 尾部阶段；尾部新增不会修改仓库原始收货记录。</p></div>
+          <button type="button" onClick={() => setDefectDialogOpen(false)}>关闭</button>
+        </div>
+        <div className="rework-defect-dialog__totals">
+          <div><span>收货阶段</span><strong>{detail.defectiveQuantity.receiving} 件</strong><small>来自仓库收货记录</small></div>
+          <div><span>尾部阶段</span><strong>{detail.defectiveQuantity.tail} 件</strong><small>{detail.defectiveQuantity.tailEntries.length} 条追加记录</small></div>
+          <div><span>次品总数</span><strong>{detail.defectiveQuantity.total} 件</strong><small>两阶段合计</small></div>
+        </div>
+        {detail.defectiveQuantity.tailEntries.length > 0 ? <div className="rework-defect-dialog__history">
+          <h3>尾部追加记录</h3>
+          {detail.defectiveQuantity.tailEntries.map((entry) => <div key={entry.entryId}>
+            <strong>+{entry.quantity} 件</strong><span>{entry.recordedBy}</span><time dateTime={entry.recordedAt}>{formatTime(entry.recordedAt)}</time>
+          </div>)}
+        </div> : <p className="rework-defect-dialog__empty">尾部阶段暂未增加次品。</p>}
+        {detail.defectiveQuantity.canAddTail ? <div className="rework-defect-dialog__add">
+          <label>新增尾部次品数量<input autoFocus type="number" inputMode="numeric" min="1" step="1" value={tailDefectQuantity} onChange={(event) => setTailDefectQuantity(event.target.value)} /></label>
+          <Button variant="primary" disabled={tailDefectBusy} onClick={() => void addTailDefectiveQuantity()}>{tailDefectBusy ? "保存中…" : "增加次品数量"}</Button>
+        </div> : <p className="rework-defect-dialog__empty">仅尾部主管、老板和Root可增加尾部阶段次品数量。</p>}
+        {tailDefectMessage ? <p className="rework-defect-dialog__message" role="status">{tailDefectMessage}</p> : null}
+      </dialog>
 
       {selectedImage && (
         <div className="rework-image-modal" role="presentation" onMouseDown={() => setSelectedImage(null)}>
