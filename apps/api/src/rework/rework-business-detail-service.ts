@@ -141,6 +141,7 @@ type DetailRow = Readonly<{
   washing_supplier_name: string | null;
   embroidery_supplier_name: string | null;
   fabric_supplier_name: string | null;
+  embroidery_merchandiser_user_id: string | null;
   embroidery_merchandiser_name: string | null;
   merchandiser_user_id: string | null;
   merchandiser_name: string | null;
@@ -207,6 +208,7 @@ export class ReworkBusinessDetailService {
          washing_supplier.supplier_name washing_supplier_name,
          embroidery_supplier.supplier_name embroidery_supplier_name,
          fabric_supplier.supplier_name fabric_supplier_name,
+         supply_context.embroidery_merchandiser_user_id,
          embroidery_merchandiser.display_name embroidery_merchandiser_name,
          orders.merchandiser_user_id,merchandiser.display_name merchandiser_name,
          orders.processing_factory_type,orders.processing_factory_supplier_id,
@@ -637,7 +639,11 @@ export class ReworkBusinessDetailService {
 
   private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
     if (broadBusinessReader(actor)) return true;
-    if (row.created_by === actor.actorId || row.merchandiser_user_id === actor.actorId) return true;
+    if (
+      row.created_by === actor.actorId
+      || row.merchandiser_user_id === actor.actorId
+      || row.embroidery_merchandiser_user_id === actor.actorId
+    ) return true;
 
     if (actorCapabilities(actor).includes("responsibility:determine")) {
       const responsibility = await this.database.query<{ permitted: boolean }>(
