@@ -208,6 +208,10 @@ export const ReworkOrderStatusSchema = z.enum([
 ]);
 export const IdempotencyKeySchema = z.string().min(1).max(200)
   .regex(/^[A-Za-z0-9._:-]+$/);
+export const AddTailDefectiveQuantitySchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  quantity: z.number().int().positive().max(1_000_000),
+}).strict();
 
 const DraftTextSchema = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable().optional();
@@ -490,6 +494,7 @@ export const InspectionReportImageExtractionSchema = z.object({
 }).strict();
 
 export type ReworkOrderStatus = z.infer<typeof ReworkOrderStatusSchema>;
+export type AddTailDefectiveQuantity = z.infer<typeof AddTailDefectiveQuantitySchema>;
 export type ReworkProcessingFactory = z.infer<typeof ReworkProcessingFactorySchema>;
 export type InspectionStage = z.infer<typeof InspectionStageSchema>;
 export type InspectionMeasurement = z.infer<typeof InspectionMeasurementSchema>;
