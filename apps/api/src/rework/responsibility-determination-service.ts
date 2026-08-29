@@ -89,6 +89,7 @@ type OrderRow = Readonly<{
   style_no: string | null;
   order_no: string | null;
   merchandiser_user_id: string | null;
+  embroidery_merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null;
   processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null;
@@ -192,7 +193,12 @@ export class ResponsibilityDeterminationService {
   ): Promise<ResponsibilityDeterminationResponse> {
     const orderResult = await executor.query<OrderRow>(
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
-              merchandiser_user_id,processing_factory_type,
+              merchandiser_user_id,
+              (SELECT supply.embroidery_merchandiser_user_id
+               FROM rework_order_supply_context supply
+               WHERE supply.rework_order_id=rework_orders.rework_order_id)
+                embroidery_merchandiser_user_id,
+              processing_factory_type,
               processing_factory_supplier_id,processing_factory_supplier_version,
               tail_inspection_required,tail_inspection_cost_bearer,
               problem_part,problem_description,rework_quantity
@@ -535,12 +541,13 @@ export class ResponsibilityDeterminationService {
         const nextStatus: ReworkStatus = draft.settlement_schema_version === 2 && hasOwnFactory
           ? "pending_owner_signature"
           : "pending_responsibility_action";
+        const sourceAction = draft.settlement_schema_version === 2 && hasOwnFactory
+          ? "rework.responsibility.submit_owner_signature"
+          : "rework.responsibility.finalize";
         const eventId = await this.appendEvent(
           client,
           actor,
-          draft.settlement_schema_version === 2 && hasOwnFactory
-            ? "rework.responsibility.submit_owner_signature"
-            : "rework.responsibility.finalize",
+          sourceAction,
           orderId,
           undefined,
           order,
@@ -609,6 +616,28 @@ export class ResponsibilityDeterminationService {
            WHERE rework_order_id=$1`,
           [orderId, actor.actorId, nextStatus],
         );
+        await this.todos?.completeOpenByDedupePrefix(
+          client,
+          actor,
+          `responsibility-entry:${orderId}:`,
+          "Responsibility determination was finalized",
+        );
+        const merchandiserRecipients = new Set([
+          order.merchandiser_user_id,
+          order.embroidery_merchandiser_user_id,
+        ].filter((recipient): recipient is string => recipient !== null));
+        for (const recipientUserId of merchandiserRecipients) {
+          await this.todos?.information(client, actor, {
+            category: "responsibility_finalized_notice",
+            sourceEventId: eventId,
+            sourceAction,
+            entityType: "rework_order",
+            entityId: orderId,
+            recipientUserId,
+            route: { routeName: "rework_detail", entityId: orderId, tab: "responsibility" },
+            dedupeKey: `responsibility-finalized-notice:${finalizedId}:${recipientUserId}`,
+          });
+        }
         return this.get(actor, orderId, client);
       },
     );
@@ -1067,8 +1096,12 @@ export class ResponsibilityDeterminationService {
   ): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
-              merchandiser_user_id,processing_factory_type,
-              processing_factory_supplier_id,
+              merchandiser_user_id,
+              (SELECT supply.embroidery_merchandiser_user_id
+               FROM rework_order_supply_context supply
+               WHERE supply.rework_order_id=rework_orders.rework_order_id)
+                embroidery_merchandiser_user_id,
+              processing_factory_type,processing_factory_supplier_id,
               processing_factory_supplier_version,
               tail_inspection_required,tail_inspection_cost_bearer,problem_part,
               problem_description,rework_quantity
