@@ -135,7 +135,7 @@ describe("responsibility determination web integration", () => {
     expect(partyRule).toContain("border-radius: var(--dx-v2-radius-md);");
     expect(partyRule).toContain("background: var(--dx-v2-color-inset);");
     expect(styles).not.toMatch(
-      /(?:gap|padding(?:-top|-bottom)?|border-radius): [^;]*\\dpx/,
+      /(?:gap|padding(?:-top|-bottom)?|border-radius): [^;]*\dpx/,
     );
   });
 
