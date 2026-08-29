@@ -41,6 +41,11 @@ type IePrecountOverview = Readonly<{
   processes: readonly Readonly<{ configurationItemId: string; processName: string }>[];
   entries: readonly IePrecountEntry[];
 }>;
+type ProgressProcessGroup = Readonly<{
+  configurationItemId: string;
+  processName: string;
+  tasks: readonly Task[];
+}>;
 export type FrontlineWorkContext = Readonly<{
   kind: "worker" | "tail_inspection";
   reworkNo: string | null;
@@ -101,6 +106,26 @@ const groupTasksByProcess = (tasks: readonly Task[]): Task[] => {
     .map(({ task }) => task);
 };
 
+const buildProgressProcessGroups = (tasks: readonly Task[]): ProgressProcessGroup[] => {
+  const groups: Array<{ configurationItemId: string; processName: string; tasks: Task[] }> = [];
+  const byConfiguration = new Map<string, { configurationItemId: string; processName: string; tasks: Task[] }>();
+  for (const task of groupTasksByProcess(tasks)) {
+    const existing = byConfiguration.get(task.configurationItemId);
+    if (existing) {
+      existing.tasks.push(task);
+      continue;
+    }
+    const group = {
+      configurationItemId: task.configurationItemId,
+      processName: taskProcessName(task),
+      tasks: [task],
+    };
+    byConfiguration.set(task.configurationItemId, group);
+    groups.push(group);
+  }
+  return groups;
+};
+
 const formatIePrecountTime = (value: string): string =>
   new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
@@ -113,12 +138,14 @@ const formatIePrecountTime = (value: string): string =>
 
 function IePrecountCell({
   reworkOrderId,
-  task,
+  configurationItemId,
+  processName,
   overview,
   onChanged,
 }: Readonly<{
   reworkOrderId: string;
-  task: Task;
+  configurationItemId: string;
+  processName: string;
   overview: IePrecountOverview;
   onChanged?: () => Promise<void> | void;
 }>): ReactElement {
@@ -129,7 +156,7 @@ function IePrecountCell({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const latest = overview.entries.find((entry) =>
-    entry.configurationItemId === task.configurationItemId);
+    entry.configurationItemId === configurationItemId);
 
   const record = async (): Promise<void> => {
     const parsedQuantity = Number(quantity);
@@ -144,7 +171,7 @@ function IePrecountCell({
         method: "POST",
         headers: { "idempotency-key": createClientRequestId() },
         body: JSON.stringify({
-          configurationItemId: task.configurationItemId,
+          configurationItemId,
           quantity: parsedQuantity,
           ...(note.trim() ? { note: note.trim() } : {}),
         }),
@@ -161,7 +188,7 @@ function IePrecountCell({
     }
   };
 
-  return <div className="n04-progress-ie-precount">
+  return <div className={`n04-progress-ie-precount${editing ? " is-editing" : ""}`}>
     {overview.canRecord && !editing
       ? <button type="button" className="n04-ie-precount-button" onClick={() => { setEditing(true); setMessage(""); }}>IE预核</button>
       : null}
@@ -169,8 +196,8 @@ function IePrecountCell({
       ? <button type="button" className="n04-ie-precount-latest" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{latest.quantity}件</button>
       : null}
     {editing ? <form className="n04-ie-precount-editor" onSubmit={(event) => { event.preventDefault(); void record(); }}>
-      <input aria-label={`${taskProcessName(task)}预核数量`} autoFocus inputMode="numeric" min="1" step="1" type="number" placeholder="数量" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
-      <input aria-label={`${taskProcessName(task)}预核备注`} maxLength={200} placeholder="备注（选填）" value={note} onChange={(event) => setNote(event.target.value)} />
+      <input aria-label={`${processName}预核数量`} autoFocus inputMode="numeric" min="1" step="1" type="number" placeholder="数量" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+      <input aria-label={`${processName}预核备注`} maxLength={200} placeholder="备注（选填）" value={note} onChange={(event) => setNote(event.target.value)} />
       <button type="submit" className="n04-ie-precount-confirm" disabled={busy}>{busy ? "确认中…" : "确认"}</button>
       <button type="button" className="n04-ie-precount-cancel" disabled={busy} onClick={() => { setEditing(false); setQuantity(""); setNote(""); setMessage(""); }}>取消</button>
     </form> : null}
@@ -179,35 +206,83 @@ function IePrecountCell({
   </div>;
 }
 
-function ManagerTaskProgressRow({
-  reworkOrderId,
+
+function ManagerWorkerProgressRow({
   task,
   writable,
-  iePrecounts,
-  showIePrecount = false,
-  onIePrecountChanged,
   onRemove,
 }: Readonly<{
-  reworkOrderId: string;
   task: Task;
   writable: boolean;
-  iePrecounts?: IePrecountOverview;
-  showIePrecount?: boolean;
-  onIePrecountChanged?: () => Promise<void> | void;
   onRemove?: () => void;
 }>): ReactElement {
   const completed = task.remainingQuantity === 0;
   const temporary = task.members.some((member) => member.personType === "temporary");
-  return <div className={`n04-progress-row${iePrecounts ? " has-ie-precount" : ""}`}>
-    <div className="n04-progress-fact"><small>工序</small><b>{taskProcessName(task)}</b></div>
+  return <div className="n04-worker-row">
     <div className="n04-progress-fact n04-progress-fact--worker">
       <small>{task.executionKind === "tail_inspection" ? "整查人员" : "返工人员"}</small>
       <span>{onRemove ? <button type="button" className="n04-worker-remove" aria-label={`移除${task.members[0]?.displayName ?? "该员工"}`} onClick={onRemove}><span aria-hidden="true">−</span></button> : null}<b>{task.members.map((member) => member.displayName).join("、")}</b>{temporary ? <em>临时工</em> : null}</span>
     </div>
     <div className="n04-progress-fact"><small>状态</small><StatusBadge tone={completed ? "success" : writable ? "warning" : "info"}>{completed ? "已完成" : writable ? "待上报" : "未完成"}</StatusBadge></div>
     <div className="n04-progress-fact n04-progress-fact--quantity"><small>上报数量</small><b className={completed ? "is-completed" : ""}>{completed ? `${task.submittedQuantity}件` : "—"}</b></div>
-    {iePrecounts && showIePrecount ? <IePrecountCell reworkOrderId={reworkOrderId} task={task} overview={iePrecounts} {...(onIePrecountChanged ? { onChanged: onIePrecountChanged } : {})} /> : null}
   </div>;
+}
+
+function ManagerProcessProgressGroup({
+  group,
+  reworkOrderId,
+  writable,
+  expanded,
+  iePrecounts,
+  removableTaskIds,
+  onToggle,
+  onIePrecountChanged,
+  onRemoveTask,
+}: Readonly<{
+  group: ProgressProcessGroup;
+  reworkOrderId: string;
+  writable: boolean;
+  expanded: boolean;
+  iePrecounts?: IePrecountOverview;
+  removableTaskIds: ReadonlySet<string>;
+  onToggle: () => void;
+  onIePrecountChanged?: () => Promise<void> | void;
+  onRemoveTask: (task: Task) => void;
+}>): ReactElement {
+  const completedCount = group.tasks.filter((task) => task.remainingQuantity === 0).length;
+  const incompleteCount = group.tasks.length - completedCount;
+  const workerCount = group.tasks.reduce((total, task) => total + task.members.length, 0);
+  const submittedTotal = group.tasks.reduce((total, task) => total + task.submittedQuantity, 0);
+  const allCompleted = incompleteCount === 0;
+  const detailId = `n04-process-${group.configurationItemId}`;
+
+  return <Surface className={`n04-process-group${allCompleted ? " is-completed" : ""}`}>
+    <div className="n04-process-group__header">
+      <button type="button" className="n04-process-group__main" aria-expanded={expanded} aria-controls={detailId} onClick={onToggle}>
+        <strong>{group.processName}</strong>
+        <span><small>人员</small><b>{workerCount}人</b></span>
+        <span><small>完成</small><b>{completedCount}/{group.tasks.length}</b></span>
+        <span><small>上报合计</small><b>{submittedTotal}件</b></span>
+        <StatusBadge tone={allCompleted ? "success" : "warning"}>{allCompleted ? "已完成" : `未完成 ${incompleteCount}`}</StatusBadge>
+      </button>
+      {iePrecounts ? <IePrecountCell
+        reworkOrderId={reworkOrderId}
+        configurationItemId={group.configurationItemId}
+        processName={group.processName}
+        overview={iePrecounts}
+        {...(onIePrecountChanged ? { onChanged: onIePrecountChanged } : {})}
+      /> : null}
+      <button type="button" className="n04-process-group__expander" aria-expanded={expanded} aria-controls={detailId} onClick={onToggle}>{expanded ? "收起 −" : "展开 +"}</button>
+    </div>
+    {expanded ? <div className="n04-process-workers" id={detailId}>
+      {group.tasks.map((task) => <ManagerWorkerProgressRow
+        key={task.workTaskId}
+        task={task}
+        writable={writable}
+        {...(removableTaskIds.has(task.workTaskId) ? { onRemove: () => onRemoveTask(task) } : {})}
+      />)}
+    </div> : null}
+  </Surface>;
 }
 
 export function WorkReportingForm({
@@ -251,8 +326,7 @@ export function WorkReportingForm({
   const [canCreateTemporary, setCanCreateTemporary] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
-  const [pendingTasksExpanded, setPendingTasksExpanded] = useState(true);
-  const [completedTasksExpanded, setCompletedTasksExpanded] = useState(true);
+  const [expandedProcesses, setExpandedProcesses] = useState<Record<string, boolean>>({});
 
   const filteredPeople = useMemo(() => {
     const selectedConfiguration = configItems.find((item) => item.configurationItemId === adjustmentConfigurationItemId);
@@ -573,16 +647,7 @@ export function WorkReportingForm({
   const visibleTasks = groupTasksByProcess(data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? []);
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
   const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
-  const iePrecountConfigurations = new Set<string>();
-  const iePrecountTaskIds = new Set<string>();
-  if (iePrecounts) {
-    for (const task of [...incompleteTasks, ...completedTasks]) {
-      if (!iePrecountConfigurations.has(task.configurationItemId)) {
-        iePrecountConfigurations.add(task.configurationItemId);
-        iePrecountTaskIds.add(task.workTaskId);
-      }
-    }
-  }
+  const progressProcessGroups = buildProgressProcessGroups(visibleTasks);
   const managerProgressView = !frontlineContext && (canAssign || canAdjustActive || iePrecounts !== undefined);
   const activeAdjustmentWritable = data?.reworkStatus === "in_progress" && canAdjustActive;
   const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
@@ -645,22 +710,28 @@ export function WorkReportingForm({
           <strong>任务进度</strong>
           <span className="is-pending">未完成 {incompleteTasks.length}</span>
           <span className="is-completed">已完成 {completedTasks.length}</span>
+          {activeAdjustmentWritable ? <button type="button" className="n04-add-worker" onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</button> : null}
         </div>
-        <Surface className="n04-progress-group n04-progress-group--pending">
-          <div className="n04-progress-group__toolbar">
-            <button type="button" className={`n04-progress-group__heading${pendingTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={pendingTasksExpanded} aria-controls="n04-pending-task-list" onClick={() => setPendingTasksExpanded((expanded) => !expanded)}>
-              <h2>未完成</h2><StatusBadge tone="warning">{incompleteTasks.length} 项</StatusBadge><b aria-hidden="true">{pendingTasksExpanded ? "收起 −" : "展开 +"}</b>
-            </button>
-            {activeAdjustmentWritable ? <button type="button" className="n04-add-worker" onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</button> : null}
-          </div>
-          {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} reworkOrderId={loadedReworkOrderId} task={task} writable={workReportingWritable} {...(iePrecounts ? { iePrecounts, showIePrecount: iePrecountTaskIds.has(task.workTaskId), onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); } } : {})} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
-        </Surface>
-        <Surface className="n04-progress-group n04-progress-group--completed">
-          <button type="button" className={`n04-progress-group__heading${completedTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={completedTasksExpanded} aria-controls="n04-completed-task-list" onClick={() => setCompletedTasksExpanded((expanded) => !expanded)}>
-            <h2>已完成</h2><StatusBadge tone="success">{completedTasks.length} 项</StatusBadge><b aria-hidden="true">{completedTasksExpanded ? "收起 −" : "展开 +"}</b>
-          </button>
-          {completedTasksExpanded ? <div id="n04-completed-task-list">{completedTasks.length > 0 ? <div className="n04-progress-list">{completedTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} reworkOrderId={loadedReworkOrderId} task={task} writable={workReportingWritable} {...(iePrecounts ? { iePrecounts, showIePrecount: iePrecountTaskIds.has(task.workTaskId), onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); } } : {})} />)}</div> : <p className="n04-progress-empty">暂无已完成任务。</p>}</div> : null}
-        </Surface>
+        <div className="n04-process-list">
+          {progressProcessGroups.map((group) => <ManagerProcessProgressGroup
+            key={group.configurationItemId}
+            group={group}
+            reworkOrderId={loadedReworkOrderId}
+            writable={workReportingWritable}
+            expanded={expandedProcesses[group.configurationItemId] === true}
+            removableTaskIds={removableActiveTaskIds}
+            onToggle={() => setExpandedProcesses((current) => ({
+              ...current,
+              [group.configurationItemId]: current[group.configurationItemId] !== true,
+            }))}
+            onRemoveTask={setRemovalTask}
+            {...(iePrecounts ? {
+              iePrecounts,
+              onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); },
+            } : {})}
+          />)}
+          {progressProcessGroups.length === 0 ? <p className="n04-progress-empty">暂无返工任务。</p> : null}
+        </div>
         {workReportingWritable && canAssign && incompleteTasks.length === 0 && completedTasks.length > 0 ? <div className="n04-completion-action">
           <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>{busy ? "核验中…" : "全部完成，进入节点05"}</Button>
         </div> : null}
