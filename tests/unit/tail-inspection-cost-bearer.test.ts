@@ -35,6 +35,10 @@ describe("tail inspection cost bearer", () => {
     expect(provenanceMigration).toContain("'production_override'");
     expect(provenanceMigration).toContain("'pending_final_quantity_ie_review'");
     expect(provenanceMigration).toContain("THEN 'processing_factory'");
+    const waiverGuardFields =
+      "ARRAY['status','tail_inspection_required','tail_inspection_cost_bearer'," +
+      "'tail_inspection_cost_bearer_source','updated_by','version','updated_at']";
+    expect(provenanceMigration.split(waiverGuardFields)).toHaveLength(3); // symmetric waiver guard
     expect(form).toContain("谁承担整查费用？");
     expect(form).toContain('tailInspectionCostBearer: ""');
     expect(contracts).toContain("TailInspectionCostBearerSchema = z.enum([");
