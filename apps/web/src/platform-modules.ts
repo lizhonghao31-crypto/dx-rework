@@ -34,6 +34,10 @@ export function shouldRedirectLegacyLandingToPlatformHome(
   _search: string,
   _selectedModule: string | null,
 ): boolean {
+  void _user;
+  void _path;
+  void _search;
+  void _selectedModule;
   return false;
 }
 
