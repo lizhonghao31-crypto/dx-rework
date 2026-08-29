@@ -34,6 +34,13 @@ type Supplier = Readonly<{
 type AllocationForm = { responsibilityType: ResponsibilityType; sharePercent: string; multiplier: string; supplierId: string };
 type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; executionKind: "worker" | "tail_inspection"; baseAmount: string; allocations: AllocationForm[] };
 
+const defaultBatchAllocation = (): AllocationForm => ({
+  responsibilityType: "own_factory",
+  sharePercent: "100",
+  multiplier: "1.000",
+  supplierId: "",
+});
+
 const requestError = async (response: Response): Promise<string> => {
   try { return ((await response.json()) as { error?: { message?: string } }).error?.message ?? "请求未完成，请稍后重试"; }
   catch { return "请求未完成，请稍后重试"; }
@@ -152,16 +159,25 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(null);
   const [processes, setProcesses] = useState<ProcessForm[]>([]);
   const [tailCostBearer, setTailCostBearer] = useState<TailInspectionCostBearer | null>(null);
+  const [tailBearerEditing, setTailBearerEditing] = useState(false);
+  const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [batchAllocations, setBatchAllocations] = useState<AllocationForm[]>(() => [defaultBatchAllocation()]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [changeReason, setChangeReason] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [message, setMessage] = useState("正在加载责任判定…");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const pendingMutationKeys = useRef<Record<string, string>>({});
+  const batchDialogRef = useRef<HTMLDivElement | null>(null);
+  const batchReturnFocusRef = useRef<HTMLElement | null>(null);
 
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next);
     setTailCostBearer(next.tailInspectionCostBearer);
+    setTailBearerEditing(next.tailInspectionRequired && next.tailInspectionCostBearer === null);
+    setSelectedProcessIds([]);
+    setBatchDialogOpen(false);
     setProcesses(formsFromResponse(next));
     setChangeReason(next.determination?.reason ?? "");
     if (canEditDetermination(next)) {
@@ -198,6 +214,38 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     }
     void reload().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "责任判定加载失败"));
   }, [reworkOrderId]);
+  useEffect(() => {
+    if (!batchDialogOpen) return;
+    const dialog = batchDialogRef.current;
+    if (!dialog) return;
+    const focusableSelector = 'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+    focusable[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setBatchDialogOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const currentFocusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+      const first = currentFocusable[0];
+      const last = currentFocusable[currentFocusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      batchReturnFocusRef.current?.focus();
+    };
+  }, [batchDialogOpen]);
 
   const determination = response?.determination ?? null;
   const editable = response !== null && canEditDetermination(response);
@@ -213,10 +261,17 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   );
   const handlerUserId = response?.handlerUserId ?? currentUserId;
   const tailSource = response?.sourceProcesses.find((source) => source.executionKind === "tail_inspection");
+  const workerProcessIds = processes.filter((process) => process.executionKind === "worker").map((process) => process.configurationItemId);
+  const allWorkerProcessesSelected = workerProcessIds.length > 0 && workerProcessIds.every((id) => selectedProcessIds.includes(id));
   const selectTailCostBearer = (next: TailInspectionCostBearer): void => {
     if (!response) return;
     setTailCostBearer(next);
-    setProcesses(formsFromResponse(response, next));
+    setProcesses((current) => {
+      const workerProcesses = current.filter((process) => process.executionKind === "worker");
+      if (next !== "processing_factory") return workerProcesses;
+      const tailProcess = formsFromResponse(response, next).find((process) => process.executionKind === "tail_inspection");
+      return tailProcess ? [...workerProcesses, tailProcess] : workerProcesses;
+    });
   };
 
   const setAllocation = (configurationItemId: string, allocationIndex: number, update: Partial<AllocationForm>): void => setProcesses((current) => current.map((process) => process.configurationItemId !== configurationItemId ? process : {
@@ -241,6 +296,39 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     ...process,
     allocations: process.allocations.filter((_, index) => index !== allocationIndex),
   }));
+  const openBatchDialog = (): void => {
+    const seedProcess = processes.find((process) => selectedProcessIds.includes(process.configurationItemId));
+    setBatchAllocations(seedProcess?.allocations.length
+      ? seedProcess.allocations.map((allocation) => ({ ...allocation }))
+      : [defaultBatchAllocation()]);
+    batchReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setBatchDialogOpen(true);
+  };
+  const setBatchAllocation = (allocationIndex: number, update: Partial<AllocationForm>): void => setBatchAllocations((current) => current.map((allocation, index) => index === allocationIndex ? { ...allocation, ...update } : allocation));
+  const addBatchAllocation = (): void => setBatchAllocations((current) => {
+    const nextType = responsibilityTypes.find((type) => !current.some((allocation) => allocation.responsibilityType === type.value))?.value;
+    if (!nextType) return current;
+    return [...current, {
+      responsibilityType: nextType,
+      sharePercent: "",
+      multiplier: isExternal(nextType) ? "1.200" : "1.000",
+      supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "",
+    }];
+  });
+  const applyBatchAllocation = (): void => {
+    const selected = processes.filter((process) => process.executionKind === "worker" && selectedProcessIds.includes(process.configurationItemId));
+    if (selected.length === 0) return;
+    if (!selected.every((process) => processValid({ ...process, allocations: batchAllocations }))) {
+      setMessage("批量判责内容不完整：比例必须为 100%，外部责任还需选择供应商且倍率不低于 1.2。");
+      return;
+    }
+    setProcesses((current) => current.map((process) => selectedProcessIds.includes(process.configurationItemId)
+      ? { ...process, allocations: batchAllocations.map((allocation) => ({ ...allocation })) }
+      : process));
+    setBatchDialogOpen(false);
+    setSelectedProcessIds([]);
+    setMessage(`已批量填写 ${selected.length} 道工序，检查无误后统一提交责任判定。`);
+  };
   const payloadProcesses = () => processes.map((process) => ({
     configurationItemId: process.configurationItemId,
     multiplier: "1.000",
@@ -362,26 +450,42 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     </div>}
     {message && <p className="responsibility-message" role="status">{message}</p>}
 
-    {response?.tailInspectionRequired ? <section className="responsibility-process">
+    {response?.tailInspectionRequired ? <section className="responsibility-process responsibility-tail-review">
       <div className="responsibility-process__title">
         <div>
           <h3>整查费用承担</h3>
-          <p>工资基础 {tailSource ? displayMoney(tailSource.baseAmount) : "待生成"}；选择加工厂后自动按 100% × 1.2 纳入外部扣款。</p>
+          <p>质检发起返工时已完成初判；生产主管在本节点确认，只有初判有误时才需要修改。</p>
         </div>
+        <b>质检初判：{response.tailInspectionCostBearer === "own_factory" ? "本厂" : response.tailInspectionCostBearer === "processing_factory" ? "加工厂" : "未填写"}</b>
       </div>
-      <fieldset className="rework-v2-tail-choice" disabled={!editable || Boolean(busyAction)}>
-        <legend>谁承担整查费用？</legend>
+      <div className="responsibility-tail-review__summary">
+        <span>工资基础 {tailSource ? displayMoney(tailSource.baseAmount) : "待生成"}</span>
+        <strong>本次确认：{tailCostBearer === "own_factory" ? "本厂承担" : tailCostBearer === "processing_factory" ? "加工厂承担（100% × 1.2）" : "待补充"}</strong>
+        {editable && !tailBearerEditing && <Button disabled={Boolean(busyAction)} onClick={() => setTailBearerEditing(true)}>修改承担方</Button>}
+      </div>
+      {tailBearerEditing && <fieldset className="rework-v2-tail-choice" disabled={!editable || Boolean(busyAction)}>
+        <legend>生产主管复核</legend>
         <label><input type="radio" name="responsibilityTailCostBearer" checked={tailCostBearer === "own_factory"} onChange={() => selectTailCostBearer("own_factory")} />本厂</label>
         <label><input type="radio" name="responsibilityTailCostBearer" checked={tailCostBearer === "processing_factory"} disabled={response.processingFactory?.type !== "supplier"} onChange={() => selectTailCostBearer("processing_factory")} />加工厂</label>
-      </fieldset>
+        {tailCostBearer !== null && <Button disabled={Boolean(busyAction)} onClick={() => setTailBearerEditing(false)}>完成修改</Button>}
+      </fieldset>}
     </section> : null}
+
+    {editable && workerProcessIds.length > 0 && <div className="responsibility-batch-toolbar">
+      <label><input type="checkbox" checked={allWorkerProcessesSelected} onChange={(event) => setSelectedProcessIds(event.target.checked ? workerProcessIds : [])} />全选工序</label>
+      <span>已选 {selectedProcessIds.length} 道</span>
+      <Button variant="primary" disabled={selectedProcessIds.length === 0 || Boolean(busyAction)} onClick={openBatchDialog}>批量判责</Button>
+    </div>}
 
     {processes.map((process) => {
       const persisted = determination?.processes.find((item) => item.configurationItemId === process.configurationItemId);
       const totalBps = shareTotalBps(process.allocations);
       return <section className="responsibility-process" key={process.configurationItemId}>
         <div className="responsibility-process__title">
-          <div><h3>{process.processName}</h3><p>工资基础 {displayMoney(process.baseAmount)} · {process.pricingUnit === "piece" ? "按件" : "按小时"}</p></div>
+          <div className="responsibility-process__identity">
+            {editable && process.executionKind === "worker" && <input aria-label={`选择工序 ${process.processName}`} type="checkbox" checked={selectedProcessIds.includes(process.configurationItemId)} onChange={(event) => setSelectedProcessIds((current) => event.target.checked ? [...current, process.configurationItemId] : current.filter((id) => id !== process.configurationItemId))} />}
+            <div><h3>{process.processName}</h3><p>工资基础 {displayMoney(process.baseAmount)} · {process.pricingUnit === "piece" ? "按件" : "按小时"}</p></div>
+          </div>
           <b className={totalBps === 10000n ? "share-ok" : "share-error"}>责任比例 {totalBps === null ? "格式有误" : `${Number(totalBps) / 100}%`}</b>
         </div>
         <div className="responsibility-party-list">
@@ -421,6 +525,38 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
         </div>}
       </section>;
     })}
+
+    {batchDialogOpen && <div className="responsibility-batch-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setBatchDialogOpen(false);
+    }}>
+      <div ref={batchDialogRef} className="responsibility-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-responsibility-title">
+        <div><h3 id="batch-responsibility-title">批量判责</h3><p>将完整责任配置应用到已选的 {selectedProcessIds.length} 道工序。应用后会覆盖这些工序当前的责任草稿，仍需点击“提交责任判定”才会保存。</p></div>
+        <div className="responsibility-party-list">
+          {batchAllocations.map((allocation, allocationIndex) => {
+            const meta = typeMeta(allocation.responsibilityType);
+            const availableTypes = responsibilityTypes.filter((item) => item.value === allocation.responsibilityType || !batchAllocations.some((current) => current.responsibilityType === item.value));
+            const supplierOptions = suppliers.filter((supplier) => supplier.supplierType === meta.supplierType);
+            return <div className="responsibility-party responsibility-batch-party" key={`${allocation.responsibilityType}:${allocationIndex}`}>
+              <label className="dx-field"><span>责任方</span><span className="dx-field__control"><select value={allocation.responsibilityType} onChange={(event) => {
+                const nextType = event.target.value as ResponsibilityType;
+                setBatchAllocation(allocationIndex, { responsibilityType: nextType, multiplier: isExternal(nextType) ? "1.200" : "1.000", supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "" });
+              }}>{availableTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label>
+              <InsetField label="承担比例（%）" value={allocation.sharePercent} inputMode="decimal" placeholder="例如 100" onChange={(event) => setBatchAllocation(allocationIndex, { sharePercent: event.target.value })} />
+              {isExternal(allocation.responsibilityType) ? <>
+                <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} placeholder={supplierOptions.length ? "选择供应商" : "没有可用供应商"} emptyText="没有匹配的供应商" onChange={(supplierId: string) => setBatchAllocation(allocationIndex, { supplierId })} /></span></label>
+                <InsetField label="扣款倍率（最低 1.2）" value={allocation.multiplier} inputMode="decimal" onChange={(event) => setBatchAllocation(allocationIndex, { multiplier: event.target.value })} />
+              </> : <div className="responsibility-party__fixed"><span>责任倍率</span><b>1.000×</b></div>}
+              <Button disabled={batchAllocations.length === 1} onClick={() => setBatchAllocations((current) => current.filter((_, index) => index !== allocationIndex))}>移除</Button>
+            </div>;
+          })}
+        </div>
+        <Button disabled={batchAllocations.length === responsibilityTypes.length} onClick={addBatchAllocation}>+ 添加责任方</Button>
+        <div className="responsibility-actions">
+          <Button variant="primary" onClick={applyBatchAllocation}>确认覆盖并应用</Button>
+          <Button onClick={() => setBatchDialogOpen(false)}>取消</Button>
+        </div>
+      </div>
+    </div>}
 
     {editable && <InsetField label="共同责任记录 / 修改说明（可选）" value={changeReason} disabled={Boolean(busyAction)} placeholder="有需要时填写" onChange={(event) => setChangeReason(event.target.value)} />}
     {!editable && determination?.reason && <p className="responsibility-message">共同责任记录 / 修改说明：{determination.reason}</p>}

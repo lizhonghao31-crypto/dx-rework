@@ -42,6 +42,90 @@
   margin-bottom: 0;
 }
 
+.responsibility-process__identity,
+.responsibility-batch-toolbar,
+.responsibility-tail-review__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--dx-v2-space-2);
+}
+
+.responsibility-process__identity > input,
+.responsibility-batch-toolbar input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--dx-v2-color-primary);
+}
+
+.responsibility-batch-toolbar {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 35, 52, 0.14);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+  box-shadow: 0 8px 20px rgba(15, 35, 52, 0.12);
+}
+
+.responsibility-batch-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.responsibility-batch-toolbar span {
+  flex: 1;
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.responsibility-tail-review__summary {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--dx-v2-color-inset);
+}
+
+.responsibility-batch-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 35, 52, 0.42);
+}
+
+.responsibility-batch-dialog {
+  display: grid;
+  gap: var(--dx-v2-space-3);
+  width: min(920px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: var(--dx-v2-space-4);
+  border-radius: var(--dx-v2-radius-lg);
+  background: var(--dx-v2-color-surface);
+  box-shadow: 0 18px 48px rgba(15, 35, 52, 0.24);
+}
+
+.responsibility-batch-dialog h3,
+.responsibility-batch-dialog p {
+  margin: 0;
+}
+
+.responsibility-batch-party {
+  grid-template-columns:
+    minmax(140px, 0.9fr)
+    minmax(100px, 0.6fr)
+    minmax(210px, 1.3fr)
+    minmax(130px, 0.7fr)
+    auto;
+}
+
 .responsibility-party-list {
   display: grid;
   gap: 8px;
@@ -246,6 +330,11 @@
     font-size: 16px;
   }
 
+  .responsibility-tail-review__summary {
+    align-items: stretch;
+    display: grid;
+  }
+
   .responsibility-allocations > div {
     grid-template-columns: 1fr;
   }
@@ -295,6 +384,14 @@
 
   .responsibility-party {
     grid-template-columns: 1fr;
+  }
+
+  .responsibility-batch-toolbar {
+    top: 4px;
+  }
+
+  .responsibility-batch-toolbar .dx-button {
+    width: 100%;
   }
 
   .multiplier-tools .dx-field {
