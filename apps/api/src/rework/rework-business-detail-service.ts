@@ -26,6 +26,13 @@ const tailDefectMutableStatuses = new Set<ReworkOrderStatus>([
 const canAddTailDefectiveQuantity = (actor: TrustedActorContext): boolean =>
   actor.actorRoles.some((role) => ["tail_supervisor", "owner_group", "root_superuser"].includes(role));
 
+const canRecordIePrecount = (actor: TrustedActorContext): boolean =>
+  actor.actorRoles.includes("root_superuser")
+  || (
+    actor.actorRoles.includes("ie_reviewer")
+    && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("process:review")
+  );
+
 const requestHash = (scope: string, input: unknown): string => createHash("sha256")
   .update(JSON.stringify({ scope, input }))
   .digest("hex");
@@ -41,6 +48,22 @@ export type ReworkBusinessDetail = Readonly<{
   orderNo: string | null;
   orderQuantity: number | null;
   sourceReceivingActualQuantity: number | null;
+  iePrecounts: Readonly<{
+    canRecord: boolean;
+    processes: readonly Readonly<{
+      configurationItemId: string;
+      processName: string;
+    }>[];
+    entries: readonly Readonly<{
+      entryId: string;
+      configurationItemId: string;
+      processName: string;
+      quantity: number;
+      note: string | null;
+      recordedBy: string;
+      recordedAt: string;
+    }>[];
+  }>;
   defectiveQuantity: Readonly<{
     receiving: number;
     tail: number;
@@ -389,6 +412,45 @@ export class ReworkBusinessDetailService {
       [reworkOrderId, canViewWagePeriods(actor)],
     );
 
+    const iePrecountFoundation = (await this.database.query<{ available: boolean }>(
+      "SELECT to_regclass('rework_ie_precount_entries') IS NOT NULL AS available",
+    )).rows[0]?.available === true;
+    const iePrecountProcesses = iePrecountFoundation
+      ? await this.database.query<{ configuration_item_id: string; process_name: string }>(
+        `WITH latest AS (
+           SELECT configuration_id
+           FROM rework_process_configurations
+           WHERE rework_order_id=$1 AND status='approved'
+           ORDER BY configuration_version DESC
+           LIMIT 1
+         )
+         SELECT item.configuration_item_id,item.process_name
+         FROM latest
+         JOIN rework_process_configuration_items item USING(configuration_id)
+         WHERE item.execution_kind='worker'
+         ORDER BY item.position,item.configuration_item_id`,
+        [reworkOrderId],
+      )
+      : { rows: [] };
+    const iePrecountEntries = iePrecountFoundation
+      ? await this.database.query<{
+        ie_precount_entry_id: string; configuration_item_id: string; process_name: string;
+        quantity: number; note: string | null; recorded_by_name: string; recorded_at: Date;
+      }>(
+        `SELECT entry.ie_precount_entry_id,entry.configuration_item_id,item.process_name,
+                entry.quantity,entry.note,COALESCE(actor.display_name,entry.recorded_by::text) recorded_by_name,
+                entry.recorded_at
+         FROM rework_ie_precount_entries entry
+         JOIN rework_process_configuration_items item
+           ON item.configuration_item_id=entry.configuration_item_id
+         LEFT JOIN app_users actor ON actor.id=entry.recorded_by
+         WHERE entry.rework_order_id=$1
+         ORDER BY entry.recorded_at DESC,entry.ie_precount_entry_id DESC
+         LIMIT 200`,
+        [reworkOrderId],
+      )
+      : { rows: [] };
+
     return {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
@@ -402,6 +464,24 @@ export class ReworkBusinessDetailService {
       sourceReceivingActualQuantity: row.source_receiving_actual_quantity == null
         ? null
         : Number(row.source_receiving_actual_quantity),
+      iePrecounts: {
+        canRecord: iePrecountFoundation
+          && canRecordIePrecount(actor)
+          && ["in_progress", "pending_order_review"].includes(row.status),
+        processes: iePrecountProcesses.rows.map((process) => ({
+          configurationItemId: process.configuration_item_id,
+          processName: process.process_name,
+        })),
+        entries: iePrecountEntries.rows.map((entry) => ({
+          entryId: entry.ie_precount_entry_id,
+          configurationItemId: entry.configuration_item_id,
+          processName: entry.process_name,
+          quantity: entry.quantity,
+          note: entry.note,
+          recordedBy: entry.recorded_by_name,
+          recordedAt: entry.recorded_at.toISOString(),
+        })),
+      },
       defectiveQuantity: {
         receiving: Number(row.source_receiving_defective_quantity ?? 0),
         tail: Number(row.tail_defective_quantity ?? 0),
@@ -468,6 +548,99 @@ export class ReworkBusinessDetailService {
         remark: event.reason,
       })),
     };
+  }
+
+  async addIePrecount(
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: Readonly<{ configurationItemId: string; quantity: number; note?: string }>,
+    idempotencyKey: string,
+  ): Promise<Readonly<{ value: ReworkBusinessDetail; reused: boolean }>> {
+    if (!canRecordIePrecount(actor)) {
+      throw new ApplicationError("FORBIDDEN", "只有IE或Root可以记录IE预核数", 403);
+    }
+    const scope = "rework.ie_precount.record";
+    const client = await this.database.connect();
+    let reused = false;
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: requestHash(scope, { reworkOrderId, ...input }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => ({
+        statusCode: 201,
+        response: await this.addIePrecountInTransaction(client, actor, reworkOrderId, input),
+      }));
+      await client.query("COMMIT");
+      reused = outcome.reused;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    return { value: await this.get(actor, reworkOrderId), reused };
+  }
+
+  private async addIePrecountInTransaction(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+    input: Readonly<{ configurationItemId: string; quantity: number; note?: string }>,
+  ): Promise<Readonly<{ entryId: string }>> {
+    const target = await client.query<{ status: ReworkOrderStatus; process_name: string }>(
+      `SELECT target.status,item.process_name
+       FROM rework_orders target
+       JOIN rework_process_configurations configuration
+         ON configuration.rework_order_id=target.rework_order_id
+        AND configuration.status='approved'
+       JOIN rework_process_configuration_items item
+         ON item.configuration_id=configuration.configuration_id
+        AND item.configuration_item_id=$2
+        AND item.execution_kind='worker'
+       WHERE target.rework_order_id=$1 AND target.status<>'deleted'
+       FOR SHARE OF target,item`,
+      [reworkOrderId, input.configurationItemId],
+    );
+    const row = target.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "返工单工序不存在", 404);
+    if (!["in_progress", "pending_order_review"].includes(row.status)) {
+      throw new ApplicationError("CONFLICT", "IE预核数只允许在N04或N05记录", 409);
+    }
+
+    const entryId = randomUUID();
+    const eventId = await this.events.append(client, actor, {
+      action: "rework.ie_precount.record",
+      entityType: "rework_order",
+      entityId: reworkOrderId,
+      before: { reworkOrderId, referenceOnly: true },
+      after: {
+        reworkOrderId,
+        entryId,
+        configurationItemId: input.configurationItemId,
+        processName: row.process_name,
+        quantity: input.quantity,
+        note: input.note ?? null,
+        referenceOnly: true,
+      },
+      ...(input.note ? { reason: input.note } : {}),
+    });
+    await client.query(
+      "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
+      [eventId, actor.requestId],
+    );
+    await client.query(
+      `INSERT INTO rework_ie_precount_entries(
+         ie_precount_entry_id,rework_order_id,configuration_item_id,quantity,note,
+         recorded_by,operation_event_id,request_id
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [entryId, reworkOrderId, input.configurationItemId, input.quantity,
+        input.note ?? null, actor.actorId, eventId, actor.requestId],
+    );
+    return { entryId };
   }
 
   async addTailDefectiveQuantity(
