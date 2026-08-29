@@ -47,15 +47,35 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
 })[status] ?? status;
 
 type ReviewReport = WholeOrderReviewResponse["reports"][number];
+type IePrecountEntry = Readonly<{
+  configurationItemId: string;
+  quantity: number;
+  note: string | null;
+  recordedBy: string;
+  recordedAt: string;
+}>;
+type IePrecountOverview = Readonly<{ entries: readonly IePrecountEntry[] }>;
+
+const formatIePrecountTime = (value: string): string =>
+  new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(value));
 
 export function WholeOrderReviewPanel({
   reworkOrderId,
   onChanged,
   embedded = false,
+  iePrecounts,
 }: {
   reworkOrderId: string;
   onChanged: () => Promise<void>;
   embedded?: boolean;
+  iePrecounts?: IePrecountOverview;
 }) {
   const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
   const [tailData, setTailData] = useState<TailInspectionResponse | null>(null);
@@ -398,6 +418,11 @@ export function WholeOrderReviewPanel({
           const reports = data.reports.filter((report) =>
             report.executionKind === "worker"
             && report.configurationItemId === process.configurationItemId);
+          const iePrecount = iePrecounts?.entries.reduce<IePrecountEntry | undefined>((latest, entry) => {
+            if (entry.configurationItemId !== process.configurationItemId) return latest;
+            if (!latest || Date.parse(entry.recordedAt) > Date.parse(latest.recordedAt)) return entry;
+            return latest;
+          }, undefined);
           return <section className={`quantity-process-card${process.complete ? " is-complete" : " is-mismatch"}`} key={process.configurationItemId}>
             <button
               className="quantity-process-toggle"
@@ -410,6 +435,7 @@ export function WholeOrderReviewPanel({
             >
               <span className="quantity-process-name">{process.processName}</span>
               <span><small>工人合计</small><strong>{process.completedQuantity}</strong></span>
+              {iePrecounts ? <span><small>IE预核</small><strong>{iePrecount?.quantity ?? "—"}</strong></span> : null}
               {data.tailInspectionRequired ? <>
                 <span><small>整查</small><strong>{process.tailCheckedQuantity}</strong></span>
                 <span><small>整查余量</small><strong>{process.tailCheckedQuantity - process.completedQuantity}</strong></span>
@@ -430,6 +456,16 @@ export function WholeOrderReviewPanel({
                 >保存修正</Button>
               </div>}
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
+              {iePrecount ? <div className="quantity-report-row">
+                <div className="quantity-report-person">
+                  <b>IE预核</b>
+                  <span>{iePrecount.recordedBy} · {formatIePrecountTime(iePrecount.recordedAt)}</span>
+                </div>
+                <div className="quantity-report-value">
+                  <strong>{iePrecount.quantity} 件</strong>
+                  {iePrecount.note ? <small>{iePrecount.note}</small> : null}
+                </div>
+              </div> : null}
               {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
                 <div className="quantity-report-person"><b>整查</b><span>有效合计</span></div>
                 <div className="quantity-report-value"><strong>{process.tailCheckedQuantity} 件</strong></div>

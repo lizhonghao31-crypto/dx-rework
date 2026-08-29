@@ -666,7 +666,13 @@ export function ReworkDetailPage({
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review" || selected.key === "quantity_adjustment")) {
-      if (canSeeWholeOrderReview) return <WorkReportingForm reworkOrderId={detail.reworkOrderId} taskMode="whole_order_review" embedded onOrderChanged={syncAfterNodeAction} />;
+      if (canSeeWholeOrderReview) return <WorkReportingForm
+        reworkOrderId={detail.reworkOrderId}
+        taskMode="whole_order_review"
+        embedded
+        onOrderChanged={syncAfterNodeAction}
+        {...(selected.key === "final_quantity_ie_review" ? { iePrecounts: detail.iePrecounts } : {})}
+      />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
     if (selected.state !== "future" && (selected.key === "responsibility" || selected.key === "owner_signature")) {

@@ -79,6 +79,20 @@ describe("IE pre-count reference ledger", () => {
     expect(page).not.toContain("请IE核数");
   });
 
+  it("shows the latest recorded process count in the N06 comparison row", async () => {
+    const [page, form, review] = await Promise.all([
+      readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
+      readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
+      readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
+    ]);
+    expect(page).toContain('selected.key === "final_quantity_ie_review" ? { iePrecounts: detail.iePrecounts }');
+    expect(form).toContain("{...(iePrecounts ? { iePrecounts } : {})}");
+    expect(review).toContain("<small>IE预核</small>");
+    expect(review).toContain('iePrecount?.quantity ?? "—"');
+    expect(review).toContain("formatIePrecountTime(iePrecount.recordedAt)");
+    expect(review).toContain("{iePrecount.note ? <small>{iePrecount.note}</small> : null}");
+  });
+
   it("registers an append-only, audited migration with the exact checksum", async () => {
     const migration = await readFile("apps/api/migrations/0118_ie_precount_ledger.sql");
     const manifest = JSON.parse(await readFile("apps/api/src/platform/migration-manifest.json", "utf8")) as {
