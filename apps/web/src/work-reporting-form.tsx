@@ -184,6 +184,7 @@ function ManagerTaskProgressRow({
   task,
   writable,
   iePrecounts,
+  showIePrecount = false,
   onIePrecountChanged,
   onRemove,
 }: Readonly<{
@@ -191,6 +192,7 @@ function ManagerTaskProgressRow({
   task: Task;
   writable: boolean;
   iePrecounts?: IePrecountOverview;
+  showIePrecount?: boolean;
   onIePrecountChanged?: () => Promise<void> | void;
   onRemove?: () => void;
 }>): ReactElement {
@@ -204,7 +206,7 @@ function ManagerTaskProgressRow({
     </div>
     <div className="n04-progress-fact"><small>状态</small><StatusBadge tone={completed ? "success" : writable ? "warning" : "info"}>{completed ? "已完成" : writable ? "待上报" : "未完成"}</StatusBadge></div>
     <div className="n04-progress-fact n04-progress-fact--quantity"><small>上报数量</small><b className={completed ? "is-completed" : ""}>{completed ? `${task.submittedQuantity}件` : "—"}</b></div>
-    {iePrecounts ? <IePrecountCell reworkOrderId={reworkOrderId} task={task} overview={iePrecounts} {...(onIePrecountChanged ? { onChanged: onIePrecountChanged } : {})} /> : null}
+    {iePrecounts && showIePrecount ? <IePrecountCell reworkOrderId={reworkOrderId} task={task} overview={iePrecounts} {...(onIePrecountChanged ? { onChanged: onIePrecountChanged } : {})} /> : null}
   </div>;
 }
 
@@ -571,6 +573,15 @@ export function WorkReportingForm({
   const visibleTasks = groupTasksByProcess(data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? []);
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
   const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
+  const iePrecountTaskIds = new Set<string>();
+  if (iePrecounts) {
+    for (const task of [...incompleteTasks, ...completedTasks]) {
+      if (!iePrecountTaskIds.has(task.configurationItemId)) {
+        iePrecountTaskIds.add(task.configurationItemId);
+        iePrecountTaskIds.add(task.workTaskId);
+      }
+    }
+  }
   const managerProgressView = !frontlineContext && (canAssign || canAdjustActive || iePrecounts !== undefined);
   const activeAdjustmentWritable = data?.reworkStatus === "in_progress" && canAdjustActive;
   const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
@@ -641,13 +652,13 @@ export function WorkReportingForm({
             </button>
             {activeAdjustmentWritable ? <button type="button" className="n04-add-worker" onClick={openActiveAddition} disabled={busy || configItems.length === 0}>新增员工</button> : null}
           </div>
-          {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} reworkOrderId={loadedReworkOrderId} task={task} writable={workReportingWritable} {...(iePrecounts ? { iePrecounts, onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); } } : {})} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
+          {pendingTasksExpanded ? <div id="n04-pending-task-list">{incompleteTasks.length > 0 ? <div className="n04-progress-list">{incompleteTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} reworkOrderId={loadedReworkOrderId} task={task} writable={workReportingWritable} {...(iePrecounts ? { iePrecounts, showIePrecount: iePrecountTaskIds.has(task.workTaskId), onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); } } : {})} {...(removableActiveTaskIds.has(task.workTaskId) ? { onRemove: () => setRemovalTask(task) } : {})} />)}</div> : <p className="n04-progress-empty">所有返工任务均已完成。</p>}</div> : null}
         </Surface>
         <Surface className="n04-progress-group n04-progress-group--completed">
           <button type="button" className={`n04-progress-group__heading${completedTasksExpanded ? "" : " is-collapsed"}`} aria-expanded={completedTasksExpanded} aria-controls="n04-completed-task-list" onClick={() => setCompletedTasksExpanded((expanded) => !expanded)}>
             <h2>已完成</h2><StatusBadge tone="success">{completedTasks.length} 项</StatusBadge><b aria-hidden="true">{completedTasksExpanded ? "收起 −" : "展开 +"}</b>
           </button>
-          {completedTasksExpanded ? <div id="n04-completed-task-list">{completedTasks.length > 0 ? <div className="n04-progress-list">{completedTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} reworkOrderId={loadedReworkOrderId} task={task} writable={workReportingWritable} {...(iePrecounts ? { iePrecounts, onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); } } : {})} />)}</div> : <p className="n04-progress-empty">暂无已完成任务。</p>}</div> : null}
+          {completedTasksExpanded ? <div id="n04-completed-task-list">{completedTasks.length > 0 ? <div className="n04-progress-list">{completedTasks.map((task) => <ManagerTaskProgressRow key={task.workTaskId} reworkOrderId={loadedReworkOrderId} task={task} writable={workReportingWritable} {...(iePrecounts ? { iePrecounts, showIePrecount: iePrecountTaskIds.has(task.workTaskId), onIePrecountChanged: async () => { await reload(); await onOrderChanged?.(); } } : {})} />)}</div> : <p className="n04-progress-empty">暂无已完成任务。</p>}</div> : null}
         </Surface>
         {workReportingWritable && canAssign && incompleteTasks.length === 0 && completedTasks.length > 0 ? <div className="n04-completion-action">
           <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>{busy ? "核验中…" : "全部完成，进入节点05"}</Button>
