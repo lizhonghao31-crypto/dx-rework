@@ -715,7 +715,7 @@ export class ResponsibilityDeterminationService {
     const targetTailCostBearerSource =
       targetTailCostBearer === null
         ? null
-        : targetTailCostBearer !== order.tail_inspection_cost_bearer
+        : input.tailInspectionCostBearer !== undefined
           ? "production_override"
           : order.tail_inspection_cost_bearer_source ?? "legacy_default";
     if (targetTailCostBearer === "processing_factory"
