@@ -4,7 +4,7 @@
 
 .rework-detail-core-facts {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
 }
@@ -32,6 +32,19 @@
   font-size: 14px;
   font-weight: 700;
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rework-detail-core-fact--defective button {
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  color: var(--dx-v2-color-primary);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
