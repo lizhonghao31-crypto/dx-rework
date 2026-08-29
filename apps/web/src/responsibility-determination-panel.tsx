@@ -162,13 +162,15 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const [tailBearerEditing, setTailBearerEditing] = useState(false);
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
-  const [batchAllocation, setBatchAllocation] = useState<AllocationForm>(defaultBatchAllocation);
+  const [batchAllocations, setBatchAllocations] = useState<AllocationForm[]>(() => [defaultBatchAllocation()]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [changeReason, setChangeReason] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [message, setMessage] = useState("正在加载责任判定…");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const pendingMutationKeys = useRef<Record<string, string>>({});
+  const batchDialogRef = useRef<HTMLDivElement | null>(null);
+  const batchReturnFocusRef = useRef<HTMLElement | null>(null);
 
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
     setResponse(next);
@@ -212,6 +214,38 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     }
     void reload().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "责任判定加载失败"));
   }, [reworkOrderId]);
+  useEffect(() => {
+    if (!batchDialogOpen) return;
+    const dialog = batchDialogRef.current;
+    if (!dialog) return;
+    const focusableSelector = 'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+    focusable[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setBatchDialogOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const currentFocusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+      const first = currentFocusable[0];
+      const last = currentFocusable[currentFocusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      batchReturnFocusRef.current?.focus();
+    };
+  }, [batchDialogOpen]);
 
   const determination = response?.determination ?? null;
   const editable = response !== null && canEditDetermination(response);
@@ -264,20 +298,32 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   }));
   const openBatchDialog = (): void => {
     const seedProcess = processes.find((process) => selectedProcessIds.includes(process.configurationItemId));
-    const seed = seedProcess?.allocations.length === 1 ? seedProcess.allocations[0] : null;
-    setBatchAllocation(seed ? { ...seed } : defaultBatchAllocation());
+    setBatchAllocations(seedProcess?.allocations.length
+      ? seedProcess.allocations.map((allocation) => ({ ...allocation }))
+      : [defaultBatchAllocation()]);
+    batchReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setBatchDialogOpen(true);
   };
-  const applyBatchAllocation = async (): Promise<void> => {
+  const setBatchAllocation = (allocationIndex: number, update: Partial<AllocationForm>): void => setBatchAllocations((current) => current.map((allocation, index) => index === allocationIndex ? { ...allocation, ...update } : allocation));
+  const addBatchAllocation = (): void => setBatchAllocations((current) => {
+    const nextType = responsibilityTypes.find((type) => !current.some((allocation) => allocation.responsibilityType === type.value))?.value;
+    if (!nextType) return current;
+    return [...current, {
+      responsibilityType: nextType,
+      sharePercent: "",
+      multiplier: isExternal(nextType) ? "1.200" : "1.000",
+      supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "",
+    }];
+  });
+  const applyBatchAllocation = (): void => {
     const selected = processes.filter((process) => process.executionKind === "worker" && selectedProcessIds.includes(process.configurationItemId));
     if (selected.length === 0) return;
-    if (!selected.every((process) => processValid({ ...process, allocations: [batchAllocation] }))) {
+    if (!selected.every((process) => processValid({ ...process, allocations: batchAllocations }))) {
       setMessage("批量判责内容不完整：比例必须为 100%，外部责任还需选择供应商且倍率不低于 1.2。");
       return;
     }
-    if (!(await confirmInApp(`确认覆盖已勾选的 ${selected.length} 道工序？仅更新当前页面，仍需点击“提交责任判定”才会保存。`))) return;
     setProcesses((current) => current.map((process) => selectedProcessIds.includes(process.configurationItemId)
-      ? { ...process, allocations: [{ ...batchAllocation }] }
+      ? { ...process, allocations: batchAllocations.map((allocation) => ({ ...allocation })) }
       : process));
     setBatchDialogOpen(false);
     setSelectedProcessIds([]);
@@ -483,19 +529,30 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     {batchDialogOpen && <div className="responsibility-batch-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setBatchDialogOpen(false);
     }}>
-      <div className="responsibility-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-responsibility-title">
-        <div><h3 id="batch-responsibility-title">批量判责</h3><p>将同一责任内容应用到已选的 {selectedProcessIds.length} 道工序。</p></div>
-        <label className="dx-field"><span>责任方</span><span className="dx-field__control"><select value={batchAllocation.responsibilityType} onChange={(event) => {
-          const nextType = event.target.value as ResponsibilityType;
-          setBatchAllocation({ responsibilityType: nextType, sharePercent: "100", multiplier: isExternal(nextType) ? "1.200" : "1.000", supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "" });
-        }}>{responsibilityTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label>
-        <InsetField label="承担比例（%）" value={batchAllocation.sharePercent} inputMode="decimal" placeholder="例如 100" onChange={(event) => setBatchAllocation((current) => ({ ...current, sharePercent: event.target.value }))} />
-        {isExternal(batchAllocation.responsibilityType) ? <>
-          <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={suppliers.filter((supplier) => supplier.supplierType === typeMeta(batchAllocation.responsibilityType).supplierType).map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={batchAllocation.supplierId} placeholder="选择供应商" emptyText="没有匹配的供应商" onChange={(supplierId: string) => setBatchAllocation((current) => ({ ...current, supplierId }))} /></span></label>
-          <InsetField label="扣款倍率（最低 1.2）" value={batchAllocation.multiplier} inputMode="decimal" onChange={(event) => setBatchAllocation((current) => ({ ...current, multiplier: event.target.value }))} />
-        </> : <div className="responsibility-party__fixed"><span>责任倍率</span><b>1.000×</b></div>}
+      <div ref={batchDialogRef} className="responsibility-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-responsibility-title">
+        <div><h3 id="batch-responsibility-title">批量判责</h3><p>将完整责任配置应用到已选的 {selectedProcessIds.length} 道工序。应用后会覆盖这些工序当前的责任草稿，仍需点击“提交责任判定”才会保存。</p></div>
+        <div className="responsibility-party-list">
+          {batchAllocations.map((allocation, allocationIndex) => {
+            const meta = typeMeta(allocation.responsibilityType);
+            const availableTypes = responsibilityTypes.filter((item) => item.value === allocation.responsibilityType || !batchAllocations.some((current) => current.responsibilityType === item.value));
+            const supplierOptions = suppliers.filter((supplier) => supplier.supplierType === meta.supplierType);
+            return <div className="responsibility-party responsibility-batch-party" key={`${allocation.responsibilityType}:${allocationIndex}`}>
+              <label className="dx-field"><span>责任方</span><span className="dx-field__control"><select value={allocation.responsibilityType} onChange={(event) => {
+                const nextType = event.target.value as ResponsibilityType;
+                setBatchAllocation(allocationIndex, { responsibilityType: nextType, multiplier: isExternal(nextType) ? "1.200" : "1.000", supplierId: nextType === "processing_factory" && response ? preferredProcessingFactoryId(response) : "" });
+              }}>{availableTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label>
+              <InsetField label="承担比例（%）" value={allocation.sharePercent} inputMode="decimal" placeholder="例如 100" onChange={(event) => setBatchAllocation(allocationIndex, { sharePercent: event.target.value })} />
+              {isExternal(allocation.responsibilityType) ? <>
+                <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} placeholder={supplierOptions.length ? "选择供应商" : "没有可用供应商"} emptyText="没有匹配的供应商" onChange={(supplierId: string) => setBatchAllocation(allocationIndex, { supplierId })} /></span></label>
+                <InsetField label="扣款倍率（最低 1.2）" value={allocation.multiplier} inputMode="decimal" onChange={(event) => setBatchAllocation(allocationIndex, { multiplier: event.target.value })} />
+              </> : <div className="responsibility-party__fixed"><span>责任倍率</span><b>1.000×</b></div>}
+              <Button disabled={batchAllocations.length === 1} onClick={() => setBatchAllocations((current) => current.filter((_, index) => index !== allocationIndex))}>移除</Button>
+            </div>;
+          })}
+        </div>
+        <Button disabled={batchAllocations.length === responsibilityTypes.length} onClick={addBatchAllocation}>+ 添加责任方</Button>
         <div className="responsibility-actions">
-          <Button variant="primary" onClick={() => void applyBatchAllocation()}>应用到已选工序</Button>
+          <Button variant="primary" onClick={applyBatchAllocation}>确认覆盖并应用</Button>
           <Button onClick={() => setBatchDialogOpen(false)}>取消</Button>
         </div>
       </div>
