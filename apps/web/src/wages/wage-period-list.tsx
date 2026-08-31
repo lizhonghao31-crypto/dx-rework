@@ -1,5 +1,6 @@
 import { WagePeriodSchema, type WagePeriod } from "@dx-rework/contracts/wages";
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
@@ -185,7 +186,7 @@ export function WagePeriodList() {
                   <article key={person.name}>
                     <b>{person.name}</b>
                     <span>{person.orderCount.size} 张返工单</span>
-                    <strong>¥{person.amount.toFixed(2)}</strong>
+                    <strong>{formatBusinessCurrency(person.amount)}</strong>
                   </article>
                 ))}
               </div>
@@ -221,7 +222,7 @@ export function WagePeriodList() {
               </div>
               <dl>
                 <dt>工人 / 明细</dt><dd>{period.personCount} / {period.sourceItemCount}</dd>
-                <dt>工资总额</dt><dd><strong>¥{period.totalAmount}</strong></dd>
+                <dt>工资总额</dt><dd><strong>{formatBusinessCurrency(period.totalAmount)}</strong></dd>
               </dl>
             </Surface>
           ))}

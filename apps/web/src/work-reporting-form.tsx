@@ -7,6 +7,7 @@ import {
   WorkReportsBatchResponseSchema,
   type ReworkWorkTasksResponse,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 
@@ -88,9 +89,6 @@ const canReadWorkFacts = (user: WorkReportingUser): boolean =>
 
 const taskProcessName = (task: Task): string =>
   task.executionKind === "tail_inspection" ? "整查" : task.processName;
-
-const formatApprovedUnitPrice = (value: number): string =>
-  value.toFixed(3).replace(/\.?0+$/, "");
 
 const groupTasksByProcess = (tasks: readonly Task[]): Task[] => {
   const processOrder = new Map<string, number>();
@@ -746,7 +744,7 @@ export function WorkReportingForm({
           </StatusBadge>
         </div>
         {task.unitPrice !== null ? <small className="work-reporting-approved-price">
-          IE 核准单价：¥{formatApprovedUnitPrice(task.unitPrice)} / {task.pricingUnit === "piece" ? "件" : "小时"}
+          IE 核准单价：{formatBusinessCurrency(task.unitPrice)} / {task.pricingUnit === "piece" ? "件" : "小时"}
         </small> : null}
         <p>{task.remainingQuantity === 0 ? `已上报 ${task.submittedQuantity} 件` : workReportingWritable ? "按实际完成件数报数" : "该节点已结束"}</p>
         {selfReportableTaskIds.has(task.workTaskId) ? <div className="mobile-actions work-reporting-actions">

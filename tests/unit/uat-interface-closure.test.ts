@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
-import { businessFieldLabel, businessValue, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
+import { businessFieldLabel, businessValue, formatBusinessCurrency, formatBusinessDecimal, formatBusinessMoney, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
 
 const read = (path: string) => readFile(path, "utf8");
 
@@ -59,7 +59,7 @@ describe("UAT interface closure", () => {
     expect(report).toContain("businessValue(column.key, row[column.key])");
     expect(report).toContain("businessFieldLabel(key)");
     expect(report).toContain("snapshotBusinessValue(key, total)");
-    expect(report).toContain("minimumFractionDigits:2");
+    expect(report).toContain("snapshotBusinessValue = businessValue");
     expect(report).not.toContain("Math.round(numeric)");
     expect(report).not.toContain('action="返回全部订单"');
     expect(report).not.toContain("数据快照：");
@@ -71,6 +71,10 @@ describe("UAT interface closure", () => {
     expect(businessFieldLabel("amount")).toBe("金额");
     expect(businessFieldLabel("exceptionCount")).toBe("异常数量");
     expect(businessValue("proposedAmount", "24.25")).toBe("¥24.25");
+    expect(formatBusinessDecimal("2000")).toBe("2,000");
+    expect(formatBusinessMoney("4.5000")).toBe("4.5");
+    expect(formatBusinessCurrency("9000.00")).toBe("¥9,000");
+    expect(businessValue("amount", "9000.00")).toBe("¥9,000");
     expect(translateTechnicalDetails({
       expiresAt: "2026-08-11T00:00:00.000Z",
       boundEntityType: "rework_order",
@@ -113,7 +117,7 @@ describe("UAT interface closure", () => {
   it("keeps wage detail and download without adjustment controls or page navigation", async () => {
     const detail = await read("apps/web/src/wages/wage-period-detail.tsx");
     expect(detail).toContain("查看分摊计算");
-    expect(detail).toContain("formatBusinessMoney(item.payableAmount)");
+    expect(detail).toContain("formatBusinessCurrency(item.payableAmount)");
     expect(detail).toContain("download");
     expect(detail).not.toContain("window.location.assign");
     expect(detail).not.toContain("发起工资调整");

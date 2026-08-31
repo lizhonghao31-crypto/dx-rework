@@ -17,13 +17,7 @@ const statuses:Record<ReportType,readonly (readonly [string,string])[]>={
   exceptions:[["","全部异常"],["overdue_todo","待办逾期"],["blocked_recipient","接收人失效"],["todo_delivery_failed","投递失败"],["deduction_follow_up_overdue","扣款跟进逾期"]],
 };
 type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse}|{kind:"unavailable";message:string};
-const snapshotBusinessValue=(key:string,value:string):string=>{
-  const formatted=businessValue(key,value);
-  const numeric=Number(value);
-  return formatted.startsWith("¥")&&Number.isFinite(numeric)
-    ? `¥${numeric.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2})}`
-    : formatted;
-};
+const snapshotBusinessValue = businessValue;
 
 export function ReportCenterPage(){
   const initial=useMemo(()=>new URLSearchParams(window.location.search),[]);

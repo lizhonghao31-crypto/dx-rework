@@ -1,4 +1,5 @@
 import type { ManagementReworkRow } from "@dx-rework/contracts/reporting";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 
 import { reportingPageUrl } from "./reporting-client.js";
@@ -50,9 +51,9 @@ export function ManagementOrderCard({
         </div>
         <dl>
           <div><dt>{terminal ? "流程状态" : "节点停留"}</dt><dd>{order.status === "cancelled" ? "已取消 · 停止计时" : order.status === "completed" ? "已完成 · 停止计时" : age(order.agingSeconds)}</dd></div>
-          <div><dt>工资</dt><dd>¥{order.wageAmount}</dd></div>
-          <div><dt>责任</dt><dd>¥{order.responsibilityAmount}</dd></div>
-          <div><dt>外部差额</dt><dd>¥{order.externalRemainingAmount}</dd></div>
+          <div><dt>工资</dt><dd>{formatBusinessCurrency(order.wageAmount)}</dd></div>
+          <div><dt>责任</dt><dd>{formatBusinessCurrency(order.responsibilityAmount)}</dd></div>
+          <div><dt>外部差额</dt><dd>{formatBusinessCurrency(order.externalRemainingAmount)}</dd></div>
           <div><dt>附件</dt><dd>{order.attachmentCount > 0 ? `${order.attachmentCount} 份 · 点击订单查阅` : "无附件"}</dd></div>
         </dl>
         <small className="reporting-order-card__activity">{activityMessage}</small>

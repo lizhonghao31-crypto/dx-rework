@@ -5,6 +5,7 @@ import {
   type ProcessConfigurationResponse,
   type WorkTaskAssignablePeopleResponse,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import {
   ProcessWorkerPlanActivationResponseSchema,
   ProcessWorkerPlanResponseSchema,
@@ -586,5 +587,5 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
 }
 
 function PlanReadonly({ plan, configuration }: { plan: ProcessWorkerPlanResponse; configuration?: ProcessConfigurationResponse["configuration"] }) {
-  return <div className="process-worker-summary">{plan.assignments.map((assignment) => { const item = configuration?.items.find((candidate) => candidate.configurationItemId === assignment.configurationItemId); return <div key={assignment.configurationItemId}><div><b>{assignment.executionKind === "tail_inspection" ? "整查 · 特殊工序" : assignment.processName}</b>{item?.unitPrice ? <small>¥{formatPrice(item.unitPrice)} / 件</small> : null}</div><span>{assignment.members.length ? assignment.members.map((member) => `${member.displayName}${member.personType === "temporary" ? "（临时）" : ""}`).join("、") : "未分配人员"}</span></div>; })}</div>;
+  return <div className="process-worker-summary">{plan.assignments.map((assignment) => { const item = configuration?.items.find((candidate) => candidate.configurationItemId === assignment.configurationItemId); return <div key={assignment.configurationItemId}><div><b>{assignment.executionKind === "tail_inspection" ? "整查 · 特殊工序" : assignment.processName}</b>{item?.unitPrice ? <small>{formatBusinessCurrency(item.unitPrice)} / 件</small> : null}</div><span>{assignment.members.length ? assignment.members.map((member) => `${member.displayName}${member.personType === "temporary" ? "（临时）" : ""}`).join("、") : "未分配人员"}</span></div>; })}</div>;
 }

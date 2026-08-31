@@ -1,5 +1,6 @@
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -241,9 +242,6 @@ const formatTime = (value: string | null): string => {
     hour12: false, timeZone: "Asia/Shanghai",
   }).format(new Date(value));
 };
-
-const formatSinglePieceReworkTotal = (value: number): string =>
-  value.toFixed(3).replace(/\.?0+$/, "");
 
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
@@ -832,7 +830,7 @@ export function ReworkDetailPage({
         </div>
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : `¥${formatSinglePieceReworkTotal(detail.singlePieceReworkTotal)}`}</span></div>
+          <div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span></div>
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
           {renderSelectedTask()}
         </section>

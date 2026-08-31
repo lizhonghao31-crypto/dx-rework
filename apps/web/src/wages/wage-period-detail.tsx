@@ -3,7 +3,7 @@ import {
   type WagePeriod,
   type WagePeriodDetail,
 } from "@dx-rework/contracts/wages";
-import { formatBusinessDecimal, formatBusinessMoney } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -125,7 +125,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       <Surface className="wage-summary">
         <dl>
           <dt>工人 / 明细</dt><dd>{period.personCount} / {period.sourceItemCount}</dd>
-          <dt>工资总额</dt><dd><strong>¥{period.totalAmount}</strong></dd>
+          <dt>工资总额</dt><dd><strong>{formatBusinessCurrency(period.totalAmount)}</strong></dd>
         </dl>
         <div className="wage-actions">
           {WAGE_MONTH_CLOSE_ENABLED && period.canLock ? (
@@ -144,11 +144,11 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
       <section className="wage-grid">
         {items.map((item) => (
           <Surface key={item.wageItemId} className="wage-item-card">
-            <h2>{item.personNameSnapshot} · 应付 ¥{formatBusinessMoney(item.payableAmount)}</h2>
+            <h2>{item.personNameSnapshot} · 应付 {formatBusinessCurrency(item.payableAmount)}</h2>
             <p>{item.supplierNameSnapshot} · {item.personTypeSnapshot === "temporary" ? "临时工" : "正式工"} · {item.reworkNoSnapshot} · {item.styleNoSnapshot}</p>
-            <p>{item.processNameSnapshot} · {formatBusinessDecimal(item.actualQuantitySnapshot)} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 基础单价 ¥{formatBusinessDecimal(item.unitPriceSnapshot)}</p>
-            <p>工资系数 ×{formatBusinessDecimal(item.temporaryWageMultiplier)} · 应付金额 ¥{formatBusinessMoney(item.payableAmount)}</p>
-            <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 ¥{formatBusinessMoney(item.groupAmount)}</p>
+            <p>{item.processNameSnapshot} · {formatBusinessDecimal(item.actualQuantitySnapshot)} {item.pricingUnitSnapshot === "piece" ? "件" : "小时"} · 基础单价 {formatBusinessCurrency(item.unitPriceSnapshot)}</p>
+            <p>工资系数 ×{formatBusinessDecimal(item.temporaryWageMultiplier, 3)} · 应付金额 {formatBusinessCurrency(item.payableAmount)}</p>
+            <p>{item.assignmentMode === "collective" ? "集体计件" : "个人计件"} · 组总额 {formatBusinessCurrency(item.groupAmount)}</p>
             <details className="wage-calculation-detail">
               <summary>查看分摊计算</summary>
               <p>个人分摊原值 {formatBusinessDecimal(item.exactPersonShare, 4)} · 尾差顺序 {item.remainderRank}/{item.memberCount}</p>
