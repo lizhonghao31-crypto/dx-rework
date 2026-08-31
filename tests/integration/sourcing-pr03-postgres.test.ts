@@ -621,6 +621,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {
+    const legacyProcessDescription = "旧".repeat(500);
     const attachmentId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -633,10 +634,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-DELETE-1",
       styleNo: "DELETE-STYLE-1",
       deliveryDate: "2026-10-01",
-      processDescription: "删除回归工艺",
+      processDescription: legacyProcessDescription,
       orderQuantity: 88,
       attachmentIds: [attachmentId],
     }, randomUUID());
+    expect(created.value).toMatchObject({
+      processDescription: legacyProcessDescription,
+      processes: [legacyProcessDescription],
+    });
 
     await expect(service.deleteByRoot(
       merchandiserActor(),

@@ -13,7 +13,9 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(contract).toContain("MAX_SOURCING_PROCESSES = 20");
     expect(contract).toContain("processes: z.array(SourcingProcessSchema)");
     expect(service).toContain("process_items");
-    expect(service).toContain("processDescription: processes.join(\"、\")");
+    expect(service).toContain("normalizeText(input.processDescription, \"工艺\", 500)");
+    expect(service).toContain("processDescription: legacyProcessDescription ?? processes.join(\"、\")");
+    expect(service).toContain("normalized.processItems");
     expect(migration).toContain("ADD COLUMN process_items text[]");
     expect(migration).toContain("sourcing_case.process_description");
     expect(migration).toContain("WHERE sourcing_case.deleted_at IS NULL");

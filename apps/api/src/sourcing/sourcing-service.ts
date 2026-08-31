@@ -722,17 +722,25 @@ export class SourcingService {
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     const erpOrderNo = normalizeText(input.erpOrderNo, "ERP订单号", 100);
-    const processes = (input.processes ?? (input.processDescription ? [input.processDescription] : []))
-      .map((process) => normalizeText(process, "工艺", 100));
-    if (processes.length < 1 || processes.length > 20) fail("工艺必须填写1至20项");
-    if (new Set(processes).size !== processes.length) fail("工艺不能重复");
+    const processItems = input.processes
+      ? input.processes.map((process) => normalizeText(process, "工艺", 100))
+      : null;
+    const legacyProcessDescription = input.processDescription
+      ? normalizeText(input.processDescription, "工艺", 500)
+      : null;
+    const processes = processItems ?? (legacyProcessDescription ? [legacyProcessDescription] : []);
+    if (processItems && (processItems.length < 1 || processItems.length > 20)) {
+      fail("工艺必须填写1至20项");
+    }
+    if (processItems && new Set(processItems).size !== processItems.length) fail("工艺不能重复");
     const normalized = {
       erpOrderNo,
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       deliveryDate: input.deliveryDate,
       processes,
-      processDescription: processes.join("、"),
+      processItems,
+      processDescription: legacyProcessDescription ?? processes.join("、"),
       orderQuantity: normalizeQuantity(input.orderQuantity),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
@@ -775,7 +783,7 @@ export class SourcingService {
             normalized.orderQuantity,
             normalized.deliveryDate,
             normalized.processDescription,
-            normalized.processes,
+            normalized.processItems,
             actor.actorId,
             eventId,
             actor.requestId,
