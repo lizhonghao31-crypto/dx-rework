@@ -616,6 +616,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         `sourcing:${created.value.sourcingCaseId}:owner:2:`,
         `sourcing:${created.value.sourcingCaseId}:finance:2:1:`,
         `sourcing:${created.value.sourcingCaseId}:factory_change:${requestedChange!.entryId}:`,
+        `sourcing:${created.value.sourcingCaseId}:finance:`,
         `sourcing:${created.value.sourcingCaseId}:finance:3:1:`,
         `sourcing:${created.value.sourcingCaseId}:factory_change:${latestRequest!.entryId}:`,
         `sourcing:${created.value.sourcingCaseId}:finance:3:1:`,
