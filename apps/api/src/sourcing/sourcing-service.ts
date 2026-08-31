@@ -2001,6 +2001,13 @@ export class SourcingService {
         if (immediate) {
           await this.applyFactoryChange(client, actor, effectSource, eventId, changeReason);
         } else {
+          if (source.status === "pending_finance_reconciliation") {
+            await this.todoProjection?.completeOpenByDedupePrefix(
+              client, actor,
+              `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:`,
+              "订单转厂审批中，原财务核对待办暂停",
+            );
+          }
           const approvalRole = initiatorRole === "order_merchandiser"
             ? FACTORY_CHANGE_VERIFY_ROLE
             : FACTORY_CHANGE_OWNER_ROLE;
@@ -2211,6 +2218,19 @@ export class SourcingService {
             policyKey: "general",
             dedupeKey: `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}`,
           });
+        } else if (source.status === "pending_finance_reconciliation") {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
+            category: "sourcing_finance_reconcile",
+            sourceEventId: eventId,
+            sourceAction: action,
+            entityType: "sourcing_case",
+            entityId: sourcingCaseId,
+            requiredRole: FINANCE_RECONCILE_ROLE,
+            requiredCapability: FINANCE_RECONCILE_CAPABILITY,
+            route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+            policyKey: "general",
+            dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}`,
+          });
         } else if (source.status === "pending_factory_change_verification") {
           await client.query(
             `INSERT INTO sourcing_case_transitions(
@@ -2322,6 +2342,25 @@ export class SourcingService {
         if (!source) return fail("报价选厂询价或当前选厂决定不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_finance_reconciliation") {
           fail("该订单当前不在财务核对阶段", 409, "INVALID_STATE_TRANSITION");
+        }
+        const openFactoryChange = await client.query(
+          `SELECT 1
+           FROM sourcing_factory_change_requests request_row
+           WHERE request_row.sourcing_case_id=$1
+             AND NOT EXISTS (
+               SELECT 1 FROM sourcing_decisions effective
+               WHERE effective.source_change_request_id=request_row.factory_change_request_id
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM sourcing_factory_change_decisions rejected
+               WHERE rejected.factory_change_request_id=request_row.factory_change_request_id
+                 AND rejected.decision='rejected'
+             )
+           LIMIT 1`,
+          [sourcingCaseId],
+        );
+        if (openFactoryChange.rowCount) {
+          fail("订单转厂审批中，财务暂不能核对", 409, "INVALID_STATE_TRANSITION");
         }
         const expectedFactoryResult = await client.query<{
           supplier_id: string;
