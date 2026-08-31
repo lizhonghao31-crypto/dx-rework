@@ -46,7 +46,7 @@ describe("sourcing role-aware factory change workflow", () => {
     expect(service).toContain('"sourcing.factory_change.management_approved"');
     expect(service).toContain('"sourcing.factory_change.owner_rejected"');
     expect(service).toContain('"sourcing.factory_change.effective"');
-    expect(service).toContain("production management first submits");
+    expect(service).toContain("生产管理首次提交选厂信息后才可发起订单转厂");
     expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/management"');
     expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/owner"');
     expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/:factoryChangeRequestId/owner-decision"');
