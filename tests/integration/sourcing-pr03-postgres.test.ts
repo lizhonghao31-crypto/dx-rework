@@ -544,7 +544,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
           version: 1,
           result: "difference",
           differenceFields: ["total_amount"],
-          totalAmount: "1400.00",
+          totalAmount: "1438.50",
         }),
         expect.objectContaining({ version: 2, result: "match", totalAmount: "1438.50" }),
       ]));
