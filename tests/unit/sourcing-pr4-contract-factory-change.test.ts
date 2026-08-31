@@ -60,7 +60,9 @@ describe("sourcing role-aware factory change workflow", () => {
     expect(migration).toContain("factory_change_effective");
     expect(migration).toContain("requires_owner_approval");
     expect(migration).toContain("decision_role");
+    expect(migration).toContain("guard_sourcing_reconciliation_without_open_factory_change");
     expect(page).toContain('{ key: "finance", number: "05"');
+    expect(page).toContain("订单转厂正在审批，财务核对已暂停");
     expect(page).not.toContain('{ key: "contract"');
     expect(page).toContain("生产管理首次提交加工厂和单价后开放");
     expect(page).toContain("订单转厂");
