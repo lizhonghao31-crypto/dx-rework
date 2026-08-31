@@ -1748,6 +1748,7 @@ export class SourcingService {
     client: PoolClient,
     actor: TrustedActorContext,
     source: Readonly<{
+      sourcing_case_id: string;
       status: string;
       sequence: number | string;
       sourcing_decision_id: string;
