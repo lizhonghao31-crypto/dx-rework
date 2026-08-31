@@ -281,6 +281,14 @@ export function registerSourcingRoutes(
     },
   );
 
+  app.get<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/factory-changes/current",
+    async (request) => dependencies.service.getCurrentFactoryChange(
+      await readActor(request),
+      caseId(request.params.sourcingCaseId),
+    ),
+  );
+
   app.post<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/factory-changes",
     async (request, reply) => {
@@ -299,6 +307,42 @@ export function registerSourcingRoutes(
     },
   );
 
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/factory-changes/management",
+    async (request, reply) => {
+      const parsed = RequestSourcingFactoryChangeSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "转厂信息不完整");
+      const result = await dependencies.service.requestFactoryChange(
+        await actionActor(request, "production_management", "sourcing:decision:record"),
+        caseId(request.params.sourcingCaseId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/factory-changes/owner",
+    async (request, reply) => {
+      const parsed = RequestSourcingFactoryChangeSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "转厂信息不完整");
+      const result = await dependencies.service.requestFactoryChange(
+        await actionActor(request, "owner_group", "sourcing:owner:approve"),
+        caseId(request.params.sourcingCaseId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
   app.post<{ Params: { sourcingCaseId: string; factoryChangeRequestId: string } }>(
     "/sourcing/cases/:sourcingCaseId/factory-changes/:factoryChangeRequestId/decision",
     async (request, reply) => {
@@ -308,6 +352,25 @@ export function registerSourcingRoutes(
         : validationError(parsed.error.issues[0]?.message ?? "换厂核实信息不完整");
       const result = await dependencies.service.decideFactoryChange(
         await actionActor(request, "production_management", "sourcing:factory_change:verify"),
+        caseId(request.params.sourcingCaseId),
+        caseId(request.params.factoryChangeRequestId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
+  app.post<{ Params: { sourcingCaseId: string; factoryChangeRequestId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/factory-changes/:factoryChangeRequestId/owner-decision",
+    async (request, reply) => {
+      const parsed = DecideSourcingFactoryChangeSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "老板转厂审批信息不完整");
+      const result = await dependencies.service.decideFactoryChange(
+        await actionActor(request, "owner_group", "sourcing:owner:approve"),
         caseId(request.params.sourcingCaseId),
         caseId(request.params.factoryChangeRequestId),
         data,
