@@ -4,6 +4,7 @@ import { calculateSourcingTotalExact } from "@dx-rework/contracts";
 import type {
   CreateSourcingCase,
   CreateSourcingIeQuote,
+  DeleteSourcingCaseResponse,
   DecideSourcingException,
   DecideSourcingFactoryChange,
   DecideSourcingOwner,
@@ -37,6 +38,7 @@ const FACTORY_CHANGE_REQUEST_CAPABILITY = "sourcing:factory_change:request";
 const FACTORY_CHANGE_VERIFY_CAPABILITY = "sourcing:factory_change:verify";
 const FINANCE_RECONCILE_CAPABILITY = "sourcing:finance:reconcile";
 const EXCEPTION_VERIFY_CAPABILITY = "sourcing:exception:verify";
+const CASE_DELETE_CAPABILITY = "sourcing:delete";
 const READ_CAPABILITY = "sourcing:view";
 const ROOT_ROLE = "root_superuser";
 const CASE_CREATE_ROLE = "order_merchandiser";
@@ -54,6 +56,7 @@ const DEFAULT_QUOTE_REASON = "IE核定加工价格";
 const DEFAULT_MANAGEMENT_REASON = "生产管理确认加工厂与价格";
 const DEFAULT_OWNER_APPROVAL_REASON = "老板批准选厂决定";
 const DEFAULT_CONTRACT_REASON = "跟单登记已签合同";
+const DEFAULT_DELETION_REASON = "Root confirmed logical deletion";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UNIT_PRICE_PATTERN = /^\d{1,10}(?:\.\d{1,4})?$/;
 const TOTAL_AMOUNT_PATTERN = /^\d{1,16}(?:\.\d{1,2})?$/;
@@ -245,7 +248,8 @@ export class SourcingService {
     private readonly events = new OperationEventRepository(),
     private readonly todoProjection?: Pick<
       TodoProjectionService,
-      "actionableForAllDirectRole" | "completeOpenByDedupePrefix" | "information"
+      "actionableForAllDirectRole" | "cancelOpenByDedupePrefix"
+        | "completeOpenByDedupePrefix" | "information"
     >,
   ) {}
 
@@ -420,12 +424,89 @@ export class SourcingService {
     return this.readCase(this.database, sourcingCaseId);
   }
 
+  async deleteByRoot(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+    idempotencyKey: string,
+  ): Promise<Result<DeleteSourcingCaseResponse>> {
+    if (
+      actor.authorizationCapability !== CASE_DELETE_CAPABILITY
+      || !actor.actorRoles.includes(ROOT_ROLE)
+    ) {
+      fail("只有超级用户可以删除报价选厂订单", 403, "FORBIDDEN");
+    }
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const scope = "sourcing.case.delete";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: requestHash(scope, { sourcingCaseId }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => {
+        const current = await client.query<{ deleted_at: Date | string | null }>(
+          `SELECT deleted_at
+           FROM sourcing_cases
+           WHERE sourcing_case_id=$1
+           FOR UPDATE`,
+          [sourcingCaseId],
+        );
+        const row = current.rows[0];
+        if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
+        if (row.deleted_at !== null) {
+          return {
+            statusCode: 200,
+            response: { sourcingCaseId, deleted: true as const },
+          };
+        }
+        const before = await this.readCase(client, sourcingCaseId);
+        const eventId = await this.events.append(client, actor, {
+          action: "sourcing.case.delete",
+          entityType: "sourcing_case",
+          entityId: sourcingCaseId,
+          before,
+          after: { ...before, deleted: true, deletedBy: actor.actorId },
+          reason: DEFAULT_DELETION_REASON,
+        });
+        await this.todoProjection?.cancelOpenByDedupePrefix(
+          client,
+          actor,
+          `sourcing:${sourcingCaseId}:`,
+          "The sourcing case was deleted by root",
+        );
+        await client.query(
+          `UPDATE sourcing_cases
+           SET deleted_at=CURRENT_TIMESTAMP,deleted_by=$2,
+               deletion_operation_event_id=$3,deletion_request_id=$4,
+               deletion_reason=$5
+           WHERE sourcing_case_id=$1`,
+          [sourcingCaseId, actor.actorId, eventId, actor.requestId, DEFAULT_DELETION_REASON],
+        );
+        return {
+          statusCode: 200,
+          response: { sourcingCaseId, deleted: true as const },
+        };
+      });
+      await client.query("COMMIT");
+      return { value: outcome.response, reused: outcome.reused };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async listAttachments(
     actor: TrustedActorContext,
     sourcingCaseId: string,
   ): Promise<SourcingAttachmentListResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    await this.readCase(this.database, sourcingCaseId);
     const result = await this.database.query<{
       attachment_id: string;
       original_filename: string;
@@ -453,6 +534,7 @@ export class SourcingService {
   ): Promise<SourcingTimelineResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    await this.readCase(this.database, sourcingCaseId);
     const result = await this.database.query<{
       entry_id: string;
       kind: "created" | "ie_quote" | "management_decision" | "owner_decision"
@@ -797,6 +879,7 @@ export class SourcingService {
              LIMIT 1
            ) current_transition ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
@@ -961,6 +1044,7 @@ export class SourcingService {
            LEFT JOIN sourcing_owner_decisions owner_row
              ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
@@ -1151,6 +1235,7 @@ export class SourcingService {
              LIMIT 1
            ) decision_row ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
@@ -1319,6 +1404,7 @@ export class SourcingService {
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
@@ -1454,6 +1540,7 @@ export class SourcingService {
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
@@ -1624,6 +1711,7 @@ export class SourcingService {
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId,factoryChangeRequestId],
         );
@@ -1838,6 +1926,7 @@ export class SourcingService {
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
@@ -2007,6 +2096,7 @@ export class SourcingService {
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
+             AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );

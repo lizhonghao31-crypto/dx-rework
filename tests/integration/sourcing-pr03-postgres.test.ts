@@ -19,6 +19,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   const todoProjection = {
     actionableForAllDirectRole: vi.fn(async () => [] as string[]),
+    cancelOpenByDedupePrefix: vi.fn(async () => 0),
     completeOpenByDedupePrefix: vi.fn(async () => 0),
     information: vi.fn(async () => undefined),
   };
@@ -86,6 +87,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     ...merchandiserActor(),
     authorizationCapability: "sourcing:view",
   });
+  const rootActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: merchandiserId,
+    actorRoles: ["root_superuser"],
+    authorizationCapability: "sourcing:delete",
+    authorizationCapabilities: ["sourcing:view", "sourcing:delete"],
+    requestId,
+  });
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -117,6 +125,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0108_sourcing_finance_closure.sql",
       "0120_sourcing_order_facts.sql",
       "0121_sourcing_remove_contract_stage.sql",
+      "0122_sourcing_case_logical_deletion.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -606,5 +615,112 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         `sourcing:${created.value.sourcingCaseId}:exception:1:`,
         `sourcing:${created.value.sourcingCaseId}:finance:3:2:`,
       ]);
+  });
+
+  it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {
+    const attachmentId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+         uploaded_by,status,ready_at
+       ) VALUES($1,$2,'待删除测试订单.jpg','image/jpeg',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId, `sourcing-test/${attachmentId}.jpg`, "b".repeat(64), merchandiserId],
+    );
+    const created = await service.createCase(merchandiserActor(), {
+      erpOrderNo: "ERP-DELETE-1",
+      styleNo: "DELETE-STYLE-1",
+      deliveryDate: "2026-10-01",
+      processDescription: "删除回归工艺",
+      orderQuantity: 88,
+      attachmentIds: [attachmentId],
+    }, randomUUID());
+
+    await expect(service.deleteByRoot(
+      merchandiserActor(),
+      created.value.sourcingCaseId,
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+    const key = randomUUID();
+    const deleted = await service.deleteByRoot(rootActor(), created.value.sourcingCaseId, key);
+    const replay = await service.deleteByRoot(rootActor(), created.value.sourcingCaseId, key);
+    expect(deleted).toEqual({
+      value: { sourcingCaseId: created.value.sourcingCaseId, deleted: true },
+      reused: false,
+    });
+    expect(replay).toEqual({
+      value: { sourcingCaseId: created.value.sourcingCaseId, deleted: true },
+      reused: true,
+    });
+
+    expect((await service.listCases(readerActor(), "ERP-DELETE-1")).items).toHaveLength(0);
+    await expect(service.getCase(readerActor(), created.value.sourcingCaseId))
+      .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    await expect(service.listAttachments(readerActor(), created.value.sourcingCaseId))
+      .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    await expect(service.listTimeline(readerActor(), created.value.sourcingCaseId))
+      .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    await expect(service.quoteIePrice(
+      ieActor(),
+      created.value.sourcingCaseId,
+      { unitPrice: "4.5" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+
+    expect(todoProjection.cancelOpenByDedupePrefix).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ actorRoles: ["root_superuser"] }),
+      `sourcing:${created.value.sourcingCaseId}:`,
+      "The sourcing case was deleted by root",
+    );
+    await expect(database.query(
+      "UPDATE sourcing_cases SET style_no='tampered' WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query(
+      `SELECT deleted_at,deleted_by,deletion_operation_event_id
+       FROM sourcing_cases WHERE sourcing_case_id=$1`,
+      [created.value.sourcingCaseId],
+    )).resolves.toMatchObject({
+      rows: [{
+        deleted_at: expect.any(Date),
+        deleted_by: merchandiserId,
+        deletion_operation_event_id: expect.any(String),
+      }],
+    });
+    await expect(database.query(
+      `SELECT entity_type,entity_id,status
+       FROM attachments WHERE attachment_id=$1`,
+      [attachmentId],
+    )).resolves.toMatchObject({
+      rows: [{
+        entity_type: "sourcing_case",
+        entity_id: created.value.sourcingCaseId,
+        status: "ready",
+      }],
+    });
+    await expect(database.query(
+      `SELECT action,authorization_capability
+       FROM operation_events
+       WHERE entity_type='sourcing_case' AND entity_id=$1
+       ORDER BY created_at DESC,event_id DESC LIMIT 1`,
+      [created.value.sourcingCaseId],
+    )).resolves.toMatchObject({
+      rows: [{ action: "sourcing.case.delete", authorization_capability: "sourcing:delete" }],
+    });
+
+    const replacement = await service.createCase(merchandiserActor(), {
+      erpOrderNo: "ERP-DELETE-1",
+      styleNo: "DELETE-STYLE-2",
+      deliveryDate: "2026-10-02",
+      processDescription: "重建订单工艺",
+      orderQuantity: 99,
+    }, randomUUID());
+    expect(replacement.value.sourcingCaseId).not.toBe(created.value.sourcingCaseId);
+    expect((await service.listCases(readerActor(), "ERP-DELETE-1")).items)
+      .toEqual([expect.objectContaining({ sourcingCaseId: replacement.value.sourcingCaseId })]);
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_cases WHERE erp_order_id='ERP-DELETE-1'",
+    )).rowCount).toBe(2);
   });
 });

@@ -55,6 +55,10 @@ const create = (
       }],
     })),
     createCase: vi.fn(async () => ({ value: caseSummary, reused: false })),
+    deleteByRoot: vi.fn(async () => ({
+      value: { sourcingCaseId: caseSummary.sourcingCaseId, deleted: true as const },
+      reused: false,
+    })),
     quoteIePrice: vi.fn(async () => ({
       value: {
         ...caseSummary,
@@ -288,6 +292,45 @@ describe("sourcing PR03 routes", () => {
       actorRoles: ["root_superuser", "owner_group"],
       authorizationCapability: "sourcing:owner:approve",
     }));
+  });
+
+  it("allows only Root to logically delete a sourcing case", async () => {
+    const ordinary = create(["sourcing:view"], ["production_management"]);
+    expect((await ordinary.app.inject({
+      method: "DELETE",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "ordinary-delete",
+      },
+    })).statusCode).toBe(403);
+    expect(ordinary.service.deleteByRoot).not.toHaveBeenCalled();
+
+    const root = create([], [], true);
+    const deleted = await root.app.inject({
+      method: "DELETE",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "x-request-id": "sourcing-delete-1",
+        "idempotency-key": "root-delete-1",
+      },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({
+      sourcingCaseId: caseSummary.sourcingCaseId,
+      deleted: true,
+    });
+    expect(root.service.deleteByRoot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["root_superuser"],
+        authorizationCapability: "sourcing:delete",
+        authorizationCapabilities: ["sourcing:delete"],
+        requestId: "sourcing-delete-1",
+      }),
+      caseSummary.sourcingCaseId,
+      "root-delete-1",
+    );
   });
 
   it("rejects malformed amount, quantity and missing idempotency key before service writes", async () => {
