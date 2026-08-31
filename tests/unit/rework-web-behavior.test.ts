@@ -146,7 +146,11 @@ describe("PR-05 web behavior", () => {
     expect(detail).not.toContain("暂未上传订单图片");
     expect(supplement).toContain("supplemental-images");
     expect(supplement).toContain("MAX_REWORK_ATTACHMENTS");
-    expect(supplement).toContain("isImageAttachment");
+    expect(supplement).toContain("isImageUploadCandidate");
+    expect(supplement).toContain("prepareImageUploadCandidate");
+    expect(supplement).toContain("uploadImageWithNormalizationRetry");
+    expect(supplement).toContain("measureAttachmentUploadStage");
+    expect(supplement).toContain('accept="image/*"');
     expect(supplement).toContain('"上传图片"');
     expect(helper).toContain("const MAX_IMAGE_EDGE = 2048");
     expect(helper).toContain("SMALL_IMAGE_DIRECT_UPLOAD_BYTES = 1024 * 1024");

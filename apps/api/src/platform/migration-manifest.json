@@ -123,6 +123,7 @@
     { "version": "0121_sourcing_remove_contract_stage", "checksum": "43b3c7e4f49e45d9cf7651fa60e0503a0db132c2cd8589e3cc2dcfcaa98e2b27" },
     { "version": "0122_sourcing_case_logical_deletion", "checksum": "ad61973df35a87fb0cb7d023d4cff7694f0c881a272b5dc0f5246aa441be51cb" },
     { "version": "0123_sourcing_explicit_role_todos", "checksum": "b2569ca04144265edae55058796ef49f25410972e3786768d9c808e06751aec2" },
-    { "version": "0124_sourcing_ordered_processes", "checksum": "b19a8cbf1c62a272b14d164005a4d417e096aa87ed3720b464094309fd94c2c0" }
+    { "version": "0124_sourcing_ordered_processes", "checksum": "b19a8cbf1c62a272b14d164005a4d417e096aa87ed3720b464094309fd94c2c0" },
+    { "version": "0125_sourcing_image_supplement", "checksum": "4bae4b9c495f49717680939d2e556274b0a73bdf117f6c1e75ab5efe7e9a7e71" }
   ]
 }

@@ -56,6 +56,16 @@ const create = (
       }],
     })),
     createCase: vi.fn(async () => ({ value: caseSummary, reused: false })),
+    supplementImages: vi.fn(async () => ({
+      value: {
+        items: [{
+          attachmentId: "00000000-0000-4000-8000-000000000301",
+          filename: "evidence.webp",
+          mimeType: "image/webp" as const,
+        }],
+      },
+      reused: false,
+    })),
     deleteByRoot: vi.fn(async () => ({
       value: { sourcingCaseId: caseSummary.sourcingCaseId, deleted: true as const },
       reused: false,
@@ -433,6 +443,69 @@ describe("sourcing PR03 routes", () => {
       payload: { decision: "approved" },
     })).statusCode).toBe(403);
     expect(ie.service.decideOwner).not.toHaveBeenCalled();
+  });
+
+  it("allows sourcing workflow roles and Root to supplement images but rejects unrelated roles", async () => {
+    const ie = create(["sourcing:view"], ["ie_reviewer"]);
+    const supplemented = await ie.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/supplemental-images`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "x-request-id": "sourcing-images-1",
+        "idempotency-key": "sourcing-images-key-1",
+      },
+      payload: {
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
+      },
+    });
+    expect(supplemented.statusCode).toBe(200);
+    expect(ie.service.supplementImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["ie_reviewer"],
+        authorizationCapability: "tools:user",
+        requestId: "sourcing-images-1",
+      }),
+      caseSummary.sourcingCaseId,
+      { attachmentIds: ["00000000-0000-4000-8000-000000000301"] },
+      "sourcing-images-key-1",
+    );
+
+    const unrelated = create(["sourcing:view"], ["warehouse_receiver"]);
+    expect((await unrelated.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/supplemental-images`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "sourcing-images-forbidden",
+      },
+      payload: {
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
+      },
+    })).statusCode).toBe(403);
+    expect(unrelated.service.supplementImages).not.toHaveBeenCalled();
+
+    const root = create([], [], true);
+    expect((await root.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/supplemental-images`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "sourcing-images-root",
+      },
+      payload: {
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
+      },
+    })).statusCode).toBe(200);
+    expect(root.service.supplementImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["root_superuser"],
+        authorizationCapability: "tools:user",
+      }),
+      caseSummary.sourcingCaseId,
+      { attachmentIds: ["00000000-0000-4000-8000-000000000301"] },
+      "sourcing-images-root",
+    );
   });
 
 });

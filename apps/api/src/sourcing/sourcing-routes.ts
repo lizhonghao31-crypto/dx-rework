@@ -8,6 +8,8 @@ import {
   RecordSourcingFinanceReconciliationSchema,
   RecordSourcingManagementDecisionSchema,
   RequestSourcingFactoryChangeSchema,
+  SOURCING_IMAGE_SUPPLEMENT_ROLES,
+  SupplementSourcingImagesSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -96,6 +98,28 @@ export function registerSourcingRoutes(
     );
   };
 
+  const supplementalImageActor = async (request: FastifyRequest) => {
+    const user = await dependencies.authenticate(token(request));
+    const root = await isRootUser(dependencies.root, user.id);
+    if (!user.businessRoles?.length && !root) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    if (!root && !user.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
+      role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
+    ))) {
+      throw new ApplicationError("FORBIDDEN", "当前角色无权补充报价选厂订单图片", 403);
+    }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (root && !actorRoles.includes("root_superuser")) actorRoles.push("root_superuser");
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability: "tools:user",
+      authorizationCapabilities: user.capabilities,
+      requestId: request.id,
+    };
+  };
+
   const rootDeleteActor = async (request: FastifyRequest) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
@@ -157,6 +181,24 @@ export function registerSourcingRoutes(
       await readActor(request),
       caseId(request.params.sourcingCaseId),
     ),
+  );
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/supplemental-images",
+    async (request, reply) => {
+      const parsed = SupplementSourcingImagesSchema.safeParse(request.body);
+      const data = parsed.success
+        ? parsed.data
+        : validationError(parsed.error.issues[0]?.message ?? "补充图片信息无效");
+      const result = await dependencies.service.supplementImages(
+        await supplementalImageActor(request),
+        caseId(request.params.sourcingCaseId),
+        data,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return result.value;
+    },
   );
 
   app.get<{ Params: { sourcingCaseId: string } }>(
