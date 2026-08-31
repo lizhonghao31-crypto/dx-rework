@@ -58,7 +58,7 @@ describe("sourcing finance confirmation and explicit-role todo routing", () => {
     expect(service.match(/actionableForAllAssignedRole\(/g)).toHaveLength(13);
     expect(service).toContain(':resume:${factoryChangeRequestId}');
     expect(service).toContain('source.status === "pending_factory_change_verification"');
-    expect(service).toContain(`sourcing:${source.sourcing_case_id}:exception:`);
+    expect(service).toContain('sourcing:${source.sourcing_case_id}:exception:');
     expect(service).toMatch(
       /source\.status === "pending_finance_reconciliation"[\s\S]*?source\.status === "pending_factory_change_verification"[\s\S]*?category: "sourcing_finance_reconcile"[\s\S]*?requiredRole: FINANCE_RECONCILE_ROLE[\s\S]*?requiredCapability: FINANCE_RECONCILE_CAPABILITY/,
     );
