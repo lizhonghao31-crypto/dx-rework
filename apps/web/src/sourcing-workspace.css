@@ -674,3 +674,65 @@
   background: #fff;
   font: inherit;
 }
+
+
+.sourcing-factory-change {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.sourcing-factory-change__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.sourcing-factory-change__heading h2,
+.sourcing-factory-change__heading p {
+  margin: 0;
+}
+
+.sourcing-factory-change > details > summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+  color: var(--color-text-inverse);
+  background: var(--color-action-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-5);
+  font-weight: 700;
+}
+
+.sourcing-factory-change > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sourcing-factory-change > details[open] > summary {
+  margin-bottom: var(--space-4);
+}
+
+.sourcing-factory-change__review {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.sourcing-factory-change__review label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sourcing-factory-change__review > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.sourcing-factory-change__delta {
+  align-self: end;
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
