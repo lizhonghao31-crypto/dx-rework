@@ -2,6 +2,7 @@ import {
   ExternalResponsibilityQueueResponseSchema,
   type ExternalResponsibilityQueueResponse,
 } from "@dx-rework/contracts/external-responsibility";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -47,6 +48,6 @@ export function ExternalResponsibilityQueuePage() {
     {state.kind === "loading" && <Surface className="external-state">正在加载外部责任队列…</Surface>}
     {state.kind === "unavailable" && <Surface className="external-state">{state.message}</Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="external-state">当前没有符合条件的外部责任事项。</Surface>}
-    {state.kind === "ready" && <div className="task-grid external-queue-grid">{items.map((item) => <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.caseId}><TaskCard task={{ id: item.reworkNo ?? "返工单", title: `${statusLabel[item.status]} · ${item.supplierName}`, meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", `应扣 ¥${item.proposedDeductionAmount}`, `累计已扣 ¥${item.actualDeductedAmount}`, `剩余 ¥${item.remainingAmount}`, item.overdue ? "已逾期" : item.canAct ? "可处理" : "仅查看"].join(" · "), tone: item.overdue ? "danger" : item.canAct ? "warning" : "info", stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看" }} /><span>打开扣款台账 →</span></a>)}</div>}
+    {state.kind === "ready" && <div className="task-grid external-queue-grid">{items.map((item) => <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.caseId}><TaskCard task={{ id: item.reworkNo ?? "返工单", title: `${statusLabel[item.status]} · ${item.supplierName}`, meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", `应扣 ${formatBusinessCurrency(item.proposedDeductionAmount)}`, `累计已扣 ${formatBusinessCurrency(item.actualDeductedAmount)}`, `剩余 ${formatBusinessCurrency(item.remainingAmount)}`, item.overdue ? "已逾期" : item.canAct ? "可处理" : "仅查看"].join(" · "), tone: item.overdue ? "danger" : item.canAct ? "warning" : "info", stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看" }} /><span>打开扣款台账 →</span></a>)}</div>}
   </Shell>;
 }

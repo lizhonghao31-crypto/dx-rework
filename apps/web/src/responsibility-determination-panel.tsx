@@ -5,6 +5,7 @@ import {
   type ResponsibilityType,
   type TailInspectionCostBearer,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -83,7 +84,7 @@ const multiplierScaled = (value: string): bigint | null => {
 };
 const isExternal = (type: ResponsibilityType): boolean => type !== "own_factory";
 const typeMeta = (type: ResponsibilityType) => responsibilityTypes.find((item) => item.value === type)!;
-const displayMoney = (value: string): string => `¥${value}`;
+const displayMoney = (value: string): string => formatBusinessCurrency(value);
 const tailCostBearerLabel = (
   bearer: TailInspectionCostBearer | null,
 ): string =>

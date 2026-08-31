@@ -4,6 +4,7 @@ import {
   type ExternalResponsibilityBatchResponse,
   type ExternalResponsibilityCaseResponse,
 } from "@dx-rework/contracts/external-responsibility";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -539,7 +540,7 @@ export function ExternalResponsibilityPanel({
         );
         const temporaryNameReady = Boolean(temporarySupplierName[item.responsibilityType]?.trim());
         return <div className="external-operation-grid" key={item.externalItemId}>
-          <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 应扣 ¥{item.proposedAmount}</span>
+          <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 应扣 {formatBusinessCurrency(item.proposedAmount)}</span>
           <SearchSelect
             options={matchingSuppliers.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))}
             value={selection[item.externalItemId] ?? ""}
@@ -596,9 +597,9 @@ export function ExternalResponsibilityPanel({
           </div>
 
           <div className="external-finance-summary">
-            <div><span>应扣金额</span><strong>¥{caseItem.proposedDeductionAmount}</strong></div>
-            <div><span>累计已扣</span><strong>¥{caseItem.actualDeductedAmount}</strong></div>
-            <div><span>剩余</span><strong>¥{caseItem.remainingAmount}</strong></div>
+            <div><span>应扣金额</span><strong>{formatBusinessCurrency(caseItem.proposedDeductionAmount)}</strong></div>
+            <div><span>累计已扣</span><strong>{formatBusinessCurrency(caseItem.actualDeductedAmount)}</strong></div>
+            <div><span>剩余</span><strong>{formatBusinessCurrency(caseItem.remainingAmount)}</strong></div>
           </div>
 
           {!readOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
@@ -607,7 +608,7 @@ export function ExternalResponsibilityPanel({
               inputMode="decimal"
               value={amount[caseItem.caseId] ?? ""}
               onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-              placeholder={`最多 ¥${caseItem.remainingAmount}`}
+              placeholder={`最多 ${formatBusinessCurrency(caseItem.remainingAmount)}`}
             />}
             {canAttachEvidence && <ExternalEvidenceUploader
               attachmentIds={evidence}
@@ -637,13 +638,13 @@ export function ExternalResponsibilityPanel({
             <h4>扣款记录</h4>
             {caseItem.deductions.map((entry) => <div key={entry.deductionEntryId}>
               <span>{entry.deductedOn} · {deductionEntryLabel[entry.entryType]}</span>
-              <b>¥{entry.amount}</b>
+              <b>{formatBusinessCurrency(entry.amount)}</b>
             </div>)}
           </div>}
 
           {caseItem.specialApproval && <div className="external-special-approval">
             <b>财务特批：{caseItem.specialApproval.reason}</b>
-            <span>申请时实扣 ¥{caseItem.specialApproval.actualDeductedAmount}，差额 ¥{caseItem.specialApproval.remainingAmount}</span>
+            <span>申请时实扣 {formatBusinessCurrency(caseItem.specialApproval.actualDeductedAmount)}，差额 {formatBusinessCurrency(caseItem.specialApproval.remainingAmount)}</span>
             {caseItem.specialApproval.decision && <span>结果：{caseItem.specialApproval.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
           </div>}
 

@@ -231,6 +231,18 @@ const MONEY_FIELDS = new Set([
   "proposedAmount",
   "actualAmount",
   "remainingAmount",
+  "unitPrice",
+  "totalAmount",
+  "payableAmount",
+  "groupAmount",
+  "baseAmount",
+  "calculationTotal",
+  "roundedAmount",
+  "ownFactoryRoundedAmount",
+  "ownFactoryTotalAmount",
+  "proposedDeductionAmount",
+  "actualDeductedAmount",
+  "baseMemberShareAmount",
 ]);
 
 const unknownFieldLabel = (key: string): string => {
@@ -294,34 +306,66 @@ export const businessCellValue = (
   return VALUE_LABELS[text] ?? text;
 };
 
+const normalizeMaximumFractionDigits = (value: number): number =>
+  Number.isFinite(value) ? Math.min(20, Math.max(0, Math.trunc(value))) : 2;
+
+const groupBusinessWholeNumber = (value: string): string =>
+  value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+const formatPlainBusinessDecimal = (
+  value: string,
+  maximumFractionDigits: number,
+): string | null => {
+  const match = value.match(/^([+-]?)(\d+)(?:\.(\d*))?$/);
+  if (!match) return null;
+  const sign = match[1] ?? "";
+  const whole = match[2] ?? "0";
+  const fraction = match[3] ?? "";
+  const keptFraction = fraction.slice(0, maximumFractionDigits)
+    .padEnd(maximumFractionDigits, "0");
+  let scaled = BigInt(`${whole}${keptFraction}`);
+  const roundingDigit = fraction[maximumFractionDigits];
+  if (roundingDigit !== undefined && roundingDigit >= "5") scaled += 1n;
+  const padded = scaled.toString().padStart(maximumFractionDigits + 1, "0");
+  const roundedWhole = maximumFractionDigits === 0
+    ? padded
+    : padded.slice(0, -maximumFractionDigits);
+  const roundedFraction = maximumFractionDigits === 0
+    ? ""
+    : padded.slice(-maximumFractionDigits).replace(/0+$/, "");
+  const prefix = sign === "-" && scaled !== 0n ? "-" : "";
+  return `${prefix}${groupBusinessWholeNumber(roundedWhole)}${roundedFraction ? `.${roundedFraction}` : ""}`;
+};
+
+export const formatBusinessDecimal = (
+  value: string | number,
+  maximumFractionDigits = 2,
+): string => {
+  const digits = normalizeMaximumFractionDigits(maximumFractionDigits);
+  const text = String(value).trim();
+  const exact = formatPlainBusinessDecimal(text, digits);
+  if (exact !== null) return exact;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value);
+  return (Object.is(numeric, -0) ? 0 : numeric).toLocaleString("zh-CN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  });
+};
+
+export const formatBusinessMoney = (value: string | number): string =>
+  formatBusinessDecimal(value, 2);
+
+export const formatBusinessCurrency = (value: string | number): string =>
+  `¥${formatBusinessMoney(value)}`;
+
 export const businessValue = (
   key: string,
   value: string | number | boolean | null | undefined,
 ): string => {
   if (value === null || value === undefined || value === "") return "—";
   const text = businessCellValue(key, value);
-  return MONEY_FIELDS.has(key) ? `¥${text}` : text;
-};
-
-export const formatBusinessDecimal = (
-  value: string | number,
-  maximumFractionDigits = 3,
-): string => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return String(value);
-  return numeric.toLocaleString("zh-CN", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  });
-};
-
-export const formatBusinessMoney = (value: string | number): string => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return String(value);
-  return numeric.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return MONEY_FIELDS.has(key) ? formatBusinessCurrency(text) : text;
 };
 
 export const translateTechnicalDetails = (value: unknown, key = ""): unknown => {

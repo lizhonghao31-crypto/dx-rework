@@ -2,6 +2,7 @@ import {
   OwnFactoryApprovalQueueResponseSchema,
   type OwnFactoryApprovalQueueResponse,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -88,7 +89,7 @@ export function OwnFactoryApprovalQueuePage() {
               <TaskCard task={{
                 id: item.reworkNo ?? "返工单",
                 title: item.canDecide ? "本厂承担待审批" : "本厂承担待查看",
-                meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", item.problemPart ?? "问题部位未填写", `本厂 ¥${item.ownFactoryTotalAmount}`, item.canDecide ? "可审批" : "仅查看"].join(" · "),
+                meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", item.problemPart ?? "问题部位未填写", `本厂 ${formatBusinessCurrency(item.ownFactoryTotalAmount)}`, item.canDecide ? "可审批" : "仅查看"].join(" · "),
                 tone: item.canDecide ? "warning" : "info",
                 stateLabel: item.canDecide ? "待审批" : "仅查看",
               }} />

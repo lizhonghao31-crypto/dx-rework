@@ -14,6 +14,7 @@ import {
   type SourcingFactory,
   type SourcingTimelineEntry,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -358,8 +359,8 @@ function OrderListPage({ mode }: { mode: "pending" | "history" }) {
           {visible.map((item) => <a className="sourcing-order-row" href={detailHref(item)} key={item.sourcingCaseId}>
             <div><strong>{item.styleNo}</strong><small>{item.erpOrderNo}</small></div>
             <span><b>{item.orderQuantity.toLocaleString("zh-CN")}</b><small>订单数量</small></span>
-            <span><b>{item.ieQuote ? `¥${item.ieQuote.unitPrice}` : "—"}</b><small>IE 单价</small></span>
-            <span><b>{item.decision ? `¥${item.decision.unitPrice}` : "—"}</b><small>生产单价</small></span>
+            <span><b>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</b><small>IE 单价</small></span>
+            <span><b>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</b><small>生产单价</small></span>
             <span><b>{item.decision?.supplierName ?? "待选厂"}</b><small>加工厂</small></span>
             <span><StatusBadge tone={item.status === "closed" ? "success" : "info"}>{STATUS_LABELS[item.status]}</StatusBadge><small>{formatDateTime(item.updatedAt)}</small></span>
           </a>)}
@@ -593,10 +594,10 @@ function OrderDetailPage({
           <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{item.orderQuantity.toLocaleString("zh-CN")} 件</dd></div>
           <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>工艺</dt><dd>{item.processDescription ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? `¥${item.ieQuote.unitPrice}` : "—"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? `¥${item.decision.unitPrice}` : "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? `¥${item.decision.totalAmount}` : item.ieQuote ? `¥${item.ieQuote.totalAmount}` : "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
         </dl>
 
@@ -645,8 +646,8 @@ function OrderDetailPage({
                   <div><strong>{timelineLabel(entry)}</strong><small>{formatDateTime(entry.handledAt)} · {entry.handledBy}</small></div>
                   <p>{entry.reason}</p>
                   <dl>
-                    {entry.unitPrice ? <div><dt>单价</dt><dd>¥{entry.unitPrice}</dd></div> : null}
-                    {entry.totalAmount ? <div><dt>总额</dt><dd>¥{entry.totalAmount}</dd></div> : null}
+                    {entry.unitPrice ? <div><dt>单价</dt><dd>{formatBusinessCurrency(entry.unitPrice)}</dd></div> : null}
+                    {entry.totalAmount ? <div><dt>总额</dt><dd>{formatBusinessCurrency(entry.totalAmount)}</dd></div> : null}
                     {entry.quantity ? <div><dt>数量</dt><dd>{entry.quantity.toLocaleString("zh-CN")} 件</dd></div> : null}
                     {entry.supplierName ? <div><dt>加工厂</dt><dd>{entry.supplierName}</dd></div> : null}
                     {entry.contractReference ? <div><dt>合同编号</dt><dd>{entry.contractReference}</dd></div> : null}
@@ -672,7 +673,7 @@ function OrderDetailPage({
 
           {item.status === "pending_management_decision" && selectedNode === "management" ? <Surface className="rework-detail-node-preview">
             <h2>03 · 生产管理调价与选厂</h2>
-            <p>IE 原价：¥{item.ieQuote?.unitPrice ?? "—"}。如调整价格，必须填写原因。</p>
+            <p>IE 原价：{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}。如调整价格，必须填写原因。</p>
             {canManage ? <div className="sourcing-form-grid">
               <label><span>加工厂</span><select value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               <label><span>生产单价</span><input value={decision.unitPrice} inputMode="decimal" onChange={(event) => { setDecision({ ...decision, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
@@ -684,7 +685,7 @@ function OrderDetailPage({
 
           {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview">
             <h2>04 · 老板最终审批</h2>
-            <p>IE 原价 ¥{item.ieQuote?.unitPrice ?? "—"}；生产管理价格 ¥{item.decision?.unitPrice ?? "—"}；加工厂 {item.decision?.supplierName ?? "—"}。</p>
+            <p>IE 原价 {item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}；生产管理价格 {item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}；加工厂 {item.decision?.supplierName ?? "—"}。</p>
             {canOwner ? <div className="sourcing-owner-actions">
               <label><span>审批说明 / 驳回原因</span><input value={ownerReason} maxLength={500} onChange={(event) => { setOwnerReason(event.target.value); actionKey.current = null; }} /></label>
               <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved", ...(ownerReason.trim() ? { decisionReason: ownerReason.trim() } : {}) }, "老板已批准")}>批准</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !ownerReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected", decisionReason: ownerReason.trim() }, "已驳回生产管理重新调整")}>驳回</button></div>
@@ -731,7 +732,7 @@ function OrderDetailPage({
 
           {item.status === "pending_factory_change_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 生产管理核实换厂</h2>
-            <p>新加工厂：{pendingFactoryChange?.supplierName ?? "—"}；新单价：{pendingFactoryChange?.unitPrice ? `¥${pendingFactoryChange.unitPrice}` : "—"}。通过后无需老板复审，直接返回财务核对。</p>
+            <p>新加工厂：{pendingFactoryChange?.supplierName ?? "—"}；新单价：{pendingFactoryChange?.unitPrice ? formatBusinessCurrency(pendingFactoryChange.unitPrice) : "—"}。通过后无需老板复审，直接返回财务核对。</p>
             {canVerifyFactoryChange && pendingFactoryChange ? <div className="sourcing-owner-actions">
               <label><span>核实说明</span><input value={verificationReason} maxLength={500} onChange={(event) => { setVerificationReason(event.target.value); actionKey.current = null; }} /></label>
               <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !verificationReason.trim()} onClick={() => void submit(

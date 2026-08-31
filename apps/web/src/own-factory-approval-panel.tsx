@@ -2,6 +2,7 @@ import {
   OwnFactoryApprovalResponseSchema,
   type OwnFactoryApprovalResponse,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -197,7 +198,7 @@ export function OwnFactoryApprovalPanel({
 
       <div className="own-factory-approval-total">
         <span>本厂承担合计</span>
-        <strong>¥{approval.ownFactoryTotalAmount}</strong>
+        <strong>{formatBusinessCurrency(approval.ownFactoryTotalAmount)}</strong>
       </div>
 
       <section className="own-factory-approval-section">
@@ -214,7 +215,7 @@ export function OwnFactoryApprovalPanel({
             <div key={process.configurationItemId}>
               <span>{process.processName}</span>
               <small>{process.pricingUnit === "piece" ? "件" : "小时"} · 倍率 {process.multiplier} · 本厂 {bpsToPercent(process.ownFactoryShareBps)}%</small>
-              <b>¥{process.ownFactoryRoundedAmount}</b>
+              <b>{formatBusinessCurrency(process.ownFactoryRoundedAmount)}</b>
             </div>
           ))}
         </div>
@@ -227,7 +228,7 @@ export function OwnFactoryApprovalPanel({
             <div key={`${line.workReportId}:${line.personId}`}>
               <span>{line.workerDisplayName}</span>
               <small>{line.taskMode === "collective" ? "集体上数" : "个人上数"} · 倍率 {line.multiplier} · {bpsToPercent(line.shareBps)}%</small>
-              <b>¥{line.roundedAmount}</b>
+              <b>{formatBusinessCurrency(line.roundedAmount)}</b>
             </div>
           ))}
         </div>
@@ -274,7 +275,7 @@ export function OwnFactoryApprovalPanel({
             <div key={item.approvalId}>
               <span>责任版本 V{item.finalizedDeterminationVersion}</span>
               <small>{item.status === "pending" ? "待审批" : item.status === "approved" ? "已通过" : "已驳回"} · {formatBusinessTime(item.createdAt)}</small>
-              <b>¥{item.ownFactoryTotalAmount}</b>
+              <b>{formatBusinessCurrency(item.ownFactoryTotalAmount)}</b>
             </div>
           ))}
         </div>

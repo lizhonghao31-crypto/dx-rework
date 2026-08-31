@@ -1,4 +1,5 @@
 import type { ManagementDashboardResponse, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -114,12 +115,12 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
             <Surface>
               <h2>金额总览</h2>
               <div className="reporting-financial-grid">
-                <div><small>工资</small><strong>¥{management.financial.wageTotal}</strong></div>
-                <div><small>责任总额</small><strong>¥{management.financial.responsibilityTotal}</strong></div>
-                <div><small>本厂承担</small><strong>¥{management.financial.ownFactoryTotal}</strong></div>
-                <div><small>外部拟扣</small><strong>¥{management.financial.externalProposed}</strong></div>
-                <div><small>累计实扣</small><strong>¥{management.financial.externalDeducted}</strong></div>
-                <div><small>未扣差额</small><strong>¥{management.financial.externalRemaining}</strong></div>
+                <div><small>工资</small><strong>{formatBusinessCurrency(management.financial.wageTotal)}</strong></div>
+                <div><small>责任总额</small><strong>{formatBusinessCurrency(management.financial.responsibilityTotal)}</strong></div>
+                <div><small>本厂承担</small><strong>{formatBusinessCurrency(management.financial.ownFactoryTotal)}</strong></div>
+                <div><small>外部拟扣</small><strong>{formatBusinessCurrency(management.financial.externalProposed)}</strong></div>
+                <div><small>累计实扣</small><strong>{formatBusinessCurrency(management.financial.externalDeducted)}</strong></div>
+                <div><small>未扣差额</small><strong>{formatBusinessCurrency(management.financial.externalRemaining)}</strong></div>
               </div>
             </Surface>
           </div>

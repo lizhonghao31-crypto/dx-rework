@@ -6,6 +6,7 @@ import {
   type ProcessConfigurationResponse,
   type TailInspectionOptionsResponse,
 } from "@dx-rework/contracts";
+import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -233,7 +234,7 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
       <div className="mobile-actions process-configuration-actions"><Button onClick={() => void save()} disabled={busy || !saveReady}>{busy ? "处理中…" : "保存配置草稿"}</Button><Button variant="primary" onClick={() => void submit()} disabled={busy || !submitReady}>{busy ? "提交中…" : "提交 IE 审核"}</Button></div>
       {!submitReady && submitReadinessIssues.length > 0 && <p className="process-readiness" role="status">还需完成：{submitReadinessIssues.join("；")}</p>}
     </Surface>}
-    {!editable && configuration && <Surface><h2>本次工序配置</h2><div className="process-readonly-list">{configuration.items.map((item) => <div key={item.configurationItemId}><b>{item.processName}</b><small>{item.source === "custom" ? "自定义工序" : "公共工序"} · ¥{formatUnitPrice(item.unitPrice)} / 件</small></div>)}</div></Surface>}
+    {!editable && configuration && <Surface><h2>本次工序配置</h2><div className="process-readonly-list">{configuration.items.map((item) => <div key={item.configurationItemId}><b>{item.processName}</b><small>{item.source === "custom" ? "自定义工序" : "公共工序"} · {formatBusinessCurrency(item.unitPrice)} / 件</small></div>)}</div></Surface>}
     {canReview && response?.reworkStatus === "pending_ie_review" && reviewSeparationBlocked && <Surface className="ie-review"><div className="section-title"><h2>IE 审核</h2><StatusBadge tone="warning">需其他 IE 审核</StatusBadge></div><p>当前账号参与了本单发起或工序配置，不能自审；请由另一名 IE 完成审核。</p></Surface>}
     {reviewable && <Surface className="ie-review"><h2>IE 审核</h2><p>确认每道工序的候选单价。通过后配置生效；驳回必须填写原因。</p><InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" /><div className="qc-secondary-actions"><Button onClick={() => void review("rejected")} disabled={busy || !reviewReason.trim()}>驳回修改</Button><Button variant="primary" onClick={() => void review("approved")} disabled={busy}>审核通过并生效</Button></div></Surface>}
   </div>;
