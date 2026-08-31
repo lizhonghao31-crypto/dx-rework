@@ -7,11 +7,6 @@ const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
-const TotalAmountInputSchema = z.string().trim().regex(
-  /^\d{1,16}(?:\.\d{1,2})?$/,
-  "实际总额必须是大于0且最多2位小数的数字",
-).refine((value) => Number(value) > 0, "实际总额必须大于0");
-
 const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
 
 export const calculateSourcingTotalExact = (
