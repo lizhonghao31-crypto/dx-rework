@@ -30,7 +30,7 @@ describe("sourcing PC form and owner approval finish", () => {
       "工艺清单",
       "＋ 新增工艺",
       "按实际生产顺序登记",
-      "待老板决策",
+      "最终审批",
       "生产管理建议由",
       "相对 IE 报价",
       "查看完整订单资料",
