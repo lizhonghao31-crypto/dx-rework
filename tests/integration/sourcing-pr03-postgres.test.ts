@@ -475,10 +475,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       financeActor(),
       created.value.sourcingCaseId,
       {
-        supplierId: replacementFactoryId,
-        unitPrice: "10.5000",
-        quantity: 137,
-        totalAmount: "1400.00",
+        result: "difference",
+        differenceFields: ["total_amount"],
         differenceReason: "发票总额与已批准选厂决定不一致",
       },
       randomUUID(),
@@ -516,12 +514,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const financeMatched = await service.recordFinanceReconciliation(
       financeActor(),
       created.value.sourcingCaseId,
-      {
-        supplierId: replacementFactoryId,
-        unitPrice: "10.5000",
-        quantity: 137,
-        totalAmount: "1438.50",
-      },
+      { result: "match" },
       randomUUID(),
     );
     expect(financeMatched.value).toMatchObject({ status: "closed", version: 13 });
