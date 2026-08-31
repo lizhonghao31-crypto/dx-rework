@@ -406,8 +406,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       randomUUID(),
     );
     expect(changeRequest.value).toMatchObject({
-      status: "pending_factory_change_verification",
-      version: 7,
+      status: "pending_finance_reconciliation",
+      version: 6,
+    });
+    expect((await service.getCurrentFactoryChange(
+      readerActor(),
+      created.value.sourcingCaseId,
+    )).item).toMatchObject({
+      initiatorRole: "order_merchandiser",
+      status: "pending_management",
+      requiresOwnerApproval: false,
     });
     const requestedChange = (await service.listTimeline(
       readerActor(),
@@ -428,7 +436,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(changeApproved.value).toMatchObject({
       status: "pending_finance_reconciliation",
-      version: 8,
+      version: 7,
       decision: {
         decisionVersion: 3,
         sourceType: "factory_change",
@@ -464,7 +472,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(changeRejected.value).toMatchObject({
       status: "pending_finance_reconciliation",
-      version: 10,
+      version: 7,
       decision: {
         decisionVersion: 3,
         supplierId: replacementFactoryId,
@@ -483,7 +491,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(financeDifference.value).toMatchObject({
       status: "pending_exception_verification",
-      version: 11,
+      version: 8,
     });
     expect((await database.query<{
       result: string;
@@ -508,7 +516,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(reopened.value).toMatchObject({
       status: "pending_finance_reconciliation",
-      version: 12,
+      version: 9,
     });
 
     const financeMatched = await service.recordFinanceReconciliation(
@@ -517,7 +525,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       { result: "match" },
       randomUUID(),
     );
-    expect(financeMatched.value).toMatchObject({ status: "closed", version: 13 });
+    expect(financeMatched.value).toMatchObject({ status: "closed", version: 10 });
 
     expect((await database.query(
       "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
