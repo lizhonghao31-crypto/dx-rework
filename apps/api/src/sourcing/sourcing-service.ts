@@ -1916,7 +1916,7 @@ export class SourcingService {
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
         const quantity = Number(source.order_quantity);
         const totalAmount = calculateSourcingTotal(unitPrice, quantity);
-        const requiresOwnerApproval = scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price);
+        const requiresOwnerApproval = scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price!);
         const immediate = initiatorRole === "owner_group"
           || (initiatorRole === "production_management" && !requiresOwnerApproval);
         const factoryChangeRequestId = randomUUID();
@@ -1975,7 +1975,7 @@ export class SourcingService {
         }
         const effectSource = {
           ...source,
-          sourcing_decision_id: source.sourcing_decision_id,
+          sourcing_decision_id: source.sourcing_decision_id!,
           decision_version: source.decision_version!,
           factory_change_request_id: factoryChangeRequestId,
           proposed_supplier_id: selected.supplier_id,
