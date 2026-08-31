@@ -570,3 +570,46 @@
 .sourcing-create-actions .dx-button {
   min-width: 144px;
 }
+
+
+.sourcing-owner-decision {
+  gap: var(--dx-v2-space-3);
+}
+
+.sourcing-owner-decision__desktop {
+  display: none;
+}
+
+.sourcing-owner-decision__lead,
+.sourcing-owner-decision__desktop > p {
+  margin: 0;
+  color: var(--dx-v2-color-text);
+  line-height: 1.75;
+}
+
+.sourcing-owner-decision__details {
+  margin-top: var(--dx-v2-space-2);
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.sourcing-owner-decision__details summary {
+  cursor: pointer;
+  color: var(--dx-v2-color-text);
+  font-weight: 700;
+}
+
+.sourcing-owner-decision__details p {
+  margin: var(--dx-v2-space-2) 0 0;
+  line-height: 1.65;
+}
+
+@media (min-width: 761px) {
+  .sourcing-owner-mobile-summary {
+    display: none;
+  }
+
+  .sourcing-owner-decision__desktop {
+    display: grid;
+    gap: var(--dx-v2-space-2);
+  }
+}

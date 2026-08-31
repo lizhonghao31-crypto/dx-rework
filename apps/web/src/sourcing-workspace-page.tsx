@@ -154,6 +154,25 @@ const businessInputValue = (value: string): string =>
 
 const businessInputChange = (value: string): string => value.replace(/,/g, "");
 
+const subtractFixedPoint = (left: string, right: string, scale: number): string | null => {
+  const toScaled = (value: string): bigint | null => {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+    if (!match || (match[2]?.length ?? 0) > scale) return null;
+    return BigInt(match[1]!) * (10n ** BigInt(scale))
+      + BigInt((match[2] ?? "").padEnd(scale, "0"));
+  };
+  const leftScaled = toScaled(left);
+  const rightScaled = toScaled(right);
+  if (leftScaled === null || rightScaled === null) return null;
+  const delta = leftScaled - rightScaled;
+  const sign = delta < 0n ? "-" : delta > 0n ? "+" : "";
+  const absolute = delta < 0n ? -delta : delta;
+  const divisor = 10n ** BigInt(scale);
+  const whole = absolute / divisor;
+  const fraction = (absolute % divisor).toString().padStart(scale, "0");
+  return sign + formatBusinessCurrency(whole.toString() + "." + fraction);
+};
+
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
@@ -857,8 +876,14 @@ function OrderDetailPage({
   const selectedTimeline = timeline.filter((entry) => timelineNode(entry) === selectedNode);
   const selectedWorkflow = WORKFLOW[selectedIndex] ?? WORKFLOW[WORKFLOW.length - 1]!;
   const priceAdjusted = item.ieQuote && item.decision
-    ? Number(item.ieQuote.unitPrice) !== Number(item.decision.unitPrice)
+    ? item.ieQuote.unitPrice !== item.decision.unitPrice
     : false;
+  const ownerUnitPriceDelta = item.ieQuote && item.decision
+    ? subtractFixedPoint(item.decision.unitPrice, item.ieQuote.unitPrice, 4)
+    : null;
+  const ownerTotalDelta = item.ieQuote && item.decision
+    ? subtractFixedPoint(item.decision.totalAmount, item.ieQuote.totalAmount, 2)
+    : null;
   const pendingFactoryChange = [...timeline].reverse()
     .find((entry) => entry.kind === "factory_change_request");
   const latestFinance = [...timeline].reverse()
@@ -989,26 +1014,23 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
-          {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview">
-            <h2>04 · 老板最终审批</h2>
-            <p>请核对订单事实与生产管理提交的选厂方案，再批准或驳回。</p>
-            <p className="sourcing-owner-mobile-summary">IE 原价 {item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}；生产管理价格 {item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}；加工厂 {item.decision?.supplierName ?? "—"}。</p>
-            <dl className="sourcing-owner-summary" aria-label="老板审批摘要">
-              <div><dt>ERP 订单</dt><dd>{item.erpOrderNo}</dd></div>
-              <div><dt>款号</dt><dd>{item.styleNo}</dd></div>
-              <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
-              <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
-              <div className="sourcing-owner-summary__processes"><dt>工艺</dt><dd>{item.processes.length ? item.processes.map((process, index) => <span key={process}>{index + 1}. {process}</span>) : "—"}</dd></div>
-              <div><dt>拟选加工厂</dt><dd>{item.decision?.supplierName ?? "—"}</dd></div>
-              <div><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
-              <div><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
-              <div><dt>价格变化</dt><dd>{priceAdjusted ? "生产管理已调整" : "沿用 IE 价格"}</dd></div>
-              <div><dt>订单总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
-              <div className="sourcing-owner-summary__reason"><dt>选厂 / 调价说明</dt><dd>{item.decision?.decisionReason || "无补充说明"}</dd></div>
-            </dl>
+          {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview sourcing-owner-decision">
+            <div className="sourcing-owner-mobile-summary">
+              <h2>04 · 最终审批</h2>
+              <p>{item.decision?.supplierName ?? "—"} · {item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}/件 · {formatBusinessDecimal(item.orderQuantity)} 件</p>
+            </div>
+            <div className="sourcing-owner-decision__desktop">
+              <h2>04 · 最终审批</h2>
+              <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision?.supplierName ?? "—"}</strong> 以 <strong>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}/件</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，订单总额 <strong>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</strong>。</p>
+              <p>相对 IE 报价 {item.ieQuote ? `${formatBusinessCurrency(item.ieQuote.unitPrice)}/件` : "—"}，单价变化 <strong>{ownerUnitPriceDelta ?? "—"}/件</strong>，总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
+              <details className="sourcing-owner-decision__details">
+                <summary>查看完整订单资料</summary>
+                <p>ERP：{item.erpOrderNo}；款号：{item.styleNo}；交货日期：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
+              </details>
+            </div>
             {canOwner ? <div className="sourcing-owner-actions">
               <label><span>审批说明 / 驳回原因</span><input value={ownerReason} maxLength={500} onChange={(event) => { setOwnerReason(event.target.value); actionKey.current = null; }} /></label>
-              <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved", ...(ownerReason.trim() ? { decisionReason: ownerReason.trim() } : {}) }, "老板已批准")}>批准</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !ownerReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected", decisionReason: ownerReason.trim() }, "已驳回生产管理重新调整")}>驳回</button></div>
+              <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved", ...(ownerReason.trim() ? { decisionReason: ownerReason.trim() } : {}) }, "老板已批准")}>批准方案</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !ownerReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected", decisionReason: ownerReason.trim() }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button></div>
             </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
