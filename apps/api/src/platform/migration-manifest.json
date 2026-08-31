@@ -126,6 +126,7 @@
     { "version": "0124_sourcing_ordered_processes", "checksum": "b19a8cbf1c62a272b14d164005a4d417e096aa87ed3720b464094309fd94c2c0" },
     { "version": "0125_sourcing_image_supplement", "checksum": "4bae4b9c495f49717680939d2e556274b0a73bdf117f6c1e75ab5efe7e9a7e71" },
     { "version": "0126_sourcing_finance_readonly_reconciliation", "checksum": "2af072f84f42c7482cd939d3b6b96e7f86eca63b2d12f5100906d6eb7d705441" },
-    { "version": "0127_sourcing_factory_change_role_metadata", "checksum": "b3d505e010d1932d22036f8091b27924645965c48917680d64aba9f8c76adf6a" }
+    { "version": "0127_sourcing_factory_change_role_metadata", "checksum": "b3d505e010d1932d22036f8091b27924645965c48917680d64aba9f8c76adf6a" },
+    { "version": "0128_sourcing_factory_change_workflow", "checksum": "7e2cce2203029acd6ee3fdb3539b0a0bead0f409b71478bb0ded111c173360c2" }
   ]
 }

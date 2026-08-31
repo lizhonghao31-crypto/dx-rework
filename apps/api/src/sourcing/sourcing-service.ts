@@ -18,6 +18,7 @@ import type {
   RequestSourcingFactoryChange,
   SourcingCaseListResponse,
   SourcingFactoryListResponse,
+  SourcingFactoryChangeStateResponse,
   SourcingCaseStatus,
   SourcingCaseSummary,
   SourcingAttachmentListResponse,
@@ -54,6 +55,7 @@ const OWNER_DECISION_ROLE = "owner_group";
 const CONTRACT_ROLE = "order_merchandiser";
 const FACTORY_CHANGE_REQUEST_ROLE = "order_merchandiser";
 const FACTORY_CHANGE_VERIFY_ROLE = "production_management";
+const FACTORY_CHANGE_OWNER_ROLE = "owner_group";
 const FINANCE_RECONCILE_ROLE = "factory_payables";
 const EXCEPTION_VERIFY_ROLE = "production_management";
 const LANE_KEY = "garment_processing" as const;
@@ -840,6 +842,81 @@ export class SourcingService {
         supplierCode: row.supplier_code,
         supplierName: row.supplier_name,
       })),
+    };
+  }
+
+  async getCurrentFactoryChange(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+  ): Promise<SourcingFactoryChangeStateResponse> {
+    this.assertReader(actor);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const result = await this.database.query<{
+      factory_change_request_id: string;
+      from_decision_id: string;
+      initiator_role: "order_merchandiser" | "production_management" | "owner_group";
+      proposed_supplier_id: string;
+      proposed_supplier_name_snapshot: string;
+      proposed_unit_price: string;
+      proposed_quantity: number | string;
+      proposed_total_amount: string;
+      change_reason: string;
+      requires_owner_approval: boolean;
+      requested_by: string;
+      requested_at: Date | string;
+      management_decision: "approved" | "rejected" | null;
+      owner_decision: "approved" | "rejected" | null;
+      effective: boolean;
+    }>(
+      `SELECT change.factory_change_request_id,change.from_decision_id,
+              change.initiator_role,change.proposed_supplier_id,
+              change.proposed_supplier_name_snapshot,change.proposed_unit_price,
+              change.proposed_quantity,change.proposed_total_amount,
+              change.change_reason,change.requires_owner_approval,
+              change.requested_by,change.requested_at,
+              management_review.decision AS management_decision,
+              owner_review.decision AS owner_decision,
+              EXISTS(
+                SELECT 1 FROM sourcing_decisions effective
+                WHERE effective.source_change_request_id=change.factory_change_request_id
+              ) AS effective
+       FROM sourcing_factory_change_requests change
+       LEFT JOIN sourcing_factory_change_decisions management_review
+         ON management_review.factory_change_request_id=change.factory_change_request_id
+        AND management_review.decision_role='production_management'
+       LEFT JOIN sourcing_factory_change_decisions owner_review
+         ON owner_review.factory_change_request_id=change.factory_change_request_id
+        AND owner_review.decision_role='owner_group'
+       WHERE change.sourcing_case_id=$1
+       ORDER BY change.requested_at DESC,change.factory_change_request_id DESC
+       LIMIT 1`,
+      [sourcingCaseId],
+    );
+    const row = result.rows[0];
+    if (!row) return { item: null };
+    const status = row.effective
+      ? "effective" as const
+      : row.management_decision === "rejected" || row.owner_decision === "rejected"
+        ? "rejected" as const
+        : row.initiator_role === "order_merchandiser" && row.management_decision === null
+          ? "pending_management" as const
+          : "pending_owner" as const;
+    return {
+      item: {
+        factoryChangeRequestId: row.factory_change_request_id,
+        fromDecisionId: row.from_decision_id,
+        initiatorRole: row.initiator_role,
+        proposedSupplierId: row.proposed_supplier_id,
+        proposedSupplierName: row.proposed_supplier_name_snapshot,
+        proposedUnitPrice: row.proposed_unit_price,
+        proposedQuantity: Number(row.proposed_quantity),
+        proposedTotalAmount: row.proposed_total_amount,
+        changeReason: row.change_reason,
+        requiresOwnerApproval: row.requires_owner_approval,
+        status,
+        requestedBy: row.requested_by,
+        requestedAt: toIso(row.requested_at),
+      },
     };
   }
 
@@ -1635,18 +1712,135 @@ export class SourcingService {
     }
   }
 
+  private factoryChangeInitiator(
+    actor: TrustedActorContext,
+  ): "order_merchandiser" | "production_management" | "owner_group" {
+    if (
+      actor.authorizationCapability === FACTORY_CHANGE_REQUEST_CAPABILITY
+      && (actor.actorRoles.includes(ROOT_ROLE) || actor.actorRoles.includes(FACTORY_CHANGE_REQUEST_ROLE))
+    ) return "order_merchandiser";
+    if (
+      actor.authorizationCapability === MANAGEMENT_DECISION_CAPABILITY
+      && (actor.actorRoles.includes(ROOT_ROLE) || actor.actorRoles.includes(MANAGEMENT_DECISION_ROLE))
+    ) return "production_management";
+    if (
+      actor.authorizationCapability === OWNER_DECISION_CAPABILITY
+      && (actor.actorRoles.includes(ROOT_ROLE) || actor.actorRoles.includes(FACTORY_CHANGE_OWNER_ROLE))
+    ) return "owner_group";
+    return fail("当前岗位无权发起订单转厂", 403, "FORBIDDEN");
+  }
+
+  private factoryChangeReviewer(
+    actor: TrustedActorContext,
+  ): "production_management" | "owner_group" {
+    if (
+      actor.authorizationCapability === FACTORY_CHANGE_VERIFY_CAPABILITY
+      && (actor.actorRoles.includes(ROOT_ROLE) || actor.actorRoles.includes(FACTORY_CHANGE_VERIFY_ROLE))
+    ) return "production_management";
+    if (
+      actor.authorizationCapability === OWNER_DECISION_CAPABILITY
+      && (actor.actorRoles.includes(ROOT_ROLE) || actor.actorRoles.includes(FACTORY_CHANGE_OWNER_ROLE))
+    ) return "owner_group";
+    return fail("当前岗位无权审批订单转厂", 403, "FORBIDDEN");
+  }
+
+  private factoryChangeTargetStatus(
+    status: string,
+    actor: TrustedActorContext,
+  ): "pending_owner_approval" | "pending_finance_reconciliation" {
+    const ownerAction = actor.authorizationCapability === OWNER_DECISION_CAPABILITY;
+    return !ownerAction && (
+      status === "pending_management_decision"
+      || status === "pending_owner_approval"
+    )
+      ? "pending_owner_approval"
+      : "pending_finance_reconciliation";
+  }
+
+  private async applyFactoryChange(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    source: Readonly<{
+      sourcing_case_id: string;
+      status: string;
+      sequence: number | string;
+      sourcing_decision_id: string;
+      decision_version: number | string;
+      factory_change_request_id: string;
+      proposed_supplier_id: string;
+      proposed_supplier_code_snapshot: string;
+      proposed_supplier_name_snapshot: string;
+      proposed_unit_price: string;
+      proposed_quantity: number | string;
+      proposed_total_amount: string;
+      reconciliation_version: number | string;
+    }>,
+    eventId: string,
+    reason: string,
+  ): Promise<void> {
+    const nextDecisionVersion = Number(source.decision_version) + 1;
+    const nextStatus = this.factoryChangeTargetStatus(source.status, actor);
+    await client.query(
+      `INSERT INTO sourcing_decisions(
+         sourcing_decision_id,sourcing_case_id,decision_version,source_type,
+         source_ie_quote_id,supersedes_decision_id,source_change_request_id,
+         supplier_id,supplier_code_snapshot,supplier_name_snapshot,
+         unit_price,quantity,total_amount,decision_reason,decided_by,
+         operation_event_id,request_id
+       ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      [
+        randomUUID(), source.sourcing_case_id ?? fail("换厂订单标识缺失"),
+        nextDecisionVersion, source.sourcing_decision_id, source.factory_change_request_id,
+        source.proposed_supplier_id, source.proposed_supplier_code_snapshot,
+        source.proposed_supplier_name_snapshot, source.proposed_unit_price,
+        Number(source.proposed_quantity), source.proposed_total_amount,
+        reason, actor.actorId, eventId, actor.requestId,
+      ],
+    );
+    if (nextStatus !== source.status) {
+      await client.query(
+        `INSERT INTO sourcing_case_transitions(
+           sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
+           business_action,transition_reason,actor_id,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,'factory_change_effective',$6,$7,$8,$9)`,
+        [
+          randomUUID(), source.sourcing_case_id, Number(source.sequence) + 1,
+          source.status, nextStatus, reason, actor.actorId, eventId, actor.requestId,
+        ],
+      );
+    }
+    await this.todoProjection?.completeOpenByDedupePrefix(
+      client, actor, `sourcing:${source.sourcing_case_id}:finance:`,
+      "选厂版本已更新，原财务核对待办失效",
+    );
+    if (nextStatus === "pending_finance_reconciliation") {
+      await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
+        category: "sourcing_finance_reconcile",
+        sourceEventId: eventId,
+        sourceAction: "sourcing.factory_change.effective",
+        entityType: "sourcing_case",
+        entityId: source.sourcing_case_id,
+        requiredRole: FINANCE_RECONCILE_ROLE,
+        requiredCapability: FINANCE_RECONCILE_CAPABILITY,
+        route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id },
+        policyKey: "general",
+        dedupeKey: `sourcing:${source.sourcing_case_id}:finance:${nextDecisionVersion}:${Number(source.reconciliation_version)+1}`,
+      });
+    }
+  }
+
   async requestFactoryChange(
     actor: TrustedActorContext,
     sourcingCaseId: string,
     input: RequestSourcingFactoryChange,
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
-    this.assertActor(actor, FACTORY_CHANGE_REQUEST_CAPABILITY, FACTORY_CHANGE_REQUEST_ROLE);
+    const initiatorRole = this.factoryChangeInitiator(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     if (!UUID_PATTERN.test(input.supplierId)) fail("加工厂标识无效");
     const unitPrice = normalizeSourcingUnitPrice(input.unitPrice);
     const changeReason = normalizeText(input.changeReason, "换厂原因", 500);
-    const scope = "sourcing.factory-change.request";
+    const scope = `sourcing.factory-change.request.${initiatorRole}`;
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
@@ -1655,23 +1849,29 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId,supplierId: input.supplierId,unitPrice,changeReason,
+          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const current = await client.query<{
+          sourcing_case_id: string;
           order_quantity: number | string;
           status: string;
           sequence: number | string;
           sourcing_decision_id: string | null;
           supplier_id: string | null;
+          decision_unit_price: string | null;
           decision_version: number | string | null;
           reconciliation_version: number | string;
+          open_change_id: string | null;
         }>(
-          `SELECT source_case.order_quantity,transition_row.to_status AS status,
-                  transition_row.sequence,decision_row.sourcing_decision_id,
-                  decision_row.supplier_id,decision_row.decision_version,
-                  COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version
+          `SELECT source_case.sourcing_case_id,source_case.order_quantity,
+                  transition_row.to_status AS status,transition_row.sequence,
+                  decision_row.sourcing_decision_id,decision_row.supplier_id,
+                  decision_row.unit_price AS decision_unit_price,
+                  decision_row.decision_version,
+                  COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version,
+                  open_change.factory_change_request_id AS open_change_id
            FROM sourcing_cases source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
@@ -1691,21 +1891,34 @@ export class SourcingService {
              WHERE reconciliation.sourcing_case_id=source_case.sourcing_case_id
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
-           WHERE source_case.sourcing_case_id=$1
-             AND source_case.deleted_at IS NULL
+           LEFT JOIN LATERAL (
+             SELECT change.factory_change_request_id
+             FROM sourcing_factory_change_requests change
+             WHERE change.sourcing_case_id=source_case.sourcing_case_id
+               AND NOT EXISTS (
+                 SELECT 1 FROM sourcing_decisions effective
+                 WHERE effective.source_change_request_id=change.factory_change_request_id
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM sourcing_factory_change_decisions rejected
+                 WHERE rejected.factory_change_request_id=change.factory_change_request_id
+                   AND rejected.decision='rejected'
+               )
+             ORDER BY change.requested_at DESC LIMIT 1
+           ) open_change ON true
+           WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
-        if (source.status !== "pending_finance_reconciliation" || !source.sourcing_decision_id) {
-          fail("只有待财务核对的订单可以发起换厂", 409, "INVALID_STATE_TRANSITION");
+        if (!source.sourcing_decision_id || !source.decision_unit_price) {
+          fail("生产管理首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
         }
+        if (source.open_change_id) fail("该订单已有待处理的转厂申请", 409, "CONFLICT");
         if (source.supplier_id === input.supplierId) fail("新加工厂不能与当前加工厂相同");
         const factory = await client.query<{
-          supplier_id: string;
-          supplier_code: string;
-          supplier_name: string;
+          supplier_id: string; supplier_code: string; supplier_name: string;
         }>(
           `SELECT supplier_id,supplier_code,supplier_name
            FROM current_supplier_catalog
@@ -1715,23 +1928,31 @@ export class SourcingService {
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
         const quantity = Number(source.order_quantity);
         const totalAmount = calculateSourcingTotal(unitPrice, quantity);
+        const requiresOwnerApproval = scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price!);
+        const immediate = initiatorRole === "owner_group"
+          || (initiatorRole === "production_management" && !requiresOwnerApproval);
+        const effectiveStatus = this.factoryChangeTargetStatus(source.status, actor);
         const factoryChangeRequestId = randomUUID();
+        const action = immediate ? "sourcing.factory_change.effective" : "sourcing.factory_change.request";
         const eventId = await this.events.append(client, actor, {
-          action: "sourcing.factory_change.request",
+          action,
           entityType: "sourcing_case",
           entityId: sourcingCaseId,
           before: {
-            status: "pending_finance_reconciliation",
+            status: source.status,
             decisionId: source.sourcing_decision_id,
             supplierId: source.supplier_id,
+            unitPrice: source.decision_unit_price,
           },
           after: {
-            status: "pending_factory_change_verification",
+            status: immediate ? effectiveStatus : source.status,
             factoryChangeRequestId,
+            initiatorRole,
             supplierId: selected.supplier_id,
             supplierCode: selected.supplier_code,
             supplierName: selected.supplier_name,
-            unitPrice,quantity,totalAmount,
+            unitPrice, quantity, totalAmount, requiresOwnerApproval,
+            effective: immediate,
           },
           reason: changeReason,
         });
@@ -1740,43 +1961,74 @@ export class SourcingService {
              factory_change_request_id,sourcing_case_id,from_decision_id,
              proposed_supplier_id,proposed_supplier_code_snapshot,
              proposed_supplier_name_snapshot,proposed_unit_price,proposed_quantity,
-             proposed_total_amount,change_reason,requested_by,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+             proposed_total_amount,change_reason,requested_by,operation_event_id,request_id,
+             initiator_role,requires_owner_approval
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [
             factoryChangeRequestId,sourcingCaseId,source.sourcing_decision_id,
             selected.supplier_id,selected.supplier_code,selected.supplier_name,
             unitPrice,quantity,totalAmount,changeReason,actor.actorId,eventId,actor.requestId,
+            initiatorRole,requiresOwnerApproval,
           ],
         );
-        await client.query(
-          `INSERT INTO sourcing_case_transitions(
-             sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
-             business_action,transition_reason,actor_id,operation_event_id,request_id
-           ) VALUES($1,$2,$3,'pending_finance_reconciliation',
-             'pending_factory_change_verification','factory_change_requested',$4,$5,$6,$7)`,
-          [
-            randomUUID(),sourcingCaseId,Number(source.sequence)+1,changeReason,
-            actor.actorId,eventId,actor.requestId,
-          ],
-        );
-        await this.todoProjection?.completeOpenByDedupePrefix(
-          client,
-          actor,
-          `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:`,
-          "已发起换厂，暂停财务核对",
-        );
-        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
-          category: "sourcing_factory_change_verify",
-          sourceEventId: eventId,
-          sourceAction: "sourcing.factory_change.request",
-          entityType: "sourcing_case",
-          entityId: sourcingCaseId,
-          requiredRole: FACTORY_CHANGE_VERIFY_ROLE,
-          requiredCapability: FACTORY_CHANGE_VERIFY_CAPABILITY,
-          route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
-          policyKey: "general",
-          dedupeKey: `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}`,
-        });
+        const reviewRole = initiatorRole === "production_management"
+          ? "production_management"
+          : initiatorRole === "owner_group" ? "owner_group" : null;
+        if (reviewRole) {
+          await client.query(
+            `INSERT INTO sourcing_factory_change_decisions(
+               factory_change_decision_id,factory_change_request_id,decision,
+               verification_reason,verified_by,operation_event_id,request_id,decision_role
+             ) VALUES($1,$2,'approved',$3,$4,$5,$6,$7)`,
+            [
+              randomUUID(),factoryChangeRequestId,changeReason,actor.actorId,
+              eventId,actor.requestId,reviewRole,
+            ],
+          );
+        }
+        const effectSource = {
+          ...source,
+          sourcing_decision_id: source.sourcing_decision_id!,
+          decision_version: source.decision_version!,
+          factory_change_request_id: factoryChangeRequestId,
+          proposed_supplier_id: selected.supplier_id,
+          proposed_supplier_code_snapshot: selected.supplier_code,
+          proposed_supplier_name_snapshot: selected.supplier_name,
+          proposed_unit_price: unitPrice,
+          proposed_quantity: quantity,
+          proposed_total_amount: totalAmount,
+        };
+        if (immediate) {
+          await this.applyFactoryChange(client, actor, effectSource, eventId, changeReason);
+        } else {
+          if (source.status === "pending_finance_reconciliation") {
+            await this.todoProjection?.completeOpenByDedupePrefix(
+              client, actor,
+              `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:`,
+              "订单转厂审批中，原财务核对待办暂停",
+            );
+          }
+          const approvalRole = initiatorRole === "order_merchandiser"
+            ? FACTORY_CHANGE_VERIFY_ROLE
+            : FACTORY_CHANGE_OWNER_ROLE;
+          const approvalCapability = initiatorRole === "order_merchandiser"
+            ? FACTORY_CHANGE_VERIFY_CAPABILITY
+            : OWNER_DECISION_CAPABILITY;
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
+            category: initiatorRole === "order_merchandiser"
+              ? "sourcing_factory_change_verify"
+              : "sourcing_factory_change_owner_approve",
+            sourceEventId: eventId,
+            sourceAction: action,
+            entityType: "sourcing_case",
+            entityId: sourcingCaseId,
+            requiredRole: approvalRole,
+            requiredCapability: approvalCapability,
+            route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+            policyKey: "general",
+            dedupeKey: `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}`,
+          });
+        }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
       await client.query("COMMIT");
@@ -1784,7 +2036,7 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("换厂状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        fail("转厂状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
@@ -1799,12 +2051,12 @@ export class SourcingService {
     input: DecideSourcingFactoryChange,
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
-    this.assertActor(actor, FACTORY_CHANGE_VERIFY_CAPABILITY, FACTORY_CHANGE_VERIFY_ROLE);
+    const reviewerRole = this.factoryChangeReviewer(actor);
     if (!UUID_PATTERN.test(sourcingCaseId) || !UUID_PATTERN.test(factoryChangeRequestId)) {
-      fail("换厂申请标识无效");
+      fail("转厂申请标识无效");
     }
     const verificationReason = normalizeText(input.verificationReason, "核实说明", 500);
-    const scope = `sourcing.factory-change.${input.decision}`;
+    const scope = `sourcing.factory-change.${reviewerRole}.${input.decision}`;
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
@@ -1813,18 +2065,20 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId,factoryChangeRequestId,
-          decision: input.decision,verificationReason,
+          sourcingCaseId,factoryChangeRequestId,decision: input.decision,verificationReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const current = await client.query<{
+          sourcing_case_id: string;
           status: string;
           sequence: number | string;
           sourcing_decision_id: string;
           decision_version: number | string;
           factory_change_request_id: string;
           from_decision_id: string;
+          initiator_role: "order_merchandiser" | "production_management" | "owner_group";
+          requires_owner_approval: boolean;
           proposed_supplier_id: string;
           proposed_supplier_code_snapshot: string;
           proposed_supplier_name_snapshot: string;
@@ -1832,14 +2086,25 @@ export class SourcingService {
           proposed_quantity: number | string;
           proposed_total_amount: string;
           reconciliation_version: number | string;
+          management_decision: string | null;
+          owner_decision: string | null;
+          effective: boolean;
         }>(
-          `SELECT transition_row.to_status AS status,transition_row.sequence,
-                  decision_row.sourcing_decision_id,decision_row.decision_version,
-                  change.factory_change_request_id,change.from_decision_id,
-                  change.proposed_supplier_id,change.proposed_supplier_code_snapshot,
+          `SELECT source_case.sourcing_case_id,transition_row.to_status AS status,
+                  transition_row.sequence,decision_row.sourcing_decision_id,
+                  decision_row.decision_version,change.factory_change_request_id,
+                  change.from_decision_id,change.initiator_role,
+                  change.requires_owner_approval,change.proposed_supplier_id,
+                  change.proposed_supplier_code_snapshot,
                   change.proposed_supplier_name_snapshot,change.proposed_unit_price,
                   change.proposed_quantity,change.proposed_total_amount,
-                  COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version
+                  COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version,
+                  management_review.decision AS management_decision,
+                  owner_review.decision AS owner_decision,
+                  EXISTS(
+                    SELECT 1 FROM sourcing_decisions effective
+                    WHERE effective.source_change_request_id=change.factory_change_request_id
+                  ) AS effective
            FROM sourcing_cases source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
@@ -1856,39 +2121,67 @@ export class SourcingService {
            JOIN sourcing_factory_change_requests change
              ON change.factory_change_request_id=$2
             AND change.sourcing_case_id=source_case.sourcing_case_id
+           LEFT JOIN sourcing_factory_change_decisions management_review
+             ON management_review.factory_change_request_id=change.factory_change_request_id
+            AND management_review.decision_role='production_management'
+           LEFT JOIN sourcing_factory_change_decisions owner_review
+             ON owner_review.factory_change_request_id=change.factory_change_request_id
+            AND owner_review.decision_role='owner_group'
            LEFT JOIN LATERAL (
              SELECT reconciliation.reconciliation_version
              FROM sourcing_finance_reconciliations reconciliation
              WHERE reconciliation.sourcing_case_id=source_case.sourcing_case_id
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
-           WHERE source_case.sourcing_case_id=$1
-             AND source_case.deleted_at IS NULL
+           WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
            FOR UPDATE OF source_case`,
           [sourcingCaseId,factoryChangeRequestId],
         );
         const source = current.rows[0];
-        if (!source) return fail("换厂申请不存在", 404, "NOT_FOUND");
+        if (!source) return fail("转厂申请不存在", 404, "NOT_FOUND");
+        if (source.effective || source.management_decision === "rejected" || source.owner_decision) {
+          fail("该转厂申请已经处理", 409, "INVALID_STATE_TRANSITION");
+        }
+        if (source.from_decision_id !== source.sourcing_decision_id) {
+          fail("转厂基准版本已经变化，请重新发起", 409, "INVALID_STATE_TRANSITION");
+        }
         if (
-          source.status !== "pending_factory_change_verification"
-          || source.from_decision_id !== source.sourcing_decision_id
-        ) fail("该换厂申请当前不可核实", 409, "INVALID_STATE_TRANSITION");
-        const approved = input.decision === "approved";
-        const action = approved
-          ? "sourcing.factory_change.approved"
-          : "sourcing.factory_change.rejected";
+          reviewerRole === "production_management"
+          && (source.initiator_role !== "order_merchandiser" || source.management_decision)
+        ) fail("该转厂申请不需要生产管理审批", 409, "INVALID_STATE_TRANSITION");
+        if (
+          reviewerRole === "owner_group"
+          && (
+            !source.requires_owner_approval
+            || (source.initiator_role === "order_merchandiser"
+              && source.management_decision !== "approved")
+          )
+        ) fail("该转厂申请当前不需要老板审批", 409, "INVALID_STATE_TRANSITION");
+        const willEffect = input.decision === "approved"
+          && (reviewerRole === "owner_group" || !source.requires_owner_approval);
+        const effectiveStatus = this.factoryChangeTargetStatus(source.status, actor);
+        const action = willEffect
+          ? "sourcing.factory_change.effective"
+          : input.decision === "approved"
+            ? "sourcing.factory_change.management_approved"
+            : reviewerRole === "owner_group"
+              ? "sourcing.factory_change.owner_rejected"
+              : "sourcing.factory_change.rejected";
         const eventId = await this.events.append(client, actor, {
           action,
           entityType: "sourcing_case",
           entityId: sourcingCaseId,
           before: {
-            status: "pending_factory_change_verification",
+            status: source.status,
             decisionId: source.sourcing_decision_id,
             factoryChangeRequestId,
           },
           after: {
-            status: "pending_finance_reconciliation",
+            status: willEffect ? effectiveStatus : source.status,
             decision: input.decision,
+            reviewerRole,
+            effective: willEffect,
+            requiresOwnerApproval: source.requires_owner_approval,
             supplierId: source.proposed_supplier_id,
             unitPrice: source.proposed_unit_price,
             quantity: Number(source.proposed_quantity),
@@ -1899,51 +2192,33 @@ export class SourcingService {
         await client.query(
           `INSERT INTO sourcing_factory_change_decisions(
              factory_change_decision_id,factory_change_request_id,decision,
-             verification_reason,verified_by,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+             verification_reason,verified_by,operation_event_id,request_id,decision_role
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
           [
             randomUUID(),factoryChangeRequestId,input.decision,verificationReason,
-            actor.actorId,eventId,actor.requestId,
-          ],
-        );
-        const nextDecisionVersion = Number(source.decision_version)+1;
-        if (approved) {
-          await client.query(
-            `INSERT INTO sourcing_decisions(
-               sourcing_decision_id,sourcing_case_id,decision_version,source_type,
-               source_ie_quote_id,supersedes_decision_id,source_change_request_id,
-               supplier_id,supplier_code_snapshot,supplier_name_snapshot,
-               unit_price,quantity,total_amount,decision_reason,decided_by,
-               operation_event_id,request_id
-             ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-            [
-              randomUUID(),sourcingCaseId,nextDecisionVersion,source.sourcing_decision_id,
-              factoryChangeRequestId,source.proposed_supplier_id,
-              source.proposed_supplier_code_snapshot,source.proposed_supplier_name_snapshot,
-              source.proposed_unit_price,Number(source.proposed_quantity),
-              source.proposed_total_amount,verificationReason,actor.actorId,eventId,actor.requestId,
-            ],
-          );
-        }
-        await client.query(
-          `INSERT INTO sourcing_case_transitions(
-             sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
-             business_action,transition_reason,actor_id,operation_event_id,request_id
-           ) VALUES($1,$2,$3,'pending_factory_change_verification',$4,$5,$6,$7,$8,$9)`,
-          [
-            randomUUID(),sourcingCaseId,Number(source.sequence)+1,
-            "pending_finance_reconciliation",
-            approved ? "factory_change_approved" : "factory_change_rejected",
-            verificationReason,actor.actorId,eventId,actor.requestId,
+            actor.actorId,eventId,actor.requestId,reviewerRole,
           ],
         );
         await this.todoProjection?.completeOpenByDedupePrefix(
-          client,
-          actor,
-          `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}:`,
-          approved ? "换厂已核实通过" : "换厂已驳回",
+          client, actor, `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}:`,
+          input.decision === "approved" ? "转厂审批已通过" : "转厂申请已驳回",
         );
-        if (approved) {
+        if (willEffect) {
+          await this.applyFactoryChange(client, actor, source, eventId, verificationReason);
+        } else if (input.decision === "approved") {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
+            category: "sourcing_factory_change_owner_approve",
+            sourceEventId: eventId,
+            sourceAction: action,
+            entityType: "sourcing_case",
+            entityId: sourcingCaseId,
+            requiredRole: FACTORY_CHANGE_OWNER_ROLE,
+            requiredCapability: OWNER_DECISION_CAPABILITY,
+            route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+            policyKey: "general",
+            dedupeKey: `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}`,
+          });
+        } else if (source.status === "pending_finance_reconciliation") {
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
@@ -1954,41 +2229,20 @@ export class SourcingService {
             requiredCapability: FINANCE_RECONCILE_CAPABILITY,
             route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
             policyKey: "general",
-            dedupeKey: `sourcing:${sourcingCaseId}:finance:${nextDecisionVersion}:${Number(source.reconciliation_version)+1}`,
+            dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}`,
           });
-          const approvingOwners = await client.query<{ user_id: string }>(
-            `SELECT DISTINCT decided_by AS user_id
-             FROM sourcing_owner_decisions
-             WHERE sourcing_case_id=$1 AND decision='approved'
-             ORDER BY decided_by`,
-            [sourcingCaseId],
+        } else if (source.status === "pending_factory_change_verification") {
+          await client.query(
+            `INSERT INTO sourcing_case_transitions(
+               sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
+               business_action,transition_reason,actor_id,operation_event_id,request_id
+             ) VALUES($1,$2,$3,'pending_factory_change_verification',
+               'pending_finance_reconciliation','factory_change_rejected',$4,$5,$6,$7)`,
+            [
+              randomUUID(),sourcingCaseId,Number(source.sequence)+1,
+              verificationReason,actor.actorId,eventId,actor.requestId,
+            ],
           );
-          for (const owner of approvingOwners.rows) {
-            await this.todoProjection?.information(client, actor, {
-              category: "sourcing_factory_change_notice",
-              sourceEventId: eventId,
-              sourceAction: action,
-              entityType: "sourcing_case",
-              entityId: sourcingCaseId,
-              recipientUserId: owner.user_id,
-              route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
-              dedupeKey:
-                `sourcing:${sourcingCaseId}:factory_change_notice:${factoryChangeRequestId}:${owner.user_id}`,
-            });
-          }
-        } else {
-          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
-            category: "sourcing_finance_reconcile",
-            sourceEventId: eventId,
-            sourceAction: action,
-            entityType: "sourcing_case",
-            entityId: sourcingCaseId,
-            requiredRole: FINANCE_RECONCILE_ROLE,
-            requiredCapability: FINANCE_RECONCILE_CAPABILITY,
-            route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
-            policyKey: "general",
-            dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:resume:${factoryChangeRequestId}`,
-          });
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });
@@ -1997,7 +2251,7 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("换厂核实状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        fail("转厂审批状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
@@ -2088,6 +2342,25 @@ export class SourcingService {
         if (!source) return fail("报价选厂询价或当前选厂决定不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_finance_reconciliation") {
           fail("该订单当前不在财务核对阶段", 409, "INVALID_STATE_TRANSITION");
+        }
+        const openFactoryChange = await client.query(
+          `SELECT 1
+           FROM sourcing_factory_change_requests request_row
+           WHERE request_row.sourcing_case_id=$1
+             AND NOT EXISTS (
+               SELECT 1 FROM sourcing_decisions effective
+               WHERE effective.source_change_request_id=request_row.factory_change_request_id
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM sourcing_factory_change_decisions rejected
+               WHERE rejected.factory_change_request_id=request_row.factory_change_request_id
+                 AND rejected.decision='rejected'
+             )
+           LIMIT 1`,
+          [sourcingCaseId],
+        );
+        if (openFactoryChange.rowCount) {
+          fail("订单转厂审批中，财务暂不能核对", 409, "INVALID_STATE_TRANSITION");
         }
         const expectedFactoryResult = await client.query<{
           supplier_id: string;
