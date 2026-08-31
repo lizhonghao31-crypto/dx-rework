@@ -538,3 +538,37 @@ BEGIN
 END;
 $$;
 
+-- Finance remains a read-only main node and must not reconcile a stale decision
+-- while an auxiliary factory-change request is still awaiting approval.
+CREATE OR REPLACE FUNCTION guard_sourcing_reconciliation_without_open_factory_change()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM sourcing_factory_change_requests request_row
+    WHERE request_row.sourcing_case_id=NEW.sourcing_case_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sourcing_decisions effective
+        WHERE effective.source_change_request_id=request_row.factory_change_request_id
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sourcing_factory_change_decisions rejected
+        WHERE rejected.factory_change_request_id=request_row.factory_change_request_id
+          AND rejected.decision='rejected'
+      )
+  ) THEN
+    RAISE EXCEPTION 'finance reconciliation must wait for the open factory change'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS sourcing_reconciliation_without_open_factory_change
+  ON sourcing_finance_reconciliations;
+CREATE TRIGGER sourcing_reconciliation_without_open_factory_change
+  BEFORE INSERT ON sourcing_finance_reconciliations
+  FOR EACH ROW
+  EXECUTE FUNCTION guard_sourcing_reconciliation_without_open_factory_change();
