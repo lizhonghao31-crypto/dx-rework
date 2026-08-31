@@ -15,8 +15,7 @@ ALTER TABLE sourcing_factory_change_decisions
     CHECK(decision_role IN ('production_management','owner_group'));
 
 -- Existing audit rows receive the policy result implied by their immutable
--- proposal and baseline decision. The append-only guard is disabled only for
--- this migration-owned backfill and restored immediately afterward.
+-- proposal and baseline decision.
 ALTER TABLE sourcing_factory_change_requests
   DISABLE TRIGGER sourcing_factory_change_requests_no_update;
 UPDATE sourcing_factory_change_requests request_row
