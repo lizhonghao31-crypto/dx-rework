@@ -801,6 +801,8 @@ function OrderDetailPage({
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const hasPendingFactoryChange = factoryChange?.status === "pending_management"
+    || factoryChange?.status === "pending_owner";
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
 
   useEffect(() => {
@@ -1013,7 +1015,7 @@ function OrderDetailPage({
               <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
             </dl> : null}
-            {canFinance ? <div className="sourcing-finance-confirmation">
+            {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : canFinance ? <div className="sourcing-finance-confirmation">
               <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
               <details>
