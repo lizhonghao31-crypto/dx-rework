@@ -117,7 +117,7 @@ describe("UAT interface closure", () => {
   it("keeps wage detail and download without adjustment controls or page navigation", async () => {
     const detail = await read("apps/web/src/wages/wage-period-detail.tsx");
     expect(detail).toContain("查看分摊计算");
-    expect(detail).toContain("formatBusinessMoney(item.payableAmount)");
+    expect(detail).toContain("formatBusinessCurrency(item.payableAmount)");
     expect(detail).toContain("download");
     expect(detail).not.toContain("window.location.assign");
     expect(detail).not.toContain("发起工资调整");

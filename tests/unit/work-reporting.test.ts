@@ -53,8 +53,8 @@ describe("work reporting monetary snapshots", () => {
     expect(form).toContain("groupTasksByProcess");
     expect(form).toContain("processOrder.set(processName, processOrder.size)");
     expect(form).not.toContain("window.setInterval");
-    expect(form).toContain("IE 核准单价：¥");
-    expect(form).toContain("formatApprovedUnitPrice(task.unitPrice)");
+    expect(form).toContain("IE 核准单价：{formatBusinessCurrency(task.unitPrice)}");
+    expect(form).toContain('import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";');
     expect(form).toContain('className="work-reporting-approved-price"');
     expect(form).toContain("expandedProcesses");
     expect(form).toContain("progressProcessGroups.map");
