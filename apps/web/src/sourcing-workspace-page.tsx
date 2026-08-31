@@ -8,6 +8,7 @@ import {
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
   SourcingFactoryListResponseSchema,
+  SourcingFactoryChangeStateResponseSchema,
   SourcingTimelineResponseSchema,
   UploadIntentResponseSchema,
   calculateSourcingTotalExact,
@@ -15,6 +16,7 @@ import {
   type SourcingCaseStatus,
   type SourcingCaseSummary,
   type SourcingFactory,
+  type SourcingFactoryChangeState,
   type SourcingTimelineEntry,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -83,6 +85,7 @@ type LocalSourcingDraft = Readonly<{
 type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; unitPrice: string; decisionReason: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
+type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
 
 const request = async <T,>(
   path: string,
@@ -677,7 +680,7 @@ const statusStep = (status: SourcingCaseStatus): number => ({
   pending_management_decision: 2,
   pending_owner_approval: 3,
   pending_contract: 4,
-  pending_factory_change_verification: 4,
+  pending_factory_change_verification: 2,
   pending_finance_reconciliation: 4,
   pending_exception_verification: 4,
   closed: 5,
@@ -718,8 +721,8 @@ const timelineNode = (entry: SourcingTimelineEntry): SourcingWorkflowNodeKey => 
   management_decision: "management",
   owner_decision: "owner",
   contract: "finance",
-  factory_change_request: "finance",
-  factory_change_verification: "finance",
+  factory_change_request: "management",
+  factory_change_verification: "management",
   finance_reconciliation: "finance",
   exception_verification: "finance",
 } as const)[entry.kind];
@@ -729,7 +732,7 @@ const WORKFLOW_PREVIEWS: Readonly<Record<SourcingWorkflowNodeKey, string>> = {
   ie_quote: "查看 IE 核定的加工单价、数量、总额和说明。",
   management: "查看生产管理的调价、选厂及决定依据。",
   owner: "查看老板最终审批结论与审批说明。",
-  finance: "查看换厂、财务四项核对、差异处理和闭环记录。",
+  finance: "查看财务四项核对、差异处理和闭环记录。",
 };
 
 function OrderDetailPage({
@@ -747,6 +750,9 @@ function OrderDetailPage({
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", unitPrice: "", decisionReason: "" });
   const [ownerReason, setOwnerReason] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
+  const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
+  const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
+  const [factoryChangeReviewReason, setFactoryChangeReviewReason] = useState("");
   const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
   const [busy, setBusy] = useState(false);
@@ -760,17 +766,24 @@ function OrderDetailPage({
 
   const load = async (): Promise<void> => {
     try {
-      const [detail, evidence, history] = await Promise.all([
+      const [detail, evidence, history, currentFactoryChange] = await Promise.all([
         request(`sourcing/cases/${sourcingCaseId}`, SourcingCaseSummarySchema),
         request(`sourcing/cases/${sourcingCaseId}/attachments`, SourcingAttachmentListResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/timeline`, SourcingTimelineResponseSchema),
+        request(`sourcing/cases/${sourcingCaseId}/factory-changes/current`, SourcingFactoryChangeStateResponseSchema),
       ]);
       setItem(detail);
       setAttachments(evidence.items);
       setTimeline(history.items);
+      setFactoryChange(currentFactoryChange.item);
+      setFactoryChangeDraft((current) => ({
+        supplierId: current.supplierId,
+        unitPrice: current.unitPrice || businessInputValue(detail.decision?.unitPrice ?? ""),
+        changeReason: current.changeReason,
+      }));
       setDecision((current) => ({
         supplierId: current.supplierId || detail.decision?.supplierId || "",
-        unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
+        unitPrice: current.unitPrice || businessInputValue(detail.decision?.unitPrice ?? detail.ieQuote?.unitPrice ?? ""),
         decisionReason: current.decisionReason,
       }));
       setMessage("");
@@ -783,15 +796,21 @@ function OrderDetailPage({
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
   const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
+  const canMerchandiserTransfer = canAct(user, "order_merchandiser", "sourcing:factory_change:request");
+  const canManagementTransfer = canManage;
+  const canOwnerTransfer = canOwner;
+  const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const hasPendingFactoryChange = factoryChange?.status === "pending_management"
+    || factoryChange?.status === "pending_owner";
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage && !canMerchandiserTransfer && !canOwnerTransfer) return;
     void request("sourcing/factories", SourcingFactoryListResponseSchema)
       .then((body) => setFactories(body.items))
       .catch((error) => setMessage(error instanceof Error ? error.message : "加工厂加载失败"));
-  }, [canManage]);
+  }, [canManage, canMerchandiserTransfer, canOwnerTransfer]);
 
   const submit = async (
     path: string,
@@ -822,7 +841,11 @@ function OrderDetailPage({
 
   const step = statusStep(item.status);
   const activeNode = WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.key ?? "finance";
-  const selectedNode = sourcingWorkflowNodeFromSearch() ?? activeNode;
+  const requestedNode = sourcingWorkflowNodeFromSearch();
+  const requestedIndex = requestedNode ? WORKFLOW.findIndex((node) => node.key === requestedNode) : -1;
+  const requestedNodeIsAccessible = requestedNode !== null
+    && (item.status === "closed" || requestedIndex <= step);
+  const selectedNode = requestedNodeIsAccessible ? requestedNode : activeNode;
   const selectedIndex = WORKFLOW.findIndex((node) => node.key === selectedNode);
   const selectedState: SourcingWorkflowNodeState = item.status === "closed" || selectedIndex < step
     ? "completed"
@@ -840,6 +863,23 @@ function OrderDetailPage({
     : null;
   const latestFinance = [...timeline].reverse()
     .find((entry) => entry.kind === "finance_reconciliation");
+  const transferNodeRole = selectedNode === "created"
+    ? "order_merchandiser"
+    : selectedNode === "management" ? "production_management"
+      : selectedNode === "owner" ? "owner_group" : null;
+  const canInitiateTransfer = transferNodeRole === "order_merchandiser"
+    ? canMerchandiserTransfer
+    : transferNodeRole === "production_management"
+      ? canManagementTransfer
+      : transferNodeRole === "owner_group" ? canOwnerTransfer : false;
+  const transferRequestPath = transferNodeRole === "production_management"
+    ? `sourcing/cases/${item.sourcingCaseId}/factory-changes/management`
+    : transferNodeRole === "owner_group"
+      ? `sourcing/cases/${item.sourcingCaseId}/factory-changes/owner`
+      : `sourcing/cases/${item.sourcingCaseId}/factory-changes`;
+  const transferPriceDelta = item.decision && factoryChangeDraft.unitPrice
+    ? subtractFixedPoint(factoryChangeDraft.unitPrice, item.decision.unitPrice, 4)
+    : null;
 
   return (
     <div className="sourcing-workspace sourcing-order-detail">
@@ -890,11 +930,14 @@ function OrderDetailPage({
             <div className="rework-workflow__desktop-grid">
               {WORKFLOW.map((node, index) => {
                 const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
-                return <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key)} key={node.key}>
+                const content = <>
                   <b>{node.number}</b>
                   <span><strong>{node.label}</strong><small>{node.role}</small></span>
                   <em>{state === "completed" ? "已完成" : state === "current" ? "处理中" : "未开始"}</em>
-                </a>;
+                </>;
+                return state === "future"
+                  ? <div className="rework-workflow__node is-future" aria-disabled="true" key={node.key}>{content}</div>
+                  : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
               })}
             </div>
           </section>
@@ -979,7 +1022,7 @@ function OrderDetailPage({
               <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
             </dl> : null}
-            {canFinance ? <div className="sourcing-finance-confirmation">
+            {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : canFinance ? <div className="sourcing-finance-confirmation">
               <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
               <details>
@@ -1010,6 +1053,36 @@ function OrderDetailPage({
                 "已退回财务重新核对",
               )}>退回财务重核</button></div>
             </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
+          </Surface> : null}
+          {transferNodeRole ? <Surface className="rework-detail-node-preview sourcing-factory-change">
+            <div className="sourcing-factory-change__heading">
+              <div><h2>订单转厂</h2><p>以当前生效的选厂版本为对照，不占用主流程节点。</p></div>
+              {!item.decision || item.status === "closed" ? <button className="dx-button dx-button--secondary" type="button" disabled>订单转厂</button> : null}
+            </div>
+            {!item.decision ? <p>生产管理首次提交加工厂和单价后开放。</p> : item.status === "closed" ? <p>订单已完成归档，转厂入口已关闭。</p> : factoryChange?.status === "pending_management" ? <>
+              <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待生产管理审批。</p>
+              {selectedNode === "management" && canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
+                <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
+                <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "生产管理已通过，转老板审批" : "转厂已生效")}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回")}>驳回</button></div>
+              </div> : null}
+            </> : factoryChange?.status === "pending_owner" ? <>
+              <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件，超过当前单价，等待老板批准。</p>
+              {selectedNode === "owner" && canOwner ? <div className="sourcing-factory-change__review">
+                <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
+                <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, "老板已批准，转厂生效")}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "老板已驳回转厂")}>驳回</button></div>
+              </div> : null}
+            </> : canInitiateTransfer ? <details>
+              <summary>订单转厂</summary>
+              <p>当前：{item.decision.supplierName} · {formatBusinessCurrency(item.decision.unitPrice)}/件。新单价不高于当前价时按角色规则直接生效；超过时交老板批准。</p>
+              <div className="sourcing-form-grid">
+                <label><span>新加工厂</span><select value={factoryChangeDraft.supplierId} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option value={factory.supplierId} key={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
+                <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+                <label><span>新总额</span><input readOnly value={businessInputValue(totalPreview(factoryChangeDraft.unitPrice, item.orderQuantity))} /></label>
+                <p className="sourcing-factory-change__delta">相对当前单价：<strong>{transferPriceDelta ?? "—"}</strong></p>
+                <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>
+                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim()} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim() }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交")}>提交转厂</button>
+              </div>
+            </details> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
           </Surface> : null}
           {message ? <p className="sourcing-action-message" role="status">{message}</p> : null}
         </section>
