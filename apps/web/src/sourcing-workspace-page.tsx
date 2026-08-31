@@ -758,6 +758,8 @@ function OrderDetailPage({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在加载订单…");
   const [activeBusinessInput, setActiveBusinessInput] = useState<string | null>(null);
+  const [decisionUnitPriceEdited, setDecisionUnitPriceEdited] = useState(false);
+  const [factoryChangeUnitPriceEdited, setFactoryChangeUnitPriceEdited] = useState(false);
   const actionKey = useRef<string | null>(null);
   const canSupplementImages = user?.isRoot === true
     || user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
@@ -778,14 +780,16 @@ function OrderDetailPage({
       setFactoryChange(currentFactoryChange.item);
       setFactoryChangeDraft((current) => ({
         supplierId: current.supplierId,
-        unitPrice: current.unitPrice || businessInputValue(detail.decision?.unitPrice ?? ""),
+        unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
         changeReason: current.changeReason,
       }));
       setDecision((current) => ({
         supplierId: current.supplierId || detail.decision?.supplierId || "",
-        unitPrice: current.unitPrice || businessInputValue(detail.decision?.unitPrice ?? detail.ieQuote?.unitPrice ?? ""),
+        unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
         decisionReason: current.decisionReason,
       }));
+      setDecisionUnitPriceEdited(false);
+      setFactoryChangeUnitPriceEdited(false);
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单加载失败");
@@ -839,7 +843,8 @@ function OrderDetailPage({
     return <div className="sourcing-workspace"><Header title="订单详情" subtitle={message} badge="报价&选厂" /></div>;
   }
 
-  const step = statusStep(item.status);
+  const mainStep = statusStep(item.status);
+  const step = factoryChange?.status === "pending_owner" ? Math.max(mainStep, 3) : mainStep;
   const activeNode = WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.key ?? "finance";
   const requestedNode = sourcingWorkflowNodeFromSearch();
   const requestedIndex = requestedNode ? WORKFLOW.findIndex((node) => node.key === requestedNode) : -1;
@@ -986,7 +991,7 @@ function OrderDetailPage({
             <p>IE 原价：{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}。如调整价格，必须填写原因。</p>
             {canManage ? <div className="sourcing-form-grid">
               <label><span>加工厂</span><select value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>生产单价</span><input value={activeBusinessInput === "decision-unit-price" ? decision.unitPrice : businessInputValue(decision.unitPrice)} inputMode="decimal" onChange={(event) => { setDecision({ ...decision, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("decision-unit-price")} onBlur={() => setActiveBusinessInput(null)} /></label>
+              <label><span>生产单价</span><input value={activeBusinessInput === "decision-unit-price" && decisionUnitPriceEdited ? decision.unitPrice : businessInputValue(decision.unitPrice)} inputMode="decimal" onChange={(event) => { setDecisionUnitPriceEdited(true); setDecision({ ...decision, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("decision-unit-price")} onBlur={() => setActiveBusinessInput(null)} /></label>
               <label><span>系统总额</span><input value={businessInputValue(totalPreview(decision.unitPrice, item.orderQuantity))} readOnly /></label>
               <label className="sourcing-form-wide"><span>选厂/调价说明</span><input value={decision.decisionReason} maxLength={500} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /></label>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, { supplierId: decision.supplierId, unitPrice: decision.unitPrice, ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}) }, "选厂决定已提交老板审批")}>提交调价与选厂</button>
@@ -1057,9 +1062,9 @@ function OrderDetailPage({
           {transferNodeRole ? <Surface className="rework-detail-node-preview sourcing-factory-change">
             <div className="sourcing-factory-change__heading">
               <div><h2>订单转厂</h2><p>以当前生效的选厂版本为对照，不占用主流程节点。</p></div>
-              {!item.decision || item.status === "closed" ? <button className="dx-button dx-button--secondary" type="button" disabled>订单转厂</button> : null}
+              {!item.decision ? <button className="dx-button dx-button--secondary" type="button" disabled>订单转厂</button> : null}
             </div>
-            {!item.decision ? <p>生产管理首次提交加工厂和单价后开放。</p> : item.status === "closed" ? <p>订单已完成归档，转厂入口已关闭。</p> : factoryChange?.status === "pending_management" ? <>
+            {!item.decision ? <p>生产管理首次提交加工厂和单价后开放。</p> : factoryChange?.status === "pending_management" ? <>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待生产管理审批。</p>
               {selectedNode === "management" && canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
@@ -1076,7 +1081,7 @@ function OrderDetailPage({
               <p>当前：{item.decision.supplierName} · {formatBusinessCurrency(item.decision.unitPrice)}/件。新单价不高于当前价时按角色规则直接生效；超过时交老板批准。</p>
               <div className="sourcing-form-grid">
                 <label><span>新加工厂</span><select value={factoryChangeDraft.supplierId} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option value={factory.supplierId} key={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-                <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+                <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" && factoryChangeUnitPriceEdited ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeUnitPriceEdited(true); setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
                 <label><span>新总额</span><input readOnly value={businessInputValue(totalPreview(factoryChangeDraft.unitPrice, item.orderQuantity))} /></label>
                 <p className="sourcing-factory-change__delta">相对当前单价：<strong>{transferPriceDelta ?? "—"}</strong></p>
                 <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>

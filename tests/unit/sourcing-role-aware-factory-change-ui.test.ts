@@ -12,7 +12,8 @@ describe("sourcing PC role-aware transfer UI", () => {
     expect(page).toContain('selectedNode === "owner"');
     expect(page).toContain(': selectedNode === "owner" ? "owner_group" : null');
     expect(page).toContain("生产管理首次提交加工厂和单价后开放");
-    expect(page).toContain("订单已完成归档，转厂入口已关闭");
+    expect(page).not.toContain("订单已完成归档，转厂入口已关闭");
+    expect(page).toContain('factoryChange?.status === "pending_owner" ? Math.max(mainStep, 3)');
   });
 
   it("routes the three initiators and two approvers to the role-aware backend endpoints", async () => {
@@ -41,7 +42,9 @@ describe("sourcing PC role-aware transfer UI", () => {
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
     ]);
-    expect(page).toContain("businessInputValue(detail.decision?.unitPrice ?? detail.ieQuote?.unitPrice ??");
+    expect(page).toContain('unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || ""');
+    expect(page).toContain("decisionUnitPriceEdited");
+    expect(page).toContain("factoryChangeUnitPriceEdited");
     expect(page).toContain("formatBusinessCurrency(factoryChange.proposedUnitPrice)");
     expect(page).toContain("if (isMobileClient())");
     expect(page).toContain("该模块当前仅开放电脑端");
