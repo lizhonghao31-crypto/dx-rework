@@ -114,6 +114,26 @@ export const DecideSourcingFactoryChangeSchema = z.object({
   verificationReason: z.string().trim().min(1, "核实说明不能为空").max(500),
 }).strict();
 
+export const SourcingFactoryChangeStateSchema = z.object({
+  factoryChangeRequestId: IdSchema,
+  fromDecisionId: IdSchema,
+  initiatorRole: z.enum(["order_merchandiser", "production_management", "owner_group"]),
+  proposedSupplierId: IdSchema,
+  proposedSupplierName: z.string(),
+  proposedUnitPrice: z.string(),
+  proposedQuantity: z.number().int().positive(),
+  proposedTotalAmount: z.string(),
+  changeReason: z.string(),
+  requiresOwnerApproval: z.boolean(),
+  status: z.enum(["pending_management", "pending_owner", "effective", "rejected"]),
+  requestedBy: IdSchema,
+  requestedAt: z.string().datetime(),
+}).strict();
+
+export const SourcingFactoryChangeStateResponseSchema = z.object({
+  item: SourcingFactoryChangeStateSchema.nullable(),
+}).strict();
+
 export const RecordSourcingFinanceReconciliationSchema = z.object({
   result: z.enum(["match", "difference"]),
   differenceFields: z.array(z.enum(["supplier", "unit_price", "quantity", "total_amount"])).max(4).optional(),
@@ -264,6 +284,8 @@ export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
 export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema>;
 export type RequestSourcingFactoryChange = z.infer<typeof RequestSourcingFactoryChangeSchema>;
 export type DecideSourcingFactoryChange = z.infer<typeof DecideSourcingFactoryChangeSchema>;
+export type SourcingFactoryChangeState = z.infer<typeof SourcingFactoryChangeStateSchema>;
+export type SourcingFactoryChangeStateResponse = z.infer<typeof SourcingFactoryChangeStateResponseSchema>;
 export type RecordSourcingFinanceReconciliation = z.infer<
   typeof RecordSourcingFinanceReconciliationSchema
 >;
