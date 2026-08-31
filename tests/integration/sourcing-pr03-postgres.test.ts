@@ -927,6 +927,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
 
     const ownerCaseId = await openAtFirstDecision("OWNER");
+    todoProjection.completeOpenByDedupePrefix.mockClear();
     const ownerDirect = await service.requestFactoryChange(
       ownerActor(),
       ownerCaseId,
@@ -954,6 +955,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       requiresOwnerApproval: true,
       status: "effective",
     });
+    expect(todoProjection.completeOpenByDedupePrefix).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      `sourcing:${ownerCaseId}:owner:`,
+      "老板直接转厂已生效，原老板审批待办失效",
+    );
 
     const exceptionCaseId = await openAtFirstDecision("EXCEPTION-TRANSFER");
     await service.decideOwner(
