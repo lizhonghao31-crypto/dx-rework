@@ -248,7 +248,7 @@ export class SourcingService {
     private readonly events = new OperationEventRepository(),
     private readonly todoProjection?: Pick<
       TodoProjectionService,
-      "actionableForAllDirectRole" | "cancelOpenByDedupePrefix"
+      "actionableForAllAssignedRole" | "cancelOpenByDedupePrefix"
         | "completeOpenByDedupePrefix" | "information"
     >,
   ) {}
@@ -806,7 +806,7 @@ export class SourcingService {
             actor.requestId,
           ],
         );
-        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_ie_quote",
           sourceEventId: eventId,
           sourceAction: "sourcing.case.create",
@@ -948,7 +948,7 @@ export class SourcingService {
           `sourcing:${sourcingCaseId}:ie_quote:${quoteVersion}:`,
           "IE 报价已完成",
         );
-        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_management_decision",
           sourceEventId: eventId,
           sourceAction: "sourcing.ie_price.quote",
@@ -1158,7 +1158,7 @@ export class SourcingService {
           `sourcing:${sourcingCaseId}:management:${decisionVersion}:`,
           "生产管理已完成调价选厂",
         );
-        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_owner_approval",
           sourceEventId: eventId,
           sourceAction: "sourcing.management_decision.record",
@@ -1305,7 +1305,7 @@ export class SourcingService {
           approved ? "老板已批准" : "老板已驳回",
         );
         if (!approved) {
-          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_management_decision",
             sourceEventId: eventId,
             sourceAction: "sourcing.owner.reject",
@@ -1318,7 +1318,7 @@ export class SourcingService {
             dedupeKey: `sourcing:${sourcingCaseId}:management:${decisionVersion + 1}`,
           });
         } else {
-          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
             sourceAction: "sourcing.owner.approve",
@@ -1456,7 +1456,7 @@ export class SourcingService {
           "合同已登记",
         );
         const nextReconciliationVersion = Number(source.reconciliation_version)+1;
-        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_finance_reconcile",
           sourceEventId: eventId,
           sourceAction: "sourcing.contract.record",
@@ -1613,7 +1613,7 @@ export class SourcingService {
           `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:`,
           "已发起换厂，暂停财务核对",
         );
-        await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_factory_change_verify",
           sourceEventId: eventId,
           sourceAction: "sourcing.factory_change.request",
@@ -1792,7 +1792,7 @@ export class SourcingService {
           approved ? "换厂已核实通过" : "换厂已驳回",
         );
         if (approved) {
-          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
             sourceAction: action,
@@ -1825,7 +1825,7 @@ export class SourcingService {
             });
           }
         } else {
-          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
             sourceAction: action,
@@ -2003,7 +2003,7 @@ export class SourcingService {
           difference ? "财务已提交差异" : "财务核对一致",
         );
         if (difference) {
-          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_exception_verify",
             sourceEventId: eventId,
             sourceAction: action,
@@ -2134,7 +2134,7 @@ export class SourcingService {
         );
         if (!close) {
           const nextReconciliationVersion = Number(source.reconciliation_version)+1;
-          await this.todoProjection?.actionableForAllDirectRole(client, actor, {
+          await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
             sourceAction: action,
