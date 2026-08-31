@@ -30,14 +30,18 @@ describe("sourcing PC form and owner approval finish", () => {
       "工艺清单",
       "＋ 新增工艺",
       "按实际生产顺序登记",
-      "老板审批摘要",
-      "拟选加工厂",
-      "价格变化",
-      "选厂 / 调价说明",
+      "待老板决策",
+      "审批关键决策信息",
+      "IE 与生产管理价格对比",
+      "总额变化",
+      "查看完整订单资料",
+      "批准方案",
+      "驳回并退回生产管理",
     ]) expect(page).toContain(text);
     expect(page).toContain("processes: normalizedProcesses");
     expect(css).toContain("@media (min-width: 761px)");
-    expect(css).toContain(".sourcing-owner-summary");
+    expect(css).toContain(".sourcing-owner-decision__question");
+    expect(css).toContain(".sourcing-owner-decision__comparison");
     expect(css).toContain(".sourcing-process-editor__list");
   });
 
