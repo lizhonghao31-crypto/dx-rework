@@ -149,6 +149,11 @@ const canonicalTotalAmount = (value: string): string => {
   return `${BigInt(whole!)}.${fraction.padEnd(2, "0")}`;
 };
 
+const businessInputValue = (value: string): string =>
+  value ? formatBusinessDecimal(value) : "";
+
+const businessInputChange = (value: string): string => value.replace(/,/g, "");
+
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
@@ -964,8 +969,8 @@ function OrderDetailPage({
             <h2>02 · IE 给价</h2>
             <p>输入加工单价，系统按订单数量精确计算总额。</p>
             {canQuote ? <div className="sourcing-form-grid">
-              <label><span>加工单价</span><input value={quote.unitPrice} inputMode="decimal" onChange={(event) => { setQuote({ ...quote, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
-              <label><span>系统总额</span><input value={totalPreview(quote.unitPrice, item.orderQuantity)} readOnly /></label>
+              <label><span>加工单价</span><input value={businessInputValue(quote.unitPrice)} inputMode="decimal" onChange={(event) => { setQuote({ ...quote, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+              <label><span>系统总额</span><input value={businessInputValue(totalPreview(quote.unitPrice, item.orderQuantity))} readOnly /></label>
               <label className="sourcing-form-wide"><span>价格说明</span><input value={quote.quoteReason} maxLength={500} onChange={(event) => { setQuote({ ...quote, quoteReason: event.target.value }); actionKey.current = null; }} /></label>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { unitPrice: quote.unitPrice, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 价格已提交")}>提交 IE 价格</button>
             </div> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
@@ -976,8 +981,8 @@ function OrderDetailPage({
             <p>IE 原价：{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}。如调整价格，必须填写原因。</p>
             {canManage ? <div className="sourcing-form-grid">
               <label><span>加工厂</span><select value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>生产单价</span><input value={decision.unitPrice} inputMode="decimal" onChange={(event) => { setDecision({ ...decision, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
-              <label><span>系统总额</span><input value={totalPreview(decision.unitPrice, item.orderQuantity)} readOnly /></label>
+              <label><span>生产单价</span><input value={businessInputValue(decision.unitPrice)} inputMode="decimal" onChange={(event) => { setDecision({ ...decision, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+              <label><span>系统总额</span><input value={businessInputValue(totalPreview(decision.unitPrice, item.orderQuantity))} readOnly /></label>
               <label className="sourcing-form-wide"><span>选厂/调价说明</span><input value={decision.decisionReason} maxLength={500} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /></label>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, { supplierId: decision.supplierId, unitPrice: decision.unitPrice, ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}) }, "选厂决定已提交老板审批")}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
@@ -1017,9 +1022,9 @@ function OrderDetailPage({
             </dl> : null}
             {canFinance ? <div className="sourcing-form-grid">
               <label><span>实际加工厂</span><select value={finance.supplierId} onChange={(event) => { setFinance({ ...finance, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择实际加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>实际单价</span><input value={finance.unitPrice} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
-              <label><span>实际数量</span><input value={finance.quantity} inputMode="numeric" onChange={(event) => { setFinance({ ...finance, quantity: event.target.value }); actionKey.current = null; }} /></label>
-              <label><span>实际总额</span><input value={finance.totalAmount} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, totalAmount: event.target.value }); actionKey.current = null; }} /></label>
+              <label><span>实际单价</span><input value={businessInputValue(finance.unitPrice)} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+              <label><span>实际数量</span><input value={businessInputValue(finance.quantity)} inputMode="numeric" onChange={(event) => { setFinance({ ...finance, quantity: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+              <label><span>实际总额</span><input value={businessInputValue(finance.totalAmount)} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, totalAmount: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
               <label className="sourcing-form-wide"><span>差异说明</span><input value={finance.differenceReason} maxLength={500} onChange={(event) => { setFinance({ ...finance, differenceReason: event.target.value }); actionKey.current = null; }} placeholder={financeDifferences.length ? `存在差异：${financeDifferences.join("、")}，请说明` : "四项一致时无需填写"} /></label>
               <button className="dx-button dx-button--primary" type="button" disabled={busy || !financeComplete || (financeDifferences.length > 0 && !finance.differenceReason.trim())} onClick={() => void submit(
                 `sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`,
@@ -1035,8 +1040,8 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由财务核对。</p>}
             {canChangeFactory ? <div className="sourcing-form-grid">
               <label><span>新加工厂</span><select value={factoryChange.supplierId} onChange={(event) => { setFactoryChange({ ...factoryChange, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>新加工单价</span><input value={factoryChange.unitPrice} inputMode="decimal" onChange={(event) => { setFactoryChange({ ...factoryChange, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
-              <label><span>新总额</span><input value={totalPreview(factoryChange.unitPrice, item.orderQuantity)} readOnly /></label>
+              <label><span>新加工单价</span><input value={businessInputValue(factoryChange.unitPrice)} inputMode="decimal" onChange={(event) => { setFactoryChange({ ...factoryChange, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+              <label><span>新总额</span><input value={businessInputValue(totalPreview(factoryChange.unitPrice, item.orderQuantity))} readOnly /></label>
               <label className="sourcing-form-wide"><span>换厂原因</span><input value={factoryChange.changeReason} maxLength={500} onChange={(event) => { setFactoryChange({ ...factoryChange, changeReason: event.target.value }); actionKey.current = null; }} /></label>
               <button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChange.supplierId || !factoryChange.unitPrice || !factoryChange.changeReason.trim()} onClick={() => void submit(
                 `sourcing/cases/${item.sourcingCaseId}/factory-changes`,
