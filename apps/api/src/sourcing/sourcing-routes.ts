@@ -1,6 +1,7 @@
 import {
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
+  DeleteSourcingCaseResponseSchema,
   DecideSourcingExceptionSchema,
   DecideSourcingFactoryChangeSchema,
   DecideSourcingOwnerSchema,
@@ -95,6 +96,21 @@ export function registerSourcingRoutes(
     );
   };
 
+  const rootDeleteActor = async (request: FastifyRequest) => {
+    const user = await dependencies.authenticate(token(request));
+    const root = await isRootUser(dependencies.root, user.id);
+    if (!root) {
+      throw new ApplicationError("FORBIDDEN", "只有超级用户可以删除报价选厂订单", 403);
+    }
+    return {
+      actorId: user.id,
+      actorRoles: [...(user.businessRoles ?? []), "root_superuser"],
+      authorizationCapability: "sourcing:delete",
+      authorizationCapabilities: [...user.capabilities, "sourcing:delete"],
+      requestId: request.id,
+    };
+  };
+
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));
 
@@ -119,6 +135,20 @@ export function registerSourcingRoutes(
       await readActor(request),
       caseId(request.params.sourcingCaseId),
     ),
+  );
+
+  app.delete<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId",
+    async (request, reply) => {
+      const sourcingCaseId = caseId(request.params.sourcingCaseId);
+      const result = await dependencies.service.deleteByRoot(
+        await rootDeleteActor(request),
+        sourcingCaseId,
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return DeleteSourcingCaseResponseSchema.parse(result.value);
+    },
   );
 
   app.get<{ Params: { sourcingCaseId: string } }>(

@@ -1,5 +1,6 @@
 import {
   AttachmentResponseSchema,
+  DeleteSourcingCaseResponseSchema,
   MAX_SOURCING_ATTACHMENTS,
   SourcingAttachmentListResponseSchema,
   SourcingCaseListResponseSchema,
@@ -14,7 +15,7 @@ import {
   type SourcingFactory,
   type SourcingTimelineEntry,
 } from "@dx-rework/contracts";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -30,6 +31,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Header, Shell } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
+import { confirmInApp } from "./system-dialog.js";
 import "./rework-detail.css";
 import "./rework-detail-compact.css";
 import "./sourcing-workspace.css";
@@ -137,6 +139,50 @@ const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): stri
 const detailHref = (item: SourcingCaseSummary): string =>
   pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
 
+function SourcingOrderCard({
+  item,
+  canDelete,
+  deleting,
+  onDelete,
+}: {
+  item: SourcingCaseSummary;
+  canDelete: boolean;
+  deleting: boolean;
+  onDelete: (item: SourcingCaseSummary) => void;
+}) {
+  return <Surface className="sourcing-order-card">
+    <a className="sourcing-order-card__main" href={detailHref(item)}>
+      <div className="sourcing-order-card__heading">
+        <div>
+          <strong>{item.styleNo}</strong>
+          <small>{item.erpOrderNo}</small>
+        </div>
+        <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
+          {STATUS_LABELS[item.status]}
+        </StatusBadge>
+      </div>
+      <dl>
+        <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
+        <div><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
+        <div><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
+        <div><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
+        <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+      </dl>
+      <small className="sourcing-order-card__activity">更新于 {formatDateTime(item.updatedAt)}</small>
+    </a>
+    {canDelete ? <button
+      type="button"
+      className="sourcing-order-delete"
+      aria-label={`删除报价选厂订单 ${item.erpOrderNo}`}
+      title="删除报价选厂订单"
+      disabled={deleting}
+      onClick={() => onDelete(item)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M9 7l1-2h4l1 2m-9 0 1 13h10l1-13" /></svg>
+    </button> : null}
+  </Surface>;
+}
+
 export function SourcingWorkspacePage({
   view,
   sourcingCaseId,
@@ -156,8 +202,8 @@ export function SourcingWorkspacePage({
   return (
     <Shell active={ACTIVE_NAVIGATION[view]}>
       {view === "create" ? <CreateOrderPage user={user} /> : null}
-      {view === "pending" ? <OrderListPage mode="pending" /> : null}
-      {view === "history" ? <OrderListPage mode="history" /> : null}
+      {view === "pending" ? <OrderListPage mode="pending" user={user} /> : null}
+      {view === "history" ? <OrderListPage mode="history" user={user} /> : null}
       {view === "detail" && sourcingCaseId
         ? <OrderDetailPage sourcingCaseId={sourcingCaseId} user={user} />
         : null}
@@ -317,10 +363,18 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   );
 }
 
-function OrderListPage({ mode }: { mode: "pending" | "history" }) {
+function OrderListPage({
+  mode,
+  user,
+}: {
+  mode: "pending" | "history";
+  user: AuthorizedUser | null;
+}) {
   const [items, setItems] = useState<readonly SourcingCaseSummary[]>([]);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("正在加载订单…");
+  const [deletingCaseId, setDeletingCaseId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const load = async (query = search): Promise<void> => {
     try {
@@ -341,6 +395,29 @@ function OrderListPage({ mode }: { mode: "pending" | "history" }) {
     [items, mode],
   );
 
+  const remove = async (item: SourcingCaseSummary): Promise<void> => {
+    if (!(await confirmInApp(
+      `确认删除报价选厂订单 ${item.erpOrderNo} 吗？删除后将从业务入口隐藏并关闭相关待办，历史证据仍会保留。`,
+    ))) return;
+    setDeletingCaseId(item.sourcingCaseId);
+    setDeleteError("");
+    try {
+      await request(
+        `sourcing/cases/${item.sourcingCaseId}`,
+        DeleteSourcingCaseResponseSchema,
+        {
+          method: "DELETE",
+          headers: { "idempotency-key": createClientRequestId() },
+        },
+      );
+      setItems((current) => current.filter((entry) => entry.sourcingCaseId !== item.sourcingCaseId));
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "删除失败");
+    } finally {
+      setDeletingCaseId("");
+    }
+  };
+
   return (
     <div className="sourcing-workspace">
       <Header
@@ -353,17 +430,17 @@ function OrderListPage({ mode }: { mode: "pending" | "history" }) {
           <input value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} placeholder="搜索 ERP、款号、跟单、供应商、工艺或合同编号" />
           <button className="dx-button dx-button--secondary" type="submit">搜索</button>
         </form>
+        {deleteError ? <p className="sourcing-delete-error" role="alert">{deleteError}</p> : null}
         {message ? <p className="sourcing-list-message" role="status">{message}</p> : null}
         {!message && visible.length === 0 ? <p className="sourcing-list-message">暂无符合条件的订单</p> : null}
         <div className="sourcing-order-list">
-          {visible.map((item) => <a className="sourcing-order-row" href={detailHref(item)} key={item.sourcingCaseId}>
-            <div><strong>{item.styleNo}</strong><small>{item.erpOrderNo}</small></div>
-            <span><b>{item.orderQuantity.toLocaleString("zh-CN")}</b><small>订单数量</small></span>
-            <span><b>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</b><small>IE 单价</small></span>
-            <span><b>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</b><small>生产单价</small></span>
-            <span><b>{item.decision?.supplierName ?? "待选厂"}</b><small>加工厂</small></span>
-            <span><StatusBadge tone={item.status === "closed" ? "success" : "info"}>{STATUS_LABELS[item.status]}</StatusBadge><small>{formatDateTime(item.updatedAt)}</small></span>
-          </a>)}
+          {visible.map((item) => <SourcingOrderCard
+            item={item}
+            key={item.sourcingCaseId}
+            canDelete={user?.isRoot === true}
+            deleting={deletingCaseId === item.sourcingCaseId}
+            onDelete={(order) => { void remove(order); }}
+          />)}
         </div>
       </Surface>
     </div>

@@ -179,6 +179,11 @@ export const SourcingCaseListResponseSchema = z.object({
   items: z.array(SourcingCaseSummarySchema),
 }).strict();
 
+export const DeleteSourcingCaseResponseSchema = z.object({
+  sourcingCaseId: IdSchema,
+  deleted: z.literal(true),
+}).strict();
+
 export const SourcingAttachmentSchema = z.object({
   attachmentId: IdSchema,
   filename: z.string(),
@@ -243,6 +248,7 @@ export type SourcingCaseStatus = z.infer<typeof SourcingCaseStatusSchema>;
 export type SourcingIeQuote = z.infer<typeof SourcingIeQuoteSchema>;
 export type SourcingCaseSummary = z.infer<typeof SourcingCaseSummarySchema>;
 export type SourcingCaseListResponse = z.infer<typeof SourcingCaseListResponseSchema>;
+export type DeleteSourcingCaseResponse = z.infer<typeof DeleteSourcingCaseResponseSchema>;
 export type SourcingAttachment = z.infer<typeof SourcingAttachmentSchema>;
 export type SourcingAttachmentListResponse = z.infer<typeof SourcingAttachmentListResponseSchema>;
 export type SourcingTimelineEntry = z.infer<typeof SourcingTimelineEntrySchema>;
