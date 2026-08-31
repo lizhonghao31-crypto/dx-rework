@@ -1473,7 +1473,6 @@ export class SourcingService {
         if (
           source.status !== "pending_owner_approval"
           || !source.sourcing_decision_id
-          || source.source_type === "factory_change"
         ) {
           fail("该询价当前不在老板终审阶段", 409, "INVALID_STATE_TRANSITION");
         }
@@ -1527,6 +1526,24 @@ export class SourcingService {
           ],
         );
         const decisionVersion = Number(source.decision_version);
+        const openFactoryChange = approved
+          ? await client.query(
+            `SELECT 1
+             FROM sourcing_factory_change_requests request_row
+             WHERE request_row.sourcing_case_id=$1
+               AND NOT EXISTS (
+                 SELECT 1 FROM sourcing_decisions effective
+                 WHERE effective.source_change_request_id=request_row.factory_change_request_id
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM sourcing_factory_change_decisions rejected
+                 WHERE rejected.factory_change_request_id=request_row.factory_change_request_id
+                   AND rejected.decision='rejected'
+               )
+             LIMIT 1`,
+            [sourcingCaseId],
+          )
+          : null;
         await this.todoProjection?.completeOpenByDedupePrefix(
           client,
           actor,
@@ -1546,7 +1563,7 @@ export class SourcingService {
             policyKey: "general",
             dedupeKey: `sourcing:${sourcingCaseId}:management:${decisionVersion + 1}`,
           });
-        } else {
+        } else if (!openFactoryChange?.rowCount) {
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
@@ -1807,6 +1824,36 @@ export class SourcingService {
           randomUUID(), source.sourcing_case_id, Number(source.sequence) + 1,
           source.status, nextStatus, reason, actor.actorId, eventId, actor.requestId,
         ],
+      );
+    }
+    if (nextStatus === "pending_owner_approval") {
+      if (source.status === "pending_management_decision") {
+        await this.todoProjection?.completeOpenByDedupePrefix(
+          client, actor, `sourcing:${source.sourcing_case_id}:management:`,
+          "转厂方案已形成新选厂版本，原生产管理待办失效",
+        );
+      }
+      await this.todoProjection?.completeOpenByDedupePrefix(
+        client, actor, `sourcing:${source.sourcing_case_id}:owner:`,
+        "转厂方案已形成新选厂版本，原老板待办失效",
+      );
+      await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
+        category: "sourcing_owner_approval",
+        sourceEventId: eventId,
+        sourceAction: "sourcing.factory_change.effective",
+        entityType: "sourcing_case",
+        entityId: source.sourcing_case_id,
+        requiredRole: OWNER_DECISION_ROLE,
+        requiredCapability: OWNER_DECISION_CAPABILITY,
+        route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id },
+        policyKey: "general",
+        dedupeKey: `sourcing:${source.sourcing_case_id}:owner:${nextDecisionVersion}`,
+      });
+    }
+    if (source.status === "pending_exception_verification") {
+      await this.todoProjection?.completeOpenByDedupePrefix(
+        client, actor, `sourcing:${source.sourcing_case_id}:exception:`,
+        "转厂方案已生效，原异常核实待办失效",
       );
     }
     await this.todoProjection?.completeOpenByDedupePrefix(
@@ -2218,7 +2265,23 @@ export class SourcingService {
             policyKey: "general",
             dedupeKey: `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}`,
           });
-        } else if (source.status === "pending_finance_reconciliation") {
+        } else if (
+          source.status === "pending_finance_reconciliation"
+          || source.status === "pending_factory_change_verification"
+        ) {
+          if (source.status === "pending_factory_change_verification") {
+            await client.query(
+              `INSERT INTO sourcing_case_transitions(
+                 sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
+                 business_action,transition_reason,actor_id,operation_event_id,request_id
+               ) VALUES($1,$2,$3,'pending_factory_change_verification',
+                 'pending_finance_reconciliation','factory_change_rejected',$4,$5,$6,$7)`,
+              [
+                randomUUID(),sourcingCaseId,Number(source.sequence)+1,
+                verificationReason,actor.actorId,eventId,actor.requestId,
+              ],
+            );
+          }
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
@@ -2229,20 +2292,8 @@ export class SourcingService {
             requiredCapability: FINANCE_RECONCILE_CAPABILITY,
             route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
             policyKey: "general",
-            dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}`,
+            dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:resume:${factoryChangeRequestId}`,
           });
-        } else if (source.status === "pending_factory_change_verification") {
-          await client.query(
-            `INSERT INTO sourcing_case_transitions(
-               sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
-               business_action,transition_reason,actor_id,operation_event_id,request_id
-             ) VALUES($1,$2,$3,'pending_factory_change_verification',
-               'pending_finance_reconciliation','factory_change_rejected',$4,$5,$6,$7)`,
-            [
-              randomUUID(),sourcingCaseId,Number(source.sequence)+1,
-              verificationReason,actor.actorId,eventId,actor.requestId,
-            ],
-          );
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
       });

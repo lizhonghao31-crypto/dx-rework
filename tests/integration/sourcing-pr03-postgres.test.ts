@@ -714,6 +714,24 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
       [managementLowCaseId],
     )).rowCount).toBe(3);
+    const managementLowOwnerApproved = await service.decideOwner(
+      ownerActor(),
+      managementLowCaseId,
+      { decision: "approved", decisionReason: "确认低价转厂后的最新选厂版本" },
+      randomUUID(),
+    );
+    expect(managementLowOwnerApproved.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 4,
+      decision: {
+        decisionVersion: 2,
+        sourceType: "factory_change",
+        supplierId: replacementFactoryId,
+      },
+      ownerDecision: {
+        decision: "approved",
+      },
+    });
 
     const managementHighCaseId = await openAtFirstDecision("MANAGEMENT-HIGH");
     const managementHigh = await service.requestFactoryChange(
@@ -743,6 +761,25 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       requiresOwnerApproval: true,
       status: "pending_owner",
     });
+    todoProjection.actionableForAllAssignedRole.mockClear();
+    const managementHighInitialApproved = await service.decideOwner(
+      ownerActor(),
+      managementHighCaseId,
+      { decision: "approved", decisionReason: "先确认原始选厂决定" },
+      randomUUID(),
+    );
+    expect(managementHighInitialApproved.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 4,
+      decision: {
+        decisionVersion: 1,
+        supplierId: factoryId,
+      },
+    });
+    expect(todoProjection.actionableForAllAssignedRole.mock.calls.some(
+      (call) => call[2].category === "sourcing_finance_reconcile",
+    )).toBe(false);
+
     const managementHighApproved = await service.decideFactoryChange(
       ownerActor(),
       managementHighCaseId,
@@ -759,6 +796,135 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         unitPrice: "10.5000",
       },
     });
+    expect(todoProjection.actionableForAllAssignedRole.mock.calls.some(
+      (call) => call[2].category === "sourcing_finance_reconcile",
+    )).toBe(true);
+
+    const resumeCaseId = await openAtFirstDecision("FINANCE-RESUME");
+    await service.decideOwner(
+      ownerActor(),
+      resumeCaseId,
+      { decision: "approved" },
+      randomUUID(),
+    );
+    await service.requestFactoryChange(
+      managerActor(),
+      resumeCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "11.0000",
+        changeReason: "财务节点发起高价转厂后测试驳回恢复",
+      },
+      randomUUID(),
+    );
+    const resumeState = await service.getCurrentFactoryChange(readerActor(), resumeCaseId);
+    todoProjection.actionableForAllAssignedRole.mockClear();
+    const resumed = await service.decideFactoryChange(
+      ownerActor(),
+      resumeCaseId,
+      resumeState.item!.factoryChangeRequestId,
+      { decision: "rejected", verificationReason: "维持原选厂决定" },
+      randomUUID(),
+    );
+    expect(resumed.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 4,
+      decision: {
+        decisionVersion: 1,
+        supplierId: factoryId,
+      },
+    });
+    expect(todoProjection.actionableForAllAssignedRole).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        category: "sourcing_finance_reconcile",
+        dedupeKey: `sourcing:${resumeCaseId}:finance:1:1:resume:${resumeState.item!.factoryChangeRequestId}`,
+      }),
+    );
+
+    const legacyCaseId = await openAtFirstDecision("LEGACY-RESUME");
+    await service.decideOwner(
+      ownerActor(),
+      legacyCaseId,
+      { decision: "approved" },
+      randomUUID(),
+    );
+    await service.requestFactoryChange(
+      factoryChangeActor(),
+      legacyCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "9.5000",
+        changeReason: "模拟升级前遗留转厂审批",
+      },
+      randomUUID(),
+    );
+    const legacyState = await service.getCurrentFactoryChange(readerActor(), legacyCaseId);
+    const legacyRequest = (await database.query<{
+      sequence: number | string;
+      operation_event_id: string;
+      request_id: string;
+      requested_by: string;
+      change_reason: string;
+    }>(
+      `SELECT transition_row.sequence,request_row.operation_event_id,
+              request_row.request_id,request_row.requested_by,request_row.change_reason
+       FROM sourcing_factory_change_requests request_row
+       JOIN LATERAL (
+         SELECT transition.sequence
+         FROM sourcing_case_transitions transition
+         WHERE transition.sourcing_case_id=request_row.sourcing_case_id
+         ORDER BY transition.sequence DESC LIMIT 1
+       ) transition_row ON true
+       WHERE request_row.factory_change_request_id=$1`,
+      [legacyState.item!.factoryChangeRequestId],
+    )).rows[0]!;
+    await database.query(
+      "ALTER TABLE sourcing_case_transitions DISABLE TRIGGER sourcing_transitions_guard_insert",
+    );
+    try {
+      await database.query(
+        `INSERT INTO sourcing_case_transitions(
+           sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
+           business_action,transition_reason,actor_id,operation_event_id,request_id
+         ) VALUES($1,$2,$3,'pending_finance_reconciliation',
+           'pending_factory_change_verification','factory_change_requested',$4,$5,$6,$7)`,
+        [
+          randomUUID(),legacyCaseId,Number(legacyRequest.sequence)+1,
+          legacyRequest.change_reason,legacyRequest.requested_by,
+          legacyRequest.operation_event_id,legacyRequest.request_id,
+        ],
+      );
+    } finally {
+      await database.query(
+        "ALTER TABLE sourcing_case_transitions ENABLE TRIGGER sourcing_transitions_guard_insert",
+      );
+    }
+    todoProjection.actionableForAllAssignedRole.mockClear();
+    const legacyResumed = await service.decideFactoryChange(
+      factoryChangeVerifier(),
+      legacyCaseId,
+      legacyState.item!.factoryChangeRequestId,
+      { decision: "rejected", verificationReason: "驳回升级前遗留申请" },
+      randomUUID(),
+    );
+    expect(legacyResumed.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 6,
+      decision: {
+        decisionVersion: 1,
+        supplierId: factoryId,
+      },
+    });
+    expect(todoProjection.actionableForAllAssignedRole).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        category: "sourcing_finance_reconcile",
+        dedupeKey: `sourcing:${legacyCaseId}:finance:1:1:resume:${legacyState.item!.factoryChangeRequestId}`,
+      }),
+    );
 
     const ownerCaseId = await openAtFirstDecision("OWNER");
     const ownerDirect = await service.requestFactoryChange(
@@ -788,6 +954,49 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       requiresOwnerApproval: true,
       status: "effective",
     });
+
+    const exceptionCaseId = await openAtFirstDecision("EXCEPTION-TRANSFER");
+    await service.decideOwner(
+      ownerActor(),
+      exceptionCaseId,
+      { decision: "approved" },
+      randomUUID(),
+    );
+    await service.recordFinanceReconciliation(
+      financeActor(),
+      exceptionCaseId,
+      {
+        result: "difference",
+        differenceFields: ["total_amount"],
+        differenceReason: "测试异常核实期间转厂",
+      },
+      randomUUID(),
+    );
+    todoProjection.completeOpenByDedupePrefix.mockClear();
+    const exceptionTransfer = await service.requestFactoryChange(
+      managerActor(),
+      exceptionCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "9.5000",
+        changeReason: "异常核实期间改用低价加工厂",
+      },
+      randomUUID(),
+    );
+    expect(exceptionTransfer.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 6,
+      decision: {
+        decisionVersion: 2,
+        supplierId: replacementFactoryId,
+      },
+    });
+    expect(todoProjection.completeOpenByDedupePrefix).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      `sourcing:${exceptionCaseId}:exception:`,
+      "转厂方案已生效，原异常核实待办失效",
+    );
 
     const merchCaseId = await openAtFirstDecision("MERCH-HIGH");
     const merchRequested = await service.requestFactoryChange(

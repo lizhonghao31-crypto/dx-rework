@@ -54,6 +54,8 @@ describe("sourcing role-aware factory change backend", () => {
     expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/:factoryChangeRequestId/owner-decision"');
     expect(migration).toContain("sourcing_factory_change_decisions_request_role_key");
     expect(migration).toContain("guard_sourcing_reconciliation_without_open_factory_change");
+    expect(migration).toContain("CREATE OR REPLACE FUNCTION guard_sourcing_owner_decision_insert()");
+    expect(migration).not.toContain("OR current_decision.source_type='factory_change'");
     expect(migration).not.toContain("ADD COLUMN initiator_role");
   });
 

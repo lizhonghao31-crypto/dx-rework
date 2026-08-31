@@ -526,6 +526,40 @@ BEGIN
 END;
 $$;
 
+-- A non-increasing factory change can become the latest immutable decision while
+-- the five-stage case is still waiting for its ordinary owner decision.
+CREATE OR REPLACE FUNCTION guard_sourcing_owner_decision_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  current_decision sourcing_decisions%ROWTYPE;
+  required_action text;
+BEGIN
+  PERFORM 1 FROM sourcing_cases
+  WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
+  SELECT * INTO current_decision
+  FROM sourcing_decisions
+  WHERE sourcing_case_id=NEW.sourcing_case_id
+  ORDER BY decision_version DESC
+  LIMIT 1;
+  IF sourcing_current_status(NEW.sourcing_case_id)<>'pending_owner_approval'
+    OR current_decision.sourcing_decision_id IS NULL
+    OR NEW.sourcing_decision_id<>current_decision.sourcing_decision_id THEN
+    RAISE EXCEPTION 'owner decision must bind the current decision'
+      USING ERRCODE='23514';
+  END IF;
+  required_action := CASE NEW.decision
+    WHEN 'approved' THEN 'sourcing.owner.approve'
+    ELSE 'sourcing.owner.reject'
+  END;
+  PERFORM sourcing_require_operation_event(
+    NEW.operation_event_id,NEW.request_id,NEW.decided_by,
+    required_action,'sourcing:owner:approve',
+    NEW.sourcing_case_id,NEW.decision_reason
+  );
+  RETURN NEW;
+END;
+$$;
+
 -- Finance remains a read-only main node and must not reconcile a stale decision
 -- while an auxiliary factory-change request is still awaiting approval.
 CREATE OR REPLACE FUNCTION guard_sourcing_reconciliation_without_open_factory_change()
