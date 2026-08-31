@@ -1850,6 +1850,15 @@ export class SourcingService {
         dedupeKey: `sourcing:${source.sourcing_case_id}:owner:${nextDecisionVersion}`,
       });
     }
+    if (
+      source.status === "pending_owner_approval"
+      && nextStatus === "pending_finance_reconciliation"
+    ) {
+      await this.todoProjection?.completeOpenByDedupePrefix(
+        client, actor, `sourcing:${source.sourcing_case_id}:owner:`,
+        "老板直接转厂已生效，原老板审批待办失效",
+      );
+    }
     if (source.status === "pending_exception_verification") {
       await this.todoProjection?.completeOpenByDedupePrefix(
         client, actor, `sourcing:${source.sourcing_case_id}:exception:`,
