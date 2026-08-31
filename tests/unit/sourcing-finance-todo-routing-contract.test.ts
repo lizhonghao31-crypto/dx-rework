@@ -55,7 +55,10 @@ describe("sourcing finance confirmation and explicit-role todo routing", () => {
 
   it("uses the explicit-role router for every sourcing business todo", async () => {
     const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
-    expect(service.match(/actionableForAllAssignedRole\(/g)).toHaveLength(11);
+    expect(service.match(/actionableForAllAssignedRole\(/g)).toHaveLength(12);
+    expect(service).toMatch(
+      /else if \(source\.status === "pending_finance_reconciliation"\) \{[\s\S]*?category: "sourcing_finance_reconcile"[\s\S]*?requiredRole: FINANCE_RECONCILE_ROLE[\s\S]*?requiredCapability: FINANCE_RECONCILE_CAPABILITY/,
+    );
     expect(service).not.toContain("todoProjection?.actionableForAllDirectRole(");
   });
 
