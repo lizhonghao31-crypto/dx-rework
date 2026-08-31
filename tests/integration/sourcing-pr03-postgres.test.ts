@@ -128,6 +128,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0122_sourcing_case_logical_deletion.sql",
       "0123_sourcing_explicit_role_todos.sql",
       "0124_sourcing_ordered_processes.sql",
+      "0127_sourcing_factory_change_auxiliary.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -406,8 +407,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       randomUUID(),
     );
     expect(changeRequest.value).toMatchObject({
-      status: "pending_factory_change_verification",
-      version: 7,
+      status: "pending_finance_reconciliation",
+      version: 6,
+    });
+    expect((await service.getCurrentFactoryChange(
+      readerActor(),
+      created.value.sourcingCaseId,
+    )).item).toMatchObject({
+      initiatorRole: "order_merchandiser",
+      status: "pending_management",
+      requiresOwnerApproval: false,
     });
     const requestedChange = (await service.listTimeline(
       readerActor(),
@@ -428,7 +437,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(changeApproved.value).toMatchObject({
       status: "pending_finance_reconciliation",
-      version: 8,
+      version: 6,
       decision: {
         decisionVersion: 3,
         sourceType: "factory_change",
@@ -464,7 +473,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(changeRejected.value).toMatchObject({
       status: "pending_finance_reconciliation",
-      version: 10,
+      version: 6,
       decision: {
         decisionVersion: 3,
         supplierId: replacementFactoryId,
@@ -483,7 +492,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(financeDifference.value).toMatchObject({
       status: "pending_exception_verification",
-      version: 11,
+      version: 7,
     });
     expect((await database.query<{
       result: string;
@@ -508,7 +517,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(reopened.value).toMatchObject({
       status: "pending_finance_reconciliation",
-      version: 12,
+      version: 8,
     });
 
     const financeMatched = await service.recordFinanceReconciliation(
@@ -517,7 +526,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       { result: "match" },
       randomUUID(),
     );
-    expect(financeMatched.value).toMatchObject({ status: "closed", version: 13 });
+    expect(financeMatched.value).toMatchObject({ status: "closed", version: 9 });
 
     expect((await database.query(
       "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
@@ -541,7 +550,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
           version: 1,
           result: "difference",
           differenceFields: ["total_amount"],
-          totalAmount: "1400.00",
+          totalAmount: "1438.50",
         }),
         expect.objectContaining({ version: 2, result: "match", totalAmount: "1438.50" }),
       ]));
@@ -560,7 +569,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query(
       "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
-    )).rowCount).toBe(13);
+    )).rowCount).toBe(9);
 
     await expect(service.decideOwner(
       ownerActor(),
