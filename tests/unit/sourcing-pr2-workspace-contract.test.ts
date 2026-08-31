@@ -54,4 +54,22 @@ describe("sourcing PR2 unified desktop workspace", () => {
     expect(source).toContain("entity_type='sourcing_case'");
     expect(source).toContain("listTimeline");
   });
+  it("reuses the proven rework image normalization and removal path", async () => {
+    const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
+    for (const contract of [
+      "isImageUploadCandidate",
+      "prepareImageUploadCandidate",
+      "uploadImageWithNormalizationRetry",
+      "measureAttachmentUploadStage",
+      "currentUploadClientProfile",
+      "removeImage",
+      "URL.createObjectURL(candidate)",
+      'accept="image/*"',
+      "disabled={busy || uploading",
+    ]) expect(source).toContain(contract);
+    expect(source).not.toContain("isImageAttachment");
+    expect(source).not.toContain("prepareAttachmentForUpload");
+    expect(source).not.toContain("Uploaded object is not a valid file of the declared type");
+  });
+
 });
