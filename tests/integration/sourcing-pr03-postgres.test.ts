@@ -128,6 +128,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0122_sourcing_case_logical_deletion.sql",
       "0123_sourcing_explicit_role_todos.sql",
       "0124_sourcing_ordered_processes.sql",
+      "0125_sourcing_image_supplement.sql",
+      "0126_sourcing_finance_readonly_reconciliation.sql",
+      "0127_sourcing_factory_change_role_metadata.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -541,7 +544,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
           version: 1,
           result: "difference",
           differenceFields: ["total_amount"],
-          totalAmount: "1400.00",
+          totalAmount: "1438.50",
         }),
         expect.objectContaining({ version: 2, result: "match", totalAmount: "1438.50" }),
       ]));

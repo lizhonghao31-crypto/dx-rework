@@ -20,10 +20,6 @@ describe("sourcing number presentation", () => {
     for (const draft of [
       "quote.unitPrice",
       "decision.unitPrice",
-      "finance.unitPrice",
-      "finance.quantity",
-      "finance.totalAmount",
-      "factoryChange.unitPrice",
     ]) expect(page).toContain(`businessInputValue(${draft})`);
     expect(page).toContain('onFocus={() => setActiveBusinessInput("quote-unit-price")}');
     expect(page).toContain('onBlur={() => setActiveBusinessInput(null)}');

@@ -54,8 +54,8 @@ describe("sourcing five-stage factory change compatibility", () => {
     expect(migration).toContain("cancel-contract-routing");
     expect(page).not.toContain('{ key: "contract"');
     expect(page).not.toContain(">登记合同</button>");
-    expect(page).toContain("发起中途换厂");
-    expect(page).toContain("生产管理核实换厂");
+    expect(page).not.toContain("发起中途换厂");
+    expect(page).not.toContain("生产管理核实换厂");
     expect(page).toContain('{ key: "finance", number: "05"');
     expect(page).not.toContain("移动端报价选厂");
   });

@@ -84,14 +84,15 @@ describe("sourcing PR03 contracts", () => {
     expect(() => DecideSourcingOwnerSchema.parse({ decision: "rejected" })).toThrow();
   });
 
-  it("validates independent finance totals and explicit exception closure", () => {
+  it("keeps finance declarative and requires explicit exception closure", () => {
     expect(RecordSourcingFinanceReconciliationSchema.parse({
-      supplierId: "00000000-0000-4000-8000-000000000200",
-      unitPrice: "12.5000",
-      quantity: 100,
-      totalAmount: "1300.00",
-      differenceReason: "实际总额含合同约定调整",
-    })).toMatchObject({ totalAmount: "1300.00" });
+      result: "match",
+    })).toEqual({ result: "match" });
+    expect(RecordSourcingFinanceReconciliationSchema.parse({
+      result: "difference",
+      differenceFields: ["total_amount"],
+      differenceReason: "发票总额与批准决定不一致",
+    })).toMatchObject({ result: "difference", differenceFields: ["total_amount"] });
     expect(() => DecideSourcingExceptionSchema.parse({ resolution: "close" })).toThrow();
   });
 
@@ -103,9 +104,10 @@ describe("sourcing PR03 contracts", () => {
     expect(page).toContain("提交调价与选厂");
     expect(page).toContain("审批说明 / 驳回原因");
     expect(page).not.toContain(">登记合同</button>");
-    expect(page).toContain("发起中途换厂");
-    expect(page).toContain("生产管理核实换厂");
-    expect(page).toContain("确认核对结果");
+    expect(page).not.toContain("发起中途换厂");
+    expect(page).not.toContain("生产管理核实换厂");
+    expect(page).toContain("确认与合同一致");
+    expect(page).toContain("财务不能在此页改写业务数据");
     expect(page).not.toContain(">提交财务核对</button>");
     expect(page).toContain("确认差异并闭环");
     expect(page).toContain("退回财务重核");
