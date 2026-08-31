@@ -622,6 +622,276 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       ]);
   });
 
+  it("enforces every factory-change initiator, price threshold and unlock boundary", async () => {
+    let serial = 0;
+    const openAtFirstDecision = async (label: string) => {
+      serial += 1;
+      const created = await service.createCase(merchandiserActor(), {
+        erpOrderNo: "ERP-TRANSFER-" + label + "-" + serial,
+        styleNo: "TRANSFER-" + label + "-" + serial,
+        deliveryDate: "2026-10-20",
+        processes: ["车缝", "整烫"],
+        orderQuantity: 100,
+      }, randomUUID());
+      await service.quoteIePrice(
+        ieActor(),
+        created.value.sourcingCaseId,
+        { unitPrice: "10.0000", quoteReason: "转厂链路测试" },
+        randomUUID(),
+      );
+      await service.recordManagementDecision(
+        managerActor(),
+        created.value.sourcingCaseId,
+        {
+          supplierId: factoryId,
+          unitPrice: "10.0000",
+          decisionReason: "首次确认加工厂和生产单价",
+        },
+        randomUUID(),
+      );
+      return created.value.sourcingCaseId;
+    };
+
+    const locked = await service.createCase(merchandiserActor(), {
+      erpOrderNo: "ERP-TRANSFER-LOCKED",
+      styleNo: "TRANSFER-LOCKED",
+      deliveryDate: "2026-10-20",
+      processes: ["车缝"],
+      orderQuantity: 100,
+    }, randomUUID());
+    await expect(service.requestFactoryChange(
+      ownerActor(),
+      locked.value.sourcingCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "9.5000",
+        changeReason: "首次选厂前不允许转厂",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+      statusCode: 409,
+    });
+
+    const managementLowCaseId = await openAtFirstDecision("MANAGEMENT-LOW");
+    const managementLow = await service.requestFactoryChange(
+      managerActor(),
+      managementLowCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "9.5000",
+        changeReason: "生产管理发起低价转厂",
+      },
+      randomUUID(),
+    );
+    expect(managementLow.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 3,
+      decision: {
+        decisionVersion: 2,
+        sourceType: "factory_change",
+        supplierId: replacementFactoryId,
+        unitPrice: "9.5000",
+      },
+    });
+    expect((await service.getCurrentFactoryChange(
+      readerActor(),
+      managementLowCaseId,
+    )).item).toMatchObject({
+      initiatorRole: "production_management",
+      requiresOwnerApproval: false,
+      status: "effective",
+    });
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
+      [managementLowCaseId],
+    )).rowCount).toBe(3);
+
+    const managementHighCaseId = await openAtFirstDecision("MANAGEMENT-HIGH");
+    const managementHigh = await service.requestFactoryChange(
+      managerActor(),
+      managementHighCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "10.5000",
+        changeReason: "生产管理发起高价转厂",
+      },
+      randomUUID(),
+    );
+    expect(managementHigh.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 3,
+      decision: {
+        decisionVersion: 1,
+        supplierId: factoryId,
+      },
+    });
+    const managementHighState = await service.getCurrentFactoryChange(
+      readerActor(),
+      managementHighCaseId,
+    );
+    expect(managementHighState.item).toMatchObject({
+      initiatorRole: "production_management",
+      requiresOwnerApproval: true,
+      status: "pending_owner",
+    });
+    const managementHighApproved = await service.decideFactoryChange(
+      ownerActor(),
+      managementHighCaseId,
+      managementHighState.item!.factoryChangeRequestId,
+      { decision: "approved", verificationReason: "老板批准高价转厂" },
+      randomUUID(),
+    );
+    expect(managementHighApproved.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 4,
+      decision: {
+        decisionVersion: 2,
+        supplierId: replacementFactoryId,
+        unitPrice: "10.5000",
+      },
+    });
+
+    const ownerCaseId = await openAtFirstDecision("OWNER");
+    const ownerDirect = await service.requestFactoryChange(
+      ownerActor(),
+      ownerCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "12.0000",
+        changeReason: "老板直接决定转厂",
+      },
+      randomUUID(),
+    );
+    expect(ownerDirect.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 4,
+      decision: {
+        decisionVersion: 2,
+        supplierId: replacementFactoryId,
+        unitPrice: "12.0000",
+      },
+    });
+    expect((await service.getCurrentFactoryChange(
+      readerActor(),
+      ownerCaseId,
+    )).item).toMatchObject({
+      initiatorRole: "owner_group",
+      requiresOwnerApproval: true,
+      status: "effective",
+    });
+
+    const merchCaseId = await openAtFirstDecision("MERCH-HIGH");
+    const merchRequested = await service.requestFactoryChange(
+      factoryChangeActor(),
+      merchCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "10.7500",
+        changeReason: "跟单发起高价转厂",
+      },
+      randomUUID(),
+    );
+    expect(merchRequested.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 3,
+    });
+    const merchPendingManagement = await service.getCurrentFactoryChange(
+      readerActor(),
+      merchCaseId,
+    );
+    expect(merchPendingManagement.item).toMatchObject({
+      initiatorRole: "order_merchandiser",
+      requiresOwnerApproval: true,
+      status: "pending_management",
+    });
+    await expect(service.requestFactoryChange(
+      financeActor(),
+      merchCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "9.0000",
+        changeReason: "财务无权发起转厂",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      statusCode: 403,
+    });
+    await service.decideFactoryChange(
+      factoryChangeVerifier(),
+      merchCaseId,
+      merchPendingManagement.item!.factoryChangeRequestId,
+      { decision: "approved", verificationReason: "生产管理批准转厂方案" },
+      randomUUID(),
+    );
+    expect((await service.getCurrentFactoryChange(
+      readerActor(),
+      merchCaseId,
+    )).item).toMatchObject({ status: "pending_owner" });
+    const merchApproved = await service.decideFactoryChange(
+      ownerActor(),
+      merchCaseId,
+      merchPendingManagement.item!.factoryChangeRequestId,
+      { decision: "approved", verificationReason: "老板批准高价方案" },
+      randomUUID(),
+    );
+    expect(merchApproved.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      version: 4,
+      decision: {
+        decisionVersion: 2,
+        supplierId: replacementFactoryId,
+        unitPrice: "10.7500",
+      },
+    });
+
+    const rejectedCaseId = await openAtFirstDecision("OWNER-REJECT");
+    await service.requestFactoryChange(
+      managerActor(),
+      rejectedCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "11.0000",
+        changeReason: "生产管理申请高价转厂后测试驳回",
+      },
+      randomUUID(),
+    );
+    const rejectedState = await service.getCurrentFactoryChange(readerActor(), rejectedCaseId);
+    const ownerRejected = await service.decideFactoryChange(
+      ownerActor(),
+      rejectedCaseId,
+      rejectedState.item!.factoryChangeRequestId,
+      { decision: "rejected", verificationReason: "老板驳回高价转厂" },
+      randomUUID(),
+    );
+    expect(ownerRejected.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 3,
+      decision: {
+        decisionVersion: 1,
+        supplierId: factoryId,
+      },
+    });
+    await expect(service.requestFactoryChange(
+      managerActor(),
+      rejectedCaseId,
+      {
+        supplierId: replacementFactoryId,
+        unitPrice: "9.8000",
+        changeReason: "驳回后重新发起低价转厂",
+      },
+      randomUUID(),
+    )).resolves.toMatchObject({
+      value: {
+        decision: {
+          decisionVersion: 2,
+          supplierId: replacementFactoryId,
+        },
+      },
+    });
+  });
+
   it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {
     const legacyProcessDescription = "旧".repeat(500);
     const attachmentId = randomUUID();
