@@ -23,10 +23,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import {
   currentQcUploadConcurrency,
-  isImageAttachment,
+  currentUploadClientProfile,
+  isImageUploadCandidate,
+  measureAttachmentUploadStage,
   prepareAndUploadWithConcurrency,
-  prepareAttachmentForUpload,
+  prepareImageUploadCandidate,
   sha256Hex,
+  uploadImageWithNormalizationRetry,
+  type AttachmentUploadTimingContext,
 } from "./attachment-upload.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -223,7 +227,13 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
   const createKey = useRef<string | null>(null);
+  const previewUrls = useRef<string[]>([]);
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
+
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+  }, []);
 
   const updateProcess = (index: number, value: string): void => {
     setProcesses((current) => current.map((process, currentIndex) => (
@@ -249,9 +259,9 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   };
 
   const uploadImages = async (files: FileList | null): Promise<void> => {
-    if (!files?.length || uploading) return;
+    if (!files?.length || uploading || busy) return;
     const selected = Array.from(files);
-    const unsupported = selected.find((file) => !isImageAttachment(file));
+    const unsupported = selected.find((file) => !isImageUploadCandidate(file));
     if (unsupported) {
       setMessage(`${unsupported.name} 不是支持的图片格式`);
       return;
@@ -262,41 +272,81 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     }
     setUploading(true);
     try {
+      const profile = currentUploadClientProfile();
       const uploaded = await prepareAndUploadWithConcurrency(
         selected,
         currentQcUploadConcurrency(),
         async (file, index) => {
           setMessage(`正在处理第 ${index + 1}/${selected.length} 张图片…`);
-          const prepared = await prepareAttachmentForUpload(file);
-          return { file: prepared, sha256: await sha256Hex(prepared) };
-        },
-        async ({ file, sha256 }, _sourceFile, index): Promise<UploadedImage> => {
-          setMessage(`正在上传第 ${index + 1}/${selected.length} 张图片…`);
-          const intent = await request("tools/attachments/upload-intents", UploadIntentResponseSchema, {
-            method: "POST",
-            body: JSON.stringify({
-              filename: file.name,
-              mimeType: file.type,
-              sizeBytes: file.size,
-              sha256,
-            }),
-          });
-          const upload = new FormData();
-          for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
-          upload.append("file", file);
-          const response = await fetch(intent.uploadUrl, { method: "POST", body: upload });
-          if (!response.ok) throw new Error(`${file.name} 上传失败`);
-          const finalized = await request(
-            `tools/attachments/${intent.attachmentId}/finalize`,
-            AttachmentResponseSchema,
-            { method: "POST" },
-          );
-          return {
-            attachmentId: finalized.attachmentId,
-            filename: finalized.filename,
-            mimeType: finalized.mimeType,
-            previewUrl: attachmentUrl(finalized.attachmentId, "preview"),
+          const baseTiming: AttachmentUploadTimingContext = {
+            diagnosticId: createClientRequestId(),
+            ...profile,
+            originalBytes: file.size,
+            uploadBytes: file.size,
+            mimeType: file.type,
           };
+          const prepared = await measureAttachmentUploadStage(
+            baseTiming,
+            "prepare",
+            () => prepareImageUploadCandidate(file),
+          );
+          const timing = { ...baseTiming, uploadBytes: prepared.size };
+          const sha256 = await measureAttachmentUploadStage(timing, "hash", () => sha256Hex(prepared));
+          return { file: prepared, timing, sha256 };
+        },
+        async ({ file, timing, sha256 }, sourceFile, index): Promise<UploadedImage> => {
+          setMessage(`正在上传第 ${index + 1}/${selected.length} 张图片…`);
+          return uploadImageWithNormalizationRetry(sourceFile, file, async (candidate) => {
+            const candidateTiming = candidate === file
+              ? timing
+              : { ...timing, uploadBytes: candidate.size, mimeType: candidate.type };
+            const candidateSha256 = candidate === file
+              ? sha256
+              : await measureAttachmentUploadStage(
+                  candidateTiming,
+                  "hash",
+                  () => sha256Hex(candidate),
+                );
+            const intent = await measureAttachmentUploadStage(
+              candidateTiming,
+              "intent",
+              () => request("tools/attachments/upload-intents", UploadIntentResponseSchema, {
+                method: "POST",
+                body: JSON.stringify({
+                  filename: candidate.name,
+                  mimeType: candidate.type,
+                  sizeBytes: candidate.size,
+                  sha256: candidateSha256,
+                }),
+              }),
+            );
+            const upload = new FormData();
+            for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
+            upload.append("file", candidate);
+            const response = await measureAttachmentUploadStage(
+              candidateTiming,
+              "oss",
+              () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
+            );
+            if (!response.ok) throw new Error(`${sourceFile.name} 上传失败`);
+            const finalized = await measureAttachmentUploadStage(
+              candidateTiming,
+              "finalize",
+              () => request(
+                `tools/attachments/${intent.attachmentId}/finalize`,
+                AttachmentResponseSchema,
+                { method: "POST" },
+              ),
+            );
+            const previewUrl = URL.createObjectURL(candidate);
+            previewUrls.current.push(previewUrl);
+            return {
+              attachmentId: finalized.attachmentId,
+              filename: finalized.filename,
+              mimeType: finalized.mimeType,
+              previewUrl,
+            };
+          });
         },
       );
       setImages((current) => [...current, ...uploaded]);
@@ -307,6 +357,18 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const removeImage = (attachmentId: string): void => {
+    setImages((current) => {
+      const removed = current.find((image) => image.attachmentId === attachmentId);
+      if (removed && previewUrls.current.includes(removed.previewUrl)) {
+        URL.revokeObjectURL(removed.previewUrl);
+        previewUrls.current = previewUrls.current.filter((url) => url !== removed.previewUrl);
+      }
+      return current.filter((image) => image.attachmentId !== attachmentId);
+    });
+    createKey.current = null;
   };
 
   const createOrder = async (): Promise<void> => {
@@ -386,15 +448,17 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
             <div><h2>订单照片</h2><p>复用返工系统图片规范，支持 JPG、PNG、WebP。</p></div>
             <StatusBadge tone="info">{images.length}/{MAX_SOURCING_ATTACHMENTS}</StatusBadge>
           </div>
-          {images.length > 0 ? <div className="rework-detail-image-grid">
-            {images.map((image) => <div className="rework-detail-image-card" key={image.attachmentId}>
-              <img src={image.previewUrl} alt={image.filename} />
-              <span>{image.filename}</span>
-            </div>)}
-          </div> : <div className="sourcing-photo-empty">尚未上传图片</div>}
-          <label className="qc-file-button sourcing-upload-button">
-            <span>{uploading ? "正在上传…" : "选择照片"}</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={uploading || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files); event.target.value = ""; }} />
+          {images.length > 0 ? <div className="rework-v2-image-grid">
+            {images.map((image) => <article key={image.attachmentId}>
+              <a href={image.previewUrl} target="_blank" rel="noreferrer">
+                <img src={image.previewUrl} alt={image.filename} />
+              </a>
+              <button type="button" disabled={busy || uploading} onClick={() => removeImage(image.attachmentId)}>移除</button>
+            </article>)}
+          </div> : null}
+          <label className="rework-v2-upload">
+            <span>{uploading ? "正在上传…" : "＋ 上传照片"}</span>
+            <input type="file" accept="image/*" multiple disabled={busy || uploading || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files); event.target.value = ""; }} />
           </label>
         </section>
         <div className="sourcing-submit-row">
