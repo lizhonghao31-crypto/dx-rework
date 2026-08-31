@@ -87,9 +87,12 @@ describe("thin platform module routing", () => {
     expect(app).toContain("useInitialPlatformEntryCheck(path, search)");
     expect(app).not.toContain("PlatformHomePage");
     expect(app).toContain('if (path === "/ui/home") page = <HomeLanding />');
-    expect(components).not.toContain('mobile-primary-navigation__label">平台');
+    expect(components).toContain('mobile-primary-navigation__label">平台');
     expect(shellCss).toContain(".dx-nav-item.is-active .primary-navigation__copy small");
     expect(shellCss).toContain("color: #fff");
     expect(sourcingCss).toContain("border: 1px solid #c9ced6");
+    expect(sourcingCss).toContain("@media (min-width: 761px)");
+    expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
+    expect(sourcingCss).toContain("grid-template-columns: repeat(6, minmax(0, 1fr))");
   });
 });

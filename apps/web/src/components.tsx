@@ -167,18 +167,32 @@ function MobilePrimaryNavigation({
   navigation,
   active,
   basePath,
+  showPlatformHome,
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
+  showPlatformHome: boolean;
 }) {
   const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);
-  const primaryNavigation = mobileCandidates;
-  const moreNavigation = navigation.filter((entry) => !isMobilePrimaryNavigation(entry));
+  const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;
+  const moreNavigation = [
+    ...(showPlatformHome ? mobileCandidates.slice(3) : []),
+    ...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),
+  ];
   const moreIsActive = moreNavigation.some((entry) => entry.name === active);
 
   return (
     <nav className="mobile-primary-navigation" aria-label="移动端主导航">
+      {showPlatformHome ? (
+        <div className="mobile-primary-navigation__entry">
+          <a href={`${basePath}/ui/home`}>
+            <NavigationItem icon="台">
+              <span className="mobile-primary-navigation__label">平台</span>
+            </NavigationItem>
+          </a>
+        </div>
+      ) : null}
       {primaryNavigation.map((entry) => (
         <div className="mobile-primary-navigation__entry" key={entry.name}>
           <MobileNavigationLink entry={entry} active={active} basePath={basePath} />
@@ -428,6 +442,7 @@ export function Shell({
           navigation={navigation}
           active={activeEntry?.name ?? active}
           basePath={basePath}
+          showPlatformHome={currentUser ? canAccessSourcing(currentUser) : false}
         />
       ) : null}
 

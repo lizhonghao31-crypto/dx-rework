@@ -9,10 +9,11 @@ describe("mobile primary navigation", () => {
 
     expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"]');
     expect(components).toContain("const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);");
-    expect(components).toContain("const primaryNavigation = mobileCandidates;");
-    expect(components).toContain("const moreNavigation = navigation.filter((entry) => !isMobilePrimaryNavigation(entry));");
-    expect(components).not.toContain("showPlatformHome");
-    expect(components).not.toContain('mobile-primary-navigation__label">平台');
+    expect(components).toContain("const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;");
+    expect(components).toContain("...(showPlatformHome ? mobileCandidates.slice(3) : []),");
+    expect(components).toContain("...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),");
+    expect(components).toContain("showPlatformHome");
+    expect(components).toContain('mobile-primary-navigation__label">平台');
     expect(components).toContain("<PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />");
     expect(components).toContain('mobileNavigation?: "primary" | "transaction";');
     expect(components).toContain('mobileNavigation === "primary"');
