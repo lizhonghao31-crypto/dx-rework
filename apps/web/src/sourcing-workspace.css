@@ -558,3 +558,15 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+.sourcing-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-create-actions .dx-button {
+  min-width: 144px;
+}

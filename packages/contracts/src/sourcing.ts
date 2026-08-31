@@ -47,6 +47,13 @@ export const SourcingCaseStatusSchema = z.enum([
 
 export const MAX_SOURCING_ATTACHMENTS = 8;
 export const MAX_SOURCING_PROCESSES = 20;
+export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
+  "order_merchandiser",
+  "ie_reviewer",
+  "production_management",
+  "owner_group",
+  "factory_payables",
+] as const;
 
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
@@ -211,6 +218,11 @@ export const SourcingAttachmentListResponseSchema = z.object({
   items: z.array(SourcingAttachmentSchema),
 }).strict();
 
+export const SupplementSourcingImagesSchema = z.object({
+  attachmentIds: z.array(IdSchema).min(1).max(MAX_SOURCING_ATTACHMENTS)
+    .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
+}).strict();
+
 export const SourcingTimelineEntrySchema = z.object({
   entryId: IdSchema,
   kind: z.enum([
@@ -268,5 +280,6 @@ export type SourcingCaseListResponse = z.infer<typeof SourcingCaseListResponseSc
 export type DeleteSourcingCaseResponse = z.infer<typeof DeleteSourcingCaseResponseSchema>;
 export type SourcingAttachment = z.infer<typeof SourcingAttachmentSchema>;
 export type SourcingAttachmentListResponse = z.infer<typeof SourcingAttachmentListResponseSchema>;
+export type SupplementSourcingImages = z.infer<typeof SupplementSourcingImagesSchema>;
 export type SourcingTimelineEntry = z.infer<typeof SourcingTimelineEntrySchema>;
 export type SourcingTimelineResponse = z.infer<typeof SourcingTimelineResponseSchema>;

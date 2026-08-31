@@ -3,6 +3,7 @@ import {
   DeleteSourcingCaseResponseSchema,
   MAX_SOURCING_ATTACHMENTS,
   MAX_SOURCING_PROCESSES,
+  SOURCING_IMAGE_SUPPLEMENT_ROLES,
   SourcingAttachmentListResponseSchema,
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
@@ -36,6 +37,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Header, Shell } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
+import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./rework-detail.css";
 import "./rework-detail-compact.css";
@@ -68,6 +70,15 @@ type UploadedImage = Readonly<{
   filename: string;
   mimeType: string;
   previewUrl: string;
+}>;
+type LocalSourcingDraft = Readonly<{
+  erpOrderNo: string;
+  styleNo: string;
+  deliveryDate: string;
+  processes: readonly string[];
+  orderQuantity: string;
+  images: readonly UploadedImage[];
+  savedAt: string;
 }>;
 type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; unitPrice: string; decisionReason: string }>;
@@ -141,6 +152,44 @@ const canonicalTotalAmount = (value: string): string => {
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
+const LOCAL_SOURCING_DRAFT_KEY = "dx-rework:sourcing-create-local-draft:v1";
+
+const readLocalSourcingDraft = (): LocalSourcingDraft | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_SOURCING_DRAFT_KEY) ?? "null") as Partial<LocalSourcingDraft> | null;
+    if (!parsed || typeof parsed.erpOrderNo !== "string" || typeof parsed.styleNo !== "string"
+      || typeof parsed.deliveryDate !== "string" || typeof parsed.orderQuantity !== "string"
+      || !Array.isArray(parsed.processes) || parsed.processes.length < 1
+      || !parsed.processes.every((process) => typeof process === "string")
+      || !Array.isArray(parsed.images)) return null;
+    const images = parsed.images.filter((image): image is UploadedImage => (
+      typeof image === "object" && image !== null
+      && typeof image.attachmentId === "string"
+      && typeof image.filename === "string"
+      && typeof image.mimeType === "string"
+    )).slice(0, MAX_SOURCING_ATTACHMENTS).map((image) => ({
+      ...image,
+      previewUrl: attachmentUrl(image.attachmentId, "preview"),
+    }));
+    return {
+      erpOrderNo: parsed.erpOrderNo,
+      styleNo: parsed.styleNo,
+      deliveryDate: parsed.deliveryDate,
+      processes: parsed.processes.slice(0, MAX_SOURCING_PROCESSES),
+      orderQuantity: parsed.orderQuantity,
+      images,
+      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
+    };
+  } catch {
+    return null;
+  }
+};
+
+const clearLocalSourcingDraft = (): void => {
+  if (typeof window !== "undefined") window.localStorage.removeItem(LOCAL_SOURCING_DRAFT_KEY);
+};
+
 const detailHref = (item: SourcingCaseSummary): string =>
   pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
 
@@ -204,6 +253,17 @@ export function SourcingWorkspacePage({
     return () => { mounted = false; };
   }, []);
 
+  const isMobileDeepLink = typeof window !== "undefined"
+    && window.matchMedia("(max-width: 800px)").matches;
+  if (isMobileDeepLink) {
+    return <Shell active={ACTIVE_NAVIGATION[view]}>
+      <div className="sourcing-workspace">
+        <Header title="报价&选厂" subtitle="该模块当前仅开放电脑端。" badge="PC 端" />
+        <Surface><h2>请在电脑端打开</h2><p>报价选厂移动端尚未建设，手机端暂不展示或办理订单流程。</p></Surface>
+      </div>
+    </Shell>;
+  }
+
   return (
     <Shell active={ACTIVE_NAVIGATION[view]}>
       {view === "create" ? <CreateOrderPage user={user} /> : null}
@@ -217,15 +277,16 @@ export function SourcingWorkspacePage({
 }
 
 function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
-  const [erpOrderNo, setErpOrderNo] = useState("");
-  const [styleNo, setStyleNo] = useState("");
-  const [deliveryDate, setDeliveryDate] = useState("");
-  const [processes, setProcesses] = useState([""]);
-  const [orderQuantity, setOrderQuantity] = useState("");
-  const [images, setImages] = useState<UploadedImage[]>([]);
+  const localDraft = useMemo(() => readLocalSourcingDraft(), []);
+  const [erpOrderNo, setErpOrderNo] = useState(localDraft?.erpOrderNo ?? "");
+  const [styleNo, setStyleNo] = useState(localDraft?.styleNo ?? "");
+  const [deliveryDate, setDeliveryDate] = useState(localDraft?.deliveryDate ?? "");
+  const [processes, setProcesses] = useState<string[]>([...(localDraft?.processes ?? [""])]);
+  const [orderQuantity, setOrderQuantity] = useState(localDraft?.orderQuantity ?? "");
+  const [images, setImages] = useState<UploadedImage[]>([...(localDraft?.images ?? [])]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
+  const [message, setMessage] = useState(localDraft ? "已恢复本机保存的订单草稿。" : "填写订单资料并上传现场或款式照片。");
   const createKey = useRef<string | null>(null);
   const previewUrls = useRef<string[]>([]);
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
@@ -371,6 +432,21 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     createKey.current = null;
   };
 
+  const saveLocalDraft = (): void => {
+    if (busy || uploading) return;
+    const draft: LocalSourcingDraft = {
+      erpOrderNo,
+      styleNo,
+      deliveryDate,
+      processes,
+      orderQuantity,
+      images,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(LOCAL_SOURCING_DRAFT_KEY, JSON.stringify(draft));
+    setMessage("草稿已保存在本机；下次打开创建订单会自动恢复。");
+  };
+
   const createOrder = async (): Promise<void> => {
     const quantity = Number(orderQuantity);
     const normalizedProcesses = processes.map((process) => process.trim());
@@ -404,6 +480,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           attachmentIds: images.map((image) => image.attachmentId),
         }),
       });
+      clearLocalSourcingDraft();
       window.location.assign(detailHref(created));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单创建失败");
@@ -463,9 +540,12 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         </section>
         <div className="sourcing-submit-row">
           <p role="status">{message}</p>
-          <button className="dx-button dx-button--primary" type="button" disabled={busy || uploading || !canCreate} onClick={() => void createOrder()}>
-            {busy ? "正在提交…" : "提交并进入审批"}
-          </button>
+          <div className="sourcing-create-actions">
+            <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button>
+            <button className="dx-button dx-button--primary" type="button" disabled={busy || uploading || !canCreate} onClick={() => void createOrder()}>
+              {busy ? "正在提交…" : "提交并进入审批"}
+            </button>
+          </div>
         </div>
       </Surface>
     </div>
@@ -656,6 +736,10 @@ function OrderDetailPage({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在加载订单…");
   const actionKey = useRef<string | null>(null);
+  const canSupplementImages = user?.isRoot === true
+    || user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
+      role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
+    )) === true;
 
   const load = async (): Promise<void> => {
     try {
@@ -799,6 +883,11 @@ function OrderDetailPage({
                 <span>{attachment.filename}</span>
               </button>)}
             </div> : <p className="sourcing-list-message">本单没有图片</p>}
+            {canSupplementImages ? <SourcingImageSupplementUploader
+              sourcingCaseId={sourcingCaseId}
+              currentAttachmentCount={attachments.length}
+              onUploaded={load}
+            /> : null}
           </section>
 
           <section className="rework-workflow" aria-label="订单流程">

@@ -9,10 +9,14 @@ import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import {
   currentQcUploadConcurrency,
-  isImageAttachment,
+  currentUploadClientProfile,
+  isImageUploadCandidate,
+  measureAttachmentUploadStage,
   prepareAndUploadWithConcurrency,
-  prepareAttachmentForUpload,
+  prepareImageUploadCandidate,
   sha256Hex,
+  uploadImageWithNormalizationRetry,
+  type AttachmentUploadTimingContext,
 } from "./attachment-upload.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -64,7 +68,7 @@ export function OrderImageSupplementUploader({
   const uploadImages = async (files: FileList | null): Promise<void> => {
     if (!files?.length || uploading || remaining === 0) return;
     const selected = Array.from(files);
-    const unsupported = selected.find((file) => !isImageAttachment(file));
+    const unsupported = selected.find((file) => !isImageUploadCandidate(file));
     if (unsupported) {
       setMessage(`${unsupported.name} 不是支持的图片格式`);
       return;
@@ -75,45 +79,79 @@ export function OrderImageSupplementUploader({
     }
 
     setUploading(true);
-    setMessage(`正在上传 ${selected.length} 张订单图片…`);
+    setMessage(`正在处理 ${selected.length} 张订单图片…`);
     let completedUploadCount = 0;
     try {
+      const profile = currentUploadClientProfile();
       const attachmentIds = await prepareAndUploadWithConcurrency(
         selected,
         currentQcUploadConcurrency(),
         async (file, index) => {
           setMessage(`正在处理第 ${index + 1}/${selected.length} 张订单图片…`);
-          const prepared = await prepareAttachmentForUpload(file);
-          return { file: prepared, sha256: await sha256Hex(prepared) };
+          const baseTiming: AttachmentUploadTimingContext = {
+            diagnosticId: createClientRequestId(),
+            ...profile,
+            originalBytes: file.size,
+            uploadBytes: file.size,
+            mimeType: file.type,
+          };
+          const prepared = await measureAttachmentUploadStage(
+            baseTiming,
+            "prepare",
+            () => prepareImageUploadCandidate(file),
+          );
+          const timing = { ...baseTiming, uploadBytes: prepared.size, mimeType: prepared.type };
+          const sha256 = await measureAttachmentUploadStage(timing, "hash", () => sha256Hex(prepared));
+          return { file: prepared, timing, sha256 };
         },
-        async ({ file, sha256 }, _sourceFile, index): Promise<string> => {
+        async ({ file, timing, sha256 }, sourceFile, index): Promise<string> => {
           setMessage(`正在上传第 ${index + 1}/${selected.length} 张订单图片…`);
-          const intent = await request(
-            "tools/attachments/upload-intents",
-            UploadIntentResponseSchema,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                filename: file.name,
-                mimeType: file.type,
-                sizeBytes: file.size,
-                sha256,
+          return uploadImageWithNormalizationRetry(sourceFile, file, async (candidate) => {
+            const candidateTiming = candidate === file
+              ? timing
+              : { ...timing, uploadBytes: candidate.size, mimeType: candidate.type };
+            const candidateSha256 = candidate === file
+              ? sha256
+              : await measureAttachmentUploadStage(
+                  candidateTiming,
+                  "hash",
+                  () => sha256Hex(candidate),
+                );
+            const intent = await measureAttachmentUploadStage(
+              candidateTiming,
+              "intent",
+              () => request("tools/attachments/upload-intents", UploadIntentResponseSchema, {
+                method: "POST",
+                body: JSON.stringify({
+                  filename: candidate.name,
+                  mimeType: candidate.type,
+                  sizeBytes: candidate.size,
+                  sha256: candidateSha256,
+                }),
               }),
-            },
-          );
-          const upload = new FormData();
-          for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
-          upload.append("file", file);
-          const response = await fetch(intent.uploadUrl, { method: "POST", body: upload });
-          if (!response.ok) throw new Error(`${file.name} 上传失败`);
-          const finalized = await request(
-            `tools/attachments/${intent.attachmentId}/finalize`,
-            AttachmentResponseSchema,
-            { method: "POST" },
-          );
-          completedUploadCount += 1;
-          setMessage(`已上传 ${completedUploadCount}/${selected.length} 张订单图片…`);
-          return finalized.attachmentId;
+            );
+            const upload = new FormData();
+            for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
+            upload.append("file", candidate);
+            const response = await measureAttachmentUploadStage(
+              candidateTiming,
+              "oss",
+              () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
+            );
+            if (!response.ok) throw new Error(`${sourceFile.name} 上传失败`);
+            const finalized = await measureAttachmentUploadStage(
+              candidateTiming,
+              "finalize",
+              () => request(
+                `tools/attachments/${intent.attachmentId}/finalize`,
+                AttachmentResponseSchema,
+                { method: "POST" },
+              ),
+            );
+            completedUploadCount += 1;
+            setMessage(`已上传 ${completedUploadCount}/${selected.length} 张订单图片…`);
+            return finalized.attachmentId;
+          });
         },
       );
       await request(
@@ -141,7 +179,7 @@ export function OrderImageSupplementUploader({
         <span>{uploading ? "正在上传…" : remaining > 0 ? "上传图片" : `已达 ${MAX_REWORK_ATTACHMENTS} 张上限`}</span>
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
           multiple
           disabled={uploading || remaining === 0}
           onChange={(event) => {

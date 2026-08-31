@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { calculateSourcingTotalExact } from "@dx-rework/contracts";
+import {
+  calculateSourcingTotalExact,
+  MAX_SOURCING_ATTACHMENTS,
+  SOURCING_IMAGE_SUPPLEMENT_ROLES,
+} from "@dx-rework/contracts";
 import type {
   CreateSourcingCase,
   CreateSourcingIeQuote,
@@ -18,6 +22,7 @@ import type {
   SourcingCaseSummary,
   SourcingAttachmentListResponse,
   SourcingTimelineResponse,
+  SupplementSourcingImages,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
@@ -41,6 +46,7 @@ const EXCEPTION_VERIFY_CAPABILITY = "sourcing:exception:verify";
 const CASE_DELETE_CAPABILITY = "sourcing:delete";
 const READ_CAPABILITY = "sourcing:view";
 const ROOT_ROLE = "root_superuser";
+const IMAGE_SUPPLEMENT_CAPABILITY = "tools:user";
 const CASE_CREATE_ROLE = "order_merchandiser";
 const IE_QUOTE_ROLE = "ie_reviewer";
 const MANAGEMENT_DECISION_ROLE = "production_management";
@@ -270,6 +276,20 @@ export class SourcingService {
       )
     ) {
       fail("当前岗位无权执行该报价选厂操作", 403, "FORBIDDEN");
+    }
+  }
+
+  private assertImageSupplementActor(actor: TrustedActorContext): void {
+    if (
+      actor.authorizationCapability !== IMAGE_SUPPLEMENT_CAPABILITY
+      || (
+        !actor.actorRoles.includes(ROOT_ROLE)
+        && !actor.actorRoles.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
+          role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
+        ))
+      )
+    ) {
+      fail("当前角色无权补充报价选厂订单图片", 403, "FORBIDDEN");
     }
   }
 
@@ -532,6 +552,114 @@ export class SourcingService {
     };
   }
 
+  async supplementImages(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+    input: SupplementSourcingImages,
+    idempotencyKey: string,
+  ): Promise<Result<SourcingAttachmentListResponse>> {
+    this.assertImageSupplementActor(actor);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const normalized = { attachmentIds: [...input.attachmentIds] };
+    const scope = "sourcing.attachments.supplement";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: requestHash(scope, { sourcingCaseId, ...normalized }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => {
+        const source = await client.query<{ sourcing_case_id: string }>(
+          `SELECT sourcing_case_id
+           FROM sourcing_cases
+           WHERE sourcing_case_id=$1 AND deleted_at IS NULL
+           FOR UPDATE`,
+          [sourcingCaseId],
+        );
+        if (!source.rows[0]) fail("报价选厂询价不存在", 404, "NOT_FOUND");
+
+        const existing = await client.query<{ attachment_id: string }>(
+          `SELECT attachment_id
+           FROM attachments
+           WHERE entity_type='sourcing_case' AND entity_id=$1 AND status='ready'
+           ORDER BY created_at,attachment_id
+           FOR UPDATE`,
+          [sourcingCaseId],
+        );
+        const existingAttachmentIds = existing.rows.map((row) => row.attachment_id);
+        if (existingAttachmentIds.length + normalized.attachmentIds.length > MAX_SOURCING_ATTACHMENTS) {
+          fail(`每张订单最多保留 ${MAX_SOURCING_ATTACHMENTS} 张图片`);
+        }
+
+        const images = await client.query<{ attachment_id: string }>(
+          `SELECT attachment_id
+           FROM attachments
+           WHERE attachment_id=ANY($1::uuid[]) AND uploaded_by=$2
+             AND status='ready' AND entity_type IS NULL AND entity_id IS NULL
+             AND mime_type IN ('image/jpeg','image/png','image/webp')
+           FOR UPDATE`,
+          [normalized.attachmentIds, actor.actorId],
+        );
+        if (images.rows.length !== normalized.attachmentIds.length) {
+          fail("补充图片必须已上传完成、属于当前账号且尚未绑定");
+        }
+
+        const nextAttachmentIds = [...existingAttachmentIds, ...normalized.attachmentIds];
+        const eventId = await this.events.append(client, actor, {
+          action: "sourcing.attachments.supplement",
+          entityType: "sourcing_case",
+          entityId: sourcingCaseId,
+          before: { attachmentIds: existingAttachmentIds },
+          after: { attachmentIds: nextAttachmentIds },
+          reason: "补充报价选厂订单图片",
+        });
+        await client.query(
+          `SELECT set_config('dx_rework.sourcing_event_id',$1,true),
+                  set_config('dx_rework.sourcing_request_id',$2,true)`,
+          [eventId, actor.requestId],
+        );
+        await client.query(
+          `UPDATE attachments
+           SET entity_type='sourcing_case',entity_id=$2,updated_at=CURRENT_TIMESTAMP
+           WHERE attachment_id=ANY($1::uuid[])`,
+          [normalized.attachmentIds, sourcingCaseId],
+        );
+        const attachments = await client.query<{
+          attachment_id: string;
+          original_filename: string;
+          mime_type: "image/jpeg" | "image/png" | "image/webp";
+        }>(
+          `SELECT attachment_id,original_filename,mime_type
+           FROM attachments
+           WHERE entity_type='sourcing_case' AND entity_id=$1 AND status='ready'
+             AND mime_type IN ('image/jpeg','image/png','image/webp')
+           ORDER BY created_at,attachment_id`,
+          [sourcingCaseId],
+        );
+        return {
+          statusCode: 200,
+          response: {
+            items: attachments.rows.map((row) => ({
+              attachmentId: row.attachment_id,
+              filename: row.original_filename,
+              mimeType: row.mime_type,
+            })),
+          },
+        };
+      });
+      await client.query("COMMIT");
+      return { value: outcome.response, reused: outcome.reused };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async listTimeline(
     actor: TrustedActorContext,
     sourcingCaseId: string,
@@ -765,6 +893,7 @@ export class SourcingService {
             laneKey: LANE_KEY,
             status: "pending_ie_quote",
             attachmentCount: normalized.attachmentIds.length,
+            attachmentIds: normalized.attachmentIds,
           },
           reason: DEFAULT_CREATION_REASON,
         });
@@ -803,6 +932,11 @@ export class SourcingService {
           if (images.rows.length !== normalized.attachmentIds.length) {
             fail("订单图片必须已上传完成、属于当前账号且尚未绑定");
           }
+          await client.query(
+            `SELECT set_config('dx_rework.sourcing_event_id',$1,true),
+                    set_config('dx_rework.sourcing_request_id',$2,true)`,
+            [eventId, actor.requestId],
+          );
           await client.query(
             `UPDATE attachments
              SET entity_type='sourcing_case',entity_id=$2,updated_at=CURRENT_TIMESTAMP
