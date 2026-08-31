@@ -807,6 +807,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       requiresOwnerApproval: true,
       status: "pending_management",
     });
+    await expect(service.recordFinanceReconciliation(
+      financeActor(),
+      merchCaseId,
+      { result: "match" },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+      statusCode: 409,
+      message: "订单转厂审批中，财务暂不能核对",
+    });
     await expect(service.requestFactoryChange(
       financeActor(),
       merchCaseId,
