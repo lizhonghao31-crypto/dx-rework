@@ -28,14 +28,16 @@ describe("sourcing five-stage factory change compatibility", () => {
     const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
     expect(service).toContain('"sourcing.contract.record"');
     expect(service).toContain('"sourcing.factory_change.request"');
-    expect(service).toContain('"sourcing.factory_change.approved"');
+    expect(service).toContain('"sourcing.factory_change.management_approved"');
+    expect(service).toContain('"sourcing.factory_change.effective"');
+    expect(service).toContain('"sourcing.factory_change.owner_rejected"');
     expect(service).toContain('"sourcing.factory_change.rejected"');
     expect(service).toContain('"factory_change"');
     expect(service).toContain("supersedes_decision_id");
     expect(service).not.toContain('category: "sourcing_contract_record"');
     expect(service).toContain('category: "sourcing_finance_reconcile"');
     expect(service).toContain('"sourcing_factory_change_verify"');
-    expect(service).toContain('"sourcing_factory_change_notice"');
+    expect(service).not.toContain('"sourcing_factory_change_notice"');
     expect(service).toContain("todoProjection?.information");
   });
 
