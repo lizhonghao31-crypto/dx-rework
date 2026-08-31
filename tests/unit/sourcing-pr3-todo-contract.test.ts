@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 describe("sourcing PR3 shared todo cutover", () => {
   it("projects every live sourcing action into the existing neutral todo system", async () => {
     const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
-    expect(service).toContain("actionableForAllDirectRole");
+    expect(service).toContain("actionableForAllAssignedRole");
+    expect(service).not.toContain("todoProjection?.actionableForAllDirectRole(");
     expect(service).toContain('"sourcing_ie_quote"');
     expect(service).toContain('"sourcing_management_decision"');
     expect(service).toContain('"sourcing_owner_approval"');
