@@ -13,7 +13,7 @@ describe("sourcing finance readonly confirmation", () => {
     expect(service).toContain("source.expected_unit_price");
     expect(service).toContain("source.expected_total_amount");
     expect(service).toContain('input.result === "difference"');
-    expect(page).toContain("财务仅核对老板批准的合同事实");
+    expect(page).toContain("财务仅核对已批准的选厂决定");
     expect(page).toContain("确认与合同一致");
     expect(page).toContain("提交差异核实");
     expect(page).not.toContain("发起中途换厂");
