@@ -778,11 +778,12 @@ function OrderDetailPage({
       setAttachments(evidence.items);
       setTimeline(history.items);
       setFactoryChange(currentFactoryChange.item);
-      setFactoryChangeDraft((current) => ({
-        supplierId: current.supplierId,
-        unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
-        changeReason: current.changeReason,
-      }));
+      setFactoryChangeDraft({
+        supplierId: "",
+        unitPrice: detail.decision?.unitPrice || "",
+        changeReason: "",
+      });
+      setFactoryChangeReviewReason("");
       setDecision((current) => ({
         supplierId: current.supplierId || detail.decision?.supplierId || "",
         unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
