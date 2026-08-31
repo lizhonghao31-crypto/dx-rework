@@ -773,13 +773,6 @@ function OrderDetailPage({
         unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
         decisionReason: current.decisionReason,
       }));
-      setFinance((current) => ({
-        supplierId: current.supplierId || detail.decision?.supplierId || "",
-        unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
-        quantity: current.quantity || String(detail.decision?.quantity ?? detail.orderQuantity),
-        totalAmount: current.totalAmount || detail.decision?.totalAmount || "",
-        differenceReason: current.differenceReason,
-      }));
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单加载失败");
@@ -794,11 +787,11 @@ function OrderDetailPage({
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
 
   useEffect(() => {
-    if (!canManage && !canChangeFactory && !canFinance) return;
+    if (!canManage) return;
     void request("sourcing/factories", SourcingFactoryListResponseSchema)
       .then((body) => setFactories(body.items))
       .catch((error) => setMessage(error instanceof Error ? error.message : "加工厂加载失败"));
-  }, [canManage, canChangeFactory, canFinance]);
+  }, [canManage]);
 
   const submit = async (
     path: string,
