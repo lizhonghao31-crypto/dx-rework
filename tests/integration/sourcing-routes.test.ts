@@ -27,6 +27,7 @@ const caseSummary: SourcingCaseSummary = {
   orderQuantity: 120,
   deliveryDate: "2026-09-15",
   processDescription: "净色车缝并整烫",
+  processes: ["净色车缝并整烫"],
   status: "pending_ie_quote",
   version: 1,
   createdBy: "00000000-0000-4000-8000-000000000001",

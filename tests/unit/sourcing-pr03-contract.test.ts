@@ -38,6 +38,20 @@ describe("sourcing PR03 contracts", () => {
       processDescription: "净色车缝并整烫",
       orderQuantity: 1.5,
     })).toThrow();
+    expect(CreateSourcingCaseSchema.parse({
+      erpOrderNo: "ERP-2026-002",
+      styleNo: "DX-200",
+      deliveryDate: "2026-09-16",
+      processes: ["车缝", "整烫", "按样衣复核"],
+      orderQuantity: 200,
+    })).toMatchObject({ processes: ["车缝", "整烫", "按样衣复核"] });
+    expect(() => CreateSourcingCaseSchema.parse({
+      erpOrderNo: "ERP-2026-003",
+      styleNo: "DX-300",
+      deliveryDate: "2026-09-17",
+      processes: ["车缝", "车缝"],
+      orderQuantity: 200,
+    })).toThrow(/工艺不能重复/);
     expect(() => CreateSourcingCaseSchema.parse({
       erpOrderId: "caller-controlled-id",
       erpOrderNo: "ERP-2026-001",
