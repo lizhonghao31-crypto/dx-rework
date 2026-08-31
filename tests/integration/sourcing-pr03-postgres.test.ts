@@ -18,7 +18,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     options: `-c search_path=${schema}`,
   });
   const todoProjection = {
-    actionableForAllDirectRole: vi.fn(async () => [] as string[]),
+    actionableForAllAssignedRole: vi.fn(async () => [] as string[]),
     cancelOpenByDedupePrefix: vi.fn(async () => 0),
     completeOpenByDedupePrefix: vi.fn(async () => 0),
     information: vi.fn(async () => undefined),
@@ -126,6 +126,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0120_sourcing_order_facts.sql",
       "0121_sourcing_remove_contract_stage.sql",
       "0122_sourcing_case_logical_deletion.sql",
+      "0123_sourcing_explicit_role_todos.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -576,7 +577,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       statusCode: 409,
     });
 
-    expect(todoProjection.actionableForAllDirectRole.mock.calls.map((call) => call[2].category))
+    expect(todoProjection.actionableForAllAssignedRole.mock.calls.map((call) => call[2].category))
       .toEqual([
         "sourcing_ie_quote",
         "sourcing_management_decision",

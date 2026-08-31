@@ -770,8 +770,14 @@ function OrderDetailPage({
           </Surface> : null}
 
           {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
-            <h2>05 · 待财务核对</h2>
-            <p>逐项核对已批准选厂决定的供应商、单价、数量和总额；一致即归档，有差异则自动交生产管理核实并通知老板。</p>
+            <h2>05 · 财务核对</h2>
+            <p>以下是老板批准的选厂决定。财务核对实际信息后确认结果；四项一致即归档，有差异则自动交生产管理核实并通知老板。</p>
+            {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
+              <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
+              <div><dt>批准单价</dt><dd>{formatBusinessCurrency(item.decision.unitPrice)}</dd></div>
+              <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
+              <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
+            </dl> : null}
             {canFinance ? <div className="sourcing-form-grid">
               <label><span>实际加工厂</span><select value={finance.supplierId} onChange={(event) => { setFinance({ ...finance, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择实际加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               <label><span>实际单价</span><input value={finance.unitPrice} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, unitPrice: event.target.value }); actionKey.current = null; }} /></label>
@@ -788,8 +794,8 @@ function OrderDetailPage({
                   ...(finance.differenceReason.trim() ? { differenceReason: finance.differenceReason.trim() } : {}),
                 },
                 financeDifferences.length ? "财务差异已提交生产管理核实" : "四项核对一致，订单已归档",
-              )}>提交财务核对</button>
-            </div> : <p>当前账号仅可查看，本节点由应付财务办理。</p>}
+              )}>确认核对结果</button>
+            </div> : <p>当前账号仅可查看，本节点由财务核对。</p>}
             {canChangeFactory ? <div className="sourcing-form-grid">
               <label><span>新加工厂</span><select value={factoryChange.supplierId} onChange={(event) => { setFactoryChange({ ...factoryChange, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               <label><span>新加工单价</span><input value={factoryChange.unitPrice} inputMode="decimal" onChange={(event) => { setFactoryChange({ ...factoryChange, unitPrice: event.target.value }); actionKey.current = null; }} /></label>

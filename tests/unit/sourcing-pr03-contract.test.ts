@@ -91,7 +91,8 @@ describe("sourcing PR03 contracts", () => {
     expect(page).not.toContain(">登记合同</button>");
     expect(page).toContain("发起中途换厂");
     expect(page).toContain("生产管理核实换厂");
-    expect(page).toContain("提交财务核对");
+    expect(page).toContain("确认核对结果");
+    expect(page).not.toContain(">提交财务核对</button>");
     expect(page).toContain("确认差异并闭环");
     expect(page).toContain("退回财务重核");
   });

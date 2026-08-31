@@ -329,6 +329,40 @@
   gap: var(--dx-v2-space-3);
 }
 
+.sourcing-finance-reference {
+  display: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--dx-v2-space-2);
+  margin: 0;
+}
+
+.sourcing-finance-reference > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--dx-v2-space-3);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-inset);
+}
+
+.sourcing-finance-reference dt {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+}
+
+.sourcing-finance-reference dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+
+@media (min-width: 761px) {
+  .sourcing-finance-reference {
+    display: grid;
+  }
+}
+
 .sourcing-owner-actions {
   display: grid;
   gap: var(--dx-v2-space-3);
