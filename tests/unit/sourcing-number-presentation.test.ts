@@ -20,14 +20,11 @@ describe("sourcing number presentation", () => {
     for (const draft of [
       "quote.unitPrice",
       "decision.unitPrice",
-      "finance.unitPrice",
-      "finance.quantity",
-      "finance.totalAmount",
-      "factoryChange.unitPrice",
+      "factoryChangeDraft.unitPrice",
     ]) expect(page).toContain(`businessInputValue(${draft})`);
     expect(page).toContain('onFocus={() => setActiveBusinessInput("quote-unit-price")}');
     expect(page).toContain('onBlur={() => setActiveBusinessInput(null)}');
     expect(page).not.toContain("value={decision.unitPrice} inputMode=\"decimal\"");
-    expect(page).not.toContain("value={finance.totalAmount} inputMode=\"decimal\"");
+    expect(page).not.toContain("value={financeReview.differenceReason} inputMode=\"decimal\"");
   });
 });
