@@ -16,6 +16,7 @@ describe("sourcing number presentation", () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain("const businessInputValue");
     expect(page).toContain("const businessInputChange");
+    expect(page).toContain("const [activeBusinessInput, setActiveBusinessInput]");
     for (const draft of [
       "quote.unitPrice",
       "decision.unitPrice",
@@ -24,6 +25,8 @@ describe("sourcing number presentation", () => {
       "finance.totalAmount",
       "factoryChange.unitPrice",
     ]) expect(page).toContain(`businessInputValue(${draft})`);
+    expect(page).toContain('onFocus={() => setActiveBusinessInput("quote-unit-price")}');
+    expect(page).toContain('onBlur={() => setActiveBusinessInput(null)}');
     expect(page).not.toContain("value={decision.unitPrice} inputMode=\"decimal\"");
     expect(page).not.toContain("value={finance.totalAmount} inputMode=\"decimal\"");
   });
