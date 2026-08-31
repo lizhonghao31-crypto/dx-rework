@@ -344,7 +344,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION guard_sourcing_reconciliation_insert()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   source_decision sourcing_decisions%ROWTYPE;
   source_supplier record;
@@ -401,7 +401,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION guard_sourcing_transition_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
