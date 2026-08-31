@@ -128,20 +128,6 @@ const totalPreview = (unitPrice: string, quantity: number): string => {
   }
 };
 
-const canonicalUnitPrice = (value: string): string => {
-  const normalized = value.trim();
-  if (!/^\d{1,10}(?:\.\d{1,4})?$/.test(normalized)) return "";
-  const [whole, fraction = ""] = normalized.split(".");
-  return `${BigInt(whole!)}.${fraction.padEnd(4, "0")}`;
-};
-
-const canonicalTotalAmount = (value: string): string => {
-  const normalized = value.trim();
-  if (!/^\d{1,16}(?:\.\d{1,2})?$/.test(normalized)) return "";
-  const [whole, fraction = ""] = normalized.split(".");
-  return `${BigInt(whole!)}.${fraction.padEnd(2, "0")}`;
-};
-
 const businessInputValue = (value: string): string =>
   value ? formatBusinessDecimal(value) : "";
 
@@ -760,7 +746,6 @@ function OrderDetailPage({
   const [quote, setQuote] = useState<QuoteDraft>({ unitPrice: "", quoteReason: "" });
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", unitPrice: "", decisionReason: "" });
   const [ownerReason, setOwnerReason] = useState("");
-  const [verificationReason, setVerificationReason] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
