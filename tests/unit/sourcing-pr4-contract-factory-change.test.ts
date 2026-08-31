@@ -42,7 +42,7 @@ describe("sourcing role-aware factory change workflow", () => {
     ]);
     expect(service).toContain('initiatorRole === "owner_group"');
     expect(service).toContain('initiatorRole === "production_management" && !requiresOwnerApproval');
-    expect(service).toContain("scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price)");
+    expect(service).toContain("scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price!)");
     expect(service).toContain('"sourcing.factory_change.management_approved"');
     expect(service).toContain('"sourcing.factory_change.owner_rejected"');
     expect(service).toContain('"sourcing.factory_change.effective"');
