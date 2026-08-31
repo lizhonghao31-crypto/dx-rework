@@ -45,11 +45,14 @@ describe("sourcing PC role-aware transfer UI", () => {
     expect(page).toContain('unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || ""');
     expect(page).toContain("decisionUnitPriceEdited");
     expect(page).toContain("factoryChangeUnitPriceEdited");
-    expect(page).toContain('setFactoryChangeDraft({');
+    expect(page).toContain("supplierId: current.supplierId");
+    expect(page).toContain("changeReason: current.changeReason");
+    expect(page).toContain("resetFactoryChange = false");
+    expect(page).toContain("if (resetFactoryChange) {");
     expect(page).toContain('supplierId: ""');
     expect(page).toContain('changeReason: ""');
     expect(page).toContain('setFactoryChangeReviewReason("");');
-    expect(page).not.toContain("changeReason: current.changeReason");
+    expect(page).toContain('"转厂申请已提交", true');
     expect(page).toContain("formatBusinessCurrency(factoryChange.proposedUnitPrice)");
     expect(page).toContain("if (isMobileClient())");
     expect(page).toContain("该模块当前仅开放电脑端");
