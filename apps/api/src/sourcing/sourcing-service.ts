@@ -73,6 +73,7 @@ type SourcingCaseRow = Readonly<{
   order_quantity: number | string;
   delivery_date: string | null;
   process_description: string | null;
+  process_items: string[] | null;
   status: string;
   version: number | string;
   created_by: string;
@@ -181,6 +182,9 @@ const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => ({
   orderQuantity: Number(row.order_quantity),
   deliveryDate: row.delivery_date,
   processDescription: row.process_description,
+  processes: row.process_items?.length
+    ? row.process_items
+    : row.process_description ? [row.process_description] : [],
   status: row.status as SourcingCaseStatus,
   version: Number(row.version),
   createdBy: row.created_by,
@@ -290,7 +294,7 @@ export class SourcingService {
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
-         case_view.process_description,
+         case_view.process_description,case_view.process_items,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -353,7 +357,7 @@ export class SourcingService {
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
-         case_view.process_description,
+         case_view.process_description,case_view.process_items,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -718,12 +722,25 @@ export class SourcingService {
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     const erpOrderNo = normalizeText(input.erpOrderNo, "ERP订单号", 100);
+    const processItems = input.processes
+      ? input.processes.map((process) => normalizeText(process, "工艺", 100))
+      : null;
+    const legacyProcessDescription = input.processDescription
+      ? normalizeText(input.processDescription, "工艺", 500)
+      : null;
+    const processes = processItems ?? (legacyProcessDescription ? [legacyProcessDescription] : []);
+    if (processItems && (processItems.length < 1 || processItems.length > 20)) {
+      fail("工艺必须填写1至20项");
+    }
+    if (processItems && new Set(processItems).size !== processItems.length) fail("工艺不能重复");
     const normalized = {
       erpOrderNo,
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       deliveryDate: input.deliveryDate,
-      processDescription: normalizeText(input.processDescription, "工艺", 500),
+      processes,
+      processItems,
+      processDescription: legacyProcessDescription ?? processes.join("、"),
       orderQuantity: normalizeQuantity(input.orderQuantity),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
@@ -754,9 +771,9 @@ export class SourcingService {
         await client.query(
           `INSERT INTO sourcing_cases(
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
-             order_quantity,delivery_date,process_description,
+             order_quantity,delivery_date,process_description,process_items,
              created_by,operation_event_id,request_id,creation_reason
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [
             sourcingCaseId,
             normalized.erpOrderId,
@@ -766,6 +783,7 @@ export class SourcingService {
             normalized.orderQuantity,
             normalized.deliveryDate,
             normalized.processDescription,
+            normalized.processItems,
             actor.actorId,
             eventId,
             actor.requestId,

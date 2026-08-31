@@ -127,6 +127,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0121_sourcing_remove_contract_stage.sql",
       "0122_sourcing_case_logical_deletion.sql",
       "0123_sourcing_explicit_role_todos.sql",
+      "0124_sourcing_ordered_processes.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -192,7 +193,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-20260826-001",
       styleNo: "DX-260826",
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝、整烫并按样衣复核",
+      processes: ["净色车缝", "整烫", "按样衣复核"],
       orderQuantity: 137,
       attachmentIds: [evidenceId],
     };
@@ -206,7 +207,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       laneKey: "garment_processing",
       orderQuantity: 137,
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝、整烫并按样衣复核",
+      processDescription: "净色车缝、整烫、按样衣复核",
+      processes: ["净色车缝", "整烫", "按样衣复核"],
       status: "pending_ie_quote",
       version: 1,
       ieQuote: null,
@@ -619,6 +621,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {
+    const legacyProcessDescription = "旧".repeat(500);
     const attachmentId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -631,10 +634,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-DELETE-1",
       styleNo: "DELETE-STYLE-1",
       deliveryDate: "2026-10-01",
-      processDescription: "删除回归工艺",
+      processDescription: legacyProcessDescription,
       orderQuantity: 88,
       attachmentIds: [attachmentId],
     }, randomUUID());
+    expect(created.value).toMatchObject({
+      processDescription: legacyProcessDescription,
+      processes: [legacyProcessDescription],
+    });
 
     await expect(service.deleteByRoot(
       merchandiserActor(),

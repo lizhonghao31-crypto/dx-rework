@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const IdSchema = z.string().uuid();
 const ShortTextSchema = z.string().trim().min(1).max(100);
+const SourcingProcessSchema = z.string().trim().min(1, "工艺不能为空").max(100);
 const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
@@ -45,17 +46,32 @@ export const SourcingCaseStatusSchema = z.enum([
 ]);
 
 export const MAX_SOURCING_ATTACHMENTS = 8;
+export const MAX_SOURCING_PROCESSES = 20;
 
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
-  processDescription: z.string().trim().min(1).max(500),
+  processes: z.array(SourcingProcessSchema).min(1).max(MAX_SOURCING_PROCESSES)
+    .refine((items) => new Set(items).size === items.length, "工艺不能重复")
+    .optional(),
+  processDescription: z.string().trim().min(1).max(500).optional(),
   orderQuantity: z.number().int().positive().max(10_000_000),
   attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
     .optional(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (!value.processes?.length && !value.processDescription) {
+    context.addIssue({ code: "custom", path: ["processes"], message: "请至少填写一项工艺" });
+  }
+  if (value.processes?.length && value.processDescription) {
+    context.addIssue({
+      code: "custom",
+      path: ["processes"],
+      message: "工艺清单与旧工艺字段不能同时提交",
+    });
+  }
+});
 
 export const CreateSourcingIeQuoteSchema = z.object({
   unitPrice: MoneyInputSchema,
@@ -165,6 +181,7 @@ export const SourcingCaseSummarySchema = z.object({
   orderQuantity: z.number().int().positive(),
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   processDescription: z.string().nullable(),
+  processes: z.array(z.string()).max(MAX_SOURCING_PROCESSES),
   status: SourcingCaseStatusSchema,
   version: z.number().int().positive(),
   createdBy: IdSchema,

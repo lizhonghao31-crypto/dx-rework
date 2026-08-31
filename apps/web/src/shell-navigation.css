@@ -23,6 +23,10 @@
   line-height: 1.35;
 }
 
+.desktop-navigation .primary-navigation__copy small {
+  color: #fff;
+}
+
 .app-shell aside {
   display: flex;
   flex-direction: column;
@@ -100,13 +104,13 @@
 }
 
 .desktop-navigation__group > summary small {
-  color: var(--dx-v2-color-inset);
+  color: #fff;
   font-size: 11px;
 }
 
 .desktop-navigation__group > summary:hover small,
 .desktop-navigation__group.is-active > summary small {
-  color: var(--dx-v2-color-text-secondary);
+  color: var(--dx-v2-color-text);
 }
 
 .desktop-navigation__group > summary b {
@@ -127,5 +131,5 @@
 .primary-navigation__entry .dx-nav-item.is-active .primary-navigation__copy strong,
 .primary-navigation__entry .dx-nav-item.is-active .primary-navigation__copy small,
 .primary-navigation__entry .dx-nav-item.is-active > b {
-  color: #fff;
+  color: #fff !important;
 }

@@ -2,6 +2,7 @@ import {
   AttachmentResponseSchema,
   DeleteSourcingCaseResponseSchema,
   MAX_SOURCING_ATTACHMENTS,
+  MAX_SOURCING_PROCESSES,
   SourcingAttachmentListResponseSchema,
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
@@ -215,7 +216,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [erpOrderNo, setErpOrderNo] = useState("");
   const [styleNo, setStyleNo] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
-  const [processDescription, setProcessDescription] = useState("");
+  const [processes, setProcesses] = useState([""]);
   const [orderQuantity, setOrderQuantity] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -223,6 +224,29 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
   const createKey = useRef<string | null>(null);
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
+
+  const updateProcess = (index: number, value: string): void => {
+    setProcesses((current) => current.map((process, currentIndex) => (
+      currentIndex === index ? value : process
+    )));
+    createKey.current = null;
+  };
+
+  const addProcess = (): void => {
+    if (processes.length >= MAX_SOURCING_PROCESSES) {
+      setMessage(`每张订单最多登记 ${MAX_SOURCING_PROCESSES} 项工艺`);
+      return;
+    }
+    setProcesses((current) => [...current, ""]);
+    createKey.current = null;
+  };
+
+  const removeProcess = (index: number): void => {
+    setProcesses((current) => current.length === 1
+      ? [""]
+      : current.filter((_process, currentIndex) => currentIndex !== index));
+    createKey.current = null;
+  };
 
   const uploadImages = async (files: FileList | null): Promise<void> => {
     if (!files?.length || uploading) return;
@@ -287,9 +311,17 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
 
   const createOrder = async (): Promise<void> => {
     const quantity = Number(orderQuantity);
+    const normalizedProcesses = processes.map((process) => process.trim());
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
     if (!erpOrderNo.trim() || !styleNo.trim()) { setMessage("请填写 ERP 订单号和款号"); return; }
-    if (!deliveryDate || !processDescription.trim()) { setMessage("请填写交货日期和工艺"); return; }
+    if (!deliveryDate || normalizedProcesses.some((process) => !process)) {
+      setMessage("请填写交货日期和所有工艺");
+      return;
+    }
+    if (new Set(normalizedProcesses).size !== normalizedProcesses.length) {
+      setMessage("工艺不能重复，请合并或修改重复项");
+      return;
+    }
     if (!/^\d+$/.test(orderQuantity) || quantity < 1 || quantity > 10_000_000) {
       setMessage("订单数量必须是1至10000000之间的整数");
       return;
@@ -305,7 +337,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           erpOrderNo: erpOrderNo.trim(),
           styleNo: styleNo.trim(),
           deliveryDate,
-          processDescription: processDescription.trim(),
+          processes: normalizedProcesses,
           orderQuantity: quantity,
           attachmentIds: images.map((image) => image.attachmentId),
         }),
@@ -334,7 +366,20 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           <label><span>款号</span><input value={styleNo} maxLength={100} onChange={(event) => { setStyleNo(event.target.value); createKey.current = null; }} placeholder="请输入款号" /></label>
           <label><span>订单数量</span><input value={orderQuantity} inputMode="numeric" onChange={(event) => { setOrderQuantity(event.target.value); createKey.current = null; }} placeholder="请输入整数" /></label>
           <label><span>交货日期</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label className="sourcing-form-wide"><span>工艺</span><input value={processDescription} maxLength={500} onChange={(event) => { setProcessDescription(event.target.value); createKey.current = null; }} placeholder="请输入订单工艺要求" /></label>
+          <label className="sourcing-process-mobile"><span>工艺</span><input value={processes[0]} maxLength={100} onChange={(event) => updateProcess(0, event.target.value)} placeholder="请输入订单工艺要求" /></label>
+          <section className="sourcing-process-editor sourcing-form-wide" aria-label="订单工艺清单">
+            <div className="sourcing-process-editor__heading">
+              <div><strong>工艺清单</strong><small>每项工艺单独一行，按实际生产顺序登记</small></div>
+              <button type="button" disabled={processes.length >= MAX_SOURCING_PROCESSES} onClick={addProcess}>＋ 新增工艺</button>
+            </div>
+            <div className="sourcing-process-editor__list">
+              {processes.map((process, index) => <div className="sourcing-process-row" key={index}>
+                <b>{String(index + 1).padStart(2, "0")}</b>
+                <label><span className="visually-hidden">第 {index + 1} 项工艺</span><input value={process} maxLength={100} onChange={(event) => updateProcess(index, event.target.value)} placeholder="例如：车缝、整烫、水洗" /></label>
+                <button type="button" aria-label={`删除第 ${index + 1} 项工艺`} disabled={processes.length === 1} onClick={() => removeProcess(index)}>删除</button>
+              </div>)}
+            </div>
+          </section>
         </div>
         <section className="sourcing-photo-field" aria-label="订单照片">
           <div className="section-title">
@@ -670,7 +715,7 @@ function OrderDetailPage({
         <dl className="rework-detail-core-facts" aria-label="报价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{item.orderQuantity.toLocaleString("zh-CN")} 件</dd></div>
           <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>工艺</dt><dd>{item.processDescription ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
@@ -762,7 +807,21 @@ function OrderDetailPage({
 
           {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview">
             <h2>04 · 老板最终审批</h2>
-            <p>IE 原价 {item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}；生产管理价格 {item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}；加工厂 {item.decision?.supplierName ?? "—"}。</p>
+            <p>请核对订单事实与生产管理提交的选厂方案，再批准或驳回。</p>
+            <p className="sourcing-owner-mobile-summary">IE 原价 {item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}；生产管理价格 {item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}；加工厂 {item.decision?.supplierName ?? "—"}。</p>
+            <dl className="sourcing-owner-summary" aria-label="老板审批摘要">
+              <div><dt>ERP 订单</dt><dd>{item.erpOrderNo}</dd></div>
+              <div><dt>款号</dt><dd>{item.styleNo}</dd></div>
+              <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
+              <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+              <div className="sourcing-owner-summary__processes"><dt>工艺</dt><dd>{item.processes.length ? item.processes.map((process, index) => <span key={process}>{index + 1}. {process}</span>) : "—"}</dd></div>
+              <div><dt>拟选加工厂</dt><dd>{item.decision?.supplierName ?? "—"}</dd></div>
+              <div><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
+              <div><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
+              <div><dt>价格变化</dt><dd>{priceAdjusted ? "生产管理已调整" : "沿用 IE 价格"}</dd></div>
+              <div><dt>订单总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
+              <div className="sourcing-owner-summary__reason"><dt>选厂 / 调价说明</dt><dd>{item.decision?.decisionReason || "无补充说明"}</dd></div>
+            </dl>
             {canOwner ? <div className="sourcing-owner-actions">
               <label><span>审批说明 / 驳回原因</span><input value={ownerReason} maxLength={500} onChange={(event) => { setOwnerReason(event.target.value); actionKey.current = null; }} /></label>
               <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved", ...(ownerReason.trim() ? { decisionReason: ownerReason.trim() } : {}) }, "老板已批准")}>批准</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !ownerReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected", decisionReason: ownerReason.trim() }, "已驳回生产管理重新调整")}>驳回</button></div>
