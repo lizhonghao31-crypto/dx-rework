@@ -2421,7 +2421,10 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("财务核对状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        const testDetail = process.env.NODE_ENV === "test" && error instanceof Error
+          ? `：${error.message}`
+          : "";
+        fail(`财务核对状态已经变化，请刷新后重试${testDetail}`, 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
