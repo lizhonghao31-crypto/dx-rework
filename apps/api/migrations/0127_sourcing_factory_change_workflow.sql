@@ -268,6 +268,24 @@ BEGIN
           USING ERRCODE='23514';
       END IF;
     ELSE
+      SELECT * INTO previous_owner_decision
+      FROM sourcing_owner_decisions
+      WHERE sourcing_decision_id=previous_decision.sourcing_decision_id
+        AND decision='rejected';
+      IF previous_decision.sourcing_decision_id IS NULL
+        OR previous_owner_decision.sourcing_owner_decision_id IS NULL
+        OR NEW.decision_version<>previous_decision.decision_version+1
+        OR NEW.supersedes_decision_id<>previous_decision.sourcing_decision_id THEN
+        RAISE EXCEPTION 'management revision must supersede the owner-rejected decision'
+          USING ERRCODE='23514';
+      END IF;
+    END IF;
+    PERFORM sourcing_require_operation_event(
+      NEW.operation_event_id,NEW.request_id,NEW.decided_by,
+      'sourcing.management_decision.record','sourcing:decision:record',
+      NEW.sourcing_case_id,NEW.decision_reason
+    );
+  ELSE
     IF previous_decision.sourcing_decision_id IS NULL
       OR NEW.decision_version<>previous_decision.decision_version+1
       OR NEW.supersedes_decision_id<>previous_decision.sourcing_decision_id THEN
@@ -324,7 +342,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 
 CREATE OR REPLACE FUNCTION guard_sourcing_transition_insert()
 RETURNS trigger LANGUAGE plpgsql AS $$
