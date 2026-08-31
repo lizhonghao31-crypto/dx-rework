@@ -82,14 +82,7 @@ type LocalSourcingDraft = Readonly<{
 }>;
 type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; unitPrice: string; decisionReason: string }>;
-type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
-type FinanceDraft = Readonly<{
-  supplierId: string;
-  unitPrice: string;
-  quantity: string;
-  totalAmount: string;
-  differenceReason: string;
-}>;
+type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
 
 const request = async <T,>(
   path: string,
@@ -133,20 +126,6 @@ const totalPreview = (unitPrice: string, quantity: number): string => {
   } catch {
     return "—";
   }
-};
-
-const canonicalUnitPrice = (value: string): string => {
-  const normalized = value.trim();
-  if (!/^\d{1,10}(?:\.\d{1,4})?$/.test(normalized)) return "";
-  const [whole, fraction = ""] = normalized.split(".");
-  return `${BigInt(whole!)}.${fraction.padEnd(4, "0")}`;
-};
-
-const canonicalTotalAmount = (value: string): string => {
-  const normalized = value.trim();
-  if (!/^\d{1,16}(?:\.\d{1,2})?$/.test(normalized)) return "";
-  const [whole, fraction = ""] = normalized.split(".");
-  return `${BigInt(whole!)}.${fraction.padEnd(2, "0")}`;
 };
 
 const businessInputValue = (value: string): string =>
@@ -767,19 +746,7 @@ function OrderDetailPage({
   const [quote, setQuote] = useState<QuoteDraft>({ unitPrice: "", quoteReason: "" });
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", unitPrice: "", decisionReason: "" });
   const [ownerReason, setOwnerReason] = useState("");
-  const [factoryChange, setFactoryChange] = useState<FactoryChangeDraft>({
-    supplierId: "",
-    unitPrice: "",
-    changeReason: "",
-  });
-  const [verificationReason, setVerificationReason] = useState("");
-  const [finance, setFinance] = useState<FinanceDraft>({
-    supplierId: "",
-    unitPrice: "",
-    quantity: "",
-    totalAmount: "",
-    differenceReason: "",
-  });
+  const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
   const [busy, setBusy] = useState(false);
@@ -806,13 +773,6 @@ function OrderDetailPage({
         unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
         decisionReason: current.decisionReason,
       }));
-      setFinance((current) => ({
-        supplierId: current.supplierId || detail.decision?.supplierId || "",
-        unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
-        quantity: current.quantity || String(detail.decision?.quantity ?? detail.orderQuantity),
-        totalAmount: current.totalAmount || detail.decision?.totalAmount || "",
-        differenceReason: current.differenceReason,
-      }));
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单加载失败");
@@ -823,21 +783,15 @@ function OrderDetailPage({
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
   const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
-  const canChangeFactory = canAct(user, "order_merchandiser", "sourcing:factory_change:request");
-  const canVerifyFactoryChange = canAct(
-    user,
-    "production_management",
-    "sourcing:factory_change:verify",
-  );
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
 
   useEffect(() => {
-    if (!canManage && !canChangeFactory && !canFinance) return;
+    if (!canManage) return;
     void request("sourcing/factories", SourcingFactoryListResponseSchema)
       .then((body) => setFactories(body.items))
       .catch((error) => setMessage(error instanceof Error ? error.message : "加工厂加载失败"));
-  }, [canManage, canChangeFactory, canFinance]);
+  }, [canManage]);
 
   const submit = async (
     path: string,
@@ -884,26 +838,8 @@ function OrderDetailPage({
   const ownerTotalDelta = item.ieQuote && item.decision
     ? subtractFixedPoint(item.decision.totalAmount, item.ieQuote.totalAmount, 2)
     : null;
-  const pendingFactoryChange = [...timeline].reverse()
-    .find((entry) => entry.kind === "factory_change_request");
   const latestFinance = [...timeline].reverse()
     .find((entry) => entry.kind === "finance_reconciliation");
-  const financeDifferences = item.decision ? [
-    ...(finance.supplierId && finance.supplierId !== item.decision.supplierId ? ["供应商"] : []),
-    ...(canonicalUnitPrice(finance.unitPrice)
-      && canonicalUnitPrice(finance.unitPrice) !== item.decision.unitPrice ? ["单价"] : []),
-    ...(Number.isInteger(Number(finance.quantity))
-      && Number(finance.quantity) !== item.decision.quantity ? ["数量"] : []),
-    ...(canonicalTotalAmount(finance.totalAmount)
-      && canonicalTotalAmount(finance.totalAmount) !== item.decision.totalAmount ? ["总额"] : []),
-  ] : [];
-  const financeComplete = Boolean(
-    finance.supplierId
-    && canonicalUnitPrice(finance.unitPrice)
-    && Number.isInteger(Number(finance.quantity))
-    && Number(finance.quantity) > 0
-    && canonicalTotalAmount(finance.totalAmount),
-  );
 
   return (
     <div className="sourcing-workspace sourcing-order-detail">
@@ -1036,66 +972,30 @@ function OrderDetailPage({
 
           {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 财务核对</h2>
-            <p>以下是老板批准的选厂决定。财务核对实际信息后确认结果；四项一致即归档，有差异则自动交生产管理核实并通知老板。</p>
+            <p>财务仅核对已批准的选厂决定，不可修改加工厂、单价、数量或总额。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
               <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
               <div><dt>批准单价</dt><dd>{formatBusinessCurrency(item.decision.unitPrice)}</dd></div>
               <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
             </dl> : null}
-            {canFinance ? <div className="sourcing-form-grid">
-              <label><span>实际加工厂</span><select value={finance.supplierId} onChange={(event) => { setFinance({ ...finance, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择实际加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>实际单价</span><input value={activeBusinessInput === "finance-unit-price" ? finance.unitPrice : businessInputValue(finance.unitPrice)} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("finance-unit-price")} onBlur={() => setActiveBusinessInput(null)} /></label>
-              <label><span>实际数量</span><input value={activeBusinessInput === "finance-quantity" ? finance.quantity : businessInputValue(finance.quantity)} inputMode="numeric" onChange={(event) => { setFinance({ ...finance, quantity: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("finance-quantity")} onBlur={() => setActiveBusinessInput(null)} /></label>
-              <label><span>实际总额</span><input value={activeBusinessInput === "finance-total-amount" ? finance.totalAmount : businessInputValue(finance.totalAmount)} inputMode="decimal" onChange={(event) => { setFinance({ ...finance, totalAmount: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("finance-total-amount")} onBlur={() => setActiveBusinessInput(null)} /></label>
-              <label className="sourcing-form-wide"><span>差异说明</span><input value={finance.differenceReason} maxLength={500} onChange={(event) => { setFinance({ ...finance, differenceReason: event.target.value }); actionKey.current = null; }} placeholder={financeDifferences.length ? `存在差异：${financeDifferences.join("、")}，请说明` : "四项一致时无需填写"} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || !financeComplete || (financeDifferences.length > 0 && !finance.differenceReason.trim())} onClick={() => void submit(
-                `sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`,
-                {
-                  supplierId: finance.supplierId,
-                  unitPrice: finance.unitPrice,
-                  quantity: Number(finance.quantity),
-                  totalAmount: finance.totalAmount,
-                  ...(finance.differenceReason.trim() ? { differenceReason: finance.differenceReason.trim() } : {}),
-                },
-                financeDifferences.length ? "财务差异已提交生产管理核实" : "四项核对一致，订单已归档",
-              )}>确认核对结果</button>
+            {canFinance ? <div className="sourcing-finance-confirmation">
+              <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
+              <details>
+                <summary>发现不一致</summary>
+                <fieldset><legend>差异项目</legend>{([
+                  ["supplier", "加工厂"], ["unit_price", "单价"], ["quantity", "数量"], ["total_amount", "总额"],
+                ] as const).map(([value, label]) => <label key={value}><input type="checkbox" checked={financeReview.differenceFields.includes(value)} onChange={(event) => {
+                  setFinanceReview((current) => ({ ...current, differenceFields: event.target.checked ? [...current.differenceFields, value] : current.differenceFields.filter((field) => field !== value) })); actionKey.current = null;
+                }} />{label}</label>)}</fieldset>
+                <label><span>差异说明</span><input value={financeReview.differenceReason} maxLength={500} onChange={(event) => { setFinanceReview({ ...financeReview, differenceReason: event.target.value }); actionKey.current = null; }} /></label>
+                <button className="dx-button dx-button--secondary" type="button" disabled={busy || !financeReview.differenceFields.length || !financeReview.differenceReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "difference", differenceFields: financeReview.differenceFields, differenceReason: financeReview.differenceReason.trim() }, "财务差异已提交生产管理核实")}>提交差异核实</button>
+              </details>
             </div> : <p>当前账号仅可查看，本节点由财务核对。</p>}
-            {canChangeFactory ? <div className="sourcing-form-grid">
-              <label><span>新加工厂</span><select value={factoryChange.supplierId} onChange={(event) => { setFactoryChange({ ...factoryChange, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>新加工单价</span><input value={activeBusinessInput === "factory-change-unit-price" ? factoryChange.unitPrice : businessInputValue(factoryChange.unitPrice)} inputMode="decimal" onChange={(event) => { setFactoryChange({ ...factoryChange, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} /></label>
-              <label><span>新总额</span><input value={businessInputValue(totalPreview(factoryChange.unitPrice, item.orderQuantity))} readOnly /></label>
-              <label className="sourcing-form-wide"><span>换厂原因</span><input value={factoryChange.changeReason} maxLength={500} onChange={(event) => { setFactoryChange({ ...factoryChange, changeReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChange.supplierId || !factoryChange.unitPrice || !factoryChange.changeReason.trim()} onClick={() => void submit(
-                `sourcing/cases/${item.sourcingCaseId}/factory-changes`,
-                {
-                  supplierId: factoryChange.supplierId,
-                  unitPrice: factoryChange.unitPrice,
-                  changeReason: factoryChange.changeReason.trim(),
-                },
-                "换厂申请已提交生产管理核实",
-              )}>发起中途换厂</button>
-            </div> : null}
           </Surface> : null}
 
-          {item.status === "pending_factory_change_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
-            <h2>05 · 生产管理核实换厂</h2>
-            <p>新加工厂：{pendingFactoryChange?.supplierName ?? "—"}；新单价：{pendingFactoryChange?.unitPrice ? formatBusinessCurrency(pendingFactoryChange.unitPrice) : "—"}。通过后无需老板复审，直接返回财务核对。</p>
-            {canVerifyFactoryChange && pendingFactoryChange ? <div className="sourcing-owner-actions">
-              <label><span>核实说明</span><input value={verificationReason} maxLength={500} onChange={(event) => { setVerificationReason(event.target.value); actionKey.current = null; }} /></label>
-              <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !verificationReason.trim()} onClick={() => void submit(
-                `sourcing/cases/${item.sourcingCaseId}/factory-changes/${pendingFactoryChange.entryId}/decision`,
-                { decision: "approved", verificationReason: verificationReason.trim() },
-                "换厂已核实通过，订单返回财务核对",
-              )}>通过换厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !verificationReason.trim()} onClick={() => void submit(
-                `sourcing/cases/${item.sourcingCaseId}/factory-changes/${pendingFactoryChange.entryId}/decision`,
-                { decision: "rejected", verificationReason: verificationReason.trim() },
-                "换厂申请已驳回",
-              )}>驳回换厂</button></div>
-            </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
-          </Surface> : null}
-
-          {item.status === "pending_exception_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
+                    {item.status === "pending_exception_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 财务差异核实</h2>
             <p>财务发现：{latestFinance?.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、") || "差异项待确认"}。记录和证据已保留，老板已收到信息通知。</p>
             {canVerifyException ? <div className="sourcing-owner-actions">

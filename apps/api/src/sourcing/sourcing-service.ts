@@ -2012,14 +2012,16 @@ export class SourcingService {
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, FINANCE_RECONCILE_CAPABILITY, FINANCE_RECONCILE_ROLE);
-    if (!UUID_PATTERN.test(sourcingCaseId) || !UUID_PATTERN.test(input.supplierId)) {
-      fail("财务核对标识无效");
-    }
-    const unitPrice = normalizeSourcingUnitPrice(input.unitPrice);
-    const quantity = normalizeQuantity(input.quantity);
-    const totalAmount = normalizeSourcingTotalAmount(input.totalAmount);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("财务核对标识无效");
+    const differenceFields = input.differenceFields ?? [];
     const suppliedReason = input.differenceReason?.trim() ?? "";
-    if (suppliedReason.length > 500) fail("差异说明不能超过500个字符");
+    const difference = input.result === "difference";
+    if (difference && (!differenceFields.length || !suppliedReason)) {
+      fail("发现差异时必须选择差异项并填写说明");
+    }
+    if (!difference && (differenceFields.length || suppliedReason)) {
+      fail("一致确认不能提交差异信息");
+    }
     const scope = "sourcing.finance.reconcile";
     const client = await this.database.connect();
     try {
@@ -2029,7 +2031,7 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId,supplierId: input.supplierId,unitPrice,quantity,totalAmount,suppliedReason,
+          sourcingCaseId,result: input.result,differenceFields,suppliedReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
@@ -2087,24 +2089,17 @@ export class SourcingService {
         if (source.status !== "pending_finance_reconciliation") {
           fail("该订单当前不在财务核对阶段", 409, "INVALID_STATE_TRANSITION");
         }
-        const factory = await client.query<{
+        const expectedFactoryResult = await client.query<{
           supplier_id: string;
           supplier_code: string;
           supplier_name: string;
         }>(
           `SELECT supplier_id,supplier_code,supplier_name
            FROM current_supplier_catalog
-           WHERE supplier_id=$1 AND supplier_type='factory' AND active=true`,
-          [input.supplierId],
+           WHERE supplier_id=$1 AND supplier_type='factory'`,
+          [source.supplier_id],
         );
-        const selected = factory.rows[0] ?? fail("请选择当前有效的实际加工厂");
-        const differenceFields: Array<"supplier" | "unit_price" | "quantity" | "total_amount"> = [];
-        if (selected.supplier_id !== source.supplier_id) differenceFields.push("supplier");
-        if (unitPrice !== source.expected_unit_price) differenceFields.push("unit_price");
-        if (quantity !== Number(source.expected_quantity)) differenceFields.push("quantity");
-        if (totalAmount !== source.expected_total_amount) differenceFields.push("total_amount");
-        const difference = differenceFields.length > 0;
-        if (difference && !suppliedReason) fail("四项核对存在差异时必须填写说明");
+        const expectedFactory = expectedFactoryResult.rows[0] ?? fail("当前批准加工厂不存在", 409, "INVALID_STATE_TRANSITION");
         const differenceReason = difference ? suppliedReason : undefined;
         const reconciliationVersion = Number(source.reconciliation_version)+1;
         const reconciliationId = randomUUID();
@@ -2131,8 +2126,8 @@ export class SourcingService {
            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
           [
             reconciliationId,sourcingCaseId,reconciliationVersion,source.sourcing_decision_id,
-            source.sourcing_contract_id,selected.supplier_id,selected.supplier_code,
-            selected.supplier_name,unitPrice,quantity,totalAmount,
+            source.sourcing_contract_id,expectedFactory.supplier_id,expectedFactory.supplier_code,
+            expectedFactory.supplier_name,source.expected_unit_price,Number(source.expected_quantity),source.expected_total_amount,
             difference ? "difference" : "match",differenceFields,differenceReason ?? null,
             actor.actorId,eventId,actor.requestId,
           ],

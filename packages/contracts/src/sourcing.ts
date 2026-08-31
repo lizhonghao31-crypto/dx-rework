@@ -7,11 +7,6 @@ const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
-const TotalAmountInputSchema = z.string().trim().regex(
-  /^\d{1,16}(?:\.\d{1,2})?$/,
-  "实际总额必须是大于0且最多2位小数的数字",
-).refine((value) => Number(value) > 0, "实际总额必须大于0");
-
 const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
 
 export const calculateSourcingTotalExact = (
@@ -120,12 +115,20 @@ export const DecideSourcingFactoryChangeSchema = z.object({
 }).strict();
 
 export const RecordSourcingFinanceReconciliationSchema = z.object({
-  supplierId: IdSchema,
-  unitPrice: MoneyInputSchema,
-  quantity: z.number().int().positive().max(10_000_000),
-  totalAmount: TotalAmountInputSchema,
+  result: z.enum(["match", "difference"]),
+  differenceFields: z.array(z.enum(["supplier", "unit_price", "quantity", "total_amount"])).max(4).optional(),
   differenceReason: z.string().trim().max(500).optional(),
-}).strict();
+}).strict().superRefine((input, context) => {
+  if (input.result === "difference" && !input.differenceFields?.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["differenceFields"], message: "请选择发现差异的项目" });
+  }
+  if (input.result === "difference" && !input.differenceReason) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["differenceReason"], message: "发现差异时必须填写说明" });
+  }
+  if (input.result === "match" && (input.differenceFields?.length || input.differenceReason)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "一致确认不能提交差异信息" });
+  }
+});
 
 export const DecideSourcingExceptionSchema = z.object({
   resolution: z.enum(["close", "reconcile_again"]),
