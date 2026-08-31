@@ -74,14 +74,14 @@ BEFORE UPDATE ON attachments
 FOR EACH ROW EXECUTE FUNCTION guard_sourcing_attachment_binding();
 
 CREATE OR REPLACE FUNCTION guard_sourcing_attachment_delete()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF OLD.entity_type='sourcing_case' THEN
     RAISE EXCEPTION 'bound sourcing evidence cannot be deleted' USING ERRCODE = '55000';
   END IF;
   RETURN OLD;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS sourcing_attachment_delete_guard ON attachments;
 CREATE TRIGGER sourcing_attachment_delete_guard
@@ -89,11 +89,11 @@ BEFORE DELETE ON attachments
 FOR EACH ROW EXECUTE FUNCTION guard_sourcing_attachment_delete();
 
 CREATE OR REPLACE FUNCTION guard_sourcing_attachment_truncate()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'attachment evidence cannot be truncated' USING ERRCODE = '55000';
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS sourcing_attachment_truncate_guard ON attachments;
 CREATE TRIGGER sourcing_attachment_truncate_guard
