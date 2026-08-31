@@ -18,6 +18,17 @@ describe("sourcing factory-change role metadata migration", () => {
     expect(migration).toContain("set_sourcing_factory_change_price_policy");
     expect(migration).toContain("NEW.proposed_unit_price>baseline_unit_price");
 
+    const disableGuard = migration.indexOf(
+      "DISABLE TRIGGER sourcing_factory_change_requests_no_update",
+    );
+    const backfill = migration.indexOf("UPDATE sourcing_factory_change_requests request_row");
+    const enableGuard = migration.indexOf(
+      "ENABLE TRIGGER sourcing_factory_change_requests_no_update",
+    );
+    expect(disableGuard).toBeGreaterThan(-1);
+    expect(backfill).toBeGreaterThan(disableGuard);
+    expect(enableGuard).toBeGreaterThan(backfill);
+
     expect(migration).not.toContain("guard_sourcing_transition_insert");
     expect(migration).not.toContain("guard_sourcing_reconciliation");
     expect(migration).not.toContain("DROP CONSTRAINT");

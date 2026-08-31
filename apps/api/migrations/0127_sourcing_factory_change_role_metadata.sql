@@ -15,13 +15,18 @@ ALTER TABLE sourcing_factory_change_decisions
     CHECK(decision_role IN ('production_management','owner_group'));
 
 -- Existing audit rows receive the policy result implied by their immutable
--- proposal and baseline decision.
+-- proposal and baseline decision. The append-only guard is disabled only for
+-- this migration-owned backfill and restored immediately afterward.
+ALTER TABLE sourcing_factory_change_requests
+  DISABLE TRIGGER sourcing_factory_change_requests_no_update;
 UPDATE sourcing_factory_change_requests request_row
 SET requires_owner_approval=(
   request_row.proposed_unit_price>baseline.unit_price
 )
 FROM sourcing_decisions baseline
 WHERE baseline.sourcing_decision_id=request_row.from_decision_id;
+ALTER TABLE sourcing_factory_change_requests
+  ENABLE TRIGGER sourcing_factory_change_requests_no_update;
 
 -- Keep the derived price policy correct for legacy callers during the staged
 -- rollout. PR2 will consume this fact but does not need to trust request input.
