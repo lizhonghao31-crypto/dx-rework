@@ -29,6 +29,9 @@ describe("sourcing image lifecycle parity", () => {
     ]);
     expect(migration).toContain("guard_sourcing_attachment_binding");
     expect(migration).toContain("bound sourcing evidence is immutable");
+    expect(migration).toContain("BEFORE UPDATE ON attachments");
+    expect(migration).toContain("BEFORE DELETE ON attachments");
+    expect(migration).toContain("BEFORE TRUNCATE ON attachments");
     expect(migration).toContain("event.after_state->'attachmentIds'");
     expect(migration).toContain("event.actor_id=NEW.uploaded_by");
     expect(migration).toContain("event.action='sourcing.case.create'");
@@ -61,7 +64,11 @@ describe("sourcing image lifecycle parity", () => {
     expect(page).toContain("readLocalSourcingDraft");
     expect(page).toContain("clearLocalSourcingDraft");
     expect(page).toContain("保存草稿");
-    expect(page).toContain('window.matchMedia("(max-width: 800px)")');
+    expect(page).toContain("localSourcingDraftKey(user.id)");
+    expect(page).toContain("restoredDraftUserId");
+    expect(page).toContain("isMobileClient()");
+    expect(page).toContain("userAgentData?.mobile");
+    expect(page).not.toContain('window.matchMedia("(max-width: 800px)")');
     expect(page).toContain("报价选厂移动端尚未建设");
   });
 });

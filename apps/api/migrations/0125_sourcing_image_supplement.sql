@@ -6,9 +6,7 @@ DECLARE
   source_case_id uuid;
 BEGIN
   IF OLD.entity_type='sourcing_case' THEN
-    IF OLD.entity_type IS DISTINCT FROM NEW.entity_type
-       OR OLD.entity_id IS DISTINCT FROM NEW.entity_id
-    THEN
+    IF NEW IS DISTINCT FROM OLD THEN
       RAISE EXCEPTION 'bound sourcing evidence is immutable' USING ERRCODE = '55000';
     END IF;
     RETURN NEW;
@@ -72,5 +70,32 @@ $$;
 
 DROP TRIGGER IF EXISTS sourcing_attachment_binding_guard ON attachments;
 CREATE TRIGGER sourcing_attachment_binding_guard
-BEFORE UPDATE OF entity_type,entity_id ON attachments
+BEFORE UPDATE ON attachments
 FOR EACH ROW EXECUTE FUNCTION guard_sourcing_attachment_binding();
+
+CREATE OR REPLACE FUNCTION guard_sourcing_attachment_delete()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+  IF OLD.entity_type='sourcing_case' THEN
+    RAISE EXCEPTION 'bound sourcing evidence cannot be deleted' USING ERRCODE = '55000';
+  END IF;
+  RETURN OLD;
+END;
+$;
+
+DROP TRIGGER IF EXISTS sourcing_attachment_delete_guard ON attachments;
+CREATE TRIGGER sourcing_attachment_delete_guard
+BEFORE DELETE ON attachments
+FOR EACH ROW EXECUTE FUNCTION guard_sourcing_attachment_delete();
+
+CREATE OR REPLACE FUNCTION guard_sourcing_attachment_truncate()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+  RAISE EXCEPTION 'attachment evidence cannot be truncated' USING ERRCODE = '55000';
+END;
+$;
+
+DROP TRIGGER IF EXISTS sourcing_attachment_truncate_guard ON attachments;
+CREATE TRIGGER sourcing_attachment_truncate_guard
+BEFORE TRUNCATE ON attachments
+FOR EACH STATEMENT EXECUTE FUNCTION guard_sourcing_attachment_truncate();

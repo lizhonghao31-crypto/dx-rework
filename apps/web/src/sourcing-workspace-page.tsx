@@ -153,11 +153,12 @@ const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): stri
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
 const LOCAL_SOURCING_DRAFT_KEY = "dx-rework:sourcing-create-local-draft:v1";
+const localSourcingDraftKey = (userId: string): string => `${LOCAL_SOURCING_DRAFT_KEY}:${userId}`;
 
-const readLocalSourcingDraft = (): LocalSourcingDraft | null => {
+const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
   if (typeof window === "undefined") return null;
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_SOURCING_DRAFT_KEY) ?? "null") as Partial<LocalSourcingDraft> | null;
+    const parsed = JSON.parse(window.localStorage.getItem(localSourcingDraftKey(userId)) ?? "null") as Partial<LocalSourcingDraft> | null;
     if (!parsed || typeof parsed.erpOrderNo !== "string" || typeof parsed.styleNo !== "string"
       || typeof parsed.deliveryDate !== "string" || typeof parsed.orderQuantity !== "string"
       || !Array.isArray(parsed.processes) || parsed.processes.length < 1
@@ -186,8 +187,16 @@ const readLocalSourcingDraft = (): LocalSourcingDraft | null => {
   }
 };
 
-const clearLocalSourcingDraft = (): void => {
-  if (typeof window !== "undefined") window.localStorage.removeItem(LOCAL_SOURCING_DRAFT_KEY);
+const clearLocalSourcingDraft = (userId: string): void => {
+  if (typeof window !== "undefined") window.localStorage.removeItem(localSourcingDraftKey(userId));
+};
+
+const isMobileClient = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  const client = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+  if (client.userAgentData?.mobile === true) return true;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(client.userAgent)) return true;
+  return client.platform === "MacIntel" && client.maxTouchPoints > 1;
 };
 
 const detailHref = (item: SourcingCaseSummary): string =>
@@ -253,9 +262,7 @@ export function SourcingWorkspacePage({
     return () => { mounted = false; };
   }, []);
 
-  const isMobileDeepLink = typeof window !== "undefined"
-    && window.matchMedia("(max-width: 800px)").matches;
-  if (isMobileDeepLink) {
+  if (isMobileClient()) {
     return <Shell active={ACTIVE_NAVIGATION[view]}>
       <div className="sourcing-workspace">
         <Header title="报价&选厂" subtitle="该模块当前仅开放电脑端。" badge="PC 端" />
@@ -277,19 +284,33 @@ export function SourcingWorkspacePage({
 }
 
 function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
-  const localDraft = useMemo(() => readLocalSourcingDraft(), []);
-  const [erpOrderNo, setErpOrderNo] = useState(localDraft?.erpOrderNo ?? "");
-  const [styleNo, setStyleNo] = useState(localDraft?.styleNo ?? "");
-  const [deliveryDate, setDeliveryDate] = useState(localDraft?.deliveryDate ?? "");
-  const [processes, setProcesses] = useState<string[]>([...(localDraft?.processes ?? [""])]);
-  const [orderQuantity, setOrderQuantity] = useState(localDraft?.orderQuantity ?? "");
-  const [images, setImages] = useState<UploadedImage[]>([...(localDraft?.images ?? [])]);
+  const [erpOrderNo, setErpOrderNo] = useState("");
+  const [styleNo, setStyleNo] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [processes, setProcesses] = useState<string[]>([""]);
+  const [orderQuantity, setOrderQuantity] = useState("");
+  const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(localDraft ? "已恢复本机保存的订单草稿。" : "填写订单资料并上传现场或款式照片。");
+  const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
   const createKey = useRef<string | null>(null);
   const previewUrls = useRef<string[]>([]);
+  const restoredDraftUserId = useRef("");
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
+
+  useEffect(() => {
+    if (!user?.id || restoredDraftUserId.current === user.id) return;
+    restoredDraftUserId.current = user.id;
+    const localDraft = readLocalSourcingDraft(user.id);
+    if (!localDraft) return;
+    setErpOrderNo(localDraft.erpOrderNo);
+    setStyleNo(localDraft.styleNo);
+    setDeliveryDate(localDraft.deliveryDate);
+    setProcesses([...localDraft.processes]);
+    setOrderQuantity(localDraft.orderQuantity);
+    setImages([...localDraft.images]);
+    setMessage("已恢复当前账号在本机保存的订单草稿。");
+  }, [user?.id]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -434,6 +455,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
 
   const saveLocalDraft = (): void => {
     if (busy || uploading) return;
+    if (!user?.id) {
+      setMessage("正在确认登录账号，请稍后再保存草稿。");
+      return;
+    }
     const draft: LocalSourcingDraft = {
       erpOrderNo,
       styleNo,
@@ -443,7 +468,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       images,
       savedAt: new Date().toISOString(),
     };
-    window.localStorage.setItem(LOCAL_SOURCING_DRAFT_KEY, JSON.stringify(draft));
+    window.localStorage.setItem(localSourcingDraftKey(user.id), JSON.stringify(draft));
     setMessage("草稿已保存在本机；下次打开创建订单会自动恢复。");
   };
 
@@ -480,7 +505,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           attachmentIds: images.map((image) => image.attachmentId),
         }),
       });
-      clearLocalSourcingDraft();
+      if (user?.id) clearLocalSourcingDraft(user.id);
       window.location.assign(detailHref(created));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单创建失败");
