@@ -972,7 +972,7 @@ function OrderDetailPage({
 
           {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 财务核对</h2>
-            <p>财务仅核对老板批准的合同事实，不可修改加工厂、单价、数量或总额。</p>
+            <p>财务仅核对已批准的选厂决定，不可修改加工厂、单价、数量或总额。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
               <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
               <div><dt>批准单价</dt><dd>{formatBusinessCurrency(item.decision.unitPrice)}</dd></div>
@@ -980,7 +980,7 @@ function OrderDetailPage({
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
             </dl> : null}
             {canFinance ? <div className="sourcing-finance-confirmation">
-              <p>请对照合同确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
+              <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
               <details>
                 <summary>发现不一致</summary>
