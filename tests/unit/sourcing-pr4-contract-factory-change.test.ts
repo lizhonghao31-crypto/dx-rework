@@ -2,61 +2,72 @@ import { readFile } from "node:fs/promises";
 
 import {
   DecideSourcingFactoryChangeSchema,
-  RecordSourcingContractSchema,
   RequestSourcingFactoryChangeSchema,
+  SourcingFactoryChangeStateResponseSchema,
 } from "@dx-rework/contracts";
 import { describe, expect, it } from "vitest";
 
-describe("sourcing five-stage factory change compatibility", () => {
-  it("validates the three desktop actions at the contract boundary", () => {
-    expect(RecordSourcingContractSchema.parse({
-      contractReference: "HT-2026-001",
-      signedOn: "2026-08-28",
-    })).toMatchObject({ contractReference: "HT-2026-001" });
+describe("sourcing role-aware factory change workflow", () => {
+  it("validates immutable request, review and current-state contracts", () => {
     expect(RequestSourcingFactoryChangeSchema.safeParse({
       supplierId: "00000000-0000-4000-8000-000000000001",
       unitPrice: "10.5000",
-      changeReason: "",
-    }).success).toBe(false);
+      changeReason: "原厂排期冲突",
+    }).success).toBe(true);
     expect(DecideSourcingFactoryChangeSchema.safeParse({
       decision: "approved",
-      verificationReason: "已核实产能与交期",
+      verificationReason: "产能与交期已核实",
     }).success).toBe(true);
+    expect(SourcingFactoryChangeStateResponseSchema.safeParse({ item: {
+      factoryChangeRequestId: "00000000-0000-4000-8000-000000000001",
+      fromDecisionId: "00000000-0000-4000-8000-000000000002",
+      initiatorRole: "production_management",
+      proposedSupplierId: "00000000-0000-4000-8000-000000000003",
+      proposedSupplierName: "二号加工厂",
+      proposedUnitPrice: "10.5000",
+      proposedQuantity: 1000,
+      proposedTotalAmount: "10500.00",
+      changeReason: "原厂排期冲突",
+      requiresOwnerApproval: false,
+      status: "effective",
+      requestedBy: "00000000-0000-4000-8000-000000000004",
+      requestedAt: "2026-08-31T00:00:00.000Z",
+    } }).success).toBe(true);
   });
 
-  it("keeps historical contracts and factory changes audited while routing new work to finance", async () => {
-    const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
-    expect(service).toContain('"sourcing.contract.record"');
-    expect(service).toContain('"sourcing.factory_change.request"');
-    expect(service).toContain('"sourcing.factory_change.approved"');
-    expect(service).toContain('"sourcing.factory_change.rejected"');
-    expect(service).toContain('"factory_change"');
-    expect(service).toContain("supersedes_decision_id");
-    expect(service).not.toContain('category: "sourcing_contract_record"');
-    expect(service).toContain('category: "sourcing_finance_reconcile"');
-    expect(service).toContain('"sourcing_factory_change_verify"');
-    expect(service).toContain('"sourcing_factory_change_notice"');
-    expect(service).toContain("todoProjection?.information");
+  it("implements all three initiators and the price threshold on the server", async () => {
+    const [service, routes] = await Promise.all([
+      readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8"),
+      readFile("apps/api/src/sourcing/sourcing-routes.ts", "utf8"),
+    ]);
+    expect(service).toContain('initiatorRole === "owner_group"');
+    expect(service).toContain('initiatorRole === "production_management" && !requiresOwnerApproval');
+    expect(service).toContain("scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price)");
+    expect(service).toContain('"sourcing.factory_change.management_approved"');
+    expect(service).toContain('"sourcing.factory_change.owner_rejected"');
+    expect(service).toContain('"sourcing.factory_change.effective"');
+    expect(service).toContain("production management first submits");
+    expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/management"');
+    expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/owner"');
+    expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/:factoryChangeRequestId/owner-decision"');
   });
 
-  it("migrates old contract-stage work and keeps the five-stage desktop page practical", async () => {
+  it("keeps five main nodes, locks transfer before the first decision and excludes finance", async () => {
     const [migration, page] = await Promise.all([
-      readFile("apps/api/migrations/0121_sourcing_remove_contract_stage.sql", "utf8"),
+      readFile("apps/api/migrations/0127_sourcing_factory_change_workflow.sql", "utf8"),
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
     ]);
-    expect(migration).toContain("contract_stage_retired");
-    expect(migration).toContain("guard_sourcing_factory_change_request_insert");
-    expect(migration).toContain("factory change must replace the current approved factory");
-    expect(migration).toContain("'pending_contract','pending_finance_reconciliation'");
-    expect(migration).toContain("sourcing_finance_reconcile");
-    expect(migration).toContain("cannot retire sourcing contract stage without a routable finance recipient");
-    expect(migration).toContain("todo_recipient_routing_exceptions");
-    expect(migration).toContain("cancel-contract-routing");
-    expect(page).not.toContain('{ key: "contract"');
-    expect(page).not.toContain(">登记合同</button>");
-    expect(page).toContain("发起中途换厂");
-    expect(page).toContain("生产管理核实换厂");
+    expect(migration).toContain("factory_change_effective");
+    expect(migration).toContain("requires_owner_approval");
+    expect(migration).toContain("decision_role");
     expect(page).toContain('{ key: "finance", number: "05"');
-    expect(page).not.toContain("移动端报价选厂");
+    expect(page).not.toContain('{ key: "contract"');
+    expect(page).toContain("生产管理首次提交加工厂和单价后开放");
+    expect(page).toContain("订单转厂");
+    expect(page).toContain('selectedNode === "created"');
+    expect(page).toContain('selectedNode === "management"');
+    expect(page).toContain('selectedNode === "owner"');
+    expect(page).not.toContain('selectedNode === "finance" ? "factory');
+    expect(page).toContain("该模块当前仅开放电脑端");
   });
 });
