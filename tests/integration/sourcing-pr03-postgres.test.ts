@@ -132,6 +132,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0126_sourcing_finance_readonly_reconciliation.sql",
       "0127_sourcing_factory_change_role_metadata.sql",
       "0128_sourcing_factory_change_workflow.sql",
+      "0133_sourcing_craft_catalog.sql",
+      "0134_versioned_craft_catalog.sql",
+      "0135_sourcing_case_craft_snapshots.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
