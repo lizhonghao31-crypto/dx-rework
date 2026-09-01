@@ -1137,6 +1137,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     }, randomUUID());
 
     const sourceRow = (await service.board(businessDate(), businessDate(), "LN20541804")).rows[0]!;
+    await expect(service.correctBatch(rootCorrector(), source.value.receivingBatchId, {
+      expectedVersion: sourceRow.version,
+      styleNo: "IN20541804",
+      documentQuantity: 1976,
+      actualQuantity: 147,
+      defectiveQuantity: 0,
+      attachmentIds: [await readyImage()],
+    })).rejects.toThrow("目标订单已经发起过返工，不能替换送货单图片");
     const merged = await service.correctBatch(rootCorrector(), source.value.receivingBatchId, {
       expectedVersion: sourceRow.version,
       styleNo: "IN20541804",
