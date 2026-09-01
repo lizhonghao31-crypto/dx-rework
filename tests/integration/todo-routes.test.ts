@@ -63,9 +63,12 @@ const createApp = () => {
   const service = {
     listForActor: vi.fn(async () => ({
       todos: [todo],
-      nextCursor: null,
       activeModule: "rework" as const,
-      moduleCounts: { rework: 1, sourcing: 0, wages: 0 },
+      moduleCounts: { rework: 1, sourcing: 0 },
+      page: 2,
+      pageSize: 15 as const,
+      totalCount: 16,
+      totalPages: 2,
     })),
     getForActor: vi.fn(async () => todo),
     latestIndicatorForActor: vi.fn(async () => ({
@@ -105,22 +108,25 @@ describe("todo HTTP boundaries", () => {
     const { app, service } = createApp();
     const response = await app.inject({
       method: "GET",
-      url: "/todos/mine?module=rework&q=ST-001",
+      url: "/todos/mine?module=rework&q=ST-001&page=2",
       headers: { cookie: "dx_rework_session=viewer" },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       todos: [todo],
-      nextCursor: null,
       activeModule: "rework",
-      moduleCounts: { rework: 1, sourcing: 0, wages: 0 },
+      moduleCounts: { rework: 1, sourcing: 0 },
+      page: 2,
+      pageSize: 15,
+      totalCount: 16,
+      totalPages: 2,
     });
     expect(service.listForActor).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: todo.recipientUserId,
         authorizationCapability: "todo:view",
       }),
-      { module: "rework", query: "ST-001", cursor: "" },
+      { module: "rework", query: "ST-001", page: 2 },
     );
 
     const detail = await app.inject({
@@ -150,6 +156,19 @@ describe("todo HTTP boundaries", () => {
       actorId: todo.recipientUserId,
       authorizationCapability: "todo:view",
     }));
+  });
+
+  it("rejects retired modules and invalid numeric pages", async () => {
+    const { app, service } = createApp();
+    for (const url of ["/todos/mine?module=wages", "/todos/mine?page=0", "/todos/mine?page=abc"]) {
+      const response = await app.inject({
+        method: "GET",
+        url,
+        headers: { cookie: "dx_rework_session=viewer" },
+      });
+      expect(response.statusCode).toBe(400);
+    }
+    expect(service.listForActor).not.toHaveBeenCalled();
   });
 
   it("allows controlled transfer only to direct production management", async () => {
