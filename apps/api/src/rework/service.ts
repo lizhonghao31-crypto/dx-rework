@@ -46,7 +46,7 @@ type ReceivingReworkEntry = Readonly<{
 }>;
 type ReworkDraftSource = Readonly<{
   receivingBatchId: string | null;
-  styleNo: string;
+  styleNo: string | null;
 }>;
 type ReworkOrderRow = Readonly<{
   rework_order_id: string;
@@ -272,7 +272,7 @@ export class ReworkInitiationService {
   ): Promise<ReworkDraftSource> {
     if (!receivingBatchId) {
       const normalizedStyleNo = requestedStyleNo?.trim().toUpperCase() ?? "";
-      if (!normalizedStyleNo) return { receivingBatchId: null, styleNo: "" };
+      if (!normalizedStyleNo) return { receivingBatchId: null, styleNo: null };
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
       const fallback = await client.query<{ receiving_batch_id: string }>(
         `SELECT batch.receiving_batch_id
