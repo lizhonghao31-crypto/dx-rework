@@ -31,6 +31,7 @@ WITH historical_names AS MATERIALIZED (
   FROM sourcing_cases sourcing_case
   CROSS JOIN LATERAL unnest(sourcing_case.process_items) item(craft_name)
   WHERE sourcing_case.process_items IS NOT NULL
+    AND sourcing_case.deleted_at IS NULL
   ORDER BY lower(btrim(item.craft_name)), sourcing_case.created_at, sourcing_case.sourcing_case_id
 ), prepared AS MATERIALIZED (
   SELECT
