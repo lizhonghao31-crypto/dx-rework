@@ -118,19 +118,21 @@ export const TodoRoutingExceptionSchema = z.object({
   updatedAt: z.string().datetime(),
 }).strict();
 
-export const TodoModuleSchema = z.enum(["rework", "sourcing", "wages"]);
+export const TodoModuleSchema = z.enum(["rework", "sourcing"]);
 
 export const TodoModuleCountsSchema = z.object({
   rework: z.number().int().nonnegative(),
   sourcing: z.number().int().nonnegative(),
-  wages: z.number().int().nonnegative(),
 }).strict();
 
 export const TodoListResponseSchema = z.object({
   todos: z.array(TodoResponseSchema).max(15),
-  nextCursor: z.string().nullable(),
   activeModule: TodoModuleSchema,
   moduleCounts: TodoModuleCountsSchema,
+  page: z.number().int().positive(),
+  pageSize: z.literal(15),
+  totalCount: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative(),
 }).strict();
 
 export const TodoMineParamsSchema = z.object({
