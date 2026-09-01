@@ -47,12 +47,13 @@ describe("related merchandiser access and N07 notifications", () => {
     expect(app).toContain('{ requiredCapability: "rework:related_orders:view" }');
   });
 
-  it("creates independent N07 todos for every production manager and closes them on takeover", async () => {
+  it("creates independent N07 todos for explicitly assigned production managers and closes them on takeover", async () => {
     const [wholeOrder, responsibility] = await Promise.all([
       readFile(wholeOrderUrl, "utf8"),
       readFile(responsibilityUrl, "utf8"),
     ]);
-    expect(wholeOrder).toContain("actionableForAllDirectRole");
+    expect(wholeOrder).toContain("actionableForAllAssignedRole");
+    expect(wholeOrder).not.toContain("actionableForAllDirectRole");
     expect(wholeOrder).toContain('requiredRole: "production_management"');
     expect(wholeOrder).toContain('requiredCapability: "responsibility:determine"');
     expect(responsibility).toContain('responsibility-entry:');

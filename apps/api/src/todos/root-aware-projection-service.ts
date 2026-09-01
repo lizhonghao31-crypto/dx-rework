@@ -15,6 +15,7 @@ const isAcceptanceRoutingConflict = (error: unknown): boolean =>
     || error.message.includes("Finance todo recipient is not uniquely routable")
     || error.message.includes("Todo recipient is no longer eligible")
     || error.message.includes("Shared role todo has no currently eligible direct recipient")
+    || error.message.includes("Assigned business role todo has no currently eligible direct recipient")
     || error.message.includes("Parallel todo recipients exceed the approved direct-role rule")
     || error.message.includes("A fully unavailable parallel todo has no stable original recipient")
     || error.message.includes("A recipient routing exception requires one direct production-management assignee")
@@ -80,6 +81,17 @@ export class RootAwareTodoProjectionService extends TodoProjectionService {
   ): Promise<string[]> {
     try {
       return await super.actionableForAllDirectRole(...args);
+    } catch (error: unknown) {
+      if (this.suppress(args[1], error)) return [];
+      throw error;
+    }
+  }
+
+  override async actionableForAllAssignedRole(
+    ...args: Parameters<TodoProjectionService["actionableForAllAssignedRole"]>
+  ): Promise<string[]> {
+    try {
+      return await super.actionableForAllAssignedRole(...args);
     } catch (error: unknown) {
       if (this.suppress(args[1], error)) return [];
       throw error;

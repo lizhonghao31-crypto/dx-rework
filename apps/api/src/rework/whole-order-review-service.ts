@@ -367,7 +367,7 @@ export class WholeOrderReviewService {
         [reworkOrderId, actor.actorId],
       );
       await this.todos?.completeOpenByDedupePrefix(client, actor, `final-quantity-ie-review:${reworkOrderId}:`, "IE approved the final quantities");
-      await this.todos?.actionableForAllDirectRole(client, actor, {
+      await this.todos?.actionableForAllAssignedRole(client, actor, {
         category: "responsibility_determination",
         sourceEventId: eventId,
         sourceAction: "rework.final_quantity.ie_review",
@@ -543,7 +543,7 @@ export class WholeOrderReviewService {
         }
       }
       if (todoFoundationAvailable) {
-        await this.todos!.actionableForAllDirectRole(client, actor, {
+        await this.todos!.actionableForAllAssignedRole(client, actor, {
           category: "responsibility_determination",
           sourceEventId: eventId,
           sourceAction: "rework.whole_order.approve",
