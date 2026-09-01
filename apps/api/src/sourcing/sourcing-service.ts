@@ -232,7 +232,7 @@ const encodeSourcingListCursor = (row: SourcingCaseRow): string =>
   })).toString("base64url");
 
 const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => {
-  const crafts = row.crafts ?? [];
+  const crafts = [...(row.crafts ?? [])];
   return {
   sourcingCaseId: row.sourcing_case_id,
   erpOrderId: row.erp_order_id,
