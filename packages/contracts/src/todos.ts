@@ -122,6 +122,11 @@ export const TodoListResponseSchema = z.object({
   todos: z.array(TodoResponseSchema),
 }).strict();
 
+export const TodoNewIndicatorSchema = z.object({
+  latestTodoId: TodoIdSchema.nullable(),
+  latestReceivedAt: z.string().datetime().nullable(),
+}).strict();
+
 export const TodoRoutingExceptionListResponseSchema = z.object({
   routingExceptions: z.array(TodoRoutingExceptionSchema),
 }).strict();
@@ -143,5 +148,6 @@ export type TodoResponse = z.infer<typeof TodoResponseSchema>;
 export type TodoDeliveryAttempt = z.infer<typeof TodoDeliveryAttemptSchema>;
 export type TodoRoutingException = z.infer<typeof TodoRoutingExceptionSchema>;
 export type TodoListResponse = z.infer<typeof TodoListResponseSchema>;
+export type TodoNewIndicator = z.infer<typeof TodoNewIndicatorSchema>;
 export type TodoRoutingExceptionListResponse = z.infer<typeof TodoRoutingExceptionListResponseSchema>;
 export type TransferTodoRoutingException = z.infer<typeof TransferTodoRoutingExceptionSchema>;

@@ -62,6 +62,10 @@ afterEach(async () => {
 const createApp = () => {
   const service = {
     listForActor: vi.fn(async () => [todo]),
+    latestIndicatorForActor: vi.fn(async () => ({
+      latestTodoId: todo.todoId,
+      latestReceivedAt: todo.createdAt,
+    })),
     listRoutingExceptionsForActor: vi.fn(async () => []),
     transferRoutingException: vi.fn(async () => todo),
   };
@@ -101,6 +105,21 @@ describe("todo HTTP boundaries", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ todos: [todo] });
     expect(service.listForActor).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: todo.recipientUserId,
+      authorizationCapability: "todo:view",
+    }));
+
+    const indicator = await app.inject({
+      method: "GET",
+      url: "/todos/mine/indicator",
+      headers: { cookie: "dx_rework_session=viewer" },
+    });
+    expect(indicator.statusCode).toBe(200);
+    expect(indicator.json()).toEqual({
+      latestTodoId: todo.todoId,
+      latestReceivedAt: todo.createdAt,
+    });
+    expect(service.latestIndicatorForActor).toHaveBeenCalledWith(expect.objectContaining({
       actorId: todo.recipientUserId,
       authorizationCapability: "todo:view",
     }));
