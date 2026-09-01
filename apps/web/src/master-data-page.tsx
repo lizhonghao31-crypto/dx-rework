@@ -14,7 +14,9 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 type Craft = Readonly<{
   craftId: string;
   craftCode: string;
+  version: number;
   craftName: string;
+  active: boolean;
   createdAt: string;
 }>;
 
@@ -176,7 +178,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     setError("");
     try {
       if (view === "crafts") {
-        setCrafts(await json<Craft[]>("master-data/crafts"));
+        setCrafts(await json<Craft[]>("master-data/crafts?includeInactive=true"));
       } else if (view === "suppliers") {
         setSuppliers(await json<Supplier[]>("master-data/suppliers?includeInactive=true"));
       } else {
@@ -254,6 +256,24 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       });
       setCraftName("");
     });
+  };
+
+  const reviseCraft = async (craft: Craft, change: "rename" | "toggle"): Promise<void> => {
+    const nextName = change === "rename"
+      ? (await promptInApp("请输入新的工艺名称", craft.craftName))?.trim()
+      : craft.craftName;
+    if (!nextName) return;
+    const reason = (await promptInApp(change === "rename" ? "请输入修改原因" : `请输入${craft.active ? "停用" : "恢复"}原因`))?.trim();
+    if (!reason) return;
+    void run(`craft:${craft.craftId}`, () =>
+      json(`master-data/crafts/${craft.craftId}/versions`, {
+        method: "POST",
+        body: JSON.stringify({
+          craftName: nextName,
+          active: change === "toggle" ? !craft.active : craft.active,
+          changeReason: reason,
+        }),
+      }));
   };
 
   const createSupplier = () => {
@@ -643,9 +663,13 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 <article key={craft.craftId} className="master-data-row">
                   <div>
                     <h3>{craft.craftName}</h3>
-                    <p>{craft.craftCode}</p>
+                    <p>{craft.craftCode} · 版本 {craft.version}</p>
                   </div>
-                  <StatusBadge tone="success">可复用</StatusBadge>
+                  <StatusBadge tone={craft.active ? "success" : "warning"}>{craft.active ? "启用" : "停用"}</StatusBadge>
+                  <div className="master-data-actions">
+                    <Button disabled={Boolean(busy)} onClick={() => void reviseCraft(craft, "rename")}>修改名称</Button>
+                    <Button disabled={Boolean(busy)} onClick={() => void reviseCraft(craft, "toggle")}>{craft.active ? "停用" : "恢复"}</Button>
+                  </div>
                 </article>
               ))}
             </div>
