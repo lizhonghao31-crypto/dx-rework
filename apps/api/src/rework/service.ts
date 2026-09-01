@@ -38,10 +38,14 @@ type FactoryState = Readonly<{
   supplierVersion: number | null;
 }> | null;
 type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{
-  receivingBatchId: string;
+  receivingBatchId?: string;
 }>;
 type ReceivingReworkEntry = Readonly<{
   receivingBatchId: string;
+  styleNo: string;
+}>;
+type ReworkDraftSource = Readonly<{
+  receivingBatchId: string | null;
   styleNo: string;
 }>;
 type ReworkOrderRow = Readonly<{
@@ -176,7 +180,11 @@ export class ReworkInitiationService {
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, "rework.draft.create", idempotencyKey, input, 201, async (client) => {
       const reworkOrderId = randomUUID();
-      const sourceReceivingBatch = await this.resolveSourceReceivingBatch(client, input.receivingBatchId);
+      const sourceReceivingBatch = await this.resolveSourceReceivingBatch(
+        client,
+        input.receivingBatchId,
+        input.styleNo,
+      );
       const factory = await this.resolveFactory(client, input.processingFactory ?? null);
       if (input.merchandiserUserId) {
         await this.ensureActiveMerchandiser(client, input.merchandiserUserId);
@@ -259,10 +267,14 @@ export class ReworkInitiationService {
 
   private async resolveSourceReceivingBatch(
     client: PoolClient,
-    receivingBatchId: string,
-  ): Promise<ReceivingReworkEntry> {
+    receivingBatchId: string | undefined,
+    requestedStyleNo: string | undefined,
+  ): Promise<ReworkDraftSource> {
     if (!receivingBatchId) {
-      throw new ApplicationError("VALIDATION_ERROR", "必须从订单回货选择收货批次发起返工", 400);
+      return {
+        receivingBatchId: null,
+        styleNo: requestedStyleNo?.trim().toUpperCase() ?? "",
+      };
     }
     const source = await client.query<{ style_no: string }>(
       "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1",

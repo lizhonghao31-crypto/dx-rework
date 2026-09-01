@@ -34,14 +34,14 @@ import type { ReworkV2DraftService } from "./v2-draft-service.js";
 import type { ReworkV2SubmissionService } from "./v2-submission-service.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{ receivingBatchId: string }>;
+type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{ receivingBatchId?: string }>;
 const CreateReworkDraftWithReceivingBatchSchema = {
   safeParse(value: unknown):
     | { success: true; data: CreateReworkDraftWithReceivingBatch }
     | { success: false } {
     if (!value || typeof value !== "object" || Array.isArray(value)) return { success: false };
     const { receivingBatchId, ...draft } = value as Record<string, unknown>;
-    if (typeof receivingBatchId !== "string" || !UUID_PATTERN.test(receivingBatchId)) {
+    if (receivingBatchId !== undefined && (typeof receivingBatchId !== "string" || !UUID_PATTERN.test(receivingBatchId))) {
       return { success: false };
     }
     const parsed = CreateReworkDraftSchema.safeParse(draft);
@@ -50,7 +50,7 @@ const CreateReworkDraftWithReceivingBatchSchema = {
       success: true,
       data: {
         ...parsed.data,
-        receivingBatchId,
+        ...(typeof receivingBatchId === "string" ? { receivingBatchId } : {}),
       },
     };
   },
@@ -223,9 +223,14 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
   };
 
   app.post("/rework-orders/drafts", async (request, reply) => {
+    const trustedActor = await actor(request);
+    const input = parse(CreateReworkDraftWithReceivingBatchSchema, request.body);
+    if (!input.receivingBatchId && !trustedActor.actorRoles.includes("root_superuser")) {
+      throw new ApplicationError("VALIDATION_ERROR", "必须从订单回货选择收货批次发起返工", 400);
+    }
     const result = await dependencies.service.createDraft(
-      await actor(request),
-      parse(CreateReworkDraftWithReceivingBatchSchema, request.body),
+      trustedActor,
+      input,
       idempotencyKey(request),
     );
     if (result.reused) void reply.header("idempotency-replayed", "true");
