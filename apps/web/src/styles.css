@@ -88,11 +88,17 @@
   .quantity-submit-row > .dx-button,
   .quantity-submit-row > .mobile-actions,
   .quantity-submit-row > .quantity-review-actions { width: 100%; }
-  .quantity-process-toggle { grid-template-columns: minmax(0, 1fr) repeat(3, minmax(48px, auto)) 22px; gap: 8px; padding: 10px; }
-  .quantity-process-toggle .dx-badge { grid-column: 1 / -2; justify-self: start; }
-  .quantity-process-toggle small { font-size: 10px; }
-  .quantity-process-toggle strong { font-size: 12px; }
-  .quantity-process-detail { padding: 0 10px 10px; }
+  .quantity-process-list { gap: 4px; }
+  .quantity-process-card { border-radius: 10px; }
+  .quantity-process-toggle { grid-template-columns: repeat(4, minmax(0, 1fr)) 20px; gap: 4px 6px; min-height: 0; padding: 6px 8px; }
+  .quantity-process-name { grid-column: 1 / -2; overflow: visible; font-size: 13px; line-height: 18px; text-overflow: clip; white-space: normal; }
+  .quantity-process-expander { grid-column: -2 / -1; grid-row: 1; font-size: 16px; }
+  .quantity-process-toggle > span:not(.quantity-process-name) { min-width: 0; }
+  .quantity-process-toggle .dx-badge { grid-column: 1 / -2; justify-self: start; min-height: 22px; padding: 2px 6px; font-size: 10px; }
+  .quantity-process-toggle small { font-size: 9px; }
+  .quantity-process-toggle strong { font-size: 11px; }
+  .quantity-process-toolbar > .quantity-process-save { min-height: 30px; margin-right: 6px; padding: 0 8px; font-size: 11px; }
+  .quantity-process-detail { padding: 0 8px 8px; }
   .quantity-report-row { grid-template-columns: minmax(0, 1fr) auto; }
   .quantity-report-actions { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; width: 100%; }
   .quantity-report-actions .dx-field { width: auto; }
