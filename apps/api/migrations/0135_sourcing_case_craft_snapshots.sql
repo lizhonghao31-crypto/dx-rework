@@ -61,17 +61,17 @@ BEGIN
      OR audit_event.actor_id<>case_creator
      OR audit_event.request_id<>NEW.request_id
      OR current_active IS DISTINCT FROM true
-     OR current_versionIS DISTINCT FROM NEW.craft_version
-     OR current_codeIS DISTINCT FROM NEW.craft_code_snapshot
-     OR current_nameIS DISTINCT FROM NEW.craft_name_snapshot
+     OR current_version IS DISTINCT FROM NEW.craft_version
+     OR current_code IS DISTINCT FROM NEW.craft_code_snapshot
+     OR current_name IS DISTINCT FROM NEW.craft_name_snapshot
      OR audit_event.after_state #>> ARRAY['crafts',(NEW.position-1)::text,'craftId']
        IS DISTINCT FROM NEW.craft_id::text
      OR (audit_event.after_state #>> ARRAY['crafts',(NEW.position-1)::text,'craftVersion'])::integer
-       <>NEW.craft_version
+       IS DISTINCT FROM NEW.craft_version
      OR audit_event.after_state #>> ARRAY['crafts',(NEW.position-1)::text,'craftCode']
-       <>NEW.craft_code_snapshot
+       IS DISTINCT FROM NEW.craft_code_snapshot
      OR audit_event.after_state #>> ARRAY['crafts',(NEW.position-1)::text,'craftName']
-       <>NEW.craft_name_snapshot
+       IS DISTINCT FROM NEW.craft_name_snapshot
   THEN
     RAISE EXCEPTION 'sourcing case craft requires enabled current master data and matching audit'
       USING ERRCODE='55000';
