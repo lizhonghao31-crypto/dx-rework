@@ -31,14 +31,17 @@ export function ReworkQueryPage() {
   const [overdue, setOverdue] = useState(initial.get("overdue") ?? "");
   const [exception, setException] = useState(initial.get("exception") ?? "");
   const [cursor,setCursor]=useState("");
+  const [cursorHistory,setCursorHistory]=useState<string[]>([]);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(true);
   const [isRoot, setIsRoot] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [deleteError, setDeleteError] = useState("");
-  const resetPage=()=>setCursor("");
-  const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,cursor:cursor||undefined, limit: "40" }), [debouncedQ,status,responsibilityType,from,to,overdue,exception,cursor]);
+  const resetPage=()=>{setCursor("");setCursorHistory([]);};
+  const previousPage=()=>{setCursor(cursorHistory.at(-1)??"");setCursorHistory((history)=>history.slice(0,-1));};
+  const nextPage=(nextCursor:string)=>{setCursorHistory((history)=>[...history,cursor]);setCursor(nextCursor);};
+  const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,cursor:cursor||undefined, limit: "15" }), [debouncedQ,status,responsibilityType,from,to,overdue,exception,cursor]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -86,9 +89,10 @@ export function ReworkQueryPage() {
     {deleteError && <Surface className="reporting-state reporting-delete-error"><p role="alert">{deleteError}</p></Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="reporting-state">没有符合筛选条件的返工单。</Surface>}
     <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} canDelete={isRoot} deleting={deletingOrderId === order.reworkOrderId} onDelete={remove} />)}</div>
-    {state.kind === "ready" && (cursor || state.value.nextCursor) && <Surface className="reporting-pagination">
-      {cursor && <Button onClick={()=>setCursor("")}>返回第一页</Button>}
-      {state.value.nextCursor && <Button variant="primary" onClick={()=>setCursor(state.value.nextCursor??"")}>下一页</Button>}
+    {state.kind === "ready" && (cursorHistory.length > 0 || state.value.nextCursor) && <Surface className="reporting-pagination">
+      {cursorHistory.length > 0 && <Button onClick={previousPage}>上一页</Button>}
+      <span>第 {cursorHistory.length + 1} 页</span>
+      {state.value.nextCursor && <Button variant="primary" onClick={()=>nextPage(state.value.nextCursor!)}>下一页</Button>}
     </Surface>}
   </Shell>;
 }
