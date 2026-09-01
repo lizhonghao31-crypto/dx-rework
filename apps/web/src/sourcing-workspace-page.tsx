@@ -297,6 +297,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [deliveryDate, setDeliveryDate] = useState("");
   const [processes, setProcesses] = useState<string[]>([""]);
   const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
+  const [activeCraftQuery, setActiveCraftQuery] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -310,11 +311,18 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   useEffect(() => {
     if (!canCreate) return;
     let mounted = true;
-    void request("master-data/crafts", CraftCatalogListResponseSchema)
-      .then((items) => { if (mounted) setCraftCatalog(items); })
-      .catch(() => { if (mounted) setMessage("工艺数据库加载失败，请刷新后重试。"); });
-    return () => { mounted = false; };
-  }, [canCreate]);
+    const timer = window.setTimeout(() => {
+      const query = activeCraftQuery.trim();
+      const path = query ? `master-data/crafts?q=${encodeURIComponent(query)}` : "master-data/crafts";
+      void request(path, CraftCatalogListResponseSchema)
+        .then((items) => { if (mounted) setCraftCatalog(items); })
+        .catch(() => { if (mounted) setMessage("工艺数据库加载失败，请刷新后重试。"); });
+    }, 150);
+    return () => {
+      mounted = false;
+      window.clearTimeout(timer);
+    };
+  }, [activeCraftQuery, canCreate]);
 
   useEffect(() => {
     if (!user?.id || restoredDraftUserId.current === user.id) return;
@@ -339,6 +347,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     setProcesses((current) => current.map((process, currentIndex) => (
       currentIndex === index ? value : process
     )));
+    setActiveCraftQuery(value);
     createKey.current = null;
   };
 
