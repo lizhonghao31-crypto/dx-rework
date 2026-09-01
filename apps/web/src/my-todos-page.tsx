@@ -13,6 +13,19 @@ type LoadState =
   | { kind: "ready"; todos: TodoResponse[] }
   | { kind: "error"; message: string };
 
+type TodoModule = "rework" | "sourcing" | "wages";
+const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
+  { id: "rework", label: "订单返工" },
+  { id: "sourcing", label: "外发定价&选厂" },
+  { id: "wages", label: "返工工资" },
+];
+
+const todoModule = (todo: TodoResponse): TodoModule => {
+  if (todo.route.routeName === "sourcing_detail" || todo.entityType === "sourcing_case") return "sourcing";
+  if (todo.route.routeName === "wage_period_detail" || todo.category === "wage_review") return "wages";
+  return "rework";
+};
+
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   rework_detail: "查看返工单",
   process_configuration: "配置或审核返工工序",
@@ -125,6 +138,7 @@ const taskHref = (todo: TodoResponse): string => [
 
 export function MyTodosPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [selectedModule, setSelectedModule] = useState<TodoModule | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -148,6 +162,17 @@ export function MyTodosPage() {
         todo.todoType !== "information"
         && (todo.status === "pending" || todo.status === "blocked_recipient"))
     : [], [state]);
+  const moduleCounts = useMemo(() => actionable.reduce<Record<TodoModule, number>>((counts, todo) => {
+    counts[todoModule(todo)] += 1;
+    return counts;
+  }, { rework: 0, sourcing: 0, wages: 0 }), [actionable]);
+  const activeModule = selectedModule
+    ?? todoModules.find((module) => moduleCounts[module.id] > 0)?.id
+    ?? "rework";
+  const visibleTodos = useMemo(
+    () => actionable.filter((todo) => todoModule(todo) === activeModule),
+    [actionable, activeModule],
+  );
 
   return (
     <Shell active="我的待办">
@@ -159,6 +184,15 @@ export function MyTodosPage() {
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>
         </header>
+      {state.kind === "ready" && actionable.length > 0 && <nav className="my-todos-modules" aria-label="待办模块">
+        {todoModules.map((module) => <button
+          type="button"
+          className={module.id === activeModule ? "is-active" : ""}
+          aria-current={module.id === activeModule ? "page" : undefined}
+          onClick={() => setSelectedModule(module.id)}
+          key={module.id}
+        ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
+      </nav>}
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
         <Surface className="my-todos-state">
@@ -174,9 +208,14 @@ export function MyTodosPage() {
           <p>有新的事项轮到你处理时，会出现在这里。</p>
         </Surface>
       )}
-      {actionable.length > 0 && (
+      {actionable.length > 0 && visibleTodos.length === 0 && (
+        <Surface className="my-todos-state my-todos-module-empty">
+          <p>该模块当前没有待处理事项。</p>
+        </Surface>
+      )}
+      {visibleTodos.length > 0 && (
         <div className="my-todos-list">
-          {actionable.map((todo, index) => {
+          {visibleTodos.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
             const orderSummary = todo.entityType === "sourcing_case"

@@ -18,6 +18,12 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain('apiUrl("todos/mine")');
     expect(page).toContain("这里只显示现在轮到你处理的事项");
     expect(page).toContain("my-todo-row");
+    expect(page).toContain("my-todos-modules");
+    expect(page).toContain('{ id: "rework", label: "订单返工" }');
+    expect(page).toContain('{ id: "sourcing", label: "外发定价&选厂" }');
+    expect(page).toContain('{ id: "wages", label: "返工工资" }');
+    expect(page).toContain("{moduleCounts[module.id]}件");
+    expect(page).toContain("visibleTodos.map");
     expect(page).toContain("my-todo-index");
     expect(page).toContain("节点停留");
     expect(page).toContain("您当前的任务已全部完成，谢谢");
@@ -38,6 +44,8 @@ describe("my todos first-entry navigation", () => {
 
     expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain(".my-todos-hero");
+    expect(css).toContain(".my-todos-modules");
+    expect(css).toContain("overflow-x: auto;");
     expect(css).toContain(".my-todo-index {");
     expect(css).toContain("display: none;");
     expect(css).toContain(".my-todo-metrics span:nth-child(2)");
