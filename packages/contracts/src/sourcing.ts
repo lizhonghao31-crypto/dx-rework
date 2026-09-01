@@ -54,6 +54,9 @@ export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
+  craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
+    .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复")
+    .optional(),
   processes: z.array(SourcingProcessSchema).min(1).max(MAX_SOURCING_PROCESSES)
     .refine((items) => new Set(items).size === items.length, "工艺不能重复")
     .optional(),
@@ -63,14 +66,19 @@ export const CreateSourcingCaseSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
     .optional(),
 }).strict().superRefine((value, context) => {
-  if (!value.processes?.length && !value.processDescription) {
-    context.addIssue({ code: "custom", path: ["processes"], message: "请至少填写一项工艺" });
+  const suppliedSources = [
+    Boolean(value.craftIds?.length),
+    Boolean(value.processes?.length),
+    Boolean(value.processDescription),
+  ].filter(Boolean).length;
+  if (suppliedSources === 0) {
+    context.addIssue({ code: "custom", path: ["craftIds"], message: "请至少选择一项工艺" });
   }
-  if (value.processes?.length && value.processDescription) {
+  if (suppliedSources > 1) {
     context.addIssue({
       code: "custom",
-      path: ["processes"],
-      message: "工艺清单与旧工艺字段不能同时提交",
+      path: ["craftIds"],
+      message: "工艺主数据、工艺清单与旧工艺字段不能同时提交",
     });
   }
 });
@@ -202,6 +210,14 @@ export const SourcingOwnerDecisionSchema = z.object({
   decidedAt: z.string().datetime(),
 }).strict();
 
+export const SourcingCraftSnapshotSchema = z.object({
+  position: z.number().int().min(1).max(MAX_SOURCING_PROCESSES),
+  craftId: IdSchema,
+  craftCode: z.string(),
+  craftVersion: z.number().int().positive(),
+  craftName: z.string(),
+}).strict();
+
 export const SourcingCaseSummarySchema = z.object({
   sourcingCaseId: IdSchema,
   erpOrderId: z.string(),
@@ -212,6 +228,7 @@ export const SourcingCaseSummarySchema = z.object({
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   processDescription: z.string().nullable(),
   processes: z.array(z.string()).max(MAX_SOURCING_PROCESSES),
+  crafts: z.array(SourcingCraftSnapshotSchema).max(MAX_SOURCING_PROCESSES).optional(),
   status: SourcingCaseStatusSchema,
   version: z.number().int().positive(),
   createdBy: IdSchema,
