@@ -237,3 +237,81 @@
     font-size: 11px;
   }
 }
+
+.my-todos-modules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-lg);
+  background: var(--dx-v2-color-inset);
+}
+
+.my-todos-modules button {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 58px;
+  padding: 12px 14px;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.my-todos-modules button.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(18, 104, 232, .18);
+}
+
+.my-todos-modules span {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.my-todos-modules strong {
+  flex: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.my-todos-module-empty {
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  .my-todos-modules {
+    display: flex;
+    gap: 8px;
+    margin: 0 -20px var(--dx-v2-space-3);
+    padding: 10px 20px;
+    overflow-x: auto;
+    border-width: 1px 0;
+    border-radius: 0;
+    scroll-snap-type: x proximity;
+  }
+
+  .my-todos-modules button {
+    flex: 0 0 154px;
+    min-height: 48px;
+    padding: 9px 11px;
+    scroll-snap-align: start;
+  }
+
+  .my-todos-modules span {
+    font-size: 12px;
+  }
+
+  .my-todos-modules strong {
+    font-size: 12px;
+  }
+}
