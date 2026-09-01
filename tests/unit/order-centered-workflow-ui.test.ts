@@ -19,6 +19,10 @@ describe("order-centered workflow UI", () => {
     expect(page).toContain("const orderSummary");
     expect(page).toContain("款号：");
     expect(page).toContain("返工单：");
+    expect(page).toContain("输入供应商名称或款号");
+    expect(page).toContain("matchesTodoSearch");
+    expect(page).toContain("todo.orderContext?.supplierName");
+    expect(page).toContain("供应商：");
     expect(page).not.toContain("订单号：");
     expect(page).toContain("节点停留");
     expect(page).toContain("相关金额");
