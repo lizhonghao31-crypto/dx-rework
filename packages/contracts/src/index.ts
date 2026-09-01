@@ -129,12 +129,20 @@ export const CreatePersonAliasSchema = z.object({
 export const CraftCatalogItemSchema = z.object({
   craftId: IdSchema,
   craftCode: CatalogCodeSchema,
+  version: z.number().int().positive(),
   craftName: z.string().trim().min(1).max(100),
+  active: z.boolean(),
   createdAt: z.string().datetime(),
 });
 export const CraftCatalogListResponseSchema = z.array(CraftCatalogItemSchema);
+export const CraftCatalogHistoryItemSchema = CraftCatalogItemSchema.extend({
+  changeReason: ReasonSchema,
+  changedBy: IdSchema,
+});
+export const CraftCatalogHistoryResponseSchema = z.array(CraftCatalogHistoryItemSchema);
 export const CraftCatalogQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
+  includeInactive: z.enum(["true", "false"]).optional(),
 }).strict();
 export const EnsureCraftsSchema = z.object({
   craftNames: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
@@ -144,6 +152,12 @@ export const EnsureCraftsSchema = z.object({
     context.addIssue({ code: "custom", path: ["craftNames"], message: "工艺不能重复" });
   }
 });
+export const ReviseCraftSchema = z.object({
+  craftName: z.string().trim().min(1).max(100),
+  active: z.boolean(),
+  changeReason: ReasonSchema,
+}).strict();
+export const CraftParamsSchema = z.object({ craftId: IdSchema }).strict();
 
 export const CreateProcessSchema = z.object({
   processCode: CatalogCodeSchema,
@@ -207,7 +221,9 @@ export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
 export type UpdateTemporaryWorkerProfile = z.infer<typeof UpdateTemporaryWorkerProfileSchema>;
 export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
 export type CraftCatalogItem = z.infer<typeof CraftCatalogItemSchema>;
+export type CraftCatalogHistoryItem = z.infer<typeof CraftCatalogHistoryItemSchema>;
 export type EnsureCrafts = z.infer<typeof EnsureCraftsSchema>;
+export type ReviseCraft = z.infer<typeof ReviseCraftSchema>;
 export type CreateProcess = z.infer<typeof CreateProcessSchema>;
 export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
 export type ReplaceProcessDefaultWorkers = z.infer<typeof ReplaceProcessDefaultWorkersSchema>;

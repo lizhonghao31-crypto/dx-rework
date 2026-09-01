@@ -9,6 +9,7 @@ import type {
   CreateProcess,
   CreateSupplier,
   ReplaceProcessDefaultWorkers,
+  ReviseCraft,
   ReviseProcess,
   ReviseSupplier,
   UpdateTemporaryWorkerProfile,
@@ -23,13 +24,17 @@ type DatabaseError = Readonly<{ code?: string }>;
 type CraftCatalogRow = Readonly<{
   craft_id: string;
   craft_code: string;
+  version: number;
   craft_name: string;
+  active: boolean;
   created_at: Date;
 }>;
 const craftCatalogItem = (row: CraftCatalogRow) => ({
   craftId: row.craft_id,
   craftCode: row.craft_code,
+  version: row.version,
   craftName: row.craft_name,
+  active: row.active,
   createdAt: row.created_at.toISOString(),
 });
 
@@ -407,33 +412,27 @@ export class AccessMasterDataService {
     }));
   }
 
-  async listCrafts(query = ""): Promise<Array<{
-    craftId: string;
-    craftCode: string;
-    craftName: string;
-    createdAt: string;
-  }>> {
+  async listCrafts(query = "", includeInactive = false): Promise<ReturnType<typeof craftCatalogItem>[]> {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length > 100) {
       throw new ApplicationError("VALIDATION_ERROR", "搜索内容不能超过100个字符", 400);
     }
     const result = await this.database.query<CraftCatalogRow>(
-      `SELECT craft_id,craft_code,craft_name,created_at
-       FROM craft_catalog_items
-       WHERE $1::text='' OR strpos(upper(craft_name || ' ' || craft_code),upper($1))>0
+      `SELECT craft_id,craft_code,version,craft_name,active,created_at
+       FROM current_craft_catalog
+       WHERE ($1::boolean OR active=true)
+         AND ($2::text='' OR strpos(upper(craft_name || ' ' || craft_code),upper($2))>0)
        ORDER BY normalized_name,craft_code
        LIMIT 200`,
-      [normalizedQuery],
+      [includeInactive, normalizedQuery],
     );
     return result.rows.map(craftCatalogItem);
   }
 
-  async ensureCrafts(actor: TrustedActorContext, input: EnsureCrafts): Promise<Array<{
-    craftId: string;
-    craftCode: string;
-    craftName: string;
-    createdAt: string;
-  }>> {
+  async ensureCrafts(
+    actor: TrustedActorContext,
+    input: EnsureCrafts,
+  ): Promise<ReturnType<typeof craftCatalogItem>[]> {
     return this.transaction(async (client) => {
       const craftNames = input.craftNames.map((name) => name.trim());
       const normalized = await client.query<{ normalized_name: string }>(
@@ -452,38 +451,147 @@ export class AccessMasterDataService {
 
       const items: ReturnType<typeof craftCatalogItem>[] = [];
       for (const craftName of craftNames) {
-        const existing = await client.query<CraftCatalogRow>(
-          `SELECT craft_id,craft_code,craft_name,created_at
+        const current = await client.query<CraftCatalogRow>(
+          `SELECT craft_id,craft_code,version,craft_name,active,created_at
+           FROM current_craft_catalog
+           WHERE normalized_name=lower(btrim($1))`,
+          [craftName],
+        );
+        if (current.rows[0]) {
+          if (!current.rows[0].active) {
+            throw new ApplicationError("CONFLICT", `工艺“${current.rows[0].craft_name}”已停用`, 409);
+          }
+          items.push(craftCatalogItem(current.rows[0]));
+          continue;
+        }
+
+        const archivedIdentity = await client.query<{ craft_id: string; craft_code: string }>(
+          `SELECT craft_id,craft_code
            FROM craft_catalog_items
            WHERE normalized_name=lower(btrim($1))
            FOR SHARE`,
           [craftName],
         );
-        if (existing.rows[0]) {
-          items.push(craftCatalogItem(existing.rows[0]));
-          continue;
-        }
-
-        const craftId = randomUUID();
-        const craftCode = `CRAFT_${randomUUID().replaceAll("-", "").slice(0, 24).toUpperCase()}`;
+        const craftId = archivedIdentity.rows[0]?.craft_id ?? randomUUID();
+        const craftCode = archivedIdentity.rows[0]?.craft_code
+          ?? `CRAFT_${randomUUID().replaceAll("-", "").slice(0, 24).toUpperCase()}`;
+        const changeReason = "外发订单业务页新增工艺";
         const craftCreationEventId = await this.events.append(client, actor, {
           action: "master_data.craft.create",
           entityType: "craft_catalog",
           entityId: craftId,
-          after: { craftId, craftCode, craftName },
-          reason: "外发订单业务页新增工艺",
+          after: { craftId, craftCode, version: 1, craftName, active: true },
+          reason: changeReason,
         });
+        if (!archivedIdentity.rows[0]) {
+          await client.query(
+            `INSERT INTO craft_catalog_items(
+               craft_id,craft_code,craft_name,created_by,operation_event_id,request_id
+             ) VALUES($1,$2,$3,$4,$5,$6)`,
+            [craftId, craftCode, craftName, actor.actorId, craftCreationEventId, actor.requestId],
+          );
+        }
+        await client.query(
+          `INSERT INTO craft_catalog_versions(
+             craft_id,version,craft_name,active,change_reason,changed_by,operation_event_id,request_id
+           ) VALUES($1,1,$2,true,$3,$4,$5,$6)`,
+          [craftId, craftName, changeReason, actor.actorId, craftCreationEventId, actor.requestId],
+        );
         const inserted = await client.query<CraftCatalogRow>(
-          `INSERT INTO craft_catalog_items(
-             craft_id,craft_code,craft_name,created_by,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6)
-           RETURNING craft_id,craft_code,craft_name,created_at`,
-          [craftId, craftCode, craftName, actor.actorId, craftCreationEventId, actor.requestId],
+          `SELECT craft_id,craft_code,version,craft_name,active,created_at
+           FROM current_craft_catalog WHERE craft_id=$1`,
+          [craftId],
         );
         items.push(craftCatalogItem(inserted.rows[0]!));
       }
       return items;
     });
+  }
+
+  async reviseCraft(
+    actor: TrustedActorContext,
+    craftId: string,
+    input: ReviseCraft,
+  ): Promise<{ craftId: string; version: number }> {
+    return this.transaction(async (client) => {
+      const normalized = await client.query<{ normalized_name: string }>(
+        "SELECT lower(btrim($1)) AS normalized_name",
+        [input.craftName],
+      );
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `dx_rework:craft:${normalized.rows[0]!.normalized_name}`,
+      ]);
+      const item = await client.query<CraftCatalogRow>(
+        `SELECT current.craft_id,current.craft_code,current.version,current.craft_name,current.active,current.created_at
+         FROM craft_catalog_items item
+         JOIN current_craft_catalog current ON current.craft_id=item.craft_id
+         WHERE item.craft_id=$1
+         FOR UPDATE OF item`,
+        [craftId],
+      );
+      const previous = item.rows[0];
+      if (!previous) throw new ApplicationError("NOT_FOUND", "工艺不存在", 404);
+      const duplicate = await client.query(
+        `SELECT 1 FROM current_craft_catalog
+         WHERE normalized_name=lower(btrim($1)) AND craft_id<>$2`,
+        [input.craftName, craftId],
+      );
+      if (duplicate.rows[0]) throw new ApplicationError("CONFLICT", "工艺名称已存在", 409);
+      const version = previous.version + 1;
+      const before = {
+        craftId,
+        craftCode: previous.craft_code,
+        version: previous.version,
+        craftName: previous.craft_name,
+        active: previous.active,
+      };
+      const after = {
+        craftId,
+        craftCode: previous.craft_code,
+        version,
+        craftName: input.craftName,
+        active: input.active,
+      };
+      const craftRevisionEventId = await this.events.append(client, actor, {
+        action: "master_data.craft.revise",
+        entityType: "craft_catalog",
+        entityId: craftId,
+        before,
+        after,
+        reason: input.changeReason,
+      });
+      await client.query(
+        `INSERT INTO craft_catalog_versions(
+           craft_id,version,craft_name,active,change_reason,changed_by,operation_event_id,request_id
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [craftId, version, input.craftName, input.active, input.changeReason, actor.actorId, craftRevisionEventId, actor.requestId],
+      );
+      return { craftId, version };
+    });
+  }
+
+  async listCraftHistory(craftId: string): Promise<Array<ReturnType<typeof craftCatalogItem> & {
+    changeReason: string;
+    changedBy: string;
+  }>> {
+    const result = await this.database.query<CraftCatalogRow & {
+      change_reason: string;
+      changed_by: string;
+    }>(
+      `SELECT item.craft_id,item.craft_code,version.version,version.craft_name,version.active,
+              version.change_reason,version.changed_by,version.created_at
+       FROM craft_catalog_items item
+       JOIN craft_catalog_versions version ON version.craft_id=item.craft_id
+       WHERE item.craft_id=$1
+       ORDER BY version.version DESC`,
+      [craftId],
+    );
+    if (result.rows.length === 0) throw new ApplicationError("NOT_FOUND", "工艺不存在", 404);
+    return result.rows.map((row) => ({
+      ...craftCatalogItem(row),
+      changeReason: row.change_reason,
+      changedBy: row.changed_by,
+    }));
   }
 
   async listProcesses(includeInactive = false): Promise<Array<{

@@ -38,6 +38,8 @@ const create = (
     listPeople: vi.fn(async () => []),
     listCrafts: vi.fn(async () => []),
     ensureCrafts: vi.fn(async () => []),
+    listCraftHistory: vi.fn(async () => []),
+    reviseCraft: vi.fn(async () => ({ craftId: "00000000-0000-4000-8000-000000000040", version: 2 })),
     listProcesses: vi.fn(async () => []),
     listProcessPage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listProcessDefaultWorkerCandidates: vi.fn(async () => []),
@@ -346,7 +348,7 @@ describe("access routes", () => {
       headers: { cookie: "dx_rework_session=trusted" },
     });
     expect(read.statusCode).toBe(200);
-    expect(service.listCrafts).toHaveBeenCalledWith("水洗");
+    expect(service.listCrafts).toHaveBeenCalledWith("水洗", false);
 
     const created = await app.inject({
       method: "POST",
@@ -373,6 +375,32 @@ describe("access routes", () => {
       payload: { craftNames: ["车缝"] },
     })).statusCode).toBe(403);
     expect(wrongRole.service.ensureCrafts).not.toHaveBeenCalled();
+
+    const craftId = "00000000-0000-4000-8000-000000000040";
+    const history = await app.inject({
+      method: "GET",
+      url: `/master-data/crafts/${craftId}/history`,
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(history.statusCode).toBe(200);
+    expect(service.listCraftHistory).toHaveBeenCalledWith(craftId);
+
+    const manager = create(["master_data:manage"], ["system_admin"]);
+    const revised = await manager.app.inject({
+      method: "POST",
+      url: `/master-data/crafts/${craftId}/versions`,
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "craft-revise-1" },
+      payload: { craftName: "成衣水洗", active: false, changeReason: "暂时停用" },
+    });
+    expect(revised.statusCode).toBe(200);
+    expect(manager.service.reviseCraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorizationCapability: "master_data:manage",
+        requestId: "craft-revise-1",
+      }),
+      craftId,
+      { craftName: "成衣水洗", active: false, changeReason: "暂时停用" },
+    );
   });
 
   it("uses separate read capabilities for business directory consumers", async () => {
