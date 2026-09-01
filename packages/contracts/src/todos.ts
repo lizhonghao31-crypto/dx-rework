@@ -118,8 +118,23 @@ export const TodoRoutingExceptionSchema = z.object({
   updatedAt: z.string().datetime(),
 }).strict();
 
+export const TodoModuleSchema = z.enum(["rework", "sourcing", "wages"]);
+
+export const TodoModuleCountsSchema = z.object({
+  rework: z.number().int().nonnegative(),
+  sourcing: z.number().int().nonnegative(),
+  wages: z.number().int().nonnegative(),
+}).strict();
+
 export const TodoListResponseSchema = z.object({
-  todos: z.array(TodoResponseSchema),
+  todos: z.array(TodoResponseSchema).max(15),
+  nextCursor: z.string().nullable(),
+  activeModule: TodoModuleSchema,
+  moduleCounts: TodoModuleCountsSchema,
+}).strict();
+
+export const TodoMineParamsSchema = z.object({
+  todoId: TodoIdSchema,
 }).strict();
 
 export const TodoNewIndicatorSchema = z.object({
@@ -145,6 +160,8 @@ export type TodoRouteDescriptor = z.infer<typeof TodoRouteDescriptorSchema>;
 export type TodoPolicy = z.infer<typeof TodoPolicySchema>;
 export type TodoOrderContext = z.infer<typeof TodoOrderContextSchema>;
 export type TodoResponse = z.infer<typeof TodoResponseSchema>;
+export type TodoModule = z.infer<typeof TodoModuleSchema>;
+export type TodoModuleCounts = z.infer<typeof TodoModuleCountsSchema>;
 export type TodoDeliveryAttempt = z.infer<typeof TodoDeliveryAttemptSchema>;
 export type TodoRoutingException = z.infer<typeof TodoRoutingExceptionSchema>;
 export type TodoListResponse = z.infer<typeof TodoListResponseSchema>;

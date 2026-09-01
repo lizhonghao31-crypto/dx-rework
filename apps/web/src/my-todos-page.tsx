@@ -1,6 +1,11 @@
-import { TodoListResponseSchema, type TodoResponse } from "@dx-rework/contracts";
+import {
+  TodoListResponseSchema,
+  type TodoModule,
+  type TodoModuleCounts,
+  type TodoResponse,
+} from "@dx-rework/contracts";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
@@ -10,32 +15,20 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "ready"; todos: TodoResponse[] }
+  | {
+      kind: "ready";
+      activeModule: TodoModule;
+      moduleCounts: TodoModuleCounts;
+      nextCursor: string | null;
+      todos: TodoResponse[];
+    }
   | { kind: "error"; message: string };
 
-type TodoModule = "rework" | "sourcing" | "wages";
 const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
   { id: "rework", label: "订单返工" },
   { id: "sourcing", label: "外发定价&选厂" },
   { id: "wages", label: "返工工资" },
 ];
-
-const todoModule = (todo: TodoResponse): TodoModule => {
-  if (todo.route.routeName === "sourcing_detail" || todo.entityType === "sourcing_case") return "sourcing";
-  if (todo.route.routeName === "wage_period_detail" || todo.category === "wage_review") return "wages";
-  return "rework";
-};
-
-const matchesTodoSearch = (todo: TodoResponse, query: string): boolean => {
-  if (!query) return true;
-  const searchable = [
-    todo.orderContext?.styleNo,
-    todo.orderContext?.supplierName,
-  ].filter((value): value is string => Boolean(value))
-    .join("\n")
-    .toLocaleLowerCase("zh-CN");
-  return searchable.includes(query);
-};
 
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   rework_detail: "查看返工单",
@@ -149,48 +142,104 @@ const taskHref = (todo: TodoResponse): string => [
 
 export function MyTodosPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const [selectedModule, setSelectedModule] = useState<TodoModule | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeQuery, setActiveQuery] = useState("");
+  const [cursor, setCursor] = useState("");
+  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const loadVersion = useRef(0);
+
+  const load = async (
+    module: TodoModule | undefined,
+    query: string,
+    pageCursor: string,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const version = ++loadVersion.current;
+    setBusy(true);
+    try {
+      const params = new URLSearchParams({ q: query });
+      if (module) params.set("module", module);
+      if (pageCursor) params.set("cursor", pageCursor);
+      const response = await fetch(`${apiUrl("todos/mine")}?${params.toString()}`, {
+        credentials: "include",
+        headers: { accept: "application/json" },
+        ...(signal ? { signal } : {}),
+      });
+      if (!response.ok) throw new Error(`待办加载失败（${response.status}）`);
+      const result = TodoListResponseSchema.parse(await response.json());
+      if (version !== loadVersion.current) return;
+      setState({
+        kind: "ready",
+        activeModule: result.activeModule,
+        moduleCounts: result.moduleCounts,
+        nextCursor: result.nextCursor,
+        todos: result.todos,
+      });
+    } catch (error: unknown) {
+      if (signal?.aborted || version !== loadVersion.current) return;
+      setState({ kind: "error", message: error instanceof Error ? error.message : "待办加载失败" });
+    } finally {
+      if (version === loadVersion.current) setBusy(false);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(apiUrl("todos/mine"), {
-      credentials: "include",
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    }).then(async (response) => {
-      if (!response.ok) throw new Error(`待办加载失败（${response.status}）`);
-      const result = TodoListResponseSchema.parse(await response.json());
-      setState({ kind: "ready", todos: result.todos });
-    }).catch((error: unknown) => {
-      if (controller.signal.aborted) return;
-      setState({ kind: "error", message: error instanceof Error ? error.message : "待办加载失败" });
-    });
+    void load(undefined, "", "", controller.signal);
     return () => controller.abort();
   }, []);
 
-  const actionable = useMemo(() => state.kind === "ready"
-    ? state.todos.filter((todo) =>
-        todo.todoType !== "information"
-        && (todo.status === "pending" || todo.status === "blocked_recipient"))
-    : [], [state]);
-  const moduleCounts = useMemo(() => actionable.reduce<Record<TodoModule, number>>((counts, todo) => {
-    counts[todoModule(todo)] += 1;
-    return counts;
-  }, { rework: 0, sourcing: 0, wages: 0 }), [actionable]);
-  const activeModule = selectedModule
-    ?? todoModules.find((module) => moduleCounts[module.id] > 0)?.id
-    ?? "rework";
-  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("zh-CN");
-  const visibleTodos = useMemo(
-    () => actionable.filter((todo) =>
-      todoModule(todo) === activeModule && matchesTodoSearch(todo, normalizedSearchQuery)),
-    [actionable, activeModule, normalizedSearchQuery],
-  );
+  const activeModule = state.kind === "ready" ? state.activeModule : "rework";
+  const moduleCounts = state.kind === "ready"
+    ? state.moduleCounts
+    : { rework: 0, sourcing: 0, wages: 0 };
+  const todos = state.kind === "ready" ? state.todos : [];
+  const nextCursor = state.kind === "ready" ? state.nextCursor : null;
+  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + moduleCounts.wages;
+
+  const resetPage = (): void => {
+    setCursor("");
+    setCursorHistory([]);
+  };
+
+  const openModule = (module: TodoModule): void => {
+    resetPage();
+    void load(module, activeQuery, "");
+  };
+
+  const searchFromFirstPage = (): void => {
+    const query = searchQuery.trim();
+    setActiveQuery(query);
+    resetPage();
+    void load(activeModule, query, "");
+  };
+
+  const clearSearch = (): void => {
+    setSearchQuery("");
+    setActiveQuery("");
+    resetPage();
+    void load(activeModule, "", "");
+  };
+
+  const goToNextPage = (): void => {
+    if (!nextCursor || busy) return;
+    setCursorHistory((current) => [...current, cursor]);
+    setCursor(nextCursor);
+    void load(activeModule, activeQuery, nextCursor);
+  };
+
+  const goToPreviousPage = (): void => {
+    if (cursorHistory.length === 0 || busy) return;
+    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? "";
+    setCursorHistory((current) => current.slice(0, -1));
+    setCursor(previousCursor);
+    void load(activeModule, activeQuery, previousCursor);
+  };
 
   return (
     <Shell active="我的待办">
-      <div className="my-todos-page">
+      <div className="my-todos-page" aria-busy={busy}>
         <header className="page-heading my-todos-hero">
           <div className="my-todos-hero__title">
             <h1>我的待办</h1>
@@ -198,17 +247,18 @@ export function MyTodosPage() {
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>
         </header>
-      {state.kind === "ready" && actionable.length > 0 && <nav className="my-todos-modules" aria-label="待办模块">
+      {state.kind === "ready" && totalActionable > 0 && <nav className="my-todos-modules" aria-label="待办模块">
         {todoModules.map((module) => <button
           type="button"
           className={module.id === activeModule ? "is-active" : ""}
           aria-current={module.id === activeModule ? "page" : undefined}
-          onClick={() => setSelectedModule(module.id)}
+          disabled={busy}
+          onClick={() => openModule(module.id)}
           key={module.id}
         ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
       </nav>}
-      {state.kind === "ready" && actionable.length > 0 && (
-        <div className="my-todos-search">
+      {state.kind === "ready" && totalActionable > 0 && (
+        <form className="my-todos-search" onSubmit={(event) => { event.preventDefault(); searchFromFirstPage(); }}>
           <label htmlFor="my-todos-search">搜索待办</label>
           <input
             id="my-todos-search"
@@ -218,8 +268,9 @@ export function MyTodosPage() {
             autoComplete="off"
             onChange={(event) => setSearchQuery(event.target.value)}
           />
-          {searchQuery && <button type="button" onClick={() => setSearchQuery("")}>清除</button>}
-        </div>
+          <button type="submit" disabled={busy}>搜索</button>
+          {searchQuery && <button type="button" disabled={busy} onClick={clearSearch}>清除</button>}
+        </form>
       )}
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
@@ -229,23 +280,23 @@ export function MyTodosPage() {
           <Button onClick={() => window.location.reload()}>重新加载</Button>
         </Surface>
       )}
-      {state.kind === "ready" && actionable.length === 0 && (
+      {state.kind === "ready" && totalActionable === 0 && (
         <Surface className="my-todos-state my-todos-complete">
           <StatusBadge tone="success">当前无待办</StatusBadge>
           <h2>您当前的任务已全部完成，谢谢。</h2>
           <p>有新的事项轮到你处理时，会出现在这里。</p>
         </Surface>
       )}
-      {actionable.length > 0 && visibleTodos.length === 0 && (
+      {state.kind === "ready" && totalActionable > 0 && todos.length === 0 && (
         <Surface className="my-todos-state my-todos-module-empty">
-          <p>{normalizedSearchQuery
+          <p>{activeQuery
             ? "未找到匹配的待办，请检查供应商名称或款号。"
             : "该模块当前没有待处理事项。"}</p>
         </Surface>
       )}
-      {visibleTodos.length > 0 && (
+      {todos.length > 0 && (
         <div className="my-todos-list">
-          {visibleTodos.map((todo, index) => {
+          {todos.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
             const orderSummary = todo.entityType === "sourcing_case"
@@ -259,7 +310,7 @@ export function MyTodosPage() {
               <Surface className="my-todo-card" key={todo.todoId}>
                 {blocked ? (
                   <div className="my-todo-row my-todo-row--blocked">
-                    <b className="my-todo-index">{String(index + 1).padStart(2, "0")}</b>
+                    <b className="my-todo-index">{String(cursorHistory.length * 15 + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <StatusBadge tone="danger">需要转交</StatusBadge>
                       <h2>{taskTitle(todo)}</h2>
@@ -268,7 +319,7 @@ export function MyTodosPage() {
                   </div>
                 ) : (
                   <a className="my-todo-row" href={taskHref(todo)}>
-                    <b className="my-todo-index">{String(index + 1).padStart(2, "0")}</b>
+                    <b className="my-todo-index">{String(cursorHistory.length * 15 + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
                         <h2>{taskTitle(todo)}</h2>
@@ -289,6 +340,11 @@ export function MyTodosPage() {
           })}
         </div>
       )}
+      {todos.length > 0 && <nav className="my-todos-pagination" aria-label="待办列表分页">
+        <button type="button" disabled={busy || cursorHistory.length === 0} onClick={goToPreviousPage}>上一页</button>
+        <span>第 {cursorHistory.length + 1} 页 · 每页 15 条</span>
+        <button type="button" disabled={busy || !nextCursor} onClick={goToNextPage}>下一页</button>
+      </nav>}
       </div>
     </Shell>
   );

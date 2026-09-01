@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import {
   TodoRouteDescriptorSchema,
+  type TodoListResponse,
+  type TodoModule,
+  type TodoModuleCounts,
   type TodoResponse,
   type TodoRouteDescriptor,
   type TodoNewIndicator,
@@ -49,6 +52,72 @@ type TodoRow = Readonly<{
   created_at: Date;
   updated_at: Date;
 }>;
+
+type TodoPageRow = TodoRow & Readonly<{
+  status_rank: number;
+  todo_module: TodoModule;
+}>;
+
+type TodoCountRow = Readonly<{
+  todo_module: TodoModule;
+  todo_count: number | string;
+}>;
+
+type TodoListCursor = Readonly<{
+  statusRank: number;
+  dueAt: string | null;
+  createdAt: string;
+  todoId: string;
+  module: TodoModule;
+  query: string;
+}>;
+
+export type TodoListOptions = Readonly<{
+  module?: TodoModule;
+  query?: string;
+  cursor?: string;
+}>;
+
+const TODO_LIST_PAGE_SIZE = 15;
+const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "wages"];
+
+const TODO_WITH_CONTEXT_SQL = `SELECT
+  todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
+  todos.entity_type,todos.entity_id,todos.recipient_user_id,todos.required_role,
+  todos.required_capability,todos.delegation_scope_id,todos.route_descriptor,todos.policy_key,
+  todos.due_at,todos.reminder_count,todos.status,todos.blocked_reason,todos.version,
+  todos.created_at,todos.updated_at,
+  orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
+  orders.updated_at rework_updated_at,
+  sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
+  sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
+  sourcing_decision.supplier_name_snapshot,
+  CASE
+    WHEN todos.route_descriptor->>'routeName'='sourcing_detail'
+      OR todos.entity_type='sourcing_case' THEN 'sourcing'
+    WHEN todos.route_descriptor->>'routeName'='wage_period_detail'
+      OR todos.category='wage_review' THEN 'wages'
+    ELSE 'rework'
+  END todo_module,
+  CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END status_rank
+FROM rework_todos todos
+LEFT JOIN rework_orders orders
+  ON orders.rework_order_id=COALESCE(
+    NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
+    CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
+  )
+LEFT JOIN current_sourcing_cases sourcing
+  ON sourcing.sourcing_case_id=CASE
+    WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
+  END
+LEFT JOIN LATERAL (
+  SELECT decision.supplier_name_snapshot
+  FROM sourcing_decisions decision
+  WHERE decision.sourcing_case_id=sourcing.sourcing_case_id
+  ORDER BY decision.decision_version DESC
+  LIMIT 1
+) sourcing_decision ON true`;
 
 type ExistingTodoRow = TodoRow & Readonly<{
   delegation_id: string | null;
@@ -116,6 +185,78 @@ export type TimedTodoAction = Readonly<{
 
 const TODO_DELIVERY_TOPIC = "todo.delivery";
 
+const emptyModuleCounts = (): TodoModuleCounts => ({ rework: 0, sourcing: 0, wages: 0 });
+
+const decodeTodoListCursor = (
+  cursor: string,
+  module: TodoModule,
+  query: string,
+): TodoListCursor | null => {
+  if (!cursor) return null;
+  if (cursor.length > 800) {
+    throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
+    if (!decoded || typeof decoded !== "object") throw new Error("invalid");
+    const value = decoded as Record<string, unknown>;
+    const statusRank = value.statusRank;
+    const dueAt = value.dueAt;
+    const createdAt = value.createdAt;
+    const todoId = value.todoId;
+    const cursorModule = value.module;
+    const cursorQuery = value.query;
+    if (
+      (statusRank !== 0 && statusRank !== 1)
+      || (dueAt !== null && typeof dueAt !== "string")
+      || typeof createdAt !== "string"
+      || typeof todoId !== "string"
+      || typeof cursorModule !== "string"
+      || typeof cursorQuery !== "string"
+    ) {
+      throw new Error("invalid");
+    }
+    const validStatusRank = statusRank as 0 | 1;
+    const validDueAt = dueAt as string | null;
+    const validCreatedAt = createdAt as string;
+    const validTodoId = todoId as string;
+    const validCursorModule = cursorModule as string;
+    const validCursorQuery = cursorQuery as string;
+    if (
+      validCursorModule !== module
+      || validCursorQuery !== query
+      || !TODO_ID_PATTERN.test(validTodoId)
+      || Number.isNaN(Date.parse(validCreatedAt))
+      || (validDueAt !== null && Number.isNaN(Date.parse(validDueAt)))
+    ) {
+      throw new Error("invalid");
+    }
+    return {
+      statusRank: validStatusRank,
+      dueAt: validDueAt ? new Date(validDueAt).toISOString() : null,
+      createdAt: new Date(validCreatedAt).toISOString(),
+      todoId: validTodoId,
+      module,
+      query,
+    };
+  } catch {
+    throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
+  }
+};
+
+const encodeTodoListCursor = (
+  row: TodoPageRow,
+  module: TodoModule,
+  query: string,
+): string => Buffer.from(JSON.stringify({
+  statusRank: Number(row.status_rank),
+  dueAt: row.due_at?.toISOString() ?? null,
+  createdAt: row.created_at.toISOString(),
+  todoId: row.todo_id,
+  module,
+  query,
+})).toString("base64url");
+
 const todoResponse = (row: TodoRow): TodoResponse => {
   const contextStatus = row.rework_status ?? row.sourcing_status;
   const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at;
@@ -180,42 +321,114 @@ export class TodoService {
     private readonly outbox = new MessageOutboxRepository(),
   ) {}
 
-  async listForActor(actor: TrustedActorContext): Promise<TodoResponse[]> {
+  async listForActor(
+    actor: TrustedActorContext,
+    options: TodoListOptions = {},
+  ): Promise<TodoListResponse> {
     this.requireCapability(actor, "todo:view");
-    const result = await this.database.query<TodoRow>(
-      `SELECT todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,todos.entity_type,todos.entity_id,
-              recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
-              due_at,reminder_count,todos.status,blocked_reason,todos.version,todos.created_at,todos.updated_at,
-              orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
-              orders.updated_at rework_updated_at,
-              sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
-              sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
-              sourcing_decision.supplier_name_snapshot
-       FROM rework_todos todos
-       LEFT JOIN rework_orders orders
-         ON orders.rework_order_id=COALESCE(
-           NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
-           CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
-         )
-       LEFT JOIN current_sourcing_cases sourcing
-         ON sourcing.sourcing_case_id=CASE
-           WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
-         END
-       LEFT JOIN LATERAL (
-         SELECT decision.supplier_name_snapshot
-         FROM sourcing_decisions decision
-         WHERE decision.sourcing_case_id=sourcing.sourcing_case_id
-         ORDER BY decision.decision_version DESC
-         LIMIT 1
-       ) sourcing_decision ON true
-       WHERE todos.recipient_user_id=$1
-         AND todos.category<>'wage_month_close'
-         AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')
-       ORDER BY CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END,
-                due_at NULLS LAST,todos.created_at DESC,todos.todo_id DESC`,
+    const normalizedQuery = options.query?.trim() ?? "";
+    if (normalizedQuery.length > 100) {
+      throw new ApplicationError("VALIDATION_ERROR", "搜索内容不能超过100个字符", 400);
+    }
+    if (options.module !== undefined && !TODO_MODULES.includes(options.module)) {
+      throw new ApplicationError("VALIDATION_ERROR", "待办模块无效", 400);
+    }
+
+    const countResult = await this.database.query<TodoCountRow>(
+      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+       SELECT todo_module,COUNT(*) todo_count
+       FROM todo_view
+       WHERE recipient_user_id=$1
+         AND todo_type<>'information'
+         AND status IN ('pending','blocked_recipient')
+         AND category<>'wage_month_close'
+         AND (rework_status IS NULL OR rework_status<>'deleted')
+       GROUP BY todo_module`,
       [actor.actorId],
     );
-    return result.rows.map(todoResponse);
+    const moduleCounts = emptyModuleCounts();
+    for (const row of countResult.rows) {
+      moduleCounts[row.todo_module] = Number(row.todo_count);
+    }
+    const activeModule = options.module
+      ?? TODO_MODULES.find((module) => moduleCounts[module] > 0)
+      ?? "rework";
+    const pageCursor = decodeTodoListCursor(options.cursor ?? "", activeModule, normalizedQuery);
+
+    const result = await this.database.query<TodoPageRow>(
+      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+       SELECT todo_view.*
+       FROM todo_view
+       WHERE recipient_user_id=$1
+         AND todo_type<>'information'
+         AND status IN ('pending','blocked_recipient')
+         AND category<>'wage_month_close'
+         AND (rework_status IS NULL OR rework_status<>'deleted')
+         AND todo_module=$2
+         AND (
+           $3=''
+           OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
+         )
+         AND (
+           $4::integer IS NULL
+           OR status_rank>$4::integer
+           OR (
+             status_rank=$4::integer
+             AND (
+               COALESCE(due_at,'infinity'::timestamptz)
+                 > COALESCE($5::timestamptz,'infinity'::timestamptz)
+               OR (
+                 COALESCE(due_at,'infinity'::timestamptz)
+                   = COALESCE($5::timestamptz,'infinity'::timestamptz)
+                 AND (
+                   created_at<$6::timestamptz
+                   OR (created_at=$6::timestamptz AND todo_id<$7::uuid)
+                 )
+               )
+             )
+           )
+         )
+       ORDER BY status_rank ASC,due_at ASC NULLS LAST,created_at DESC,todo_id DESC
+       LIMIT 16`,
+      [
+        actor.actorId,
+        activeModule,
+        normalizedQuery,
+        pageCursor?.statusRank ?? null,
+        pageCursor?.dueAt ?? null,
+        pageCursor?.createdAt ?? null,
+        pageCursor?.todoId ?? null,
+      ],
+    );
+    const pageRows = result.rows.slice(0, TODO_LIST_PAGE_SIZE);
+    return {
+      todos: pageRows.map(todoResponse),
+      nextCursor: result.rows.length > TODO_LIST_PAGE_SIZE
+        ? encodeTodoListCursor(pageRows[TODO_LIST_PAGE_SIZE - 1]!, activeModule, normalizedQuery)
+        : null,
+      activeModule,
+      moduleCounts,
+    };
+  }
+
+  async getForActor(actor: TrustedActorContext, todoId: string): Promise<TodoResponse> {
+    this.requireCapability(actor, "todo:view");
+    if (!TODO_ID_PATTERN.test(todoId)) {
+      throw new ApplicationError("VALIDATION_ERROR", "待办标识无效", 400);
+    }
+    const result = await this.database.query<TodoPageRow>(
+      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+       SELECT todo_view.*
+       FROM todo_view
+       WHERE recipient_user_id=$1
+         AND todo_id=$2
+         AND (rework_status IS NULL OR rework_status<>'deleted')`,
+      [actor.actorId, todoId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "待办不存在或已不再分配给你", 404);
+    return todoResponse(row);
   }
 
   async latestIndicatorForActor(actor: TrustedActorContext): Promise<TodoNewIndicator> {

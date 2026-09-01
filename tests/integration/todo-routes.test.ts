@@ -61,7 +61,13 @@ afterEach(async () => {
 
 const createApp = () => {
   const service = {
-    listForActor: vi.fn(async () => [todo]),
+    listForActor: vi.fn(async () => ({
+      todos: [todo],
+      nextCursor: null,
+      activeModule: "rework" as const,
+      moduleCounts: { rework: 1, sourcing: 0, wages: 0 },
+    })),
+    getForActor: vi.fn(async () => todo),
     latestIndicatorForActor: vi.fn(async () => ({
       latestTodoId: todo.todoId,
       latestReceivedAt: todo.createdAt,
@@ -99,15 +105,35 @@ describe("todo HTTP boundaries", () => {
     const { app, service } = createApp();
     const response = await app.inject({
       method: "GET",
-      url: "/todos/mine",
+      url: "/todos/mine?module=rework&q=ST-001",
       headers: { cookie: "dx_rework_session=viewer" },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ todos: [todo] });
-    expect(service.listForActor).toHaveBeenCalledWith(expect.objectContaining({
-      actorId: todo.recipientUserId,
-      authorizationCapability: "todo:view",
-    }));
+    expect(response.json()).toEqual({
+      todos: [todo],
+      nextCursor: null,
+      activeModule: "rework",
+      moduleCounts: { rework: 1, sourcing: 0, wages: 0 },
+    });
+    expect(service.listForActor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: todo.recipientUserId,
+        authorizationCapability: "todo:view",
+      }),
+      { module: "rework", query: "ST-001", cursor: "" },
+    );
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/todos/mine/${todo.todoId}`,
+      headers: { cookie: "dx_rework_session=viewer" },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toEqual(todo);
+    expect(service.getForActor).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: todo.recipientUserId }),
+      todo.todoId,
+    );
 
     const indicator = await app.inject({
       method: "GET",

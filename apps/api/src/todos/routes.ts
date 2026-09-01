@@ -1,5 +1,6 @@
 import {
   TodoListResponseSchema,
+  TodoMineParamsSchema,
   TodoNewIndicatorSchema,
   TodoResponseSchema,
   TodoRoutingExceptionListResponseSchema,
@@ -34,7 +35,8 @@ const parse = <T>(
 export type TodoHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: Pick<TodoService,
-    "listForActor" | "latestIndicatorForActor" | "listRoutingExceptionsForActor" | "transferRoutingException">;
+    "getForActor" | "listForActor" | "latestIndicatorForActor"
+      | "listRoutingExceptionsForActor" | "transferRoutingException">;
 }>;
 
 export function registerTodoRoutes(
@@ -63,9 +65,30 @@ export function registerTodoRoutes(
     };
   };
 
-  app.get("/todos/mine", async (request) => TodoListResponseSchema.parse({
-    todos: await dependencies.service.listForActor(await actor(request, "todo:view")),
-  }));
+  app.get<{
+    Querystring: { cursor?: string; module?: string; q?: string };
+  }>("/todos/mine", async (request) => {
+    const module = request.query.module;
+    const query = request.query.q;
+    const cursor = request.query.cursor;
+    if (module !== undefined && module !== "rework" && module !== "sourcing" && module !== "wages") {
+      throw new ApplicationError("VALIDATION_ERROR", "待办模块无效", 400);
+    }
+    if (query !== undefined && typeof query !== "string") {
+      throw new ApplicationError("VALIDATION_ERROR", "搜索内容无效", 400);
+    }
+    if (cursor !== undefined && typeof cursor !== "string") {
+      throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
+    }
+    return TodoListResponseSchema.parse(await dependencies.service.listForActor(
+      await actor(request, "todo:view"),
+      {
+        ...(module ? { module } : {}),
+        query: query ?? "",
+        cursor: cursor ?? "",
+      },
+    ));
+  });
 
   app.get("/todos/mine/indicator", async (request, reply) => {
     const currentActor = await actor(request, "todo:view");
@@ -74,6 +97,12 @@ export function registerTodoRoutes(
       await dependencies.service.latestIndicatorForActor(currentActor),
     );
   });
+
+  app.get<{ Params: { todoId: string } }>("/todos/mine/:todoId", async (request) =>
+    TodoResponseSchema.parse(await dependencies.service.getForActor(
+      await actor(request, "todo:view"),
+      parse(TodoMineParamsSchema, request.params).todoId,
+    )));
 
   app.get("/todos/routing-exceptions/mine", async (request) =>
     TodoRoutingExceptionListResponseSchema.parse({
