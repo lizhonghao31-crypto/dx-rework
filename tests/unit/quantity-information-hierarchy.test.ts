@@ -18,6 +18,11 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(reviewCss).toContain(".quantity-process-toggle");
     expect(reviewCss).toContain(".quantity-process-card.is-mismatch");
     expect(reviewCss).toContain(".quantity-report-value");
+    expect(reviewCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr)) 20px");
+    expect(reviewCss).toContain(".quantity-process-name { grid-column: 1 / -2");
+    expect(reviewCss).toContain("white-space: normal");
+    expect(reviewCss).toContain(".quantity-process-list { gap: 4px");
+    expect(reviewCss).toContain("min-height: 30px");
     const processToolbar = review.slice(
       review.indexOf("const canSaveProcess"),
       review.indexOf('{open && <div className="quantity-process-detail">'),
