@@ -32,7 +32,11 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain('aria-label="后五页"');
     expect(page).toContain("my-todo-index");
     expect(page).toContain("节点停留");
-    expect(page).toContain("您当前的任务已全部完成，谢谢");
+    expect(page).toContain("您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。");
+    expect(page).not.toContain('state.kind === "ready" && totalActionable > 0 && <nav');
+    expect(page).not.toContain('state.kind === "ready" && totalActionable > 0 && <Surface className="my-todos-workspace"');
+    expect(page).toContain('state.kind === "ready" && <nav className="my-todos-modules"');
+    expect(page).toContain('state.kind === "ready" && <Surface className="my-todos-workspace"');
   });
 
   it("keeps the mobile task list aligned to the product hierarchy without changing the action path", async () => {
