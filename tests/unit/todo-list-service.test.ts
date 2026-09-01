@@ -77,7 +77,8 @@ describe("todo list query", () => {
     const countSql = String(query.mock.calls[0]![0]);
     const totalSql = String(query.mock.calls[1]![0]);
     const pageSql = String(query.mock.calls[2]![0]);
-    expect(countSql).toContain("LEFT JOIN current_supplier_catalog rework_supplier");
+    expect(countSql).toContain("LEFT JOIN supplier_catalog_versions rework_supplier");
+    expect(countSql).toContain("rework_supplier.version=orders.processing_factory_supplier_version");
     expect(countSql).toContain("orders.processing_factory_type='own_factory'");
     expect(totalSql).toContain("COALESCE(supplier_name_snapshot,'')");
     expect(query.mock.calls[1]![1]).toEqual([
@@ -95,4 +96,3 @@ describe("todo list query", () => {
     ]);
   });
 });
-
