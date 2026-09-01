@@ -29,8 +29,8 @@ type LoadState =
   | { kind: "error"; message: string };
 
 const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
-  { id: "rework", label: "订单返工" },
   { id: "sourcing", label: "外发定价&选厂" },
+  { id: "rework", label: "订单返工" },
 ];
 
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
@@ -202,7 +202,6 @@ export function MyTodosPage() {
   const todos = state.kind === "ready" ? state.todos : [];
   const page = state.kind === "ready" ? state.page : requestedPage;
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
-  const totalCount = state.kind === "ready" ? state.totalCount : 0;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
   const pageGroupStart = Math.floor((Math.max(page, 1) - 1) / 5) * 5 + 1;
@@ -226,16 +225,6 @@ export function MyTodosPage() {
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>
         </header>
-      {state.kind === "ready" && <nav className="my-todos-modules" aria-label="待办模块">
-        {todoModules.map((module) => <button
-          type="button"
-          className={module.id === activeModule ? "is-active" : ""}
-          aria-current={module.id === activeModule ? "page" : undefined}
-          disabled={busy}
-          onClick={() => openModule(module.id)}
-          key={module.id}
-        ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
-      </nav>}
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
         <Surface className="my-todos-state">
@@ -246,17 +235,23 @@ export function MyTodosPage() {
       )}
       {state.kind === "ready" && <Surface className="my-todos-workspace">
         <div className="my-todos-toolbar">
-          <div>
-            <strong>{todoModules.find((module) => module.id === activeModule)?.label}</strong>
-            <span>{activeQuery ? `找到 ${totalCount} 条` : `共 ${totalCount} 条待办`}</span>
-          </div>
+          <nav className="my-todos-modules" aria-label="待办模块">
+            {todoModules.map((module) => <button
+              type="button"
+              className={module.id === activeModule ? "is-active" : ""}
+              aria-current={module.id === activeModule ? "page" : undefined}
+              disabled={busy}
+              onClick={() => openModule(module.id)}
+              key={module.id}
+            ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
+          </nav>
           <label className="my-todos-search" htmlFor="my-todos-search">
-            <span>搜索待办</span>
             <input
               id="my-todos-search"
               type="search"
               value={searchQuery}
               maxLength={100}
+              aria-label="搜索待办"
               placeholder="输入供应商名称或款号，自动筛选"
               autoComplete="off"
               onChange={(event) => {
