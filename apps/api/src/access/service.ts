@@ -514,8 +514,13 @@ export class AccessMasterDataService {
     input: ReviseCraft,
   ): Promise<{ craftId: string; version: number }> {
     return this.transaction(async (client) => {
-      const normalizedName = input.craftName.trim().toLocaleLowerCase("zh-CN");
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`dx_rework:craft:${normalizedName}`]);
+      const normalized = await client.query<{ normalized_name: string }>(
+        "SELECT lower(btrim($1)) AS normalized_name",
+        [input.craftName],
+      );
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `dx_rework:craft:${normalized.rows[0]!.normalized_name}`,
+      ]);
       const item = await client.query<CraftCatalogRow>(
         `SELECT current.craft_id,current.craft_code,current.version,current.craft_name,current.active,current.created_at
          FROM craft_catalog_items item
@@ -547,7 +552,7 @@ export class AccessMasterDataService {
         craftName: input.craftName,
         active: input.active,
       };
-      const operationEventId = await this.events.append(client, actor, {
+      const craftRevisionEventId = await this.events.append(client, actor, {
         action: "master_data.craft.revise",
         entityType: "craft_catalog",
         entityId: craftId,
@@ -559,7 +564,7 @@ export class AccessMasterDataService {
         `INSERT INTO craft_catalog_versions(
            craft_id,version,craft_name,active,change_reason,changed_by,operation_event_id,request_id
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [craftId, version, input.craftName, input.active, input.changeReason, actor.actorId, operationEventId, actor.requestId],
+        [craftId, version, input.craftName, input.active, input.changeReason, actor.actorId, craftRevisionEventId, actor.requestId],
       );
       return { craftId, version };
     });
