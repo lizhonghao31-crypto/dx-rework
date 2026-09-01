@@ -162,7 +162,8 @@ export class ReworkInitiationService {
                   AND existing_order.status NOT IN ('cancelled','deleted')
               ) AS has_existing_rework
        FROM receiving_batches batch
-       WHERE batch.receiving_batch_id=$1`,
+       WHERE batch.receiving_batch_id=$1
+         AND batch.deleted_at IS NULL`,
       [receivingBatchId],
     );
     const row = result.rows[0];
@@ -278,6 +279,7 @@ export class ReworkInitiationService {
         `SELECT batch.receiving_batch_id
          FROM receiving_batches batch
          WHERE upper(btrim(batch.style_no))=$1
+           AND batch.deleted_at IS NULL
            AND NOT EXISTS (
              SELECT 1 FROM rework_orders completed_order
              WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
@@ -297,7 +299,7 @@ export class ReworkInitiationService {
       };
     }
     const source = await client.query<{ style_no: string }>(
-      "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1",
+      "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1 AND deleted_at IS NULL",
       [receivingBatchId],
     );
     const sourceRow = source.rows[0];
@@ -313,6 +315,7 @@ export class ReworkInitiationService {
               ) AS has_existing_rework
        FROM receiving_batches batch
        WHERE batch.receiving_batch_id=$1
+         AND batch.deleted_at IS NULL
        FOR UPDATE`,
       [receivingBatchId],
     );
