@@ -2,7 +2,6 @@ import { z } from "zod";
 
 const IdSchema = z.string().uuid();
 const ShortTextSchema = z.string().trim().min(1).max(100);
-const SourcingProcessSchema = z.string().trim().min(1, "工艺不能为空").max(100);
 const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
@@ -55,33 +54,12 @@ export const CreateSourcingCaseSchema = z.object({
   styleNo: ShortTextSchema,
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
-    .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复")
-    .optional(),
-  processes: z.array(SourcingProcessSchema).min(1).max(MAX_SOURCING_PROCESSES)
-    .refine((items) => new Set(items).size === items.length, "工艺不能重复")
-    .optional(),
-  processDescription: z.string().trim().min(1).max(500).optional(),
+    .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复"),
   orderQuantity: z.number().int().positive().max(10_000_000),
   attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
     .optional(),
-}).strict().superRefine((value, context) => {
-  const suppliedSources = [
-    Boolean(value.craftIds?.length),
-    Boolean(value.processes?.length),
-    Boolean(value.processDescription),
-  ].filter(Boolean).length;
-  if (suppliedSources === 0) {
-    context.addIssue({ code: "custom", path: ["craftIds"], message: "请至少选择一项工艺" });
-  }
-  if (suppliedSources > 1) {
-    context.addIssue({
-      code: "custom",
-      path: ["craftIds"],
-      message: "工艺主数据、工艺清单与旧工艺字段不能同时提交",
-    });
-  }
-});
+}).strict();
 
 export const CreateSourcingIeQuoteSchema = z.object({
   unitPrice: MoneyInputSchema,
