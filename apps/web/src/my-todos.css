@@ -315,3 +315,62 @@
     font-size: 12px;
   }
 }
+
+
+.my-todos-search {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 440px) auto;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.my-todos-search label {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.my-todos-search input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-text);
+  font: inherit;
+}
+
+.my-todos-search input:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  outline-offset: 1px;
+}
+
+.my-todos-search button {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 800px) {
+  .my-todos-search {
+    grid-template-columns: 1fr auto;
+    margin-bottom: var(--dx-v2-space-3);
+  }
+
+  .my-todos-search label {
+    grid-column: 1 / -1;
+  }
+
+  .my-todos-search input {
+    min-width: 0;
+  }
+}

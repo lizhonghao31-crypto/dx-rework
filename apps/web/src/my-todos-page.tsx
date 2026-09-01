@@ -26,6 +26,17 @@ const todoModule = (todo: TodoResponse): TodoModule => {
   return "rework";
 };
 
+const matchesTodoSearch = (todo: TodoResponse, query: string): boolean => {
+  if (!query) return true;
+  const searchable = [
+    todo.orderContext?.styleNo,
+    todo.orderContext?.supplierName,
+  ].filter((value): value is string => Boolean(value))
+    .join("\n")
+    .toLocaleLowerCase("zh-CN");
+  return searchable.includes(query);
+};
+
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   rework_detail: "查看返工单",
   process_configuration: "配置或审核返工工序",
@@ -139,6 +150,7 @@ const taskHref = (todo: TodoResponse): string => [
 export function MyTodosPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [selectedModule, setSelectedModule] = useState<TodoModule | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -169,9 +181,11 @@ export function MyTodosPage() {
   const activeModule = selectedModule
     ?? todoModules.find((module) => moduleCounts[module.id] > 0)?.id
     ?? "rework";
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("zh-CN");
   const visibleTodos = useMemo(
-    () => actionable.filter((todo) => todoModule(todo) === activeModule),
-    [actionable, activeModule],
+    () => actionable.filter((todo) =>
+      todoModule(todo) === activeModule && matchesTodoSearch(todo, normalizedSearchQuery)),
+    [actionable, activeModule, normalizedSearchQuery],
   );
 
   return (
@@ -193,6 +207,20 @@ export function MyTodosPage() {
           key={module.id}
         ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
       </nav>}
+      {state.kind === "ready" && actionable.length > 0 && (
+        <div className="my-todos-search">
+          <label htmlFor="my-todos-search">搜索待办</label>
+          <input
+            id="my-todos-search"
+            type="search"
+            value={searchQuery}
+            placeholder="输入供应商名称或款号"
+            autoComplete="off"
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          {searchQuery && <button type="button" onClick={() => setSearchQuery("")}>清除</button>}
+        </div>
+      )}
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
         <Surface className="my-todos-state">
@@ -210,7 +238,9 @@ export function MyTodosPage() {
       )}
       {actionable.length > 0 && visibleTodos.length === 0 && (
         <Surface className="my-todos-state my-todos-module-empty">
-          <p>该模块当前没有待处理事项。</p>
+          <p>{normalizedSearchQuery
+            ? "未找到匹配的待办，请检查供应商名称或款号。"
+            : "该模块当前没有待处理事项。"}</p>
         </Surface>
       )}
       {visibleTodos.length > 0 && (
@@ -219,7 +249,7 @@ export function MyTodosPage() {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
             const orderSummary = todo.entityType === "sourcing_case"
-              ? "外发定价选厂订单 · 点击查看完整流程与审批记录"
+              ? `款号：${order?.styleNo ?? "未填写"} · 供应商：${order?.supplierName ?? "待选厂"}`
               : order
                 ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
                 : todo.route.routeName === "wage_period_detail"
