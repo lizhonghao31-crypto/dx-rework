@@ -149,6 +149,11 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     );
   };
 
+  app.get<{ Querystring: { q?: string } }>("/receiving/repeat-options", async (request) => {
+    await creator(request);
+    return { orders: await dependencies.service.listRepeatOptions(request.query.q ?? "") };
+  });
+
   app.get<{ Querystring: { q?: string } }>("/receiving/style-options", async (request) => {
     await readUser(request);
     return { styles: await dependencies.service.listStyleOptions(request.query.q ?? "") };
