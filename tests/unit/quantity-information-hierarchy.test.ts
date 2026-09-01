@@ -22,6 +22,8 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(reviewCss).toContain(".quantity-process-toggle");
     expect(reviewCss).toContain(".quantity-process-card.is-mismatch");
     expect(reviewCss).toContain(".quantity-report-value");
+    expect(reviewCss).toContain(".quantity-process-price");
+    expect(reviewCss).toContain(".quantity-process-price__review");
     expect(reviewCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr)) 20px");
     expect(reviewCss).toContain(".quantity-process-name { grid-column: 1 / -2");
     expect(reviewCss).toContain("white-space: normal");
@@ -43,5 +45,12 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(review).toContain("<small>整查</small>");
     expect(review).toContain("<small>整查余量</small>");
     expect(review).toContain("主管修改，原值");
+    expect(review).toContain('process.pricingUnit === "piece" ? "件" : "小时"');
+    expect(review).toContain("formatBusinessDecimal(value, 3)");
+    expect(review).toContain('tone={ready ? "success" : "warning"}');
+    expect(review).toContain('填写每个工序有效的最终单价');
+    expect(review).toContain("processPrices: prices.map");
+    expect(review).toContain("价格有调整");
+    expect(review).toContain("原价格不变并保留本版审计记录");
   });
 });

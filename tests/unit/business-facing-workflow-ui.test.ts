@@ -154,7 +154,7 @@ describe("business-facing workflow UI", () => {
     ]);
     expect(source).toContain("工人合计");
     expect(source).toContain("确认数量并提交 IE");
-    expect(source).toContain("主管可修正个人有效数量；原始上数始终保留");
+    expect(source).toContain("主管可修正个人有效数量并调整最终单价；原始上数和 N03 价格始终保留");
     expect(source).not.toContain("finalQuantities");
     expect(source).not.toContain("quantity-adjustments");
     expect(source).not.toContain("oneDecimalQuantity");
