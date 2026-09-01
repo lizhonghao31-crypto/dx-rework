@@ -68,15 +68,39 @@ export const money = (value: string | null | undefined): string => {
 export const number = (value: string | number): number => typeof value === "number" ? value : Number(value);
 export const iso = (value: Date): string => value.toISOString();
 export const capabilities = (actor: TrustedActorContext): readonly string[] => actor.authorizationCapabilities ?? [actor.authorizationCapability];
-export const encodeCursor = (row: FactRow): string => Buffer.from(JSON.stringify({ updatedAt: row.updated_at.toISOString(), id: row.rework_order_id }), "utf8").toString("base64url");
-export const decodeCursor = (cursor: string | undefined): { updatedAt: string; id: string } | null => {
+export type ReworkListCursor = Readonly<{
+  closedRank?: 0 | 1;
+  updatedAt: string;
+  id: string;
+}>;
+
+const closedOrderRank = (status: ManagementReworkRow["status"]): 0 | 1 =>
+  status === "completed" || status === "cancelled" ? 1 : 0;
+
+export const encodeCursor = (row: FactRow): string => Buffer.from(JSON.stringify({
+  closedRank: closedOrderRank(row.status),
+  updatedAt: row.updated_at.toISOString(),
+  id: row.rework_order_id,
+}), "utf8").toString("base64url");
+export const decodeCursor = (cursor: string | undefined): ReworkListCursor | null => {
   if (!cursor) return null;
   try {
     const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
     if (!value || typeof value !== "object") throw new Error("invalid");
     const parsed = value as Record<string, unknown>;
-    if (typeof parsed.updatedAt !== "string" || Number.isNaN(Date.parse(parsed.updatedAt)) || typeof parsed.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed.id)) throw new Error("invalid");
-    return { updatedAt: parsed.updatedAt, id: parsed.id };
+    const closedRank = parsed.closedRank;
+    if (
+      typeof parsed.updatedAt !== "string"
+      || Number.isNaN(Date.parse(parsed.updatedAt))
+      || typeof parsed.id !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed.id)
+      || (closedRank !== undefined && closedRank !== 0 && closedRank !== 1)
+    ) throw new Error("invalid");
+    return {
+      updatedAt: parsed.updatedAt,
+      id: parsed.id,
+      ...(closedRank === 0 || closedRank === 1 ? { closedRank } : {}),
+    };
   } catch {
     return fail("查询游标无效", 400, "VALIDATION_ERROR");
   }

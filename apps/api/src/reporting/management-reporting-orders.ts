@@ -1,4 +1,6 @@
-import { type Queryable, type FactRow, TIMEZONE } from "./management-reporting-shared.js";
+import { type Queryable, type FactRow, TIMEZONE, type ReworkListCursor } from "./management-reporting-shared.js";
+
+const CLOSED_ORDER_RANK_SQL = "CASE WHEN order_record.status IN ('completed','cancelled') THEN 1 ELSE 0 END";
 
 export async function fetchFacts(source: Queryable, options: {
   q?: string;
@@ -11,7 +13,8 @@ export async function fetchFacts(source: Queryable, options: {
   from?: string;
   to?: string;
   limit: number;
-  cursor?: { updatedAt: string; id: string } | null;
+  cursor?: ReworkListCursor | null;
+  openFirst?: boolean;
   siteOnly?: boolean;
   workTaskActorUserId?: string;
   includeTemporaryProxyTasks?: boolean;
@@ -43,7 +46,17 @@ export async function fetchFacts(source: Queryable, options: {
   if (options.cursor) {
     const date = bind(options.cursor.updatedAt);
     const id = bind(options.cursor.id);
-    where.push(`(order_record.updated_at,order_record.rework_order_id)<(${date}::timestamptz,${id}::uuid)`);
+    if (options.openFirst) {
+      const cursorRank = options.cursor.closedRank === undefined
+        ? `(SELECT CASE WHEN cursor_order.status IN ('completed','cancelled') THEN 1 ELSE 0 END
+            FROM rework_orders cursor_order WHERE cursor_order.rework_order_id=${id}::uuid)`
+        : bind(options.cursor.closedRank);
+      where.push(`(${CLOSED_ORDER_RANK_SQL}>${cursorRank}
+        OR (${CLOSED_ORDER_RANK_SQL}=${cursorRank}
+          AND (order_record.updated_at,order_record.rework_order_id)<(${date}::timestamptz,${id}::uuid)))`);
+    } else {
+      where.push(`(order_record.updated_at,order_record.rework_order_id)<(${date}::timestamptz,${id}::uuid)`);
+    }
   }
   if (options.siteOnly) where.push(`order_record.status IN ('pending_process_configuration','pending_ie_review','pending_task_assignment','in_progress','pending_order_review','pending_final_quantity_ie_review','pending_quantity_adjustment_ie_review')`);
   if (options.relatedOrderActorUserId) {
@@ -77,6 +90,9 @@ export async function fetchFacts(source: Queryable, options: {
     )`);
   }
   const limit = bind(options.limit);
+  const orderBy = options.openFirst
+    ? `${CLOSED_ORDER_RANK_SQL} ASC,order_record.updated_at DESC,order_record.rework_order_id DESC`
+    : "order_record.updated_at DESC,order_record.rework_order_id DESC";
   return source.query<FactRow>(
     `WITH current_determinations AS (
        SELECT determination.* FROM rework_responsibility_determinations determination
@@ -224,7 +240,7 @@ export async function fetchFacts(source: Queryable, options: {
      LEFT JOIN followup_stats ON followup_stats.rework_order_id=order_record.rework_order_id
      LEFT JOIN latest_event ON latest_event.rework_order_id=order_record.rework_order_id
      WHERE ${where.join(" AND ")}
-     ORDER BY order_record.updated_at DESC,order_record.rework_order_id DESC LIMIT ${limit}`,
+     ORDER BY ${orderBy} LIMIT ${limit}`,
     values,
   );
 }
