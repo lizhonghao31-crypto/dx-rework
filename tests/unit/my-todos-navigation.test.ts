@@ -35,8 +35,15 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain("您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。");
     expect(page).not.toContain('state.kind === "ready" && totalActionable > 0 && <nav');
     expect(page).not.toContain('state.kind === "ready" && totalActionable > 0 && <Surface className="my-todos-workspace"');
-    expect(page).toContain('state.kind === "ready" && <nav className="my-todos-modules"');
+    expect(page).not.toContain('state.kind === "ready" && <nav className="my-todos-modules"');
     expect(page).toContain('state.kind === "ready" && <Surface className="my-todos-workspace"');
+    expect(page).toContain('<div className="my-todos-toolbar">');
+    expect(page).toContain('<nav className="my-todos-modules"');
+    expect(page.indexOf('{ id: "sourcing", label: "外发定价&选厂" }')).toBeLessThan(
+      page.indexOf('{ id: "rework", label: "订单返工" }'),
+    );
+    expect(page).not.toContain("<span>搜索待办</span>");
+    expect(page).toContain('aria-label="搜索待办"');
   });
 
   it("keeps the mobile task list aligned to the product hierarchy without changing the action path", async () => {
@@ -55,6 +62,10 @@ describe("my todos first-entry navigation", () => {
     expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain(".my-todos-hero");
     expect(css).toContain(".my-todos-modules");
+    expect(css).toContain("background: var(--dx-v2-color-control);");
+    expect(css).toContain("justify-content: center;");
+    expect(css).toContain("flex: 0 0 min(440px, 34vw);");
+    expect(css).toContain("background: var(--dx-v2-color-inset);");
     expect(css).toContain("overflow-x: auto;");
     expect(css).toContain(".my-todo-index {");
     expect(css).toContain("display: none;");
