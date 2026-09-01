@@ -66,9 +66,9 @@ describe("my todos first-entry navigation", () => {
     expect(css).toContain("background: var(--dx-v2-color-control);");
     expect(css).toContain("justify-content: center;");
     expect(css).toContain("flex-wrap: nowrap;");
-    expect(css).toContain("flex: 0 0 auto;");
-    expect(css).toContain("flex: 0 0 190px;");
-    expect(css).toContain("width: 190px;");
+    expect(css).toContain("flex: 0 0 40%;");
+    expect(css).toContain("flex: 1 1 0;");
+    expect(css).toContain("width: auto;");
     expect(css).toContain("flex: 0 1 440px;");
     expect(css).toContain("width: 440px;");
     expect(css).toContain("margin-left: auto;");
