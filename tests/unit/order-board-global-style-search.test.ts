@@ -15,7 +15,7 @@ describe("order board global style search", () => {
 
     expect(service).toContain("const mode = needle ? \"search\" : \"range\"");
     expect(service).toContain("$3::text<>''");
-    expect(service).toContain("upper(btrim(batch.style_no)) LIKE '%' || $3 || '%'");
+    expect(service).toContain("strpos(upper(btrim(batch.style_no)),$3)>0");
     expect(service).toContain("receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')");
     expect(service).toContain("receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')");
     expect(routes).toContain("status?: string;");
@@ -29,7 +29,7 @@ describe("order board global style search", () => {
     expect(page).toContain('<option value="short">少收</option>');
     expect(page).toContain('<option value="extra">多收</option>');
     expect(page).toContain('<option value="multiple">多次收货</option>');
-    expect(service).toContain('if (status === "multiple") return row.receiptCount > 1;');
+    expect(service).toContain("$4='multiple' AND totals.receipt_count>1");
     expect(page).toContain("event.target.value.toUpperCase()");
     expect(receivingPage).toContain("styleNo.trim().toUpperCase()");
     expect(receivingPage).toContain("setStyleNo(event.target.value)");
