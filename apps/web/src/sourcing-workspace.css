@@ -535,6 +535,16 @@
   gap: var(--dx-v2-space-2);
 }
 
+.sourcing-owner-actions .sourcing-owner-reject {
+  color: #fff;
+  border-color: #b42318;
+  background: #b42318;
+}
+
+.sourcing-owner-actions .sourcing-owner-reject:hover:not(:disabled) {
+  background: #8f1d16;
+}
+
 .sourcing-action-message {
   margin: 0;
   color: var(--dx-v2-color-text-secondary);

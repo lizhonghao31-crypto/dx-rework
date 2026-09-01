@@ -93,7 +93,7 @@ export const DecideSourcingOwnerSchema = z.discriminatedUnion("decision", [
   }).strict(),
   z.object({
     decision: z.literal("rejected"),
-    decisionReason: z.string().trim().min(1, "驳回原因不能为空").max(500),
+    decisionReason: z.string().trim().max(500).optional(),
   }).strict(),
 ]);
 

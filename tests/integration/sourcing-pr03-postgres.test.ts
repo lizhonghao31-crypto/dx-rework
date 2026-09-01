@@ -351,7 +351,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const rejected = await service.decideOwner(
       ownerActor(),
       created.value.sourcingCaseId,
-      { decision: "rejected", decisionReason: "价格偏高，请重新核对" },
+      { decision: "rejected" },
       randomUUID(),
     );
     expect(rejected.value).toMatchObject({
@@ -359,7 +359,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       version: 4,
       ownerDecision: {
         decision: "rejected",
-        decisionReason: "价格偏高，请重新核对",
+        decisionReason: "老板驳回选厂决定",
       },
     });
 
