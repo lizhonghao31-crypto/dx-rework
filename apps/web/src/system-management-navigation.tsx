@@ -6,7 +6,7 @@ import type { AuthorizedUser } from "./auth.js";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 export type SystemManagementTechnicalTab = "audit" | "attachments" | "delegations" | "exceptions";
-export type SystemManagementSection = "employee-access" | "master-data" | "process-data" | "workforce" | SystemManagementTechnicalTab;
+export type SystemManagementSection = "employee-access" | "master-data" | "workforce" | SystemManagementTechnicalTab;
 
 const technicalTabs: readonly [SystemManagementTechnicalTab, string][] = [
   ["audit", "审计日志"],
@@ -46,8 +46,7 @@ export function SystemManagementNavigation({
   const visibleTabs = access.technical ? technicalTabs : [];
   return <nav className="admin-navigation" aria-label="系统管理模块">
     {access.employee ? <a className={active === "employee-access" ? "active" : ""} href={pageUrl("ui/employee-access")}>人员与权限</a> : null}
-    {access.masterData ? <a className={active === "master-data" ? "active" : ""} href={pageUrl("ui/master-data")}>工厂与供应商</a> : null}
-    {access.masterData ? <a className={active === "process-data" ? "active" : ""} href={pageUrl("ui/process-database")}>工艺数据库</a> : null}
+    {access.masterData ? <a className={active === "master-data" ? "active" : ""} href={pageUrl("ui/master-data")}>工厂、供应商与工艺数据库</a> : null}
     {access.masterData ? <a className={active === "workforce" ? "active" : ""} href={pageUrl("ui/people")}>作业人员与临时工</a> : null}
     {visibleTabs.map(([tab, label]) => onTechnicalTabChange ? (
       <button key={tab} className={active === tab ? "active" : ""} onClick={() => onTechnicalTabChange(tab)}>{label}</button>
