@@ -36,6 +36,8 @@ const create = (
     listRoleAssignments: vi.fn(async () => []),
     listDelegations: vi.fn(async () => []),
     listPeople: vi.fn(async () => []),
+    listCrafts: vi.fn(async () => []),
+    ensureCrafts: vi.fn(async () => []),
     listProcesses: vi.fn(async () => []),
     listProcessPage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listProcessDefaultWorkerCandidates: vi.fn(async () => []),
@@ -334,6 +336,43 @@ describe("access routes", () => {
       },
     })).statusCode).toBe(403);
     expect(wrongRole.service.updateTemporaryWorkerProfile).not.toHaveBeenCalled();
+  });
+
+  it("lets order merchandisers read and create reusable sourcing crafts", async () => {
+    const { app, service } = create(["sourcing:inquiry:create"], ["order_merchandiser"]);
+    const read = await app.inject({
+      method: "GET",
+      url: "/master-data/crafts?q=水洗",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(read.statusCode).toBe(200);
+    expect(service.listCrafts).toHaveBeenCalledWith("水洗");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/master-data/crafts/ensure",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "craft-request-1" },
+      payload: { craftNames: ["水洗", "整烫"] },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(service.ensureCrafts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "00000000-0000-4000-8000-000000000001",
+        actorRoles: ["order_merchandiser"],
+        authorizationCapability: "sourcing:inquiry:create",
+        requestId: "craft-request-1",
+      }),
+      { craftNames: ["水洗", "整烫"] },
+    );
+
+    const wrongRole = create(["sourcing:inquiry:create"], ["quality_control"]);
+    expect((await wrongRole.app.inject({
+      method: "POST",
+      url: "/master-data/crafts/ensure",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { craftNames: ["车缝"] },
+    })).statusCode).toBe(403);
+    expect(wrongRole.service.ensureCrafts).not.toHaveBeenCalled();
   });
 
   it("uses separate read capabilities for business directory consumers", async () => {

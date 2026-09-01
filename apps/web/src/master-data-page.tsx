@@ -11,6 +11,13 @@ import "./master-data-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
+type Craft = Readonly<{
+  craftId: string;
+  craftCode: string;
+  craftName: string;
+  createdAt: string;
+}>;
+
 type Supplier = Readonly<{
   supplierId: string;
   supplierCode: string;
@@ -139,9 +146,11 @@ const columnIndex = (headers: readonly string[], name: string): number =>
 const valueAt = (row: readonly string[], index: number): string =>
   index >= 0 ? (row[index] ?? "").trim() : "";
 
-export type MasterDataView = "suppliers" | "processes";
+export type MasterDataView = "crafts" | "suppliers" | "processes";
 
-export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }) {
+export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
+  const [crafts, setCrafts] = useState<Craft[]>([]);
+  const [craftName, setCraftName] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [processes, setProcesses] = useState<Process[]>([]);
   const [processDefaultWorkerCandidates, setProcessDefaultWorkerCandidates] = useState<ProcessDefaultWorkerCandidate[]>([]);
@@ -166,7 +175,9 @@ export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }
   const load = async () => {
     setError("");
     try {
-      if (view === "suppliers") {
+      if (view === "crafts") {
+        setCrafts(await json<Craft[]>("master-data/crafts"));
+      } else if (view === "suppliers") {
         setSuppliers(await json<Supplier[]>("master-data/suppliers?includeInactive=true"));
       } else {
         const [processPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
@@ -180,7 +191,7 @@ export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }
         setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : view === "processes" ? "工艺数据库加载失败" : "供应商资料加载失败");
+      setError(loadError instanceof Error ? loadError.message : view === "crafts" ? "工艺数据库加载失败" : view === "processes" ? "工序数据库加载失败" : "供应商资料加载失败");
     }
   };
 
@@ -228,6 +239,21 @@ export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }
     } finally {
       setBusy("");
     }
+  };
+
+  const createCraft = () => {
+    const name = craftName.trim();
+    if (!name) {
+      setError("请输入工艺名称。");
+      return;
+    }
+    void run("create-craft", async () => {
+      await json("master-data/crafts/ensure", {
+        method: "POST",
+        body: JSON.stringify({ craftNames: [name] }),
+      });
+      setCraftName("");
+    });
   };
 
   const createSupplier = () => {
@@ -579,19 +605,52 @@ export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }
     <Shell active="基础资料">
       <header className="page-heading">
         <div>
-          <h1>{view === "processes" ? "工艺数据库" : "工厂与供应商"}</h1>
-          <p>{view === "processes" ? "维护返工使用的公共工艺、计价单位和默认候选人。" : "维护加工厂及其他供应商资料。"}</p>
+          <h1>{view === "crafts" ? "工艺数据库" : view === "processes" ? "工序数据库" : "工厂与供应商"}</h1>
+          <p>{view === "crafts" ? "沉淀外发定价与选厂使用的工艺；业务页直接录入后自动同步。" : view === "processes" ? "维护返工使用的公共工序、计价单位和默认候选人。" : "维护加工厂及其他供应商资料。"}</p>
         </div>
       </header>
       <Surface className="admin-card"><SystemManagementNavigation active="master-data" /></Surface>
       <nav className="master-data-view-tabs" aria-label="基础资料数据库">
-        <a className={view === "processes" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=processes`}>工艺数据库</a>
+        <a className={view === "crafts" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=crafts`}>工艺数据库</a>
+        <a className={view === "processes" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=processes`}>工序数据库</a>
         <a className={view === "suppliers" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=suppliers`}>工厂与供应商</a>
       </nav>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
 
         <div className="master-data-grid master-data-grid--single">
+          {view === "crafts" ? <Surface className="master-data-panel">
+            <div className="master-data-section-heading" id="crafts">
+              <div>
+                <h2>外发工艺</h2>
+                <p>外发跟单在创建订单时可直接录入新工艺；系统自动建档，后续订单可直接搜索复用。</p>
+              </div>
+            </div>
+            <div className="master-data-create">
+              <input
+                value={craftName}
+                maxLength={100}
+                placeholder="输入新的外发工艺名称"
+                aria-label="外发工艺名称"
+                onChange={(event) => setCraftName(event.target.value)}
+              />
+              <Button disabled={Boolean(busy) || !craftName.trim()} onClick={createCraft}>
+                {busy === "create-craft" ? "新增中…" : "新增工艺"}
+              </Button>
+            </div>
+            <div className="master-data-list">
+              {crafts.length === 0 ? <p>暂无外发工艺；提交第一张外发订单时也会自动建档。</p> : crafts.map((craft) => (
+                <article key={craft.craftId} className="master-data-row">
+                  <div>
+                    <h3>{craft.craftName}</h3>
+                    <p>{craft.craftCode}</p>
+                  </div>
+                  <StatusBadge tone="success">可复用</StatusBadge>
+                </article>
+              ))}
+            </div>
+          </Surface> : null}
+
           {view === "suppliers" ? <Surface className="master-data-panel">
             <div className="master-data-section-heading" id="factories">
               <h2>加工厂与供应商</h2>

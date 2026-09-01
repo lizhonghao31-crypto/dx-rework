@@ -126,6 +126,25 @@ export const CreatePersonAliasSchema = z.object({
   reason: ReasonSchema,
 }).strict();
 
+export const CraftCatalogItemSchema = z.object({
+  craftId: IdSchema,
+  craftCode: CatalogCodeSchema,
+  craftName: z.string().trim().min(1).max(100),
+  createdAt: z.string().datetime(),
+});
+export const CraftCatalogListResponseSchema = z.array(CraftCatalogItemSchema);
+export const CraftCatalogQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
+}).strict();
+export const EnsureCraftsSchema = z.object({
+  craftNames: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
+}).strict().superRefine((value, context) => {
+  const normalized = value.craftNames.map((name) => name.toLocaleLowerCase("zh-CN"));
+  if (new Set(normalized).size !== normalized.length) {
+    context.addIssue({ code: "custom", path: ["craftNames"], message: "工艺不能重复" });
+  }
+});
+
 export const CreateProcessSchema = z.object({
   processCode: CatalogCodeSchema,
   processName: z.string().trim().min(1).max(100),
@@ -187,6 +206,8 @@ export type AssignRole = z.infer<typeof AssignRoleSchema>;
 export type CreateBusinessPerson = z.infer<typeof CreateBusinessPersonSchema>;
 export type UpdateTemporaryWorkerProfile = z.infer<typeof UpdateTemporaryWorkerProfileSchema>;
 export type CreatePersonAlias = z.infer<typeof CreatePersonAliasSchema>;
+export type CraftCatalogItem = z.infer<typeof CraftCatalogItemSchema>;
+export type EnsureCrafts = z.infer<typeof EnsureCraftsSchema>;
 export type CreateProcess = z.infer<typeof CreateProcessSchema>;
 export type ReviseProcess = z.infer<typeof ReviseProcessSchema>;
 export type ReplaceProcessDefaultWorkers = z.infer<typeof ReplaceProcessDefaultWorkersSchema>;

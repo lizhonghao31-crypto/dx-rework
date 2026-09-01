@@ -4,6 +4,7 @@ import type {
   AssignRole,
   CreateBusinessPerson,
   CreateDelegation,
+  EnsureCrafts,
   CreatePersonAlias,
   CreateProcess,
   CreateSupplier,
@@ -19,6 +20,19 @@ import { OperationEventRepository, type TrustedActorContext } from "../tools/rep
 import { isRootActor } from "./business-authority.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
+type CraftCatalogRow = Readonly<{
+  craft_id: string;
+  craft_code: string;
+  craft_name: string;
+  created_at: Date;
+}>;
+const craftCatalogItem = (row: CraftCatalogRow) => ({
+  craftId: row.craft_id,
+  craftCode: row.craft_code,
+  craftName: row.craft_name,
+  createdAt: row.created_at.toISOString(),
+});
+
 type PersonAliasRow = Readonly<{ alias_id: string; person_id: string; alias: string; normalized_alias: string }>;
 type TemporaryWorkerProfileRow = Readonly<{
   person_id: string;
@@ -391,6 +405,85 @@ export class AccessMasterDataService {
       active: row.active,
       aliases: row.aliases,
     }));
+  }
+
+  async listCrafts(query = ""): Promise<Array<{
+    craftId: string;
+    craftCode: string;
+    craftName: string;
+    createdAt: string;
+  }>> {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length > 100) {
+      throw new ApplicationError("VALIDATION_ERROR", "搜索内容不能超过100个字符", 400);
+    }
+    const result = await this.database.query<CraftCatalogRow>(
+      `SELECT craft_id,craft_code,craft_name,created_at
+       FROM craft_catalog_items
+       WHERE $1::text='' OR strpos(upper(craft_name || ' ' || craft_code),upper($1))>0
+       ORDER BY normalized_name,craft_code
+       LIMIT 200`,
+      [normalizedQuery],
+    );
+    return result.rows.map(craftCatalogItem);
+  }
+
+  async ensureCrafts(actor: TrustedActorContext, input: EnsureCrafts): Promise<Array<{
+    craftId: string;
+    craftCode: string;
+    craftName: string;
+    createdAt: string;
+  }>> {
+    return this.transaction(async (client) => {
+      const craftNames = input.craftNames.map((name) => name.trim());
+      const normalized = await client.query<{ normalized_name: string }>(
+        `SELECT lower(btrim(input.craft_name)) AS normalized_name
+         FROM unnest($1::text[]) WITH ORDINALITY AS input(craft_name,position)
+         ORDER BY input.position`,
+        [craftNames],
+      );
+      const normalizedNames = normalized.rows.map((row) => row.normalized_name);
+      if (new Set(normalizedNames).size !== normalizedNames.length) {
+        throw new ApplicationError("VALIDATION_ERROR", "工艺不能重复", 400);
+      }
+      for (const normalizedName of [...normalizedNames].sort()) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`dx_rework:craft:${normalizedName}`]);
+      }
+
+      const items: ReturnType<typeof craftCatalogItem>[] = [];
+      for (const craftName of craftNames) {
+        const existing = await client.query<CraftCatalogRow>(
+          `SELECT craft_id,craft_code,craft_name,created_at
+           FROM craft_catalog_items
+           WHERE normalized_name=lower(btrim($1))
+           FOR SHARE`,
+          [craftName],
+        );
+        if (existing.rows[0]) {
+          items.push(craftCatalogItem(existing.rows[0]));
+          continue;
+        }
+
+        const craftId = randomUUID();
+        const craftCode = `CRAFT_${randomUUID().replaceAll("-", "").slice(0, 24).toUpperCase()}`;
+        const craftCreationEventId = await this.events.append(client, actor, {
+          action: "master_data.craft.create",
+          entityType: "craft_catalog",
+          entityId: craftId,
+          after: { craftId, craftCode, craftName },
+          reason: "外发订单业务页新增工艺",
+        });
+        const inserted = await client.query<CraftCatalogRow>(
+          `INSERT INTO craft_catalog_items(
+             craft_id,craft_code,craft_name,created_by,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6)
+           RETURNING craft_id,craft_code,craft_name,created_at`,
+          [craftId, craftCode, craftName, actor.actorId, craftCreationEventId, actor.requestId],
+        );
+        items.push(craftCatalogItem(inserted.rows[0]!));
+      }
+      return items;
+    });
   }
 
   async listProcesses(includeInactive = false): Promise<Array<{

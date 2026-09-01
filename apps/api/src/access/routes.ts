@@ -1,6 +1,7 @@
 import {
   AssignRoleSchema,
   CatalogListQuerySchema,
+  CraftCatalogQuerySchema,
   ConfirmWorkAssignmentsSchema,
   CreateBusinessPersonSchema,
   CreateDelegationSchema,
@@ -8,6 +9,7 @@ import {
   CreateProcessSchema,
   CreateSupplierSchema,
   DelegationParamsSchema,
+  EnsureCraftsSchema,
   DelegationsQuerySchema,
   IdempotencyKeySchema,
   PeopleListQuerySchema,
@@ -142,6 +144,44 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     return temporaryActor;
   };
 
+  const craftActor = async (
+    request: FastifyRequest,
+    mutation = false,
+  ): Promise<TrustedActorContext> => {
+    const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    const managesMasterData = user.capabilities.includes("master_data:manage");
+    const createsSourcingOrders = user.businessRoles?.includes("order_merchandiser") === true
+      && user.capabilities.includes("sourcing:inquiry:create");
+    const readsSourcing = user.capabilities.includes("sourcing:view") || createsSourcingOrders;
+    if (!isRoot && !managesMasterData && (mutation ? !createsSourcingOrders : !readsSourcing)) {
+      throw new ApplicationError("FORBIDDEN", mutation ? "仅外发跟单可新增工艺" : "无权查看工艺数据库", 403);
+    }
+    if (!user.businessRoles?.length && !isRoot) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    const authorizationCapability = managesMasterData
+      ? "master_data:manage"
+      : createsSourcingOrders
+        ? "sourcing:inquiry:create"
+        : mutation
+          ? "master_data:manage"
+          : "sourcing:view";
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    const authorizationCapabilities = [...user.capabilities];
+    if (isRoot && !authorizationCapabilities.includes(authorizationCapability)) {
+      authorizationCapabilities.push(authorizationCapability);
+    }
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability,
+      authorizationCapabilities,
+      requestId: request.id,
+    };
+  };
+
   const roleManager = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
     const isRoot = await dependencies.root.isRootUser(user.id);
@@ -206,6 +246,18 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       includeRevokedAliases: query.includeRevokedAliases === "true",
     }, peopleActor);
   });
+
+  app.get("/master-data/crafts", async (request) => {
+    await craftActor(request);
+    const query = parse(CraftCatalogQuerySchema, request.query);
+    return dependencies.service.listCrafts(query.q ?? "");
+  });
+
+  app.post("/master-data/crafts/ensure", async (request) =>
+    dependencies.service.ensureCrafts(
+      await craftActor(request, true),
+      parse(EnsureCraftsSchema, request.body),
+    ));
 
   app.get("/master-data/processes", async (request) => {
     await actor(request, "process_catalog:read");
