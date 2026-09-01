@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import { useDebouncedValue } from "./use-debounced-value.js";
 import "./my-todos.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -19,7 +20,10 @@ type LoadState =
       kind: "ready";
       activeModule: TodoModule;
       moduleCounts: TodoModuleCounts;
-      nextCursor: string | null;
+      page: number;
+      pageSize: 15;
+      totalCount: number;
+      totalPages: number;
       todos: TodoResponse[];
     }
   | { kind: "error"; message: string };
@@ -27,7 +31,6 @@ type LoadState =
 const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
   { id: "rework", label: "订单返工" },
   { id: "sourcing", label: "外发定价&选厂" },
-  { id: "wages", label: "返工工资" },
 ];
 
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
@@ -143,24 +146,23 @@ const taskHref = (todo: TodoResponse): string => [
 export function MyTodosPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeQuery, setActiveQuery] = useState("");
-  const [cursor, setCursor] = useState("");
-  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
+  const [requestedModule, setRequestedModule] = useState<TodoModule | undefined>();
+  const [requestedPage, setRequestedPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const loadVersion = useRef(0);
+  const activeQuery = useDebouncedValue(searchQuery.trim(), 250);
 
   const load = async (
     module: TodoModule | undefined,
     query: string,
-    pageCursor: string,
+    page: number,
     signal?: AbortSignal,
   ): Promise<void> => {
     const version = ++loadVersion.current;
     setBusy(true);
     try {
-      const params = new URLSearchParams({ q: query });
+      const params = new URLSearchParams({ q: query, page: String(page) });
       if (module) params.set("module", module);
-      if (pageCursor) params.set("cursor", pageCursor);
       const response = await fetch(`${apiUrl("todos/mine")}?${params.toString()}`, {
         credentials: "include",
         headers: { accept: "application/json" },
@@ -173,7 +175,10 @@ export function MyTodosPage() {
         kind: "ready",
         activeModule: result.activeModule,
         moduleCounts: result.moduleCounts,
-        nextCursor: result.nextCursor,
+        page: result.page,
+        pageSize: result.pageSize,
+        totalCount: result.totalCount,
+        totalPages: result.totalPages,
         todos: result.todos,
       });
     } catch (error: unknown) {
@@ -186,55 +191,29 @@ export function MyTodosPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void load(undefined, "", "", controller.signal);
+    void load(requestedModule, activeQuery, requestedPage, controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [activeQuery, requestedModule, requestedPage]);
 
   const activeModule = state.kind === "ready" ? state.activeModule : "rework";
   const moduleCounts = state.kind === "ready"
     ? state.moduleCounts
-    : { rework: 0, sourcing: 0, wages: 0 };
+    : { rework: 0, sourcing: 0 };
   const todos = state.kind === "ready" ? state.todos : [];
-  const nextCursor = state.kind === "ready" ? state.nextCursor : null;
-  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + moduleCounts.wages;
-
-  const resetPage = (): void => {
-    setCursor("");
-    setCursorHistory([]);
-  };
+  const page = state.kind === "ready" ? state.page : requestedPage;
+  const pageSize = state.kind === "ready" ? state.pageSize : 15;
+  const totalCount = state.kind === "ready" ? state.totalCount : 0;
+  const totalPages = state.kind === "ready" ? state.totalPages : 0;
+  const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
+  const pageGroupStart = Math.floor((Math.max(page, 1) - 1) / 5) * 5 + 1;
+  const visiblePages = Array.from(
+    { length: Math.max(0, Math.min(5, totalPages - pageGroupStart + 1)) },
+    (_, index) => pageGroupStart + index,
+  );
 
   const openModule = (module: TodoModule): void => {
-    resetPage();
-    void load(module, activeQuery, "");
-  };
-
-  const searchFromFirstPage = (): void => {
-    const query = searchQuery.trim();
-    setActiveQuery(query);
-    resetPage();
-    void load(activeModule, query, "");
-  };
-
-  const clearSearch = (): void => {
-    setSearchQuery("");
-    setActiveQuery("");
-    resetPage();
-    void load(activeModule, "", "");
-  };
-
-  const goToNextPage = (): void => {
-    if (!nextCursor || busy) return;
-    setCursorHistory((current) => [...current, cursor]);
-    setCursor(nextCursor);
-    void load(activeModule, activeQuery, nextCursor);
-  };
-
-  const goToPreviousPage = (): void => {
-    if (cursorHistory.length === 0 || busy) return;
-    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? "";
-    setCursorHistory((current) => current.slice(0, -1));
-    setCursor(previousCursor);
-    void load(activeModule, activeQuery, previousCursor);
+    setRequestedModule(module);
+    setRequestedPage(1);
   };
 
   return (
@@ -257,21 +236,6 @@ export function MyTodosPage() {
           key={module.id}
         ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
       </nav>}
-      {state.kind === "ready" && totalActionable > 0 && (
-        <form className="my-todos-search" onSubmit={(event) => { event.preventDefault(); searchFromFirstPage(); }}>
-          <label htmlFor="my-todos-search">搜索待办</label>
-          <input
-            id="my-todos-search"
-            type="search"
-            value={searchQuery}
-            placeholder="输入供应商名称或款号"
-            autoComplete="off"
-            onChange={(event) => setSearchQuery(event.target.value)}
-          />
-          <button type="submit" disabled={busy}>搜索</button>
-          {searchQuery && <button type="button" disabled={busy} onClick={clearSearch}>清除</button>}
-        </form>
-      )}
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
         <Surface className="my-todos-state">
@@ -287,12 +251,33 @@ export function MyTodosPage() {
           <p>有新的事项轮到你处理时，会出现在这里。</p>
         </Surface>
       )}
-      {state.kind === "ready" && totalActionable > 0 && todos.length === 0 && (
-        <Surface className="my-todos-state my-todos-module-empty">
+      {state.kind === "ready" && totalActionable > 0 && <Surface className="my-todos-workspace">
+        <div className="my-todos-toolbar">
+          <div>
+            <strong>{todoModules.find((module) => module.id === activeModule)?.label}</strong>
+            <span>{activeQuery ? `找到 ${totalCount} 条` : `共 ${totalCount} 条待办`}</span>
+          </div>
+          <label className="my-todos-search" htmlFor="my-todos-search">
+            <span>搜索待办</span>
+            <input
+              id="my-todos-search"
+              type="search"
+              value={searchQuery}
+              placeholder="输入供应商名称或款号，自动筛选"
+              autoComplete="off"
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setRequestedPage(1);
+              }}
+            />
+          </label>
+        </div>
+      {todos.length === 0 && (
+        <div className="my-todos-state my-todos-module-empty">
           <p>{activeQuery
             ? "未找到匹配的待办，请检查供应商名称或款号。"
             : "该模块当前没有待处理事项。"}</p>
-        </Surface>
+        </div>
       )}
       {todos.length > 0 && (
         <div className="my-todos-list">
@@ -307,10 +292,10 @@ export function MyTodosPage() {
                   ? "工资期间核对任务"
                   : "返工单关联信息待读取";
             return (
-              <Surface className="my-todo-card" key={todo.todoId}>
+              <div className="my-todo-card" key={todo.todoId}>
                 {blocked ? (
                   <div className="my-todo-row my-todo-row--blocked">
-                    <b className="my-todo-index">{String(cursorHistory.length * 15 + index + 1).padStart(2, "0")}</b>
+                    <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <StatusBadge tone="danger">需要转交</StatusBadge>
                       <h2>{taskTitle(todo)}</h2>
@@ -319,7 +304,7 @@ export function MyTodosPage() {
                   </div>
                 ) : (
                   <a className="my-todo-row" href={taskHref(todo)}>
-                    <b className="my-todo-index">{String(cursorHistory.length * 15 + index + 1).padStart(2, "0")}</b>
+                    <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
                         <h2>{taskTitle(todo)}</h2>
@@ -335,16 +320,34 @@ export function MyTodosPage() {
                     </div>
                   </a>
                 )}
-              </Surface>
+              </div>
             );
           })}
         </div>
       )}
-      {todos.length > 0 && <nav className="my-todos-pagination" aria-label="待办列表分页">
-        <button type="button" disabled={busy || cursorHistory.length === 0} onClick={goToPreviousPage}>上一页</button>
-        <span>第 {cursorHistory.length + 1} 页 · 每页 15 条</span>
-        <button type="button" disabled={busy || !nextCursor} onClick={goToNextPage}>下一页</button>
+      {totalPages > 1 && <nav className="my-todos-pagination" aria-label="待办列表分页">
+        <button
+          type="button"
+          aria-label="前五页"
+          disabled={busy || pageGroupStart === 1}
+          onClick={() => setRequestedPage(Math.max(1, pageGroupStart - 5))}
+        >‹</button>
+        {visiblePages.map((pageNumber) => <button
+          type="button"
+          className={pageNumber === page ? "is-active" : ""}
+          aria-current={pageNumber === page ? "page" : undefined}
+          disabled={busy}
+          onClick={() => setRequestedPage(pageNumber)}
+          key={pageNumber}
+        >{pageNumber}</button>)}
+        <button
+          type="button"
+          aria-label="后五页"
+          disabled={busy || pageGroupStart + 5 > totalPages}
+          onClick={() => setRequestedPage(pageGroupStart + 5)}
+        >›</button>
       </nav>}
+      </Surface>}
       </div>
     </Shell>
   );
