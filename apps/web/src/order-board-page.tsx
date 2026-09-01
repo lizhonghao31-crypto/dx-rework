@@ -267,7 +267,7 @@ export function OrderBoardPage() {
     const label = reworkLabel(row.reworkStatus);
     if (row.reworkStatus === null) {
       if (!canInitiate) return null;
-      const params = new URLSearchParams({ styleNo: row.styleNo, receivingBatchId: row.receivingBatchId });
+      const params = new URLSearchParams({ receivingBatchId: row.receivingBatchId });
       return <a className={className} href={`${pageUrl("ui/qc/new")}?${params.toString()}`}>{label}</a>;
     }
     if (row.reworkOrderId && canInitiate) {

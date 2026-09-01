@@ -51,7 +51,7 @@ describe("N01 v2 streamlined initiation", () => {
     expect(contracts).toContain("SaveReworkSupplyContextSchema");
   });
 
-  it("links the receiving board into N01 without removing the independent fallback entry", async () => {
+  it("uses the receiving board as the only N01 creation entry", async () => {
     const [board, navigation, form] = await Promise.all([
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
@@ -59,11 +59,12 @@ describe("N01 v2 streamlined initiation", () => {
     ]);
 
     expect(board).toContain('pageUrl("ui/qc/new")');
-    expect(board).toContain("new URLSearchParams({ styleNo: row.styleNo, receivingBatchId: row.receivingBatchId })");
+    expect(board).toContain("new URLSearchParams({ receivingBatchId: row.receivingBatchId })");
     expect(board).toContain("发起返工");
-    expect(navigation).toContain('name: "发起返工"');
-    expect(form).toContain('get("styleNo")');
+    expect(navigation).not.toContain('name: "发起返工"');
     expect(form).toContain('get("receivingBatchId")');
+    expect(form).toContain("rework-orders/receiving-entry/");
+    expect(form).toContain('readOnly={Boolean(receivingBatchId || order?.receivingBatchId)}');
     expect(form).not.toContain("differenceQuantity");
     expect(form).not.toContain("lastReceiverName");
     expect(form).not.toContain("receivedAt");

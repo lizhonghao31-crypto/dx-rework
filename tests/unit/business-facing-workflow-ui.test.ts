@@ -169,9 +169,10 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/components.tsx"),
     ]);
-    for (const entry of ["我的待办", "订单回货", "发起返工", "返工单看板", "系统管理", "财务报表"]) {
+    for (const entry of ["我的待办", "订单回货", "返工单看板", "系统管理", "财务报表"]) {
       expect(navigation).toContain(`name: "${entry}"`);
     }
+    expect(navigation).not.toContain('name: "发起返工"');
     expect(navigation).not.toContain('name: "返工执行"');
     expect(navigation).not.toContain('name: "返工上数"');
     expect(detail).toContain("rework-detail-target-layout");

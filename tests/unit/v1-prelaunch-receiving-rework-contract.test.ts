@@ -126,7 +126,8 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
       read("apps/api/migrations/0086_receiving_rework_evidence_link.sql"),
       read("apps/api/src/receiving/receiving-service.ts"),
     ]);
-    expect(form).toContain("disabled={busy || Boolean(receivingBatchId)}");
+    expect(form).toContain("disabled={busy || Boolean(receivingBatchId || order?.receivingBatchId)}");
+    expect(form).toContain("readOnly={Boolean(receivingBatchId || order?.receivingBatchId)}");
     expect(migration).toContain("source receiving batch already has active rework");
     expect(migration).toContain("guard_receiving_attachment_binding");
     expect(migration).toContain("receiving attachment binding requires trusted audit context");

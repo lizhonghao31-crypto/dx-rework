@@ -51,6 +51,10 @@ const create = (
   }>,
 ) => {
   const service = {
+    getReceivingEntry: vi.fn(async (receivingBatchId: string) => ({
+      receivingBatchId,
+      styleNo: "PD20529725",
+    })),
     createDraft: vi.fn(async () => ({ value: response, reused: false })),
     updateDraft: vi.fn(async () => ({ value: { ...response, version: 2 }, reused: false })),
     supplementOrderImages: vi.fn(async () => ({ value: { ...response, attachmentIds: ["00000000-0000-4000-8000-000000000011"], version: 2 }, reused: false })),
@@ -168,7 +172,10 @@ describe("rework initiation routes", () => {
       method: "POST",
       url: "/rework-orders/drafts",
       headers: { cookie: "dx_rework_session=trusted" },
-      payload: { styleNo: "PD20529725" },
+      payload: {
+        receivingBatchId: "00000000-0000-4000-8000-000000000099",
+        styleNo: "PD20529725",
+      },
     });
     expect(missing.statusCode).toBe(400);
 
@@ -180,7 +187,10 @@ describe("rework initiation routes", () => {
         "idempotency-key": "qc-create-1",
         "x-request-id": "rework-request-1",
       },
-      payload: { styleNo: "PD20529725" },
+      payload: {
+        receivingBatchId: "00000000-0000-4000-8000-000000000099",
+        styleNo: "PD20529725",
+      },
     });
     expect(created.statusCode).toBe(201);
     expect(service.createDraft).toHaveBeenCalledWith({
@@ -189,7 +199,39 @@ describe("rework initiation routes", () => {
       authorizationCapability: "rework:initiate",
       authorizationCapabilities: ["rework:initiate"],
       requestId: "rework-request-1",
-    }, { styleNo: "PD20529725" }, "qc-create-1");
+    }, {
+      receivingBatchId: "00000000-0000-4000-8000-000000000099",
+      styleNo: "PD20529725",
+    }, "qc-create-1");
+  });
+
+  it("requires a receiving batch and exposes its server-side style for the board entry", async () => {
+    const { app, service } = create();
+    const withoutBatch = await app.inject({
+      method: "POST",
+      url: "/rework-orders/drafts",
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "idempotency-key": "qc-create-without-batch",
+      },
+      payload: { styleNo: "PD20529725" },
+    });
+    expect(withoutBatch.statusCode).toBe(400);
+    expect(service.createDraft).not.toHaveBeenCalled();
+
+    const context = await app.inject({
+      method: "GET",
+      url: "/rework-orders/receiving-entry/00000000-0000-4000-8000-000000000099",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(context.statusCode).toBe(200);
+    expect(context.json()).toEqual({
+      receivingBatchId: "00000000-0000-4000-8000-000000000099",
+      styleNo: "PD20529725",
+    });
+    expect(service.getReceivingEntry).toHaveBeenCalledWith(
+      "00000000-0000-4000-8000-000000000099",
+    );
   });
 
   it("allows owners to enter N01 without assigning themselves the QC role", async () => {

@@ -38,7 +38,11 @@ type FactoryState = Readonly<{
   supplierVersion: number | null;
 }> | null;
 type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{
-  receivingBatchId?: string;
+  receivingBatchId: string;
+}>;
+type ReceivingReworkEntry = Readonly<{
+  receivingBatchId: string;
+  styleNo: string;
 }>;
 type ReworkOrderRow = Readonly<{
   rework_order_id: string;
@@ -141,6 +145,30 @@ export class ReworkInitiationService {
     private readonly todoService?: TodoService,
   ) {}
 
+  async getReceivingEntry(receivingBatchId: string): Promise<ReceivingReworkEntry> {
+    const result = await this.database.query<{
+      style_no: string;
+      has_existing_rework: boolean;
+    }>(
+      `SELECT batch.style_no,
+              EXISTS(
+                SELECT 1
+                FROM rework_orders existing_order
+                WHERE existing_order.source_receiving_batch_id=batch.receiving_batch_id
+                  AND existing_order.status NOT IN ('cancelled','deleted')
+              ) AS has_existing_rework
+       FROM receiving_batches batch
+       WHERE batch.receiving_batch_id=$1`,
+      [receivingBatchId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
+    if (row.has_existing_rework) {
+      throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
+    }
+    return { receivingBatchId, styleNo: row.style_no };
+  }
+
   async createDraft(
     actor: TrustedActorContext,
     input: CreateReworkDraftWithReceivingBatch,
@@ -148,11 +176,7 @@ export class ReworkInitiationService {
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, "rework.draft.create", idempotencyKey, input, 201, async (client) => {
       const reworkOrderId = randomUUID();
-      const sourceReceivingBatchId = await this.resolveSourceReceivingBatch(
-        client,
-        input.receivingBatchId,
-        input.styleNo ?? null,
-      );
+      const sourceReceivingBatch = await this.resolveSourceReceivingBatch(client, input.receivingBatchId);
       const factory = await this.resolveFactory(client, input.processingFactory ?? null);
       if (input.merchandiserUserId) {
         await this.ensureActiveMerchandiser(client, input.merchandiserUserId);
@@ -162,8 +186,8 @@ export class ReworkInitiationService {
         reworkOrderId,
         reworkNo: null,
         status: "draft" as const,
-        receivingBatchId: sourceReceivingBatchId,
-        styleNo: input.styleNo ?? null,
+        receivingBatchId: sourceReceivingBatch.receivingBatchId,
+        styleNo: sourceReceivingBatch.styleNo,
         customerSupplyCode: input.customerSupplyCode ?? null,
         factoryStyleNo: input.factoryStyleNo ?? null,
         orderNo: input.orderNo ?? null,
@@ -224,7 +248,7 @@ export class ReworkInitiationService {
           next.tailInspectionCostBearer,
           next.tailInspectionCostBearerSource,
           next.inspectionReport,
-          sourceReceivingBatchId,
+          sourceReceivingBatch.receivingBatchId,
           actor.actorId,
         ],
       );
@@ -235,39 +259,26 @@ export class ReworkInitiationService {
 
   private async resolveSourceReceivingBatch(
     client: PoolClient,
-    receivingBatchId: string | undefined,
-    styleNo: string | null,
-  ): Promise<string | null> {
-    const normalizedStyleNo = styleNo?.trim().toUpperCase();
+    receivingBatchId: string,
+  ): Promise<ReceivingReworkEntry> {
     if (!receivingBatchId) {
-      if (!normalizedStyleNo) return null;
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
-      const fallback = await client.query<{ receiving_batch_id: string }>(
-        `SELECT batch.receiving_batch_id
-         FROM receiving_batches batch
-         WHERE upper(btrim(batch.style_no))=$1
-           AND NOT EXISTS (
-             SELECT 1 FROM rework_orders completed_order
-             WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
-               AND completed_order.status='completed'
-           )
-         ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
-         LIMIT 1`,
-        [normalizedStyleNo],
-      );
-      return fallback.rows[0]?.receiving_batch_id ?? null;
+      throw new ApplicationError("VALIDATION_ERROR", "必须从订单回货选择收货批次发起返工", 400);
     }
-    if (!normalizedStyleNo) {
-      throw new ApplicationError("VALIDATION_ERROR", "收货批次要求同时提供款号", 400);
-    }
+    const source = await client.query<{ style_no: string }>(
+      "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1",
+      [receivingBatchId],
+    );
+    const sourceRow = source.rows[0];
+    if (!sourceRow) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
+    const normalizedStyleNo = sourceRow.style_no.trim().toUpperCase();
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
-    const batch = await client.query<{ style_no: string; closed: boolean }>(
+    const batch = await client.query<{ style_no: string; has_existing_rework: boolean }>(
       `SELECT batch.style_no,
               EXISTS(
-                SELECT 1 FROM rework_orders completed_order
-                WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
-                  AND completed_order.status='completed'
-              ) AS closed
+                SELECT 1 FROM rework_orders existing_order
+                WHERE existing_order.source_receiving_batch_id=batch.receiving_batch_id
+                  AND existing_order.status NOT IN ('cancelled','deleted')
+              ) AS has_existing_rework
        FROM receiving_batches batch
        WHERE batch.receiving_batch_id=$1
        FOR UPDATE`,
@@ -275,13 +286,10 @@ export class ReworkInitiationService {
     );
     const row = batch.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
-    if (row.style_no.trim().toUpperCase() !== normalizedStyleNo) {
-      throw new ApplicationError("VALIDATION_ERROR", "收货批次与款号不一致", 400);
+    if (row.has_existing_rework) {
+      throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
     }
-    if (row.closed) {
-      throw new ApplicationError("CONFLICT", "已完成返工的收货批次不能再次发起返工", 409);
-    }
-    return receivingBatchId;
+    return { receivingBatchId, styleNo: row.style_no };
   }
 
   async updateDraft(
@@ -307,9 +315,17 @@ export class ReworkInitiationService {
       const factory = input.processingFactory === undefined
         ? factoryFromRow(current)
         : await this.resolveFactory(client, input.processingFactory);
-      const nextStyleNo = input.styleNo === undefined ? current.style_no : input.styleNo;
-      const sourceReceivingBatchId = current.source_receiving_batch_id
-        ?? await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
+      if (
+        current.source_receiving_batch_id
+        && input.styleNo !== undefined
+        && input.styleNo?.trim().toUpperCase() !== current.style_no?.trim().toUpperCase()
+      ) {
+        throw new ApplicationError("VALIDATION_ERROR", "来源收货批次的款号不能在返工单修改", 400);
+      }
+      const nextStyleNo = current.source_receiving_batch_id
+        ? current.style_no
+        : input.styleNo === undefined ? current.style_no : input.styleNo;
+      const sourceReceivingBatchId = current.source_receiving_batch_id;
       const nextVersion = current.version + 1;
       const nextTailInspectionRequired = input.tailInspectionRequired
         ?? current.tail_inspection_required;

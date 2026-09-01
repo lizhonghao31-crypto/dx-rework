@@ -79,7 +79,8 @@ describe("PR-01A UI prototype contract", () => {
     expect(pages).not.toContain('href="#"');
   });
   it("turns the approved QC page into an idempotent real v2 workflow while admitting owners and root", () => {
-    expect(app).toContain('<Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
+    expect(app).toContain('<Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
+    expect(app).toContain("<ReceivingReworkEntryRedirect />");
     expect(app).toContain('{ requiredRole: "quality_control", requiredCapability: "rework:initiate" }');
     expect(app).toContain('const owner = { requiredRole: "owner_group" } as const');
     expect(reworkV2Form).toContain('"rework-orders/initiation-options"');
