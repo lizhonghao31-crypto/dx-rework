@@ -221,13 +221,18 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const client = await database.connect();
     try {
       await client.query("BEGIN");
+      const current = await client.query<{ version: number }>(
+        "SELECT version FROM rework_orders WHERE rework_order_id=$1 FOR UPDATE",
+        [reworkOrderId],
+      );
+      const nextVersion = (current.rows[0]?.version ?? 0) + 1;
       await client.query(
         `INSERT INTO operation_events(
            event_id,request_id,actor_id,actor_roles,authorization_capability,
            action,entity_type,entity_id,after_state,reason
          ) VALUES($1,$2,$3,ARRAY['quality_control'],'rework:initiate',
                   'rework.cancel','rework_order',$4,$5::jsonb,$6)`,
-        [eventId, requestId, receiverId, reworkOrderId, JSON.stringify(draftAfterState(reworkOrderId, styleNo, "cancelled", 2, reason)), reason],
+        [eventId, requestId, receiverId, reworkOrderId, JSON.stringify(draftAfterState(reworkOrderId, styleNo, "cancelled", nextVersion, reason)), reason],
       );
       await client.query(
         "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
@@ -236,9 +241,9 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       await client.query(
         `UPDATE rework_orders
          SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP,cancelled_by=$2,
-             cancel_reason=$3,updated_by=$2,version=2,updated_at=CURRENT_TIMESTAMP
+             cancel_reason=$3,updated_by=$2,version=$4,updated_at=clock_timestamp()
          WHERE rework_order_id=$1`,
-        [reworkOrderId, receiverId, reason],
+        [reworkOrderId, receiverId, reason, nextVersion],
       );
       await client.query("COMMIT");
     } catch (error) {
@@ -278,6 +283,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0113_tail_inspection_cost_bearer.sql");
     await migration("0115_receiving_style_identity_canonicalization.sql");
     await migration("0119_tail_inspection_cost_bearer_provenance.sql");
+    await migration("0130_root_receiving_correction_after_rework.sql");
   });
 
   afterAll(async () => {
@@ -778,7 +784,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(retained.rows[0]?.count).toBe("1");
   });
 
-  it("binds a real server draft to the receiving batch, blocks a duplicate active rework, and reopens after cancellation", async () => {
+  it("lets Root correct style and quantities after rework starts while receipt facts and deletion lock remain intact", async () => {
     const image = await readyImage();
     const receipt = await service.create(receiver(), {
       styleNo: "STYLE-REWORK-LINK-01",
@@ -803,21 +809,68 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await expect(createReworkDraft("STYLE-REWORK-LINK-01"))
       .rejects.toThrow("source receiving batch already has active rework");
 
-    await cancelReworkDraft(firstDraftId, "STYLE-REWORK-LINK-01");
-    board = await service.board(businessDate());
+    const activeRow = board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)!;
+    const corrected = await service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
+      expectedVersion: activeRow.version,
+      styleNo: "STYLE-REWORK-LINK-CORRECTED-01",
+      documentQuantity: 44,
+      actualQuantity: 39,
+      defectiveQuantity: 3,
+    });
+    expect(corrected).toMatchObject({
+      receivingBatchId: receipt.value.receivingBatchId,
+      styleNo: "STYLE-REWORK-LINK-CORRECTED-01",
+      documentQuantity: 44,
+      actualQuantity: 39,
+      defectiveQuantity: 3,
+      differenceQuantity: -5,
+      version: 2,
+    });
+    const correctedFacts = await database.query<{
+      batch_style: string;
+      receipt_style: string;
+      document_quantity: number;
+      actual_quantity: number;
+      defective_quantity: number;
+      rework_style: string;
+      rework_version: number;
+    }>(
+      `SELECT batch.style_no AS batch_style,receipt.style_no AS receipt_style,
+              receipt.document_quantity,receipt.actual_quantity,receipt.defective_quantity,
+              rework.style_no AS rework_style,rework.version AS rework_version
+       FROM receiving_batches batch
+       JOIN receiving_receipts receipt USING(receiving_batch_id)
+       JOIN rework_orders rework ON rework.source_receiving_batch_id=batch.receiving_batch_id
+       WHERE batch.receiving_batch_id=$1 AND rework.rework_order_id=$2`,
+      [receipt.value.receivingBatchId, firstDraftId],
+    );
+    expect(correctedFacts.rows[0]).toEqual({
+      batch_style: "STYLE-REWORK-LINK-CORRECTED-01",
+      receipt_style: "STYLE-REWORK-LINK-01",
+      document_quantity: 40,
+      actual_quantity: 40,
+      defective_quantity: 0,
+      rework_style: "STYLE-REWORK-LINK-CORRECTED-01",
+      rework_version: 2,
+    });
+    board = await service.board(businessDate(), businessDate(), "STYLE-REWORK-LINK-CORRECTED-01");
+    expect(board.rows[0]).toMatchObject({
+      receivingBatchId: receipt.value.receivingBatchId,
+      documentQuantity: 44,
+      actualQuantity: 39,
+      defectiveQuantity: 3,
+      rootMutable: false,
+    });
+
+    await cancelReworkDraft(firstDraftId, "STYLE-REWORK-LINK-CORRECTED-01");
+    board = await service.board(businessDate(), businessDate(), "STYLE-REWORK-LINK-CORRECTED-01");
     const cancelledRow = board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)!;
     expect(cancelledRow.reworkStatus).toBeNull();
     expect(cancelledRow.rootMutable).toBe(false);
-    await expect(service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
-      expectedVersion: cancelledRow.version,
-      styleNo: "STYLE-REWORK-LINK-01",
-      documentQuantity: 41,
-      actualQuantity: 41,
-    })).rejects.toThrow("已经发起过返工");
     await expect(service.deleteBatch(rootCorrector(), receipt.value.receivingBatchId, cancelledRow.version))
       .rejects.toThrow("已经发起过返工");
 
-    const secondDraftId = await createReworkDraft("STYLE-REWORK-LINK-01");
+    const secondDraftId = await createReworkDraft("STYLE-REWORK-LINK-CORRECTED-01");
     expect(secondDraftId).not.toBe(firstDraftId);
     const secondLink = await database.query<{ source_receiving_batch_id: string }>(
       "SELECT source_receiving_batch_id FROM rework_orders WHERE rework_order_id=$1",
