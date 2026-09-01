@@ -41,6 +41,7 @@ const todo: TodoResponse = {
     reworkNo: "RW-20260801-001",
     orderNo: "PO-2026-001",
     styleNo: "ST-001",
+    supplierName: null,
     status: "pending_process_configuration",
     updatedAt: "2026-08-01T00:00:00.000Z",
   },

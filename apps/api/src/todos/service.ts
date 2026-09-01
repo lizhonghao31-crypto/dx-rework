@@ -39,6 +39,11 @@ type TodoRow = Readonly<{
   style_no?: string | null;
   rework_status?: string | null;
   rework_updated_at?: Date | null;
+  sourcing_order_no?: string | null;
+  sourcing_style_no?: string | null;
+  sourcing_status?: string | null;
+  sourcing_updated_at?: Date | null;
+  supplier_name_snapshot?: string | null;
   version: number;
   created_at: Date;
   updated_at: Date;
@@ -110,7 +115,10 @@ export type TimedTodoAction = Readonly<{
 
 const TODO_DELIVERY_TOPIC = "todo.delivery";
 
-const todoResponse = (row: TodoRow): TodoResponse => ({
+const todoResponse = (row: TodoRow): TodoResponse => {
+  const contextStatus = row.rework_status ?? row.sourcing_status;
+  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at;
+  return ({
   todoId: row.todo_id,
   todoType: row.todo_type,
   category: row.category,
@@ -127,19 +135,21 @@ const todoResponse = (row: TodoRow): TodoResponse => ({
   reminderCount: row.reminder_count,
   status: row.status,
   blockedReason: row.blocked_reason,
-  orderContext: row.rework_status && row.rework_updated_at
+  orderContext: contextStatus && contextUpdatedAt
     ? {
         reworkNo: row.rework_no ?? null,
-        orderNo: row.order_no ?? null,
-        styleNo: row.style_no ?? null,
-        status: row.rework_status,
-        updatedAt: row.rework_updated_at.toISOString(),
+        orderNo: row.order_no ?? row.sourcing_order_no ?? null,
+        styleNo: row.style_no ?? row.sourcing_style_no ?? null,
+        supplierName: row.supplier_name_snapshot ?? null,
+        status: contextStatus,
+        updatedAt: contextUpdatedAt.toISOString(),
       }
     : null,
   version: row.version,
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),
-});
+  });
+};
 
 const validateCreateInput = (input: CreateTodoInTransactionInput): void => {
   if (!input.category.trim() || input.category.length > 120 || !input.dedupeKey.trim()) {
@@ -176,13 +186,27 @@ export class TodoService {
               recipient_user_id,required_role,required_capability,delegation_scope_id,route_descriptor,policy_key,
               due_at,reminder_count,todos.status,blocked_reason,todos.version,todos.created_at,todos.updated_at,
               orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
-              orders.updated_at rework_updated_at
+              orders.updated_at rework_updated_at,
+              sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
+              sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
+              sourcing_decision.supplier_name_snapshot
        FROM rework_todos todos
        LEFT JOIN rework_orders orders
          ON orders.rework_order_id=COALESCE(
            NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
            CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
          )
+       LEFT JOIN current_sourcing_cases sourcing
+         ON sourcing.sourcing_case_id=CASE
+           WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
+         END
+       LEFT JOIN LATERAL (
+         SELECT decision.supplier_name_snapshot
+         FROM sourcing_decisions decision
+         WHERE decision.sourcing_case_id=sourcing.sourcing_case_id
+         ORDER BY decision.decision_version DESC
+         LIMIT 1
+       ) sourcing_decision ON true
        WHERE todos.recipient_user_id=$1
          AND todos.category<>'wage_month_close'
          AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')
