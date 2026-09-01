@@ -29,6 +29,18 @@ describe("rework query default range and ordering", () => {
     expect(source).not.toContain("reportingBusinessDate");
   });
 
+  it("requests 15 cards per page and keeps normal previous/next navigation", async () => {
+    const source = await readFile("apps/web/src/reporting/rework-query-page.tsx", "utf8");
+
+    expect(source).toContain('limit: "15"');
+    expect(source).not.toContain('limit: "40"');
+    expect(source).toContain("const [cursorHistory,setCursorHistory]=useState<string[]>([]);");
+    expect(source).toContain(">上一页</Button>");
+    expect(source).toContain(">下一页</Button>");
+    expect(source).toContain("第 {cursorHistory.length + 1} 页");
+    expect(source).toContain('setCursorHistory([]);');
+  });
+
   it("encodes the closed-order rank and still accepts cursors issued before this change", () => {
     const cursor = encodeCursor({
       rework_order_id: orderId,
