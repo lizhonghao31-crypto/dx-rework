@@ -16,6 +16,7 @@ describe("sourcing craft database separation", () => {
     expect(migration).toContain("CREATE TABLE craft_catalog_items");
     expect(migration).toContain("FROM sourcing_cases");
     expect(migration).toContain("unnest(sourcing_case.process_items)");
+    expect(migration).toContain("sourcing_case.deleted_at IS NULL");
     expect(migration).not.toContain("CREATE VIEW craft_catalog_items AS");
     expect(migration).not.toContain("ALTER TABLE process_catalog_items");
 
@@ -33,6 +34,8 @@ describe("sourcing craft database separation", () => {
     expect(sourcingPage).toContain("craftNames: normalizedProcesses");
     expect(sourcingPage).toContain("processes: normalizedProcesses");
     expect(sourcingPage).toContain('list="sourcing-craft-options"');
+    expect(sourcingPage).toContain('master-data/crafts?q=');
+    expect(sourcingPage).toContain("activeCraftQuery");
     expect(sourcingPage).toContain("提交订单时自动写入工艺数据库");
 
     expect(masterDataPage).toContain('view === "crafts" ? "工艺数据库"');
