@@ -132,6 +132,6 @@
     { "version": "0130_root_receiving_correction_after_rework", "checksum": "bf4b495d72e00b02f066f53ca22f974d8796be91c52ffe222de5dd0a5c0b02de" },
     { "version": "0131_responsibility_todo_explicit_assignees", "checksum": "271ed948d69cd1753f3a74c41879dff70fb6c4c400276827cde349245de0732b" },
     { "version": "0132_receiving_merge_into_rework_target", "checksum": "6d8876d9c0be2b2c50eb47cd8ef3d3059dc47b70f8b448e3019bc9b78ff5b7b9" },
-    { "version": "0133_sourcing_craft_catalog", "checksum": "26de0a03fe9ae09eb383e12bb00cce4a3f29ab2c19a2b387240ce1bc3bad9b56" }
+    { "version": "0133_sourcing_craft_catalog", "checksum": "a3560809a38adf1cdff11b24a150b6640af352c3068ce8a5afaeb5670930ebbc" }
   ]
 }
