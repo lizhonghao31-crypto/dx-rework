@@ -387,7 +387,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const firstTodoPage = await todoService.listForActor(tailTodoView(), { module: "rework" });
     expect(firstTodoPage.moduleCounts.rework).toBeGreaterThan(0);
     expect(firstTodoPage.todos).toHaveLength(1);
-    expect(firstTodoPage.nextCursor).toBeNull();
+    expect(firstTodoPage).toMatchObject({ page: 1, pageSize: 15, totalCount: 1, totalPages: 1 });
     expect((await todoService.listForActor(
       tailTodoView(),
       { module: "rework", query: "%" },
