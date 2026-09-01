@@ -21,9 +21,10 @@ describe("order-centered workflow UI", () => {
     expect(page).toContain("返工单：");
     expect(page).toContain("输入供应商名称或款号");
     expect(todos).toContain("strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0");
-    expect(todos).toContain("LIMIT 16");
+    expect(todos).toContain("LIMIT $4 OFFSET $5");
     expect(page).toContain('params.set("module", module)');
-    expect(page).toContain("每页 15 条");
+    expect(page).toContain("visiblePages.map");
+    expect(page).toContain('aria-label="后五页"');
     expect(page).toContain("order?.supplierName");
     expect(page).toContain("供应商：");
     expect(page).not.toContain("订单号：");
