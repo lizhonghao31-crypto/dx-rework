@@ -28,11 +28,12 @@ describe("N01 local-only draft contract", () => {
     const source = await readFile("apps/web/src/rework-v2-form.tsx", "utf8");
 
     expect(source).toContain("const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();");
-    expect(source).toContain("localDraftSeed?.form ?? emptyForm(!reworkOrderId)");
+    expect(source).toContain("localDraftSeed?.form ?? emptyForm()");
     expect(source).toContain("localDraftSeed?.images.map(restoredImage) ?? []");
     expect(source).toContain("tools/attachments/${image.attachmentId}/download?mode=preview");
     expect(source).toContain("已恢复本机保存资料；尚未创建返工单");
     expect(source).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
+    expect(source).toContain("rework-orders/receiving-entry/");
   });
 
   it("creates the server rework order only from the real submit path and clears the local copy after success", async () => {
@@ -41,7 +42,7 @@ describe("N01 local-only draft contract", () => {
     const submitBlock = source.match(/const submit = async \(\): Promise<void> => \{[\s\S]*?\n {2}const uploadFiles = async/);
 
     expect(serverDraftBlock?.[0]).toContain('"rework-orders/drafts"');
-    expect(serverDraftBlock?.[0]).toContain("...(receivingBatchId ? { receivingBatchId } : {})");
+    expect(serverDraftBlock?.[0]).toContain("receivingBatchId,");
     expect(submitBlock?.[0]).toContain("() => persistServerDraft(false)");
     expect(submitBlock?.[0]).toContain("clearLocalN01Draft();");
     expect(submitBlock?.[0]).toContain("submit-v2");

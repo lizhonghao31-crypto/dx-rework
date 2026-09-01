@@ -258,11 +258,28 @@ function HomeLanding() {
   );
 }
 
+function ReceivingReworkEntryRedirect() {
+  useEffect(() => {
+    window.location.replace(pageUrl("ui/orders"));
+  }, []);
+
+  return (
+    <main className="auth-shell">
+      <Surface className="auth-card">
+        <StatusBadge tone="info">订单回货</StatusBadge>
+        <h1>请从收货订单发起返工</h1>
+        <p>正在返回订单回货看板…</p>
+      </Surface>
+    </main>
+  );
+}
+
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { path, search } = useInternalLocation(basePath);
   const platformEntryReady = useInitialPlatformEntryCheck(path, search);
   const hasReworkContext = new URLSearchParams(search).has("rework");
+  const receivingEntryBatchId = new URLSearchParams(search).get("receivingBatchId")?.trim() ?? "";
   if (!platformEntryReady) return <PlatformEntryChecking />;
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
@@ -300,7 +317,9 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
-  else if (path === "/ui/qc/new") page = <Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>;
+  else if (path === "/ui/qc/new") page = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(receivingEntryBatchId)
+    ? <Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>
+    : <ReceivingReworkEntryRedirect />;
   else if (path === "/ui/process-configuration") page = hasReworkContext
     ? <Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
     : <WorkflowQueuePage active="返工单看板" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;

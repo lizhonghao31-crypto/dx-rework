@@ -13,7 +13,9 @@ describe("rework initiation information architecture", () => {
     expect(app).toContain("<ReworkInitiationV2Form />");
     expect(app).not.toContain("ReworkInitiationWorkbench");
     expect(form).not.toContain('get("draft")');
-    expect(form).toContain('get("styleNo")');
+    expect(form).toContain('get("receivingBatchId")');
+    expect(form).not.toContain('get("styleNo")');
+    expect(form).toContain("rework-orders/receiving-entry/");
     expect(form).toContain("window.location.assign(pageUrl(`ui/tasks/${submitted.reworkOrderId}`))");
     expect(form).toContain("只填返工真正需要的资料");
     expect(detail).toContain("InitiationFollowUpActions");

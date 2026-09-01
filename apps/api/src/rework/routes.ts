@@ -34,14 +34,14 @@ import type { ReworkV2DraftService } from "./v2-draft-service.js";
 import type { ReworkV2SubmissionService } from "./v2-submission-service.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{ receivingBatchId?: string }>;
+type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{ receivingBatchId: string }>;
 const CreateReworkDraftWithReceivingBatchSchema = {
   safeParse(value: unknown):
     | { success: true; data: CreateReworkDraftWithReceivingBatch }
     | { success: false } {
     if (!value || typeof value !== "object" || Array.isArray(value)) return { success: false };
     const { receivingBatchId, ...draft } = value as Record<string, unknown>;
-    if (receivingBatchId !== undefined && (typeof receivingBatchId !== "string" || !UUID_PATTERN.test(receivingBatchId))) {
+    if (typeof receivingBatchId !== "string" || !UUID_PATTERN.test(receivingBatchId)) {
       return { success: false };
     }
     const parsed = CreateReworkDraftSchema.safeParse(draft);
@@ -50,7 +50,7 @@ const CreateReworkDraftWithReceivingBatchSchema = {
       success: true,
       data: {
         ...parsed.data,
-        ...(typeof receivingBatchId === "string" ? { receivingBatchId } : {}),
+        receivingBatchId,
       },
     };
   },
@@ -231,6 +231,16 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
+  app.get<{ Params: { receivingBatchId: string } }>(
+    "/rework-orders/receiving-entry/:receivingBatchId",
+    async (request) => {
+      await actor(request);
+      if (!UUID_PATTERN.test(request.params.receivingBatchId)) {
+        throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+      }
+      return dependencies.service.getReceivingEntry(request.params.receivingBatchId);
+    },
+  );
   if (dependencies.attachments && dependencies.inspectionImageExtractor) {
     app.post("/rework-orders/inspection-report-extractions", async (request) => {
       const trustedActor = await actor(request);

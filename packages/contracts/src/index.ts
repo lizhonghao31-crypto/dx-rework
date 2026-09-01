@@ -443,6 +443,7 @@ export const ReworkOrderResponseSchema = z.object({
   reworkOrderId: IdSchema,
   reworkNo: z.string().nullable(),
   status: ReworkOrderStatusSchema,
+  receivingBatchId: IdSchema.nullable().optional(),
   styleNo: z.string().nullable(),
   customerSupplyCode: z.string().nullable(),
   factoryStyleNo: z.string().nullable(),

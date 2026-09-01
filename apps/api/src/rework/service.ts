@@ -40,6 +40,14 @@ type FactoryState = Readonly<{
 type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{
   receivingBatchId?: string;
 }>;
+type ReceivingReworkEntry = Readonly<{
+  receivingBatchId: string;
+  styleNo: string;
+}>;
+type ReworkDraftSource = Readonly<{
+  receivingBatchId: string | null;
+  styleNo: string | null;
+}>;
 type ReworkOrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
@@ -141,6 +149,31 @@ export class ReworkInitiationService {
     private readonly todoService?: TodoService,
   ) {}
 
+  async getReceivingEntry(receivingBatchId: string): Promise<ReceivingReworkEntry> {
+    const result = await this.database.query<{
+      style_no: string;
+      has_existing_rework: boolean;
+    }>(
+      `SELECT batch.style_no,
+              EXISTS(
+                SELECT 1
+                FROM rework_orders existing_order
+                WHERE existing_order.source_receiving_batch_id=batch.receiving_batch_id
+                  AND existing_order.status NOT IN ('cancelled','deleted')
+              ) AS has_existing_rework
+       FROM receiving_batches batch
+       WHERE batch.receiving_batch_id=$1
+         AND batch.deleted_at IS NULL`,
+      [receivingBatchId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
+    if (row.has_existing_rework) {
+      throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
+    }
+    return { receivingBatchId, styleNo: row.style_no.trim().toUpperCase() };
+  }
+
   async createDraft(
     actor: TrustedActorContext,
     input: CreateReworkDraftWithReceivingBatch,
@@ -148,10 +181,10 @@ export class ReworkInitiationService {
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, "rework.draft.create", idempotencyKey, input, 201, async (client) => {
       const reworkOrderId = randomUUID();
-      const sourceReceivingBatchId = await this.resolveSourceReceivingBatch(
+      const sourceReceivingBatch = await this.resolveSourceReceivingBatch(
         client,
         input.receivingBatchId,
-        input.styleNo ?? null,
+        input.styleNo,
       );
       const factory = await this.resolveFactory(client, input.processingFactory ?? null);
       if (input.merchandiserUserId) {
@@ -162,8 +195,8 @@ export class ReworkInitiationService {
         reworkOrderId,
         reworkNo: null,
         status: "draft" as const,
-        receivingBatchId: sourceReceivingBatchId,
-        styleNo: input.styleNo ?? null,
+        receivingBatchId: sourceReceivingBatch.receivingBatchId,
+        styleNo: sourceReceivingBatch.styleNo,
         customerSupplyCode: input.customerSupplyCode ?? null,
         factoryStyleNo: input.factoryStyleNo ?? null,
         orderNo: input.orderNo ?? null,
@@ -224,7 +257,7 @@ export class ReworkInitiationService {
           next.tailInspectionCostBearer,
           next.tailInspectionCostBearerSource,
           next.inspectionReport,
-          sourceReceivingBatchId,
+          sourceReceivingBatch.receivingBatchId,
           actor.actorId,
         ],
       );
@@ -236,16 +269,17 @@ export class ReworkInitiationService {
   private async resolveSourceReceivingBatch(
     client: PoolClient,
     receivingBatchId: string | undefined,
-    styleNo: string | null,
-  ): Promise<string | null> {
-    const normalizedStyleNo = styleNo?.trim().toUpperCase();
+    requestedStyleNo: string | null | undefined,
+  ): Promise<ReworkDraftSource> {
     if (!receivingBatchId) {
-      if (!normalizedStyleNo) return null;
+      const normalizedStyleNo = requestedStyleNo?.trim().toUpperCase() ?? "";
+      if (!normalizedStyleNo) return { receivingBatchId: null, styleNo: null };
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
       const fallback = await client.query<{ receiving_batch_id: string }>(
         `SELECT batch.receiving_batch_id
          FROM receiving_batches batch
          WHERE upper(btrim(batch.style_no))=$1
+           AND batch.deleted_at IS NULL
            AND NOT EXISTS (
              SELECT 1 FROM rework_orders completed_order
              WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
@@ -255,33 +289,42 @@ export class ReworkInitiationService {
          LIMIT 1`,
         [normalizedStyleNo],
       );
-      return fallback.rows[0]?.receiving_batch_id ?? null;
+      const fallbackBatchId = fallback.rows[0]?.receiving_batch_id;
+      if (fallbackBatchId) {
+        return this.resolveSourceReceivingBatch(client, fallbackBatchId, normalizedStyleNo);
+      }
+      return {
+        receivingBatchId: null,
+        styleNo: normalizedStyleNo,
+      };
     }
-    if (!normalizedStyleNo) {
-      throw new ApplicationError("VALIDATION_ERROR", "收货批次要求同时提供款号", 400);
-    }
+    const source = await client.query<{ style_no: string }>(
+      "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1 AND deleted_at IS NULL",
+      [receivingBatchId],
+    );
+    const sourceRow = source.rows[0];
+    if (!sourceRow) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
+    const normalizedStyleNo = sourceRow.style_no.trim().toUpperCase();
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
-    const batch = await client.query<{ style_no: string; closed: boolean }>(
+    const batch = await client.query<{ style_no: string; has_existing_rework: boolean }>(
       `SELECT batch.style_no,
               EXISTS(
-                SELECT 1 FROM rework_orders completed_order
-                WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
-                  AND completed_order.status='completed'
-              ) AS closed
+                SELECT 1 FROM rework_orders existing_order
+                WHERE existing_order.source_receiving_batch_id=batch.receiving_batch_id
+                  AND existing_order.status NOT IN ('cancelled','deleted')
+              ) AS has_existing_rework
        FROM receiving_batches batch
        WHERE batch.receiving_batch_id=$1
+         AND batch.deleted_at IS NULL
        FOR UPDATE`,
       [receivingBatchId],
     );
     const row = batch.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
-    if (row.style_no.trim().toUpperCase() !== normalizedStyleNo) {
-      throw new ApplicationError("VALIDATION_ERROR", "收货批次与款号不一致", 400);
+    if (row.has_existing_rework) {
+      throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
     }
-    if (row.closed) {
-      throw new ApplicationError("CONFLICT", "已完成返工的收货批次不能再次发起返工", 409);
-    }
-    return receivingBatchId;
+    return { receivingBatchId, styleNo: normalizedStyleNo };
   }
 
   async updateDraft(
@@ -307,9 +350,22 @@ export class ReworkInitiationService {
       const factory = input.processingFactory === undefined
         ? factoryFromRow(current)
         : await this.resolveFactory(client, input.processingFactory);
-      const nextStyleNo = input.styleNo === undefined ? current.style_no : input.styleNo;
-      const sourceReceivingBatchId = current.source_receiving_batch_id
-        ?? await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
+      if (
+        current.source_receiving_batch_id
+        && input.styleNo !== undefined
+        && input.styleNo?.trim().toUpperCase() !== current.style_no?.trim().toUpperCase()
+      ) {
+        throw new ApplicationError("VALIDATION_ERROR", "来源收货批次的款号不能在返工单修改", 400);
+      }
+      let nextStyleNo = current.source_receiving_batch_id
+        ? current.style_no
+        : input.styleNo === undefined ? current.style_no : input.styleNo;
+      let sourceReceivingBatchId = current.source_receiving_batch_id;
+      if (!sourceReceivingBatchId) {
+        const legacySource = await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
+        sourceReceivingBatchId = legacySource.receivingBatchId;
+        nextStyleNo = legacySource.styleNo;
+      }
       const nextVersion = current.version + 1;
       const nextTailInspectionRequired = input.tailInspectionRequired
         ?? current.tail_inspection_required;
@@ -1608,6 +1664,7 @@ export class ReworkInitiationService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      receivingBatchId: row.source_receiving_batch_id,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
@@ -1643,4 +1700,3 @@ export class ReworkInitiationService {
     };
   }
 }
-

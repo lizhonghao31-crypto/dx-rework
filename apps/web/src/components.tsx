@@ -166,12 +166,11 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "发起返工", "返工单看板"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
-  "发起返工": { label: "发起", glyph: "发" },
   "返工单看板": { label: "返工", glyph: "返" },
 };
 
@@ -407,7 +406,6 @@ export function Shell({
   const isSystemAdmin = currentUser?.businessRoles?.includes("system_admin") === true;
   const hasRole = (role: string) => currentUser?.businessRoles?.includes(role) === true;
   const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
-  const initiationAccess = isRoot || isOwner || hasRole("quality_control") || hasCapability("rework:initiate");
   const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
   const todoAccess = hasCapability("todo:view");
@@ -433,13 +431,6 @@ export function Shell({
   });
 
   const reworkNavigation: NavigationEntry[] = [];
-  if (initiationAccess) {
-    reworkNavigation.push({
-      name: "发起返工",
-      description: "登记款号、问题、数量和证据",
-      href: "/ui/qc/new",
-    });
-  }
   if (reworkBoardAccess) {
     reworkNavigation.push({
       name: "返工单看板",

@@ -54,6 +54,10 @@ type StoredImage = Readonly<{
   filename: string;
   mimeType: string;
 }>;
+type ReceivingReworkEntry = Readonly<{
+  receivingBatchId: string;
+  styleNo: string;
+}>;
 type ReworkInitiationV2FormProps = Readonly<{
   reworkOrderId?: string;
   embedded?: boolean;
@@ -80,18 +84,13 @@ type LocalN01Draft = Readonly<{
   savedAt: string;
 }>;
 
-const initialStyleNo = (): string => {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("styleNo")?.trim() ?? "";
-};
-
 const initialReceivingBatchId = (): string | undefined => {
   if (typeof window === "undefined") return undefined;
   return new URLSearchParams(window.location.search).get("receivingBatchId")?.trim() || undefined;
 };
 
-const emptyForm = (useUrlStyle = true): V2FormState => ({
-  styleNo: useUrlStyle ? initialStyleNo() : "",
+const emptyForm = (): V2FormState => ({
+  styleNo: "",
   factory: "",
   merchandiserUserId: "",
   tailInspectionRequired: true,
@@ -146,10 +145,8 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
         && parsed.receivingBatchId !== null
         && typeof parsed.receivingBatchId !== "string")
     ) return null;
-    const requestedStyle = initialStyleNo();
-    if (requestedStyle && parsed.form.styleNo.trim() !== requestedStyle) return null;
     const requestedBatchId = initialReceivingBatchId();
-    if (requestedBatchId && parsed.receivingBatchId !== requestedBatchId) return null;
+    if (!requestedBatchId || parsed.receivingBatchId !== requestedBatchId) return null;
     return {
       schemaVersion: 2,
       ...(parsed.receivingBatchId === undefined
@@ -230,6 +227,17 @@ async function request<T>(
   return schema.parse(await response.json());
 }
 
+const ReceivingReworkEntrySchema: ApiSchema<ReceivingReworkEntry> = {
+  parse(value: unknown): ReceivingReworkEntry {
+    if (!value || typeof value !== "object") throw new Error("收货订单资料格式错误");
+    const row = value as Record<string, unknown>;
+    if (typeof row.receivingBatchId !== "string" || typeof row.styleNo !== "string") {
+      throw new Error("收货订单资料格式错误");
+    }
+    return { receivingBatchId: row.receivingBatchId, styleNo: row.styleNo };
+  },
+};
+
 export function ReworkInitiationV2Form({
   reworkOrderId,
   embedded = false,
@@ -240,7 +248,7 @@ export function ReworkInitiationV2Form({
   const receivingBatchId = reworkOrderId
     ? undefined
     : initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined;
-  const [form, setForm] = useState<V2FormState>(() => localDraftSeed?.form ?? emptyForm(!reworkOrderId));
+  const [form, setForm] = useState<V2FormState>(() => localDraftSeed?.form ?? emptyForm());
   const [options, setOptions] = useState<ReworkInitiationOptionsResponse>({ merchandisers: [], factories: [] });
   const [supplyOptions, setSupplyOptions] = useState<ReworkSupplyContextOptionsResponse>({
     embroideryWashingMerchandisers: [],
@@ -256,9 +264,9 @@ export function ReworkInitiationV2Form({
       ? "正在读取返工草稿…"
       : localDraftSeed
         ? "已恢复本机保存资料；尚未创建返工单"
-        : initialStyleNo()
-          ? "已从订单回货带入款号，请补充返工资料"
-          : "填写三项核心资料并上传报告",
+        : receivingBatchId
+          ? "正在读取收货订单款号…"
+          : "请从订单回货发起返工",
   );
   const pendingSave = useRef<PendingSave | null>(null);
   const pendingSubmit = useRef<PendingSubmitAttempt | null>(null);
@@ -313,19 +321,29 @@ export function ReworkInitiationV2Form({
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "返工草稿加载失败");
       });
-    } else {
-      void Promise.all([coreOptions, optionalOptions]).then(([core, supply]) => {
+    } else if (receivingBatchId) {
+      void Promise.all([
+        coreOptions,
+        optionalOptions,
+        request(
+          `rework-orders/receiving-entry/${encodeURIComponent(receivingBatchId)}`,
+          ReceivingReworkEntrySchema,
+          { signal: controller.signal },
+        ),
+      ]).then(([core, supply, receivingEntry]) => {
         if (!active) return;
         setOptions(core);
         setSupplyOptions(supply);
+        setForm((current) => ({ ...current, styleNo: receivingEntry.styleNo }));
+        setMessage("已从订单回货读取款号，请补充返工资料");
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
-        setMessage(error instanceof Error ? error.message : "下拉资料加载失败");
+        setMessage(error instanceof Error ? error.message : "收货订单资料加载失败");
       });
     }
 
     return () => { active = false; controller.abort(); };
-  }, [reworkOrderId]);
+  }, [receivingBatchId, reworkOrderId]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -439,7 +457,7 @@ export function ReworkInitiationV2Form({
               method: "POST",
               headers: { "idempotency-key": key },
               body: JSON.stringify({
-                ...(receivingBatchId ? { receivingBatchId } : {}),
+                receivingBatchId,
                 ...payload,
               }),
             },
@@ -458,6 +476,7 @@ export function ReworkInitiationV2Form({
     setBusy(true);
     try {
       if (!reworkOrderId && !order) {
+        if (!receivingBatchId) throw new Error("请从订单回货发起返工");
         writeLocalN01Draft(form, images, receivingBatchId);
         pendingSubmit.current = null;
         setMessage("已保存到本机；尚未创建返工单");
@@ -652,7 +671,7 @@ export function ReworkInitiationV2Form({
     {!embedded ? <div className="rework-v2-heading">
       <div>
         <h1>发起返工</h1>
-        <p>只填返工真正需要的资料；从订单回货进入时仅自动带入款号。</p>
+        <p>只填返工真正需要的资料；款号由订单回货自动带入。</p>
       </div>
       <StatusBadge tone={complete ? "success" : "info"}>{complete ? "可以提交" : "填写中"}</StatusBadge>
     </div> : null}
@@ -663,7 +682,7 @@ export function ReworkInitiationV2Form({
         {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{availableImageCount} 份报告</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
-        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="输入款号" /></label>
+        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId || order?.receivingBatchId)} readOnly={Boolean(receivingBatchId || order?.receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="从订单回货自动带入" /></label>
         <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory, tailInspectionCostBearer: factory === "own_factory" && form.tailInspectionCostBearer === "processing_factory" ? "" : form.tailInspectionCostBearer }); pendingSubmit.current = null; }} /></div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
         <fieldset className="rework-v2-tail-choice" disabled={busy}>

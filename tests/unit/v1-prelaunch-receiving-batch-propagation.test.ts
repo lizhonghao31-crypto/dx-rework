@@ -17,7 +17,7 @@ describe("PR-01 stable receiving batch propagation", () => {
     expect(form).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
     expect(form).toContain("receivingBatchId: receivingBatchId ?? null");
     expect(form).toContain("writeLocalN01Draft(form, images, receivingBatchId)");
-    expect(form).toContain("...(receivingBatchId ? { receivingBatchId } : {})");
+    expect(form).toContain("receivingBatchId,");
     expect(form).toContain('"rework-orders/drafts"');
   });
 
@@ -35,8 +35,12 @@ describe("PR-01 stable receiving batch propagation", () => {
     expect(service).toContain("input.receivingBatchId");
     expect(service).toContain("pg_advisory_xact_lock(hashtext($1))");
     expect(service).toContain("source_receiving_batch_id,created_by,updated_by");
-    expect(service).toContain("收货批次与款号不一致");
-    expect(service).toContain("已完成返工的收货批次不能再次发起返工");
-    expect(service).toContain("return fallback.rows[0]?.receiving_batch_id ?? null");
+    expect(service).toContain("receiving_batch_id=$1 AND deleted_at IS NULL");
+    expect(service).toContain("AND batch.deleted_at IS NULL");
+    expect(routes).toContain("Readonly<{ receivingBatchId: string }>");
+    expect(routes).toContain('typeof receivingBatchId !== "string"');
+    expect(service).toContain("该收货批次已有返工单，不能重复发起");
+    expect(service).not.toContain("return fallback.rows[0]?.receiving_batch_id ?? null");
+    expect(service).toContain("styleNo: sourceReceivingBatch.styleNo");
   });
 });

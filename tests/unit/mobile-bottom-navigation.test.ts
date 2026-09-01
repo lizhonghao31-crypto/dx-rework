@@ -7,7 +7,8 @@ describe("mobile primary navigation", () => {
   it("derives the visible mobile entry list from the existing authorized navigation", async () => {
     const components = await read("apps/web/src/components.tsx");
 
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "发起返工", "返工单看板"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板"]');
+    expect(components).not.toContain('name: "发起返工"');
     expect(components).toContain("const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);");
     expect(components).toContain("const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;");
     expect(components).toContain("...(showPlatformHome ? mobileCandidates.slice(3) : []),");
@@ -31,7 +32,8 @@ describe("mobile primary navigation", () => {
     expect(css).toContain("position: fixed;");
     expect(css).toContain("env(safe-area-inset-bottom, 0px)");
     expect(css).toContain(".mobile-primary-navigation__more[open] .mobile-primary-navigation__drawer");
-    expect(app).toContain('<Shell active="发起返工" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
+    expect(app).toContain('<Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
+    expect(app).toContain("<ReceivingReworkEntryRedirect />");
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>');
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
   });

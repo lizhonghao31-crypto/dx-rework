@@ -334,6 +334,13 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   }
 
   async function startOrder(pass: 1 | 2, fixture: PassFixture) {
+    const receivingBatchId = randomUUID();
+    await fixture.database.query(
+      `INSERT INTO receiving_batches(
+         receiving_batch_id,style_no,created_by,created_at,delivery_note_quantity
+       ) VALUES($1,$2,$3,CURRENT_TIMESTAMP,100)`,
+      [receivingBatchId, `ROOT-PASS-${pass}`, fixture.rootUserId],
+    );
     const initialImageId = randomUUID();
     await fixture.database.query(
       `INSERT INTO attachments(
@@ -353,6 +360,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       "POST",
       "/rework-orders/drafts",
       {
+        receivingBatchId,
         styleNo: `ROOT-PASS-${pass}`,
         orderQuantity: 100,
         orderNo: `ROOT-ORDER-${pass}`,

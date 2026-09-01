@@ -36,7 +36,8 @@ describe("order board global style search", () => {
     expect(receivingPage).not.toContain("setStyleNo(event.target.value.toUpperCase())");
     expect(rework).toContain("styleNo?.trim().toUpperCase()");
     expect(rework).toContain("upper(btrim(batch.style_no))=$1");
-    expect(rework).toContain("row.style_no.trim().toUpperCase() !== normalizedStyleNo");
+    expect(rework).toContain("WHERE batch.receiving_batch_id=$1");
+    expect(rework).toContain("input.styleNo?.trim().toUpperCase() !== current.style_no?.trim().toUpperCase()");
     expect(migration).toContain("upper(btrim(NEW.style_no))<>upper(btrim(batch_style))");
     expect(migration).toContain("hashtext(upper(btrim(batch_style)))");
   });
