@@ -170,6 +170,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     "master_data:manage",
   );
   const qc = () => actor(ids.qc, ["quality_control"], "rework:initiate");
+  const tailTodoView = () => actor(ids.tail, ["tail_supervisor"], "todo:view");
   const tailConfigure = () => actor(
     ids.tail,
     ["tail_supervisor"],
@@ -382,6 +383,19 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       reworkQuantity: 200,
       reworkNo: expect.stringMatching(/^RW-/),
     });
+
+    const firstTodoPage = await todoService.listForActor(tailTodoView(), { module: "rework" });
+    expect(firstTodoPage.moduleCounts.rework).toBeGreaterThan(0);
+    expect(firstTodoPage.todos).toHaveLength(1);
+    expect(firstTodoPage.nextCursor).toBeNull();
+    expect((await todoService.listForActor(
+      tailTodoView(),
+      { module: "rework", query: "%" },
+    )).todos).toHaveLength(0);
+    expect(await todoService.getForActor(
+      tailTodoView(),
+      firstTodoPage.todos[0]!.todoId,
+    )).toMatchObject({ todoId: firstTodoPage.todos[0]!.todoId, status: "pending" });
 
     // Post-creation order evidence must pass the same current-schema guards
     // used in production, while preserving the active workflow state.

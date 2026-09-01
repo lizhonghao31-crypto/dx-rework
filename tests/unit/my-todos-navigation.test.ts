@@ -23,7 +23,9 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain('{ id: "sourcing", label: "外发定价&选厂" }');
     expect(page).toContain('{ id: "wages", label: "返工工资" }');
     expect(page).toContain("{moduleCounts[module.id]}件");
-    expect(page).toContain("visibleTodos.map");
+    expect(page).toContain("todos.map");
+    expect(page).toContain("my-todos-pagination");
+    expect(page).toContain("每页 15 条");
     expect(page).toContain("my-todo-index");
     expect(page).toContain("节点停留");
     expect(page).toContain("您当前的任务已全部完成，谢谢");

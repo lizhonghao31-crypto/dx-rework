@@ -1,4 +1,4 @@
-import { TodoListResponseSchema, type TodoResponse } from "@dx-rework/contracts";
+import { TodoResponseSchema, type TodoResponse } from "@dx-rework/contracts";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useState } from "react";
 
@@ -75,18 +75,17 @@ export function ResponsibilityTaskPage() {
       setState({ kind: "error", message: "任务链接无效" });
       return;
     }
-    const response = await fetch(apiUrl("todos/mine"), {
+    const response = await fetch(apiUrl(`todos/mine/${todoId}`), {
       credentials: "include",
       headers: { accept: "application/json" },
       ...(signal ? { signal } : {}),
     });
-    if (!response.ok) throw new Error(`任务加载失败（${response.status}）`);
-    const { todos } = TodoListResponseSchema.parse(await response.json());
-    const todo = todos.find((item) => item.todoId === todoId);
-    if (!todo) {
+    if (response.status === 404) {
       setState({ kind: "error", message: "该任务已不再分配给你，请返回我的待办查看当前任务。" });
       return;
     }
+    if (!response.ok) throw new Error(`任务加载失败（${response.status}）`);
+    const todo = TodoResponseSchema.parse(await response.json());
     if (!isActionTodo(todo)) {
       setState({ kind: "error", message: "该任务暂不支持独立处理，请返回我的待办。" });
       return;

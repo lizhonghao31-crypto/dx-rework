@@ -13,8 +13,10 @@ describe("responsibility task page", () => {
 
     expect(app).toContain('path.startsWith("/ui/my-tasks/")');
     expect(list).toContain('pageUrl(`ui/my-tasks/${todo.todoId}`)');
-    expect(list).toContain('todo.todoType !== "information"');
-    expect(task).toContain('item.todoId === todoId');
+    expect(list).toContain("TodoListResponseSchema");
+    expect(list).toContain("result.todos");
+    expect(task).toContain('apiUrl(`todos/mine/${todoId}`)');
+    expect(task).toContain("TodoResponseSchema.parse");
     expect(task).toContain('todo.status === "completed"');
     expect(task).toContain("该任务已不再分配给你");
     expect(task).toContain("您在本订单内的任务已全部完成，谢谢");
