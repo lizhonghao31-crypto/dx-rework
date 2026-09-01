@@ -859,8 +859,19 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       documentQuantity: 44,
       actualQuantity: 39,
       defectiveQuantity: 3,
+      rootCorrectable: true,
+      rootDeletable: false,
       rootMutable: false,
     });
+
+    await expect(service.correctBatch(rootCorrector(), receipt.value.receivingBatchId, {
+      expectedVersion: corrected.version,
+      styleNo: corrected.styleNo,
+      documentQuantity: corrected.documentQuantity,
+      actualQuantity: corrected.actualQuantity,
+      defectiveQuantity: corrected.defectiveQuantity,
+      attachmentIds: [await readyImage()],
+    })).rejects.toThrow("返工发起后不能替换送货单图片");
 
     await cancelReworkDraft(firstDraftId, "STYLE-REWORK-LINK-CORRECTED-01");
     board = await service.board(businessDate(), businessDate(), "STYLE-REWORK-LINK-CORRECTED-01");
