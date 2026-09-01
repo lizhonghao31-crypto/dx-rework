@@ -9,7 +9,7 @@ import { promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type Supplier = Readonly<{
   supplierId: string;
@@ -141,7 +141,7 @@ const valueAt = (row: readonly string[], index: number): string =>
 
 export type MasterDataView = "suppliers" | "processes";
 
-export function MasterDataPage({ view = "suppliers" }: { view?: MasterDataView }) {
+export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [processes, setProcesses] = useState<Process[]>([]);
   const [processDefaultWorkerCandidates, setProcessDefaultWorkerCandidates] = useState<ProcessDefaultWorkerCandidate[]>([]);
@@ -583,7 +583,11 @@ export function MasterDataPage({ view = "suppliers" }: { view?: MasterDataView }
           <p>{view === "processes" ? "维护返工使用的公共工艺、计价单位和默认候选人。" : "维护加工厂及其他供应商资料。"}</p>
         </div>
       </header>
-      <Surface className="admin-card"><SystemManagementNavigation active={view === "processes" ? "process-data" : "master-data"} /></Surface>
+      <Surface className="admin-card"><SystemManagementNavigation active="master-data" /></Surface>
+      <nav className="master-data-view-tabs" aria-label="基础资料数据库">
+        <a className={view === "processes" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=processes`}>工艺数据库</a>
+        <a className={view === "suppliers" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=suppliers`}>工厂与供应商</a>
+      </nav>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
 
