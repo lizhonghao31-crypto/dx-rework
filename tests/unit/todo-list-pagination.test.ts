@@ -55,51 +55,40 @@ const row = (index: number) => {
 };
 
 describe("my todo pagination", () => {
-  it("returns 15 actionable todos, module counts and a stable next cursor", async () => {
+  it("returns 15 actionable todos, module counts and a directly addressable second page", async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [{ todo_module: "rework", todo_count: "16" }] })
-      .mockResolvedValueOnce({ rows: Array.from({ length: 16 }, (_, index) => row(index + 1)) })
+      .mockResolvedValueOnce({ rows: [{ total_count: "16" }] })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 15 }, (_, index) => row(index + 1)) })
       .mockResolvedValueOnce({ rows: [{ todo_module: "rework", todo_count: "16" }] })
+      .mockResolvedValueOnce({ rows: [{ total_count: "16" }] })
       .mockResolvedValueOnce({ rows: [row(16)] });
     const service = new TodoService({ query } as unknown as Pool);
 
     const first = await service.listForActor(actor, { module: "rework", query: "STYLE" });
     expect(first.todos).toHaveLength(15);
-    expect(first.moduleCounts).toEqual({ rework: 16, sourcing: 0, wages: 0 });
-    expect(first.nextCursor).toEqual(expect.any(String));
-    expect(query.mock.calls[1]?.[0]).toContain("LIMIT 16");
+    expect(first.moduleCounts).toEqual({ rework: 16, sourcing: 0 });
+    expect(first).toMatchObject({ page: 1, pageSize: 15, totalCount: 16, totalPages: 2 });
+    expect(query.mock.calls[2]?.[0]).toContain("LIMIT $4 OFFSET $5");
+    expect(query.mock.calls[2]?.[1]).toEqual([actor.actorId, "rework", "STYLE", 15, 0]);
 
     const second = await service.listForActor(actor, {
       module: "rework",
       query: "STYLE",
-      cursor: first.nextCursor ?? "",
+      page: 2,
     });
     expect(second.todos).toHaveLength(1);
-    expect(second.nextCursor).toBeNull();
-    expect(query.mock.calls[3]?.[1]).toEqual([
-      actor.actorId,
-      "rework",
-      "STYLE",
-      0,
-      null,
-      row(15).created_at.toISOString(),
-      row(15).todo_id,
-    ]);
+    expect(second).toMatchObject({ page: 2, pageSize: 15, totalCount: 16, totalPages: 2 });
+    expect(query.mock.calls[5]?.[1]).toEqual([actor.actorId, "rework", "STYLE", 15, 15]);
   });
 
-  it("rejects a cursor bound to another query before loading a page", async () => {
-    const query = vi.fn()
-      .mockResolvedValueOnce({ rows: [{ todo_module: "rework", todo_count: 16 }] })
-      .mockResolvedValueOnce({ rows: Array.from({ length: 16 }, (_, index) => row(index + 1)) })
-      .mockResolvedValueOnce({ rows: [{ todo_module: "rework", todo_count: 16 }] });
+  it("rejects invalid numeric pages before loading data", async () => {
+    const query = vi.fn();
     const service = new TodoService({ query } as unknown as Pool);
-    const first = await service.listForActor(actor, { module: "rework", query: "STYLE" });
-
-    await expect(service.listForActor(actor, {
-      module: "rework",
-      query: "OTHER",
-      cursor: first.nextCursor ?? "",
-    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
-    expect(query).toHaveBeenCalledTimes(3);
+    for (const page of [0, 100_001]) {
+      await expect(service.listForActor(actor, { module: "rework", page }))
+        .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    }
+    expect(query).not.toHaveBeenCalled();
   });
 });
