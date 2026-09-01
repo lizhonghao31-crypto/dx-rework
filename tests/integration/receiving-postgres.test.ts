@@ -284,6 +284,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0115_receiving_style_identity_canonicalization.sql");
     await migration("0119_tail_inspection_cost_bearer_provenance.sql");
     await migration("0130_root_receiving_correction_after_rework.sql");
+    await migration("0132_receiving_merge_into_rework_target.sql");
   });
 
   afterAll(async () => {
@@ -1110,6 +1111,86 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       [target.value.receivingBatchId],
     );
     expect(mergeAudit.rows[0]?.count).toBe("1");
+  });
+
+  it("lets Root merge a typo batch into a canonical batch that already has rework and reconcile quantities", async () => {
+    const targetImage = await readyImage();
+    const sourceImage = await readyImage();
+    const target = await service.create(receiver(), {
+      styleNo: "IN20541804",
+      documentQuantity: 1976,
+      actualQuantity: 100,
+      defectiveQuantity: 2,
+      attachmentIds: [targetImage],
+    }, randomUUID());
+    const reworkDraft = await reworkService.createDraft(initiator(), {
+      receivingBatchId: target.value.receivingBatchId,
+      styleNo: "IN20541804",
+    }, randomUUID());
+    const reworkOrderId = reworkDraft.value.reworkOrderId;
+    const source = await service.create(receiver(), {
+      styleNo: "LN20541804",
+      documentQuantity: 1976,
+      actualQuantity: 150,
+      defectiveQuantity: 1,
+      attachmentIds: [sourceImage],
+    }, randomUUID());
+
+    const sourceRow = (await service.board(businessDate(), businessDate(), "LN20541804")).rows[0]!;
+    await expect(service.correctBatch(rootCorrector(), source.value.receivingBatchId, {
+      expectedVersion: sourceRow.version,
+      styleNo: "IN20541804",
+      documentQuantity: 1976,
+      actualQuantity: 147,
+      defectiveQuantity: 0,
+      attachmentIds: [await readyImage()],
+    })).rejects.toThrow("目标订单已经发起过返工，不能替换送货单图片");
+    const merged = await service.correctBatch(rootCorrector(), source.value.receivingBatchId, {
+      expectedVersion: sourceRow.version,
+      styleNo: "IN20541804",
+      documentQuantity: 1976,
+      actualQuantity: 147,
+      defectiveQuantity: 0,
+    });
+
+    expect(merged).toMatchObject({
+      receivingBatchId: target.value.receivingBatchId,
+      styleNo: "IN20541804",
+      documentQuantity: 1976,
+      actualQuantity: 247,
+      defectiveQuantity: 2,
+      differenceQuantity: -1729,
+    });
+    const board = await service.board(businessDate(), businessDate(), "IN20541804");
+    expect(board.rows).toHaveLength(1);
+    expect(board.rows[0]).toMatchObject({
+      receivingBatchId: target.value.receivingBatchId,
+      actualQuantity: 247,
+      currentActualQuantity: 247,
+      defectiveQuantity: 2,
+      currentDefectiveQuantity: 2,
+      receiptCount: 2,
+      reworkOrderId,
+      reworkStatus: "draft",
+      rootCorrectable: true,
+      rootDeletable: false,
+    });
+    expect(board.rows[0]?.attachments.map((item) => item.attachmentId).sort()).toEqual(
+      [targetImage, sourceImage].sort(),
+    );
+    const link = await database.query<{ source_receiving_batch_id: string; style_no: string }>(
+      "SELECT source_receiving_batch_id,style_no FROM rework_orders WHERE rework_order_id=$1",
+      [reworkOrderId],
+    );
+    expect(link.rows[0]).toEqual({
+      source_receiving_batch_id: target.value.receivingBatchId,
+      style_no: "IN20541804",
+    });
+    const sourceBatch = await database.query<{ deleted_at: Date | null }>(
+      "SELECT deleted_at FROM receiving_batches WHERE receiving_batch_id=$1",
+      [source.value.receivingBatchId],
+    );
+    expect(sourceBatch.rows[0]?.deleted_at).toBeInstanceOf(Date);
   });
 
   it("lets Root replace receiving images while retaining retired objects and audit", async () => {
