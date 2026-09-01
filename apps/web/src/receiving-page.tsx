@@ -11,6 +11,7 @@ import {
   sha256Hex,
 } from "./attachment-upload.js";
 import { mapWithConcurrency } from "./concurrency.js";
+import { useDebouncedValue } from "./use-debounced-value.js";
 import "./receiving-page.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -28,6 +29,8 @@ const businessDateDaysAgo = (daysAgo: number): string => {
 };
 
 type StyleOptions = Readonly<{ styles: readonly string[] }>;
+type RepeatOrder = Readonly<{ receivingBatchId: string; styleNo: string; documentQuantity: number }>;
+type RepeatOptions = Readonly<{ orders: readonly RepeatOrder[] }>;
 type Receipt = Readonly<{
   receiptId: string;
   receivingBatchId: string;
@@ -117,6 +120,14 @@ const uploadReceivingImage = async (source: File): Promise<string> => {
 export function ReceivingPage() {
   const [open, setOpen] = useState(false);
   const [backfill, setBackfill] = useState(false);
+  const [repeat, setRepeat] = useState(false);
+  const [repeatQuery, setRepeatQuery] = useState("");
+  const debouncedRepeatQuery = useDebouncedValue(repeatQuery, 180);
+  const [repeatOrders, setRepeatOrders] = useState<readonly RepeatOrder[]>([]);
+  const [repeatOptionsQuery, setRepeatOptionsQuery] = useState("");
+  const [selectedRepeatOrder, setSelectedRepeatOrder] = useState<RepeatOrder | null>(null);
+  const [repeatMenuOpen, setRepeatMenuOpen] = useState(false);
+  const [repeatSearching, setRepeatSearching] = useState(false);
   const [receivedDate, setReceivedDate] = useState(businessDateDaysAgo(1));
   const [styles, setStyles] = useState<readonly string[]>([]);
   const [styleNo, setStyleNo] = useState("");
@@ -139,6 +150,35 @@ export function ReceivingPage() {
   };
 
   useEffect(() => { void loadStyles(); }, []);
+  useEffect(() => {
+    const needle = debouncedRepeatQuery.trim();
+    if (!repeat || needle.length < 4) {
+      setRepeatOrders([]);
+      setRepeatOptionsQuery("");
+      setRepeatSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    const params = new URLSearchParams({ q: needle });
+    setRepeatSearching(true);
+    void requestJson<RepeatOptions>(`receiving/repeat-options?${params.toString()}`, {
+      method: "GET",
+      signal: controller.signal,
+    })
+      .then((body) => {
+        if (controller.signal.aborted) return;
+        setRepeatOrders(body.orders);
+        setRepeatOptionsQuery(needle.toUpperCase());
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setRepeatOrders([]);
+        setRepeatOptionsQuery("");
+        setMessage(cause instanceof Error ? cause.message : "可追加收货订单加载失败");
+      })
+      .finally(() => { if (!controller.signal.aborted) setRepeatSearching(false); });
+    return () => { controller.abort(); };
+  }, [repeat, debouncedRepeatQuery]);
   useEffect(() => () => {
     for (const previewUrl of previewUrls.current) URL.revokeObjectURL(previewUrl);
     previewUrls.current.clear();
@@ -193,6 +233,47 @@ export function ReceivingPage() {
       return current.filter((_, itemIndex) => itemIndex !== index);
     });
     pendingKey.current = null;
+  };
+
+  const submitRepeated = async () => {
+    const actualCount = Number(actualQuantity);
+    const defectiveCount = Number(defectiveQuantity);
+    if (!selectedRepeatOrder) { setMessage("请先搜索并选择要追加收货的订单"); return; }
+    if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
+    if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
+    if (defectiveCount > actualCount) { setMessage("次品数量不能超过实际收货数量"); return; }
+
+    setBusy(true);
+    setMessage("正在提交多次收货…");
+    try {
+      const key = pendingKey.current ?? createClientRequestId();
+      pendingKey.current = key;
+      const receipt = await requestJson<Receipt>("receiving/repeat-receipts", {
+        method: "POST",
+        headers: { "idempotency-key": key },
+        body: JSON.stringify({
+          receivingBatchId: selectedRepeatOrder.receivingBatchId,
+          actualQuantity: actualCount,
+          defectiveQuantity: defectiveCount,
+        }),
+      });
+      pendingKey.current = null;
+      setMessage(`多次收货成功 · ${receipt.styleNo} · 实收 ${receipt.actualQuantity} 件 · 次品 ${receipt.defectiveQuantity} 件`);
+      setRepeatQuery("");
+      setRepeatOrders([]);
+      setSelectedRepeatOrder(null);
+      setRepeatMenuOpen(false);
+      setActualQuantity("");
+      setDefectiveQuantity("0");
+      setRepeat(false);
+      setOpen(false);
+    } catch (cause) {
+      const nextMessage = cause instanceof Error ? cause.message : "提交失败，请稍后重试";
+      if (nextMessage.includes("重新搜索")) setSelectedRepeatOrder(null);
+      setMessage(nextMessage);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async () => {
@@ -263,14 +344,88 @@ export function ReceivingPage() {
       <div className="receiving-brand">达兴 · 仓库收货</div>
       {!open ? (
         <div className="receiving-entry-actions">
-          <button className="receiving-start" type="button" onClick={() => { setBackfill(false); setOpen(true); setMessage(""); }}>
+          <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setBackfill(false); setOpen(true); setMessage(""); }}>
             <span aria-hidden="true">＋</span>
             <strong>点击收货</strong>
           </button>
-          <button className="receiving-backfill-start" type="button" onClick={() => { setBackfill(true); setReceivedDate(businessDateDaysAgo(1)); setOpen(true); setMessage(""); }}>
+          <button className="receiving-repeat-start" type="button" onClick={() => {
+            setRepeat(true);
+            setBackfill(false);
+            setRepeatQuery("");
+            setRepeatOrders([]);
+            setSelectedRepeatOrder(null);
+            setActualQuantity("");
+            setDefectiveQuantity("0");
+            setOpen(true);
+            setMessage("");
+          }}>
+            多次收货
+          </button>
+          <button className="receiving-backfill-start" type="button" onClick={() => { setRepeat(false); setBackfill(true); setReceivedDate(businessDateDaysAgo(1)); setOpen(true); setMessage(""); }}>
             补录
           </button>
         </div>
+      ) : repeat ? (
+        <Surface className="receiving-form-card">
+          <h1>多次收货</h1>
+          <label className="receiving-field">
+            <span>款号</span>
+            <div className="receiving-style-input">
+              <input
+                type="search"
+                autoComplete="off"
+                inputMode="text"
+                placeholder="输入款号后4-5位搜索"
+                value={repeatQuery}
+                disabled={busy}
+                onFocus={() => setRepeatMenuOpen(true)}
+                onBlur={() => window.setTimeout(() => setRepeatMenuOpen(false), 120)}
+                onChange={(event) => {
+                  setRepeatQuery(event.target.value);
+                  setRepeatOrders([]);
+                  setRepeatOptionsQuery("");
+                  setSelectedRepeatOrder(null);
+                  setRepeatMenuOpen(true);
+                  pendingKey.current = null;
+                }}
+              />
+              {repeatMenuOpen && repeatOptionsQuery === repeatQuery.trim().toUpperCase() && repeatOrders.length > 0 ? <div className="receiving-style-menu" role="listbox">
+                {repeatOrders.map((order) => <button
+                  className="receiving-repeat-option"
+                  type="button"
+                  key={order.receivingBatchId}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setRepeatQuery(order.styleNo);
+                    setSelectedRepeatOrder(order);
+                    setRepeatMenuOpen(false);
+                    pendingKey.current = null;
+                  }}
+                ><strong>{order.styleNo}</strong><small>原送货单 {order.documentQuantity} 件</small></button>)}
+              </div> : null}
+            </div>
+          </label>
+          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · 原送货单 {selectedRepeatOrder.documentQuantity} 件</p> : (
+            <p className="receiving-repeat-hint">{repeatSearching ? "正在搜索…" : repeatQuery.trim().length < 4 ? "请输入款号末尾至少4位" : "没有可追加收货的匹配订单"}</p>
+          )}
+          <label className="receiving-field">
+            <span>实际收货数量</span>
+            <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
+          </label>
+          <label className="receiving-field">
+            <span>次品数量</span>
+            <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={defectiveQuantity} disabled={busy} onChange={(event) => { setDefectiveQuantity(event.target.value); pendingKey.current = null; }} />
+          </label>
+          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submitRepeated()}>{busy ? "提交中…" : "提交多次收货"}</Button>
+          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => {
+            pendingKey.current = null;
+            setRepeat(false);
+            setRepeatQuery("");
+            setRepeatOrders([]);
+            setSelectedRepeatOrder(null);
+            setOpen(false);
+          }}>返回</button>
+        </Surface>
       ) : (
         <Surface className="receiving-form-card">
           <h1>{backfill ? "补录收货" : "收货"}</h1>
