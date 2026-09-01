@@ -268,7 +268,7 @@ export class ReworkInitiationService {
   private async resolveSourceReceivingBatch(
     client: PoolClient,
     receivingBatchId: string | undefined,
-    requestedStyleNo: string | undefined,
+    requestedStyleNo: string | null | undefined,
   ): Promise<ReworkDraftSource> {
     if (!receivingBatchId) {
       return {
