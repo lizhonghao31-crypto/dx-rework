@@ -301,7 +301,8 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
-  else if (path === "/ui/master-data") page = <MasterDataPage />;
+  else if (path === "/ui/master-data") page = <MasterDataPage view="suppliers" />;
+  else if (path === "/ui/process-database") page = <MasterDataPage view="processes" />;
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
   else if (path === "/ui/frontline/tasks") page = <FrontlineTaskPage />;
@@ -360,7 +361,7 @@ export function App() {
   if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
   }
-  if (path === "/ui/master-data" || path === "/ui/people") {
+  if (path === "/ui/master-data" || path === "/ui/process-database" || path === "/ui/people") {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredCapability: "master_data:manage" },
