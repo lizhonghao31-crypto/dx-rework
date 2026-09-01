@@ -129,6 +129,7 @@
     { "version": "0127_sourcing_factory_change_role_metadata", "checksum": "b3d505e010d1932d22036f8091b27924645965c48917680d64aba9f8c76adf6a" },
     { "version": "0128_sourcing_factory_change_workflow", "checksum": "da31247c93785043465251fb3af80ec69ece25dfa7e84cf9845d7a1776c580f6" },
     { "version": "0129_n05_price_ie_reapproval", "checksum": "82d50207d812f66eb892f015409d13ae8ef3279aefcfe6a48ea1ea34ac94986e" },
-    { "version": "0130_root_receiving_correction_after_rework", "checksum": "bf4b495d72e00b02f066f53ca22f974d8796be91c52ffe222de5dd0a5c0b02de" }
+    { "version": "0130_root_receiving_correction_after_rework", "checksum": "bf4b495d72e00b02f066f53ca22f974d8796be91c52ffe222de5dd0a5c0b02de" },
+    { "version": "0131_responsibility_todo_explicit_assignees", "checksum": "271ed948d69cd1753f3a74c41879dff70fb6c4c400276827cde349245de0732b" }
   ]
 }
