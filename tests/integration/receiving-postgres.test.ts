@@ -560,6 +560,47 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       .rejects.toThrow("收货状态筛选无效");
   });
 
+  it("keeps an open rework action visible when same-style receiving batches consolidate", async () => {
+    const today = businessDate();
+    const yesterday = pastBusinessDate(1);
+    const current = await service.create(receiver(), {
+      styleNo: "STYLE-REWORK-PROJECTION-01",
+      documentQuantity: 100,
+      actualQuantity: 30,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const historical = await service.create(receiver(), {
+      styleNo: "STYLE-REWORK-PROJECTION-01",
+      documentQuantity: 100,
+      actualQuantity: 40,
+      attachmentIds: [await readyImage()],
+      receivedDate: yesterday,
+    }, randomUUID());
+    expect(historical.value.receivingBatchId).not.toBe(current.value.receivingBatchId);
+
+    const draft = await reworkService.createDraft(initiator(), {
+      receivingBatchId: historical.value.receivingBatchId,
+      styleNo: "STYLE-REWORK-PROJECTION-01",
+    }, randomUUID());
+
+    const board = await service.board(today, today, "STYLE-REWORK-PROJECTION-01");
+    expect(board.rows).toHaveLength(1);
+    expect(board.rows[0]).toMatchObject({
+      receivingBatchId: current.value.receivingBatchId,
+      batchCount: 2,
+      reworkOrderId: draft.value.reworkOrderId,
+      reworkStatus: "draft",
+    });
+
+    await cancelReworkDraft(draft.value.reworkOrderId, "STYLE-REWORK-PROJECTION-01");
+    const afterCancellation = await service.board(today, today, "STYLE-REWORK-PROJECTION-01");
+    expect(afterCancellation.rows[0]).toMatchObject({
+      receivingBatchId: current.value.receivingBatchId,
+      reworkOrderId: null,
+      reworkStatus: null,
+    });
+  });
+
   it("assigns Root quantity corrections to the audited correction date instead of prior receipts", async () => {
     const today = businessDate();
     const receipt = await service.create(receiver(), {

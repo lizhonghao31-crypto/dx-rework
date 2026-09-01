@@ -1146,9 +1146,23 @@ export class ReceivingService {
        LEFT JOIN LATERAL (
          SELECT item.rework_order_id,item.status
          FROM rework_orders item
-         WHERE item.source_receiving_batch_id=action.receiving_batch_id
-           AND item.status<>'deleted'
-         ORDER BY item.updated_at DESC,item.rework_order_id DESC
+         WHERE item.status<>'deleted'
+           AND (
+             (
+               item.status NOT IN ('completed','cancelled')
+               AND EXISTS (
+                 SELECT 1
+                 FROM scoped_batches source_batch
+                 WHERE source_batch.receiving_batch_id=item.source_receiving_batch_id
+                   AND source_batch.style_key=totals.style_key
+               )
+             )
+             OR item.source_receiving_batch_id=action.receiving_batch_id
+           )
+         ORDER BY
+           CASE WHEN item.status NOT IN ('completed','cancelled') THEN 0 ELSE 1 END,
+           CASE WHEN item.status='draft' THEN 1 ELSE 0 END,
+           item.updated_at DESC,item.rework_order_id DESC
          LIMIT 1
        ) rework ON true
        LEFT JOIN LATERAL (
