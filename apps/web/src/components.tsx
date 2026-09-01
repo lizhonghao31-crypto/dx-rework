@@ -1,3 +1,4 @@
+import { TodoNewIndicatorSchema } from "@dx-rework/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
@@ -6,11 +7,28 @@ import {
   StatusBadge,
   Surface,
 } from "@dx-rework/ui";
+import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
 import { canAccessSourcing } from "./platform-modules.js";
+import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
+import {
+  indicatorMarker,
+  isUnseenTodoMarker,
+  readSeenTodoMarker,
+  writeSeenTodoMarker,
+  type TodoArrivalMarker,
+} from "./todo-new-indicator.js";
 
+const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const browserTodoStorage = (): Storage | null => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
 
@@ -66,20 +84,30 @@ function PrimaryNavigation({
   navigation,
   active,
   basePath,
+  hasNewTodos = false,
+  onOpenTodos,
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
+  hasNewTodos?: boolean;
+  onOpenTodos?: () => void;
 }) {
   return (
     <nav className="primary-navigation" aria-label="主导航">
       {navigation.map((entry) => (
         <div className="primary-navigation__entry" key={entry.name}>
-          <a href={`${basePath}${entry.href}`}>
+          <a
+            href={`${basePath}${entry.href}`}
+            onClick={entry.name === "我的待办" ? onOpenTodos : undefined}
+          >
             <NavigationItem icon="•" active={active === entry.name}>
               <span className="primary-navigation__copy">
                 <strong>{entry.name}</strong>
                 <small>{entry.description}</small>
+                {entry.name === "我的待办" && hasNewTodos
+                  ? <span className="todo-new-indicator" role="status">您有新的待办</span>
+                  : null}
               </span>
             </NavigationItem>
           </a>
@@ -94,16 +122,26 @@ function DesktopNavigation({
   groups,
   active,
   basePath,
+  hasNewTodos,
+  onOpenTodos,
 }: {
   globalNavigation: readonly NavigationEntry[];
   groups: readonly NavigationGroup[];
   active: string;
   basePath: string;
+  hasNewTodos: boolean;
+  onOpenTodos: () => void;
 }) {
   return (
     <nav className="desktop-navigation" aria-label="桌面端主导航">
       <div className="desktop-navigation__global">
-        <PrimaryNavigation navigation={globalNavigation} active={active} basePath={basePath} />
+        <PrimaryNavigation
+          navigation={globalNavigation}
+          active={active}
+          basePath={basePath}
+          hasNewTodos={hasNewTodos}
+          onOpenTodos={onOpenTodos}
+        />
       </div>
       {groups.filter((group) => group.entries.length > 0).map((group) => {
         const groupIsActive = group.entries.some((entry) => entry.name === active);
@@ -147,17 +185,28 @@ function MobileNavigationLink({
   entry,
   active,
   basePath,
+  hasNewTodos,
+  onOpenTodos,
 }: {
   entry: NavigationEntry;
   active: string;
   basePath: string;
+  hasNewTodos: boolean;
+  onOpenTodos: () => void;
 }) {
   const meta = MOBILE_NAVIGATION_META[entry.name] ?? { label: entry.name, glyph: "目" };
   const isActive = active === entry.name;
   return (
-    <a href={basePath + entry.href} aria-current={isActive ? "page" : undefined}>
+    <a
+      href={basePath + entry.href}
+      aria-current={isActive ? "page" : undefined}
+      onClick={entry.name === "我的待办" ? onOpenTodos : undefined}
+    >
       <NavigationItem icon={meta.glyph} active={isActive}>
         <span className="mobile-primary-navigation__label">{meta.label}</span>
+        {entry.name === "我的待办" && hasNewTodos
+          ? <span className="todo-new-indicator todo-new-indicator--mobile" role="status">您有新的待办</span>
+          : null}
       </NavigationItem>
     </a>
   );
@@ -168,11 +217,15 @@ function MobilePrimaryNavigation({
   active,
   basePath,
   showPlatformHome,
+  hasNewTodos,
+  onOpenTodos,
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
   showPlatformHome: boolean;
+  hasNewTodos: boolean;
+  onOpenTodos: () => void;
 }) {
   const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);
   const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;
@@ -195,7 +248,13 @@ function MobilePrimaryNavigation({
       ) : null}
       {primaryNavigation.map((entry) => (
         <div className="mobile-primary-navigation__entry" key={entry.name}>
-          <MobileNavigationLink entry={entry} active={active} basePath={basePath} />
+          <MobileNavigationLink
+            entry={entry}
+            active={active}
+            basePath={basePath}
+            hasNewTodos={hasNewTodos}
+            onOpenTodos={onOpenTodos}
+          />
         </div>
       ))}
       {moreNavigation.length ? (
@@ -227,6 +286,8 @@ export function Shell({
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
+  const [latestTodoMarker, setLatestTodoMarker] = useState<TodoArrivalMarker | null>(null);
+  const [hasNewTodos, setHasNewTodos] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartY = useRef<number | null>(null);
   const pullDistanceRef = useRef(0);
@@ -242,6 +303,62 @@ export function Shell({
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.capabilities.includes("todo:view")) {
+      setLatestTodoMarker(null);
+      setHasNewTodos(false);
+      return;
+    }
+
+    setLatestTodoMarker(null);
+    setHasNewTodos(false);
+    const controller = new AbortController();
+    let checking = false;
+    const checkIndicator = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const response = await fetch(apiUrl("todos/mine/indicator"), {
+          credentials: "include",
+          headers: { accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const responseActorId = response.headers.get("x-dx-rework-actor-id");
+        if (responseActorId !== currentUser.id) {
+          window.location.reload();
+          return;
+        }
+        const marker = indicatorMarker(TodoNewIndicatorSchema.parse(await response.json()));
+        setLatestTodoMarker(marker);
+        if (active === "我的待办") {
+          if (marker) writeSeenTodoMarker(browserTodoStorage(), currentUser.id, marker);
+          setHasNewTodos(false);
+          return;
+        }
+        setHasNewTodos(marker
+          ? isUnseenTodoMarker(marker, readSeenTodoMarker(browserTodoStorage(), currentUser.id))
+          : false);
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) console.warn("Todo indicator refresh failed", error);
+      } finally {
+        checking = false;
+      }
+    };
+    const stopRefreshing = installTodoIndicatorRefresh(checkIndicator);
+    return () => {
+      controller.abort();
+      stopRefreshing();
+    };
+  }, [active, currentUser]);
+
+  const acknowledgeNewTodos = () => {
+    if (currentUser && latestTodoMarker) {
+      writeSeenTodoMarker(browserTodoStorage(), currentUser.id, latestTodoMarker);
+    }
+    setHasNewTodos(false);
+  };
 
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 800px)");
@@ -425,6 +542,8 @@ export function Shell({
           groups={desktopNavigationGroups}
           active={active}
           basePath={basePath}
+          hasNewTodos={hasNewTodos}
+          onOpenTodos={acknowledgeNewTodos}
         />
         <div className="org app-shell__identity">
           {currentUser ? (
@@ -443,6 +562,8 @@ export function Shell({
           active={activeEntry?.name ?? active}
           basePath={basePath}
           showPlatformHome={currentUser ? canAccessSourcing(currentUser) : false}
+          hasNewTodos={hasNewTodos}
+          onOpenTodos={acknowledgeNewTodos}
         />
       ) : null}
 
