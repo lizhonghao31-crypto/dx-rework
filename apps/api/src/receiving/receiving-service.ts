@@ -13,6 +13,12 @@ const MAX_RECEIVING_IMAGES = 3;
 const RECEIVING_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+type CreateRepeatedReceivingInput = Readonly<{
+  receivingBatchId: string;
+  actualQuantity: number;
+  defectiveQuantity?: number;
+}>;
+
 type CreateReceivingInput = Readonly<{
   styleNo: string;
   documentQuantity: number;
@@ -250,6 +256,49 @@ export class ReceivingService {
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => ({ statusCode: 201, response: await this.createInTransaction(client, actor, normalized) }));
+      await client.query("COMMIT");
+      return { value: outcome.response, reused: outcome.reused };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createRepeated(
+    actor: TrustedActorContext,
+    input: CreateRepeatedReceivingInput,
+    idempotencyKey: string,
+  ): Promise<Result<ReceivingReceipt>> {
+    if (!UUID_PATTERN.test(input.receivingBatchId)) fail("收货订单标识无效");
+    const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
+    const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
+    if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
+    const scope = "receiving.receipt.repeat";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: hash(scope, { receivingBatchId: input.receivingBatchId, actualQuantity, defectiveQuantity }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => {
+        const target = await this.repeatReceivingBatch(client, input.receivingBatchId);
+        return {
+          statusCode: 201,
+          response: await this.createInTransaction(client, actor, {
+            styleNo: target.styleNo,
+            documentQuantity: target.documentQuantity,
+            actualQuantity,
+            defectiveQuantity,
+            attachmentIds: [],
+            receivedDate: null,
+          }, target.receivingBatchId),
+        };
+      });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
@@ -698,6 +747,85 @@ export class ReceivingService {
     }
   }
 
+  private async repeatReceivingBatch(
+    client: PoolClient,
+    receivingBatchId: string,
+  ): Promise<{ receivingBatchId: string; styleNo: string; documentQuantity: number }> {
+    const initial = await client.query<{ style_no: string }>(
+      `SELECT style_no FROM receiving_batches
+       WHERE receiving_batch_id=$1 AND deleted_at IS NULL`,
+      [receivingBatchId],
+    );
+    const initialRow = initial.rows[0];
+    if (!initialRow) return fail("收货订单不存在", 404, "NOT_FOUND");
+    const styleNo = normalizeStyleNo(initialRow.style_no);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [styleNo]);
+    const target = await client.query<{
+      receiving_batch_id: string;
+      style_no: string;
+      document_quantity: string;
+    }>(
+      `SELECT batch.receiving_batch_id,
+              upper(btrim(batch.style_no)) AS style_no,
+              batch.delivery_note_quantity::bigint AS document_quantity
+       FROM receiving_batches batch
+       WHERE batch.receiving_batch_id=$1
+         AND batch.deleted_at IS NULL
+         AND NOT EXISTS(
+           SELECT 1 FROM receiving_receipts receipt
+           JOIN operation_events event ON event.event_id=receipt.operation_event_id
+           WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+             AND event.after_state->>'backfilled'='true'
+         )
+         AND NOT EXISTS(
+           SELECT 1 FROM rework_orders rework
+           WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+             AND (
+               rework.status='completed'
+               OR EXISTS(
+                 SELECT 1 FROM operation_events event
+                 WHERE event.entity_type='rework_order'
+                   AND event.entity_id=rework.rework_order_id::text
+                   AND event.after_state->>'status'='completed'
+               )
+             )
+         )
+         AND EXISTS(
+           SELECT 1 FROM attachments attachment
+           WHERE attachment.entity_type='receiving_batch'
+             AND attachment.entity_id=batch.receiving_batch_id::text
+             AND attachment.status='ready'
+             AND NOT EXISTS(
+               SELECT 1 FROM receiving_attachment_retirements retired
+               WHERE retired.attachment_id=attachment.attachment_id
+             )
+         )
+         AND batch.receiving_batch_id=(
+           SELECT latest.receiving_batch_id
+           FROM receiving_batches latest
+           WHERE upper(btrim(latest.style_no))=$2
+             AND latest.deleted_at IS NULL
+             AND NOT EXISTS(
+               SELECT 1 FROM receiving_receipts receipt
+               JOIN operation_events event ON event.event_id=receipt.operation_event_id
+               WHERE receipt.receiving_batch_id=latest.receiving_batch_id
+                 AND event.after_state->>'backfilled'='true'
+             )
+           ORDER BY latest.created_at DESC,latest.receiving_batch_id DESC
+           LIMIT 1
+         )
+       FOR UPDATE OF batch`,
+      [receivingBatchId, styleNo],
+    );
+    const row = target.rows[0];
+    if (!row) return fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
+    return {
+      receivingBatchId: row.receiving_batch_id,
+      styleNo: row.style_no,
+      documentQuantity: Number(row.document_quantity),
+    };
+  }
+
   private async resolveReceivingBatch(
     client: PoolClient,
     actor: TrustedActorContext,
@@ -815,14 +943,15 @@ export class ReceivingService {
     client: PoolClient,
     actor: TrustedActorContext,
     input: NormalizedCreateReceivingInput,
+    targetReceivingBatchId?: string,
   ): Promise<ReceivingReceipt> {
-    const { receivingBatchId } = await this.resolveReceivingBatch(
+    const receivingBatchId = targetReceivingBatchId ?? (await this.resolveReceivingBatch(
       client,
       actor,
       input.styleNo,
       input.documentQuantity,
       input.receivedDate,
-    );
+    )).receivingBatchId;
     const receiptId = randomUUID();
     const eventId = await this.events.append(client, actor, {
       action: "receiving.receipt.create",
@@ -1367,6 +1496,7 @@ export { normalizeReceivingBackfillDate };
 export type {
   BoardResult,
   CorrectReceivingBatchInput,
+  CreateRepeatedReceivingInput,
   RepeatReceivingOption,
   CreateReceivingInput,
   ReceivingBatchSnapshot,

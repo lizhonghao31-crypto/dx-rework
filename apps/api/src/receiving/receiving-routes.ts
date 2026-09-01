@@ -103,6 +103,25 @@ const batchId = (input: string): string => {
   return input;
 };
 
+const repeatBody = (input: unknown): {
+  receivingBatchId: string;
+  actualQuantity: number;
+  defectiveQuantity: number;
+} => {
+  if (!input || typeof input !== "object") {
+    throw new ApplicationError("VALIDATION_ERROR", "多次收货信息不完整", 400);
+  }
+  const body = input as Record<string, unknown>;
+  if (typeof body.receivingBatchId !== "string") {
+    throw new ApplicationError("VALIDATION_ERROR", "请选择要追加收货的订单", 400);
+  }
+  return {
+    receivingBatchId: batchId(body.receivingBatchId),
+    actualQuantity: Number(body.actualQuantity),
+    defectiveQuantity: body.defectiveQuantity === undefined ? 0 : Number(body.defectiveQuantity),
+  };
+};
+
 export type ReceivingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: ReceivingService;
@@ -181,6 +200,16 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
       request.query.q ?? "",
       request.query.status ?? "all",
     );
+  });
+
+  app.post("/receiving/repeat-receipts", async (request, reply) => {
+    const result = await dependencies.service.createRepeated(
+      await creator(request),
+      repeatBody(request.body),
+      idempotencyKey(request),
+    );
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(201).send(result.value);
   });
 
   app.post("/receiving/receipts", async (request, reply) => {
