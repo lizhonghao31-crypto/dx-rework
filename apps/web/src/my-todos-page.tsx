@@ -203,10 +203,11 @@ export function MyTodosPage() {
   const page = state.kind === "ready" ? state.page : requestedPage;
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
+  const renderedTotalPages = Math.max(totalPages, 1);
   const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
   const pageGroupStart = Math.floor((Math.max(page, 1) - 1) / 5) * 5 + 1;
   const visiblePages = Array.from(
-    { length: Math.max(0, Math.min(5, totalPages - pageGroupStart + 1)) },
+    { length: Math.min(5, renderedTotalPages - pageGroupStart + 1) },
     (_, index) => pageGroupStart + index,
   );
 
@@ -316,7 +317,7 @@ export function MyTodosPage() {
           })}
         </div>
       )}
-      {totalPages > 1 && <nav className="my-todos-pagination" aria-label="待办列表分页">
+      <nav className="my-todos-pagination" aria-label="待办列表分页">
         <button
           type="button"
           aria-label="前五页"
@@ -334,10 +335,10 @@ export function MyTodosPage() {
         <button
           type="button"
           aria-label="后五页"
-          disabled={busy || pageGroupStart + 5 > totalPages}
+          disabled={busy || pageGroupStart + 5 > renderedTotalPages}
           onClick={() => setRequestedPage(pageGroupStart + 5)}
         >›</button>
-      </nav>}
+      </nav>
       </Surface>}
       </div>
     </Shell>

@@ -29,6 +29,8 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain("todos.map");
     expect(page).toContain("my-todos-pagination");
     expect(page).toContain("visiblePages.map");
+    expect(page).toContain("Math.max(totalPages, 1)");
+    expect(page).not.toContain("{totalPages > 1 && <nav");
     expect(page).toContain('aria-label="后五页"');
     expect(page).toContain("my-todo-index");
     expect(page).toContain("节点停留");
