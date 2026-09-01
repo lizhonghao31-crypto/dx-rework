@@ -1,5 +1,6 @@
 import {
   TodoListResponseSchema,
+  TodoNewIndicatorSchema,
   TodoResponseSchema,
   TodoRoutingExceptionListResponseSchema,
   TodoRoutingExceptionParamsSchema,
@@ -32,7 +33,8 @@ const parse = <T>(
 
 export type TodoHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
-  service: Pick<TodoService, "listForActor" | "listRoutingExceptionsForActor" | "transferRoutingException">;
+  service: Pick<TodoService,
+    "listForActor" | "latestIndicatorForActor" | "listRoutingExceptionsForActor" | "transferRoutingException">;
 }>;
 
 export function registerTodoRoutes(
@@ -64,6 +66,10 @@ export function registerTodoRoutes(
   app.get("/todos/mine", async (request) => TodoListResponseSchema.parse({
     todos: await dependencies.service.listForActor(await actor(request, "todo:view")),
   }));
+
+  app.get("/todos/mine/indicator", async (request) => TodoNewIndicatorSchema.parse(
+    await dependencies.service.latestIndicatorForActor(await actor(request, "todo:view")),
+  ));
 
   app.get("/todos/routing-exceptions/mine", async (request) =>
     TodoRoutingExceptionListResponseSchema.parse({
