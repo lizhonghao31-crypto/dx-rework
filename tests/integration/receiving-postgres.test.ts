@@ -547,6 +547,10 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const shortOnly = await service.board(today, today, "in20546664", "short");
     expect(shortOnly.rows).toHaveLength(1);
     expect(shortOnly.kpis).toEqual(allTimeSearch.kpis);
+    const multipleOnly = await service.board(today, today, "in20546664", "multiple");
+    expect(multipleOnly.rows).toHaveLength(1);
+    expect(multipleOnly.rows[0]?.receiptCount).toBe(2);
+    expect(multipleOnly.kpis).toEqual(allTimeSearch.kpis);
     const normalOnly = await service.board(today, today, "in20546664", "normal");
     expect(normalOnly.rows).toHaveLength(0);
     expect(normalOnly.kpis).toEqual({

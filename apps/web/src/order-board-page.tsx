@@ -17,7 +17,7 @@ import "./order-board-page.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
-type BoardStatus = "all" | "normal" | "extra" | "short";
+type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple";
 
 type ReceivingHistoryItem = Readonly<{
   receiptId: string;
@@ -63,7 +63,7 @@ type BoardResult = Readonly<{
   startDate: string;
   endDate: string;
   mode: "range" | "search";
-  status: "all" | "normal" | "extra" | "short";
+  status: BoardStatus;
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -375,6 +375,7 @@ export function OrderBoardPage() {
           <option value="normal">正常</option>
           <option value="short">少收</option>
           <option value="extra">多收</option>
+          <option value="multiple">多次收货</option>
         </select></label>
       </div>
       <div className="order-board-heading__action">
