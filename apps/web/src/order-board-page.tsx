@@ -425,12 +425,12 @@ export function OrderBoardPage() {
                 {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
               </StatusBadge>
             </div>
-            <button
+            {row.receiptCount > 1 ? <button
               type="button"
               className="order-board-history-toggle"
               aria-expanded={historyExpanded}
               onClick={() => toggleHistory(row.styleNo)}
-            >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button>
+            >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button> : null}
           </div>
           <div className="order-board-row__document">
             <span>送货单数量</span>
