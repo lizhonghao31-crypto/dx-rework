@@ -263,6 +263,7 @@ export function MyTodosPage() {
               id="my-todos-search"
               type="search"
               value={searchQuery}
+              maxLength={100}
               placeholder="输入供应商名称或款号，自动筛选"
               autoComplete="off"
               onChange={(event) => {
