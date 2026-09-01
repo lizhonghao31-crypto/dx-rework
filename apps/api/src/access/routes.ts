@@ -164,7 +164,9 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       ? "master_data:manage"
       : createsSourcingOrders
         ? "sourcing:inquiry:create"
-        : "sourcing:view";
+        : mutation
+          ? "master_data:manage"
+          : "sourcing:view";
     const actorRoles = [...(user.businessRoles ?? [])];
     if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
     const authorizationCapabilities = [...user.capabilities];
