@@ -11,6 +11,10 @@ describe("order-centered workflow UI", () => {
     expect(contracts).toContain("TodoOrderContextSchema");
     expect(todos).toContain("orderContext:");
     expect(todos).toContain("LEFT JOIN rework_orders orders");
+    expect(todos).toContain("LEFT JOIN current_sourcing_cases sourcing");
+    expect(todos).toContain("ORDER BY decision.decision_version DESC");
+    expect(todos).toContain("supplierName: row.supplier_name_snapshot ?? null");
+    expect(contracts).toContain("supplierName: z.string().nullable()");
     expect(page).toContain("my-todo-index");
     expect(page).toContain("const orderSummary");
     expect(page).toContain("款号：");
