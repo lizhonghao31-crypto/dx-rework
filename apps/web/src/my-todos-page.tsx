@@ -21,7 +21,7 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   own_factory_approval: "查看历史本厂审批",
   external_responsibility_detail: "记录供应商实际扣款",
   wage_period_detail: "核对返工工资",
-  sourcing_detail: "处理报价选厂订单",
+  sourcing_detail: "处理外发定价选厂订单",
 };
 
 const taskTitle = (todo: TodoResponse): string =>
@@ -180,7 +180,7 @@ export function MyTodosPage() {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
             const orderSummary = todo.entityType === "sourcing_case"
-              ? "报价选厂订单 · 点击查看完整流程与审批记录"
+              ? "外发定价选厂订单 · 点击查看完整流程与审批记录"
               : order
                 ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
                 : todo.route.routeName === "wage_period_detail"

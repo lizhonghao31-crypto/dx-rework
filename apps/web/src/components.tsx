@@ -128,11 +128,11 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "发起返工", "返工单看板"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
-  "订单看板": { label: "收货", glyph: "收" },
+  "订单回货": { label: "收货", glyph: "收" },
   "发起返工": { label: "发起", glyph: "发" },
   "返工单看板": { label: "返工", glyph: "返" },
 };
@@ -310,7 +310,7 @@ export function Shell({
     });
   }
   globalNavigation.push({
-    name: "订单看板",
+    name: "订单回货",
     description: "查看每日收货与数量差异",
     href: "/ui/orders",
   });
@@ -387,12 +387,12 @@ export function Shell({
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
     {
-      name: "返工",
-      description: "尾部返工业务",
+      name: "订单返工",
+      description: "订单返工业务",
       entries: reworkNavigation,
     },
     {
-      name: "报价&选厂",
+      name: "外发定价&选厂",
       description: "询价、审批与执行",
       entries: sourcingNavigation,
     },
@@ -419,7 +419,7 @@ export function Shell({
         </div>
       ) : null}
       <aside>
-        <h2>达兴 · 业务平台</h2>
+        <h2>达兴 · 数字助手</h2>
         <DesktopNavigation
           globalNavigation={globalNavigation}
           groups={desktopNavigationGroups}

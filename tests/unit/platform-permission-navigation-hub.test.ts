@@ -13,7 +13,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(accessModuleIdsForCapabilities(["rework:initiate", "sourcing:view", "access:admin"]))
       .toEqual(["rework", "sourcing", "platform"]);
     expect(accessModuleLabelsForCapabilities(["sourcing:quote:write"]))
-      .toEqual(["报价&选厂"]);
+      .toEqual(["外发定价&选厂"]);
     expect(accessModuleIdsForCapabilities(["tools:user", "todo:view", "receiving:create"]))
       .toEqual([]);
     expect(accessModuleIdsForCapabilities(["rework:initiate", "todo:view"]))
@@ -37,17 +37,17 @@ describe("platform permission and desktop navigation hub", () => {
       readFile("apps/web/src/shell-navigation.css", "utf8"),
     ]);
 
-    expect(components.indexOf('name: "我的待办"')).toBeLessThan(components.indexOf('name: "订单看板"'));
-    expect(components).toContain('name: "返工"');
-    expect(components).toContain('name: "报价&选厂"');
+    expect(components.indexOf('name: "我的待办"')).toBeLessThan(components.indexOf('name: "订单回货"'));
+    expect(components).toContain('name: "订单返工"');
+    expect(components).toContain('name: "外发定价&选厂"');
     expect(components).toContain('name: "平台管理"');
     expect(components).toContain("currentUser && canAccessSourcing(currentUser)");
     expect(components).toContain("Desktop-only sourcing");
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "发起返工", "返工单看板"]');
     expect(employeeAccess).toContain('<h1>人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
     expect(employeeAccess).toContain("employee.isRoot");
-    expect(employeeAccess).toContain("Root（返工 / 报价&选厂 / 平台管理）");
+    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 平台管理）");
     expect(systemNavigation).toContain(">人员与权限</a>");
     expect(css).toContain(".desktop-navigation__group");
     expect(css).toContain("color: var(--dx-v2-color-surface);");

@@ -165,7 +165,7 @@ export function OrderBoardPage() {
   const [status, setStatus] = useState<BoardStatus>("all");
   const debouncedQuery = useDebouncedValue(query, 180);
   const [data, setData] = useState<BoardResult | null>(null);
-  const [message, setMessage] = useState("正在加载订单看板…");
+  const [message, setMessage] = useState("正在加载订单回货…");
   const [canReceive, setCanReceive] = useState(false);
   const [canInitiate, setCanInitiate] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
@@ -217,7 +217,7 @@ export function OrderBoardPage() {
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
     void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("订单看板加载失败");
+        if (!response.ok) throw new Error("订单回货加载失败");
         return response.json() as Promise<BoardResult>;
       })
       .then((body) => {
@@ -231,7 +231,7 @@ export function OrderBoardPage() {
       })
       .catch(() => {
         if (!active) return;
-        setMessage("订单看板加载失败，请刷新后重试");
+        setMessage("订单回货加载失败，请刷新后重试");
       });
     return () => { active = false; };
   }, [startDate, endDate, debouncedQuery, status, refreshToken]);
@@ -363,7 +363,7 @@ export function OrderBoardPage() {
   return <div className="order-board-page">
     <div className="order-board-heading">
       <div className="order-board-heading__title">
-        <h1>订单看板</h1>
+        <h1>订单回货</h1>
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">
@@ -553,7 +553,7 @@ export function OrderBoardPage() {
       <div className="order-board-dialog order-board-delete-dialog" role="dialog" aria-modal="true" aria-label="删除收货订单" onMouseDown={(event) => event.stopPropagation()}>
         <h2>确认删除收货订单？</h2>
         <p>款号：<strong>{deleting.styleNo}</strong></p>
-        <p>删除后从订单看板隐藏，原始收货记录与图片仍保留审计。此操作仅限尚未发起返工的订单。</p>
+        <p>删除后从订单回货隐藏，原始收货记录与图片仍保留审计。此操作仅限尚未发起返工的订单。</p>
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setDeleting(null)}>取消</button>

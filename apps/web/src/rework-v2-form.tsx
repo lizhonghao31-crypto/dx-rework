@@ -257,7 +257,7 @@ export function ReworkInitiationV2Form({
       : localDraftSeed
         ? "已恢复本机保存资料；尚未创建返工单"
         : initialStyleNo()
-          ? "已从订单看板带入款号，请补充返工资料"
+          ? "已从订单回货带入款号，请补充返工资料"
           : "填写三项核心资料并上传报告",
   );
   const pendingSave = useRef<PendingSave | null>(null);
@@ -652,7 +652,7 @@ export function ReworkInitiationV2Form({
     {!embedded ? <div className="rework-v2-heading">
       <div>
         <h1>发起返工</h1>
-        <p>只填返工真正需要的资料；从订单看板进入时仅自动带入款号。</p>
+        <p>只填返工真正需要的资料；从订单回货进入时仅自动带入款号。</p>
       </div>
       <StatusBadge tone={complete ? "success" : "info"}>{complete ? "可以提交" : "填写中"}</StatusBadge>
     </div> : null}

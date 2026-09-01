@@ -14,8 +14,8 @@ const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessMod
 };
 
 export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, string> = {
-  rework: "返工",
-  sourcing: "报价&选厂",
+  rework: "订单返工",
+  sourcing: "外发定价&选厂",
   platform: "平台管理",
 };
 

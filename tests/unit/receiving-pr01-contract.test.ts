@@ -43,7 +43,7 @@ describe("PR-01 receiving fact layer", () => {
     ]);
     expect(app).toContain('path === "/ui/orders"');
     expect(app).toContain('path === "/ui/receiving"');
-    expect(navigation).toContain('name: "订单看板"');
+    expect(navigation).toContain('name: "订单回货"');
     expect(navigation).toContain('name: "返工单看板"');
     expect(board).toContain("少收订单默认置顶");
     expect(board).toContain("收货订单");

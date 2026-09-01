@@ -15,11 +15,11 @@ const ROLE_LABELS: Record<string, string> = {
 
 const moduleCopy = {
   sourcing: {
-    title: "报价&选厂",
+    title: "外发定价&选厂",
     description: "创建询价、主管决定工厂和单价、合同执行与财务核对",
   },
   rework: {
-    title: "尾部返工",
+    title: "订单返工",
     description: "收货、返工处理、责任判定、工资与扣款",
   },
 } as const;
@@ -44,7 +44,7 @@ export function PlatformHomePage() {
     <main className="platform-home">
       <header className="platform-home__header">
         <div>
-          <p className="platform-home__eyebrow">达兴 · 业务平台</p>
+          <p className="platform-home__eyebrow">达兴 · 数字助手</p>
           <h1>业务工作台</h1>
           <p>请选择需要进入的业务模块</p>
         </div>
