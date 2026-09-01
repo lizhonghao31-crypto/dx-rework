@@ -31,6 +31,9 @@ describe("PR-01 receiving fact layer", () => {
     expect(migration).toContain("receiving_receipts_no_delete");
     expect(routes).toContain("await isRootUser(dependencies.root, user.id)");
     expect(routes).toContain('"receiving:create"');
+    expect(routes).toContain('"/receiving/repeat-options"');
+    expect(routes).toContain("await creator(request);");
+    expect(routes).toContain("dependencies.service.listRepeatOptions");
     expect(auth).toContain("if (user.isRoot === true) return true");
   });
 

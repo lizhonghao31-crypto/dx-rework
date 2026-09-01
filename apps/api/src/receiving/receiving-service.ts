@@ -40,6 +40,12 @@ type CorrectReceivingBatchInput = Readonly<{
   attachmentIds?: readonly string[];
 }>;
 
+type RepeatReceivingOption = Readonly<{
+  receivingBatchId: string;
+  styleNo: string;
+  documentQuantity: number;
+}>;
+
 type ReceivingReceipt = Readonly<{
   receiptId: string;
   receivingBatchId: string;
@@ -887,6 +893,69 @@ export class ReceivingService {
     };
   }
 
+  async listRepeatOptions(query = ""): Promise<readonly RepeatReceivingOption[]> {
+    const needle = query.trim().toUpperCase();
+    const result = await this.database.query<{
+      receiving_batch_id: string;
+      style_no: string;
+      document_quantity: string;
+    }>(
+      `WITH ranked AS (
+         SELECT batch.receiving_batch_id,
+                upper(btrim(batch.style_no)) AS style_no,
+                batch.delivery_note_quantity::bigint AS document_quantity,
+                row_number() OVER (
+                  PARTITION BY upper(btrim(batch.style_no))
+                  ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+                ) AS position,
+                EXISTS(
+                  SELECT 1 FROM rework_orders rework
+                  WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+                    AND (
+                      rework.status='completed'
+                      OR EXISTS (
+                        SELECT 1 FROM operation_events event
+                        WHERE event.entity_type='rework_order'
+                          AND event.entity_id=rework.rework_order_id::text
+                          AND event.after_state->>'status'='completed'
+                      )
+                    )
+                ) AS closed,
+                EXISTS(
+                  SELECT 1 FROM attachments attachment
+                  WHERE attachment.entity_type='receiving_batch'
+                    AND attachment.entity_id=batch.receiving_batch_id::text
+                    AND attachment.status='ready'
+                    AND NOT EXISTS(
+                      SELECT 1 FROM receiving_attachment_retirements retired
+                      WHERE retired.attachment_id=attachment.attachment_id
+                    )
+                ) AS has_images
+         FROM receiving_batches batch
+         WHERE batch.deleted_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1
+             FROM receiving_receipts receipt
+             JOIN operation_events event ON event.event_id=receipt.operation_event_id
+             WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+               AND event.after_state->>'backfilled'='true'
+           )
+       )
+       SELECT receiving_batch_id,style_no,document_quantity
+       FROM ranked
+       WHERE position=1 AND NOT closed AND has_images
+         AND ($1::text='' OR right(style_no,char_length($1))=$1)
+       ORDER BY style_no
+       LIMIT 20`,
+      [needle],
+    );
+    return result.rows.map((row) => ({
+      receivingBatchId: row.receiving_batch_id,
+      styleNo: row.style_no,
+      documentQuantity: Number(row.document_quantity),
+    }));
+  }
+
   async listStyleOptions(query = ""): Promise<readonly string[]> {
     const needle = query.trim().toUpperCase();
     const result = await this.database.query<{ style_no: string }>(
@@ -1298,6 +1367,7 @@ export { normalizeReceivingBackfillDate };
 export type {
   BoardResult,
   CorrectReceivingBatchInput,
+  RepeatReceivingOption,
   CreateReceivingInput,
   ReceivingBatchSnapshot,
   ReceivingReceipt,

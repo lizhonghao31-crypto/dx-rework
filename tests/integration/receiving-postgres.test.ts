@@ -544,6 +544,19 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(Date.parse(allTimeSearch.rows[0]!.receivingHistory[0]!.receivedAt)).not.toBeNaN();
     expect(allTimeSearch.rows[0]!.receivingHistory[0]!.receiverName).toBeTruthy();
 
+    await service.create(receiver(), {
+      styleNo: "AB546664ZZ",
+      documentQuantity: 10,
+      actualQuantity: 10,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const repeatOptions = await service.listRepeatOptions("546664");
+    expect(repeatOptions).toEqual([{
+      receivingBatchId: current.value.receivingBatchId,
+      styleNo: "IN20546664",
+      documentQuantity: 4017,
+    }]);
+
     const shortOnly = await service.board(today, today, "in20546664", "short");
     expect(shortOnly.rows).toHaveLength(1);
     expect(shortOnly.kpis).toEqual(allTimeSearch.kpis);
