@@ -18,6 +18,26 @@ describe("PR-01 receiving fact layer", () => {
     expect(page).not.toContain("下一步");
   });
 
+  it("keeps repeat receiving to a selected order plus actual and defective quantities", async () => {
+    const [page, css] = await Promise.all([
+      read("apps/web/src/receiving-page.tsx"),
+      read("apps/web/src/receiving-page.css"),
+    ]);
+    expect(page).toContain("多次收货");
+    expect(page).toContain("输入款号后4-5位搜索");
+    expect(page).toContain("<span>款号</span>");
+    expect(page).not.toContain("<span>订单号 / 款号</span>");
+    expect(page).toContain("repeatOptionsQuery === repeatQuery.trim().toUpperCase()");
+    expect(page).toContain("receiving/repeat-options");
+    expect(page).toContain("receiving/repeat-receipts");
+    expect(page).toContain("receivingBatchId: selectedRepeatOrder.receivingBatchId");
+    expect(page.indexOf("receiving-repeat-start")).toBeLessThan(page.indexOf("receiving-backfill-start"));
+    const repeatSubmit = page.slice(page.indexOf("const submitRepeated"), page.indexOf("const submit ="));
+    expect(repeatSubmit).not.toContain("documentQuantity:");
+    expect(repeatSubmit).not.toContain("attachmentIds");
+    expect(css).toContain(".receiving-repeat-start,.receiving-backfill-start");
+  });
+
   it("records immutable receiving facts and gives Root the same receiving path", async () => {
     const [migration, routes, auth] = await Promise.all([
       read("apps/api/migrations/0076_receiving_fact_layer.sql"),
