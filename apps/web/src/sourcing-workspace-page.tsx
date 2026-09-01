@@ -242,8 +242,8 @@ function SourcingOrderCard({
     {canDelete ? <button
       type="button"
       className="sourcing-order-delete"
-      aria-label={`删除报价选厂订单 ${item.erpOrderNo}`}
-      title="删除报价选厂订单"
+      aria-label={`删除外发定价选厂订单 ${item.erpOrderNo}`}
+      title="删除外发定价选厂订单"
       disabled={deleting}
       onClick={() => onDelete(item)}
     >
@@ -271,8 +271,8 @@ export function SourcingWorkspacePage({
   if (isMobileClient()) {
     return <Shell active={ACTIVE_NAVIGATION[view]}>
       <div className="sourcing-workspace">
-        <Header title="报价&选厂" subtitle="该模块当前仅开放电脑端。" badge="PC 端" />
-        <Surface><h2>请在电脑端打开</h2><p>报价选厂移动端尚未建设，手机端暂不展示或办理订单流程。</p></Surface>
+        <Header title="外发定价&选厂" subtitle="该模块当前仅开放电脑端。" badge="PC 端" />
+        <Surface><h2>请在电脑端打开</h2><p>外发定价选厂移动端尚未建设，手机端暂不展示或办理订单流程。</p></Surface>
       </div>
     </Shell>;
   }
@@ -524,7 +524,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       <Header
         title="创建订单"
         subtitle="跟单只需登记订单核心资料和照片，提交后自动进入待审批订单。"
-        badge="报价&选厂"
+        badge="外发定价&选厂"
       />
       <Surface className="sourcing-create-card">
         <div className="section-title">
@@ -617,7 +617,7 @@ function OrderListPage({
 
   const remove = async (item: SourcingCaseSummary): Promise<void> => {
     if (!(await confirmInApp(
-      `确认删除报价选厂订单 ${item.erpOrderNo} 吗？删除后将从业务入口隐藏并关闭相关待办，历史证据仍会保留。`,
+      `确认删除外发定价选厂订单 ${item.erpOrderNo} 吗？删除后将从业务入口隐藏并关闭相关待办，历史证据仍会保留。`,
     ))) return;
     setDeletingCaseId(item.sourcingCaseId);
     setDeleteError("");
@@ -849,7 +849,7 @@ function OrderDetailPage({
   };
 
   if (!item) {
-    return <div className="sourcing-workspace"><Header title="订单详情" subtitle={message} badge="报价&选厂" /></div>;
+    return <div className="sourcing-workspace"><Header title="订单详情" subtitle={message} badge="外发定价&选厂" /></div>;
   }
 
   const mainStep = statusStep(item.status);
@@ -906,7 +906,7 @@ function OrderDetailPage({
         actionHref={item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending"}
       />
       <div className="rework-detail-layout rework-detail-target-layout">
-        <dl className="rework-detail-core-facts" aria-label="报价选厂订单核心信息">
+        <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{item.orderQuantity.toLocaleString("zh-CN")} 件</dd></div>
           <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>

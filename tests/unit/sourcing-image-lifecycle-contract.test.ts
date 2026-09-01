@@ -69,6 +69,6 @@ describe("sourcing image lifecycle parity", () => {
     expect(page).toContain("isMobileClient()");
     expect(page).toContain("userAgentData?.mobile");
     expect(page).not.toContain('window.matchMedia("(max-width: 800px)")');
-    expect(page).toContain("报价选厂移动端尚未建设");
+    expect(page).toContain("外发定价选厂移动端尚未建设");
   });
 });

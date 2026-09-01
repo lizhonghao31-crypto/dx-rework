@@ -7,7 +7,7 @@ describe("mobile primary navigation", () => {
   it("derives the visible mobile entry list from the existing authorized navigation", async () => {
     const components = await read("apps/web/src/components.tsx");
 
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单看板", "发起返工", "返工单看板"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "发起返工", "返工单看板"]');
     expect(components).toContain("const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);");
     expect(components).toContain("const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;");
     expect(components).toContain("...(showPlatformHome ? mobileCandidates.slice(3) : []),");

@@ -8,7 +8,7 @@ describe("workflow navigation access contract", () => {
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
     ]);
 
-    for (const entry of ["我的待办", "订单看板", "发起返工", "返工单看板", "系统管理", "财务报表", "工资管理"]) {
+    for (const entry of ["我的待办", "订单回货", "发起返工", "返工单看板", "系统管理", "财务报表", "工资管理"]) {
       expect(shell).toContain(`name: "${entry}"`);
     }
     expect(shell).not.toContain('name: "返工上数"');

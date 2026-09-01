@@ -291,7 +291,7 @@ export function App() {
   else if (path === "/ui/my-tasks") page = <MyTodosPage />;
   else if (path.startsWith("/ui/my-tasks/")) page = <ResponsibilityTaskPage />;
   else if (path === "/ui/receiving") page = <ReceivingPage />;
-  else if (path === "/ui/orders") page = <Shell active="订单看板"><OrderBoardPage /></Shell>;
+  else if (path === "/ui/orders") page = <Shell active="订单回货"><OrderBoardPage /></Shell>;
   else if (path === "/ui/supervisor") page = <ManagementDashboardPage mode="site" />;
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;

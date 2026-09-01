@@ -285,7 +285,7 @@ export function EmployeeAccessPage() {
                   || employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
                 const assignedRoleNames = employee.businessRoles.map(assignedRoleDisplayName);
                 const accessRoleNames = employee.isRoot
-                  ? ["Root（返工 / 报价&选厂 / 平台管理）", ...assignedRoleNames]
+                  ? ["Root（订单返工 / 外发定价&选厂 / 平台管理）", ...assignedRoleNames]
                   : assignedRoleNames;
                 const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
                 const wouldDisableLastOwner =
