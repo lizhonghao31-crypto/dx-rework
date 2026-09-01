@@ -38,7 +38,8 @@ describe("sourcing craft database separation", () => {
 
     expect(sourcingPage).toContain('request("master-data/crafts/ensure"');
     expect(sourcingPage).toContain("craftNames: normalizedProcesses");
-    expect(sourcingPage).toContain("processes: normalizedProcesses");
+    expect(sourcingPage).toContain("craftIds: ensuredCrafts.map");
+    expect(sourcingPage).not.toContain("processes: normalizedProcesses");
     expect(sourcingPage).toContain('list="sourcing-craft-options"');
     expect(sourcingPage).toContain('master-data/crafts?q=');
     expect(sourcingPage).toContain("activeCraftQuery");
