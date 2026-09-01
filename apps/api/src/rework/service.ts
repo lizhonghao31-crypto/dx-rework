@@ -170,7 +170,7 @@ export class ReworkInitiationService {
     if (row.has_existing_rework) {
       throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
     }
-    return { receivingBatchId, styleNo: row.style_no };
+    return { receivingBatchId, styleNo: row.style_no.trim().toUpperCase() };
   }
 
   async createDraft(
@@ -271,9 +271,29 @@ export class ReworkInitiationService {
     requestedStyleNo: string | null | undefined,
   ): Promise<ReworkDraftSource> {
     if (!receivingBatchId) {
+      const normalizedStyleNo = requestedStyleNo?.trim().toUpperCase() ?? "";
+      if (!normalizedStyleNo) return { receivingBatchId: null, styleNo: "" };
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [normalizedStyleNo]);
+      const fallback = await client.query<{ receiving_batch_id: string }>(
+        `SELECT batch.receiving_batch_id
+         FROM receiving_batches batch
+         WHERE upper(btrim(batch.style_no))=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM rework_orders completed_order
+             WHERE completed_order.source_receiving_batch_id=batch.receiving_batch_id
+               AND completed_order.status='completed'
+           )
+         ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+         LIMIT 1`,
+        [normalizedStyleNo],
+      );
+      const fallbackBatchId = fallback.rows[0]?.receiving_batch_id;
+      if (fallbackBatchId) {
+        return this.resolveSourceReceivingBatch(client, fallbackBatchId, normalizedStyleNo);
+      }
       return {
         receivingBatchId: null,
-        styleNo: requestedStyleNo?.trim().toUpperCase() ?? "",
+        styleNo: normalizedStyleNo,
       };
     }
     const source = await client.query<{ style_no: string }>(
@@ -301,7 +321,7 @@ export class ReworkInitiationService {
     if (row.has_existing_rework) {
       throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
     }
-    return { receivingBatchId, styleNo: row.style_no };
+    return { receivingBatchId, styleNo: normalizedStyleNo };
   }
 
   async updateDraft(
@@ -334,10 +354,15 @@ export class ReworkInitiationService {
       ) {
         throw new ApplicationError("VALIDATION_ERROR", "来源收货批次的款号不能在返工单修改", 400);
       }
-      const nextStyleNo = current.source_receiving_batch_id
+      let nextStyleNo = current.source_receiving_batch_id
         ? current.style_no
         : input.styleNo === undefined ? current.style_no : input.styleNo;
-      const sourceReceivingBatchId = current.source_receiving_batch_id;
+      let sourceReceivingBatchId = current.source_receiving_batch_id;
+      if (!sourceReceivingBatchId) {
+        const legacySource = await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
+        sourceReceivingBatchId = legacySource.receivingBatchId;
+        nextStyleNo = legacySource.styleNo;
+      }
       const nextVersion = current.version + 1;
       const nextTailInspectionRequired = input.tailInspectionRequired
         ?? current.tail_inspection_required;
