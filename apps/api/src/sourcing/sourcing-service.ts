@@ -1031,37 +1031,18 @@ export class SourcingService {
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     const erpOrderNo = normalizeText(input.erpOrderNo, "ERP订单号", 100);
-    const craftIds = input.craftIds ? [...input.craftIds] : null;
-    const processItems = input.processes
-      ? input.processes.map((process) => normalizeText(process, "工艺", 100))
-      : null;
-    const legacyProcessDescription = input.processDescription
-      ? normalizeText(input.processDescription, "工艺", 500)
-      : null;
-    if (craftIds && (craftIds.length < 1 || craftIds.length > 20)) {
-      fail("工艺必须选择1至20项");
-    }
-    if (craftIds && (
-      new Set(craftIds).size !== craftIds.length
+    const craftIds = [...input.craftIds];
+    if (
+      craftIds.length < 1 || craftIds.length > 20
+      || new Set(craftIds).size !== craftIds.length
       || craftIds.some((craftId) => !UUID_PATTERN.test(craftId))
-    )) fail("工艺标识无效或重复");
-    if (processItems && (processItems.length < 1 || processItems.length > 20)) {
-      fail("工艺必须填写1至20项");
-    }
-    if (processItems && new Set(processItems).size !== processItems.length) fail("工艺不能重复");
-    if ([Boolean(craftIds), Boolean(processItems), Boolean(legacyProcessDescription)].filter(Boolean).length !== 1) {
-      fail("工艺主数据、工艺清单与旧工艺字段必须且只能提交一种");
-    }
-    const processes = processItems ?? (legacyProcessDescription ? [legacyProcessDescription] : []);
+    ) fail("工艺标识无效或重复");
     const normalized = {
       erpOrderNo,
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       deliveryDate: input.deliveryDate,
       craftIds,
-      processes,
-      processItems,
-      processDescription: legacyProcessDescription ?? (processes.length ? processes.join("、") : null),
       orderQuantity: normalizeQuantity(input.orderQuantity),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
@@ -1076,8 +1057,7 @@ export class SourcingService {
         requestHash: requestHash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const selectedCrafts = normalized.craftIds
-          ? (await client.query<{
+        const selectedCrafts = (await client.query<{
               position: number;
               craft_id: string;
               craft_code: string;
@@ -1104,16 +1084,12 @@ export class SourcingService {
               craftCode: craft.craft_code,
               craftVersion: craft.craft_version,
               craftName: craft.craft_name,
-            }))
-          : [];
-        if (normalized.craftIds && selectedCrafts.length !== normalized.craftIds.length) {
+            }));
+        if (selectedCrafts.length !== normalized.craftIds.length) {
           fail("所选工艺已停用或不存在，请重新选择", 409, "CONFLICT");
         }
-        const persistedProcessItems = selectedCrafts.length
-          ? selectedCrafts.map((craft) => craft.craftName)
-          : normalized.processItems;
-        const persistedProcessDescription = persistedProcessItems?.join("、")
-          ?? normalized.processDescription;
+        const persistedProcessItems = selectedCrafts.map((craft) => craft.craftName);
+        const persistedProcessDescription = persistedProcessItems.join("、");
         const sourcingCaseId = randomUUID();
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.create",
@@ -1121,7 +1097,7 @@ export class SourcingService {
           entityId: sourcingCaseId,
           after: {
             ...normalized,
-            processes: persistedProcessItems ?? normalized.processes,
+            processes: persistedProcessItems,
             processItems: persistedProcessItems,
             processDescription: persistedProcessDescription,
             crafts: selectedCrafts,
