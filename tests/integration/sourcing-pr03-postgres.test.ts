@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
@@ -24,6 +25,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     information: vi.fn(async () => undefined),
   };
   const service = new SourcingService(database, undefined, undefined, todoProjection);
+  const craftService = new AccessMasterDataService(database, "corp");
+  const craftIdsByName = new Map<string, string>();
+  const craftId = (craftName: string): string => {
+    const value = craftIdsByName.get(craftName);
+    if (!value) throw new Error(`missing sourcing craft fixture: ${craftName}`);
+    return value;
+  };
   const merchandiserId = randomUUID();
   const ieId = randomUUID();
   const managerId = randomUUID();
@@ -147,6 +155,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
        ($3,'生产管理',true),($4,'老板',true),($5,'应付财务',true)`,
       [merchandiserId, ieId, managerId, ownerId, financeId],
     );
+    const craftFixtures = await craftService.ensureCrafts(merchandiserActor("sourcing-craft-fixtures"), {
+      craftNames: [
+        "净色车缝",
+        "整烫",
+        "按样衣复核",
+        "车缝",
+        "删除测试工艺",
+        "重建订单工艺",
+      ],
+    });
+    craftFixtures.forEach((craft) => craftIdsByName.set(craft.craftName, craft.craftId));
     await database.query(
       `INSERT INTO attachments(
          attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
@@ -200,7 +219,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-20260826-001",
       styleNo: "DX-260826",
       deliveryDate: "2026-09-15",
-      processes: ["净色车缝", "整烫", "按样衣复核"],
+      craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
       orderQuantity: 137,
       attachmentIds: [evidenceId],
     };
@@ -641,7 +660,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         erpOrderNo: "ERP-TRANSFER-" + label + "-" + serial,
         styleNo: "TRANSFER-" + label + "-" + serial,
         deliveryDate: "2026-10-20",
-        processes: ["车缝", "整烫"],
+        craftIds: [craftId("车缝"), craftId("整烫")],
         orderQuantity: 100,
       }, randomUUID());
       await service.quoteIePrice(
@@ -667,7 +686,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-TRANSFER-LOCKED",
       styleNo: "TRANSFER-LOCKED",
       deliveryDate: "2026-10-20",
-      processes: ["车缝"],
+      craftIds: [craftId("车缝")],
       orderQuantity: 100,
     }, randomUUID());
     await expect(service.requestFactoryChange(
@@ -1129,7 +1148,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {
-    const legacyProcessDescription = "旧".repeat(500);
+    const deletionCraftName = "删除测试工艺";
     const attachmentId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -1142,13 +1161,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-DELETE-1",
       styleNo: "DELETE-STYLE-1",
       deliveryDate: "2026-10-01",
-      processDescription: legacyProcessDescription,
+      craftIds: [craftId(deletionCraftName)],
       orderQuantity: 88,
       attachmentIds: [attachmentId],
     }, randomUUID());
     expect(created.value).toMatchObject({
-      processDescription: legacyProcessDescription,
-      processes: [legacyProcessDescription],
+      processDescription: deletionCraftName,
+      processes: [deletionCraftName],
     });
 
     await expect(service.deleteByRoot(
@@ -1229,7 +1248,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       erpOrderNo: "ERP-DELETE-1",
       styleNo: "DELETE-STYLE-2",
       deliveryDate: "2026-10-02",
-      processDescription: "重建订单工艺",
+      craftIds: [craftId("重建订单工艺")],
       orderQuantity: 99,
     }, randomUUID());
     expect(replacement.value.sourcingCaseId).not.toBe(created.value.sourcingCaseId);
