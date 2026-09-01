@@ -235,7 +235,7 @@ export function MyTodosPage() {
       )}
       {state.kind === "ready" && <Surface className="my-todos-workspace">
         <div className="my-todos-toolbar">
-          <nav className="my-todos-modules" aria-label="待办模块">
+          <div className="my-todos-modules" role="tablist" aria-label="待办模块">
             {todoModules.map((module) => <button
               type="button"
               className={module.id === activeModule ? "is-active" : ""}
@@ -244,7 +244,7 @@ export function MyTodosPage() {
               onClick={() => openModule(module.id)}
               key={module.id}
             ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
-          </nav>
+          </div>
           <label className="my-todos-search" htmlFor="my-todos-search">
             <input
               id="my-todos-search"
