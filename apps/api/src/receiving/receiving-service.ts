@@ -99,6 +99,8 @@ type BoardRow = Readonly<{
   reworkOrderId: string | null;
   reworkStatus: ReworkStatus;
   version: number;
+  rootCorrectable: boolean;
+  rootDeletable: boolean;
   rootMutable: boolean;
 }>;
 
@@ -732,6 +734,9 @@ export class ReceivingService {
       const current = await this.mutableBatch(client, receivingBatchId, true);
       if (current.version !== normalized.expectedVersion) {
         fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+      }
+      if (current.has_rework_history && normalized.attachmentIds !== undefined) {
+        fail("返工发起后不能替换送货单图片", 409, "INVALID_STATE_TRANSITION");
       }
       const defectiveQuantity = normalized.defectiveQuantity ?? Number(current.defective_quantity);
       if (defectiveQuantity > normalized.actualQuantity) fail("次品数量不能超过实际收货数量");
@@ -1434,6 +1439,8 @@ export class ReceivingService {
       rework_order_id: string | null;
       rework_status: string | null;
       version: number;
+      root_correctable: boolean;
+      root_deletable: boolean;
       root_mutable: boolean;
     }>(
       `${RECEIVING_BOARD_BASE_SQL}, filtered_totals AS (
@@ -1488,6 +1495,11 @@ export class ReceivingService {
               rework.rework_order_id,rework.status AS rework_status,
               COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments,
               action.version,
+              totals.batch_count=1 AS root_correctable,
+              totals.batch_count=1 AND NOT EXISTS(
+                SELECT 1 FROM rework_orders history
+                WHERE history.source_receiving_batch_id=action.receiving_batch_id
+              ) AS root_deletable,
               totals.batch_count=1 AND NOT EXISTS(
                 SELECT 1 FROM rework_orders history
                 WHERE history.source_receiving_batch_id=action.receiving_batch_id
@@ -1644,6 +1656,8 @@ export class ReceivingService {
       reworkOrderId: row.rework_order_id,
       reworkStatus: lifecycle(row.rework_status),
       version: row.version,
+      rootCorrectable: row.root_correctable,
+      rootDeletable: row.root_deletable,
       rootMutable: row.root_mutable,
     }));
     const rows = allRows.slice(0, 15);
