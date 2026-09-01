@@ -13,6 +13,10 @@ describe("N04-N05 quantity information hierarchy", () => {
     ]);
 
     expect(reportingCss).toContain(".work-reporting-page > .dx-surface > .section-title + p");
+    expect(reportingCss).toContain(".n04-process-list {\n    gap: 4px");
+    expect(reportingCss).toContain("grid-template-columns: minmax(76px, 1.4fr) repeat(3, minmax(36px, .65fr)) auto");
+    expect(reportingCss).toContain(".n04-process-group__main > strong {\n    overflow: visible");
+    expect(reportingCss).toContain("min-height: 28px");
     expect(tailCss).toContain(".tail-inspection-process small");
     expect(tailCss).toContain(".tail-inspection-entry > .dx-field input");
     expect(reviewCss).toContain(".quantity-process-toggle");

@@ -570,37 +570,73 @@
   }
 
   .work-reporting-page .n04-process-list {
-    gap: var(--dx-v2-space-2);
+    gap: 4px;
+  }
+
+  .work-reporting-page .n04-process-group {
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgb(15 35 52 / 8%);
   }
 
   .work-reporting-page .n04-process-group__header {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--dx-v2-space-2);
-    padding: var(--dx-v2-space-2);
+    gap: 4px 6px;
+    min-height: 0;
+    padding: 6px 8px;
   }
 
   .work-reporting-page .n04-process-group__main {
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) repeat(2, minmax(54px, auto));
-    gap: var(--dx-v2-space-2);
-  }
-
-  .work-reporting-page .n04-process-group__main > span:nth-of-type(3),
-  .work-reporting-page .n04-process-group__main > .dx-badge {
-    grid-column: auto;
+    grid-template-columns: minmax(76px, 1.4fr) repeat(3, minmax(36px, .65fr)) auto;
+    gap: 4px;
+    min-height: 0;
   }
 
   .work-reporting-page .n04-process-group__main > strong {
-    font-size: 15px;
+    overflow: visible;
+    font-size: 13px;
+    line-height: 16px;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .work-reporting-page .n04-process-group__main > span {
+    gap: 1px;
+  }
+
+  .work-reporting-page .n04-process-group__main small {
+    font-size: 9px;
+  }
+
+  .work-reporting-page .n04-process-group__main b {
+    font-size: 12px;
+  }
+
+  .work-reporting-page .n04-process-group__main > .dx-badge {
+    min-height: 22px;
+    padding: 2px 6px;
+    font-size: 10px;
   }
 
   .work-reporting-page .n04-process-group__expander {
     justify-self: end;
+    min-width: 48px;
+    min-height: 28px;
+    padding: 0 4px;
+    font-size: 11px;
   }
 
   .work-reporting-page .n04-progress-ie-precount {
     justify-content: flex-start;
+    gap: 4px;
     min-width: 0;
+  }
+
+  .work-reporting-page .n04-ie-precount-button,
+  .work-reporting-page .n04-ie-precount-latest {
+    min-height: 28px;
+    padding: 0 6px;
+    font-size: 11px;
   }
 
   .work-reporting-page .n04-progress-ie-precount.is-editing {
