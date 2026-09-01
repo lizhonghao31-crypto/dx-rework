@@ -202,7 +202,6 @@ export function MyTodosPage() {
   const todos = state.kind === "ready" ? state.todos : [];
   const page = state.kind === "ready" ? state.page : requestedPage;
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
-  const totalCount = state.kind === "ready" ? state.totalCount : 0;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
   const pageGroupStart = Math.floor((Math.max(page, 1) - 1) / 5) * 5 + 1;
