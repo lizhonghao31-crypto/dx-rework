@@ -226,7 +226,7 @@ export function MyTodosPage() {
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>
         </header>
-      {state.kind === "ready" && totalActionable > 0 && <nav className="my-todos-modules" aria-label="待办模块">
+      {state.kind === "ready" && <nav className="my-todos-modules" aria-label="待办模块">
         {todoModules.map((module) => <button
           type="button"
           className={module.id === activeModule ? "is-active" : ""}
@@ -244,14 +244,7 @@ export function MyTodosPage() {
           <Button onClick={() => window.location.reload()}>重新加载</Button>
         </Surface>
       )}
-      {state.kind === "ready" && totalActionable === 0 && (
-        <Surface className="my-todos-state my-todos-complete">
-          <StatusBadge tone="success">当前无待办</StatusBadge>
-          <h2>您当前的任务已全部完成，谢谢。</h2>
-          <p>有新的事项轮到你处理时，会出现在这里。</p>
-        </Surface>
-      )}
-      {state.kind === "ready" && totalActionable > 0 && <Surface className="my-todos-workspace">
+      {state.kind === "ready" && <Surface className="my-todos-workspace">
         <div className="my-todos-toolbar">
           <div>
             <strong>{todoModules.find((module) => module.id === activeModule)?.label}</strong>
@@ -277,7 +270,9 @@ export function MyTodosPage() {
         <div className="my-todos-state my-todos-module-empty">
           <p>{activeQuery
             ? "未找到匹配的待办，请检查供应商名称或款号。"
-            : "该模块当前没有待处理事项。"}</p>
+            : totalActionable === 0
+              ? "您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。"
+              : "该模块当前没有待处理事项。"}</p>
         </div>
       )}
       {todos.length > 0 && (
