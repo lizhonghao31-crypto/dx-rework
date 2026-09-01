@@ -207,6 +207,7 @@ export class ManagementReportingService {
       ...(ownTaskScoped ? { workTaskActorUserId: actor.actorId } : {}),
       ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
       ...(relatedOrderScoped ? { relatedOrderActorUserId: actor.actorId } : {}),
+      openFirst: true,
       limit: query.limit + 1,
       ...(cursor ? { cursor } : {}),
     }), this.db.query<{ as_of: Date }>("SELECT CURRENT_TIMESTAMP as_of")]);
