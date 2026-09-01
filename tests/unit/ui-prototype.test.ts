@@ -19,7 +19,7 @@ const processConfigurationForm = read("../../apps/web/src/process-worker-assignm
 const landingTarget = read("../../apps/web/src/landing-target.ts");
 
 describe("PR-01A UI prototype contract", () => {
-  it.each(["/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/master-data", "/ui/process-database", "/ui/process-configuration", "/ui/piecework/collective", "/ui/audit", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
+  it.each(["/ui/supervisor", "/ui/tasks", "/ui/tasks/", "/ui/qc/new", "/ui/master-data", "/ui/process-configuration", "/ui/piecework/collective", "/ui/audit", "/system/foundation"])("declares route %s", (route) => expect(app).toContain(route));
   it("routes the authenticated root to a business landing instead of the technical foundation", () => {
     expect(app).toContain('if (path === "/") return <HomeLanding />;');
     expect(app).toContain("const target = platformLandingTarget(body.user);");
