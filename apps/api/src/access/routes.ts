@@ -2,6 +2,7 @@ import {
   AssignRoleSchema,
   CatalogListQuerySchema,
   CraftCatalogQuerySchema,
+  CraftParamsSchema,
   ConfirmWorkAssignmentsSchema,
   CreateBusinessPersonSchema,
   CreateDelegationSchema,
@@ -18,6 +19,7 @@ import {
   ReplaceProcessDefaultWorkersSchema,
   PersonAliasParamsSchema,
   PersonParamsSchema,
+  ReviseCraftSchema,
   ReviseProcessSchema,
   ReviseSupplierSchema,
   RevokeAccessSchema,
@@ -250,7 +252,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   app.get("/master-data/crafts", async (request) => {
     await craftActor(request);
     const query = parse(CraftCatalogQuerySchema, request.query);
-    return dependencies.service.listCrafts(query.q ?? "");
+    return dependencies.service.listCrafts(query.q ?? "", query.includeInactive === "true");
   });
 
   app.post("/master-data/crafts/ensure", async (request) =>
@@ -258,6 +260,21 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       await craftActor(request, true),
       parse(EnsureCraftsSchema, request.body),
     ));
+
+  app.get("/master-data/crafts/:craftId/history", async (request) => {
+    await craftActor(request);
+    const params = parse(CraftParamsSchema, request.params);
+    return dependencies.service.listCraftHistory(params.craftId);
+  });
+
+  app.post("/master-data/crafts/:craftId/versions", async (request) => {
+    const params = parse(CraftParamsSchema, request.params);
+    return dependencies.service.reviseCraft(
+      await actor(request, "master_data:manage"),
+      params.craftId,
+      parse(ReviseCraftSchema, request.body),
+    );
+  });
 
   app.get("/master-data/processes", async (request) => {
     await actor(request, "process_catalog:read");
