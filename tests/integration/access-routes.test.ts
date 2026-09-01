@@ -37,6 +37,7 @@ const create = (
     listDelegations: vi.fn(async () => []),
     listPeople: vi.fn(async () => []),
     listProcesses: vi.fn(async () => []),
+    listProcessPage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listProcessDefaultWorkerCandidates: vi.fn(async () => []),
     listSuppliers: vi.fn(async () => []),
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
@@ -445,6 +446,24 @@ describe("access routes", () => {
       payload: { personIds: [], changeReason: "越权尝试" },
     })).statusCode).toBe(403);
     expect(worker.service.replaceTailInspectionDefaultWorkers).not.toHaveBeenCalled();
+  });
+
+
+  it("serves a filtered process catalog page without changing the legacy list", async () => {
+    const { app, service } = create(["process_catalog:read"], ["quality_control"]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/master-data/process-catalog?includeInactive=true&q=%25&cursor=next-page",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ items: [], nextCursor: null });
+    expect(service.listProcessPage).toHaveBeenCalledWith({
+      includeInactive: true,
+      query: "%",
+      cursor: "next-page",
+    });
+    expect(service.listProcesses).not.toHaveBeenCalled();
   });
 
   it("exposes revoked alias history only when explicitly requested", async () => {

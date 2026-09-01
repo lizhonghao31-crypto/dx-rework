@@ -11,6 +11,7 @@ import {
   DelegationsQuerySchema,
   IdempotencyKeySchema,
   PeopleListQuerySchema,
+  ProcessCatalogPageQuerySchema,
   ProcessParamsSchema,
   ReplaceProcessDefaultWorkersSchema,
   PersonAliasParamsSchema,
@@ -210,6 +211,16 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     await actor(request, "process_catalog:read");
     const query = parse(CatalogListQuerySchema, request.query);
     return dependencies.service.listProcesses(query.includeInactive === "true");
+  });
+
+  app.get("/master-data/process-catalog", async (request) => {
+    await actor(request, "process_catalog:read");
+    const query = parse(ProcessCatalogPageQuerySchema, request.query);
+    return dependencies.service.listProcessPage({
+      includeInactive: query.includeInactive === "true",
+      query: query.q ?? "",
+      cursor: query.cursor ?? "",
+    });
   });
 
   app.get("/master-data/process-default-worker-candidates", async (request) => {
