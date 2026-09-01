@@ -4,6 +4,7 @@ import {
   type TailInspectionResponse,
   type WholeOrderReviewResponse,
 } from "@dx-rework/contracts";
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -45,6 +46,9 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
   cancelled: "已取消",
   deleted: "已删除",
 })[status] ?? status;
+
+const formatUnitPrice = (value: number | null): string =>
+  value === null ? "—" : `¥${formatBusinessDecimal(value, 3)}`;
 
 type ReviewReport = WholeOrderReviewResponse["reports"][number];
 type IePrecountEntry = Readonly<{
@@ -354,6 +358,13 @@ export function WholeOrderReviewPanel({
       || (Number(value) !== 1 && !reason);
   });
   const ready = allComplete && !priceIssue && !coefficientIssue;
+  const readinessIssues = [
+    ...(!allComplete ? [data.tailInspectionRequired
+      ? "补齐有效报数并处理工序超数"
+      : "等待全部返工报数"] : []),
+    ...(priceIssue ? ["填写每个工序有效的最终单价"] : []),
+    ...(coefficientIssue ? ["检查临时工工资调整"] : []),
+  ];
   const tailReports = data.reports.filter((report) => report.executionKind === "tail_inspection");
   const temporaryWorkerGroups = data.temporaryWorkers.reduce<Array<{
     configurationItemId: string;
@@ -425,8 +436,8 @@ export function WholeOrderReviewPanel({
           <h2>按工序核对</h2>
           <p>{tailStage ? "主管可修正个人有效数量并调整最终单价；原始上数和 N03 价格始终保留。" : "IE 只读核对系统锁定的数量事实与价格提案。"}</p>
         </div>
-        <StatusBadge tone={allComplete ? "success" : "warning"}>
-          {allComplete ? "全部可确认" : "存在异常"}
+        <StatusBadge tone={ready ? "success" : "warning"}>
+          {ready ? "全部可确认" : "存在异常"}
         </StatusBadge>
       </div>
       <div className="quantity-process-list">
@@ -480,13 +491,13 @@ export function WholeOrderReviewPanel({
               <div className="quantity-process-price__copy">
                 <b>{tailStage ? "最终价格" : "价格复核"}</b>
                 <small>{tailStage
-                  ? `N03 已审 ¥${process.finalUnitPrice ?? "—"}；不调整可保留原价`
+                  ? `N03 已审 ${formatUnitPrice(process.finalUnitPrice)}；不调整可保留原价`
                   : reviewedPrice
                     ? "与本版最终数量一并提交"
                     : "历史在途单沿用 N03 已审价格"}</small>
               </div>
               {tailStage && data.canReview ? <InsetField
-                label="拟提交单价（元/件）"
+                label={`拟提交单价（元/${process.pricingUnit === "piece" ? "件" : "小时"}）`}
                 type="number"
                 min="0.001"
                 step="0.001"
@@ -498,8 +509,8 @@ export function WholeOrderReviewPanel({
                   [process.configurationItemId]: event.target.value,
                 }))}
               /> : <div className="quantity-process-price__review">
-                <span><small>原价</small><strong>¥{reviewedPrice?.originalUnitPrice ?? process.finalUnitPrice ?? "—"}</strong></span>
-                <span><small>提议价</small><strong>¥{reviewedPrice?.proposedUnitPrice ?? process.finalUnitPrice ?? "—"}</strong></span>
+                <span><small>原价</small><strong>{formatUnitPrice(reviewedPrice?.originalUnitPrice ?? process.finalUnitPrice)}</strong></span>
+                <span><small>提议价</small><strong>{formatUnitPrice(reviewedPrice?.proposedUnitPrice ?? process.finalUnitPrice)}</strong></span>
                 <StatusBadge tone={reviewedPrice?.changed ? "warning" : "info"}>
                   {reviewedPrice?.changed ? "价格有调整" : "沿用原价"}
                 </StatusBadge>
@@ -629,7 +640,7 @@ export function WholeOrderReviewPanel({
           {busy ? "提交中…" : data.tailInspectionRequired ? "确认数量并提交 IE" : "确认数量并提交 IE"}
         </Button>
       </div>
-      {!ready && <p role="status">{data.tailInspectionRequired ? "还需完成：补齐有效报数、处理工序超数，并检查临时工工资调整。" : "还需完成：等待全部返工报数，并检查临时工工资调整。"}</p>}
+      {!ready && <p role="status">还需完成：{readinessIssues.join("；")}。</p>}
     </Surface>}
 
     {ieStage && data.canIeReview && <Surface>
