@@ -5,20 +5,24 @@ import { describe, expect, it } from "vitest";
 
 describe("sourcing PC form and owner approval finish", () => {
   it("stores ordered process facts without removing the legacy search field", async () => {
-    const [contract, service, migration] = await Promise.all([
+    const [contract, service, migration, craftMigration] = await Promise.all([
       readFile("packages/contracts/src/sourcing.ts", "utf8"),
       readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8"),
       readFile("apps/api/migrations/0124_sourcing_ordered_processes.sql", "utf8"),
+      readFile("apps/api/migrations/0135_sourcing_case_craft_snapshots.sql", "utf8"),
     ]);
     expect(contract).toContain("MAX_SOURCING_PROCESSES = 20");
-    expect(contract).toContain("processes: z.array(SourcingProcessSchema)");
+    expect(contract).toContain("craftIds: z.array(IdSchema)");
     expect(service).toContain("process_items");
-    expect(service).toContain("normalizeText(input.processDescription, \"工艺\", 500)");
-    expect(service).toContain("processDescription: legacyProcessDescription ?? processes.join(\"、\")");
-    expect(service).toContain("normalized.processItems");
+    expect(service).not.toContain("input.processDescription");
+    expect(service).toContain("const persistedProcessDescription");
+    expect(service).toContain("const persistedProcessItems");
+    expect(service).toContain("INSERT INTO sourcing_case_crafts");
     expect(migration).toContain("ADD COLUMN process_items text[]");
     expect(migration).toContain("sourcing_case.process_description");
     expect(migration).toContain("WHERE sourcing_case.deleted_at IS NULL");
+    expect(craftMigration).toContain("craft_name_snapshot");
+    expect(craftMigration).not.toContain("INSERT INTO sourcing_case_crafts");
   });
 
   it("renders an ordered editor and a decision-ready owner summary on desktop", async () => {
@@ -37,7 +41,7 @@ describe("sourcing PC form and owner approval finish", () => {
       "批准方案",
       "驳回并退回生产管理",
     ]) expect(page).toContain(text);
-    expect(page).toContain("processes: normalizedProcesses");
+    expect(page).toContain("craftIds: ensuredCrafts.map");
     expect(css).toContain("@media (min-width: 761px)");
     expect(page).toContain("subtractFixedPoint");
     expect(page).toContain("sourcing-owner-mobile-summary");

@@ -4,9 +4,20 @@ import { describe, expect, it } from "vitest";
 
 describe("sourcing craft database separation", () => {
   it("keeps sourcing crafts independent from rework process configuration", async () => {
-    const [migration, service, routes, sourcingPage, masterDataPage, requirement] = await Promise.all([
+    const [
+      migration,
+      orderCraftMigration,
+      service,
+      sourcingService,
+      routes,
+      sourcingPage,
+      masterDataPage,
+      requirement,
+    ] = await Promise.all([
       readFile("apps/api/migrations/0134_versioned_craft_catalog.sql", "utf8"),
+      readFile("apps/api/migrations/0135_sourcing_case_craft_snapshots.sql", "utf8"),
       readFile("apps/api/src/access/service.ts", "utf8"),
+      readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8"),
       readFile("apps/api/src/access/routes.ts", "utf8"),
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
       readFile("apps/web/src/master-data-page.tsx", "utf8"),
@@ -20,6 +31,13 @@ describe("sourcing craft database separation", () => {
     expect(migration).toContain("craft_catalog_versions_guard_creation");
     expect(migration).not.toContain("FROM sourcing_cases");
     expect(migration).not.toContain("ALTER TABLE process_catalog_items");
+
+    expect(orderCraftMigration).toContain("CREATE TABLE sourcing_case_crafts");
+    expect(orderCraftMigration).toContain("sourcing_case_crafts_guard_creation");
+    expect(orderCraftMigration).not.toContain("INSERT INTO sourcing_case_crafts");
+    expect(sourcingService).toContain("INSERT INTO sourcing_case_crafts");
+    expect(sourcingService).toContain("所选工艺已停用或不存在");
+    expect(sourcingService).toContain("ORDER BY binding.position");
 
     expect(service).toContain("async listCrafts(");
     expect(service).toContain("async ensureCrafts(");
@@ -38,7 +56,8 @@ describe("sourcing craft database separation", () => {
 
     expect(sourcingPage).toContain('request("master-data/crafts/ensure"');
     expect(sourcingPage).toContain("craftNames: normalizedProcesses");
-    expect(sourcingPage).toContain("processes: normalizedProcesses");
+    expect(sourcingPage).toContain("craftIds: ensuredCrafts.map");
+    expect(sourcingPage).not.toContain("processes: normalizedProcesses");
     expect(sourcingPage).toContain('list="sourcing-craft-options"');
     expect(sourcingPage).toContain('master-data/crafts?q=');
     expect(sourcingPage).toContain("activeCraftQuery");

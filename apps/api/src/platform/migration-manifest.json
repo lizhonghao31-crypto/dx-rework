@@ -133,6 +133,7 @@
     { "version": "0131_responsibility_todo_explicit_assignees", "checksum": "271ed948d69cd1753f3a74c41879dff70fb6c4c400276827cde349245de0732b" },
     { "version": "0132_receiving_merge_into_rework_target", "checksum": "6d8876d9c0be2b2c50eb47cd8ef3d3059dc47b70f8b448e3019bc9b78ff5b7b9" },
     { "version": "0133_sourcing_craft_catalog", "checksum": "a3560809a38adf1cdff11b24a150b6640af352c3068ce8a5afaeb5670930ebbc" },
-    { "version": "0134_versioned_craft_catalog", "checksum": "25f2b3dba7791e1b322d0e9f03d7597d4ff6cc07a04bbdd4bee821551a14f246" }
+    { "version": "0134_versioned_craft_catalog", "checksum": "25f2b3dba7791e1b322d0e9f03d7597d4ff6cc07a04bbdd4bee821551a14f246" },
+    { "version": "0135_sourcing_case_craft_snapshots", "checksum": "d9ff6a7686813a324caab6a5b219a6f28a42c64f5530ee8566dcaf769072bdb1" }
   ]
 }

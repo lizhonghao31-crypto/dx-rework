@@ -22,34 +22,47 @@ describe("sourcing PR03 contracts", () => {
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝并整烫",
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
       orderQuantity: 120,
     })).toEqual({
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝并整烫",
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
       orderQuantity: 120,
     });
     expect(() => CreateSourcingCaseSchema.parse({
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝并整烫",
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
       orderQuantity: 1.5,
     })).toThrow();
     expect(CreateSourcingCaseSchema.parse({
       erpOrderNo: "ERP-2026-002",
       styleNo: "DX-200",
       deliveryDate: "2026-09-16",
-      processes: ["车缝", "整烫", "按样衣复核"],
+      craftIds: [
+        "00000000-0000-4000-8000-000000000401",
+        "00000000-0000-4000-8000-000000000402",
+        "00000000-0000-4000-8000-000000000403",
+      ],
       orderQuantity: 200,
-    })).toMatchObject({ processes: ["车缝", "整烫", "按样衣复核"] });
+    })).toMatchObject({
+      craftIds: [
+        "00000000-0000-4000-8000-000000000401",
+        "00000000-0000-4000-8000-000000000402",
+        "00000000-0000-4000-8000-000000000403",
+      ],
+    });
     expect(() => CreateSourcingCaseSchema.parse({
       erpOrderNo: "ERP-2026-003",
       styleNo: "DX-300",
       deliveryDate: "2026-09-17",
-      processes: ["车缝", "车缝"],
+      craftIds: [
+        "00000000-0000-4000-8000-000000000401",
+        "00000000-0000-4000-8000-000000000401",
+      ],
       orderQuantity: 200,
     })).toThrow(/工艺不能重复/);
     expect(() => CreateSourcingCaseSchema.parse({
@@ -57,7 +70,7 @@ describe("sourcing PR03 contracts", () => {
       erpOrderNo: "ERP-2026-001",
       styleNo: "DX-100",
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝并整烫",
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
       orderQuantity: 120,
     })).toThrow();
   });

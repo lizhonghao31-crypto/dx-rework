@@ -2,7 +2,6 @@ import { z } from "zod";
 
 const IdSchema = z.string().uuid();
 const ShortTextSchema = z.string().trim().min(1).max(100);
-const SourcingProcessSchema = z.string().trim().min(1, "工艺不能为空").max(100);
 const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
@@ -54,26 +53,13 @@ export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
   styleNo: ShortTextSchema,
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
-  processes: z.array(SourcingProcessSchema).min(1).max(MAX_SOURCING_PROCESSES)
-    .refine((items) => new Set(items).size === items.length, "工艺不能重复")
-    .optional(),
-  processDescription: z.string().trim().min(1).max(500).optional(),
+  craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
+    .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复"),
   orderQuantity: z.number().int().positive().max(10_000_000),
   attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
     .optional(),
-}).strict().superRefine((value, context) => {
-  if (!value.processes?.length && !value.processDescription) {
-    context.addIssue({ code: "custom", path: ["processes"], message: "请至少填写一项工艺" });
-  }
-  if (value.processes?.length && value.processDescription) {
-    context.addIssue({
-      code: "custom",
-      path: ["processes"],
-      message: "工艺清单与旧工艺字段不能同时提交",
-    });
-  }
-});
+}).strict();
 
 export const CreateSourcingIeQuoteSchema = z.object({
   unitPrice: MoneyInputSchema,
@@ -202,6 +188,14 @@ export const SourcingOwnerDecisionSchema = z.object({
   decidedAt: z.string().datetime(),
 }).strict();
 
+export const SourcingCraftSnapshotSchema = z.object({
+  position: z.number().int().min(1).max(MAX_SOURCING_PROCESSES),
+  craftId: IdSchema,
+  craftCode: z.string(),
+  craftVersion: z.number().int().positive(),
+  craftName: z.string(),
+}).strict();
+
 export const SourcingCaseSummarySchema = z.object({
   sourcingCaseId: IdSchema,
   erpOrderId: z.string(),
@@ -212,6 +206,7 @@ export const SourcingCaseSummarySchema = z.object({
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   processDescription: z.string().nullable(),
   processes: z.array(z.string()).max(MAX_SOURCING_PROCESSES),
+  crafts: z.array(SourcingCraftSnapshotSchema).max(MAX_SOURCING_PROCESSES).optional(),
   status: SourcingCaseStatusSchema,
   version: z.number().int().positive(),
   createdBy: IdSchema,
