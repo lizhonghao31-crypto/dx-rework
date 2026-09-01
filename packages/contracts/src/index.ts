@@ -848,6 +848,11 @@ export const CorrectWorkReportQuantitiesSchema = z.object({
 });
 export const ReviewWholeOrderSchema = z.object({
   expectedOrderVersion: z.number().int().positive(),
+  processPrices: z.array(z.object({
+    configurationItemId: IdSchema,
+    unitPrice: z.number().finite().positive().max(99_999_999_999.999)
+      .refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "Unit price keeps at most three decimals"),
+  }).strict()).optional(),
   temporaryCoefficients: z.array(z.object({
     configurationItemId: IdSchema,
     personId: IdSchema,
@@ -859,6 +864,10 @@ export const ReviewWholeOrderSchema = z.object({
     }
   })),
 }).strict().superRefine((value, context) => {
+  const priceIds = value.processPrices?.map((item) => item.configurationItemId) ?? [];
+  if (new Set(priceIds).size !== priceIds.length) {
+    context.addIssue({ code: "custom", path: ["processPrices"], message: "Process prices cannot contain duplicates" });
+  }
   const coefficientKeys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
   if (new Set(coefficientKeys).size !== coefficientKeys.length) {
     context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
@@ -992,6 +1001,12 @@ export const WholeOrderReviewResponseSchema = z.object({
     reviewedBy: IdSchema.nullable(),
     reviewedAt: z.string().datetime().nullable(),
     reviewReason: z.string().nullable(),
+    prices: z.array(z.object({
+      configurationItemId: IdSchema,
+      originalUnitPrice: z.number().positive(),
+      proposedUnitPrice: z.number().positive(),
+      changed: z.boolean(),
+    }).strict()),
     quantities: z.array(z.object({
       configurationItemId: IdSchema,
       workerReportedQuantity: z.number().int().nonnegative(),
