@@ -575,6 +575,34 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     });
     await expect(service.board(today, today, "in20546664", "unknown"))
       .rejects.toThrow("收货状态筛选无效");
+
+    const repeatKey = randomUUID();
+    const repeated = await service.createRepeated(receiver(), {
+      receivingBatchId: current.value.receivingBatchId,
+      actualQuantity: 100,
+      defectiveQuantity: 2,
+    }, repeatKey);
+    const replayed = await service.createRepeated(receiver(), {
+      receivingBatchId: current.value.receivingBatchId,
+      actualQuantity: 100,
+      defectiveQuantity: 2,
+    }, repeatKey);
+    expect(replayed.reused).toBe(true);
+    expect(replayed.value.receiptId).toBe(repeated.value.receiptId);
+    expect(repeated.value).toMatchObject({
+      receivingBatchId: current.value.receivingBatchId,
+      styleNo: "IN20546664",
+      documentQuantity: 4017,
+      actualQuantity: 100,
+      defectiveQuantity: 2,
+    });
+    const afterRepeat = await service.board(today, today, "in20546664");
+    expect(afterRepeat.rows[0]).toMatchObject({ cumulativeActualQuantity: 3758, receiptCount: 3 });
+    await expect(service.createRepeated(receiver(), {
+      receivingBatchId: backfilled.value.receivingBatchId,
+      actualQuantity: 1,
+      defectiveQuantity: 0,
+    }, randomUUID())).rejects.toThrow("该订单已不可追加收货，请重新搜索选择");
   });
 
   it("keeps an open rework action visible when same-style receiving batches consolidate", async () => {

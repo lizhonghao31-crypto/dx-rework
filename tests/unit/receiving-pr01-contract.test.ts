@@ -34,6 +34,9 @@ describe("PR-01 receiving fact layer", () => {
     expect(routes).toContain('"/receiving/repeat-options"');
     expect(routes).toContain("await creator(request);");
     expect(routes).toContain("dependencies.service.listRepeatOptions");
+    expect(routes).toContain('"/receiving/repeat-receipts"');
+    expect(routes).toContain("dependencies.service.createRepeated");
+    expect(routes).toContain("idempotencyKey(request)");
     expect(auth).toContain("if (user.isRoot === true) return true");
   });
 
