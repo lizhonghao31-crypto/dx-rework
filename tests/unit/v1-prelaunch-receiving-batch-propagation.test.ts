@@ -35,7 +35,7 @@ describe("PR-01 stable receiving batch propagation", () => {
     expect(service).toContain("input.receivingBatchId");
     expect(service).toContain("pg_advisory_xact_lock(hashtext($1))");
     expect(service).toContain("source_receiving_batch_id,created_by,updated_by");
-    expect(service).toContain("必须从订单回货选择收货批次发起返工");
+    expect(routes).toContain("必须从订单回货选择收货批次发起返工");
     expect(service).toContain("该收货批次已有返工单，不能重复发起");
     expect(service).not.toContain("return fallback.rows[0]?.receiving_batch_id ?? null");
     expect(service).toContain("styleNo: sourceReceivingBatch.styleNo");
