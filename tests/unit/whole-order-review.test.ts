@@ -29,7 +29,9 @@ describe("whole-order review contracts", () => {
     const response = { reworkOrderId: id, reworkStatus: "pending_order_review", orderVersion: 2, canReview: true, canIeReview: false, canAdjustQuantity: true, canConfirmQuantity: false, canReviewQuantityIncrease: false, processes: [], reports: [report], adjustments: [], temporaryWorkers: [], reviewId: null, finalConfirmation: null };
     expect(WholeOrderReviewResponseSchema.safeParse(response).success).toBe(true);
     expect(WholeOrderReviewResponseSchema.safeParse({ ...response, reports: [{ ...report, assignmentMode: undefined }] }).success).toBe(false);
-    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2, reason: "旺季临时工加价" }] }).success).toBe(true);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, processPrices: [{ configurationItemId: id, unitPrice: 1.234 }], temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2, reason: "旺季临时工加价" }] }).success).toBe(true);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, processPrices: [{ configurationItemId: id, unitPrice: 1.2345 }], temporaryCoefficients: [] }).success).toBe(false);
+    expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, processPrices: [{ configurationItemId: id, unitPrice: 1 }, { configurationItemId: id, unitPrice: 2 }], temporaryCoefficients: [] }).success).toBe(false);
     expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.2 }] }).success).toBe(false);
     expect(ReviewWholeOrderSchema.safeParse({ expectedOrderVersion: 2, finalQuantities: [{ configurationItemId: id, finalConfirmedQuantity: 1 }], temporaryCoefficients: [] }).success).toBe(false);
     expect(CorrectWorkReportQuantitySchema.safeParse({ expectedOrderVersion: 2, effectiveQuantity: 4800 }).success).toBe(true);
@@ -78,6 +80,23 @@ describe("whole-order review contracts", () => {
     expect(migration).toContain("rework_tail_completion_coefficients");
     expect(migration).toContain("rework.whole_order.approve");
     expect(migration).not.toContain("rework.tail_pricing.ie_approve");
+  });
+
+  it("keeps N05 prices pending until the N06 IE decision", async () => {
+    const [service, migration] = await Promise.all([
+      readFile(new URL("../../apps/api/src/rework/whole-order-review-service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/api/migrations/0129_n05_price_ie_reapproval.sql", import.meta.url), "utf8"),
+    ]);
+    expect(service).toContain("rework_tail_completion_prices");
+    expect(service).toContain("price_snapshot_required");
+    expect(service.indexOf("INSERT INTO rework_tail_completion_reviews")).toBeLessThan(
+      service.indexOf("UPDATE rework_process_configuration_items item"),
+    );
+    expect(migration).toContain("process price can only change to the IE-approved N05 proposal");
+    expect(migration).toContain("IE-approved final prices must exactly cover the active process configuration");
+    expect(migration).toContain("rework_tail_completion_prices_no_update");
+    expect(migration).toContain("rework_tail_completion_prices_no_delete");
+    expect(migration).toContain("rework_tail_completion_prices_no_truncate");
   });
 
   it("adds only a forward PR-08 migration with immutable rejection and adjustment guards", async () => {

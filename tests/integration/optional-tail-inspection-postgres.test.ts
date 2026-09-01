@@ -284,11 +284,25 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
           configurationItemId: workerItem.configurationItemId,
           finalConfirmedQuantity: 10,
         }],
+        processPrices: [{
+          configurationItemId: workerItem.configurationItemId,
+          unitPrice: 0.25,
+        }],
         temporaryCoefficients: [],
       },
       randomUUID(),
     );
     expect(confirmed.value.reworkStatus).toBe("pending_final_quantity_ie_review");
+    expect(confirmed.value.finalConfirmation?.prices).toEqual([{
+      configurationItemId: workerItem.configurationItemId,
+      originalUnitPrice: 0.2,
+      proposedUnitPrice: 0.25,
+      changed: true,
+    }]);
+    expect((await database.query(
+      "SELECT unit_price::text FROM rework_process_configuration_items WHERE configuration_item_id=$1",
+      [workerItem.configurationItemId],
+    )).rows).toEqual([{ unit_price: "0.200" }]);
     expect((await database.query(
       `SELECT worker_reported_quantity::text,tail_reported_quantity::text,final_confirmed_quantity::text
        FROM rework_tail_completion_quantities quantity
@@ -316,14 +330,18 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
     });
     expect(ieApproved.value.orderVersion).toBe(confirmed.value.orderVersion + 1);
     expect((await database.query(
-      `SELECT report.settlement_quantity::text,report.group_amount>0 AS has_wage
+      `SELECT report.settlement_quantity::text,report.group_amount=2.5 AS uses_repriced_wage
        FROM rework_work_reports report
        WHERE report.rework_order_id=$1 AND report.status='submitted'`,
       [draft.value.reworkOrderId],
     )).rows).toEqual([{
       settlement_quantity: "10.00",
-      has_wage: true,
+      uses_repriced_wage: true,
     }]);
+    expect((await database.query(
+      "SELECT unit_price::text FROM rework_process_configuration_items WHERE configuration_item_id=$1",
+      [workerItem.configurationItemId],
+    )).rows).toEqual([{ unit_price: "0.250" }]);
     expect((await database.query(
       `SELECT count(*)::int AS count,bool_and(reviewed_by=$2) AS reviewed_by_ie
        FROM rework_order_reviews WHERE rework_order_id=$1`,

@@ -64,12 +64,16 @@ type AdjustmentForUpdate = AdjustmentRow & Readonly<{
 type ItemRow = Readonly<{ configuration_item_id: string; execution_kind: "worker" | "tail_inspection"; pricing_unit: "piece" | "hour"; planned_quantity: string }>;
 type FinalConfirmationRow = Readonly<{
   confirmation_id: string; confirmation_version: number; confirmed_by: string; confirmed_at: Date;
-  workflow_stage: "approved" | "pending_ie_review"; decision: "approved" | "rejected" | null;
+  workflow_stage: "approved" | "pending_ie_review"; price_snapshot_required: boolean;
+  decision: "approved" | "rejected" | null;
   reviewed_by: string | null; reviewed_at: Date | null; review_reason: string | null;
 }>;
 type FinalQuantityRow = Readonly<{
   configuration_item_id: string; worker_reported_quantity: string;
   tail_reported_quantity: string; final_confirmed_quantity: string;
+}>;
+type FinalPriceRow = Readonly<{
+  configuration_item_id: string; original_unit_price: string; proposed_unit_price: string;
 }>;
 
 const numberValue = (value: string | number): number => Number(value);
@@ -120,6 +124,21 @@ export class WholeOrderReviewService {
       if (plans.length === 0 || plans.some((plan) => plan.unit_price === null)) {
         error("每道工序必须完成 IE 核价后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
       }
+      const submittedPrices = input.processPrices ?? plans.map((plan) => ({
+        configurationItemId: plan.configuration_item_id,
+        unitPrice: numberValue(plan.unit_price!),
+      }));
+      const submittedPriceIds = new Set(submittedPrices.map((price) => price.configurationItemId));
+      const expectedPriceIds = new Set(plans.map((plan) => plan.configuration_item_id));
+      if (submittedPriceIds.size !== expectedPriceIds.size
+        || [...expectedPriceIds].some((value) => !submittedPriceIds.has(value))) {
+        error("最终价格必须完整覆盖当前生效的每道工序", 400, "VALIDATION_ERROR");
+      }
+      const finalPrices = plans.map((plan) => ({
+        configurationItemId: plan.configuration_item_id,
+        originalUnitPrice: numberValue(plan.unit_price!),
+        proposedUnitPrice: submittedPrices.find((price) => price.configurationItemId === plan.configuration_item_id)!.unitPrice,
+      }));
       await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required);
       const finalQuantities = plans.map((plan) => ({
         configurationItemId: plan.configuration_item_id,
@@ -151,17 +170,26 @@ export class WholeOrderReviewService {
         before: this.orderAudit(order),
         after: {
           ...this.orderAudit(order, "pending_final_quantity_ie_review", order.version + 1),
-          confirmationId, confirmationVersion, finalQuantities,
+          confirmationId, confirmationVersion, finalQuantities, finalPrices,
           temporaryCoefficients: input.temporaryCoefficients,
         },
       });
       await this.context(client, eventId, actor.requestId, "whole_order_review");
       await client.query(
         `INSERT INTO rework_tail_completion_confirmations(
-           confirmation_id,rework_order_id,confirmation_version,workflow_stage,confirmed_by,operation_event_id,request_id
-         ) VALUES($1,$2,$3,'pending_ie_review',$4,$5,$6)`,
+           confirmation_id,rework_order_id,confirmation_version,workflow_stage,price_snapshot_required,
+           confirmed_by,operation_event_id,request_id
+         ) VALUES($1,$2,$3,'pending_ie_review',true,$4,$5,$6)`,
         [confirmationId, reworkOrderId, confirmationVersion, actor.actorId, eventId, actor.requestId],
       );
+      for (const price of finalPrices) {
+        await client.query(
+          `INSERT INTO rework_tail_completion_prices(
+             confirmation_id,configuration_item_id,original_unit_price,proposed_unit_price
+           ) VALUES($1,$2,$3,$4)`,
+          [confirmationId, price.configurationItemId, price.originalUnitPrice, price.proposedUnitPrice],
+        );
+      }
       for (const quantity of finalQuantities) {
         const plan = plans.find((candidate) => candidate.configuration_item_id === quantity.configurationItemId)!;
         await client.query(
@@ -214,6 +242,10 @@ export class WholeOrderReviewService {
       const confirmation = await this.currentConfirmation(client, reworkOrderId, true);
       const pendingConfirmation = confirmation ?? error("没有等待 IE 复核的最终数量确认版本", 409, "CONFLICT");
       if (pendingConfirmation.decision !== null) error("该最终数量确认版本已经完成 IE 复核", 409, "CONFLICT");
+      const finalPrices = await this.confirmationPrices(client, pendingConfirmation.confirmation_id);
+      if (pendingConfirmation.price_snapshot_required && finalPrices.length === 0) {
+        error("最终价格快照不完整，不能进行 IE 复核", 409, "CONFLICT");
+      }
       const approved = input.decision === "approved";
       const nextStatus = approved ? "pending_responsibility_determination" : "pending_order_review";
       const reviewId = randomUUID();
@@ -225,6 +257,11 @@ export class WholeOrderReviewService {
           ...this.orderAudit(order, nextStatus, order.version + 1),
           confirmationId: pendingConfirmation.confirmation_id, confirmationVersion: pendingConfirmation.confirmation_version,
           decision: input.decision, orderReviewId,
+          finalPrices: finalPrices.map((price) => ({
+            configurationItemId: price.configuration_item_id,
+            originalUnitPrice: numberValue(price.original_unit_price),
+            proposedUnitPrice: numberValue(price.proposed_unit_price),
+          })),
         },
         ...(input.reason ? { reason: input.reason } : {}),
       });
@@ -259,6 +296,17 @@ export class WholeOrderReviewService {
           recipientKey: "role:tail_supervisor", idempotencyKey: `${reworkOrderId}:final-quantity:${reviewId}:rejected`,
         });
         return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
+      }
+      if (pendingConfirmation.price_snapshot_required) {
+        await client.query(
+          `UPDATE rework_process_configuration_items item
+           SET unit_price=price.proposed_unit_price
+           FROM rework_tail_completion_prices price
+           WHERE price.confirmation_id=$1
+             AND price.configuration_item_id=item.configuration_item_id
+             AND item.unit_price IS DISTINCT FROM price.proposed_unit_price`,
+          [pendingConfirmation.confirmation_id],
+        );
       }
       await client.query(
         `WITH amounts AS (
@@ -1018,7 +1066,8 @@ export class WholeOrderReviewService {
   private async currentConfirmation(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<FinalConfirmationRow | null> {
     const result = await client.query<FinalConfirmationRow>(
       `SELECT confirmation.confirmation_id,confirmation.confirmation_version,confirmation.confirmed_by,confirmation.confirmed_at,
-              confirmation.workflow_stage,review.decision,review.reviewed_by,review.reviewed_at,review.reason AS review_reason
+              confirmation.workflow_stage,confirmation.price_snapshot_required,
+              review.decision,review.reviewed_by,review.reviewed_at,review.reason AS review_reason
        FROM rework_tail_completion_confirmations confirmation
        LEFT JOIN rework_tail_completion_reviews review ON review.confirmation_id=confirmation.confirmation_id
        WHERE confirmation.rework_order_id=$1
@@ -1030,6 +1079,7 @@ export class WholeOrderReviewService {
   }
 
   private async confirmationDto(client: Pick<Pool, "query"> | PoolClient, confirmation: FinalConfirmationRow): Promise<NonNullable<WholeOrderReviewResponse["finalConfirmation"]>> {
+    const prices = await this.confirmationPrices(client, confirmation.confirmation_id);
     const quantities = await client.query<FinalQuantityRow>(
       `SELECT configuration_item_id,worker_reported_quantity::text,tail_reported_quantity::text,final_confirmed_quantity::text
        FROM rework_tail_completion_quantities WHERE confirmation_id=$1 ORDER BY configuration_item_id`,
@@ -1044,6 +1094,12 @@ export class WholeOrderReviewService {
       reviewedBy: confirmation.reviewed_by,
       reviewedAt: iso(confirmation.reviewed_at),
       reviewReason: confirmation.review_reason,
+      prices: prices.map((price) => ({
+        configurationItemId: price.configuration_item_id,
+        originalUnitPrice: numberValue(price.original_unit_price),
+        proposedUnitPrice: numberValue(price.proposed_unit_price),
+        changed: numberValue(price.original_unit_price) !== numberValue(price.proposed_unit_price),
+      })),
       quantities: quantities.rows.map((quantity) => ({
         configurationItemId: quantity.configuration_item_id,
         workerReportedQuantity: numberValue(quantity.worker_reported_quantity),
@@ -1052,6 +1108,20 @@ export class WholeOrderReviewService {
         changed: numberValue(quantity.worker_reported_quantity) !== numberValue(quantity.final_confirmed_quantity),
       })),
     };
+  }
+
+  private async confirmationPrices(
+    client: Pick<Pool, "query"> | PoolClient,
+    confirmationId: string,
+  ): Promise<FinalPriceRow[]> {
+    const result = await client.query<FinalPriceRow>(
+      `SELECT configuration_item_id,original_unit_price::text,proposed_unit_price::text
+       FROM rework_tail_completion_prices
+       WHERE confirmation_id=$1
+       ORDER BY configuration_item_id`,
+      [confirmationId],
+    );
+    return result.rows;
   }
 
   private async plans(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string): Promise<PlanRow[]> {
