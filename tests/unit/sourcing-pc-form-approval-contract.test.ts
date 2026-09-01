@@ -12,9 +12,9 @@ describe("sourcing PC form and owner approval finish", () => {
       readFile("apps/api/migrations/0135_sourcing_case_craft_snapshots.sql", "utf8"),
     ]);
     expect(contract).toContain("MAX_SOURCING_PROCESSES = 20");
-    expect(contract).toContain("processes: z.array(SourcingProcessSchema)");
+    expect(contract).toContain("craftIds: z.array(IdSchema)");
     expect(service).toContain("process_items");
-    expect(service).toContain("normalizeText(input.processDescription, \"工艺\", 500)");
+    expect(service).not.toContain("input.processDescription");
     expect(service).toContain("const persistedProcessDescription");
     expect(service).toContain("const persistedProcessItems");
     expect(service).toContain("INSERT INTO sourcing_case_crafts");
