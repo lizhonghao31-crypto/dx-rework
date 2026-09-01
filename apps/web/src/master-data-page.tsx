@@ -30,6 +30,11 @@ type Process = Readonly<{
   defaultWorkerPersonIds: string[];
 }>;
 
+type ProcessPage = Readonly<{
+  items: Process[];
+  nextCursor: string | null;
+}>;
+
 type ProcessDefaultWorkerCandidate = Readonly<{
   personId: string;
   personType: "internal" | "temporary";
@@ -46,6 +51,7 @@ type SupplierImportData = Readonly<{
 }>;
 type ProcessImportData = Readonly<{
   systemCode: string;
+  processId?: string;
   processName: string;
   pricingUnit: Process["pricingUnit"];
   active: boolean;
@@ -101,6 +107,13 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   return await response.json() as T;
 }
 
+const processCatalogPath = (query: string, cursor = ""): string => {
+  const parameters = new URLSearchParams({ includeInactive: "true" });
+  if (query) parameters.set("q", query);
+  if (cursor) parameters.set("cursor", cursor);
+  return `master-data/process-catalog?${parameters.toString()}`;
+};
+
 const generatedCode = (prefix: string): string =>
   `${prefix}_${createClientRequestId().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
 
@@ -141,17 +154,26 @@ export function MasterDataPage() {
   const [editingProcessRosterId, setEditingProcessRosterId] = useState("");
   const [processRosterDraft, setProcessRosterDraft] = useState<string[]>([]);
   const [processRosterSearch, setProcessRosterSearch] = useState("");
+  const [processSearch, setProcessSearch] = useState("");
+  const [appliedProcessSearch, setAppliedProcessSearch] = useState("");
+  const [processCursor, setProcessCursor] = useState("");
+  const [processCursorHistory, setProcessCursorHistory] = useState<string[]>([]);
+  const [processNextCursor, setProcessNextCursor] = useState<string | null>(null);
+  const [processPageLoading, setProcessPageLoading] = useState(false);
 
   const load = async () => {
     setError("");
     try {
-      const [nextSuppliers, nextProcesses, nextProcessDefaultWorkerCandidates] = await Promise.all([
+      const [nextSuppliers, processPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
         json<Supplier[]>("master-data/suppliers?includeInactive=true"),
-        json<Process[]>("master-data/processes?includeInactive=true"),
+        json<ProcessPage>(processCatalogPath(appliedProcessSearch)),
         json<ProcessDefaultWorkerCandidate[]>("master-data/process-default-worker-candidates"),
       ]);
       setSuppliers(nextSuppliers);
-      setProcesses(nextProcesses);
+      setProcesses(processPage.items);
+      setProcessNextCursor(processPage.nextCursor);
+      setProcessCursor("");
+      setProcessCursorHistory([]);
       setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "基础资料加载失败");
@@ -159,6 +181,36 @@ export function MasterDataPage() {
   };
 
   useEffect(() => { void load(); }, []);
+
+  const showProcessPage = async (query: string, cursor: string, history: string[]) => {
+    if (processPageLoading || busy) return;
+    setProcessPageLoading(true);
+    setBusy("process-page");
+    setError("");
+    try {
+      const page = await json<ProcessPage>(processCatalogPath(query, cursor));
+      setProcesses(page.items);
+      setProcessNextCursor(page.nextCursor);
+      setAppliedProcessSearch(query);
+      setProcessCursor(cursor);
+      setProcessCursorHistory(history);
+      setEditingProcessRosterId("");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "工序目录加载失败");
+    } finally {
+      setProcessPageLoading(false);
+      setBusy("");
+    }
+  };
+
+  const applyProcessSearch = (): void => {
+    void showProcessPage(processSearch.trim(), "", []);
+  };
+
+  const clearProcessSearch = (): void => {
+    setProcessSearch("");
+    void showProcessPage("", "", []);
+  };
 
   const run = async (key: string, work: () => Promise<unknown>) => {
     if (busy) return;
@@ -302,16 +354,30 @@ export function MasterDataPage() {
       supplier.active ? "是" : "否",
     ]),
   );
-  const exportProcesses = () => downloadCsv(
-    "返工系统-工序当前资料.csv",
-    ["系统编码", "工序名称", "计价单位", "启用状态"],
-    processes.map((process) => [
-      process.processCode,
-      process.processName,
-      process.pricingUnit === "piece" ? "件" : "小时",
-      process.active ? "是" : "否",
-    ]),
-  );
+  const loadAllProcesses = () => json<Process[]>("master-data/processes?includeInactive=true");
+
+  const exportProcesses = async (): Promise<void> => {
+    if (busy) return;
+    setBusy("export-processes");
+    setError("");
+    try {
+      const catalog = await loadAllProcesses();
+      downloadCsv(
+        "返工系统-工序当前资料.csv",
+        ["系统编码", "工序名称", "计价单位", "启用状态"],
+        catalog.map((process) => [
+          process.processCode,
+          process.processName,
+          process.pricingUnit === "piece" ? "件" : "小时",
+          process.active ? "是" : "否",
+        ]),
+      );
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "工序资料导出失败");
+    } finally {
+      setBusy("");
+    }
+  };
 
   const previewSupplierImport = (filename: string, rows: string[][]): ImportPreview => {
     const headers = rows[0] ?? [];
@@ -357,7 +423,7 @@ export function MasterDataPage() {
     return { kind: "supplier", filename, rows: previewRows };
   };
 
-  const previewProcessImport = (filename: string, rows: string[][]): ImportPreview => {
+  const previewProcessImport = (filename: string, rows: string[][], catalog: readonly Process[]): ImportPreview => {
     const headers = rows[0] ?? [];
     const codeIndex = columnIndex(headers, "系统编码");
     const nameIndex = columnIndex(headers, "工序名称");
@@ -384,14 +450,15 @@ export function MasterDataPage() {
       seen.add(key);
       const data: ProcessImportData = { systemCode, processName: processNameValue, pricingUnit: pricingUnitValue, active: activeValue };
       if (systemCode) {
-        const existing = processes.find((process) => process.processCode === systemCode);
+        const existing = catalog.find((process) => process.processCode === systemCode);
         if (!existing) return { rowNumber, action: "error", message: "系统编码不存在；新增记录请把系统编码留空。", process: data };
+        const existingData = { ...data, processId: existing.processId };
         if (existing.processName === processNameValue && existing.pricingUnit === pricingUnitValue && existing.active === activeValue) {
-          return { rowNumber, action: "skip", message: "与当前资料一致。", process: data };
+          return { rowNumber, action: "skip", message: "与当前资料一致。", process: existingData };
         }
-        return { rowNumber, action: "update", message: "将生成新的工序版本。", process: data };
+        return { rowNumber, action: "update", message: "将生成新的工序版本。", process: existingData };
       }
-      const sameName = processes.find((process) => normalized(process.processName) === normalized(processNameValue));
+      const sameName = catalog.find((process) => normalized(process.processName) === normalized(processNameValue));
       if (sameName) {
         if (sameName.pricingUnit === pricingUnitValue && sameName.active === activeValue) {
           return { rowNumber, action: "skip", message: `已存在：${sameName.processCode}`, process: data };
@@ -411,7 +478,7 @@ export function MasterDataPage() {
       if (rows.length < 1) throw new Error("导入文件为空。");
       setPreview(kind === "supplier"
         ? previewSupplierImport(file.name, rows)
-        : previewProcessImport(file.name, rows));
+        : previewProcessImport(file.name, rows, await loadAllProcesses()));
     } catch (importError) {
       setPreview(null);
       setError(importError instanceof Error ? importError.message : "导入文件读取失败");
@@ -472,9 +539,8 @@ export function MasterDataPage() {
               }),
             });
           } else {
-            const existing = processes.find((process) => process.processCode === row.process?.systemCode);
-            if (!existing) throw new Error(`第 ${row.rowNumber} 行对应的工序已不存在，请重新预检。`);
-            await json(`master-data/processes/${existing.processId}/versions`, {
+            if (!row.process.processId) throw new Error(`第 ${row.rowNumber} 行对应的工序缺少预检标识，请重新预检。`);
+            await json(`master-data/processes/${row.process.processId}/versions`, {
               method: "POST",
               body: JSON.stringify({
                 processName: row.process.processName,
@@ -580,7 +646,7 @@ export function MasterDataPage() {
               <h2>工序</h2>
               <div className="master-data-batch-actions">
                 <Button disabled={Boolean(busy)} onClick={downloadProcessTemplate}>下载导入模板</Button>
-                <Button disabled={Boolean(busy)} onClick={exportProcesses}>导出当前资料</Button>
+                <Button disabled={Boolean(busy)} onClick={() => void exportProcesses()}>{busy === "export-processes" ? "导出中…" : "导出当前资料"}</Button>
                 <label className="master-data-file-button">
                   <span>上传批量导入</span>
                   <input
@@ -595,6 +661,19 @@ export function MasterDataPage() {
                 </label>
               </div>
             </div>
+            <form className="master-data-process-search" onSubmit={(event) => { event.preventDefault(); applyProcessSearch(); }}>
+              <input
+                type="search"
+                value={processSearch}
+                maxLength={100}
+                placeholder="搜索工序名称或系统编码"
+                aria-label="搜索工序"
+                disabled={processPageLoading}
+                onChange={(event) => setProcessSearch(event.target.value)}
+              />
+              <Button type="submit" disabled={Boolean(busy) || processPageLoading}>搜索</Button>
+              {(processSearch || appliedProcessSearch) ? <Button type="button" disabled={Boolean(busy) || processPageLoading} onClick={clearProcessSearch}>清除</Button> : null}
+            </form>
             <div className="master-data-create">
               <input
                 value={processName}
@@ -615,7 +694,7 @@ export function MasterDataPage() {
               </Button>
             </div>
             <div className="master-data-list">
-              {processes.length === 0 ? <p>暂无公共工序。</p> : processes.map((process) => (
+              {processes.length === 0 ? <p>{appliedProcessSearch ? "没有匹配工序。" : "暂无公共工序。"}</p> : processes.map((process) => (
                 <article key={process.processId} className="master-data-row">
                   <div>
                     <h3>{process.processName}</h3>
@@ -640,6 +719,28 @@ export function MasterDataPage() {
                 </article>
               ))}
             </div>
+            {(processes.length > 0 || processCursorHistory.length > 0) ? <div className="master-data-process-pager" aria-busy={processPageLoading}>
+              <span>{processPageLoading ? "加载中…" : `每页最多 15 条${appliedProcessSearch ? ` · 搜索“${appliedProcessSearch}”` : ""}`}</span>
+              <div>
+                <Button
+                  disabled={Boolean(busy) || processPageLoading || processCursorHistory.length === 0}
+                  onClick={() => {
+                    const previous = processCursorHistory[processCursorHistory.length - 1] ?? "";
+                    void showProcessPage(appliedProcessSearch, previous, processCursorHistory.slice(0, -1));
+                  }}
+                >
+                  上一页
+                </Button>
+                <Button
+                  disabled={Boolean(busy) || processPageLoading || !processNextCursor}
+                  onClick={() => {
+                    if (processNextCursor) void showProcessPage(appliedProcessSearch, processNextCursor, [...processCursorHistory, processCursor]);
+                  }}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div> : null}
           </Surface>
         </div>
 
