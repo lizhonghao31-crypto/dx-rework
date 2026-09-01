@@ -66,26 +66,27 @@ export function registerTodoRoutes(
   };
 
   app.get<{
-    Querystring: { cursor?: string; module?: string; q?: string };
+    Querystring: { module?: string; page?: string; q?: string };
   }>("/todos/mine", async (request) => {
     const module = request.query.module;
     const query = request.query.q;
-    const cursor = request.query.cursor;
-    if (module !== undefined && module !== "rework" && module !== "sourcing" && module !== "wages") {
+    const pageInput = request.query.page;
+    if (module !== undefined && module !== "rework" && module !== "sourcing") {
       throw new ApplicationError("VALIDATION_ERROR", "待办模块无效", 400);
     }
     if (query !== undefined && typeof query !== "string") {
       throw new ApplicationError("VALIDATION_ERROR", "搜索内容无效", 400);
     }
-    if (cursor !== undefined && typeof cursor !== "string") {
-      throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
+    const page = pageInput === undefined ? 1 : Number(pageInput);
+    if (!Number.isInteger(page) || page < 1 || page > 100_000) {
+      throw new ApplicationError("VALIDATION_ERROR", "页码无效", 400);
     }
     return TodoListResponseSchema.parse(await dependencies.service.listForActor(
       await actor(request, "todo:view"),
       {
         ...(module ? { module } : {}),
         query: query ?? "",
-        cursor: cursor ?? "",
+        page,
       },
     ));
   });
