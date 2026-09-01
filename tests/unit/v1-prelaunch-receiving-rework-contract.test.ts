@@ -39,6 +39,7 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(service).toContain("返工发起后不能替换送货单图片");
     expect(board).toContain("row.rootCorrectable");
     expect(board).toContain("row.rootDeletable");
+    expect(board).toContain("返工已发起，送货单图片已锁定");
   });
 
   it("requires 1-3 receiving-note images for a new receiving batch and reuses existing batch evidence on later receipts", async () => {
