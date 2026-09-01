@@ -33,7 +33,8 @@ describe("UAT interface closure", () => {
     expect(employee).toContain('<SystemManagementNavigation active="employee-access" />');
     expect(employee).toContain("assignableRoles");
     expect(masterData).toContain('<SystemManagementNavigation active="master-data" />');
-    expect(masterData).toContain('view === "processes" ? "工艺数据库" : "工厂与供应商"');
+    expect(masterData).toContain('view === "crafts" ? "工艺数据库"');
+    expect(masterData).toContain('view === "processes" ? "工序数据库"');
     expect(masterData).toContain('id="factories"');
     expect(masterData).toContain('id="processes"');
   });
