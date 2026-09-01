@@ -301,7 +301,7 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
-  else if (path === "/ui/master-data") page = <MasterDataPage />;
+  else if (path === "/ui/master-data") page = <MasterDataPage view={new URLSearchParams(search).get("view") === "suppliers" ? "suppliers" : "processes"} />;
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
   else if (path === "/ui/frontline/tasks") page = <FrontlineTaskPage />;

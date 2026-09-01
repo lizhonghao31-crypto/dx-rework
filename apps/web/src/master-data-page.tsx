@@ -9,7 +9,7 @@ import { promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type Supplier = Readonly<{
   supplierId: string;
@@ -139,7 +139,9 @@ const columnIndex = (headers: readonly string[], name: string): number =>
 const valueAt = (row: readonly string[], index: number): string =>
   index >= 0 ? (row[index] ?? "").trim() : "";
 
-export function MasterDataPage() {
+export type MasterDataView = "suppliers" | "processes";
+
+export function MasterDataPage({ view = "processes" }: { view?: MasterDataView }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [processes, setProcesses] = useState<Process[]>([]);
   const [processDefaultWorkerCandidates, setProcessDefaultWorkerCandidates] = useState<ProcessDefaultWorkerCandidate[]>([]);
@@ -164,23 +166,25 @@ export function MasterDataPage() {
   const load = async () => {
     setError("");
     try {
-      const [nextSuppliers, processPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
-        json<Supplier[]>("master-data/suppliers?includeInactive=true"),
-        json<ProcessPage>(processCatalogPath(appliedProcessSearch)),
-        json<ProcessDefaultWorkerCandidate[]>("master-data/process-default-worker-candidates"),
-      ]);
-      setSuppliers(nextSuppliers);
-      setProcesses(processPage.items);
-      setProcessNextCursor(processPage.nextCursor);
-      setProcessCursor("");
-      setProcessCursorHistory([]);
-      setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
+      if (view === "suppliers") {
+        setSuppliers(await json<Supplier[]>("master-data/suppliers?includeInactive=true"));
+      } else {
+        const [processPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
+          json<ProcessPage>(processCatalogPath(appliedProcessSearch)),
+          json<ProcessDefaultWorkerCandidate[]>("master-data/process-default-worker-candidates"),
+        ]);
+        setProcesses(processPage.items);
+        setProcessNextCursor(processPage.nextCursor);
+        setProcessCursor("");
+        setProcessCursorHistory([]);
+        setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
+      }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "基础资料加载失败");
+      setError(loadError instanceof Error ? loadError.message : view === "processes" ? "工艺数据库加载失败" : "供应商资料加载失败");
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [view]);
 
   const showProcessPage = async (query: string, cursor: string, history: string[]) => {
     if (processPageLoading || busy) return;
@@ -575,16 +579,20 @@ export function MasterDataPage() {
     <Shell active="基础资料">
       <header className="page-heading">
         <div>
-          <h1>基础资料</h1>
-          <p>维护加工厂、供应商和公共工序资料。</p>
+          <h1>{view === "processes" ? "工艺数据库" : "工厂与供应商"}</h1>
+          <p>{view === "processes" ? "维护返工使用的公共工艺、计价单位和默认候选人。" : "维护加工厂及其他供应商资料。"}</p>
         </div>
       </header>
       <Surface className="admin-card"><SystemManagementNavigation active="master-data" /></Surface>
+      <nav className="master-data-view-tabs" aria-label="基础资料数据库">
+        <a className={view === "processes" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=processes`}>工艺数据库</a>
+        <a className={view === "suppliers" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=suppliers`}>工厂与供应商</a>
+      </nav>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
 
-        <div className="master-data-grid">
-          <Surface className="master-data-panel">
+        <div className="master-data-grid master-data-grid--single">
+          {view === "suppliers" ? <Surface className="master-data-panel">
             <div className="master-data-section-heading" id="factories">
               <h2>加工厂与供应商</h2>
               <div className="master-data-batch-actions">
@@ -639,9 +647,9 @@ export function MasterDataPage() {
                 </article>
               ))}
             </div>
-          </Surface>
+          </Surface> : null}
 
-          <Surface className="master-data-panel">
+          {view === "processes" ? <Surface className="master-data-panel">
             <div className="master-data-section-heading" id="processes">
               <h2>工序</h2>
               <div className="master-data-batch-actions">
@@ -741,7 +749,7 @@ export function MasterDataPage() {
                 </Button>
               </div>
             </div> : null}
-          </Surface>
+          </Surface> : null}
         </div>
 
         {preview && previewSummary ? (
