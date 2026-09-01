@@ -1624,6 +1624,7 @@ export class ReworkInitiationService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      receivingBatchId: row.source_receiving_batch_id,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
@@ -1659,4 +1660,3 @@ export class ReworkInitiationService {
     };
   }
 }
-
