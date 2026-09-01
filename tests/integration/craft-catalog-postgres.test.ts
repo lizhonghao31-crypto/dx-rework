@@ -5,6 +5,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
+import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const { Pool } = pg;
@@ -18,11 +19,20 @@ runWithPostgres("versioned sourcing craft catalog", () => {
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const actorId = randomUUID();
   const service = new AccessMasterDataService(database, "corp");
+  const sourcingService = new SourcingService(database);
 
   const actor = (requestId = randomUUID()): TrustedActorContext => ({
     actorId,
     actorRoles: ["system_admin"],
     authorizationCapability: "master_data:manage",
+    requestId,
+  });
+
+  const sourcingActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId,
+    actorRoles: ["order_merchandiser"],
+    authorizationCapability: "sourcing:inquiry:create",
+    authorizationCapabilities: ["sourcing:view", "sourcing:inquiry:create"],
     requestId,
   });
 
@@ -49,6 +59,77 @@ runWithPostgres("versioned sourcing craft catalog", () => {
     await database.end();
     await adminDatabase.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await adminDatabase.end();
+  });
+
+  it("binds only enabled crafts to new orders and preserves ordered snapshots", async () => {
+    const [cutting, buttoning] = await service.ensureCrafts(actor("order-crafts"), {
+      craftNames: ["裁片定位", "钉扣"],
+    });
+
+    const created = await sourcingService.createCase(sourcingActor("order-create"), {
+      erpOrderNo: "ERP-CRAFT-001",
+      styleNo: "CRAFT-001",
+      deliveryDate: "2026-09-30",
+      craftIds: [buttoning!.craftId, cutting!.craftId],
+      orderQuantity: 80,
+    }, "order-craft-create-key");
+
+    expect(created.value).toMatchObject({
+      processes: ["钉扣", "裁片定位"],
+      crafts: [
+        {
+          position: 1,
+          craftId: buttoning!.craftId,
+          craftName: "钉扣",
+          craftVersion: 1,
+        },
+        {
+          position: 2,
+          craftId: cutting!.craftId,
+          craftName: "裁片定位",
+          craftVersion: 1,
+        },
+      ],
+    });
+
+    await service.reviseCraft(actor("disable-bound-craft"), buttoning!.craftId, {
+      craftName: "钉扣（暂停）",
+      active: false,
+      changeReason: "暂不允许新订单选择",
+    });
+
+    expect((await database.query(
+      `SELECT position,craft_id,craft_version,craft_name_snapshot
+       FROM sourcing_case_crafts
+       WHERE sourcing_case_id=$1
+       ORDER BY position`,
+      [created.value.sourcingCaseId],
+    )).rows).toEqual([
+      {
+        position: 1,
+        craft_id: buttoning!.craftId,
+        craft_version: 1,
+        craft_name_snapshot: "钉扣",
+      },
+      {
+        position: 2,
+        craft_id: cutting!.craftId,
+        craft_version: 1,
+        craft_name_snapshot: "裁片定位",
+      },
+    ]);
+    expect((await database.query(
+      "SELECT process_items FROM sourcing_cases WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rows[0]).toEqual({ process_items: ["钉扣", "裁片定位"] });
+
+    await expect(sourcingService.createCase(sourcingActor("inactive-order"), {
+      erpOrderNo: "ERP-CRAFT-002",
+      styleNo: "CRAFT-002",
+      deliveryDate: "2026-10-01",
+      craftIds: [buttoning!.craftId],
+      orderQuantity: 20,
+    }, "inactive-order-key")).rejects.toThrow("所选工艺已停用或不存在");
   });
 
   it("creates, revises, disables and reads immutable audit history", async () => {
