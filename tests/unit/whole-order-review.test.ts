@@ -71,7 +71,7 @@ describe("whole-order review contracts", () => {
     expect(panel).toContain("确认数量并提交 IE");
     expect(panel).toContain("临时工实发系数");
     expect(panel).toContain("IE 复核决定");
-    expect(panel).toContain("系统按各工序有效数量生成最终数量；工序数量不得超过整查数量。");
+    expect(panel).toContain("系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。");
     expect(service).not.toContain("async submitTailPricing");
     expect(service).not.toContain("async reviewTailPricing");
     expect(service).toContain('this.orderAudit(order, "pending_final_quantity_ie_review"');
