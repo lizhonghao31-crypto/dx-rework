@@ -21,6 +21,7 @@
 
 .my-todos-toolbar {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
   padding: 18px 24px;
@@ -29,15 +30,18 @@
 
 .my-todos-modules {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  margin: 0;
 }
 
 .my-todos-modules button {
   display: inline-flex;
-  flex: 0 0 clamp(150px, 16vw, 210px);
+  flex: 0 0 190px;
+  width: 190px;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -78,7 +82,9 @@
 
 .my-todos-search {
   display: block;
-  flex: 0 0 min(440px, 34vw);
+  flex: 0 1 440px;
+  width: 440px;
+  min-width: 320px;
   margin-left: auto;
 }
 
@@ -288,12 +294,15 @@
 
   .my-todos-modules button {
     flex-basis: 140px;
+    width: 140px;
     min-height: 42px;
     padding: 0 10px;
   }
 
   .my-todos-search {
-    flex-basis: 260px;
+    flex: 0 0 260px;
+    width: 260px;
+    min-width: 260px;
   }
 
   .my-todos-search input {
