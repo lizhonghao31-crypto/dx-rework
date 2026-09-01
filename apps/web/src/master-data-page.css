@@ -1,6 +1,7 @@
 .master-data-shell{max-width:1220px;margin:0 auto;padding:0}
 .master-data-error{padding:var(--dx-v2-space-3);border-radius:var(--dx-v2-radius-md);background:var(--dx-v2-color-warning-bg);color:var(--dx-v2-color-danger)}
 .master-data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--dx-v2-space-4)}
+.master-data-grid--single{grid-template-columns:minmax(0,1fr)}
 .master-data-panel{min-width:0}
 .master-data-panel h2{margin-top:0}
 .master-data-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--dx-v2-space-3);margin-bottom:var(--dx-v2-space-3)}
