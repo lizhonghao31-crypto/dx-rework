@@ -28,6 +28,8 @@ describe("order board global style search", () => {
     expect(page).toContain('<option value="normal">正常</option>');
     expect(page).toContain('<option value="short">少收</option>');
     expect(page).toContain('<option value="extra">多收</option>');
+    expect(page).toContain('<option value="multiple">多次收货</option>');
+    expect(service).toContain('if (status === "multiple") return row.receiptCount > 1;');
     expect(page).toContain("event.target.value.toUpperCase()");
     expect(receivingPage).toContain("styleNo.trim().toUpperCase()");
     expect(receivingPage).toContain("setStyleNo(event.target.value)");

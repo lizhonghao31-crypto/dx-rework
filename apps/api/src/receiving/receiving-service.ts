@@ -65,7 +65,7 @@ type ReceivingHistoryItem = Readonly<{
   receivedAt: string;
   receiverName: string;
 }>;
-type BoardStatus = "all" | "normal" | "extra" | "short";
+type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple";
 
 type BoardRow = Readonly<{
   receivingBatchId: string;
@@ -133,7 +133,7 @@ const normalizeStyleNo = (value: string): string => {
 
 const normalizeBoardStatus = (value: string): BoardStatus => {
   if (value === "" || value === "all") return "all";
-  if (value === "normal" || value === "extra" || value === "short") return value;
+  if (value === "normal" || value === "extra" || value === "short" || value === "multiple") return value;
   return fail("收货状态筛选无效");
 };
 
@@ -1267,6 +1267,7 @@ export class ReceivingService {
       rootMutable: row.root_mutable,
     }));
     const rows = allRows.filter((row) => {
+      if (status === "multiple") return row.receiptCount > 1;
       if (status === "normal") return row.differenceQuantity === 0;
       if (status === "short") return row.differenceQuantity < 0;
       if (status === "extra") return row.differenceQuantity > 0;
