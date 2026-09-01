@@ -756,6 +756,60 @@ runWithPostgres("role permissions and versioned master data", () => {
     ]);
   });
 
+
+  it("pages and searches the process catalog with a query-bound stable cursor", async () => {
+    await Promise.all(Array.from({ length: 17 }, (_, index) => service.createProcess(masterDataActor, {
+      processCode: `PAGE_PROCESS_${String(index + 1).padStart(2, "0")}`,
+      processName: `分页工序${String(index + 1).padStart(2, "0")}`,
+      pricingUnit: "piece",
+      active: true,
+      changeReason: "验证工序目录分页",
+    })));
+    await service.createProcess(masterDataActor, {
+      processCode: "PERCENT_PROCESS",
+      processName: "百分比%工序",
+      pricingUnit: "piece",
+      active: true,
+      changeReason: "验证字面量搜索",
+    });
+
+    const firstPage = await service.listProcessPage({ query: "分页工序" });
+    expect(firstPage.items).toHaveLength(15);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    const secondPage = await service.listProcessPage({
+      query: "分页工序",
+      cursor: firstPage.nextCursor!,
+    });
+    expect(secondPage.items).toHaveLength(2);
+    expect(secondPage.nextCursor).toBeNull();
+    expect(new Set([...firstPage.items, ...secondPage.items].map((item) => item.processId)).size).toBe(17);
+
+    expect((await service.listProcessPage({ query: "%" })).items).toEqual([
+      expect.objectContaining({ processCode: "PERCENT_PROCESS", processName: "百分比%工序" }),
+    ]);
+    await expect(service.listProcessPage({
+      query: "另一个搜索",
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const longQuery = "长".repeat(100);
+    await Promise.all(Array.from({ length: 16 }, (_, index) => service.createProcess(masterDataActor, {
+      processCode: `LONG_PROCESS_${String(index + 1).padStart(2, "0")}`,
+      processName: `${longQuery}${String(index + 1).padStart(2, "0")}`,
+      pricingUnit: "piece",
+      active: true,
+      changeReason: "验证多字节搜索游标",
+    })));
+    const longFirstPage = await service.listProcessPage({ query: longQuery });
+    expect(longFirstPage.items).toHaveLength(15);
+    expect(longFirstPage.nextCursor).toEqual(expect.any(String));
+    expect(longFirstPage.nextCursor!.length).toBeLessThanOrEqual(4096);
+    expect((await service.listProcessPage({
+      query: longQuery,
+      cursor: longFirstPage.nextCursor!,
+    })).items).toHaveLength(1);
+  });
+
   it("adds only active global delegations to session-wide capabilities", async () => {
     await service.assignRole(adminActor, { userId: financeId, roleCode: "finance_read", reason: "财务只读" });
     await service.createDelegation(delegationActor, {

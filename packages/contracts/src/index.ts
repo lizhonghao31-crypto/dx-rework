@@ -175,6 +175,10 @@ export const DelegationsQuerySchema = z.object({
 export const CatalogListQuerySchema = z.object({
   includeInactive: z.enum(["true", "false"]).optional(),
 }).strict();
+export const ProcessCatalogPageQuerySchema = CatalogListQuerySchema.extend({
+  q: z.string().trim().max(100).optional(),
+  cursor: z.string().max(4096).optional(),
+}).strict();
 export const PeopleListQuerySchema = CatalogListQuerySchema.extend({
   includeRevokedAliases: z.enum(["true", "false"]).optional(),
 }).strict();
