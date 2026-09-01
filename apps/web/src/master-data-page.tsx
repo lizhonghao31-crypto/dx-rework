@@ -183,8 +183,9 @@ export function MasterDataPage() {
   useEffect(() => { void load(); }, []);
 
   const showProcessPage = async (query: string, cursor: string, history: string[]) => {
-    if (processPageLoading) return;
+    if (processPageLoading || busy) return;
     setProcessPageLoading(true);
+    setBusy("process-page");
     setError("");
     try {
       const page = await json<ProcessPage>(processCatalogPath(query, cursor));
@@ -198,6 +199,7 @@ export function MasterDataPage() {
       setError(loadError instanceof Error ? loadError.message : "工序目录加载失败");
     } finally {
       setProcessPageLoading(false);
+      setBusy("");
     }
   };
 
