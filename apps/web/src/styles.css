@@ -29,6 +29,13 @@
 .quantity-tail-toggle small { color: var(--dx-v2-color-text-secondary); font-weight: 500; }
 .quantity-process-name { overflow: hidden; font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .quantity-process-expander { color: var(--dx-v2-color-primary); font-size: 20px; text-align: center; }
+.quantity-process-price { display: flex; align-items: center; justify-content: space-between; gap: var(--dx-v2-space-3); padding: var(--dx-v2-space-2) var(--dx-v2-space-4); border-top: 1px solid rgba(195, 206, 216, 0.72); background: var(--dx-v2-color-surface); }
+.quantity-process-price__copy { display: grid; gap: 1px; min-width: 0; }
+.quantity-process-price__copy small,
+.quantity-process-price__review small { color: var(--dx-v2-color-text-secondary); }
+.quantity-process-price > .dx-field { width: min(220px, 42%); min-width: 150px; }
+.quantity-process-price__review { display: flex; align-items: center; gap: var(--dx-v2-space-4); }
+.quantity-process-price__review > span { display: grid; gap: 1px; }
 .quantity-process-detail { display: grid; gap: var(--dx-v2-space-2); padding: 0 var(--dx-v2-space-4) var(--dx-v2-space-4); border-top: 1px solid rgba(195, 206, 216, 0.72); background: var(--dx-v2-color-inset); }
 .quantity-report-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(100px, auto) minmax(260px, auto); align-items: center; gap: var(--dx-v2-space-3); padding: var(--dx-v2-space-3) 0; border-bottom: 1px solid rgba(195, 206, 216, 0.62); }
 .quantity-report-row:last-child { border-bottom: 0; }
@@ -66,6 +73,10 @@
   .quantity-tail-toggle small { font-size: 10px; }
   .quantity-process-toggle strong { font-size: 12px; }
   .quantity-process-expander { font-size: 17px; }
+  .quantity-process-price { gap: 8px; padding: 5px 10px; }
+  .quantity-process-price__copy small,
+  .quantity-process-price__review small { font-size: 10px; }
+  .quantity-process-price > .dx-field { width: 190px; }
   .quantity-process-detail { gap: 4px; padding: 0 10px 8px; }
   .quantity-report-row { grid-template-columns: minmax(120px, 1fr) minmax(84px, auto) minmax(236px, auto); gap: 8px; padding: 6px 0; }
   .quantity-report-person span,
@@ -98,6 +109,11 @@
   .quantity-process-toggle small { font-size: 9px; }
   .quantity-process-toggle strong { font-size: 11px; }
   .quantity-process-toolbar > .quantity-process-save { min-height: 30px; margin-right: 6px; padding: 0 8px; font-size: 11px; }
+  .quantity-process-price { align-items: end; gap: 6px; padding: 6px 8px; }
+  .quantity-process-price__copy { flex: 1 1 auto; }
+  .quantity-process-price > .dx-field { flex: 0 0 132px; width: 132px; min-width: 0; }
+  .quantity-process-price__review { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 0 0 58%; gap: 4px 8px; }
+  .quantity-process-price__review .dx-badge { grid-column: 1 / -1; justify-self: start; }
   .quantity-process-detail { padding: 0 8px 8px; }
   .quantity-report-row { grid-template-columns: minmax(0, 1fr) auto; }
   .quantity-report-actions { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; width: 100%; }

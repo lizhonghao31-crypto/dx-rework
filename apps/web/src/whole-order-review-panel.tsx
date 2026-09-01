@@ -76,6 +76,7 @@ export function WholeOrderReviewPanel({
   const [coefficientSectionExpanded, setCoefficientSectionExpanded] = useState(false);
   const [coefficientExpanded, setCoefficientExpanded] = useState<Record<string, boolean>>({});
   const [correctionInputs, setCorrectionInputs] = useState<Record<string, string>>({});
+  const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
   const attempts = useRef<Record<string, string>>({});
@@ -86,6 +87,10 @@ export function WholeOrderReviewPanel({
     setCorrectionInputs((current) => Object.fromEntries(overview.reports.map((report) => [
       report.workReportId,
       current[report.workReportId] ?? String(report.effectiveQuantity),
+    ])));
+    setPriceInputs((current) => Object.fromEntries(overview.processes.map((process) => [
+      process.configurationItemId,
+      current[process.configurationItemId] ?? (process.finalUnitPrice === null ? "" : String(process.finalUnitPrice)),
     ])));
     setMultipliers((current) => Object.fromEntries(overview.temporaryWorkers.map((worker) => {
       const id = `${worker.configurationItemId}:${worker.personId}`;
@@ -113,8 +118,8 @@ export function WholeOrderReviewPanel({
         );
       applyOverview(overview);
       setTailData(tail);
-      if (overview.reviewId) setMessage("IE 已复核通过，工资已按有效数量锁定并进入责任判定。");
-      else if (overview.reworkStatus === "pending_final_quantity_ie_review") setMessage("请 IE 只读核对各工序数量；通过或退回，不在本节点修改。");
+      if (overview.reviewId) setMessage("IE 已复核通过，工资已按批准的有效数量和最终价格锁定并进入责任判定。");
+      else if (overview.reworkStatus === "pending_final_quantity_ie_review") setMessage("请 IE 只读核对各工序数量与价格提案；通过或退回，不在本节点修改。");
       else if (overview.reworkStatus === "pending_order_review") {
         const rejected = overview.finalConfirmation?.status === "rejected"
           ? overview.finalConfirmation.reviewReason
@@ -258,6 +263,16 @@ export function WholeOrderReviewPanel({
 
   const confirmQuantities = async () => {
     if (!data) return;
+    const prices = data.processes.map((process) => ({
+      process,
+      text: priceInputs[process.configurationItemId]?.trim() ?? "",
+    }));
+    if (prices.some((row) => !/^\d+(?:\.\d{1,3})?$/.test(row.text)
+      || Number(row.text) <= 0
+      || Number(row.text) > 99_999_999_999.999)) {
+      setMessage("最终单价必须大于 0，最多三位小数。");
+      return;
+    }
     const coefficients = data.temporaryWorkers.map((worker) => {
       const id = `${worker.configurationItemId}:${worker.personId}`;
       return { worker, text: multipliers[id]?.trim() ?? "", reason: multiplierReasons[id]?.trim() ?? "" };
@@ -270,13 +285,19 @@ export function WholeOrderReviewPanel({
       setMessage("临时工实发系数不是 1.0 时，必须填写调整原因。");
       return;
     }
-    if (!(await confirmInApp(data.tailInspectionRequired ? "确认各工序有效数量均未超过整查，并提交 IE 复核？" : "确认各工序工人有效数量无误，并提交 IE 复核？"))) return;
+    if (!(await confirmInApp(data.tailInspectionRequired
+      ? "确认各工序有效数量均未超过整查，且最终价格无误，并提交 IE 复核？"
+      : "确认各工序工人有效数量与最终价格无误，并提交 IE 复核？"))) return;
     try {
       await call(
         "rework-orders/" + reworkOrderId + "/whole-order-review/approve",
         WholeOrderReviewResponseSchema.parse,
         {
           expectedOrderVersion: data.orderVersion,
+          processPrices: prices.map(({ process, text }) => ({
+            configurationItemId: process.configurationItemId,
+            unitPrice: Number(text),
+          })),
           temporaryCoefficients: coefficients.map(({ worker, text, reason }) => ({
             configurationItemId: worker.configurationItemId,
             personId: worker.personId,
@@ -286,7 +307,7 @@ export function WholeOrderReviewPanel({
         },
         applyOverview,
       );
-      setMessage("系统已生成最终数量，等待 IE 复核。");
+      setMessage("系统已锁定本版最终数量与价格提案，等待 IE 复核。");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "数量提交失败");
     }
@@ -296,7 +317,7 @@ export function WholeOrderReviewPanel({
     if (!data) return;
     const reason = decision === "rejected" ? await promptInApp("请填写退回尾部主管的原因") : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
-    if (decision === "approved" && !(await confirmInApp("确认数量事实无误？通过后按每个人的有效数量生成工资。"))) return;
+    if (decision === "approved" && !(await confirmInApp("确认数量与价格提案无误？通过后按批准的有效数量和最终价格生成工资。"))) return;
     try {
       await call(
         "rework-orders/" + reworkOrderId + "/whole-order-review/ie-review",
@@ -305,7 +326,7 @@ export function WholeOrderReviewPanel({
         applyOverview,
       );
       setMessage(decision === "approved"
-        ? "IE 复核已通过，工资已按有效数量锁定并进入责任判定。"
+        ? "IE 复核已通过，工资已按批准的有效数量和最终价格锁定并进入责任判定。"
         : "已退回尾部最终数量确认。");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "IE 复核失败");
@@ -317,6 +338,12 @@ export function WholeOrderReviewPanel({
   const ieStage = data.reworkStatus === "pending_final_quantity_ie_review";
   const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
   const submittedTailAssignments = tailData?.assignments.filter((assignment) => assignment.submittedAt !== null) ?? [];
+  const priceIssue = data.processes.some((process) => {
+    const value = priceInputs[process.configurationItemId]?.trim() ?? "";
+    return !/^\d+(?:\.\d{1,3})?$/.test(value)
+      || Number(value) <= 0
+      || Number(value) > 99_999_999_999.999;
+  });
   const coefficientIssue = data.temporaryWorkers.some((worker) => {
     const id = `${worker.configurationItemId}:${worker.personId}`;
     const value = multipliers[id]?.trim() ?? "";
@@ -326,7 +353,7 @@ export function WholeOrderReviewPanel({
       || Number(value) > 10
       || (Number(value) !== 1 && !reason);
   });
-  const ready = allComplete && !coefficientIssue;
+  const ready = allComplete && !priceIssue && !coefficientIssue;
   const tailReports = data.reports.filter((report) => report.executionKind === "tail_inspection");
   const temporaryWorkerGroups = data.temporaryWorkers.reduce<Array<{
     configurationItemId: string;
@@ -396,7 +423,7 @@ export function WholeOrderReviewPanel({
       <div className="quantity-review-heading">
         <div>
           <h2>按工序核对</h2>
-          <p>{tailStage ? "主管可修正个人有效数量；原始上数始终保留。" : "IE 只读核对系统锁定的数量事实。"}</p>
+          <p>{tailStage ? "主管可修正个人有效数量并调整最终单价；原始上数和 N03 价格始终保留。" : "IE 只读核对系统锁定的数量事实与价格提案。"}</p>
         </div>
         <StatusBadge tone={allComplete ? "success" : "warning"}>
           {allComplete ? "全部可确认" : "存在异常"}
@@ -415,6 +442,8 @@ export function WholeOrderReviewPanel({
           }, undefined);
           const canSaveProcess = tailStage && data.canReview && reports.some(canCorrectReport);
           const processHasChanges = reports.some(hasChangedCorrection);
+          const reviewedPrice = data.finalConfirmation?.prices.find((price) =>
+            price.configurationItemId === process.configurationItemId);
           return <section className={`quantity-process-card${process.complete ? " is-complete" : " is-mismatch"}`} key={process.configurationItemId}>
             <div className="quantity-process-toolbar">
             <button
@@ -447,6 +476,35 @@ export function WholeOrderReviewPanel({
               onClick={() => void correctProcess(process.configurationItemId, reports, process.processName)}
             >保存修正</Button> : null}
             </div>
+            {(tailStage || ieStage) && <div className="quantity-process-price">
+              <div className="quantity-process-price__copy">
+                <b>{tailStage ? "最终价格" : "价格复核"}</b>
+                <small>{tailStage
+                  ? `N03 已审 ¥${process.finalUnitPrice ?? "—"}；不调整可保留原价`
+                  : reviewedPrice
+                    ? "与本版最终数量一并提交"
+                    : "历史在途单沿用 N03 已审价格"}</small>
+              </div>
+              {tailStage && data.canReview ? <InsetField
+                label="拟提交单价（元/件）"
+                type="number"
+                min="0.001"
+                step="0.001"
+                inputMode="decimal"
+                value={priceInputs[process.configurationItemId] ?? ""}
+                disabled={busy}
+                onChange={(event) => setPriceInputs((current) => ({
+                  ...current,
+                  [process.configurationItemId]: event.target.value,
+                }))}
+              /> : <div className="quantity-process-price__review">
+                <span><small>原价</small><strong>¥{reviewedPrice?.originalUnitPrice ?? process.finalUnitPrice ?? "—"}</strong></span>
+                <span><small>提议价</small><strong>¥{reviewedPrice?.proposedUnitPrice ?? process.finalUnitPrice ?? "—"}</strong></span>
+                <StatusBadge tone={reviewedPrice?.changed ? "warning" : "info"}>
+                  {reviewedPrice?.changed ? "价格有调整" : "沿用原价"}
+                </StatusBadge>
+              </div>}
+            </div>}
             {open && <div className="quantity-process-detail">
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
               {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
@@ -565,7 +623,7 @@ export function WholeOrderReviewPanel({
       <div className="quantity-submit-row">
         <div>
           <h2>提交 IE 复核</h2>
-          <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；工序数量不得超过整查数量。" : "本单无需整查；系统按工人有效数量生成最终数量。"}</p>
+          <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : "本单无需整查；工人有效数量与价格提案一并交 IE 复核。"}</p>
         </div>
         <Button variant="primary" onClick={() => void confirmQuantities()} disabled={busy || !ready}>
           {busy ? "提交中…" : data.tailInspectionRequired ? "确认数量并提交 IE" : "确认数量并提交 IE"}
@@ -578,7 +636,7 @@ export function WholeOrderReviewPanel({
       <div className="quantity-submit-row">
         <div>
           <h2>IE 复核决定</h2>
-          <p>通过后按每个人的有效数量生成工资；退回后保留本版审计记录。</p>
+          <p>通过后按批准的有效数量和最终价格生成工资；退回后原价格不变并保留本版审计记录。</p>
         </div>
         <div className="quantity-review-actions">
           <Button onClick={() => void reviewQuantities("rejected")} disabled={busy}>退回</Button>
