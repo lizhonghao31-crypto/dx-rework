@@ -536,7 +536,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           erpOrderNo: erpOrderNo.trim(),
           styleNo: styleNo.trim(),
           deliveryDate,
-          processes: normalizedProcesses,
+          craftIds: ensuredCrafts.map((craft) => craft.craftId),
           orderQuantity: quantity,
           attachmentIds: images.map((image) => image.attachmentId),
         }),
