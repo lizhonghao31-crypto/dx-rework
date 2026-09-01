@@ -89,6 +89,13 @@ type SourcingCaseRow = Readonly<{
   delivery_date: string | null;
   process_description: string | null;
   process_items: string[] | null;
+  crafts: readonly {
+    position: number;
+    craftId: string;
+    craftCode: string;
+    craftVersion: number;
+    craftName: string;
+  }[] | null;
   status: string;
   version: number | string;
   created_by: string;
@@ -224,7 +231,9 @@ const encodeSourcingListCursor = (row: SourcingCaseRow): string =>
     sourcingCaseId: row.sourcing_case_id,
   })).toString("base64url");
 
-const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => ({
+const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => {
+  const crafts = row.crafts ?? [];
+  return {
   sourcingCaseId: row.sourcing_case_id,
   erpOrderId: row.erp_order_id,
   erpOrderNo: row.erp_order_no,
@@ -233,9 +242,12 @@ const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => ({
   orderQuantity: Number(row.order_quantity),
   deliveryDate: row.delivery_date,
   processDescription: row.process_description,
-  processes: row.process_items?.length
-    ? row.process_items
-    : row.process_description ? [row.process_description] : [],
+  processes: crafts.length
+    ? crafts.map((craft) => craft.craftName)
+    : row.process_items?.length
+      ? row.process_items
+      : row.process_description ? [row.process_description] : [],
+  crafts,
   status: row.status as SourcingCaseStatus,
   version: Number(row.version),
   createdBy: row.created_by,
@@ -291,7 +303,8 @@ const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => ({
         decidedAt: toIso(row.owner_decided_at),
       }
     : null,
-});
+  };
+};
 
 const databaseCode = (error: unknown): string | undefined =>
   typeof error === "object" && error !== null ? (error as SqlError).code : undefined;
@@ -360,6 +373,7 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
+         crafts_row.crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -384,6 +398,20 @@ export class SourcingService {
          owner_row.decided_at AS owner_decided_at
        FROM current_sourcing_cases case_view
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'position',binding.position,
+             'craftId',binding.craft_id,
+             'craftCode',binding.craft_code_snapshot,
+             'craftVersion',binding.craft_version,
+             'craftName',binding.craft_name_snapshot
+           )
+           ORDER BY binding.position
+         ) AS crafts
+         FROM sourcing_case_crafts binding
+         WHERE binding.sourcing_case_id=case_view.sourcing_case_id
+       ) crafts_row ON true
        LEFT JOIN LATERAL (
          SELECT quote.*
          FROM sourcing_ie_quotes quote
@@ -425,6 +453,7 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
+         crafts_row.crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -449,6 +478,20 @@ export class SourcingService {
          owner_row.decided_at AS owner_decided_at
        FROM current_sourcing_cases case_view
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'position',binding.position,
+             'craftId',binding.craft_id,
+             'craftCode',binding.craft_code_snapshot,
+             'craftVersion',binding.craft_version,
+             'craftName',binding.craft_name_snapshot
+           )
+           ORDER BY binding.position
+         ) AS crafts
+         FROM sourcing_case_crafts binding
+         WHERE binding.sourcing_case_id=case_view.sourcing_case_id
+       ) crafts_row ON true
        LEFT JOIN LATERAL (
          SELECT quote.*
          FROM sourcing_ie_quotes quote
@@ -988,25 +1031,37 @@ export class SourcingService {
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     const erpOrderNo = normalizeText(input.erpOrderNo, "ERP订单号", 100);
+    const craftIds = input.craftIds ? [...input.craftIds] : null;
     const processItems = input.processes
       ? input.processes.map((process) => normalizeText(process, "工艺", 100))
       : null;
     const legacyProcessDescription = input.processDescription
       ? normalizeText(input.processDescription, "工艺", 500)
       : null;
-    const processes = processItems ?? (legacyProcessDescription ? [legacyProcessDescription] : []);
+    if (craftIds && (craftIds.length < 1 || craftIds.length > 20)) {
+      fail("工艺必须选择1至20项");
+    }
+    if (craftIds && (
+      new Set(craftIds).size !== craftIds.length
+      || craftIds.some((craftId) => !UUID_PATTERN.test(craftId))
+    )) fail("工艺标识无效或重复");
     if (processItems && (processItems.length < 1 || processItems.length > 20)) {
       fail("工艺必须填写1至20项");
     }
     if (processItems && new Set(processItems).size !== processItems.length) fail("工艺不能重复");
+    if ([Boolean(craftIds), Boolean(processItems), Boolean(legacyProcessDescription)].filter(Boolean).length !== 1) {
+      fail("工艺主数据、工艺清单与旧工艺字段必须且只能提交一种");
+    }
+    const processes = processItems ?? (legacyProcessDescription ? [legacyProcessDescription] : []);
     const normalized = {
       erpOrderNo,
       erpOrderId: erpOrderNo,
       styleNo: normalizeText(input.styleNo, "款号", 100),
       deliveryDate: input.deliveryDate,
+      craftIds,
       processes,
       processItems,
-      processDescription: legacyProcessDescription ?? processes.join("、"),
+      processDescription: legacyProcessDescription ?? (processes.length ? processes.join("、") : null),
       orderQuantity: normalizeQuantity(input.orderQuantity),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
@@ -1021,6 +1076,44 @@ export class SourcingService {
         requestHash: requestHash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        const selectedCrafts = normalized.craftIds
+          ? (await client.query<{
+              position: number;
+              craft_id: string;
+              craft_code: string;
+              craft_version: number;
+              craft_name: string;
+            }>(
+              `SELECT requested.position::integer AS position,
+                      item.craft_id,item.craft_code,
+                      version.version AS craft_version,version.craft_name
+               FROM unnest($1::uuid[]) WITH ORDINALITY requested(craft_id,position)
+               JOIN craft_catalog_items item ON item.craft_id=requested.craft_id
+               JOIN LATERAL (
+                 SELECT history.version,history.craft_name,history.active
+                 FROM craft_catalog_versions history
+                 WHERE history.craft_id=item.craft_id
+                 ORDER BY history.version DESC
+                 LIMIT 1
+               ) version ON version.active
+               ORDER BY requested.position`,
+              [normalized.craftIds],
+            )).rows.map((craft) => ({
+              position: craft.position,
+              craftId: craft.craft_id,
+              craftCode: craft.craft_code,
+              craftVersion: craft.craft_version,
+              craftName: craft.craft_name,
+            }))
+          : [];
+        if (normalized.craftIds && selectedCrafts.length !== normalized.craftIds.length) {
+          fail("所选工艺已停用或不存在，请重新选择", 409, "CONFLICT");
+        }
+        const persistedProcessItems = selectedCrafts.length
+          ? selectedCrafts.map((craft) => craft.craftName)
+          : normalized.processItems;
+        const persistedProcessDescription = persistedProcessItems?.join("、")
+          ?? normalized.processDescription;
         const sourcingCaseId = randomUUID();
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.create",
@@ -1028,6 +1121,10 @@ export class SourcingService {
           entityId: sourcingCaseId,
           after: {
             ...normalized,
+            processes: persistedProcessItems ?? normalized.processes,
+            processItems: persistedProcessItems,
+            processDescription: persistedProcessDescription,
+            crafts: selectedCrafts,
             laneKey: LANE_KEY,
             status: "pending_ie_quote",
             attachmentCount: normalized.attachmentIds.length,
@@ -1049,14 +1146,34 @@ export class SourcingService {
             LANE_KEY,
             normalized.orderQuantity,
             normalized.deliveryDate,
-            normalized.processDescription,
-            normalized.processItems,
+            persistedProcessDescription,
+            persistedProcessItems,
             actor.actorId,
             eventId,
             actor.requestId,
             DEFAULT_CREATION_REASON,
           ],
         );
+        for (const craft of selectedCrafts) {
+          await client.query(
+            `INSERT INTO sourcing_case_crafts(
+               sourcing_case_id,position,craft_id,craft_version,
+               craft_code_snapshot,craft_name_snapshot,created_by,
+               operation_event_id,request_id
+             ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [
+              sourcingCaseId,
+              craft.position,
+              craft.craftId,
+              craft.craftVersion,
+              craft.craftCode,
+              craft.craftName,
+              actor.actorId,
+              eventId,
+              actor.requestId,
+            ],
+          );
+        }
         if (normalized.attachmentIds.length > 0) {
           const images = await client.query<{ attachment_id: string }>(
             `SELECT attachment_id
