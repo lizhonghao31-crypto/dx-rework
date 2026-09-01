@@ -63,24 +63,15 @@ type TodoCountRow = Readonly<{
   todo_count: number | string;
 }>;
 
-type TodoListCursor = Readonly<{
-  statusRank: number;
-  dueAt: string | null;
-  createdAt: string;
-  todoId: string;
-  module: TodoModule;
-  query: string;
-}>;
-
 export type TodoListOptions = Readonly<{
   module?: TodoModule;
   query?: string;
-  cursor?: string;
+  page?: number;
 }>;
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "wages"];
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
@@ -92,12 +83,16 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   orders.updated_at rework_updated_at,
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
   sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
-  sourcing_decision.supplier_name_snapshot,
+  COALESCE(
+    sourcing_decision.supplier_name_snapshot,
+    CASE
+      WHEN orders.processing_factory_type='own_factory' THEN '本厂'
+      ELSE rework_supplier.supplier_name
+    END
+  ) supplier_name_snapshot,
   CASE
     WHEN todos.route_descriptor->>'routeName'='sourcing_detail'
       OR todos.entity_type='sourcing_case' THEN 'sourcing'
-    WHEN todos.route_descriptor->>'routeName'='wage_period_detail'
-      OR todos.category='wage_review' THEN 'wages'
     ELSE 'rework'
   END todo_module,
   CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END status_rank
@@ -107,6 +102,8 @@ LEFT JOIN rework_orders orders
     NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
     CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
   )
+LEFT JOIN current_supplier_catalog rework_supplier
+  ON rework_supplier.supplier_id=orders.processing_factory_supplier_id
 LEFT JOIN current_sourcing_cases sourcing
   ON sourcing.sourcing_case_id=CASE
     WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
@@ -185,77 +182,7 @@ export type TimedTodoAction = Readonly<{
 
 const TODO_DELIVERY_TOPIC = "todo.delivery";
 
-const emptyModuleCounts = (): TodoModuleCounts => ({ rework: 0, sourcing: 0, wages: 0 });
-
-const decodeTodoListCursor = (
-  cursor: string,
-  module: TodoModule,
-  query: string,
-): TodoListCursor | null => {
-  if (!cursor) return null;
-  if (cursor.length > 800) {
-    throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
-  }
-  try {
-    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
-    if (!decoded || typeof decoded !== "object") throw new Error("invalid");
-    const value = decoded as Record<string, unknown>;
-    const statusRank = value.statusRank;
-    const dueAt = value.dueAt;
-    const createdAt = value.createdAt;
-    const todoId = value.todoId;
-    const cursorModule = value.module;
-    const cursorQuery = value.query;
-    if (
-      (statusRank !== 0 && statusRank !== 1)
-      || (dueAt !== null && typeof dueAt !== "string")
-      || typeof createdAt !== "string"
-      || typeof todoId !== "string"
-      || typeof cursorModule !== "string"
-      || typeof cursorQuery !== "string"
-    ) {
-      throw new Error("invalid");
-    }
-    const validStatusRank = statusRank as 0 | 1;
-    const validDueAt = dueAt as string | null;
-    const validCreatedAt = createdAt as string;
-    const validTodoId = todoId as string;
-    const validCursorModule = cursorModule as string;
-    const validCursorQuery = cursorQuery as string;
-    if (
-      validCursorModule !== module
-      || validCursorQuery !== query
-      || !TODO_ID_PATTERN.test(validTodoId)
-      || Number.isNaN(Date.parse(validCreatedAt))
-      || (validDueAt !== null && Number.isNaN(Date.parse(validDueAt)))
-    ) {
-      throw new Error("invalid");
-    }
-    return {
-      statusRank: validStatusRank,
-      dueAt: validDueAt ? new Date(validDueAt).toISOString() : null,
-      createdAt: new Date(validCreatedAt).toISOString(),
-      todoId: validTodoId,
-      module,
-      query,
-    };
-  } catch {
-    throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
-  }
-};
-
-const encodeTodoListCursor = (
-  row: TodoPageRow,
-  module: TodoModule,
-  query: string,
-): string => Buffer.from(JSON.stringify({
-  statusRank: Number(row.status_rank),
-  dueAt: row.due_at?.toISOString() ?? null,
-  createdAt: row.created_at.toISOString(),
-  todoId: row.todo_id,
-  module,
-  query,
-})).toString("base64url");
+const emptyModuleCounts = (): TodoModuleCounts => ({ rework: 0, sourcing: 0 });
 
 const todoResponse = (row: TodoRow): TodoResponse => {
   const contextStatus = row.rework_status ?? row.sourcing_status;
@@ -333,6 +260,10 @@ export class TodoService {
     if (options.module !== undefined && !TODO_MODULES.includes(options.module)) {
       throw new ApplicationError("VALIDATION_ERROR", "待办模块无效", 400);
     }
+    const requestedPage = options.page ?? 1;
+    if (!Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 100_000) {
+      throw new ApplicationError("VALIDATION_ERROR", "页码无效", 400);
+    }
 
     const countResult = await this.database.query<TodoCountRow>(
       `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
@@ -353,7 +284,26 @@ export class TodoService {
     const activeModule = options.module
       ?? TODO_MODULES.find((module) => moduleCounts[module] > 0)
       ?? "rework";
-    const pageCursor = decodeTodoListCursor(options.cursor ?? "", activeModule, normalizedQuery);
+    const totalResult = await this.database.query<{ total_count: number | string }>(
+      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+       SELECT COUNT(*) total_count
+       FROM todo_view
+       WHERE recipient_user_id=$1
+         AND todo_type<>'information'
+         AND status IN ('pending','blocked_recipient')
+         AND category<>'wage_month_close'
+         AND (rework_status IS NULL OR rework_status<>'deleted')
+         AND todo_module=$2
+         AND (
+           $3=''
+           OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
+         )`,
+      [actor.actorId, activeModule, normalizedQuery],
+    );
+    const totalCount = Number(totalResult.rows[0]?.total_count ?? 0);
+    const totalPages = Math.ceil(totalCount / TODO_LIST_PAGE_SIZE);
+    const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
 
     const result = await this.database.query<TodoPageRow>(
       `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
@@ -370,45 +320,24 @@ export class TodoService {
            OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
          )
-         AND (
-           $4::integer IS NULL
-           OR status_rank>$4::integer
-           OR (
-             status_rank=$4::integer
-             AND (
-               COALESCE(due_at,'infinity'::timestamptz)
-                 > COALESCE($5::timestamptz,'infinity'::timestamptz)
-               OR (
-                 COALESCE(due_at,'infinity'::timestamptz)
-                   = COALESCE($5::timestamptz,'infinity'::timestamptz)
-                 AND (
-                   created_at<$6::timestamptz
-                   OR (created_at=$6::timestamptz AND todo_id<$7::uuid)
-                 )
-               )
-             )
-           )
-         )
        ORDER BY status_rank ASC,due_at ASC NULLS LAST,created_at DESC,todo_id DESC
-       LIMIT 16`,
+       LIMIT $4 OFFSET $5`,
       [
         actor.actorId,
         activeModule,
         normalizedQuery,
-        pageCursor?.statusRank ?? null,
-        pageCursor?.dueAt ?? null,
-        pageCursor?.createdAt ?? null,
-        pageCursor?.todoId ?? null,
+        TODO_LIST_PAGE_SIZE,
+        (page - 1) * TODO_LIST_PAGE_SIZE,
       ],
     );
-    const pageRows = result.rows.slice(0, TODO_LIST_PAGE_SIZE);
     return {
-      todos: pageRows.map(todoResponse),
-      nextCursor: result.rows.length > TODO_LIST_PAGE_SIZE
-        ? encodeTodoListCursor(pageRows[TODO_LIST_PAGE_SIZE - 1]!, activeModule, normalizedQuery)
-        : null,
+      todos: result.rows.map(todoResponse),
       activeModule,
       moduleCounts,
+      page,
+      pageSize: TODO_LIST_PAGE_SIZE,
+      totalCount,
+      totalPages,
     };
   }
 
