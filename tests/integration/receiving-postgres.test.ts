@@ -465,6 +465,11 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receiptCount: 2,
     });
     expect(twoDays.kpis.receivedQuantity).toBe(70);
+    expect(twoDays.nextCursor).toBeNull();
+
+    const literalWildcard = await service.board(today, today, "%");
+    expect(literalWildcard.rows).toHaveLength(0);
+    expect(literalWildcard.kpis.orderCount).toBe(0);
   });
 
   it("consolidates repeated style batches before status filtering and KPI calculation", async () => {

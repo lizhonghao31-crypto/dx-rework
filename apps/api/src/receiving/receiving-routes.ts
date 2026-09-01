@@ -179,6 +179,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
   });
 
   app.get<{ Querystring: {
+    cursor?: string;
     date?: string;
     startDate?: string;
     endDate?: string;
@@ -199,6 +200,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
       endDate,
       request.query.q ?? "",
       request.query.status ?? "all",
+      request.query.cursor ?? "",
     );
   });
 

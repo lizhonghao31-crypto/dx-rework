@@ -72,6 +72,7 @@ type BoardResult = Readonly<{
     differenceRate: number;
   }>;
   rows: readonly BoardRow[];
+  nextCursor: string | null;
 }>;
 
 const localDate = (): string => {
@@ -166,10 +167,13 @@ export function OrderBoardPage() {
   const debouncedQuery = useDebouncedValue(query, 180);
   const [data, setData] = useState<BoardResult | null>(null);
   const [message, setMessage] = useState("正在加载订单回货…");
+  const [pageLoading, setPageLoading] = useState(false);
   const [canReceive, setCanReceive] = useState(false);
   const [canInitiate, setCanInitiate] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [cursor, setCursor] = useState("");
+  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
   const [expandedStyles, setExpandedStyles] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<BoardRow | null>(null);
   const [deleting, setDeleting] = useState<BoardRow | null>(null);
@@ -184,6 +188,11 @@ export function OrderBoardPage() {
     attachments: readonly ReceivingAttachment[];
     index: number;
   }> | null>(null);
+
+  const resetPagination = () => {
+    setCursor("");
+    setCursorHistory([]);
+  };
 
   useEffect(() => {
     let active = true;
@@ -212,9 +221,11 @@ export function OrderBoardPage() {
 
   useEffect(() => {
     let active = true;
+    setPageLoading(true);
     const params = new URLSearchParams({ startDate, endDate });
     params.set("status", status);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
+    if (cursor) params.set("cursor", cursor);
     void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("订单回货加载失败");
@@ -232,9 +243,12 @@ export function OrderBoardPage() {
       .catch(() => {
         if (!active) return;
         setMessage("订单回货加载失败，请刷新后重试");
+      })
+      .finally(() => {
+        if (active) setPageLoading(false);
       });
     return () => { active = false; };
-  }, [startDate, endDate, debouncedQuery, status, refreshToken]);
+  }, [startDate, endDate, debouncedQuery, status, cursor, refreshToken]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
@@ -367,10 +381,10 @@ export function OrderBoardPage() {
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">
-        <label>开始日期<input type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-        <label>结束日期<input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-        <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => setQuery(event.target.value.toUpperCase())} /></label>
-        <label>状态<select value={status} onChange={(event) => setStatus(event.target.value as BoardStatus)}>
+        <label>开始日期<input type="date" value={startDate} max={endDate} onChange={(event) => { resetPagination(); setStartDate(event.target.value); }} /></label>
+        <label>结束日期<input type="date" value={endDate} min={startDate} onChange={(event) => { resetPagination(); setEndDate(event.target.value); }} /></label>
+        <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => { resetPagination(); setQuery(event.target.value.toUpperCase()); }} /></label>
+        <label>状态<select value={status} onChange={(event) => { resetPagination(); setStatus(event.target.value as BoardStatus); }}>
           <option value="all">全部状态</option>
           <option value="normal">正常</option>
           <option value="short">少收</option>
@@ -476,6 +490,28 @@ export function OrderBoardPage() {
       })}
     </div>
     {message ? <p className="order-board-message" role="status">{message}</p> : null}
+    {(data?.rows.length || cursorHistory.length > 0) ? <nav className="order-board-pagination" aria-label="订单回货分页">
+      <button
+        type="button"
+        disabled={pageLoading || cursorHistory.length === 0}
+        onClick={() => {
+          if (pageLoading) return;
+          const previous = cursorHistory[cursorHistory.length - 1] ?? "";
+          setCursorHistory((current) => current.slice(0, -1));
+          setCursor(previous);
+        }}
+      >上一页</button>
+      <span>第 {cursorHistory.length + 1} 页 · 每页 15 条</span>
+      <button
+        type="button"
+        disabled={pageLoading || !data?.nextCursor}
+        onClick={() => {
+          if (pageLoading || !data?.nextCursor) return;
+          setCursorHistory((current) => [...current, cursor]);
+          setCursor(data.nextCursor);
+        }}
+      >下一页</button>
+    </nav> : null}
     {mutationMessage && !editing && !deleting ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p> : null}
 
     {attachmentViewer && selectedAttachment ? <div

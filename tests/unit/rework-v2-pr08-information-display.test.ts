@@ -9,7 +9,7 @@ describe("PR-08 information display", () => {
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
     ]);
     expect(service).toContain("abnormalOrderCount");
-    expect(service).toContain("row.differenceQuantity !== 0");
+    expect(service).toContain("count(*) FILTER (WHERE difference_quantity<>0)");
     expect(service).toContain("prior_actual_quantity");
     expect(service).toContain("delivery_note_quantity");
     expect(service).toContain('const mode = needle ? "search" : "range"');
