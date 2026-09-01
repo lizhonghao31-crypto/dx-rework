@@ -560,7 +560,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           <label className="sourcing-process-mobile"><span>工艺</span><input list="sourcing-craft-options" value={processes[0]} maxLength={100} onChange={(event) => updateProcess(0, event.target.value)} placeholder="请输入订单工艺要求" /></label>
           <section className="sourcing-process-editor sourcing-form-wide" aria-label="订单工艺清单">
             <div className="sourcing-process-editor__heading">
-              <div><strong>工艺清单</strong><small>可搜索已有工艺，也可直接输入新工艺；提交订单时自动写入工艺数据库</small></div>
+              <div><strong>工艺清单</strong><small>每项工艺单独一行，按实际生产顺序登记；可搜索已有工艺，也可直接输入新工艺，提交订单时自动写入工艺数据库</small></div>
               <button type="button" disabled={processes.length >= MAX_SOURCING_PROCESSES} onClick={addProcess}>＋ 新增工艺</button>
             </div>
             <div className="sourcing-process-editor__list">
