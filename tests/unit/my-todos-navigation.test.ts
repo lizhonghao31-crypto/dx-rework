@@ -38,7 +38,8 @@ describe("my todos first-entry navigation", () => {
     expect(page).not.toContain('state.kind === "ready" && <nav className="my-todos-modules"');
     expect(page).toContain('state.kind === "ready" && <Surface className="my-todos-workspace"');
     expect(page).toContain('<div className="my-todos-toolbar">');
-    expect(page).toContain('<nav className="my-todos-modules"');
+    expect(page).toContain('<div className="my-todos-modules" role="tablist"');
+    expect(page).not.toContain('<nav className="my-todos-modules"');
     expect(page.indexOf('{ id: "sourcing", label: "外发定价&选厂" }')).toBeLessThan(
       page.indexOf('{ id: "rework", label: "订单返工" }'),
     );
@@ -64,7 +65,13 @@ describe("my todos first-entry navigation", () => {
     expect(css).toContain(".my-todos-modules");
     expect(css).toContain("background: var(--dx-v2-color-control);");
     expect(css).toContain("justify-content: center;");
-    expect(css).toContain("flex: 0 0 min(440px, 34vw);");
+    expect(css).toContain("flex-wrap: nowrap;");
+    expect(css).toContain("flex: 0 0 40%;");
+    expect(css).toContain("flex: 1 1 0;");
+    expect(css).toContain("width: auto;");
+    expect(css).toContain("flex: 0 1 440px;");
+    expect(css).toContain("width: 440px;");
+    expect(css).toContain("margin-left: auto;");
     expect(css).toContain("background: var(--dx-v2-color-inset);");
     expect(css).toContain("overflow-x: auto;");
     expect(css).toContain(".my-todo-index {");
