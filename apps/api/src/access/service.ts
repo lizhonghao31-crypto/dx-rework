@@ -436,7 +436,13 @@ export class AccessMasterDataService {
   }>> {
     return this.transaction(async (client) => {
       const craftNames = input.craftNames.map((name) => name.trim());
-      const normalizedNames = craftNames.map((name) => name.toLocaleLowerCase("zh-CN"));
+      const normalized = await client.query<{ normalized_name: string }>(
+        `SELECT lower(btrim(input.craft_name)) AS normalized_name
+         FROM unnest($1::text[]) WITH ORDINALITY AS input(craft_name,position)
+         ORDER BY input.position`,
+        [craftNames],
+      );
+      const normalizedNames = normalized.rows.map((row) => row.normalized_name);
       if (new Set(normalizedNames).size !== normalizedNames.length) {
         throw new ApplicationError("VALIDATION_ERROR", "工艺不能重复", 400);
       }
@@ -460,7 +466,7 @@ export class AccessMasterDataService {
 
         const craftId = randomUUID();
         const craftCode = `CRAFT_${randomUUID().replaceAll("-", "").slice(0, 24).toUpperCase()}`;
-        const operationEventId = await this.events.append(client, actor, {
+        const craftCreationEventId = await this.events.append(client, actor, {
           action: "master_data.craft.create",
           entityType: "craft_catalog",
           entityId: craftId,
@@ -472,7 +478,7 @@ export class AccessMasterDataService {
              craft_id,craft_code,craft_name,created_by,operation_event_id,request_id
            ) VALUES($1,$2,$3,$4,$5,$6)
            RETURNING craft_id,craft_code,craft_name,created_at`,
-          [craftId, craftCode, craftName, actor.actorId, operationEventId, actor.requestId],
+          [craftId, craftCode, craftName, actor.actorId, craftCreationEventId, actor.requestId],
         );
         items.push(craftCatalogItem(inserted.rows[0]!));
       }
