@@ -55,6 +55,8 @@ type BoardRow = Readonly<{
   reworkOrderId: string | null;
   reworkStatus: ReworkStatus;
   version: number;
+  rootCorrectable: boolean;
+  rootDeletable: boolean;
   rootMutable: boolean;
 }>;
 
@@ -288,10 +290,10 @@ export function OrderBoardPage() {
   };
 
   const rootControls = (row: BoardRow, mobile: boolean) => {
-    if (!isRoot || !row.rootMutable) return null;
+    if (!isRoot || (!row.rootCorrectable && !row.rootDeletable)) return null;
     return <div className={`order-board-root-actions order-board-root-actions--${mobile ? "mobile" : "desktop"}`}>
-      <button type="button" onClick={() => openEdit(row)}>修改</button>
-      <button type="button" className="is-danger" onClick={() => { setEditing(null); setDeleting(row); setMutationMessage(""); }}>删除</button>
+      {row.rootCorrectable ? <button type="button" onClick={() => openEdit(row)}>修改</button> : null}
+      {row.rootDeletable ? <button type="button" className="is-danger" onClick={() => { setEditing(null); setDeleting(row); setMutationMessage(""); }}>删除</button> : null}
     </div>;
   };
 
@@ -552,14 +554,16 @@ export function OrderBoardPage() {
     {editing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setEditing(null)}>
       <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>
         <h2>修改收货订单</h2>
-        <p>款号改成已有款号时会自动合并；原始收货记录与被替换图片继续保留审计。</p>
+        <p>{editing.rootDeletable
+          ? "款号改成已有款号时会自动合并；原始收货记录与被替换图片继续保留审计。"
+          : "可纠正款号和数量；原始收货记录保留，已用于返工的送货单图片不变。"}</p>
         <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value.toUpperCase())} /></label>
         <div className="order-board-dialog__quantity-grid">
           <label>送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
           <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
           <label>次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setEditDefectiveQuantity(event.target.value)} /></label>
         </div>
-        <label>替换送货单图片（可选，1–3张）
+        {editing.rootDeletable ? <label>替换送货单图片（可选，1–3张）
           <input
             type="file"
             accept="image/*"
@@ -576,8 +580,12 @@ export function OrderBoardPage() {
               setMutationMessage("");
             }}
           />
-        </label>
-        {editImages.length > 0 ? <small>已选择{editImages.length}张；保存后整体替换当前图片。</small> : <small>不选择新图则保留当前图片。</small>}
+        </label> : null}
+        {editing.rootDeletable
+          ? editImages.length > 0
+            ? <small>已选择{editImages.length}张；保存后整体替换当前图片。</small>
+            : <small>不选择新图则保留当前图片。</small>
+          : <small>返工已发起，送货单图片已锁定。</small>}
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setEditing(null)}>取消</button>

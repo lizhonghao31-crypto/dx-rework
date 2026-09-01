@@ -99,6 +99,8 @@ type BoardRow = Readonly<{
   reworkOrderId: string | null;
   reworkStatus: ReworkStatus;
   version: number;
+  rootCorrectable: boolean;
+  rootDeletable: boolean;
   rootMutable: boolean;
 }>;
 
@@ -580,6 +582,7 @@ export class ReceivingService {
   private async mutableBatch(
     client: PoolClient,
     receivingBatchId: string,
+    allowReworkHistory = false,
   ): Promise<Readonly<{
     style_no: string;
     version: number;
@@ -621,7 +624,7 @@ export class ReceivingService {
     const row = result.rows[0];
     if (!row) return fail("收货订单不存在", 404, "NOT_FOUND");
     if (row.deleted_at) return fail("收货订单不存在", 404, "NOT_FOUND");
-    if (row.has_rework_history) {
+    if (row.has_rework_history && !allowReworkHistory) {
       fail("该订单已经发起过返工，不能再修改或删除", 409, "INVALID_STATE_TRANSITION");
     }
     return row;
@@ -728,9 +731,12 @@ export class ReceivingService {
       const styleRow = currentStyle.rows[0];
       if (!styleRow) return fail("收货订单不存在", 404, "NOT_FOUND");
       await this.lockStyles(client, [styleRow.style_no, normalized.styleNo]);
-      const current = await this.mutableBatch(client, receivingBatchId);
+      const current = await this.mutableBatch(client, receivingBatchId, true);
       if (current.version !== normalized.expectedVersion) {
         fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+      }
+      if (current.has_rework_history && normalized.attachmentIds !== undefined) {
+        fail("返工发起后不能替换送货单图片", 409, "INVALID_STATE_TRANSITION");
       }
       const defectiveQuantity = normalized.defectiveQuantity ?? Number(current.defective_quantity);
       if (defectiveQuantity > normalized.actualQuantity) fail("次品数量不能超过实际收货数量");
@@ -744,7 +750,7 @@ export class ReceivingService {
         version: current.version,
       };
 
-      const targetResult = await client.query<{
+      const targetResult = current.has_rework_history ? { rows: [] } : await client.query<{
         receiving_batch_id: string;
         has_rework_history: boolean;
       }>(
@@ -906,7 +912,10 @@ export class ReceivingService {
         before,
         after,
       });
-      await client.query("SELECT set_config('dx_rework.receiving_root_action','correct',true)");
+      await client.query(
+        "SELECT set_config('dx_rework.receiving_root_action','correct',true),set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
+        [eventId, actor.requestId],
+      );
       const updated = await client.query(
         `UPDATE receiving_batches batch
          SET style_no=$2,delivery_note_quantity=$3,
@@ -915,12 +924,19 @@ export class ReceivingService {
              defective_quantity_adjustment=$5-(SELECT sum(defective_quantity) FROM receiving_receipts WHERE receiving_batch_id=batch.receiving_batch_id),
              version=batch.version+1,updated_by=$6,updated_at=clock_timestamp(),
              last_operation_event_id=$7,last_request_id=$8
-         WHERE batch.receiving_batch_id=$1 AND batch.version=$9 AND batch.deleted_at IS NULL
-           AND NOT EXISTS(SELECT 1 FROM rework_orders WHERE source_receiving_batch_id=batch.receiving_batch_id)`,
+         WHERE batch.receiving_batch_id=$1 AND batch.version=$9 AND batch.deleted_at IS NULL`,
         [receivingBatchId, normalized.styleNo, normalized.documentQuantity, normalized.actualQuantity,
           defectiveQuantity, actor.actorId, eventId, actor.requestId, normalized.expectedVersion],
       );
       if (updated.rowCount !== 1) fail("收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+      if (current.has_rework_history && current.style_no !== normalized.styleNo) {
+        await client.query(
+          `UPDATE rework_orders
+           SET style_no=$2,version=version+1,updated_by=$3,updated_at=clock_timestamp()
+           WHERE source_receiving_batch_id=$1 AND style_no IS DISTINCT FROM $2`,
+          [receivingBatchId, normalized.styleNo, actor.actorId],
+        );
+      }
       await this.replaceReceivingImages(client, actor, receivingBatchId, normalized.attachmentIds);
       await client.query("COMMIT");
       return after;
@@ -1423,6 +1439,8 @@ export class ReceivingService {
       rework_order_id: string | null;
       rework_status: string | null;
       version: number;
+      root_correctable: boolean;
+      root_deletable: boolean;
       root_mutable: boolean;
     }>(
       `${RECEIVING_BOARD_BASE_SQL}, filtered_totals AS (
@@ -1477,6 +1495,11 @@ export class ReceivingService {
               rework.rework_order_id,rework.status AS rework_status,
               COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments,
               action.version,
+              totals.batch_count=1 AS root_correctable,
+              totals.batch_count=1 AND NOT EXISTS(
+                SELECT 1 FROM rework_orders history
+                WHERE history.source_receiving_batch_id=action.receiving_batch_id
+              ) AS root_deletable,
               totals.batch_count=1 AND NOT EXISTS(
                 SELECT 1 FROM rework_orders history
                 WHERE history.source_receiving_batch_id=action.receiving_batch_id
@@ -1633,6 +1656,8 @@ export class ReceivingService {
       reworkOrderId: row.rework_order_id,
       reworkStatus: lifecycle(row.rework_status),
       version: row.version,
+      rootCorrectable: row.root_correctable,
+      rootDeletable: row.root_deletable,
       rootMutable: row.root_mutable,
     }));
     const rows = allRows.slice(0, 15);
