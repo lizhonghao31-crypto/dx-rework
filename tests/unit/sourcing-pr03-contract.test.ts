@@ -73,7 +73,7 @@ describe("sourcing PR03 contracts", () => {
     expect(() => calculateSourcingTotal("0.0001", 1)).toThrow(/总额/);
   });
 
-  it("validates management adjustments and requires an owner rejection reason", () => {
+  it("validates management adjustments and accepts direct owner decisions", () => {
     expect(RecordSourcingManagementDecisionSchema.parse({
       supplierId: "00000000-0000-4000-8000-000000000200",
       unitPrice: "12.5000",
@@ -81,7 +81,9 @@ describe("sourcing PR03 contracts", () => {
     })).toMatchObject({ unitPrice: "12.5000" });
     expect(DecideSourcingOwnerSchema.parse({ decision: "approved" }))
       .toEqual({ decision: "approved" });
-    expect(() => DecideSourcingOwnerSchema.parse({ decision: "rejected" })).toThrow();
+    expect(DecideSourcingOwnerSchema.parse({ decision: "rejected" }))
+      .toEqual({ decision: "rejected" });
+    expect(() => DecideSourcingOwnerSchema.parse({ decision: "rejected", decisionReason: "x".repeat(501) })).toThrow();
   });
 
   it("keeps finance declarative and requires explicit exception closure", () => {
@@ -102,7 +104,10 @@ describe("sourcing PR03 contracts", () => {
     expect(page).toContain("提交 IE 价格");
     expect(page).toContain("请选择加工厂");
     expect(page).toContain("提交调价与选厂");
-    expect(page).toContain("审批说明 / 驳回原因");
+    expect(page).not.toContain("审批说明 / 驳回原因");
+    expect(page).not.toContain("ownerReason");
+    expect(page).toContain("sourcing-owner-reject");
+    expect(page).toContain('{ decision: "rejected" }');
     expect(page).not.toContain(">登记合同</button>");
     expect(page).not.toContain("发起中途换厂");
     expect(page).not.toContain("生产管理核实换厂");

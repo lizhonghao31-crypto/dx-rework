@@ -63,6 +63,7 @@ const DEFAULT_CREATION_REASON = "基于正式 ERP 订单创建报价选厂询价
 const DEFAULT_QUOTE_REASON = "IE核定加工价格";
 const DEFAULT_MANAGEMENT_REASON = "生产管理确认加工厂与价格";
 const DEFAULT_OWNER_APPROVAL_REASON = "老板批准选厂决定";
+const DEFAULT_OWNER_REJECTION_REASON = "老板驳回选厂决定";
 const DEFAULT_CONTRACT_REASON = "跟单登记已签合同";
 const DEFAULT_DELETION_REASON = "Root confirmed logical deletion";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1420,8 +1421,11 @@ export class SourcingService {
     this.assertActor(actor, OWNER_DECISION_CAPABILITY, OWNER_DECISION_ROLE);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     const suppliedReason = input.decisionReason?.trim() ?? "";
-    if (input.decision === "rejected" && !suppliedReason) fail("驳回原因不能为空");
-    const decisionReason = suppliedReason || DEFAULT_OWNER_APPROVAL_REASON;
+    const decisionReason = suppliedReason || (
+      input.decision === "approved"
+        ? DEFAULT_OWNER_APPROVAL_REASON
+        : DEFAULT_OWNER_REJECTION_REASON
+    );
     if (decisionReason.length > 500) fail("审批说明不能超过500个字符");
     const scope = `sourcing.owner.${input.decision}`;
     const client = await this.database.connect();

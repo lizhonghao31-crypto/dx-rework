@@ -748,7 +748,6 @@ function OrderDetailPage({
   const [factories, setFactories] = useState<readonly SourcingFactory[]>([]);
   const [quote, setQuote] = useState<QuoteDraft>({ unitPrice: "", quoteReason: "" });
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", unitPrice: "", decisionReason: "" });
-  const [ownerReason, setOwnerReason] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
@@ -1021,9 +1020,8 @@ function OrderDetailPage({
                 <p>ERP：{item.erpOrderNo}；款号：{item.styleNo}；交货日期：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
               </details>
             </div>
-            {canOwner ? <div className="sourcing-owner-actions">
-              <label><span>审批说明 / 驳回原因</span><input value={ownerReason} maxLength={500} onChange={(event) => { setOwnerReason(event.target.value); actionKey.current = null; }} /></label>
-              <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved", ...(ownerReason.trim() ? { decisionReason: ownerReason.trim() } : {}) }, "老板已批准")}>批准方案</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !ownerReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected", decisionReason: ownerReason.trim() }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button></div>
+            {canOwner ? <div className="sourcing-owner-actions" aria-label="老板审批操作">
+              <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button><button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button></div>
             </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
