@@ -102,8 +102,9 @@ LEFT JOIN rework_orders orders
     NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
     CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
   )
-LEFT JOIN current_supplier_catalog rework_supplier
+LEFT JOIN supplier_catalog_versions rework_supplier
   ON rework_supplier.supplier_id=orders.processing_factory_supplier_id
+ AND rework_supplier.version=orders.processing_factory_supplier_version
 LEFT JOIN current_sourcing_cases sourcing
   ON sourcing.sourcing_case_id=CASE
     WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
