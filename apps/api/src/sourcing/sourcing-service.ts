@@ -69,6 +69,12 @@ const DEFAULT_DELETION_REASON = "Root confirmed logical deletion";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UNIT_PRICE_PATTERN = /^\d{1,10}(?:\.\d{1,4})?$/;
 const TOTAL_AMOUNT_PATTERN = /^\d{1,16}(?:\.\d{1,2})?$/;
+const SOURCING_LIST_PAGE_SIZE = 15;
+
+type SourcingListCursor = Readonly<{
+  createdAt: string;
+  sourcingCaseId: string;
+}>;
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type SqlError = Readonly<{ code?: string; constraint?: string }>;
@@ -181,6 +187,42 @@ const requestHash = (scope: string, payload: unknown): string =>
 
 const toIso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+
+const decodeSourcingListCursor = (cursor: string): SourcingListCursor | null => {
+  if (!cursor) return null;
+  if (cursor.length > 500) fail("分页游标无效");
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
+    if (!decoded || typeof decoded !== "object") fail("分页游标无效");
+    const value = decoded as Record<string, unknown>;
+    const createdAt = value.createdAt;
+    const sourcingCaseId = value.sourcingCaseId;
+    if (typeof createdAt !== "string" || typeof sourcingCaseId !== "string") {
+      fail("分页游标无效");
+    }
+    const validCreatedAt = createdAt as string;
+    const validSourcingCaseId = sourcingCaseId as string;
+    if (
+      !UUID_PATTERN.test(validSourcingCaseId)
+      || Number.isNaN(Date.parse(validCreatedAt))
+    ) {
+      fail("分页游标无效");
+    }
+    return {
+      createdAt: new Date(validCreatedAt).toISOString(),
+      sourcingCaseId: validSourcingCaseId,
+    };
+  } catch (error) {
+    if (error instanceof ApplicationError) throw error;
+    return fail("分页游标无效");
+  }
+};
+
+const encodeSourcingListCursor = (row: SourcingCaseRow): string =>
+  Buffer.from(JSON.stringify({
+    createdAt: toIso(row.created_at),
+    sourcingCaseId: row.sourcing_case_id,
+  })).toString("base64url");
 
 const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => ({
   sourcingCaseId: row.sourcing_case_id,
@@ -370,11 +412,13 @@ export class SourcingService {
     actor: TrustedActorContext,
     query = "",
     statusFilter: "all" | "pending" | "closed" = "all",
+    cursor = "",
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
     const normalizedQuery = query.trim();
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
     if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
+    const pageCursor = decodeSourcingListCursor(cursor);
     const result = await this.database.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
@@ -435,11 +479,27 @@ export class SourcingService {
           ))
          AND ($2='all' OR ($2='closed' AND case_view.status='closed')
            OR ($2='pending' AND case_view.status<>'closed'))
-       ORDER BY case_view.created_at DESC
-       LIMIT 200`,
-      [normalizedQuery, statusFilter],
+         AND (
+           $3::timestamptz IS NULL
+           OR (case_view.created_at,case_view.sourcing_case_id)
+             < ($3::timestamptz,$4::uuid)
+         )
+       ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC
+       LIMIT 16`,
+      [
+        normalizedQuery,
+        statusFilter,
+        pageCursor?.createdAt ?? null,
+        pageCursor?.sourcingCaseId ?? null,
+      ],
     );
-    return { items: result.rows.map(mapCase) };
+    const pageRows = result.rows.slice(0, SOURCING_LIST_PAGE_SIZE);
+    return {
+      items: pageRows.map(mapCase),
+      nextCursor: result.rows.length > SOURCING_LIST_PAGE_SIZE
+        ? encodeSourcingListCursor(pageRows[SOURCING_LIST_PAGE_SIZE - 1]!)
+        : null,
+    };
   }
 
   async getCase(
