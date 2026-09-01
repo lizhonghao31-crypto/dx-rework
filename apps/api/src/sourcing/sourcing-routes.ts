@@ -138,19 +138,24 @@ export function registerSourcingRoutes(
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));
 
-  app.get<{ Querystring: { q?: string; status?: string } }>("/sourcing/cases", async (request) => {
+  app.get<{ Querystring: { cursor?: string; q?: string; status?: string } }>("/sourcing/cases", async (request) => {
     if (request.query.q !== undefined && typeof request.query.q !== "string") {
       validationError("搜索内容无效");
+    }
+    if (request.query.cursor !== undefined && typeof request.query.cursor !== "string") {
+      validationError("分页游标无效");
     }
     const status = request.query.status;
     if (status !== undefined && status !== "pending" && status !== "closed") {
       validationError("订单状态筛选无效");
     }
-    const statusFilter = status === "pending" || status === "closed" ? status : undefined;
-    const actor = await readActor(request);
-    return statusFilter
-      ? dependencies.service.listCases(actor, request.query.q ?? "", statusFilter)
-      : dependencies.service.listCases(actor, request.query.q ?? "");
+    const statusFilter = status === "pending" || status === "closed" ? status : "all";
+    return dependencies.service.listCases(
+      await readActor(request),
+      request.query.q ?? "",
+      statusFilter,
+      request.query.cursor ?? "",
+    );
   });
 
   app.get<{ Params: { sourcingCaseId: string } }>(

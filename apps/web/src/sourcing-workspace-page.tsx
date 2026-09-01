@@ -595,21 +595,58 @@ function OrderListPage({
   const [message, setMessage] = useState("正在加载订单…");
   const [deletingCaseId, setDeletingCaseId] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [activeQuery, setActiveQuery] = useState("");
+  const [cursor, setCursor] = useState("");
+  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const loadVersion = useRef(0);
 
-  const load = async (query = search): Promise<void> => {
+  const load = async (query: string, pageCursor: string): Promise<void> => {
+    const version = ++loadVersion.current;
     try {
+      const params = new URLSearchParams({
+        status: mode === "history" ? "closed" : "pending",
+        q: query.trim(),
+      });
+      if (pageCursor) params.set("cursor", pageCursor);
       const body = await request(
-        `sourcing/cases?status=${mode === "history" ? "closed" : "pending"}&q=${encodeURIComponent(query.trim())}`,
+        `sourcing/cases?${params.toString()}`,
         SourcingCaseListResponseSchema,
       );
+      if (version !== loadVersion.current) return;
       setItems(body.items);
+      setNextCursor(body.nextCursor);
       setMessage("");
     } catch (error) {
+      if (version !== loadVersion.current) return;
       setMessage(error instanceof Error ? error.message : "订单列表加载失败");
     }
   };
 
-  useEffect(() => { void load(""); }, []);
+  const searchFromFirstPage = (): void => {
+    const query = search.trim();
+    setActiveQuery(query);
+    setCursor("");
+    setCursorHistory([]);
+    void load(query, "");
+  };
+
+  const goToNextPage = (): void => {
+    if (!nextCursor) return;
+    setCursorHistory((current) => [...current, cursor]);
+    setCursor(nextCursor);
+    void load(activeQuery, nextCursor);
+  };
+
+  const goToPreviousPage = (): void => {
+    if (cursorHistory.length === 0) return;
+    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? "";
+    setCursorHistory((current) => current.slice(0, -1));
+    setCursor(previousCursor);
+    void load(activeQuery, previousCursor);
+  };
+
+  useEffect(() => { void load("", ""); }, []);
   const visible = useMemo(
     () => items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
     [items, mode],
@@ -643,10 +680,10 @@ function OrderListPage({
       <Header
         title={mode === "pending" ? "待审批订单" : "历史订单"}
         subtitle={mode === "pending" ? "所有未完成订单集中在这里，点击订单查看完整流程和当前办理区。" : "所有已完成订单集中归档，保留报价、调价、选厂和审批证据。"}
-        badge={`${visible.length} 单`}
+        badge={`${visible.length} 条当前页`}
       />
       <Surface className="sourcing-list-card">
-        <form className="sourcing-search" onSubmit={(event) => { event.preventDefault(); void load(search); }}>
+        <form className="sourcing-search" onSubmit={(event) => { event.preventDefault(); searchFromFirstPage(); }}>
           <input value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} placeholder="搜索 ERP、款号、跟单、供应商、工艺或合同编号" />
           <button className="dx-button dx-button--secondary" type="submit">搜索</button>
         </form>
@@ -662,6 +699,11 @@ function OrderListPage({
             onDelete={(order) => { void remove(order); }}
           />)}
         </div>
+        {!message && visible.length > 0 ? <nav className="sourcing-pagination" aria-label="订单列表分页">
+          <button className="dx-button dx-button--secondary" type="button" disabled={cursorHistory.length === 0} onClick={goToPreviousPage}>上一页</button>
+          <span>第 {cursorHistory.length + 1} 页 · 每页 15 条</span>
+          <button className="dx-button dx-button--secondary" type="button" disabled={!nextCursor} onClick={goToNextPage}>下一页</button>
+        </nav> : null}
       </Surface>
     </div>
   );

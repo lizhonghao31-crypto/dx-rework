@@ -781,3 +781,34 @@
   background: var(--dx-v2-color-inset);
 }
 
+
+.sourcing-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dx-v2-space-3);
+  padding-top: var(--dx-v2-space-2);
+}
+
+.sourcing-pagination span {
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+@media (max-width: 640px) {
+  .sourcing-pagination {
+    justify-content: space-between;
+    gap: var(--dx-v2-space-2);
+  }
+
+  .sourcing-pagination .dx-button {
+    min-width: 76px;
+    padding-inline: var(--dx-v2-space-3);
+  }
+
+  .sourcing-pagination span {
+    font-size: 12px;
+    text-align: center;
+  }
+}
