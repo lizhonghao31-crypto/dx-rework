@@ -115,6 +115,7 @@ describe("todo HTTP boundaries", () => {
       headers: { cookie: "dx_rework_session=viewer" },
     });
     expect(indicator.statusCode).toBe(200);
+    expect(indicator.headers["x-dx-rework-actor-id"]).toBe(todo.recipientUserId);
     expect(indicator.json()).toEqual({
       latestTodoId: todo.todoId,
       latestReceivedAt: todo.createdAt,

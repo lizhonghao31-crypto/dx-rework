@@ -67,9 +67,13 @@ export function registerTodoRoutes(
     todos: await dependencies.service.listForActor(await actor(request, "todo:view")),
   }));
 
-  app.get("/todos/mine/indicator", async (request) => TodoNewIndicatorSchema.parse(
-    await dependencies.service.latestIndicatorForActor(await actor(request, "todo:view")),
-  ));
+  app.get("/todos/mine/indicator", async (request, reply) => {
+    const currentActor = await actor(request, "todo:view");
+    reply.header("x-dx-rework-actor-id", currentActor.actorId);
+    return TodoNewIndicatorSchema.parse(
+      await dependencies.service.latestIndicatorForActor(currentActor),
+    );
+  });
 
   app.get("/todos/routing-exceptions/mine", async (request) =>
     TodoRoutingExceptionListResponseSchema.parse({
