@@ -909,12 +909,12 @@ function OrderDetailPage({
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{item.orderQuantity.toLocaleString("zh-CN")} 件</dd></div>
           <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
+          <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
         </dl>
 
         <div className="rework-detail-overview-grid">

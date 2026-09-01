@@ -75,11 +75,12 @@ describe("thin platform module routing", () => {
   });
 
   it("protects sourcing with AuthGate and keeps the unified desktop CSS token-based", async () => {
-    const [app, components, shellCss, sourcingCss] = await Promise.all([
+    const [app, components, shellCss, sourcingCss, sourcingPage] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
       readFile("apps/web/src/shell-navigation.css", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
+      readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/sourcing"');
     expect(app).toContain('{ requiredCapability: "sourcing:view" }');
@@ -93,6 +94,9 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain("border: 1px solid #c9ced6");
     expect(sourcingCss).toContain("@media (min-width: 761px)");
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
-    expect(sourcingCss).toContain("grid-template-columns: repeat(6, minmax(0, 1fr))");
+    expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
+    expect(sourcingCss).toContain("grid-column: 1 / -1");
+    expect(sourcingPage.indexOf("<dt>调价情况</dt>"))
+      .toBeLessThan(sourcingPage.indexOf("<dt>工艺</dt>"));
   });
 });
