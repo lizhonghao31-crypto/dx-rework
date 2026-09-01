@@ -776,12 +776,9 @@ export class ReceivingService {
         [normalized.styleNo, receivingBatchId, current.style_no],
       );
       const targetRow = targetResult.rows[0];
-      if (targetRow?.has_rework_history) {
-        fail("同款号目标订单已经发起过返工，不能自动合并", 409, "INVALID_STATE_TRANSITION");
-      }
       const targetId = targetRow?.receiving_batch_id;
       if (targetId) {
-        const target = await this.mutableBatch(client, targetId);
+        const target = await this.mutableBatch(client, targetId, true);
         const targetBefore: ReceivingBatchSnapshot = {
           receivingBatchId: targetId,
           styleNo: target.style_no,
