@@ -262,8 +262,28 @@ export function SourcingWorkspacePage({
     return () => { mounted = false; };
   }, []);
 
+  const mobileActiveView = view === "detail" ? "pending" : view;
+  const canCreateOrder = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
+
   return (
     <Shell active={ACTIVE_NAVIGATION[view]}>
+      <nav className="sourcing-mobile-navigation" aria-label="外发业务页面">
+        {canCreateOrder ? <a
+          className={mobileActiveView === "create" ? "is-active" : ""}
+          aria-current={mobileActiveView === "create" ? "page" : undefined}
+          href={pageUrl("ui/sourcing/create")}
+        >创建</a> : null}
+        <a
+          className={mobileActiveView === "pending" ? "is-active" : ""}
+          aria-current={mobileActiveView === "pending" ? "page" : undefined}
+          href={pageUrl("ui/sourcing/pending")}
+        >待审批</a>
+        <a
+          className={mobileActiveView === "history" ? "is-active" : ""}
+          aria-current={mobileActiveView === "history" ? "page" : undefined}
+          href={pageUrl("ui/sourcing/history")}
+        >历史</a>
+      </nav>
       {view === "create" ? <CreateOrderPage user={user} /> : null}
       {view === "pending" ? <OrderListPage mode="pending" user={user} /> : null}
       {view === "history" ? <OrderListPage mode="history" user={user} /> : null}
