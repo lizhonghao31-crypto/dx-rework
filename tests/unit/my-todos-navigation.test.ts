@@ -50,7 +50,7 @@ describe("my todos first-entry navigation", () => {
     );
     expect(page).not.toContain("<span>搜索待办</span>");
     expect(page).toContain('aria-label="搜索待办"');
-    expect(page).toContain("accessiblePlatformModules(session.user)");
+    expect(page).toContain("todoModuleIdsForUser(session.user)");
     expect(page).toContain("visibleTodoModules.map");
   });
 
