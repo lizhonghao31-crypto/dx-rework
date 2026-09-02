@@ -17,6 +17,7 @@ import { verifySession } from "./auth.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import { canAdjustActiveWorkforce, canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
 import { reportsArePersisted } from "./work-reporting-submission.js";
+import { alertInApp } from "./system-dialog.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
 import "./work-reporting-form.css";
 
@@ -402,7 +403,12 @@ export function WorkReportingForm({
   const assign = async (configurationItemId: string) => {
     if (!data || data.reworkStatus !== "pending_task_assignment" || busy) return;
     const memberIds = people.filter((person) => selected[person.personId]).map((person) => person.personId);
-    if (memberIds.length === 0) { setMessage("请至少选择一名返工人员。"); return; }
+    if (memberIds.length === 0) {
+      const issue = "请至少选择一名返工人员。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "人员分配暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     setBusy(true);
     try {
       const assigned = await mapWithConcurrency(memberIds, 3, (personId) => request(`rework-orders/${data.reworkOrderId}/work-tasks`, WorkTaskResponseSchema.parse, {
@@ -428,9 +434,19 @@ export function WorkReportingForm({
 
   const addActiveMembers = async () => {
     if (!data || data.reworkStatus !== "in_progress" || !canAdjustActive || busy) return;
-    if (!adjustmentConfigurationItemId) { setMessage("请选择要增加员工的工序。"); return; }
+    if (!adjustmentConfigurationItemId) {
+      const issue = "请选择要增加员工的工序。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "新增员工暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     const memberIds = filteredPeople.filter((person) => selected[person.personId]).map((person) => person.personId);
-    if (memberIds.length === 0) { setMessage("请至少选择一名新增员工。"); return; }
+    if (memberIds.length === 0) {
+      const issue = "请至少选择一名新增员工。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "新增员工暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     setBusy(true);
     try {
       const adjusted = await request(
@@ -499,7 +515,12 @@ export function WorkReportingForm({
     const remark = temporaryRemark.trim();
     const phoneNumber = temporaryPhoneNumber.trim().replace(/[\s-]/g, "");
     const identityNumber = temporaryIdentityNumber.trim().toUpperCase();
-    if (!displayName) { setMessage("请填写临时工姓名。"); return; }
+    if (!displayName) {
+      const issue = "请填写临时工姓名。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "临时工暂不能添加", confirmLabel: "知道了" });
+      return;
+    }
     setBusy(true);
     try {
       await request("master-data/temporary-workers", (value) => value as { personId: string }, {
@@ -533,6 +554,14 @@ export function WorkReportingForm({
 
   const confirmAssignments = async () => {
     if (!data || data.reworkStatus !== "pending_task_assignment" || busy) return;
+    const allAssigned = configItems.length > 0 && configItems.every((item) =>
+      data.tasks.some((task) => task.configurationItemId === item.configurationItemId));
+    if (!allAssigned) {
+      const issue = "请先为每道工序分配至少一名返工人员。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "返工暂不能开始", confirmLabel: "知道了" });
+      return;
+    }
     setBusy(true);
     try {
       const confirmed = await request(`rework-orders/${data.reworkOrderId}/work-tasks/confirm`, ReworkWorkTasksResponseSchema.parse, {
@@ -549,7 +578,12 @@ export function WorkReportingForm({
   const submitReports = async () => {
     if (!data || data.reworkStatus !== "in_progress" || !reportTasks || busy) return;
     const quantities = reportTasks.map((task) => ({ task, text: reportQuantities[task.workTaskId]?.trim() ?? "" }));
-    if (quantities.some(({ text }) => !/^\d+$/.test(text) || Number(text) <= 0)) { setMessage("请输入大于 0 的整数件数。"); return; }
+    if (quantities.some(({ text }) => !/^\d+$/.test(text) || Number(text) <= 0)) {
+      const issue = "请把每项实际完工件数填写为大于 0 的整数。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "返工报数暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     setBusy(true);
     setMessage(quantities.length > 1
       ? `正在批量提交 ${quantities.length} 项报数，请勿关闭页面或重复操作。`
@@ -697,8 +731,8 @@ export function WorkReportingForm({
         <div className="workforce-person-list">{filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName}</label>)}</div>
         {filteredPeople.length === 0 && <p>当前没有可选择的{peopleType === "internal" ? "正式工" : "临时工"}。</p>}
         {selectedPeopleCount === 0 && filteredPeople.length > 0 && <p>先选择至少一名返工人员，再分配到对应工序。</p>}
-        <div className="mobile-actions work-reporting-actions">{configItems.map((item) => <Button key={item.configurationItemId} onClick={() => void assign(item.configurationItemId)} disabled={busy || selectedPeopleCount === 0}>分配 {item.processName}</Button>)}</div>
-        <Button variant="primary" onClick={() => void confirmAssignments()} disabled={busy || !allProcessesAssigned}>{busy ? "处理中…" : "完成分配，开始返工"}</Button>
+        <div className="mobile-actions work-reporting-actions">{configItems.map((item) => <Button key={item.configurationItemId} onClick={() => void assign(item.configurationItemId)} data-ready={selectedPeopleCount > 0 ? "true" : "false"} disabled={busy}>分配 {item.processName}</Button>)}</div>
+        <Button variant="primary" data-ready={allProcessesAssigned ? "true" : "false"} onClick={() => void confirmAssignments()} disabled={busy}>{busy ? "处理中…" : "完成分配，开始返工"}</Button>
         {!allProcessesAssigned && configItems.length > 0 && <p>每道工序至少分配一名人员后才能开始返工。</p>}
       </Surface>}
     </>}
@@ -757,8 +791,8 @@ export function WorkReportingForm({
       {visibleTasks.length === 0 && <Surface>当前暂无需要本人处理的任务。</Surface>}
     </>}
     {removalTask && (assignmentWritable || activeAdjustmentWritable) && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="移除返工人员"><h2>移除返工人员</h2><p>确认从当前订单移除“{removalTask.members[0]?.displayName ?? "该人员"}”的“{removalTask.processName}”任务？</p><div className="mobile-actions work-reporting-actions"><Button onClick={() => setRemovalTask(null)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void confirmRemoval()} disabled={busy}>{busy ? "处理中…" : "确认移除"}</Button></div></div></Surface></div>}
-    {adjustmentDialogOpen && activeAdjustmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="新增返工员工"><h2>新增员工</h2><p>新增人员只加入当前订单，不修改默认人员名单。</p><div className="workforce-adjustment-processes" role="group" aria-label="选择工序">{configItems.map((item) => <Button key={item.configurationItemId} {...(adjustmentConfigurationItemId === item.configurationItemId ? { variant: "primary" as const } : {})} onClick={() => { setAdjustmentConfigurationItemId(item.configurationItemId); setSelected({}); }} disabled={busy}>{item.processName}</Button>)}</div><div className="workforce-type-tabs" role="tablist" aria-label="员工类别"><button type="button" role="tab" aria-selected={peopleType === "internal"} className={peopleType === "internal" ? "is-active" : ""} onClick={() => choosePeopleType("internal")} disabled={busy}>正式工</button><button type="button" role="tab" aria-selected={peopleType === "temporary"} className={peopleType === "temporary" ? "is-active" : ""} onClick={() => choosePeopleType("temporary")} disabled={busy}>临时工</button></div><InsetField label="搜索员工" type="search" value={peopleQuery} placeholder="输入姓名搜索" disabled={busy} onChange={(event) => setPeopleQuery(event.target.value)} /><div className="workforce-person-list">{filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName}</label>)}</div>{filteredPeople.length === 0 ? <p>当前工序没有其他可新增员工。</p> : null}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setAdjustmentDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void addActiveMembers()} disabled={busy || adjustmentSelectedCount === 0}>{busy ? "新增中…" : `确认新增（${adjustmentSelectedCount}）`}</Button></div></div></Surface></div>}
-    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" onClick={() => void createTemporaryWorker()} disabled={busy || !temporaryName.trim()}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
-    {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? "请输入您的实际整查件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}{busy && <p role="status">正在提交 {reportTasks.length} 项报数，请勿关闭页面或重复操作。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" onClick={() => void submitReports()} disabled={busy || !reportsReady}>{busy ? reportTasks.length > 1 ? `批量提交中（${reportTasks.length} 项）…` : "提交中…" : "确认"}</Button></div></div></Surface></div>}
+    {adjustmentDialogOpen && activeAdjustmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="新增返工员工"><h2>新增员工</h2><p>新增人员只加入当前订单，不修改默认人员名单。</p><div className="workforce-adjustment-processes" role="group" aria-label="选择工序">{configItems.map((item) => <Button key={item.configurationItemId} {...(adjustmentConfigurationItemId === item.configurationItemId ? { variant: "primary" as const } : {})} onClick={() => { setAdjustmentConfigurationItemId(item.configurationItemId); setSelected({}); }} disabled={busy}>{item.processName}</Button>)}</div><div className="workforce-type-tabs" role="tablist" aria-label="员工类别"><button type="button" role="tab" aria-selected={peopleType === "internal"} className={peopleType === "internal" ? "is-active" : ""} onClick={() => choosePeopleType("internal")} disabled={busy}>正式工</button><button type="button" role="tab" aria-selected={peopleType === "temporary"} className={peopleType === "temporary" ? "is-active" : ""} onClick={() => choosePeopleType("temporary")} disabled={busy}>临时工</button></div><InsetField label="搜索员工" type="search" value={peopleQuery} placeholder="输入姓名搜索" disabled={busy} onChange={(event) => setPeopleQuery(event.target.value)} /><div className="workforce-person-list">{filteredPeople.map((person) => <label className="process-source" key={person.personId}><input type="checkbox" checked={Boolean(selected[person.personId])} disabled={busy} onChange={(event) => setSelected((current) => ({ ...current, [person.personId]: event.target.checked }))} />{person.displayName}</label>)}</div>{filteredPeople.length === 0 ? <p>当前工序没有其他可新增员工。</p> : null}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setAdjustmentDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" data-ready={adjustmentSelectedCount > 0 ? "true" : "false"} onClick={() => void addActiveMembers()} disabled={busy}>{busy ? "新增中…" : `确认新增（${adjustmentSelectedCount}）`}</Button></div></div></Surface></div>}
+    {temporaryDialogOpen && assignmentWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="添加临时工"><h2>添加临时工</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="区分备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions work-reporting-actions"><Button onClick={() => setTemporaryDialogOpen(false)} disabled={busy}>取消</Button><Button variant="primary" data-ready={temporaryName.trim() ? "true" : "false"} onClick={() => void createTemporaryWorker()} disabled={busy}>{busy ? "添加中…" : "添加临时工"}</Button></div></div></Surface></div>}
+    {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? "请输入您的实际整查件数" : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <InsetField key={task.workTaskId} label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} />)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}{busy && <p role="status">正在提交 {reportTasks.length} 项报数，请勿关闭页面或重复操作。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" data-ready={reportsReady ? "true" : "false"} onClick={() => void submitReports()} disabled={busy}>{busy ? reportTasks.length > 1 ? `批量提交中（${reportTasks.length} 项）…` : "提交中…" : "确认"}</Button></div></div></Surface></div>}
   </div>;
 }
