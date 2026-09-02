@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { todoPageWindow } from "./todo-pagination.js";
-import "./list-pagination.css";
+import "./my-todos.css";
 
 export const LIST_PAGE_SIZE = 15;
 
 export const listPageWindow = todoPageWindow;
+
+export function cursorPageWindow(page: number, canGoPrevious: boolean, canGoNext: boolean): number[] {
+  const currentPage = Math.max(1, Math.floor(page));
+  return [
+    ...(canGoPrevious && currentPage > 1 ? [currentPage - 1] : []),
+    currentPage,
+    ...(canGoNext ? [currentPage + 1] : []),
+  ];
+}
 
 export function usePaginatedItems<T>(items: readonly T[], resetKey: string, pageSize = LIST_PAGE_SIZE) {
   const [page, setPage] = useState(1);
@@ -23,6 +32,36 @@ export function usePaginatedItems<T>(items: readonly T[], resetKey: string, page
   return { items: visibleItems, page: currentPage, totalPages, setPage } as const;
 }
 
+type PaginationItem =
+  | Readonly<{
+      kind: "page";
+      page: number;
+      active: boolean;
+      disabled: boolean;
+      onClick: () => void;
+    }>
+  | Readonly<{
+      kind: "ellipsis";
+      key: "start-ellipsis" | "end-ellipsis";
+    }>;
+
+function PaginationNav({ items, ariaLabel }: Readonly<{ items: readonly PaginationItem[]; ariaLabel: string }>) {
+  return (
+    <nav className="my-todos-pagination" aria-label={ariaLabel}>
+      {items.map((item) => item.kind === "ellipsis"
+        ? <span className="my-todos-pagination__ellipsis" aria-hidden="true" key={item.key}>…</span>
+        : <button
+            type="button"
+            className={item.active ? "is-active" : ""}
+            aria-current={item.active ? "page" : undefined}
+            disabled={item.disabled}
+            onClick={item.onClick}
+            key={item.page}
+          >{item.page}</button>)}
+    </nav>
+  );
+}
+
 type ListPaginationProps = Readonly<{
   page: number;
   totalPages: number;
@@ -34,21 +73,27 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel }: Li
   const pageCount = Math.max(1, Math.floor(totalPages));
   const currentPage = Math.min(pageCount, Math.max(1, Math.floor(page)));
   const pages = listPageWindow(currentPage, pageCount);
-  return (
-    <nav className="list-pagination" aria-label={ariaLabel}>
-      {pages[0] !== 1 && <><button type="button" onClick={() => onPageChange(1)}>1</button><span>…</span></>}
-      {pages.map((item) => (
-        <button
-          type="button"
-          className={item === currentPage ? "is-active" : undefined}
-          aria-current={item === currentPage ? "page" : undefined}
-          onClick={() => onPageChange(item)}
-          key={item}
-        >{item}</button>
-      ))}
-      {pages[pages.length - 1] !== pageCount && <><span>…</span><button type="button" onClick={() => onPageChange(pageCount)}>{pageCount}</button></>}
-    </nav>
-  );
+  const items: PaginationItem[] = [];
+
+  if (pages[0] > 1) {
+    items.push({ kind: "page", page: 1, active: currentPage === 1, disabled: false, onClick: () => onPageChange(1) });
+  }
+  if (pages[0] > 2) items.push({ kind: "ellipsis", key: "start-ellipsis" });
+  for (const pageNumber of pages) {
+    items.push({
+      kind: "page",
+      page: pageNumber,
+      active: pageNumber === currentPage,
+      disabled: false,
+      onClick: () => onPageChange(pageNumber),
+    });
+  }
+  if (pages[pages.length - 1] < pageCount - 1) items.push({ kind: "ellipsis", key: "end-ellipsis" });
+  if (pages[pages.length - 1] < pageCount) {
+    items.push({ kind: "page", page: pageCount, active: currentPage === pageCount, disabled: false, onClick: () => onPageChange(pageCount) });
+  }
+
+  return <PaginationNav items={items} ariaLabel={ariaLabel} />;
 }
 
 type CursorListPaginationProps = Readonly<{
@@ -62,11 +107,18 @@ type CursorListPaginationProps = Readonly<{
 }>;
 
 export function CursorListPagination({ page, canGoPrevious, canGoNext, onPrevious, onNext, ariaLabel, busy = false }: CursorListPaginationProps) {
-  return (
-    <nav className="list-pagination" aria-label={ariaLabel}>
-      <button type="button" aria-label="上一页" disabled={busy || !canGoPrevious} onClick={onPrevious}>‹</button>
-      <button type="button" className="is-active" aria-current="page" disabled>{page}</button>
-      <button type="button" aria-label="下一页" disabled={busy || !canGoNext} onClick={onNext}>›</button>
-    </nav>
-  );
+  const currentPage = Math.max(1, Math.floor(page));
+  const items: PaginationItem[] = cursorPageWindow(currentPage, canGoPrevious, canGoNext).map((pageNumber): PaginationItem => ({
+    kind: "page",
+    page: pageNumber,
+    active: pageNumber === currentPage,
+    disabled: busy,
+    onClick: pageNumber < currentPage
+      ? onPrevious
+      : pageNumber > currentPage
+        ? onNext
+        : () => undefined,
+  }));
+
+  return <PaginationNav items={items} ariaLabel={ariaLabel} />;
 }

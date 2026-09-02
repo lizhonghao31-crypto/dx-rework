@@ -19,9 +19,9 @@ describe("master-data process catalog pagination", () => {
     expect(source).toContain('setProcessPageLoading(false);\n      setBusy("");');
   });
 
-  it("uses the shared compact pager on desktop and mobile", async () => {
+  it("uses the My Todos pager on desktop and mobile", async () => {
     const page = await read("apps/web/src/master-data-page.tsx");
-    const styles = await read("apps/web/src/list-pagination.css");
+    const styles = await read("apps/web/src/my-todos.css");
 
     expect(page).toContain("<CursorListPagination");
     expect(styles).toContain("width: 34px");
