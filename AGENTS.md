@@ -6,9 +6,10 @@
 
 1. GitHub `main` 是唯一代码 Golden Source。
 2. 业务规则以 `docs/requirements/startup-requirements-v1.2.md` 为当前确认基线。
-3. Figma「达兴企业 UI 基础库 · Pilot」是 UI 变量与通用组件的设计 Golden Source。
-4. Figma「内部计件返工系统 · Product」是页面布局与交互验收载体。
-5. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
+3. 样衣模块以 `docs/requirements/sample-system-migration-v1.0.md` 为一期业务、权限、数据、UI、迁移与验收 Golden Source。
+4. Figma「达兴企业 UI 基础库 · Pilot」是 UI 变量与通用组件的设计 Golden Source。
+5. Figma「内部计件返工系统 · Product」是页面布局与交互验收载体。
+6. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
 
 ## 2. 每次施工前的强制预检
 
@@ -151,6 +152,8 @@ PR 描述必须包含：
 ## 12. ChatGPT + Codex 固定施工流程（P0）
 
 详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；平台与报价选厂的已确认决定和当前进度见 `docs/roadmap/platform-sourcing-roadmap-v1.0.md`。任何新聊天窗口、新 Codex 任务或直接施工开始前必须先读取这两个文件。
+
+涉及样衣模块的任何讨论、设计、编码、测试、PR 或迁移操作，必须在范围预检前完整读取 `docs/requirements/sample-system-migration-v1.0.md`。未读取不得开工；发现聊天内容、旧系统实现或旧文档与该规则冲突时，以该规则为准并报告冲突。身份、权限、数据源、金额口径、状态闭环或上线门槛的变更，必须先更新该规则并获得业务负责人明确批准。
 
 以下规则为默认强制流程：
 
