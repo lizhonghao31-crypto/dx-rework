@@ -22,7 +22,8 @@ describe("N01 image and wage integrity", () => {
     expect(castRepairMigration).toContain("guard_rework_submission_requires_image");
     expect(castRepairMigration).toContain("attachment.entity_id=NEW.rework_order_id::text");
     expect(form).toContain('accept="image/*"');
-    expect(form).toContain("availableImageCount > 0");
+    expect(form).toContain("availableImageCount <= 0");
+    expect(form).toContain("请至少上传 1 张返工报告图片。");
   });
 
   it("uses the N07 completion coefficient everywhere a temporary wage coefficient is displayed", async () => {

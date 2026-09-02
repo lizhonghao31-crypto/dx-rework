@@ -35,7 +35,7 @@ import {
   type PendingSubmitAttempt,
 } from "./rework-submission.js";
 import { SearchSelect } from "./search-select.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
 import "./rework-v2-form.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -353,13 +353,18 @@ export function ReworkInitiationV2Form({
   const availableImageCount = reworkOrderId
     ? order?.attachmentIds.length ?? existingAttachmentCount
     : images.length;
-  const complete = Boolean(
-    form.styleNo.trim()
-    && form.factory
-    && form.merchandiserUserId
-    && (!form.tailInspectionRequired || form.tailInspectionCostBearer)
-    && availableImageCount > 0,
-  );
+  const submissionIssue = !form.styleNo.trim()
+    ? "请填写款号。"
+    : !form.factory
+      ? "请选择加工厂。"
+      : !form.merchandiserUserId
+        ? "请选择订单跟单。"
+        : form.tailInspectionRequired && !form.tailInspectionCostBearer
+          ? "请选择整查费用承担方。"
+          : availableImageCount <= 0
+            ? "请至少上传 1 张返工报告图片。"
+            : null;
+  const complete = submissionIssue === null;
 
   const coreFactory = (): CreateReworkDraft["processingFactory"] => {
     if (form.factory === "own_factory") return { type: "own_factory" };
@@ -494,7 +499,12 @@ export function ReworkInitiationV2Form({
   };
 
   const submit = async (): Promise<void> => {
-    if (busy || uploading || !complete) return;
+    if (busy || uploading) return;
+    if (submissionIssue) {
+      setMessage(submissionIssue);
+      await alertInApp(submissionIssue, { title: "返工单暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     if (!(await confirmInApp("确认提交返工单？"))) return;
     setBusy(true);
     setMessage("正在提交返工…");
@@ -739,7 +749,7 @@ export function ReworkInitiationV2Form({
         <Button
           type="button"
           variant="primary"
-          disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)}
+          disabled={busy || uploading || (Boolean(reworkOrderId) && !order)}
           onClick={() => void submit()}
         >提交返工</Button>
       </div>

@@ -13,7 +13,7 @@ import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { verifySession } from "./auth.js";
 import { SearchSelect } from "./search-select.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const responsibilityTypes: ReadonlyArray<{
@@ -173,6 +173,29 @@ const processValid = (process: ProcessForm): boolean => {
     return !isExternal(allocation.responsibilityType) || (multiplier >= 1200n && allocation.supplierId.length > 0);
   });
 };
+const processValidationIssue = (process: ProcessForm): string | null => {
+  if (process.allocations.length === 0) return `工序“${process.processName}”至少需要一名责任方。`;
+  if (new Set(process.allocations.map((allocation) => allocation.responsibilityType)).size !== process.allocations.length) {
+    return `工序“${process.processName}”不能重复选择同一种责任方。`;
+  }
+  const total = shareTotalBps(process.allocations);
+  if (total === null) return `工序“${process.processName}”的承担比例格式不正确。`;
+  if (total !== 10000n) return `工序“${process.processName}”的承担比例合计必须为 100%，当前为 ${Number(total) / 100}%。`;
+  for (const allocation of process.allocations) {
+    const responsibility = typeMeta(allocation.responsibilityType).label;
+    const share = parsePercentToBps(allocation.sharePercent);
+    if (share === null || share === 0n) return `工序“${process.processName}”的“${responsibility}”承担比例必须大于 0。`;
+    const multiplier = multiplierScaled(allocation.multiplier);
+    if (multiplier === null || multiplier < 1000n) return `工序“${process.processName}”的“${responsibility}”扣款倍率格式不正确。`;
+    if (isExternal(allocation.responsibilityType) && multiplier < 1200n) {
+      return `工序“${process.processName}”的“${responsibility}”扣款倍率不能低于 1.2。`;
+    }
+    if (isExternal(allocation.responsibilityType) && !allocation.supplierId) {
+      return `工序“${process.processName}”的“${responsibility}”必须选择具体供应商。`;
+    }
+  }
+  return null;
+};
 
 export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false }: { reworkOrderId: string | null; onOrderChanged?: () => void; embedded?: boolean }) {
   const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(null);
@@ -286,6 +309,14 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     [processes, response, tailCostBearer],
   );
   const handlerUserId = response?.handlerUserId ?? currentUserId;
+  const invalidProcessIssue = processes.map(processValidationIssue).find((issue) => issue !== null) ?? null;
+  const submissionIssue = !handlerUserId
+    ? "无法确认当前责任处理人，请刷新页面后重试。"
+    : !tailBearerValid
+      ? "请先选择整查费用承担方。"
+      : processes.length === 0
+        ? "当前没有可提交的返工工序。"
+        : invalidProcessIssue;
   const tailSource = response?.sourceProcesses.find((source) => source.executionKind === "tail_inspection");
   const workerProcessIds = processes.filter((process) => process.executionKind === "worker").map((process) => process.configurationItemId);
   const allWorkerProcessesSelected = workerProcessIds.length > 0 && workerProcessIds.every((id) => selectedProcessIds.includes(id));
@@ -395,7 +426,12 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     }
   };
   const submit = async (): Promise<void> => {
-    if (!response || !editable || !allProcessesValid || !handlerUserId || busyAction) return;
+    if (!response || !editable || busyAction) return;
+    if (submissionIssue) {
+      setMessage(submissionIssue);
+      await alertInApp(submissionIssue, { title: "责任判定暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     const includesOwnFactory = processes.some((process) => process.allocations.some((allocation) => allocation.responsibilityType === "own_factory"));
     if (!(await confirmInApp(includesOwnFactory
       ? "提交责任判定并进入老板确认？提交后将锁定责任比例、供应商和外部扣款倍率。"
@@ -595,7 +631,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       <Button disabled={Boolean(busyAction)} onClick={() => void takeover()}>{busyAction === "takeover" ? "接管中…" : "接管责任处理"}</Button>
     </div>}
     {editable && <div className="responsibility-actions">
-      <Button variant="primary" onClick={() => void submit()} disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}>{busyAction === "submit" ? "提交中…" : "提交责任判定"}</Button>
+      <Button variant="primary" data-ready={allProcessesValid && Boolean(handlerUserId) ? "true" : "false"} onClick={() => void submit()} disabled={Boolean(busyAction)}>{busyAction === "submit" ? "提交中…" : "提交责任判定"}</Button>
     </div>}
     {ownerSigning && response?.canOwnerSign && <div className="responsibility-actions responsibility-actions--owner">
       <Button variant="primary" disabled={Boolean(busyAction)} onClick={() => void ownerDecision("approve")}>{busyAction === "owner-approve" ? "确认中…" : "确认同意并完成返工"}</Button>
