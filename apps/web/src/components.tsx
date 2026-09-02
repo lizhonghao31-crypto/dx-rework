@@ -511,6 +511,9 @@ export function Shell({
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
+  const mobileActive = sourcingNavigation.some((entry) => entry.name === active)
+    ? "外发定价&选厂"
+    : activeEntry?.name ?? active;
 
   return (
     <div className="app-shell">
@@ -547,7 +550,7 @@ export function Shell({
       {mobileNavigation === "primary" ? (
         <MobilePrimaryNavigation
           navigation={navigation}
-          active={activeEntry?.name ?? active}
+          active={mobileActive}
           basePath={basePath}
           hasNewTodos={hasNewTodos}
           onOpenTodos={acknowledgeNewTodos}
