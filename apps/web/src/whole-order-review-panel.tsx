@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
-import { confirmInApp, promptInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
@@ -269,7 +269,15 @@ export function WholeOrderReviewPanel({
   };
 
   const confirmQuantities = async () => {
-    if (!data) return;
+    if (!data || busy) return;
+    if (!allComplete) {
+      const issue = data.tailInspectionRequired
+        ? "请先补齐有效报数并处理工序超数。"
+        : "请等待全部返工报数完成。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "数量暂不能提交 IE", confirmLabel: "知道了" });
+      return;
+    }
     const prices = data.processes.map((process) => ({
       process,
       text: priceInputs[process.configurationItemId]?.trim() ?? "",
@@ -277,7 +285,9 @@ export function WholeOrderReviewPanel({
     if (prices.some((row) => !/^\d+(?:\.\d{1,3})?$/.test(row.text)
       || Number(row.text) <= 0
       || Number(row.text) > 99_999_999_999.999)) {
-      setMessage("最终单价必须大于 0，最多三位小数。");
+      const issue = "最终单价必须大于 0，最多三位小数。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "数量暂不能提交 IE", confirmLabel: "知道了" });
       return;
     }
     const coefficients = data.temporaryWorkers.map((worker) => {
@@ -285,11 +295,15 @@ export function WholeOrderReviewPanel({
       return { worker, text: multipliers[id]?.trim() ?? "", reason: multiplierReasons[id]?.trim() ?? "" };
     });
     if (coefficients.some((row) => !/^\d+(?:\.\d{1,3})?$/.test(row.text) || Number(row.text) <= 0 || Number(row.text) > 10)) {
-      setMessage("临时工实发系数必须大于 0 且不超过 10，最多三位小数。");
+      const issue = "临时工实发系数必须大于 0 且不超过 10，最多三位小数。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "数量暂不能提交 IE", confirmLabel: "知道了" });
       return;
     }
     if (coefficients.some((row) => Number(row.text) !== 1 && !row.reason)) {
-      setMessage("临时工实发系数不是 1.0 时，必须填写调整原因。");
+      const issue = "临时工实发系数不是 1.0 时，必须填写调整原因。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "数量暂不能提交 IE", confirmLabel: "知道了" });
       return;
     }
     if (!(await confirmInApp(data.tailInspectionRequired
@@ -321,7 +335,17 @@ export function WholeOrderReviewPanel({
   };
 
   const reviewQuantities = async (decision: "approved" | "rejected") => {
-    if (!data) return;
+    if (!data || busy) return;
+    if (changedPriceIds.length > 0 && !priceReviewReady) {
+      const undecidedNames = data.processes
+        .filter((process) => changedPriceIds.includes(process.configurationItemId)
+          && !priceReviewDecisions[process.configurationItemId])
+        .map((process) => process.processName);
+      const issue = `请先对调价工序${undecidedNames.length ? `“${undecidedNames.join("、")}”` : ""}逐项选择同意或驳回。`;
+      setMessage(issue);
+      await alertInApp(issue, { title: "IE 复核暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     const rejectedProcesses = data.processes
       .filter((process) => priceReviewDecisions[process.configurationItemId] === "rejected")
       .map((process) => process.processName);
@@ -674,7 +698,7 @@ export function WholeOrderReviewPanel({
           <h2>提交 IE 复核</h2>
           <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : "本单无需整查；工人有效数量与价格提案一并交 IE 复核。"}</p>
         </div>
-        <Button variant="primary" onClick={() => void confirmQuantities()} disabled={busy || !ready}>
+        <Button variant="primary" data-ready={ready ? "true" : "false"} onClick={() => void confirmQuantities()} disabled={busy}>
           {busy ? "提交中…" : data.tailInspectionRequired ? "确认数量并提交 IE" : "确认数量并提交 IE"}
         </Button>
       </div>
@@ -691,7 +715,8 @@ export function WholeOrderReviewPanel({
           {changedPriceIds.length > 0 ? <Button
             variant="primary"
             onClick={() => void reviewQuantities(anyPriceRejected ? "rejected" : "approved")}
-            disabled={busy || !priceReviewReady}
+            data-ready={priceReviewReady ? "true" : "false"}
+            disabled={busy}
           >提交复核结果</Button> : <>
             <Button onClick={() => void reviewQuantities("rejected")} disabled={busy}>退回</Button>
             <Button variant="primary" onClick={() => void reviewQuantities("approved")} disabled={busy}>通过</Button>
