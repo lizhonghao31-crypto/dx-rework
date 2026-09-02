@@ -7,7 +7,6 @@ import {
   accessModuleLabelsForCapabilities,
   employeeHasAccessModule,
   todoModuleIdsForUser,
-  todoModuleIdsForUser,
 } from "../../apps/web/src/platform-access.js";
 
 describe("platform permission and desktop navigation hub", () => {
@@ -29,18 +28,6 @@ describe("platform permission and desktop navigation hub", () => {
     expect(employeeHasAccessModule(["owner_group"], [], "sourcing")).toBe(true);
     expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
     expect(employeeHasAccessModule(["tail_inspector"], [], "rework")).toBe(true);
-    expect(todoModuleIdsForUser({
-      businessRoles: ["warehouse_receiver"],
-      capabilities: ["receiving:create", "todo:view"],
-    })).toEqual([]);
-    expect(todoModuleIdsForUser({
-      businessRoles: ["system_admin"],
-      capabilities: ["admin:read", "todo:view"],
-    })).toEqual([]);
-    expect(todoModuleIdsForUser({
-      businessRoles: ["order_merchandiser"],
-      capabilities: ["quantity:confirm", "sourcing:view", "todo:view"],
-    })).toEqual(["rework", "sourcing"]);
     expect(todoModuleIdsForUser({
       businessRoles: ["warehouse_receiver"],
       capabilities: ["receiving:create", "todo:view"],
