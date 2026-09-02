@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
 import "./tail-inspection-panel.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -83,12 +83,16 @@ export function TailInspectionPanel({
     if (!data || busy) return;
     const assignment = data.assignments.find((item) => item.canSubmit);
     if (!assignment) {
-      setMessage("当前没有可提交的整查任务。 ");
+      const issue = "当前没有可提交的整查任务。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "整查数量暂不能提交", confirmLabel: "知道了" });
       return;
     }
     const returned = returnedQuantity.trim();
     if (!/^\d+$/.test(returned) || Number(returned) <= 0) {
-      setMessage("返件总数必须填写为大于 0 的整数件数。 ");
+      const issue = "返件总数必须填写为大于 0 的整数件数。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "整查数量暂不能提交", confirmLabel: "知道了" });
       return;
     }
     const items = data.processes.map((process) => ({
@@ -97,11 +101,15 @@ export function TailInspectionPanel({
       processName: process.processName,
     }));
     if (items.some((item) => !Number.isInteger(item.inspectedQuantity) || item.inspectedQuantity < 0)) {
-      setMessage("每道工序都必须填写整数件数；没有该工序返件时请填 0。 ");
+      const issue = "每道工序都必须填写整数件数；没有该工序返件时请填 0。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "整查数量暂不能提交", confirmLabel: "知道了" });
       return;
     }
     if (items.some((item) => item.inspectedQuantity > Number(returned))) {
-      setMessage("单道工序的清点数量不能超过本次返件总数。 ");
+      const issue = "单道工序的清点数量不能超过本次返件总数。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "整查数量暂不能提交", confirmLabel: "知道了" });
       return;
     }
     const confirmation = isRoot
@@ -193,7 +201,7 @@ export function TailInspectionPanel({
         </div>)}
       </div>
       <div className="mobile-actions tail-inspection-actions">
-        <Button variant="primary" disabled={busy || !tailSubmitReady} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "代报整查数量" : "提交整查报数"}</Button>
+        <Button variant="primary" data-ready={tailSubmitReady ? "true" : "false"} disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : isRoot ? "代报整查数量" : "提交整查报数"}</Button>
       </div>
       {tailReadinessMessage && <p className="tail-inspection-readiness" role="status">{tailReadinessMessage}</p>}
     </Surface>}
