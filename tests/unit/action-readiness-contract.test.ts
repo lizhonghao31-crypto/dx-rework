@@ -29,37 +29,49 @@ describe("business action readiness contract", () => {
     expect(responsibility).toContain('const needsSave = determination === null || determination.stage === "finalized" || hasUnsavedChanges');
   });
 
-  it("gates N02 save, submit and IE rejection with deterministic prerequisites", async () => {
-    const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
-    expect(source).toContain("const itemIssue = validateItems(items);");
-    expect(source).toContain("const workerIssue = items.findIndex");
-    expect(source).toContain("const submitReady = saveReady;");
-    expect(source).toContain('disabled={busy || !saveReady}');
-    expect(source).toContain('disabled={busy || !submitReady}');
-    expect(source).toContain('还需完成：{readinessIssues.join("；")}');
-    expect(source.indexOf('className="process-worker-actions"')).toBeLessThan(
-      source.indexOf('readinessIssues.length ? <p role="status">'),
-    );
-    expect(source).toContain('disabled={busy || !reviewReason.trim()}');
+  it("keeps N02 save, submit and IE rejection clickable with explicit feedback", async () => {
+    const [source, legacy] = await Promise.all([
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
+      readFile("apps/web/src/legacy-process-configuration-form.tsx", "utf8"),
+    ]);
+    for (const page of [source, legacy]) {
+      expect(page).toContain("alertInApp");
+      expect(page).toContain("data-ready=");
+    }
+    expect(source).toContain("const configurationIssue =");
+    expect(source).toContain('title: "工序与人员暂不能提交"');
+    expect(source).toContain('disabled={busy || assignmentOptionsLoading}');
+    expect(source).not.toContain('disabled={busy || !submitReady}');
+    expect(source).toContain('title: "核价暂不能驳回"');
+    expect(legacy).toContain('title: "工序配置暂不能提交"');
+    expect(legacy).toContain('disabled={busy}>{busy ? "提交中…"');
+    expect(legacy).not.toContain('disabled={busy || !submitReady}');
+    expect(legacy).toContain('title: "审核暂不能驳回"');
   });
 
-  it("keeps historical assignment gated and N04 reporting ready before the user can trigger a no-op", async () => {
+  it("keeps historical assignment and N04 reporting clickable with explicit feedback", async () => {
     const source = await readFile("apps/web/src/work-reporting-form.tsx", "utf8");
-    expect(source).toContain("const selectedPeopleCount =");
-    expect(source).toContain('disabled={busy || selectedPeopleCount === 0}');
-    expect(source).toContain("const reportsReady = Boolean(");
-    expect(source).toContain('disabled={busy || !reportsReady}');
+    expect(source).toContain('title: "人员分配暂不能提交"');
+    expect(source).toContain('title: "返工暂不能开始"');
+    expect(source).toContain('title: "新增员工暂不能提交"');
+    expect(source).toContain('title: "临时工暂不能添加"');
+    expect(source).toContain('title: "返工报数暂不能提交"');
+    expect(source).toContain('data-ready={reportsReady ? "true" : "false"}');
+    expect(source).toContain('onClick={() => void submitReports()} disabled={busy}');
+    expect(source).not.toContain('disabled={busy || !reportsReady}');
   });
 
-  it("gates the N05 final action below deterministic readiness text", async () => {
+  it("keeps N05 and IE price review clickable with explicit feedback", async () => {
     const wholeOrder = await readFile("apps/web/src/whole-order-review-panel.tsx", "utf8");
     expect(wholeOrder).toContain("const coefficientIssue =");
     expect(wholeOrder).toContain("const ready = allComplete && !priceIssue && !coefficientIssue;");
-    expect(wholeOrder).not.toContain("finalQuantities");
-    expect(wholeOrder).toContain('disabled={busy || !ready}');
-    expect(wholeOrder.indexOf('disabled={busy || !ready}')).toBeLessThan(
-      wholeOrder.indexOf('{!ready && <p role="status">'),
-    );
+    expect(wholeOrder).toContain('title: "数量暂不能提交 IE"');
+    expect(wholeOrder).toContain('title: "IE 复核暂不能提交"');
+    expect(wholeOrder).toContain('data-ready={ready ? "true" : "false"}');
+    expect(wholeOrder).toContain('onClick={() => void confirmQuantities()} disabled={busy}');
+    expect(wholeOrder).not.toContain('disabled={busy || !ready}');
+    expect(wholeOrder).toContain('data-ready={priceReviewReady ? "true" : "false"}');
+    expect(wholeOrder).not.toContain('disabled={busy || !priceReviewReady}');
   });
 
   it("requires a rejection reason before the N09 own-factory rejection action is enabled", async () => {

@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { SearchSelect } from "./search-select.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
 import "./process-configuration-form.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -129,6 +129,11 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
   const saveReady = editable && itemValidationError === null;
   const submitReadinessIssues = [...(itemValidationError ? [itemValidationError.replace(/。$/, "")] : []), ...(tailInspectors.length === 0 ? ["至少分配 1 名整查"] : [])];
   const submitReady = editable && submitReadinessIssues.length === 0;
+  const configurationIssue = !editable
+    ? "当前节点不能修改工序配置。"
+    : submitReadinessIssues.length > 0
+      ? `还需完成：${submitReadinessIssues.join("；")}。`
+      : null;
 
   const reload = async () => {
     if (!reworkOrderId) return;
@@ -175,13 +180,24 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
     delete pendingMutationKeys.current[signature]; setResponse(saved); setItems(saved.configuration?.items.map(toItem) ?? [emptyItem()]); return saved;
   };
   const save = async () => {
-    if (!response || !editable || busy || !validateCurrentForm()) return;
+    if (busy) return;
+    if (!response || !saveReady) {
+      const issue = !response ? "工序配置尚未加载完成。" : itemValidationError ?? configurationIssue ?? "当前工序配置暂不能保存。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "工序配置暂不能保存", confirmLabel: "知道了" });
+      return;
+    }
     setBusy(true); try { await persistCurrentDraft(); setMessage("工序配置草稿已保存；可继续修改，或直接提交 IE 审核。"); }
     catch (error: unknown) { setMessage(error instanceof Error ? error.message : "草稿保存失败"); } finally { setBusy(false); }
   };
   const submit = async () => {
-    if (!response || !editable || busy || !validateCurrentForm()) return;
-    if (tailInspectors.length === 0) { setMessage("请至少分配一名整查人员。整查会在提交后立即收到待办。 "); return; }
+    if (busy) return;
+    if (!response || !submitReady) {
+      const issue = !response ? "工序配置尚未加载完成。" : configurationIssue ?? "当前工序配置暂不能提交。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "工序配置暂不能提交", confirmLabel: "知道了" });
+      return;
+    }
     if (!(await confirmInApp("确认提交当前工序与候选单价给 IE 核价，并立即分配整查？"))) return;
     setBusy(true);
     try {
@@ -200,7 +216,12 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
   };
   const review = async (decision: "approved" | "rejected") => {
     if (!response || !configuration || !reviewable || busy) return;
-    if (decision === "rejected" && !reviewReason.trim()) { setMessage("IE 驳回必须填写原因。"); return; }
+    if (decision === "rejected" && !reviewReason.trim()) {
+      const issue = "IE 驳回必须填写原因。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "审核暂不能驳回", confirmLabel: "知道了" });
+      return;
+    }
     if (!(await confirmInApp(decision === "approved" ? "确认审核通过并使工序生效？" : "确认驳回并退回尾部主管修改？"))) return;
     setBusy(true);
     const path = "rework-orders/" + response.reworkOrderId + "/process-configuration/review";
@@ -231,11 +252,11 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
       <section className="process-tail-inspectors" aria-labelledby="tail-inspector-heading"><div className="section-title"><div><h2 id="tail-inspector-heading">分配整查</h2><p>提交后整查即可开始清点；可多人清点，结果自动汇总。</p></div><StatusBadge tone={tailInspectors.length ? "success" : "warning"}>{tailInspectors.length ? `已分配 ${tailInspectors.length} 人` : "至少 1 人"}</StatusBadge></div>
         <div className="process-tail-inspector-list">{tailInspectionOptions.inspectors.map((inspector) => { const selectedInspector = tailInspectors.find((item) => item.userId === inspector.userId); return <div className="process-tail-inspector" key={inspector.userId}><label className="process-source"><input type="checkbox" checked={Boolean(selectedInspector)} disabled={busy} onChange={(event) => setTailInspectors((current) => event.target.checked ? [...current, { userId: inspector.userId, boxScope: "" }] : current.filter((item) => item.userId !== inspector.userId))} />{inspector.displayName}</label>{selectedInspector ? <InsetField label="清点箱数 / 范围（可选）" value={selectedInspector.boxScope} maxLength={200} disabled={busy} placeholder="例如：3 箱、A1–A3" onChange={(event) => setTailInspectors((current) => current.map((item) => item.userId === inspector.userId ? { ...item, boxScope: event.target.value } : item))} /> : null}</div>; })}{tailInspectionOptions.inspectors.length === 0 ? <p>当前没有可分配的整查人员；请先在员工权限管理为相关人员授予“整查”角色。</p> : null}</div>
       </section>
-      <div className="mobile-actions process-configuration-actions"><Button onClick={() => void save()} disabled={busy || !saveReady}>{busy ? "处理中…" : "保存配置草稿"}</Button><Button variant="primary" onClick={() => void submit()} disabled={busy || !submitReady}>{busy ? "提交中…" : "提交 IE 审核"}</Button></div>
+      <div className="mobile-actions process-configuration-actions"><Button data-ready={saveReady ? "true" : "false"} onClick={() => void save()} disabled={busy}>{busy ? "处理中…" : "保存配置草稿"}</Button><Button variant="primary" data-ready={submitReady ? "true" : "false"} onClick={() => void submit()} disabled={busy}>{busy ? "提交中…" : "提交 IE 审核"}</Button></div>
       {!submitReady && submitReadinessIssues.length > 0 && <p className="process-readiness" role="status">还需完成：{submitReadinessIssues.join("；")}</p>}
     </Surface>}
     {!editable && configuration && <Surface><h2>本次工序配置</h2><div className="process-readonly-list">{configuration.items.map((item) => <div key={item.configurationItemId}><b>{item.processName}</b><small>{item.source === "custom" ? "自定义工序" : "公共工序"} · {item.unitPrice === null ? "—" : formatBusinessCurrency(item.unitPrice)} / 件</small></div>)}</div></Surface>}
     {canReview && response?.reworkStatus === "pending_ie_review" && reviewSeparationBlocked && <Surface className="ie-review"><div className="section-title"><h2>IE 审核</h2><StatusBadge tone="warning">需其他 IE 审核</StatusBadge></div><p>当前账号参与了本单发起或工序配置，不能自审；请由另一名 IE 完成审核。</p></Surface>}
-    {reviewable && <Surface className="ie-review"><h2>IE 审核</h2><p>确认每道工序的候选单价。通过后配置生效；驳回必须填写原因。</p><InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" /><div className="qc-secondary-actions"><Button onClick={() => void review("rejected")} disabled={busy || !reviewReason.trim()}>驳回修改</Button><Button variant="primary" onClick={() => void review("approved")} disabled={busy}>审核通过并生效</Button></div></Surface>}
+    {reviewable && <Surface className="ie-review"><h2>IE 审核</h2><p>确认每道工序的候选单价。通过后配置生效；驳回必须填写原因。</p><InsetField label="审核意见 / 驳回原因" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} disabled={busy} placeholder="通过时可选；驳回时必填" /><div className="qc-secondary-actions"><Button data-ready={reviewReason.trim() ? "true" : "false"} onClick={() => void review("rejected")} disabled={busy}>驳回修改</Button><Button variant="primary" onClick={() => void review("approved")} disabled={busy}>审核通过并生效</Button></div></Surface>}
   </div>;
 }
