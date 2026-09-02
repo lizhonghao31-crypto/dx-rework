@@ -25,7 +25,14 @@ type PromptRequest = Readonly<{
   resolve: (value: string | null) => void;
 }>;
 
-type DialogRequest = ConfirmRequest | PromptRequest;
+type AlertRequest = Readonly<{
+  kind: "alert";
+  message: string;
+  options: DialogOptions;
+  resolve: () => void;
+}>;
+
+type DialogRequest = ConfirmRequest | PromptRequest | AlertRequest;
 
 const queue: DialogRequest[] = [];
 let active = false;
@@ -42,8 +49,10 @@ const completeRequest = (
     active = false;
     if (request.kind === "confirm") {
       request.resolve(value === true);
-    } else {
+    } else if (request.kind === "prompt") {
       request.resolve(typeof value === "string" ? value : null);
+    } else {
+      request.resolve();
     }
     mountNextDialog();
   });
@@ -77,6 +86,17 @@ export const confirmInApp = (
   });
 };
 
+export const alertInApp = (
+  message: string,
+  options: DialogOptions = {},
+): Promise<void> => {
+  if (typeof document === "undefined") return Promise.resolve();
+  return new Promise((resolve) => {
+    queue.push({ kind: "alert", message, options, resolve });
+    mountNextDialog();
+  });
+};
+
 export const promptInApp = (
   message: string,
   defaultValue = "",
@@ -100,8 +120,9 @@ function SystemDialog({
   const messageId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(request.kind === "prompt" ? request.defaultValue : "");
-  const title = request.options.title ?? (request.kind === "prompt" ? "填写信息" : "确认操作");
-  const confirmLabel = request.options.confirmLabel ?? "确认";
+  const title = request.options.title
+    ?? (request.kind === "prompt" ? "填写信息" : request.kind === "alert" ? "操作提示" : "确认操作");
+  const confirmLabel = request.options.confirmLabel ?? (request.kind === "alert" ? "知道了" : "确认");
   const cancelLabel = request.options.cancelLabel ?? "取消";
 
   useEffect(() => {
@@ -118,7 +139,7 @@ function SystemDialog({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      onComplete(request.kind === "confirm" ? false : null);
+      onComplete(request.kind === "confirm" ? false : request.kind === "prompt" ? null : true);
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -130,7 +151,7 @@ function SystemDialog({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onComplete(request.kind === "confirm" ? true : value);
+    onComplete(request.kind === "prompt" ? value : true);
   };
 
   return (
@@ -161,13 +182,13 @@ function SystemDialog({
             </label>
           ) : null}
           <div className="system-dialog__actions">
-            <Button
+            {request.kind !== "alert" ? <Button
               type="button"
               data-system-dialog-cancel="true"
               onClick={() => onComplete(request.kind === "confirm" ? false : null)}
             >
               {cancelLabel}
-            </Button>
+            </Button> : null}
             <Button type="submit" variant="primary" data-system-dialog-confirm="true">
               {confirmLabel}
             </Button>
