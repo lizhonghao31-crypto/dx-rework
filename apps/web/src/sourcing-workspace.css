@@ -5,6 +5,10 @@
   margin: 0 auto;
 }
 
+.sourcing-mobile-navigation {
+  display: none;
+}
+
 .sourcing-create-card,
 .sourcing-list-card {
   display: grid;
@@ -813,7 +817,35 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 800px) {
+  .sourcing-mobile-navigation {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: var(--dx-v2-space-2);
+    margin-bottom: var(--dx-v2-space-3);
+    padding: var(--dx-v2-space-2);
+    border: 1px solid var(--dx-v2-color-border);
+    border-radius: var(--dx-v2-radius-md);
+    background: var(--dx-v2-color-surface);
+  }
+
+  .sourcing-mobile-navigation a {
+    display: grid;
+    min-height: 42px;
+    place-items: center;
+    padding: 0 var(--dx-v2-space-2);
+    color: var(--dx-v2-color-text);
+    border-radius: 9px;
+    background: var(--dx-v2-color-inset);
+    text-decoration: none;
+    font-weight: 750;
+  }
+
+  .sourcing-mobile-navigation a.is-active {
+    color: #fff;
+    background: var(--dx-v2-color-control);
+  }
+
   .sourcing-workspace {
     gap: var(--dx-v2-space-3);
     width: 100%;
