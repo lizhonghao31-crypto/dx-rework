@@ -11,6 +11,7 @@ import { createWebUrls } from "../url-contract.js";
 import { verifySession } from "./auth.js";
 import { Shell } from "./components.js";
 import { accessiblePlatformModules } from "./platform-modules.js";
+import { todoPageWindow } from "./todo-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./my-todos.css";
 
@@ -222,18 +223,9 @@ export function MyTodosPage() {
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const renderedTotalPages = Math.max(totalPages, 1);
   const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
-  const pageWindowStart = renderedTotalPages <= 5
-    ? 1
-    : page <= 3
-      ? 1
-      : page >= renderedTotalPages - 2
-        ? renderedTotalPages - 4
-        : page - 2;
-  const pageWindowEnd = Math.min(renderedTotalPages, pageWindowStart + 4);
-  const visiblePages = Array.from(
-    { length: pageWindowEnd - pageWindowStart + 1 },
-    (_, index) => pageWindowStart + index,
-  );
+  const visiblePages = todoPageWindow(page, renderedTotalPages);
+  const pageWindowStart = visiblePages[0] ?? 1;
+  const pageWindowEnd = visiblePages.at(-1) ?? 1;
   const visibleTodoModules = accessibleTodoModules === null
     ? todoModules
     : todoModules.filter((module) => accessibleTodoModules.has(module.id));
