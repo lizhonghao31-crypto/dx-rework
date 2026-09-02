@@ -74,34 +74,47 @@ describe("business action readiness contract", () => {
     expect(wholeOrder).not.toContain('disabled={busy || !priceReviewReady}');
   });
 
-  it("requires a rejection reason before the N09 own-factory rejection action is enabled", async () => {
+  it("keeps the N09 own-factory rejection clickable with explicit feedback", async () => {
     const source = await readFile("apps/web/src/own-factory-approval-panel.tsx", "utf8");
-    expect(source).toContain('disabled={Boolean(busy) || !opinion.trim()}');
+    expect(source).toContain('title: "本厂承担暂不能驳回"');
+    expect(source).toContain('data-ready={opinion.trim() ? "true" : "false"}');
+    expect(source).not.toContain('disabled={Boolean(busy) || !opinion.trim()}');
   });
 
-  it("gates external supplier allocation and the simplified deduction action", async () => {
+  it("keeps external allocation and deduction clickable with explicit feedback", async () => {
     const source = await readFile("apps/web/src/external-responsibility-panel.tsx", "utf8");
-    expect(source).toContain("const supplierAllocationReady =");
-    expect(source).toContain('disabled={busy || !supplierAllocationReady}');
-    expect(source).toContain('disabled={busy || !temporaryNameReady}');
-    expect(source).toContain("const deductionReady = inputCents !== null");
-    expect(source).toContain("&& inputCents <= remainingCents;");
-    expect(source).toContain('disabled={busy || !deductionReady}');
+    expect(source).toContain('title: "供应商暂不能新增"');
+    expect(source).toContain('title: "供应商分配暂不能提交"');
+    expect(source).toContain('title: "扣款暂不能提交"');
+    expect(source).toContain('data-ready={supplierAllocationReady ? "true" : "false"}');
+    expect(source).toContain('data-ready={temporaryNameReady ? "true" : "false"}');
+    expect(source).toContain('data-ready={deductionReady ? "true" : "false"}');
+    expect(source).not.toContain('disabled={busy || !supplierAllocationReady}');
+    expect(source).not.toContain('disabled={busy || !temporaryNameReady}');
+    expect(source).not.toContain('disabled={busy || !deductionReady}');
     expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
-    expect(source.indexOf('className="external-case-actions"')).toBeLessThan(
-      source.indexOf('<small role="status">请输入大于 0、最多两位小数且不超过剩余金额的本次扣款。</small>'),
-    );
     expect(source).toContain("requestRevision(caseItem)");
   });
 
-  it("gates deterministic system-management create and import actions", async () => {
+  it("keeps system-management create and import actions clickable with explicit feedback", async () => {
     const [workforce, masterData] = await Promise.all([
       readFile("apps/web/src/workforce-master-data-page.tsx", "utf8"),
       readFile("apps/web/src/master-data-page.tsx", "utf8"),
     ]);
-    expect(workforce).toContain('disabled={busy || !name.trim()}');
-    expect(masterData).toContain('disabled={Boolean(busy) || !supplierName.trim()}');
-    expect(masterData).toContain('disabled={Boolean(busy) || !processName.trim()}');
-    expect(masterData).toContain('previewSummary.error > 0 || !importReason.trim() || previewSummary.create + previewSummary.update === 0');
+    expect(workforce).toContain('title: "临时工档案暂不能建立"');
+    expect(workforce).toContain('data-ready={name.trim() ? "true" : "false"}');
+    expect(workforce).not.toContain('disabled={busy || !name.trim()}');
+
+    expect(masterData).toContain('title: "工艺暂不能新增"');
+    expect(masterData).toContain('title: "供应商暂不能新增"');
+    expect(masterData).toContain('title: "工序暂不能新增"');
+    expect(masterData).toContain('title: "批量资料暂不能导入"');
+    expect(masterData).toContain('data-ready={craftName.trim() ? "true" : "false"}');
+    expect(masterData).toContain('data-ready={supplierName.trim() ? "true" : "false"}');
+    expect(masterData).toContain('data-ready={processName.trim() ? "true" : "false"}');
+    expect(masterData).not.toContain('disabled={Boolean(busy) || !supplierName.trim()}');
+    expect(masterData).not.toContain('disabled={Boolean(busy) || !processName.trim()}');
+    expect(masterData).toContain("previewSummary.error === 0");
   });
+
 });
