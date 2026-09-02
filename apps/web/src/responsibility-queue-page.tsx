@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell, TaskCard } from "./components.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import "./responsibility-queue.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -63,6 +64,7 @@ export function ResponsibilityQueuePage() {
       .toLocaleLowerCase("zh-CN")
       .includes(needle));
   }, [allItems, q]);
+  const page = usePaginatedItems(items, q);
 
   return (
     <Shell active="责任处理">
@@ -87,7 +89,7 @@ export function ResponsibilityQueuePage() {
       {state.kind === "ready" && items.length === 0 && <Surface className="responsibility-queue-state">当前没有符合条件的待判责返工单。</Surface>}
       {state.kind === "ready" && items.length > 0 && (
         <div className="task-grid responsibility-queue-grid">
-          {items.map((item) => {
+          {page.items.map((item) => {
             const title = item.highMultiplierPending
               ? item.canConfirmHighMultiplier
                 ? "高倍率待你独立确认"
@@ -128,6 +130,7 @@ export function ResponsibilityQueuePage() {
           })}
         </div>
       )}
+      {state.kind === "ready" && <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="待责任判定分页" />}
     </Shell>
   );
 }

@@ -3,6 +3,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
+import { ListPagination, usePaginatedItems } from "../list-pagination.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { loadReworkOrders, reportingPageUrl } from "./reporting-client.js";
 import "./reporting.css";
@@ -171,6 +172,10 @@ export function WorkflowQueuePage({
   const ready = state.kind === "ready" ? state : null;
   const page = ready?.pages[selected];
   const items = page?.items ?? [];
+  const itemPage = usePaginatedItems(
+    items,
+    `${selected}:${debouncedQ}:${overdue}:${exception}:${from}:${to}`,
+  );
   const meta = queueMeta[selected];
   const canUseUnifiedQuery = ready?.available.some((status) => ready.pages[status]?.canViewReports === true) === true;
 
@@ -229,7 +234,7 @@ export function WorkflowQueuePage({
             </Surface>
           ) : (
             <div className="reporting-order-grid workflow-order-grid">
-              {items.map((order) => (
+              {itemPage.items.map((order) => (
                 <a className="reporting-order-link" href={reportingPageUrl(actionHref(order))} key={order.reworkOrderId}>
                   <Surface className="reporting-order-card workflow-order-card">
                     <div className="reporting-order-card__heading">
@@ -251,6 +256,7 @@ export function WorkflowQueuePage({
               ))}
             </div>
           )}
+          <ListPagination page={itemPage.page} totalPages={itemPage.totalPages} onPageChange={itemPage.setPage} ariaLabel="节点订单分页" />
         </>
       )}
 

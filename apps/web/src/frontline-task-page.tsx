@@ -7,6 +7,7 @@ import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
 import "./frontline-task-page.css";
 
@@ -58,6 +59,7 @@ export function FrontlineTaskPage() {
   }, [kind]);
 
   const items = state.kind === "ready" ? state.items : [];
+  const page = usePaginatedItems(items, kind ?? "");
   const selected = items.find((item) => item.reworkOrderId === selectedId)
     ?? (items.length === 1 ? items[0] : null);
 
@@ -113,7 +115,7 @@ export function FrontlineTaskPage() {
     {state.kind === "error" ? <Surface>{state.message}</Surface> : null}
     {state.kind === "ready" && items.length === 0 ? <Surface>当前没有需要本人处理的任务。</Surface> : null}
     {state.kind === "ready" && items.length > 1 ? <div className="frontline-task-list">
-      {items.map((item) => <button className={item.images[0] ? "has-image" : undefined} type="button" onClick={() => enter(item)} key={item.reworkOrderId}>
+      {page.items.map((item) => <button className={item.images[0] ? "has-image" : undefined} type="button" onClick={() => enter(item)} key={item.reworkOrderId}>
         <span className="frontline-task-list__identity"><small>款号</small><strong>{item.styleNo ?? "款号未填写"}</strong><small>{item.reworkNo ?? "返工单号待生成"}</small></span>
         {item.images[0] ? <img className="frontline-task-list__image" src={imageUrl(item.images[0].attachmentId)} alt={item.images[0].filename} loading="lazy" /> : null}
         <span><small>工序</small><strong>{item.processNames.join("、")}</strong></span>
@@ -121,6 +123,7 @@ export function FrontlineTaskPage() {
         <b>进入</b>
       </button>)}
     </div> : null}
+    {state.kind === "ready" && items.length > 1 ? <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="本人任务分页" /> : null}
     <a className="frontline-task-back" href={pageUrl("ui/frontline")}>返回一线工作台</a>
   </main>;
 }

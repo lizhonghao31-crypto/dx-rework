@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
 import { verifySession } from "../auth.js";
+import { CursorListPagination } from "../list-pagination.js";
 import { confirmInApp } from "../system-dialog.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { deleteReworkOrder, loadReworkOrders } from "./reporting-client.js";
@@ -89,10 +90,14 @@ export function ReworkQueryPage() {
     {deleteError && <Surface className="reporting-state reporting-delete-error"><p role="alert">{deleteError}</p></Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="reporting-state">没有符合筛选条件的返工单。</Surface>}
     <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} canDelete={isRoot} deleting={deletingOrderId === order.reworkOrderId} onDelete={remove} />)}</div>
-    {state.kind === "ready" && (cursorHistory.length > 0 || state.value.nextCursor) && <Surface className="reporting-pagination">
-      {cursorHistory.length > 0 && <Button onClick={previousPage}>上一页</Button>}
-      <span>第 {cursorHistory.length + 1} 页</span>
-      {state.value.nextCursor && <Button variant="primary" onClick={()=>nextPage(state.value.nextCursor!)}>下一页</Button>}
-    </Surface>}
+    {state.kind === "ready" && <CursorListPagination
+      page={cursorHistory.length + 1}
+      canGoPrevious={cursorHistory.length > 0}
+      canGoNext={Boolean(state.value.nextCursor)}
+      busy={refreshing}
+      ariaLabel="返工单分页"
+      onPrevious={previousPage}
+      onNext={() => { if (state.value.nextCursor) nextPage(state.value.nextCursor); }}
+    />}
   </Shell>;
 }

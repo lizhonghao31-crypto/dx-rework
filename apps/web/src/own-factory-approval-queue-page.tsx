@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell, TaskCard } from "./components.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import "./responsibility-queue.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -61,6 +62,7 @@ export function OwnFactoryApprovalQueuePage() {
     return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.problemPart]
       .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
   }, [allItems, q]);
+  const page = usePaginatedItems(items, q);
 
   return (
     <Shell active="本厂审批">
@@ -84,7 +86,7 @@ export function OwnFactoryApprovalQueuePage() {
       {state.kind === "ready" && items.length === 0 && <Surface className="responsibility-queue-state">当前没有符合条件的本厂承担审批。</Surface>}
       {state.kind === "ready" && items.length > 0 && (
         <div className="task-grid responsibility-queue-grid">
-          {items.map((item) => (
+          {page.items.map((item) => (
             <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.approvalId}>
               <TaskCard task={{
                 id: item.reworkNo ?? "返工单",
@@ -98,6 +100,7 @@ export function OwnFactoryApprovalQueuePage() {
           ))}
         </div>
       )}
+      {state.kind === "ready" && <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="本厂承担审批分页" />}
     </Shell>
   );
 }

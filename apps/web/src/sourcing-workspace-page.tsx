@@ -41,6 +41,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Header, Shell } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
+import { CursorListPagination } from "./list-pagination.js";
 import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./rework-detail.css";
@@ -735,11 +736,14 @@ function OrderListPage({
             onDelete={(order) => { void remove(order); }}
           />)}
         </div>
-        {!message && visible.length > 0 ? <nav className="sourcing-pagination" aria-label="订单列表分页">
-          <button className="dx-button dx-button--secondary" type="button" disabled={cursorHistory.length === 0} onClick={goToPreviousPage}>上一页</button>
-          <span>第 {cursorHistory.length + 1} 页 · 每页 15 条</span>
-          <button className="dx-button dx-button--secondary" type="button" disabled={!nextCursor} onClick={goToNextPage}>下一页</button>
-        </nav> : null}
+        {!message ? <CursorListPagination
+          page={cursorHistory.length + 1}
+          canGoPrevious={cursorHistory.length > 0}
+          canGoNext={Boolean(nextCursor)}
+          ariaLabel="订单列表分页"
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+        /> : null}
       </Surface>
     </div>
   );

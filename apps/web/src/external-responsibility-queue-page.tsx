@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell, TaskCard } from "./components.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -42,12 +43,13 @@ export function ExternalResponsibilityQueuePage() {
     return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.supplierName, statusLabel[item.status]]
       .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
   }, [allItems, q]);
+  const page = usePaginatedItems(items, q);
   return <Shell active="外部扣款"><Header title="供应商扣款处理" subtitle="记录每次实际扣款；扣足后系统自动完成" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"} />
     <Surface className="external-queue-summary"><div><h2>供应商扣款工作台</h2><p>查看应扣、累计已扣和剩余金额，录入本次扣款即可。</p></div><StatusBadge tone="info">扣款台账</StatusBadge></Surface>
     <Surface className="reporting-filters"><InsetField label="搜索当前节点事项" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 供应商 / 状态" /></Surface>
     {state.kind === "loading" && <Surface className="external-state">正在加载外部责任队列…</Surface>}
     {state.kind === "unavailable" && <Surface className="external-state">{state.message}</Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="external-state">当前没有符合条件的外部责任事项。</Surface>}
-    {state.kind === "ready" && <div className="task-grid external-queue-grid">{items.map((item) => <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.caseId}><TaskCard task={{ id: item.reworkNo ?? "返工单", title: `${statusLabel[item.status]} · ${item.supplierName}`, meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", `应扣 ${formatBusinessCurrency(item.proposedDeductionAmount)}`, `累计已扣 ${formatBusinessCurrency(item.actualDeductedAmount)}`, `剩余 ${formatBusinessCurrency(item.remainingAmount)}`, item.overdue ? "已逾期" : item.canAct ? "可处理" : "仅查看"].join(" · "), tone: item.overdue ? "danger" : item.canAct ? "warning" : "info", stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看" }} /><span>打开扣款台账 →</span></a>)}</div>}
+    {state.kind === "ready" && <><div className="task-grid external-queue-grid">{page.items.map((item) => <a className="responsibility-task-link" href={`${basePath}/ui/tasks/${item.reworkOrderId}`} key={item.caseId}><TaskCard task={{ id: item.reworkNo ?? "返工单", title: `${statusLabel[item.status]} · ${item.supplierName}`, meta: [item.styleNo ?? "款号未填写", item.orderNo ?? "订单号未填写", `应扣 ${formatBusinessCurrency(item.proposedDeductionAmount)}`, `累计已扣 ${formatBusinessCurrency(item.actualDeductedAmount)}`, `剩余 ${formatBusinessCurrency(item.remainingAmount)}`, item.overdue ? "已逾期" : item.canAct ? "可处理" : "仅查看"].join(" · "), tone: item.overdue ? "danger" : item.canAct ? "warning" : "info", stateLabel: item.overdue ? "已逾期" : item.canAct ? "待处理" : "仅查看" }} /><span>打开扣款台账 →</span></a>)}</div><ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="供应商扣款分页" /></>}
   </Shell>;
 }
