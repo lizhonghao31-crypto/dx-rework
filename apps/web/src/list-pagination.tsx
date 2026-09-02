@@ -73,12 +73,14 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel }: Li
   const pageCount = Math.max(1, Math.floor(totalPages));
   const currentPage = Math.min(pageCount, Math.max(1, Math.floor(page)));
   const pages = listPageWindow(currentPage, pageCount);
+  const firstPage = pages[0] ?? 1;
+  const lastPage = pages.at(-1) ?? firstPage;
   const items: PaginationItem[] = [];
 
-  if (pages[0] > 1) {
+  if (firstPage > 1) {
     items.push({ kind: "page", page: 1, active: currentPage === 1, disabled: false, onClick: () => onPageChange(1) });
   }
-  if (pages[0] > 2) items.push({ kind: "ellipsis", key: "start-ellipsis" });
+  if (firstPage > 2) items.push({ kind: "ellipsis", key: "start-ellipsis" });
   for (const pageNumber of pages) {
     items.push({
       kind: "page",
@@ -88,8 +90,8 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel }: Li
       onClick: () => onPageChange(pageNumber),
     });
   }
-  if (pages[pages.length - 1] < pageCount - 1) items.push({ kind: "ellipsis", key: "end-ellipsis" });
-  if (pages[pages.length - 1] < pageCount) {
+  if (lastPage < pageCount - 1) items.push({ kind: "ellipsis", key: "end-ellipsis" });
+  if (lastPage < pageCount) {
     items.push({ kind: "page", page: pageCount, active: currentPage === pageCount, disabled: false, onClick: () => onPageChange(pageCount) });
   }
 
