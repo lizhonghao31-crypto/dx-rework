@@ -95,12 +95,16 @@ export function TailInspectionPanel({
       await alertInApp(issue, { title: "整查数量暂不能提交", confirmLabel: "知道了" });
       return;
     }
-    const items = data.processes.map((process) => ({
-      configurationItemId: process.configurationItemId,
-      inspectedQuantity: Number(processQuantities[process.configurationItemId]?.trim() ?? ""),
-      processName: process.processName,
-    }));
-    if (items.some((item) => !Number.isInteger(item.inspectedQuantity) || item.inspectedQuantity < 0)) {
+    const items = data.processes.map((process) => {
+      const quantityText = processQuantities[process.configurationItemId]?.trim() ?? "";
+      return {
+        configurationItemId: process.configurationItemId,
+        inspectedQuantity: Number(quantityText),
+        processName: process.processName,
+        quantityText,
+      };
+    });
+    if (items.some((item) => !isPieceCount(item.quantityText))) {
       const issue = "每道工序都必须填写整数件数；没有该工序返件时请填 0。";
       setMessage(issue);
       await alertInApp(issue, { title: "整查数量暂不能提交", confirmLabel: "知道了" });
