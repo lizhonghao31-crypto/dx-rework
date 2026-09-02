@@ -71,7 +71,7 @@ describe("sourcing image lifecycle parity", () => {
     expect(page).toContain("restoredDraftUserId");
     expect(page).not.toContain("isMobileClient");
     expect(page).not.toContain("外发定价选厂移动端尚未建设");
-    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain(".sourcing-process-editor");
   });
 });
