@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { businessFieldLabel, businessValue, formatBusinessTime } from "../business-display.js";
 import { Header, Shell } from "../components.js";
+import { ListPagination, usePaginatedItems } from "../list-pagination.js";
 import { loadReport, reportExportUrl, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
 import "./reporting.css";
 
@@ -31,6 +32,7 @@ export function ReportCenterPage(){
   const filters=useMemo(()=>({from,to,q:q.trim()||undefined,status:status||undefined,limit:"100"}),[from,to,q,status]);
   useEffect(()=>{const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters]);
   const value=state.kind==="ready"?state.value:null;
+  const page=usePaginatedItems(value?.rows??[], `${type}:${from}:${to}:${q}:${status}`);
   return <Shell active="财务报表"><Header title="财务报表" subtitle="查询返工、工资、责任和扣款明细" badge={value?`${value.rowCount} 行 · ${value.range.from} 至 ${value.range.to}`:"查询中"} />
     <Surface className="reporting-filters report-center-filters">
       <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
@@ -44,7 +46,7 @@ export function ReportCenterPage(){
     {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
     {value&&<>
       <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{snapshotBusinessValue(key, total)}</StatusBadge>)}</div></Surface>
-      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{value.rows.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{businessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}</Surface>
+      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{page.items.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{businessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}<ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="财务报表分页" /></Surface>
     </>}
   </Shell>;
 }

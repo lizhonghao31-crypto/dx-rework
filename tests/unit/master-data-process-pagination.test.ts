@@ -9,7 +9,7 @@ describe("master-data process catalog pagination", () => {
 
     expect(source).toContain("master-data/process-catalog?");
     expect(source).toContain("processCursorHistory");
-    expect(source).toContain("每页最多 15 条");
+    expect(source).toContain('ariaLabel="公共工序分页"');
     expect(source).toContain("搜索工序名称或系统编码");
     expect(source).toContain('const loadAllProcesses = () => json<Process[]>("master-data/processes?includeInactive=true")');
     expect(source).toContain("previewProcessImport(file.name, rows, await loadAllProcesses())");
@@ -19,11 +19,13 @@ describe("master-data process catalog pagination", () => {
     expect(source).toContain('setProcessPageLoading(false);\n      setBusy("");');
   });
 
-  it("keeps the pager usable on desktop and mobile", async () => {
-    const styles = await read("apps/web/src/master-data-page.css");
+  it("uses the shared compact pager on desktop and mobile", async () => {
+    const page = await read("apps/web/src/master-data-page.tsx");
+    const styles = await read("apps/web/src/list-pagination.css");
 
-    expect(styles).toContain(".master-data-process-pager");
-    expect(styles).toContain(".master-data-process-search");
-    expect(styles).toContain("grid-template-columns:1fr 1fr");
+    expect(page).toContain("<CursorListPagination");
+    expect(styles).toContain("width: 34px");
+    expect(styles).toContain("width: 32px");
+    expect(styles).toContain("@media (max-width: 800px)");
   });
 });

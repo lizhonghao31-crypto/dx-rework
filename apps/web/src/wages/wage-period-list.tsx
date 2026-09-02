@@ -8,6 +8,7 @@ import { z } from "zod";
 import { createWebUrls } from "../../url-contract.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
+import { ListPagination, usePaginatedItems } from "../list-pagination.js";
 import {
   loadReport,
   reportExportUrl,
@@ -133,6 +134,10 @@ export function WagePeriodList() {
     }
     return [...rows.values()].sort((left, right) => right.amount - left.amount);
   }, [value]);
+  const resetKey = `${from}:${to}:${debouncedQ}:${status}`;
+  const personPage = usePaginatedItems(personSummary, resetKey);
+  const detailPage = usePaginatedItems(value?.rows ?? [], resetKey);
+  const periodPage = usePaginatedItems(periods, status);
 
   return (
     <div className="wage-page wage-management">
@@ -182,7 +187,7 @@ export function WagePeriodList() {
             </div>
             {personSummary.length ? (
               <div className="wage-person-grid">
-                {personSummary.map((person) => (
+                {personPage.items.map((person) => (
                   <article key={person.name}>
                     <b>{person.name}</b>
                     <span>{person.orderCount.size} 张返工单</span>
@@ -191,6 +196,7 @@ export function WagePeriodList() {
                 ))}
               </div>
             ) : <p>当前条件没有工资数据。</p>}
+            <ListPagination page={personPage.page} totalPages={personPage.totalPages} onPageChange={personPage.setPage} ariaLabel="工人工资汇总分页" />
           </Surface>
 
           <Surface className="wage-detail-table">
@@ -198,12 +204,13 @@ export function WagePeriodList() {
             <div className="reporting-table-wrap">
               <table>
                 <thead><tr>{value.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
-                <tbody>{value.rows.map((row, index) => (
+                <tbody>{detailPage.items.map((row, index) => (
                   <tr key={index}>{value.columns.map((column) => <td key={column.key}>{businessValue(column.key, row[column.key])}</td>)}</tr>
                 ))}</tbody>
               </table>
             </div>
             {value.rows.length === 0 ? <p>当前筛选范围没有工资明细。</p> : null}
+            <ListPagination page={detailPage.page} totalPages={detailPage.totalPages} onPageChange={detailPage.setPage} ariaLabel="工资明细分页" />
           </Surface>
         </>
       ) : null}
@@ -214,7 +221,7 @@ export function WagePeriodList() {
         </div>
         {message ? <p role="alert" className="form-message">{message}</p> : null}
         <div className="wage-grid">
-          {periods.map((period) => (
+          {periodPage.items.map((period) => (
             <Surface key={period.periodId} className="wage-period-card">
               <div className="wage-period-card__heading">
                 <a href={pageUrl(`ui/wages/${period.periodId}`)}><strong>{period.periodMonth.slice(0, 7)}</strong></a>
@@ -228,6 +235,7 @@ export function WagePeriodList() {
           ))}
         </div>
         {periods.length === 0 && !message ? <Surface><p>暂无已生成的返工工资。</p></Surface> : null}
+        <ListPagination page={periodPage.page} totalPages={periodPage.totalPages} onPageChange={periodPage.setPage} ariaLabel="月结批次分页" />
       </section> : null}
     </div>
   );

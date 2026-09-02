@@ -4,6 +4,7 @@ import type { AdminAuditEventsPage, AdminAuditExportsPage } from "@dx-rework/con
 import type { AdminAttachmentsPage, AdminDelegationsPage, AdminExceptionsPage } from "@dx-rework/contracts/admin-console";
 import { createWebUrls } from "../url-contract.js";
 import type { AuthorizedUser } from "./auth.js";
+import { CursorListPagination, ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation, type SystemManagementTechnicalTab } from "./system-management-navigation.js";
 import {
   businessActionLabel,
@@ -67,10 +68,6 @@ function JsonDetails({ value }: { value: unknown }) {
   return <details><summary>查看详情</summary><pre>{JSON.stringify(translateTechnicalDetails(value), null, 2)}</pre></details>;
 }
 
-function Pager({ cursor, onNext }: { cursor: string | null; onNext: (cursor: string) => void }) {
-  return <div className="admin-pager">{cursor ? <Button onClick={() => onNext(cursor)}>下一页</Button> : <span>没有更多数据</span>}</div>;
-}
-
 export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [technicalAccess, setTechnicalAccess] = useState<boolean | null>(null);
@@ -119,10 +116,11 @@ export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab })
 
 function AuditTab() {
   const [cursor, setCursor] = useState<string | undefined>();
+  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
   const [searchVersion, setSearchVersion] = useState(0);
   const [state, setState] = useState<LoadState<{ events: AdminAuditEventsPage; exports: AdminAuditExportsPage }>>({ kind: "loading" });
   const [filters, setFilters] = useState({ from: "", to: "", actorId: "", action: "", entityType: "", entityId: "", authorizationCapability: "", requestId: "" });
-  const query = () => new URLSearchParams(Object.entries({ ...filters, cursor: cursor ?? "", limit: "20" }).filter((entry): entry is [string, string] => entry[1] !== "")).toString();
+  const query = () => new URLSearchParams(Object.entries({ ...filters, cursor: cursor ?? "", limit: "15" }).filter((entry): entry is [string, string] => entry[1] !== "")).toString();
   useEffect(() => {
     setState({ kind: "loading" });
     void Promise.all([
@@ -134,6 +132,7 @@ function AuditTab() {
   }, [cursor, searchVersion]);
   const submitSearch = () => {
     setCursor(undefined);
+    setCursorHistory([]);
     setSearchVersion((value) => value + 1);
   };
   return (
@@ -153,7 +152,21 @@ function AuditTab() {
               </article>
             ))}
           </div>
-          <Pager cursor={events.nextCursor} onNext={setCursor} />
+          <CursorListPagination
+            page={cursorHistory.length + 1}
+            canGoPrevious={cursorHistory.length > 0}
+            canGoNext={Boolean(events.nextCursor)}
+            ariaLabel="审计日志分页"
+            onPrevious={() => {
+              setCursor(cursorHistory[cursorHistory.length - 1] || undefined);
+              setCursorHistory((history) => history.slice(0, -1));
+            }}
+            onNext={() => {
+              if (!events.nextCursor) return;
+              setCursorHistory((history) => [...history, cursor ?? ""]);
+              setCursor(events.nextCursor);
+            }}
+          />
           <h2>导出记录</h2>
           {exports.items.map((item) => <article key={item.eventId}><b>{businessActionLabel(item.action)}</b><p>{businessValue("reportType", item.exportType ?? item.reportType ?? "未知导出类型")} · {formatBusinessTime(item.createdAt)}</p></article>)}
         </>
@@ -187,16 +200,17 @@ const attachmentStatusLabel: Record<"pending" | "ready" | "rejected", string> = 
 
 function AttachmentsTab() {
   const [cursor, setCursor] = useState<string | undefined>();
+  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
   const [state, setState] = useState<LoadState<AdminAttachmentsPage>>({ kind: "loading" });
   useEffect(() => {
     setState({ kind: "loading" });
-    void getJson<AdminAttachmentsPage>(`admin/attachments?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`)
+    void getJson<AdminAttachmentsPage>(`admin/attachments?limit=15${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`)
       .then((data) => setState({ kind: "ready", data }))
       .catch((error: unknown) => setState(loadError(error)));
   }, [cursor]);
   return (
     <section className="admin-panel">
-      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {businessValue("mimeType", item.mimeType)} · {formatFileSize(item.sizeBytes)}</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ? businessEntityLabel(item.entityType) : "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><Pager cursor={data.nextCursor} onNext={setCursor} /></>} />
+      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {businessValue("mimeType", item.mimeType)} · {formatFileSize(item.sizeBytes)}</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ? businessEntityLabel(item.entityType) : "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><CursorListPagination page={cursorHistory.length + 1} canGoPrevious={cursorHistory.length > 0} canGoNext={Boolean(data.nextCursor)} ariaLabel="附件分页" onPrevious={() => { setCursor(cursorHistory[cursorHistory.length - 1] || undefined); setCursorHistory((history) => history.slice(0, -1)); }} onNext={() => { if (!data.nextCursor) return; setCursorHistory((history) => [...history, cursor ?? ""]); setCursor(data.nextCursor); }} /></>} />
     </section>
   );
 }
@@ -208,7 +222,12 @@ function DelegationsTab() {
       .then((data) => setState({ kind: "ready", data }))
       .catch((error: unknown) => setState(loadError(error)));
   }, []);
-  return <section className="admin-panel"><State state={state} render={(data) => <div className="admin-list">{data.items.length === 0 ? <p>暂无代理授权。</p> : data.items.map((item) => <article key={item.delegationId}><h3>{businessCapabilityLabel(item.capability)}</h3><p>授权人：{item.grantor.displayName ?? "未知"}（{item.grantor.userId}） → 被授权人：{item.grantee.displayName ?? "未知"}（{item.grantee.userId}）</p><p>授权范围：{businessValue("scopeType", item.scopeType)} / {item.scopeId ?? "全局"}</p><p>{item.effectiveNow ? "当前有效" : "当前无效"} · {formatBusinessTime(item.validFrom)} 至 {formatBusinessTime(item.validUntil)}</p><p>{item.revokedAt ? `已撤销：${item.revokeReason ?? "未记录"}` : item.grantReason}</p></article>)}</div>} /></section>;
+  return <section className="admin-panel"><State state={state} render={(data) => <DelegationList data={data} />} /></section>;
+}
+
+function DelegationList({ data }: { data: AdminDelegationsPage }) {
+  const page = usePaginatedItems(data.items, "delegations");
+  return <><div className="admin-list">{data.items.length === 0 ? <p>暂无代理授权。</p> : page.items.map((item) => <article key={item.delegationId}><h3>{businessCapabilityLabel(item.capability)}</h3><p>授权人：{item.grantor.displayName ?? "未知"}（{item.grantor.userId}） → 被授权人：{item.grantee.displayName ?? "未知"}（{item.grantee.userId}）</p><p>授权范围：{businessValue("scopeType", item.scopeType)} / {item.scopeId ?? "全局"}</p><p>{item.effectiveNow ? "当前有效" : "当前无效"} · {formatBusinessTime(item.validFrom)} 至 {formatBusinessTime(item.validUntil)}</p><p>{item.revokedAt ? `已撤销：${item.revokeReason ?? "未记录"}` : item.grantReason}</p></article>)}</div><ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="代理授权分页" /></>;
 }
 
 function ExceptionsTab() {
@@ -218,5 +237,10 @@ function ExceptionsTab() {
       .then((data) => setState({ kind: "ready", data }))
       .catch((error: unknown) => setState(loadError(error)));
   }, []);
-  return <section className="admin-panel"><State state={state} render={(data) => <div className="admin-list">{data.items.length === 0 ? <p>暂无系统异常。</p> : data.items.map((item) => <article key={`${item.exceptionType}:${item.sourceEntityId}`}><h3>{businessExceptionLabel(item.exceptionType)}</h3><p>{businessEntityLabel(item.sourceEntityType)} / {item.sourceEntityId}</p><p>关联订单：{item.reworkOrderId && item.deepLink ? <a href={pageUrl(item.deepLink)}>{item.reworkOrderId} · 进入返工单</a> : "未关联返工单"}</p><p>业务动作：{item.businessAction} · 失败阶段：{item.failureStage}</p><p>处理状态：{businessValue("status", item.status)} · 最近更新：{formatBusinessTime(item.lastUpdatedAt)}</p><p>最近错误：{item.safeError ?? "无安全错误摘要"}</p>{item.requestId ? <p><CopyableRequestId value={item.requestId} /></p> : <p>请求 ID：未记录</p>}<p>{item.retryable ? "可安全重试" : "不可由管理员重试"}</p><JsonDetails value={item.details} /></article>)}</div>} /></section>;
+  return <section className="admin-panel"><State state={state} render={(data) => <ExceptionList data={data} />} /></section>;
+}
+
+function ExceptionList({ data }: { data: AdminExceptionsPage }) {
+  const page = usePaginatedItems(data.items, "exceptions");
+  return <><div className="admin-list">{data.items.length === 0 ? <p>暂无系统异常。</p> : page.items.map((item) => <article key={`${item.exceptionType}:${item.sourceEntityId}`}><h3>{businessExceptionLabel(item.exceptionType)}</h3><p>{businessEntityLabel(item.sourceEntityType)} / {item.sourceEntityId}</p><p>关联订单：{item.reworkOrderId && item.deepLink ? <a href={pageUrl(item.deepLink)}>{item.reworkOrderId} · 进入返工单</a> : "未关联返工单"}</p><p>业务动作：{item.businessAction} · 失败阶段：{item.failureStage}</p><p>处理状态：{businessValue("status", item.status)} · 最近更新：{formatBusinessTime(item.lastUpdatedAt)}</p><p>最近错误：{item.safeError ?? "无安全错误摘要"}</p>{item.requestId ? <p><CopyableRequestId value={item.requestId} /></p> : <p>请求 ID：未记录</p>}<p>{item.retryable ? "可安全重试" : "不可由管理员重试"}</p><JsonDetails value={item.details} /></article>)}</div><ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="系统异常分页" /></>;
 }

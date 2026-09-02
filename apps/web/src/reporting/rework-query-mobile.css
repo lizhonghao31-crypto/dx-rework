@@ -9,7 +9,7 @@
   .reporting-filters.reporting-filters--orders{grid-template-columns:minmax(0,1.35fr) minmax(0,.825fr) minmax(0,.825fr);gap:8px;padding:10px}
   .reporting-filters--orders>*{width:auto;min-width:0;grid-column:auto}
   .reporting-filters--orders .dx-field,.reporting-filters--orders label{gap:4px;font-size:11px}
-  .reporting-filters--orders select,.reporting-filters--orders input{box-sizing:border-box;width:100%;min-width:0;min-height:36px;padding:0 7px;border-radius:8px;font-size:12px}
+  .reporting-filters--orders select,.reporting-filters--orders input{box-sizing:border-box;width:100%;min-width:0;height:36px;min-height:36px;max-height:36px;padding:0 7px;border-radius:8px;font-size:12px}
   .reporting-filters--orders .reporting-date-range>span{grid-template-columns:minmax(0,1fr);gap:4px}
   .reporting-filters--orders .reporting-date-range i{display:none}
   .reporting-filters--orders .reporting-filters__refresh{grid-column:3;width:auto;min-height:32px;justify-self:end;padding-inline:11px;font-size:12px}

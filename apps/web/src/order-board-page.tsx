@@ -11,6 +11,7 @@ import {
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
 import { ImageViewer } from "./image-viewer.js";
+import { CursorListPagination } from "./list-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
 
@@ -492,28 +493,24 @@ export function OrderBoardPage() {
       })}
     </div>
     {message ? <p className="order-board-message" role="status">{message}</p> : null}
-    {(data?.rows.length || cursorHistory.length > 0) ? <nav className="order-board-pagination" aria-label="订单回货分页">
-      <button
-        type="button"
-        disabled={pageLoading || cursorHistory.length === 0}
-        onClick={() => {
+    {data ? <CursorListPagination
+      page={cursorHistory.length + 1}
+      canGoPrevious={cursorHistory.length > 0}
+      canGoNext={Boolean(data.nextCursor)}
+      busy={pageLoading}
+      ariaLabel="订单回货分页"
+      onPrevious={() => {
           if (pageLoading) return;
           const previous = cursorHistory[cursorHistory.length - 1] ?? "";
           setCursorHistory((current) => current.slice(0, -1));
           setCursor(previous);
-        }}
-      >上一页</button>
-      <span>第 {cursorHistory.length + 1} 页 · 每页 15 条</span>
-      <button
-        type="button"
-        disabled={pageLoading || !data?.nextCursor}
-        onClick={() => {
-          if (pageLoading || !data?.nextCursor) return;
+      }}
+      onNext={() => {
+          if (pageLoading || !data.nextCursor) return;
           setCursorHistory((current) => [...current, cursor]);
           setCursor(data.nextCursor);
-        }}
-      >下一页</button>
-    </nav> : null}
+      }}
+    /> : null}
     {mutationMessage && !editing && !deleting ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p> : null}
 
     {attachmentViewer && selectedAttachment ? <div

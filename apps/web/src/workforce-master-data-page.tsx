@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import "./workforce-master-data-page.css";
@@ -161,6 +162,8 @@ export function WorkforceMasterDataPage() {
 
   const internal = filteredPeople.filter((person) => person.personType === "internal");
   const temporary = filteredPeople.filter((person) => person.personType === "temporary");
+  const internalPage = usePaginatedItems(internal, query);
+  const temporaryPage = usePaginatedItems(temporary, query);
 
   return (
     <Shell active="人员资料">
@@ -209,7 +212,7 @@ export function WorkforceMasterDataPage() {
             <h2>内部工人</h2>
             <p>授予“工人”角色后自动进入这里；撤销角色、停用账号或离职后不能再被新分配。</p>
             <div className="workforce-list">
-              {internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internal.map((person) => (
+              {internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internalPage.items.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>内部员工 · 可登录</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "档案有效" : "档案停用"}</StatusBadge>
@@ -220,12 +223,13 @@ export function WorkforceMasterDataPage() {
                 </article>
               ))}
             </div>
+            <ListPagination page={internalPage.page} totalPages={internalPage.totalPages} onPageChange={internalPage.setPage} ariaLabel="内部工人分页" />
           </Surface>
 
           <Surface>
             <h2>临时工</h2>
             <div className="workforce-list">
-              {temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporary.map((person) => (
+              {temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporaryPage.items.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>临时工 · 不登录 · {person.temporaryCode ?? "历史临时工待补编号"}{person.temporaryRemark ? ` · ${person.temporaryRemark}` : ""}</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "可分配" : "已停用"}</StatusBadge>
@@ -241,6 +245,7 @@ export function WorkforceMasterDataPage() {
                 </article>
               ))}
             </div>
+            <ListPagination page={temporaryPage.page} totalPages={temporaryPage.totalPages} onPageChange={temporaryPage.setPage} ariaLabel="临时工分页" />
           </Surface>
         </div>
       </div>

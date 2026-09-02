@@ -4,6 +4,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Shell } from "./components.js";
+import { CursorListPagination, ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
@@ -636,6 +637,8 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       error: preview.rows.filter((row) => row.action === "error").length,
     };
   }, [preview]);
+  const craftPage = usePaginatedItems(crafts, view);
+  const supplierPage = usePaginatedItems(suppliers, view);
 
   return (
     <Shell active="基础资料">
@@ -675,7 +678,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               </Button>
             </div>
             <div className="master-data-list">
-              {crafts.length === 0 ? <p>暂无外发工艺；提交第一张外发订单时也会自动建档。</p> : crafts.map((craft) => (
+              {crafts.length === 0 ? <p>暂无外发工艺；提交第一张外发订单时也会自动建档。</p> : craftPage.items.map((craft) => (
                 <article key={craft.craftId} className="master-data-row">
                   <div>
                     <h3>{craft.craftName}</h3>
@@ -689,6 +692,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 </article>
               ))}
             </div>
+            <ListPagination page={craftPage.page} totalPages={craftPage.totalPages} onPageChange={craftPage.setPage} ariaLabel="外发工艺分页" />
           </Surface> : null}
 
           {view === "suppliers" ? <Surface className="master-data-panel">
@@ -732,7 +736,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               </Button>
             </div>
             <div className="master-data-list">
-              {suppliers.length === 0 ? <p>暂无供应商。</p> : suppliers.map((supplier) => (
+              {suppliers.length === 0 ? <p>暂无供应商。</p> : supplierPage.items.map((supplier) => (
                 <article key={supplier.supplierId} className="master-data-row">
                   <div>
                     <h3>{supplier.supplierName}</h3>
@@ -746,6 +750,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 </article>
               ))}
             </div>
+            <ListPagination page={supplierPage.page} totalPages={supplierPage.totalPages} onPageChange={supplierPage.setPage} ariaLabel="供应商分页" />
           </Surface> : null}
 
           {view === "processes" ? <Surface className="master-data-panel">
@@ -826,28 +831,20 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 </article>
               ))}
             </div>
-            {(processes.length > 0 || processCursorHistory.length > 0) ? <div className="master-data-process-pager" aria-busy={processPageLoading}>
-              <span>{processPageLoading ? "加载中…" : `每页最多 15 条${appliedProcessSearch ? ` · 搜索“${appliedProcessSearch}”` : ""}`}</span>
-              <div>
-                <Button
-                  disabled={Boolean(busy) || processPageLoading || processCursorHistory.length === 0}
-                  onClick={() => {
+            <CursorListPagination
+              page={processCursorHistory.length + 1}
+              canGoPrevious={processCursorHistory.length > 0}
+              canGoNext={Boolean(processNextCursor)}
+              busy={Boolean(busy) || processPageLoading}
+              ariaLabel="公共工序分页"
+              onPrevious={() => {
                     const previous = processCursorHistory[processCursorHistory.length - 1] ?? "";
                     void showProcessPage(appliedProcessSearch, previous, processCursorHistory.slice(0, -1));
-                  }}
-                >
-                  上一页
-                </Button>
-                <Button
-                  disabled={Boolean(busy) || processPageLoading || !processNextCursor}
-                  onClick={() => {
+              }}
+              onNext={() => {
                     if (processNextCursor) void showProcessPage(appliedProcessSearch, processNextCursor, [...processCursorHistory, processCursor]);
-                  }}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div> : null}
+              }}
+            />
           </Surface> : null}
         </div>
 

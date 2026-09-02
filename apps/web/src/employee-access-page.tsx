@@ -3,6 +3,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts/employee-access";
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import {
   employeesInAccessFilter,
   hasEffectiveRoleAccess,
@@ -142,6 +143,10 @@ export function EmployeeAccessPage() {
       return haystack.includes(needle);
     });
   }, [accessFilter, directory, moduleFilter, query, roleNameByCode, roles]);
+  const employeePage = usePaginatedItems(
+    filteredEmployees,
+    `${accessFilter}:${moduleFilter}:${query}`,
+  );
 
   const effectiveRoleCount = useMemo(
     () => directory?.employees.filter(hasEffectiveRoleAccess).length ?? 0,
@@ -269,9 +274,9 @@ export function EmployeeAccessPage() {
           {error ? <p className="employee-access-error" role="alert">{error}</p> : null}
           {!directory ? <p>正在加载员工目录…</p> : filteredEmployees.length === 0 ? (
             <p className="employee-access-empty">没有匹配的员工。</p>
-          ) : (
+          ) : (<>
             <section className="employee-access-grid" aria-label="员工权限目录">
-              {filteredEmployees.map((employee) => {
+              {employeePage.items.map((employee) => {
                 const why = reasonByUser[employee.userId] ?? "";
                 const activeAssignments = employee.roleHistory.filter((history) => history.revokedAt === null);
                 const assignableRoles = roles.filter((role) =>
@@ -396,7 +401,8 @@ export function EmployeeAccessPage() {
                 );
               })}
             </section>
-          )}
+            <ListPagination page={employeePage.page} totalPages={employeePage.totalPages} onPageChange={employeePage.setPage} ariaLabel="员工权限目录分页" />
+          </>)}
         </Surface>
       </div>
     </Shell>
