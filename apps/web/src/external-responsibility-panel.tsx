@@ -13,7 +13,7 @@ import { createClientRequestId } from "./client-request-id.js";
 import { shanghaiBusinessDate } from "./business-date.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { SearchSelect } from "./search-select.js";
-import { confirmInApp, promptInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
 import "./external-responsibility.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -204,7 +204,9 @@ export function ExternalResponsibilityPanel({
   ): Promise<void> => {
     const supplierName = temporarySupplierName[item.responsibilityType]?.trim() ?? "";
     if (!supplierName) {
-      setMessage(`请先填写${responsibilityTypeLabel[item.responsibilityType]}名称。`);
+      const issue = `请先填写${responsibilityTypeLabel[item.responsibilityType]}名称。`;
+      setMessage(issue);
+      await alertInApp(issue, { title: "供应商暂不能新增", confirmLabel: "知道了" });
       return;
     }
     const supplierType = requiredSupplierType(item.responsibilityType);
@@ -261,7 +263,9 @@ export function ExternalResponsibilityPanel({
     for (const item of unassigned) {
       const supplierId = selection[item.externalItemId];
       if (!supplierId) {
-        setMessage("请为每个外部责任项目选择实际拟扣供应商。");
+        const issue = "请为每个外部责任项目选择实际拟扣供应商。";
+        setMessage(issue);
+        await alertInApp(issue, { title: "供应商分配暂不能提交", confirmLabel: "知道了" });
         return;
       }
       const key = `${item.responsibilityType}:${supplierId}`;
@@ -322,11 +326,15 @@ export function ExternalResponsibilityPanel({
     const cents = parseMoneyToCents(text);
     const remainingCents = parseMoneyToCents(caseItem.remainingAmount);
     if (cents === null || cents <= 0n) {
-      setMessage("本次扣款金额必须大于 0，最多两位小数。");
+      const issue = "本次扣款金额必须大于 0，最多两位小数。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "扣款暂不能提交", confirmLabel: "知道了" });
       return;
     }
     if (remainingCents === null || cents > remainingCents) {
-      setMessage("本次扣款金额不能超过当前剩余应扣金额。");
+      const issue = "本次扣款金额不能超过当前剩余应扣金额。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "扣款暂不能提交", confirmLabel: "知道了" });
       return;
     }
     const files = attachments[caseItem.caseId] ?? [];
@@ -557,7 +565,7 @@ export function ExternalResponsibilityPanel({
               disabled={busy}
               onChange={(event) => setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: event.target.value }))}
             />
-            <Button disabled={busy || !temporaryNameReady} onClick={() => void createTemporarySupplier(item)}>新增并选择</Button>
+            <Button data-ready={temporaryNameReady ? "true" : "false"} disabled={busy} onClick={() => void createTemporarySupplier(item)}>新增并选择</Button>
           </div>}
         </div>;
       })}
@@ -567,7 +575,7 @@ export function ExternalResponsibilityPanel({
         onChange={(event) => setProcessingOverrideReason(event.target.value)}
         placeholder="仅改选加工厂时填写"
       />}
-      <Button variant="primary" disabled={busy || !supplierAllocationReady} onClick={() => void allocate()}>确认供应商</Button>
+      <Button variant="primary" data-ready={supplierAllocationReady ? "true" : "false"} disabled={busy} onClick={() => void allocate()}>确认供应商</Button>
     </section>}
 
     {visibleCases.length === 0 && visibleUnassigned.length === 0 && <StatusBadge tone="info">当前外部责任金额为 0，无需扣款。</StatusBadge>}
@@ -617,7 +625,7 @@ export function ExternalResponsibilityPanel({
               onMessage={setMessage}
             />}
             <div className="external-case-actions">
-              {canRecordDeduction && <Button variant="primary" disabled={busy || !deductionReady} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
+              {canRecordDeduction && <Button variant="primary" data-ready={deductionReady ? "true" : "false"} disabled={busy} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
               {recoveryClose && <Button variant="primary" disabled={busy} onClick={() => void finishDeduction(caseItem)}>完成扣款</Button>}
               {canRequestSpecialApproval && <Button disabled={busy} onClick={() => void requestSpecialApproval(caseItem)}>转财务总监特批</Button>}
               {canDecideSpecialApproval && <>

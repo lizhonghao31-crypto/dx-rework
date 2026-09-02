@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
 import "./own-factory-approval.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -116,7 +116,9 @@ export function OwnFactoryApprovalPanel({
   const decide = async (decision: "approved" | "rejected"): Promise<void> => {
     if (state.kind !== "ready" || !state.value.approval || !state.value.canDecide || busy) return;
     if (decision === "rejected" && !opinion.trim()) {
-      setMessage("驳回必须填写原因。");
+      const issue = "驳回必须填写原因。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "本厂承担暂不能驳回", confirmLabel: "知道了" });
       return;
     }
     if (!(await confirmInApp(decision === "approved" ? "确认通过本厂承担？" : "确认驳回并退回责任判定？"))) return;
@@ -262,7 +264,7 @@ export function OwnFactoryApprovalPanel({
           />
           <div>
             <Button variant="primary" disabled={Boolean(busy)} onClick={() => void decide("approved")}>通过</Button>
-            <Button disabled={Boolean(busy) || !opinion.trim()} onClick={() => void decide("rejected")}>驳回并退回责任判定</Button>
+            <Button data-ready={opinion.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void decide("rejected")}>驳回并退回责任判定</Button>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
-import { promptInApp } from "./system-dialog.js";
+import { alertInApp, promptInApp } from "./system-dialog.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import "./workforce-master-data-page.css";
 
@@ -81,7 +81,9 @@ export function WorkforceMasterDataPage() {
   const createTemporary = async (): Promise<void> => {
     const displayName = name.trim();
     if (!displayName) {
-      setMessage("请输入临时工姓名。");
+      const issue = "请输入临时工姓名。";
+      setMessage(issue);
+      await alertInApp(issue, { title: "临时工档案暂不能建立", confirmLabel: "知道了" });
       return;
     }
     const reason = (await promptInApp("请输入建立临时工档案的原因", "返工临时工登记"))?.trim();
@@ -181,7 +183,7 @@ export function WorkforceMasterDataPage() {
             <label>姓名<input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} /></label>
             <label>区分备注（可选）<input value={temporaryRemark} maxLength={100} placeholder="如：夜班、老张介绍" onChange={(event) => setTemporaryRemark(event.target.value)} /></label>
             <label>别名（可选，用逗号分隔）<input value={aliases} onChange={(event) => setAliases(event.target.value)} /></label>
-            <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
+            <Button variant="primary" data-ready={name.trim() ? "true" : "false"} disabled={busy} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
           </div>
         </Surface>
 
