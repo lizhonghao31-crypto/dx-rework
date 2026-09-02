@@ -227,7 +227,7 @@ export function MyTodosPage() {
   const pageWindowStart = visiblePages[0] ?? 1;
   const pageWindowEnd = visiblePages.at(-1) ?? 1;
   const visibleTodoModules = accessibleTodoModules === null
-    ? todoModules
+    ? []
     : todoModules.filter((module) => accessibleTodoModules.has(module.id));
 
   const openModule = (module: TodoModule): void => {
