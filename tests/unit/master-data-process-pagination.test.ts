@@ -8,7 +8,8 @@ describe("master-data process catalog pagination", () => {
     const source = await read("apps/web/src/master-data-page.tsx");
 
     expect(source).toContain("master-data/process-catalog?");
-    expect(source).toContain("processCursorHistory");
+    expect(source).toContain("const [processPage, setProcessPage] = useState(1);");
+    expect(source).toContain("const [processTotalPages, setProcessTotalPages] = useState(1);");
     expect(source).toContain('ariaLabel="公共工序分页"');
     expect(source).toContain("搜索工序名称或系统编码");
     expect(source).toContain('const loadAllProcesses = () => json<Process[]>("master-data/processes?includeInactive=true")');
@@ -23,7 +24,8 @@ describe("master-data process catalog pagination", () => {
     const page = await read("apps/web/src/master-data-page.tsx");
     const styles = await read("apps/web/src/my-todos.css");
 
-    expect(page).toContain("<CursorListPagination");
+    expect(page).toContain("<ListPagination");
+    expect(page).not.toContain("<CursorListPagination");
     expect(styles).toContain("width: 34px");
     expect(styles).toContain("width: 32px");
     expect(styles).toContain("@media (max-width: 800px)");

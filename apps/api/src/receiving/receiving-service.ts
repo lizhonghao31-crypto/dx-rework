@@ -128,18 +128,10 @@ type BoardResult = Readonly<{
     differenceRate: number;
   }>;
   rows: readonly BoardRow[];
-  nextCursor: string | null;
-}>;
-
-type BoardCursor = Readonly<{
-  differenceRank: number;
-  absoluteDifference: number;
-  lastReceivedAt: string;
-  styleKey: string;
-  startDate: string;
-  endDate: string;
-  query: string;
-  status: BoardStatus;
+  page: number;
+  pageSize: 15;
+  totalCount: number;
+  totalPages: number;
 }>;
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
@@ -161,79 +153,6 @@ const normalizeBoardStatus = (value: string): BoardStatus => {
   if (value === "" || value === "all") return "all";
   if (value === "normal" || value === "extra" || value === "short" || value === "multiple") return value;
   return fail("收货状态筛选无效");
-};
-
-const differenceRank = (difference: number): number => difference < 0 ? 0 : difference > 0 ? 1 : 2;
-
-const decodeBoardCursor = (
-  cursor: string,
-  startDate: string,
-  endDate: string,
-  query: string,
-  status: BoardStatus,
-): BoardCursor | null => {
-  if (!cursor) return null;
-  if (cursor.length > 1000) fail("分页游标无效");
-  try {
-    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
-    if (!decoded || typeof decoded !== "object") throw new Error("invalid");
-    const value = decoded as Record<string, unknown>;
-    const rank = value.differenceRank;
-    const absoluteDifference = value.absoluteDifference;
-    const lastReceivedAt = value.lastReceivedAt;
-    const styleKey = value.styleKey;
-    if (
-      (rank !== 0 && rank !== 1 && rank !== 2)
-      || typeof absoluteDifference !== "number"
-      || !Number.isSafeInteger(absoluteDifference)
-      || absoluteDifference < 0
-      || typeof lastReceivedAt !== "string"
-      || Number.isNaN(Date.parse(lastReceivedAt))
-      || typeof styleKey !== "string"
-      || value.startDate !== startDate
-      || value.endDate !== endDate
-      || value.query !== query
-      || value.status !== status
-    ) {
-      throw new Error("invalid");
-    }
-    return {
-      differenceRank: rank as number,
-      absoluteDifference: absoluteDifference as number,
-      lastReceivedAt: lastReceivedAt as string,
-      styleKey: styleKey as string,
-      startDate,
-      endDate,
-      query,
-      status,
-    };
-  } catch {
-    return fail("分页游标无效");
-  }
-};
-
-const encodeBoardCursor = (
-  row: Readonly<{
-    difference_quantity: string;
-    last_received_cursor: string;
-    style_no: string;
-  }>,
-  startDate: string,
-  endDate: string,
-  query: string,
-  status: BoardStatus,
-): string => {
-  const difference = Number(row.difference_quantity);
-  return Buffer.from(JSON.stringify({
-  differenceRank: differenceRank(difference),
-  absoluteDifference: Math.abs(difference),
-  lastReceivedAt: row.last_received_cursor,
-  styleKey: row.style_no,
-  startDate,
-  endDate,
-  query,
-  status,
-  })).toString("base64url");
 };
 
 const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
@@ -1371,7 +1290,7 @@ export class ReceivingService {
     endDateOrQuery = startDateInput,
     query = "",
     statusInput = "all",
-    cursor = "",
+    pageInput = 1,
   ): Promise<BoardResult> {
     const startDate = normalizeBoardDate(startDateInput);
     const hasExplicitEndDate = /^\d{4}-\d{2}-\d{2}$/.test(endDateOrQuery);
@@ -1380,7 +1299,8 @@ export class ReceivingService {
     const needle = (hasExplicitEndDate ? query : endDateOrQuery).trim().toUpperCase();
     const status = normalizeBoardStatus(statusInput);
     const mode = needle ? "search" : "range";
-    const pageCursor = decodeBoardCursor(cursor, startDate, endDate, needle, status);
+    const page = Number.isInteger(pageInput) && pageInput > 0 ? pageInput : fail("分页页码无效");
+    const offset = (page - 1) * 15;
 
     const client = await this.database.connect();
     try {
@@ -1461,23 +1381,8 @@ export class ReceivingService {
        ), page_totals AS (
          SELECT *
          FROM filtered_totals
-         WHERE $5::integer IS NULL
-            OR difference_rank>$5::integer
-            OR (
-              difference_rank=$5::integer
-              AND (
-                absolute_difference<$6::bigint
-                OR (
-                  absolute_difference=$6::bigint
-                  AND (
-                    last_received_at<$7::timestamptz
-                    OR (last_received_at=$7::timestamptz AND style_key>$8::text)
-                  )
-                )
-              )
-            )
          ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC
-         LIMIT 16
+         LIMIT 15 OFFSET $5
        )
        SELECT action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
@@ -1622,10 +1527,7 @@ export class ReceivingService {
         endDate,
         needle,
         status,
-        pageCursor?.differenceRank ?? null,
-        pageCursor?.absoluteDifference ?? null,
-        pageCursor?.lastReceivedAt ?? null,
-        pageCursor?.styleKey ?? null,
+        offset,
       ],
     );
     const allRows: BoardRow[] = rowsResult.rows.map((row) => ({
@@ -1660,9 +1562,10 @@ export class ReceivingService {
       rootDeletable: row.root_deletable,
       rootMutable: row.root_mutable,
     }));
-    const rows = allRows.slice(0, 15);
+    const rows = allRows;
     const differenceQuantity = Number(summary.difference_quantity);
     const documentQuantity = Number(summary.document_quantity);
+    const totalCount = Number(summary.order_count);
       await client.query("COMMIT");
       return {
       date: endDate,
@@ -1680,9 +1583,10 @@ export class ReceivingService {
           : Number(((differenceQuantity / documentQuantity) * 100).toFixed(2)),
       },
       rows,
-      nextCursor: allRows.length > 15
-        ? encodeBoardCursor(rowsResult.rows[14]!, startDate, endDate, needle, status)
-        : null,
+      page,
+      pageSize: 15,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / 15)),
       };
     } catch (error) {
       await client.query("ROLLBACK");

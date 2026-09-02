@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { capabilities, decodeCursor, encodeCursor, fail, nodeMeta, number, reportStatusValues, TIMEZONE, type CountRow, type Queryable, type Range, type ReportData } from "./management-reporting-shared.js";
+import { capabilities, fail, nodeMeta, number, reportStatusValues, TIMEZONE, type CountRow, type Queryable, type Range, type ReportData } from "./management-reporting-shared.js";
 import { currentExceptionCount, financial as loadFinancial } from "./management-reporting-financial.js";
 import { exceptions as loadExceptions } from "./management-reporting-exceptions.js";
 import { fetchFacts } from "./management-reporting-orders.js";
@@ -180,7 +180,6 @@ export class ManagementReportingService {
       await this.require(actor, workflowCapability);
     }
 
-    const cursor = decodeCursor(query.cursor);
     const overdue = query.overdue === "true" ? true : query.overdue === "false" ? false : undefined;
     const exception = query.exception === "true" ? true : query.exception === "false" ? false : undefined;
     const ownTaskScoped = !broadCapability
@@ -208,15 +207,18 @@ export class ManagementReportingService {
       ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
       ...(relatedOrderScoped ? { relatedOrderActorUserId: actor.actorId } : {}),
       openFirst: true,
-      limit: query.limit + 1,
-      ...(cursor ? { cursor } : {}),
+      limit: query.limit,
+      offset: (query.page - 1) * query.limit,
     }), this.db.query<{ as_of: Date }>("SELECT CURRENT_TIMESTAMP as_of")]);
-    const hasMore = result.rows.length > query.limit;
-    const rows = hasMore ? result.rows.slice(0, query.limit) : result.rows;
+    const rows = result.rows;
+    const totalCount = number(rows[0]?.total_count ?? "0");
     return {
       asOf: (clock.rows[0]?.as_of ?? new Date(0)).toISOString(),
       items: rows.map((row) => factDto(row)),
-      nextCursor: hasMore && rows.at(-1) ? encodeCursor(rows.at(-1)!) : null,
+      page: query.page,
+      pageSize: query.limit,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / query.limit)),
       canViewReports: currentCapabilities.includes("report:view"),
     };
   }

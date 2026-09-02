@@ -41,7 +41,7 @@ const create = (
     listCraftHistory: vi.fn(async () => []),
     reviseCraft: vi.fn(async () => ({ craftId: "00000000-0000-4000-8000-000000000040", version: 2 })),
     listProcesses: vi.fn(async () => []),
-    listProcessPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listProcessPage: vi.fn(async (input: { page?: number }) => ({ items: [], page: input.page ?? 1, pageSize: 15 as const, totalCount: 0, totalPages: 1 })),
     listProcessDefaultWorkerCandidates: vi.fn(async () => []),
     listSuppliers: vi.fn(async () => []),
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
@@ -520,15 +520,15 @@ describe("access routes", () => {
     const { app, service } = create(["process_catalog:read"], ["quality_control"]);
     const response = await app.inject({
       method: "GET",
-      url: "/master-data/process-catalog?includeInactive=true&q=%25&cursor=next-page",
+      url: "/master-data/process-catalog?includeInactive=true&q=%25&page=2",
       headers: { cookie: "dx_rework_session=trusted" },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ items: [], nextCursor: null });
+    expect(response.json()).toEqual({ items: [], page: 2, pageSize: 15, totalCount: 0, totalPages: 1 });
     expect(service.listProcessPage).toHaveBeenCalledWith({
       includeInactive: true,
       query: "%",
-      cursor: "next-page",
+      page: 2,
     });
     expect(service.listProcesses).not.toHaveBeenCalled();
   });

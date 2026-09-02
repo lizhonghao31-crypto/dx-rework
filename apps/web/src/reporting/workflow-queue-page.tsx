@@ -184,7 +184,7 @@ export function WorkflowQueuePage({
       <Header
         title={title}
         subtitle="订单按真实当前状态进入对应节点；处理完成后自动离开本节点并流转到下一节点"
-        badge={ready ? `${items.length}${page?.nextCursor ? "+" : ""} 单当前结果` : "实时节点队列"}
+        badge={ready ? `${page?.totalCount ?? items.length} 单当前结果` : "实时节点队列"}
         {...(canUseUnifiedQuery ? { action: "返工统一查询", actionHref: "/ui/tasks" } : {})}
       />
 
@@ -201,7 +201,7 @@ export function WorkflowQueuePage({
                   {...(selected === status ? { variant: "primary" as const } : {})}
                   onClick={() => selectStatus(status)}
                 >
-                  {queueMeta[status].node} · {queueMeta[status].label} · {statusPage?.items.length ?? 0}{statusPage?.nextCursor ? "+" : ""} 单
+                  {queueMeta[status].node} · {queueMeta[status].label} · {statusPage?.totalCount ?? 0} 单
                 </Button>
               );
             })}
@@ -264,3 +264,4 @@ export function WorkflowQueuePage({
     </Shell>
   );
 }
+

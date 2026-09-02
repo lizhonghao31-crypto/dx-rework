@@ -19,6 +19,7 @@ type Row = Readonly<{
   created_at: Date;
   export_type?: string | null;
   report_type?: string | null;
+  total_count: string;
 }>;
 
 type Cursor = Readonly<{ createdAt: string; eventId: string }>;
@@ -56,16 +57,23 @@ export class AdminAuditService {
   constructor(private readonly db: Pool) {}
 
   async events(query: AdminAuditEventsQuery): Promise<AdminAuditEventsPage> {
-    const cursor = decodeCursor(query.cursor);
     const params: unknown[] = [];
-    const where = this.commonWhere(query, params, cursor);
+    const where = this.commonWhere(query, params, null);
     if (query.action) where.push(`event.action=$${params.push(query.action)}`);
     if (query.entityType) where.push(`event.entity_type=$${params.push(query.entityType)}`);
     if (query.entityId) where.push(`event.entity_id=$${params.push(query.entityId)}`);
     if (query.authorizationCapability) where.push(`event.authorization_capability=$${params.push(query.authorizationCapability)}`);
     if (query.requestId) where.push(`event.request_id=$${params.push(query.requestId)}`);
-    const rows = await this.select(where, params, query.limit);
-    return this.page(rows, query.limit, eventDto);
+    const rows = await this.select(where, params, query.limit, (query.page - 1) * query.limit);
+    const pageRows = rows.slice(0, query.limit);
+    const totalCount = Number(pageRows[0]?.total_count ?? "0");
+    return {
+      items: pageRows.map(eventDto),
+      page: query.page,
+      pageSize: query.limit,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / query.limit)),
+    };
   }
 
   async exports(query: AdminAuditExportsQuery): Promise<AdminAuditExportsPage> {
@@ -88,8 +96,8 @@ export class AdminAuditService {
     return where;
   }
 
-  private async select(where: string[], params: unknown[], limit: number): Promise<Row[]> {
-    const sql = `SELECT event.event_id,event.request_id,event.actor_id,"user".display_name actor_display_name,event.actor_roles,event.authorization_capability,event.action,event.entity_type,event.entity_id,event.before_state,event.after_state,event.reason,event.created_at,event.after_state->>'exportType' export_type,event.after_state->>'reportType' report_type FROM operation_events event LEFT JOIN app_users "user" ON "user".id=event.actor_id ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY event.created_at DESC,event.event_id DESC LIMIT $${params.push(limit + 1)}`;
+  private async select(where: string[], params: unknown[], limit: number, offset = 0): Promise<Row[]> {
+    const sql = `SELECT event.event_id,event.request_id,event.actor_id,"user".display_name actor_display_name,event.actor_roles,event.authorization_capability,event.action,event.entity_type,event.entity_id,event.before_state,event.after_state,event.reason,event.created_at,event.after_state->>'exportType' export_type,event.after_state->>'reportType' report_type,count(*) OVER()::text total_count FROM operation_events event LEFT JOIN app_users "user" ON "user".id=event.actor_id ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY event.created_at DESC,event.event_id DESC LIMIT $${params.push(limit + 1)} OFFSET $${params.push(offset)}`;
     return (await this.db.query<Row>(sql, params)).rows;
   }
 

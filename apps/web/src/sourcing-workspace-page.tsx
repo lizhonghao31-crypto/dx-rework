@@ -41,7 +41,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Header, Shell } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
-import { CursorListPagination } from "./list-pagination.js";
+import { ListPagination } from "./list-pagination.js";
 import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./rework-detail.css";
@@ -633,26 +633,26 @@ function OrderListPage({
   const [deletingCaseId, setDeletingCaseId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
-  const [cursor, setCursor] = useState("");
-  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const loadVersion = useRef(0);
 
-  const load = async (query: string, pageCursor: string): Promise<void> => {
+  const load = async (query: string, pageNumber: number): Promise<void> => {
     const version = ++loadVersion.current;
     try {
       const params = new URLSearchParams({
         status: mode === "history" ? "closed" : "pending",
         q: query.trim(),
+        page: String(pageNumber),
       });
-      if (pageCursor) params.set("cursor", pageCursor);
       const body = await request(
         `sourcing/cases?${params.toString()}`,
         SourcingCaseListResponseSchema,
       );
       if (version !== loadVersion.current) return;
       setItems(body.items);
-      setNextCursor(body.nextCursor);
+      setPage(body.page);
+      setTotalPages(body.totalPages);
       setMessage("");
     } catch (error) {
       if (version !== loadVersion.current) return;
@@ -663,27 +663,11 @@ function OrderListPage({
   const searchFromFirstPage = (): void => {
     const query = search.trim();
     setActiveQuery(query);
-    setCursor("");
-    setCursorHistory([]);
-    void load(query, "");
+    setPage(1);
+    void load(query, 1);
   };
 
-  const goToNextPage = (): void => {
-    if (!nextCursor) return;
-    setCursorHistory((current) => [...current, cursor]);
-    setCursor(nextCursor);
-    void load(activeQuery, nextCursor);
-  };
-
-  const goToPreviousPage = (): void => {
-    if (cursorHistory.length === 0) return;
-    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? "";
-    setCursorHistory((current) => current.slice(0, -1));
-    setCursor(previousCursor);
-    void load(activeQuery, previousCursor);
-  };
-
-  useEffect(() => { void load("", ""); }, []);
+  useEffect(() => { void load("", 1); }, []);
   const visible = useMemo(
     () => items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
     [items, mode],
@@ -736,13 +720,14 @@ function OrderListPage({
             onDelete={(order) => { void remove(order); }}
           />)}
         </div>
-        {!message ? <CursorListPagination
-          page={cursorHistory.length + 1}
-          canGoPrevious={cursorHistory.length > 0}
-          canGoNext={Boolean(nextCursor)}
+        {!message ? <ListPagination
+          page={page}
+          totalPages={totalPages}
           ariaLabel="订单列表分页"
-          onPrevious={goToPreviousPage}
-          onNext={goToNextPage}
+          onPageChange={(nextPage) => {
+            setPage(nextPage);
+            void load(activeQuery, nextPage);
+          }}
         /> : null}
       </Surface>
     </div>

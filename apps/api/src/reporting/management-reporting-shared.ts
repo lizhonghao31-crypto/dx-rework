@@ -33,6 +33,7 @@ export type FactRow = {
   exception_count: number;
   attachment_count: number;
   updated_at: Date;
+  total_count?: string;
 };
 export type CountRow = { status: string; count: string };
 export type FinancialRow = {

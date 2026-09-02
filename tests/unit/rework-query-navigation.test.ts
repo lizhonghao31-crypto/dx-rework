@@ -29,18 +29,19 @@ describe("rework query default range and ordering", () => {
     expect(source).not.toContain("reportingBusinessDate");
   });
 
-  it("requests 15 cards per page and keeps shared previous/next cursor navigation", async () => {
+  it("requests true 15-card numbered pages through the shared pagination view", async () => {
     const source = await readFile("apps/web/src/reporting/rework-query-page.tsx", "utf8");
 
     expect(source).toContain('limit: "15"');
     expect(source).not.toContain('limit: "40"');
-    expect(source).toContain("const [cursorHistory,setCursorHistory]=useState<string[]>([]);");
-    expect(source).toContain("<CursorListPagination");
+    expect(source).toContain("const [page,setPage]=useState(1);");
+    expect(source).toContain("<ListPagination");
+    expect(source).not.toContain("<CursorListPagination");
     expect(source).toContain('ariaLabel="返工单分页"');
-    expect(source).toContain("page={cursorHistory.length + 1}");
-    expect(source).toContain("onPrevious={previousPage}");
-    expect(source).toContain("canGoNext={Boolean(state.value.nextCursor)}");
-    expect(source).toContain('setCursorHistory([]);');
+    expect(source).toContain("page={state.value.page}");
+    expect(source).toContain("totalPages={state.value.totalPages}");
+    expect(source).toContain("onPageChange={setPage}");
+    expect(source).toContain("setPage(1);");
   });
 
   it("encodes the closed-order rank and still accepts cursors issued before this change", () => {
@@ -66,7 +67,7 @@ describe("rework query default range and ordering", () => {
     expect(listSql).toContain(
       "ORDER BY CASE WHEN order_record.status IN ('completed','cancelled') THEN 1 ELSE 0 END ASC,order_record.updated_at DESC,order_record.rework_order_id DESC",
     );
-    expect(listValues).toEqual([updatedAt, orderId, 0, 41]);
+    expect(listValues).toEqual([updatedAt, orderId, 0, 41, 0]);
 
     const legacyQuery = vi.fn(async () => ({ rows: [] }));
     await fetchFacts({ query: legacyQuery } as never, {
@@ -76,7 +77,7 @@ describe("rework query default range and ordering", () => {
     });
     const [legacySql, legacyValues] = legacyQuery.mock.calls[0] as unknown as [string, unknown[]];
     expect(legacySql).toContain("FROM rework_orders cursor_order WHERE cursor_order.rework_order_id=$2::uuid");
-    expect(legacyValues).toEqual([updatedAt, orderId, 41]);
+    expect(legacyValues).toEqual([updatedAt, orderId, 41, 0]);
 
     const dashboardQuery = vi.fn(async () => ({ rows: [] }));
     await fetchFacts({ query: dashboardQuery } as never, { limit: 8 });

@@ -46,10 +46,10 @@ runWithPostgres("PR-15 admin audit query PostgreSQL integration", () => {
     for (const role of ["owner_group", "production_management", "tail_supervisor", "worker"]) {
       expect(grants.rows).not.toContainEqual({ role_code: role });
     }
-    await expect(service.events({ limit: 100 })).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.events({ limit: 100, page: 1 })).resolves.toEqual({ items: [], page: 1, pageSize: 100, totalCount: 0, totalPages: 1 });
   });
 
-  it("returns historical actor role snapshots, display names, states, reasons, filters and stable cursors", async () => {
+  it("returns historical actor role snapshots, display names, states, reasons, filters and numbered pages", async () => {
     const requestId = `req-${randomUUID()}`;
     const eventIds = [randomUUID(), randomUUID(), randomUUID()];
     await database.query(
@@ -69,14 +69,16 @@ runWithPostgres("PR-15 admin audit query PostgreSQL integration", () => {
     );
     expect(currentRoles.rows).toEqual([{ role_code: "owner_group" }, { role_code: "tail_supervisor" }]);
 
-    const page1 = await service.events({ limit: 2 });
-    const page2 = await service.events({ limit: 2, cursor: page1.nextCursor ?? undefined });
+    const page1 = await service.events({ limit: 2, page: 1 });
+    const page2 = await service.events({ limit: 2, page: 2 });
     expect([...page1.items, ...page2.items].map((item) => item.eventId)).toEqual(eventIds);
     expect(new Set([...page1.items, ...page2.items].map((item) => item.eventId)).size).toBe(3);
+    expect(page1).toMatchObject({ page: 1, pageSize: 2, totalCount: 3, totalPages: 2 });
+    expect(page2).toMatchObject({ page: 2, pageSize: 2, totalCount: 3, totalPages: 2 });
     expect(page1.items[0]).toMatchObject({ actorId: ids.owner, actorDisplayName: "Owner", actorRoles: ["owner_group"], beforeState: { old: true }, reason: "export reason" });
-    await expect(service.events({ limit: 10, cursor: "not-a-valid-cursor" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(service.events({ limit: 10, page: 0 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
 
-    expect((await service.events({ from: "2026-08-05T12:00:02Z", to: "2026-08-05T12:00:03Z", actorId: ids.owner, action: "report.exported", entityType: "report_export", entityId: "rework_overview", authorizationCapability: "report:export", requestId, limit: 10 })).items.map((item) => item.eventId)).toEqual([eventIds[0]]);
+    expect((await service.events({ from: "2026-08-05T12:00:02Z", to: "2026-08-05T12:00:03Z", actorId: ids.owner, action: "report.exported", entityType: "report_export", entityId: "rework_overview", authorizationCapability: "report:export", requestId, limit: 10, page: 1 })).items.map((item) => item.eventId)).toEqual([eventIds[0]]);
     expect((await service.exports({ reportType: "rework_overview", limit: 10 })).items[0]).toMatchObject({ action: "report.exported", reportType: "rework_overview", exportType: null });
     expect((await service.exports({ exportType: "custom_export", limit: 10 })).items[0]).toMatchObject({ action: "export.created", exportType: "custom_export", reportType: null });
     expect((await database.query("SELECT count(*)::int count FROM operation_events")).rows[0].count).toBe(3);

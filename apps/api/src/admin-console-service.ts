@@ -51,7 +51,6 @@ export class AdminConsoleService {
   constructor(private readonly db: Pool) {}
 
   async attachments(query: AdminAttachmentsQuery): Promise<AdminAttachmentsPage> {
-    const cursor = decodeCursor(query.cursor);
     const params: unknown[] = [];
     const where: string[] = [];
     if (query.attachmentId) where.push(`attachment.attachment_id=$${params.push(query.attachmentId)}::uuid`);
@@ -62,7 +61,6 @@ export class AdminConsoleService {
     if (query.mimeType) where.push(`attachment.mime_type=$${params.push(query.mimeType)}`);
     if (query.from) where.push(`attachment.created_at >= $${params.push(query.from)}::timestamptz`);
     if (query.to) where.push(`attachment.created_at <= $${params.push(query.to)}::timestamptz`);
-    if (cursor) where.push(`(attachment.created_at,attachment.attachment_id) < ($${params.push(cursor.createdAt)}::timestamptz,$${params.push(cursor.id)}::uuid)`);
     const rows = (await this.db.query<SeekRow & {
       attachment_id: string;
       original_filename: string;
@@ -76,8 +74,10 @@ export class AdminConsoleService {
       status: "pending" | "ready" | "rejected";
       rejection_reason: string | null;
       ready_at: Date | null;
-    }>(`SELECT attachment.created_at,attachment.attachment_id id,attachment.attachment_id,attachment.original_filename,attachment.mime_type,attachment.size_bytes::text,attachment.sha256,attachment.uploaded_by,uploader.display_name uploader_display_name,attachment.entity_type,attachment.entity_id,attachment.status,attachment.rejection_reason,attachment.ready_at FROM attachments attachment LEFT JOIN app_users uploader ON uploader.id=attachment.uploaded_by ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY attachment.created_at DESC,attachment.attachment_id DESC LIMIT $${params.push(query.limit + 1)}`, params)).rows;
-    const page = rows.slice(0, query.limit);
+      total_count: string;
+    }>(`SELECT attachment.created_at,attachment.attachment_id id,attachment.attachment_id,attachment.original_filename,attachment.mime_type,attachment.size_bytes::text,attachment.sha256,attachment.uploaded_by,uploader.display_name uploader_display_name,attachment.entity_type,attachment.entity_id,attachment.status,attachment.rejection_reason,attachment.ready_at,count(*) OVER()::text total_count FROM attachments attachment LEFT JOIN app_users uploader ON uploader.id=attachment.uploaded_by ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY attachment.created_at DESC,attachment.attachment_id DESC LIMIT $${params.push(query.limit)} OFFSET $${params.push((query.page - 1) * query.limit)}`, params)).rows;
+    const page = rows;
+    const totalCount = Number(page[0]?.total_count ?? "0");
     return {
       items: page.map((row): AdminAttachment => ({
         attachmentId: row.attachment_id,
@@ -94,7 +94,10 @@ export class AdminConsoleService {
         createdAt: row.created_at.toISOString(),
         readyAt: row.ready_at?.toISOString() ?? null,
       })),
-      nextCursor: rows.length > query.limit ? encodeCursor(page.at(-1)!) : null,
+      page: query.page,
+      pageSize: query.limit,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / query.limit)),
     };
   }
 

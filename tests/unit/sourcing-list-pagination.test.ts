@@ -12,7 +12,8 @@ const actor: TrustedActorContext = {
   requestId: "sourcing-list-pagination",
 };
 
-const row = (index: number) => ({
+const row = (index: number, totalCount = 16) => ({
+  total_count: String(totalCount),
   sourcing_case_id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
   erp_order_id: `ERP-${index}`,
   erp_order_no: `ERP-${index}`,
@@ -58,36 +59,33 @@ const row = (index: number) => ({
 });
 
 describe("sourcing list pagination", () => {
-  it("returns 15 rows and uses a stable cursor for the next query", async () => {
+  it("returns true 15-row numbered pages and the total page count", async () => {
     const query = vi.fn()
-      .mockResolvedValueOnce({ rows: Array.from({ length: 16 }, (_, index) => row(index + 1)) })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 15 }, (_, index) => row(index + 1)) })
       .mockResolvedValueOnce({ rows: [row(16)] });
     const service = new SourcingService({ query } as unknown as Pool);
 
-    const first = await service.listCases(actor, "", "pending");
+    const first = await service.listCases(actor, "", "pending", 1);
     expect(first.items).toHaveLength(15);
-    expect(first.nextCursor).toEqual(expect.any(String));
-    expect(query.mock.calls[0]?.[0]).toContain("LIMIT 16");
+    expect(first).toMatchObject({ page: 1, pageSize: 15, totalCount: 16, totalPages: 2 });
+    expect(query.mock.calls[0]?.[0]).toContain("count(*) OVER()");
+    expect(query.mock.calls[0]?.[0]).toContain("LIMIT 15 OFFSET $3");
     expect(query.mock.calls[0]?.[0]).toContain(
       "ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC",
     );
+    expect(query.mock.calls[0]?.[1]).toEqual(["", "pending", 0]);
 
-    const second = await service.listCases(actor, "", "pending", first.nextCursor ?? "");
+    const second = await service.listCases(actor, "", "pending", 2);
     expect(second.items).toHaveLength(1);
-    expect(second.nextCursor).toBeNull();
-    expect(query.mock.calls[1]?.[1]).toEqual([
-      "",
-      "pending",
-      row(15).created_at.toISOString(),
-      row(15).sourcing_case_id,
-    ]);
+    expect(second).toMatchObject({ page: 2, pageSize: 15, totalCount: 16, totalPages: 2 });
+    expect(query.mock.calls[1]?.[1]).toEqual(["", "pending", 15]);
   });
 
-  it("rejects malformed cursors before querying PostgreSQL", async () => {
+  it("rejects invalid page numbers before querying PostgreSQL", async () => {
     const query = vi.fn();
     const service = new SourcingService({ query } as unknown as Pool);
 
-    await expect(service.listCases(actor, "", "all", "not-a-cursor")).rejects.toMatchObject({
+    await expect(service.listCases(actor, "", "all", 0)).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       statusCode: 400,
     });

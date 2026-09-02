@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
 import { verifySession } from "../auth.js";
-import { CursorListPagination } from "../list-pagination.js";
+import { ListPagination } from "../list-pagination.js";
 import { confirmInApp } from "../system-dialog.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { deleteReworkOrder, loadReworkOrders } from "./reporting-client.js";
@@ -31,18 +31,15 @@ export function ReworkQueryPage() {
   const [to,setTo]=useState(initial.get("to")??"");
   const [overdue, setOverdue] = useState(initial.get("overdue") ?? "");
   const [exception, setException] = useState(initial.get("exception") ?? "");
-  const [cursor,setCursor]=useState("");
-  const [cursorHistory,setCursorHistory]=useState<string[]>([]);
+  const [page,setPage]=useState(1);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(true);
   const [isRoot, setIsRoot] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [deleteError, setDeleteError] = useState("");
-  const resetPage=()=>{setCursor("");setCursorHistory([]);};
-  const previousPage=()=>{setCursor(cursorHistory.at(-1)??"");setCursorHistory((history)=>history.slice(0,-1));};
-  const nextPage=(nextCursor:string)=>{setCursorHistory((history)=>[...history,cursor]);setCursor(nextCursor);};
-  const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,cursor:cursor||undefined, limit: "15" }), [debouncedQ,status,responsibilityType,from,to,overdue,exception,cursor]);
+  const resetPage=()=>{setPage(1);};
+  const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,page: String(page), limit: "15" }), [debouncedQ,status,responsibilityType,from,to,overdue,exception,page]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -90,14 +87,12 @@ export function ReworkQueryPage() {
     {deleteError && <Surface className="reporting-state reporting-delete-error"><p role="alert">{deleteError}</p></Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="reporting-state">没有符合筛选条件的返工单。</Surface>}
     <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} canDelete={isRoot} deleting={deletingOrderId === order.reworkOrderId} onDelete={remove} />)}</div>
-    {state.kind === "ready" && <CursorListPagination
-      page={cursorHistory.length + 1}
-      canGoPrevious={cursorHistory.length > 0}
-      canGoNext={Boolean(state.value.nextCursor)}
+    {state.kind === "ready" && <ListPagination
+      page={state.value.page}
+      totalPages={state.value.totalPages}
       busy={refreshing}
       ariaLabel="返工单分页"
-      onPrevious={previousPage}
-      onNext={() => { if (state.value.nextCursor) nextPage(state.value.nextCursor); }}
+      onPageChange={setPage}
     />}
   </Shell>;
 }

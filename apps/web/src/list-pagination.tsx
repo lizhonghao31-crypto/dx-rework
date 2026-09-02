@@ -7,15 +7,6 @@ export const LIST_PAGE_SIZE = 15;
 
 export const listPageWindow = todoPageWindow;
 
-export function cursorPageWindow(page: number, canGoPrevious: boolean, canGoNext: boolean): number[] {
-  const currentPage = Math.max(1, Math.floor(page));
-  return [
-    ...(canGoPrevious && currentPage > 1 ? [currentPage - 1] : []),
-    currentPage,
-    ...(canGoNext ? [currentPage + 1] : []),
-  ];
-}
-
 export function usePaginatedItems<T>(items: readonly T[], resetKey: string, pageSize = LIST_PAGE_SIZE) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -67,9 +58,10 @@ type ListPaginationProps = Readonly<{
   totalPages: number;
   onPageChange: (page: number) => void;
   ariaLabel: string;
+  busy?: boolean;
 }>;
 
-export function ListPagination({ page, totalPages, onPageChange, ariaLabel }: ListPaginationProps) {
+export function ListPagination({ page, totalPages, onPageChange, ariaLabel, busy = false }: ListPaginationProps) {
   const pageCount = Math.max(1, Math.floor(totalPages));
   const currentPage = Math.min(pageCount, Math.max(1, Math.floor(page)));
   const pages = listPageWindow(currentPage, pageCount);
@@ -78,7 +70,7 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel }: Li
   const items: PaginationItem[] = [];
 
   if (firstPage > 1) {
-    items.push({ kind: "page", page: 1, active: currentPage === 1, disabled: false, onClick: () => onPageChange(1) });
+    items.push({ kind: "page", page: 1, active: currentPage === 1, disabled: busy, onClick: () => onPageChange(1) });
   }
   if (firstPage > 2) items.push({ kind: "ellipsis", key: "start-ellipsis" });
   for (const pageNumber of pages) {
@@ -86,41 +78,14 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel }: Li
       kind: "page",
       page: pageNumber,
       active: pageNumber === currentPage,
-      disabled: false,
+      disabled: busy,
       onClick: () => onPageChange(pageNumber),
     });
   }
   if (lastPage < pageCount - 1) items.push({ kind: "ellipsis", key: "end-ellipsis" });
   if (lastPage < pageCount) {
-    items.push({ kind: "page", page: pageCount, active: currentPage === pageCount, disabled: false, onClick: () => onPageChange(pageCount) });
+    items.push({ kind: "page", page: pageCount, active: currentPage === pageCount, disabled: busy, onClick: () => onPageChange(pageCount) });
   }
-
-  return <PaginationNav items={items} ariaLabel={ariaLabel} />;
-}
-
-type CursorListPaginationProps = Readonly<{
-  page: number;
-  canGoPrevious: boolean;
-  canGoNext: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
-  ariaLabel: string;
-  busy?: boolean;
-}>;
-
-export function CursorListPagination({ page, canGoPrevious, canGoNext, onPrevious, onNext, ariaLabel, busy = false }: CursorListPaginationProps) {
-  const currentPage = Math.max(1, Math.floor(page));
-  const items: PaginationItem[] = cursorPageWindow(currentPage, canGoPrevious, canGoNext).map((pageNumber): PaginationItem => ({
-    kind: "page",
-    page: pageNumber,
-    active: pageNumber === currentPage,
-    disabled: busy,
-    onClick: pageNumber < currentPage
-      ? onPrevious
-      : pageNumber > currentPage
-        ? onNext
-        : () => undefined,
-  }));
 
   return <PaginationNav items={items} ariaLabel={ariaLabel} />;
 }

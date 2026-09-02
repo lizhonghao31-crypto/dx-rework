@@ -214,14 +214,14 @@ describe("sourcing PR03 routes", () => {
     const allowed = create(["sourcing:view"], ["production_management"]);
     expect((await allowed.app.inject({
       method: "GET",
-      url: "/sourcing/cases?q=DX-100&status=pending&cursor=next-page",
+      url: "/sourcing/cases?q=DX-100&status=pending&page=2",
       headers: { cookie: "dx_rework_session=trusted" },
     })).statusCode).toBe(200);
     expect(allowed.service.listCases).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationCapability: "sourcing:view" }),
       "DX-100",
       "pending",
-      "next-page",
+      2,
     );
 
     const forbidden = create([], ["production_management"]);

@@ -210,7 +210,7 @@ export const CatalogListQuerySchema = z.object({
 }).strict();
 export const ProcessCatalogPageQuerySchema = CatalogListQuerySchema.extend({
   q: z.string().trim().max(100).optional(),
-  cursor: z.string().max(4096).optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
 }).strict();
 export const PeopleListQuerySchema = CatalogListQuerySchema.extend({
   includeRevokedAliases: z.enum(["true", "false"]).optional(),

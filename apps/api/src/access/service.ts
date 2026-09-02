@@ -136,66 +136,10 @@ type ProcessCatalogPageRow = Readonly<{
   pricing_unit: string;
   active: boolean;
   default_worker_person_ids: string[];
-}>;
-
-type ProcessCatalogCursor = Readonly<{
-  processNameSort: string;
-  processCode: string;
-  processId: string;
-  query: string;
-  includeInactive: boolean;
+  total_count: string;
 }>;
 
 const PROCESS_CATALOG_PAGE_SIZE = 15;
-const PROCESS_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const decodeProcessCatalogCursor = (
-  cursor: string,
-  query: string,
-  includeInactive: boolean,
-): ProcessCatalogCursor | null => {
-  if (!cursor) return null;
-  if (cursor.length > 4096) throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
-  try {
-    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
-    if (!decoded || typeof decoded !== "object") throw new Error("invalid");
-    const value = decoded as Record<string, unknown>;
-    if (
-      typeof value.processNameSort !== "string"
-      || typeof value.processCode !== "string"
-      || typeof value.processId !== "string"
-      || typeof value.query !== "string"
-      || typeof value.includeInactive !== "boolean"
-      || !PROCESS_ID_PATTERN.test(value.processId)
-      || value.query !== query
-      || value.includeInactive !== includeInactive
-    ) {
-      throw new Error("invalid");
-    }
-    return {
-      processNameSort: value.processNameSort,
-      processCode: value.processCode,
-      processId: value.processId,
-      query: value.query,
-      includeInactive: value.includeInactive,
-    };
-  } catch (error) {
-    if (error instanceof ApplicationError) throw error;
-    throw new ApplicationError("VALIDATION_ERROR", "分页游标无效", 400);
-  }
-};
-
-const encodeProcessCatalogCursor = (
-  row: ProcessCatalogPageRow,
-  query: string,
-  includeInactive: boolean,
-): string => Buffer.from(JSON.stringify({
-  processNameSort: row.process_name_sort,
-  processCode: row.process_code,
-  processId: row.process_id,
-  query,
-  includeInactive,
-})).toString("base64url");
 
 const processCatalogItem = (row: ProcessCatalogPageRow) => ({
   processId: row.process_id,
@@ -639,7 +583,7 @@ export class AccessMasterDataService {
   async listProcessPage(input: {
     includeInactive?: boolean;
     query?: string;
-    cursor?: string;
+    page?: number;
   } = {}): Promise<{
     items: Array<{
       processId: string;
@@ -650,17 +594,25 @@ export class AccessMasterDataService {
       active: boolean;
       defaultWorkerPersonIds: string[];
     }>;
-    nextCursor: string | null;
+    page: number;
+    pageSize: 15;
+    totalCount: number;
+    totalPages: number;
   }> {
     const includeInactive = input.includeInactive ?? false;
     const query = (input.query ?? "").trim();
     if (query.length > 100) throw new ApplicationError("VALIDATION_ERROR", "搜索内容不能超过100个字符", 400);
-    const cursor = decodeProcessCatalogCursor(input.cursor ?? "", query, includeInactive);
+    const page = input.page ?? 1;
+    if (!Number.isInteger(page) || page < 1 || page > 100_000) {
+      throw new ApplicationError("VALIDATION_ERROR", "分页页码无效", 400);
+    }
+    const offset = (page - 1) * PROCESS_CATALOG_PAGE_SIZE;
     const result = await this.database.query<ProcessCatalogPageRow>(
       `SELECT catalog.process_id,catalog.process_code,catalog.version,catalog.process_name,
               lower(catalog.process_name) AS process_name_sort,
               catalog.pricing_unit,catalog.active,
-              COALESCE(roster.person_ids,'{}'::uuid[]) AS default_worker_person_ids
+              COALESCE(roster.person_ids,'{}'::uuid[]) AS default_worker_person_ids,
+              count(*) OVER()::text AS total_count
        FROM current_process_catalog catalog
        LEFT JOIN LATERAL (
          SELECT person_ids FROM process_default_worker_roster_versions roster_version
@@ -669,27 +621,22 @@ export class AccessMasterDataService {
        ) roster ON true
        WHERE ($1::boolean OR catalog.active=true)
          AND ($2::text='' OR strpos(upper(catalog.process_name || ' ' || catalog.process_code),upper($2))>0)
-         AND (
-           $3::text IS NULL
-           OR (lower(catalog.process_name),catalog.process_code,catalog.process_id)
-              > ($3::text,$4::text,$5::uuid)
-         )
        ORDER BY lower(catalog.process_name),catalog.process_code,catalog.process_id
-       LIMIT 16`,
+       LIMIT 15 OFFSET $3`,
       [
         includeInactive,
         query,
-        cursor?.processNameSort ?? null,
-        cursor?.processCode ?? null,
-        cursor?.processId ?? null,
+        offset,
       ],
     );
-    const rows = result.rows.slice(0, PROCESS_CATALOG_PAGE_SIZE);
+    const rows = result.rows;
+    const totalCount = Number(rows[0]?.total_count ?? "0");
     return {
       items: rows.map(processCatalogItem),
-      nextCursor: result.rows.length > PROCESS_CATALOG_PAGE_SIZE
-        ? encodeProcessCatalogCursor(rows[PROCESS_CATALOG_PAGE_SIZE - 1]!, query, includeInactive)
-        : null,
+      page,
+      pageSize: PROCESS_CATALOG_PAGE_SIZE,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / PROCESS_CATALOG_PAGE_SIZE)),
     };
   }
 

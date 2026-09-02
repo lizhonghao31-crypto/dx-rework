@@ -58,7 +58,7 @@ export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
   overdue: z.enum(["true", "false"]).optional(),
   exception: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
-  cursor: z.string().regex(/^[A-Za-z0-9_-]{1,500}$/).optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
 }).strict();
 
 export const ReportQuerySchema = DashboardQuerySchema.extend({
@@ -172,7 +172,10 @@ export const SiteDashboardResponseSchema = z.object({
 export const ManagementReworkPageSchema = z.object({
   asOf: DateTimeSchema,
   items: z.array(ManagementReworkRowSchema),
-  nextCursor: z.string().nullable(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  totalCount: z.number().int().nonnegative(),
+  totalPages: z.number().int().positive(),
   canViewReports: z.boolean(),
 }).strict();
 

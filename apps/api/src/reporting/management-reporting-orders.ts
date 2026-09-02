@@ -14,6 +14,7 @@ export async function fetchFacts(source: Queryable, options: {
   to?: string;
   limit: number;
   cursor?: ReworkListCursor | null;
+  offset?: number;
   openFirst?: boolean;
   siteOnly?: boolean;
   workTaskActorUserId?: string;
@@ -90,6 +91,7 @@ export async function fetchFacts(source: Queryable, options: {
     )`);
   }
   const limit = bind(options.limit);
+  const offset = bind(options.offset ?? 0);
   const orderBy = options.openFirst
     ? `${CLOSED_ORDER_RANK_SQL} ASC,order_record.updated_at DESC,order_record.rework_order_id DESC`
     : "order_record.updated_at DESC,order_record.rework_order_id DESC";
@@ -229,7 +231,8 @@ export async function fetchFacts(source: Queryable, options: {
              )
            )
        ) attachment_count,
-       order_record.updated_at
+       order_record.updated_at,
+       count(*) OVER()::text total_count
      FROM rework_orders order_record
      LEFT JOIN current_determinations current_determination ON current_determination.rework_order_id=order_record.rework_order_id
      LEFT JOIN responsibility ON responsibility.rework_order_id=order_record.rework_order_id
@@ -240,7 +243,7 @@ export async function fetchFacts(source: Queryable, options: {
      LEFT JOIN followup_stats ON followup_stats.rework_order_id=order_record.rework_order_id
      LEFT JOIN latest_event ON latest_event.rework_order_id=order_record.rework_order_id
      WHERE ${where.join(" AND ")}
-     ORDER BY ${orderBy} LIMIT ${limit}`,
+     ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
     values,
   );
 }

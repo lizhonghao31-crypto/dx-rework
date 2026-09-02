@@ -14,7 +14,7 @@ export const AdminAuditEventsQuerySchema = z.object({
   entityId: z.string().min(1).max(200).optional(),
   authorizationCapability: z.string().min(1).max(128).optional(),
   requestId: z.string().min(1).max(128).optional(),
-  cursor: CursorSchema.optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
   limit: LimitSchema,
 }).strict();
 
@@ -48,7 +48,10 @@ export const AdminAuditEventSchema = z.object({
 
 export const AdminAuditEventsPageSchema = z.object({
   items: z.array(AdminAuditEventSchema),
-  nextCursor: z.string().nullable(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  totalCount: z.number().int().nonnegative(),
+  totalPages: z.number().int().positive(),
 }).strict();
 
 export const AdminAuditExportSchema = AdminAuditEventSchema.extend({

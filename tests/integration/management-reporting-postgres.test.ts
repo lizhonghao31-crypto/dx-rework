@@ -93,12 +93,12 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
   it("executes dashboards, unified query and every report against the complete empty schema", async () => {
     const management = await service.managementDashboard(owner(), {});
     const site = await service.siteDashboard(tail(), {});
-    const page = await service.listReworkOrders(owner(), { limit: 25 });
+    const page = await service.listReworkOrders(owner(), { limit: 25, page: 1 });
     expect(management.kpis).toEqual({ openOrders: 0, completedOrders: 0, overdueTodos: 0, exceptionCount: 0 });
     expect(management.financial).toEqual({ wageTotal: "0.00", responsibilityTotal: "0.00", ownFactoryTotal: "0.00", externalProposed: "0.00", externalDeducted: "0.00", externalRemaining: "0.00" });
     expect(site.kpis.pendingWageReview).toBe(0);
     expect(site.nodeCounts).toContainEqual({ node: "N11", label: "订单完成与后续结算 · 待工资初核", count: 0 });
-    expect(page).toMatchObject({ items: [], nextCursor: null, canViewReports: true });
+    expect(page).toMatchObject({ items: [], page: 1, pageSize: 25, totalCount: 0, totalPages: 1, canViewReports: true });
 
     for (const reportType of ["rework_overview", "wages", "responsibilities", "own_factory", "external_deductions", "exceptions"] as const) {
       const preview = await service.report(owner(), reportType, { limit: 100 });
@@ -109,10 +109,10 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
   });
 
   it("lets operational roles read only a status-scoped workflow queue without report access", async () => {
-    const page = await service.listReworkOrders(worker(), { status: "in_progress", limit: 25 });
-    expect(page).toMatchObject({ items: [], nextCursor: null, canViewReports: false });
-    await expect(service.listReworkOrders(worker(), { limit: 25 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(service.listReworkOrders(worker(), { status: "pending_order_review", limit: 25 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const page = await service.listReworkOrders(worker(), { status: "in_progress", limit: 25, page: 1 });
+    expect(page).toMatchObject({ items: [], page: 1, pageSize: 25, totalCount: 0, totalPages: 1, canViewReports: false });
+    await expect(service.listReworkOrders(worker(), { limit: 25, page: 1 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(service.listReworkOrders(worker(), { status: "pending_order_review", limit: 25, page: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("keeps site users out of management reports and records every successful export", async () => {
@@ -152,7 +152,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
 
   it("rejects report access when the claimed capability is absent even for system_admin", async () => {
     const systemAdmin = actor(ids.admin, ["system_admin"], "report:view", ["dashboard:management:read"]);
-    const page = await service.listReworkOrders(systemAdmin, { limit: 25 });
+    const page = await service.listReworkOrders(systemAdmin, { limit: 25, page: 1 });
     expect(page.canViewReports).toBe(false);
     await expect(service.report(systemAdmin, "rework_overview", { limit: 100 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(service.report(owner(), "wages", { status: "approved", limit: 100 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
