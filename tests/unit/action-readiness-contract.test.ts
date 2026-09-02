@@ -2,18 +2,28 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("business action readiness contract", () => {
-  it("keeps N01 readiness and gates the simplified N08 submit action", async () => {
-    const [initiation, responsibility] = await Promise.all([
+  it("keeps N01, historical tail counts and N08 clickable with explicit validation feedback", async () => {
+    const [initiation, tailInspection, responsibility] = await Promise.all([
       readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
+      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
     ]);
 
-    expect(initiation).toContain("const complete = Boolean(");
-    expect(initiation).toContain("availableImageCount > 0");
-    expect(initiation).toContain('disabled={busy || uploading || !complete || (Boolean(reworkOrderId) && !order)}');
-    expect(responsibility).toContain("const allProcessesValid = processes.length > 0 && processes.every(processValid) && tailBearerValid;");
-    expect(responsibility).toContain("!response || !editable || !allProcessesValid || !handlerUserId || busyAction");
-    expect(responsibility).toContain('disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}');
+    expect(initiation).toContain("const submissionIssue =");
+    expect(initiation).toContain("const complete = submissionIssue === null;");
+    expect(initiation).toContain("await alertInApp(submissionIssue");
+    expect(initiation).toContain('disabled={busy || uploading || (Boolean(reworkOrderId) && !order)}');
+    expect(initiation).not.toContain("busy || uploading || !complete");
+
+    expect(tailInspection).toContain('title: "整查数量暂不能提交"');
+    expect(tailInspection).toContain('data-ready={tailSubmitReady ? "true" : "false"}');
+    expect(tailInspection).toContain('disabled={busy} onClick={() => void submit()}');
+
+    expect(responsibility).toContain("const processValidationIssue =");
+    expect(responsibility).toContain("const submissionIssue =");
+    expect(responsibility).toContain('title: "责任判定暂不能提交"');
+    expect(responsibility).toContain('disabled={Boolean(busyAction)}');
+    expect(responsibility).not.toContain('disabled={!allProcessesValid || !handlerUserId || Boolean(busyAction)}');
     expect(responsibility).toContain('const needsSave = determination === null || determination.stage === "finalized" || hasUnsavedChanges');
   });
 
