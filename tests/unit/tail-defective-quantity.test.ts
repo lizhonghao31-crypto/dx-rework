@@ -8,6 +8,7 @@ const routesUrl = new URL("../../apps/api/src/rework/routes.ts", import.meta.url
 const contractsUrl = new URL("../../packages/contracts/src/index.ts", import.meta.url);
 const pageUrl = new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url);
 const migrationUrl = new URL("../../apps/api/migrations/0116_tail_defective_quantity_ledger.sql", import.meta.url);
+const integrityMigrationUrl = new URL("../../apps/api/migrations/0136_tail_defective_quantity_integrity.sql", import.meta.url);
 const manifestUrl = new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url);
 
 describe("tail defective quantity ledger", () => {
@@ -26,6 +27,8 @@ describe("tail defective quantity ledger", () => {
     expect(service).toContain('["tail_supervisor", "owner_group", "root_superuser"]');
     expect(service).toContain("只有尾部主管、老板或Root可以增加尾部次品数量");
     expect(service).toContain("receiving: Number(row.source_receiving_defective_quantity ?? 0)");
+    expect(service).toContain("receivingLinked: row.source_receiving_defective_quantity !== null");
+    expect(service).toContain("updated_by=$3,updated_at=clock_timestamp()");
     expect(service).toContain("tail: Number(row.tail_defective_quantity ?? 0)");
     expect(service).toContain("tailEntries:");
   });
@@ -42,6 +45,8 @@ describe("tail defective quantity ledger", () => {
     const page = await readFile(pageUrl, "utf8");
     expect(page).toContain("总数 = 收货阶段 + 尾部阶段");
     expect(page).toContain("detail.defectiveQuantity.receiving");
+    expect(page).toContain("detail.defectiveQuantity.receivingLinked");
+    expect(page).toContain("未关联仓库收货记录");
     expect(page).toContain("detail.defectiveQuantity.tail");
     expect(page).toContain("detail.defectiveQuantity.total");
     expect(page).toContain("detail.defectiveQuantity.canAddTail");
@@ -54,5 +59,15 @@ describe("tail defective quantity ledger", () => {
     const manifest = JSON.parse(manifestText) as { migrations: Array<{ version: string; checksum: string }> };
     expect(manifest.migrations).toContainEqual({ version: "0116_tail_defective_quantity_ledger", checksum });
     expect(migration.toString("utf8")).toContain("quantity integer NOT NULL CHECK (quantity > 0)");
+
+    const integrityMigration = await readFile(integrityMigrationUrl);
+    const integrityChecksum = createHash("sha256").update(integrityMigration).digest("hex");
+    expect(manifest.migrations).toContainEqual({
+      version: "0136_tail_defective_quantity_integrity",
+      checksum: integrityChecksum,
+    });
+    expect(integrityMigration.toString("utf8")).toContain("rework_tail_defective_quantity_entries_guard_insert");
+    expect(integrityMigration.toString("utf8")).toContain("rework_tail_defective_quantity_entries_no_update");
+    expect(integrityMigration.toString("utf8")).toContain("rework.tail_defective_quantity.add");
   });
 });

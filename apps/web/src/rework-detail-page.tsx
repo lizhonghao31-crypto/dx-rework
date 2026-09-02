@@ -80,6 +80,7 @@ export type ReworkBusinessDetail = Readonly<{
   }>;
   defectiveQuantity: Readonly<{
     receiving: number;
+    receivingLinked: boolean;
     tail: number;
     total: number;
     canAddTail: boolean;
@@ -842,7 +843,7 @@ export function ReworkDetailPage({
           <button type="button" onClick={() => setDefectDialogOpen(false)}>关闭</button>
         </div>
         <div className="rework-defect-dialog__totals">
-          <div><span>收货阶段</span><strong>{detail.defectiveQuantity.receiving} 件</strong><small>来自仓库收货记录</small></div>
+          <div><span>收货阶段</span><strong>{detail.defectiveQuantity.receivingLinked ? `${detail.defectiveQuantity.receiving} 件` : "—"}</strong><small>{detail.defectiveQuantity.receivingLinked ? "来自仓库收货记录" : "未关联仓库收货记录"}</small></div>
           <div><span>尾部阶段</span><strong>{detail.defectiveQuantity.tail} 件</strong><small>{detail.defectiveQuantity.tailEntries.length} 条追加记录</small></div>
           <div><span>次品总数</span><strong>{detail.defectiveQuantity.total} 件</strong><small>两阶段合计</small></div>
         </div>
