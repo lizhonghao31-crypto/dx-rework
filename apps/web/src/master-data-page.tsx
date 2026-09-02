@@ -5,7 +5,7 @@ import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Shell } from "./components.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
-import { promptInApp } from "./system-dialog.js";
+import { alertInApp, promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
@@ -243,10 +243,12 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     }
   };
 
-  const createCraft = () => {
+  const createCraft = async () => {
     const name = craftName.trim();
     if (!name) {
-      setError("请输入工艺名称。");
+      const issue = "请输入工艺名称。";
+      setError(issue);
+      await alertInApp(issue, { title: "工艺暂不能新增", confirmLabel: "知道了" });
       return;
     }
     void run("create-craft", async () => {
@@ -276,10 +278,12 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       }));
   };
 
-  const createSupplier = () => {
+  const createSupplier = async () => {
     const name = supplierName.trim();
     if (!name) {
-      setError("请输入供应商名称。");
+      const issue = "请输入供应商名称。";
+      setError(issue);
+      await alertInApp(issue, { title: "供应商暂不能新增", confirmLabel: "知道了" });
       return;
     }
     void run("create-supplier", async () => {
@@ -315,10 +319,12 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       }));
   };
 
-  const createProcess = () => {
+  const createProcess = async () => {
     const name = processName.trim();
     if (!name) {
-      setError("请输入工序名称。");
+      const issue = "请输入工序名称。";
+      setError(issue);
+      await alertInApp(issue, { title: "工序暂不能新增", confirmLabel: "知道了" });
       return;
     }
     void run("create-process", async () => {
@@ -539,12 +545,22 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     if (!preview || busy) return;
     const reason = importReason.trim();
     if (!reason) {
-      setError("确认导入前请填写操作原因。");
+      const issue = "确认导入前请填写操作原因。";
+      setError(issue);
+      await alertInApp(issue, { title: "批量资料暂不能导入", confirmLabel: "知道了" });
       return;
     }
     const actionable = preview.rows.filter((row) => row.action === "create" || row.action === "update");
     if (preview.rows.some((row) => row.action === "error")) {
-      setError("预检仍有错误行，请先修改文件后重新上传。");
+      const issue = "预检仍有错误行，请先修改文件后重新上传。";
+      setError(issue);
+      await alertInApp(issue, { title: "批量资料暂不能导入", confirmLabel: "知道了" });
+      return;
+    }
+    if (actionable.length === 0) {
+      const issue = "当前预检没有需要新增或更新的记录。";
+      setError(issue);
+      await alertInApp(issue, { title: "批量资料暂不能导入", confirmLabel: "知道了" });
       return;
     }
     setBusy("batch-import");
@@ -654,7 +670,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 aria-label="外发工艺名称"
                 onChange={(event) => setCraftName(event.target.value)}
               />
-              <Button disabled={Boolean(busy) || !craftName.trim()} onClick={createCraft}>
+              <Button data-ready={craftName.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void createCraft()}>
                 {busy === "create-craft" ? "新增中…" : "新增工艺"}
               </Button>
             </div>
@@ -711,7 +727,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <Button disabled={Boolean(busy) || !supplierName.trim()} onClick={createSupplier}>
+              <Button data-ready={supplierName.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void createSupplier()}>
                 {busy === "create-supplier" ? "新增中…" : "新增"}
               </Button>
             </div>
@@ -780,7 +796,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 <option value="piece">件</option>
                 <option value="hour">小时</option>
               </select>
-              <Button disabled={Boolean(busy) || !processName.trim()} onClick={createProcess}>
+              <Button data-ready={processName.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void createProcess()}>
                 {busy === "create-process" ? "新增中…" : "新增"}
               </Button>
             </div>
@@ -867,7 +883,8 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
             {previewSummary.create + previewSummary.update === 0 && <p role="status">当前预检没有需要新增或更新的记录。</p>}
             <Button
               variant="primary"
-              disabled={Boolean(busy) || previewSummary.error > 0 || !importReason.trim() || previewSummary.create + previewSummary.update === 0}
+              data-ready={previewSummary.error === 0 && Boolean(importReason.trim()) && previewSummary.create + previewSummary.update > 0 ? "true" : "false"}
+              disabled={Boolean(busy)}
               onClick={() => void applyImport()}
             >
               {busy === "batch-import" ? "导入中…" : "确认导入"}
