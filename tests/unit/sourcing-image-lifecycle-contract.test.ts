@@ -58,17 +58,20 @@ describe("sourcing image lifecycle parity", () => {
     expect(page).toContain("currentAttachmentCount={attachments.length}");
   });
 
-  it("restores local create drafts and blocks sourcing mobile deep links without building mobile UI", async () => {
-    const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
+  it("restores local create drafts and opens mobile deep links on the real business UI", async () => {
+    const [page, css] = await Promise.all([
+      readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
+      readFile("apps/web/src/sourcing-workspace.css", "utf8"),
+    ]);
     expect(page).toContain("LOCAL_SOURCING_DRAFT_KEY");
     expect(page).toContain("readLocalSourcingDraft");
     expect(page).toContain("clearLocalSourcingDraft");
     expect(page).toContain("保存草稿");
     expect(page).toContain("localSourcingDraftKey(user.id)");
     expect(page).toContain("restoredDraftUserId");
-    expect(page).toContain("isMobileClient()");
-    expect(page).toContain("userAgentData?.mobile");
-    expect(page).not.toContain('window.matchMedia("(max-width: 800px)")');
-    expect(page).toContain("外发定价选厂移动端尚未建设");
+    expect(page).not.toContain("isMobileClient");
+    expect(page).not.toContain("外发定价选厂移动端尚未建设");
+    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain(".sourcing-process-editor");
   });
 });
