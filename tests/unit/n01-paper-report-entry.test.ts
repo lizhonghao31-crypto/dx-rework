@@ -19,7 +19,8 @@ describe("N01 v2 streamlined initiation", () => {
     expect(form).toContain("＋ 上传报告");
     expect(form).toContain('accept="image/*"');
     expect(form).toContain("uploadImageWithNormalizationRetry");
-    expect(form).toContain("availableImageCount > 0");
+    expect(form).toContain("availableImageCount <= 0");
+    expect(form).toContain("请至少上传 1 张返工报告图片。");
     expect(form).toContain("order?.attachmentIds.length ?? existingAttachmentCount");
     expect(form).toContain("报告仅支持图片格式");
     expect(form).not.toContain("验货阶段（必填）");
