@@ -90,7 +90,7 @@
 /* The sidebar has grown beyond its original fixed-height assumption. Keep the
    navigation in its own scroll region so the account block can never overlap
    the last navigation item. */
-body .app-shell nav {
+body .app-shell > aside > nav {
   max-height: calc(100vh - 240px);
   overflow-y: auto;
   padding-right: 4px;
