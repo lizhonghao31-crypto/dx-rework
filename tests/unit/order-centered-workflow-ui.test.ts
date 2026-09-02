@@ -24,7 +24,8 @@ describe("order-centered workflow UI", () => {
     expect(todos).toContain("LIMIT $4 OFFSET $5");
     expect(page).toContain('params.set("module", module)');
     expect(page).toContain("visiblePages.map");
-    expect(page).toContain('aria-label="后五页"');
+    expect(page).not.toContain('aria-label="后五页"');
+    expect(page).toContain("todoPageWindow(page, renderedTotalPages)");
     expect(page).toContain("order?.supplierName");
     expect(page).toContain("供应商：");
     expect(page).not.toContain("订单号：");
