@@ -59,6 +59,7 @@ type IePrecountEntry = Readonly<{
   recordedAt: string;
 }>;
 type IePrecountOverview = Readonly<{ entries: readonly IePrecountEntry[] }>;
+type PriceReviewDecision = "approved" | "rejected";
 
 export function WholeOrderReviewPanel({
   reworkOrderId,
@@ -83,11 +84,13 @@ export function WholeOrderReviewPanel({
   const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
   const [multipliers, setMultipliers] = useState<Record<string, string>>({});
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
+  const [priceReviewDecisions, setPriceReviewDecisions] = useState<Record<string, PriceReviewDecision>>({});
   const attempts = useRef<Record<string, string>>({});
   const requestInFlight = useRef(false);
 
   const applyOverview = (overview: WholeOrderReviewResponse) => {
     setData(overview);
+    setPriceReviewDecisions({});
     setCorrectionInputs((current) => Object.fromEntries(overview.reports.map((report) => [
       report.workReportId,
       current[report.workReportId] ?? String(report.effectiveQuantity),
@@ -319,7 +322,14 @@ export function WholeOrderReviewPanel({
 
   const reviewQuantities = async (decision: "approved" | "rejected") => {
     if (!data) return;
-    const reason = decision === "rejected" ? await promptInApp("请填写退回尾部主管的原因") : undefined;
+    const rejectedProcesses = data.processes
+      .filter((process) => priceReviewDecisions[process.configurationItemId] === "rejected")
+      .map((process) => process.processName);
+    const reason = decision === "rejected"
+      ? await promptInApp(rejectedProcesses.length > 0
+        ? `已驳回${rejectedProcesses.join("、")}的调价，请填写退回尾部主管的原因`
+        : "请填写退回尾部主管的原因")
+      : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
     if (decision === "approved" && !(await confirmInApp("确认数量与价格提案无误？通过后按批准的有效数量和最终价格生成工资。"))) return;
     try {
@@ -341,6 +351,13 @@ export function WholeOrderReviewPanel({
   const tailStage = data.reworkStatus === "pending_order_review";
   const ieStage = data.reworkStatus === "pending_final_quantity_ie_review";
   const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
+  const changedPriceIds = ieStage
+    ? data.finalConfirmation?.prices.filter((price) => price.changed).map((price) => price.configurationItemId) ?? []
+    : [];
+  const allChangedPricesDecided = changedPriceIds.length > 0
+    && changedPriceIds.every((id) => priceReviewDecisions[id] === "approved" || priceReviewDecisions[id] === "rejected");
+  const anyPriceRejected = changedPriceIds.some((id) => priceReviewDecisions[id] === "rejected");
+  const priceReviewReady = changedPriceIds.length === 0 || allChangedPricesDecided;
   const submittedTailAssignments = tailData?.assignments.filter((assignment) => assignment.submittedAt !== null) ?? [];
   const priceIssue = data.processes.some((process) => {
     const value = priceInputs[process.configurationItemId]?.trim() ?? "";
@@ -487,16 +504,12 @@ export function WholeOrderReviewPanel({
               onClick={() => void correctProcess(process.configurationItemId, reports, process.processName)}
             >保存修正</Button> : null}
             </div>
-            {(tailStage || ieStage) && <div className="quantity-process-price">
+            {tailStage && <div className="quantity-process-price">
               <div className="quantity-process-price__copy">
-                <b>{tailStage ? "最终价格" : "价格复核"}</b>
-                <small>{tailStage
-                  ? `N03 已审 ${formatUnitPrice(process.finalUnitPrice)}；不调整可保留原价`
-                  : reviewedPrice
-                    ? "与本版最终数量一并提交"
-                    : "历史在途单沿用 N03 已审价格"}</small>
+                <b>最终价格</b>
+                <small>{`N03 已审 ${formatUnitPrice(process.finalUnitPrice)}；不调整可保留原价`}</small>
               </div>
-              {tailStage && data.canReview ? <InsetField
+              {data.canReview && <InsetField
                 label={`拟提交单价（元/${process.pricingUnit === "piece" ? "件" : "小时"}）`}
                 type="number"
                 min="0.001"
@@ -508,13 +521,38 @@ export function WholeOrderReviewPanel({
                   ...current,
                   [process.configurationItemId]: event.target.value,
                 }))}
-              /> : <div className="quantity-process-price__review">
-                <span><small>原价</small><strong>{formatUnitPrice(reviewedPrice?.originalUnitPrice ?? process.finalUnitPrice)}</strong></span>
-                <span><small>提议价</small><strong>{formatUnitPrice(reviewedPrice?.proposedUnitPrice ?? process.finalUnitPrice)}</strong></span>
-                <StatusBadge tone={reviewedPrice?.changed ? "warning" : "info"}>
-                  {reviewedPrice?.changed ? "价格有调整" : "沿用原价"}
-                </StatusBadge>
-              </div>}
+              />}
+            </div>}
+            {ieStage && reviewedPrice?.changed && <div className="quantity-process-price">
+              <div className="quantity-process-price__copy">
+                <b>价格复核</b>
+              </div>
+              <div className="quantity-process-price__review">
+                <span><small>原价</small><strong>{formatUnitPrice(reviewedPrice.originalUnitPrice)}</strong></span>
+                <span><small>提议价</small><strong>{formatUnitPrice(reviewedPrice.proposedUnitPrice)}</strong></span>
+                {data.canIeReview && <div className="quantity-price-decision" aria-label={`${process.processName}调价决定`}>
+                  <button
+                    className="quantity-price-decision__button is-approve"
+                    type="button"
+                    aria-pressed={priceReviewDecisions[process.configurationItemId] === "approved"}
+                    disabled={busy}
+                    onClick={() => setPriceReviewDecisions((current) => ({
+                      ...current,
+                      [process.configurationItemId]: "approved",
+                    }))}
+                  >同意</button>
+                  <button
+                    className="quantity-price-decision__button is-reject"
+                    type="button"
+                    aria-pressed={priceReviewDecisions[process.configurationItemId] === "rejected"}
+                    disabled={busy}
+                    onClick={() => setPriceReviewDecisions((current) => ({
+                      ...current,
+                      [process.configurationItemId]: "rejected",
+                    }))}
+                  >驳回</button>
+                </div>}
+              </div>
             </div>}
             {open && <div className="quantity-process-detail">
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
@@ -650,8 +688,14 @@ export function WholeOrderReviewPanel({
           <p>通过后按批准的有效数量和最终价格生成工资；退回后原价格不变并保留本版审计记录。</p>
         </div>
         <div className="quantity-review-actions">
-          <Button onClick={() => void reviewQuantities("rejected")} disabled={busy}>退回</Button>
-          <Button variant="primary" onClick={() => void reviewQuantities("approved")} disabled={busy}>通过</Button>
+          {changedPriceIds.length > 0 ? <Button
+            variant="primary"
+            onClick={() => void reviewQuantities(anyPriceRejected ? "rejected" : "approved")}
+            disabled={busy || !priceReviewReady}
+          >提交复核结果</Button> : <>
+            <Button onClick={() => void reviewQuantities("rejected")} disabled={busy}>退回</Button>
+            <Button variant="primary" onClick={() => void reviewQuantities("approved")} disabled={busy}>通过</Button>
+          </>}
         </div>
       </div>
     </Surface>}

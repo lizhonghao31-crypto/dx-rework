@@ -71,6 +71,16 @@ describe("whole-order review contracts", () => {
     expect(panel).toContain("确认数量并提交 IE");
     expect(panel).toContain("临时工实发系数");
     expect(panel).toContain("IE 复核决定");
+    expect(panel).not.toContain("沿用原价");
+    expect(panel).toContain("ieStage && reviewedPrice?.changed");
+    expect(panel).toContain(">同意</button>");
+    expect(panel).toContain(">驳回</button>");
+    expect(panel).toContain('className="quantity-price-decision__button is-approve"');
+    expect(panel).toContain('className="quantity-price-decision__button is-reject"');
+    expect(panel).toContain("data.canIeReview && <div className=\"quantity-price-decision\"");
+    expect(panel).toContain("allChangedPricesDecided");
+    expect(panel).toContain('priceReviewDecisions[id] === "approved" || priceReviewDecisions[id] === "rejected"');
+    expect(panel).not.toContain("changedPriceIds.length === 0 || anyPriceRejected");
     expect(panel).toContain("系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。");
     expect(service).not.toContain("async submitTailPricing");
     expect(service).not.toContain("async reviewTailPricing");

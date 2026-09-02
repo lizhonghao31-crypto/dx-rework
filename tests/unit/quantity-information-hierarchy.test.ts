@@ -50,7 +50,11 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(review).toContain('tone={ready ? "success" : "warning"}');
     expect(review).toContain('填写每个工序有效的最终单价');
     expect(review).toContain("processPrices: prices.map");
-    expect(review).toContain("价格有调整");
+    expect(review).not.toContain("价格有调整");
+    expect(reviewCss).toContain(".quantity-price-decision__button.is-approve");
+    expect(reviewCss).toContain("color: var(--color-success, #176b45)");
+    expect(reviewCss).toContain(".quantity-price-decision__button.is-reject");
+    expect(reviewCss).toContain("color: var(--color-danger, #a12b2b)");
     expect(review).toContain("原价格不变并保留本版审计记录");
   });
 });
