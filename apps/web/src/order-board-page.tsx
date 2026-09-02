@@ -11,7 +11,7 @@ import {
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
 import { ImageViewer } from "./image-viewer.js";
-import { CursorListPagination } from "./list-pagination.js";
+import { ListPagination } from "./list-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
 
@@ -75,7 +75,10 @@ type BoardResult = Readonly<{
     differenceRate: number;
   }>;
   rows: readonly BoardRow[];
-  nextCursor: string | null;
+  page: number;
+  pageSize: 15;
+  totalCount: number;
+  totalPages: number;
 }>;
 
 const localDate = (): string => {
@@ -175,8 +178,7 @@ export function OrderBoardPage() {
   const [canInitiate, setCanInitiate] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
-  const [cursor, setCursor] = useState("");
-  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
+  const [page, setPage] = useState(1);
   const [expandedStyles, setExpandedStyles] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<BoardRow | null>(null);
   const [deleting, setDeleting] = useState<BoardRow | null>(null);
@@ -193,8 +195,7 @@ export function OrderBoardPage() {
   }> | null>(null);
 
   const resetPagination = () => {
-    setCursor("");
-    setCursorHistory([]);
+    setPage(1);
   };
 
   useEffect(() => {
@@ -227,8 +228,8 @@ export function OrderBoardPage() {
     setPageLoading(true);
     const params = new URLSearchParams({ startDate, endDate });
     params.set("status", status);
+    params.set("page", String(page));
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
-    if (cursor) params.set("cursor", cursor);
     void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("订单回货加载失败");
@@ -251,7 +252,7 @@ export function OrderBoardPage() {
         if (active) setPageLoading(false);
       });
     return () => { active = false; };
-  }, [startDate, endDate, debouncedQuery, status, cursor, refreshToken]);
+  }, [startDate, endDate, debouncedQuery, status, page, refreshToken]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
@@ -493,23 +494,12 @@ export function OrderBoardPage() {
       })}
     </div>
     {message ? <p className="order-board-message" role="status">{message}</p> : null}
-    {data ? <CursorListPagination
-      page={cursorHistory.length + 1}
-      canGoPrevious={cursorHistory.length > 0}
-      canGoNext={Boolean(data.nextCursor)}
+    {data ? <ListPagination
+      page={data.page}
+      totalPages={data.totalPages}
       busy={pageLoading}
       ariaLabel="订单回货分页"
-      onPrevious={() => {
-          if (pageLoading) return;
-          const previous = cursorHistory[cursorHistory.length - 1] ?? "";
-          setCursorHistory((current) => current.slice(0, -1));
-          setCursor(previous);
-      }}
-      onNext={() => {
-          if (pageLoading || !data.nextCursor) return;
-          setCursorHistory((current) => [...current, cursor]);
-          setCursor(data.nextCursor);
-      }}
+      onPageChange={setPage}
     /> : null}
     {mutationMessage && !editing && !deleting ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p> : null}
 

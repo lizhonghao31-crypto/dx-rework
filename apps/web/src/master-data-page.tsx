@@ -4,7 +4,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { Shell } from "./components.js";
-import { CursorListPagination, ListPagination, usePaginatedItems } from "./list-pagination.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
@@ -42,7 +42,10 @@ type Process = Readonly<{
 
 type ProcessPage = Readonly<{
   items: Process[];
-  nextCursor: string | null;
+  page: number;
+  pageSize: 15;
+  totalCount: number;
+  totalPages: number;
 }>;
 
 type ProcessDefaultWorkerCandidate = Readonly<{
@@ -117,10 +120,10 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   return await response.json() as T;
 }
 
-const processCatalogPath = (query: string, cursor = ""): string => {
+const processCatalogPath = (query: string, page = 1): string => {
   const parameters = new URLSearchParams({ includeInactive: "true" });
   if (query) parameters.set("q", query);
-  if (cursor) parameters.set("cursor", cursor);
+  parameters.set("page", String(page));
   return `master-data/process-catalog?${parameters.toString()}`;
 };
 
@@ -170,9 +173,8 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   const [processRosterSearch, setProcessRosterSearch] = useState("");
   const [processSearch, setProcessSearch] = useState("");
   const [appliedProcessSearch, setAppliedProcessSearch] = useState("");
-  const [processCursor, setProcessCursor] = useState("");
-  const [processCursorHistory, setProcessCursorHistory] = useState<string[]>([]);
-  const [processNextCursor, setProcessNextCursor] = useState<string | null>(null);
+  const [processPage, setProcessPage] = useState(1);
+  const [processTotalPages, setProcessTotalPages] = useState(1);
   const [processPageLoading, setProcessPageLoading] = useState(false);
 
   const load = async () => {
@@ -183,14 +185,13 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       } else if (view === "suppliers") {
         setSuppliers(await json<Supplier[]>("master-data/suppliers?includeInactive=true"));
       } else {
-        const [processPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
+        const [nextProcessPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
           json<ProcessPage>(processCatalogPath(appliedProcessSearch)),
           json<ProcessDefaultWorkerCandidate[]>("master-data/process-default-worker-candidates"),
         ]);
-        setProcesses(processPage.items);
-        setProcessNextCursor(processPage.nextCursor);
-        setProcessCursor("");
-        setProcessCursorHistory([]);
+        setProcesses(nextProcessPage.items);
+        setProcessPage(nextProcessPage.page);
+        setProcessTotalPages(nextProcessPage.totalPages);
         setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
       }
     } catch (loadError) {
@@ -200,18 +201,17 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
 
   useEffect(() => { void load(); }, [view]);
 
-  const showProcessPage = async (query: string, cursor: string, history: string[]) => {
+  const showProcessPage = async (query: string, pageNumber: number) => {
     if (processPageLoading || busy) return;
     setProcessPageLoading(true);
     setBusy("process-page");
     setError("");
     try {
-      const page = await json<ProcessPage>(processCatalogPath(query, cursor));
-      setProcesses(page.items);
-      setProcessNextCursor(page.nextCursor);
+      const nextPage = await json<ProcessPage>(processCatalogPath(query, pageNumber));
+      setProcesses(nextPage.items);
+      setProcessPage(nextPage.page);
+      setProcessTotalPages(nextPage.totalPages);
       setAppliedProcessSearch(query);
-      setProcessCursor(cursor);
-      setProcessCursorHistory(history);
       setEditingProcessRosterId("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "工序目录加载失败");
@@ -222,12 +222,12 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   };
 
   const applyProcessSearch = (): void => {
-    void showProcessPage(processSearch.trim(), "", []);
+    void showProcessPage(processSearch.trim(), 1);
   };
 
   const clearProcessSearch = (): void => {
     setProcessSearch("");
-    void showProcessPage("", "", []);
+    void showProcessPage("", 1);
   };
 
   const run = async (key: string, work: () => Promise<unknown>) => {
@@ -831,19 +831,12 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 </article>
               ))}
             </div>
-            <CursorListPagination
-              page={processCursorHistory.length + 1}
-              canGoPrevious={processCursorHistory.length > 0}
-              canGoNext={Boolean(processNextCursor)}
+            <ListPagination
+              page={processPage}
+              totalPages={processTotalPages}
               busy={Boolean(busy) || processPageLoading}
               ariaLabel="公共工序分页"
-              onPrevious={() => {
-                    const previous = processCursorHistory[processCursorHistory.length - 1] ?? "";
-                    void showProcessPage(appliedProcessSearch, previous, processCursorHistory.slice(0, -1));
-              }}
-              onNext={() => {
-                    if (processNextCursor) void showProcessPage(appliedProcessSearch, processNextCursor, [...processCursorHistory, processCursor]);
-              }}
+              onPageChange={(nextPage) => { void showProcessPage(appliedProcessSearch, nextPage); }}
             />
           </Surface> : null}
         </div>

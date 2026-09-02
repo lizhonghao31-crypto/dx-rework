@@ -179,7 +179,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
   });
 
   app.get<{ Querystring: {
-    cursor?: string;
+    page?: string;
     date?: string;
     startDate?: string;
     endDate?: string;
@@ -195,12 +195,16 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     }).format(new Date());
     const startDate = request.query.startDate ?? request.query.date ?? today;
     const endDate = request.query.endDate ?? request.query.date ?? startDate;
+    const page = Number(request.query.page ?? "1");
+    if (!Number.isInteger(page) || page < 1 || page > 100_000) {
+      throw new ApplicationError("VALIDATION_ERROR", "分页页码无效", 400);
+    }
     return dependencies.service.board(
       startDate,
       endDate,
       request.query.q ?? "",
       request.query.status ?? "all",
-      request.query.cursor ?? "",
+      page,
     );
   });
 

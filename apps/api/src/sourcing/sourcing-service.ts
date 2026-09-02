@@ -71,11 +71,6 @@ const UNIT_PRICE_PATTERN = /^\d{1,10}(?:\.\d{1,4})?$/;
 const TOTAL_AMOUNT_PATTERN = /^\d{1,16}(?:\.\d{1,2})?$/;
 const SOURCING_LIST_PAGE_SIZE = 15;
 
-type SourcingListCursor = Readonly<{
-  createdAt: string;
-  sourcingCaseId: string;
-}>;
-
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type SqlError = Readonly<{ code?: string; constraint?: string }>;
 
@@ -129,6 +124,7 @@ type SourcingCaseRow = Readonly<{
   owner_decision_reason: string | null;
   owner_decided_by: string | null;
   owner_decided_at: Date | string | null;
+  total_count?: string;
 }>;
 
 const fail = (message: string, status = 400, code = "VALIDATION_ERROR"): never => {
@@ -194,42 +190,6 @@ const requestHash = (scope: string, payload: unknown): string =>
 
 const toIso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-
-const decodeSourcingListCursor = (cursor: string): SourcingListCursor | null => {
-  if (!cursor) return null;
-  if (cursor.length > 500) fail("分页游标无效");
-  try {
-    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
-    if (!decoded || typeof decoded !== "object") fail("分页游标无效");
-    const value = decoded as Record<string, unknown>;
-    const createdAt = value.createdAt;
-    const sourcingCaseId = value.sourcingCaseId;
-    if (typeof createdAt !== "string" || typeof sourcingCaseId !== "string") {
-      fail("分页游标无效");
-    }
-    const validCreatedAt = createdAt as string;
-    const validSourcingCaseId = sourcingCaseId as string;
-    if (
-      !UUID_PATTERN.test(validSourcingCaseId)
-      || Number.isNaN(Date.parse(validCreatedAt))
-    ) {
-      fail("分页游标无效");
-    }
-    return {
-      createdAt: new Date(validCreatedAt).toISOString(),
-      sourcingCaseId: validSourcingCaseId,
-    };
-  } catch (error) {
-    if (error instanceof ApplicationError) throw error;
-    return fail("分页游标无效");
-  }
-};
-
-const encodeSourcingListCursor = (row: SourcingCaseRow): string =>
-  Buffer.from(JSON.stringify({
-    createdAt: toIso(row.created_at),
-    sourcingCaseId: row.sourcing_case_id,
-  })).toString("base64url");
 
 const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => {
   const crafts = [...(row.crafts ?? [])];
@@ -440,15 +400,17 @@ export class SourcingService {
     actor: TrustedActorContext,
     query = "",
     statusFilter: "all" | "pending" | "closed" = "all",
-    cursor = "",
+    page = 1,
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
     const normalizedQuery = query.trim();
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
     if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
-    const pageCursor = decodeSourcingListCursor(cursor);
+    if (!Number.isInteger(page) || page < 1 || page > 100_000) fail("分页页码无效");
+    const offset = (page - 1) * SOURCING_LIST_PAGE_SIZE;
     const result = await this.database.query<SourcingCaseRow>(
       `SELECT
+         count(*) OVER()::text AS total_count,
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
@@ -522,26 +484,22 @@ export class SourcingService {
           ))
          AND ($2='all' OR ($2='closed' AND case_view.status='closed')
            OR ($2='pending' AND case_view.status<>'closed'))
-         AND (
-           $3::timestamptz IS NULL
-           OR (case_view.created_at,case_view.sourcing_case_id)
-             < ($3::timestamptz,$4::uuid)
-         )
        ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC
-       LIMIT 16`,
+       LIMIT 15 OFFSET $3`,
       [
         normalizedQuery,
         statusFilter,
-        pageCursor?.createdAt ?? null,
-        pageCursor?.sourcingCaseId ?? null,
+        offset,
       ],
     );
-    const pageRows = result.rows.slice(0, SOURCING_LIST_PAGE_SIZE);
+    const pageRows = result.rows;
+    const totalCount = Number(pageRows[0]?.total_count ?? "0");
     return {
       items: pageRows.map(mapCase),
-      nextCursor: result.rows.length > SOURCING_LIST_PAGE_SIZE
-        ? encodeSourcingListCursor(pageRows[SOURCING_LIST_PAGE_SIZE - 1]!)
-        : null,
+      page,
+      pageSize: SOURCING_LIST_PAGE_SIZE,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / SOURCING_LIST_PAGE_SIZE)),
     };
   }
 

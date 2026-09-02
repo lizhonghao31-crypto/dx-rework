@@ -25,7 +25,7 @@ const event = {
 };
 
 function appFor(capabilities: string[], businessRoles: string[]) {
-  const service = { events: vi.fn().mockResolvedValue({ items: [event], nextCursor: null }), exports: vi.fn().mockResolvedValue({ items: [{ ...event, exportType: null, reportType: null }], nextCursor: null }) };
+  const service = { events: vi.fn().mockResolvedValue({ items: [event], page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }), exports: vi.fn().mockResolvedValue({ items: [{ ...event, exportType: null, reportType: null }], nextCursor: null }) };
   const app = buildApp({
     config,
     checkDatabase: vi.fn(),

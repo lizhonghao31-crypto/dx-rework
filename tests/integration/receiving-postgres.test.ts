@@ -472,7 +472,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       receiptCount: 2,
     });
     expect(twoDays.kpis.receivedQuantity).toBe(70);
-    expect(twoDays.nextCursor).toBeNull();
+    expect(twoDays).toMatchObject({ page: 1, pageSize: 15, totalCount: 1, totalPages: 1 });
 
     const literalWildcard = await service.board(today, today, "%");
     expect(literalWildcard.rows).toHaveLength(0);

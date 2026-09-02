@@ -288,7 +288,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     return dependencies.service.listProcessPage({
       includeInactive: query.includeInactive === "true",
       query: query.q ?? "",
-      cursor: query.cursor ?? "",
+      page: query.page,
     });
   });
 

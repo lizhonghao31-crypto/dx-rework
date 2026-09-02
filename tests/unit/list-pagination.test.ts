@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import {
-  cursorPageWindow,
   LIST_PAGE_SIZE,
   listPageWindow,
 } from "../../apps/web/src/list-pagination.js";
@@ -13,14 +12,8 @@ describe("shared list pagination", () => {
   it("matches the My Todos five-page window and 15-row page size", () => {
     expect(LIST_PAGE_SIZE).toBe(15);
     expect(listPageWindow(1, 30)).toEqual([1, 2, 3, 4, 5]);
-    expect(listPageWindow(8, 30)).toEqual([6, 7, 8, 9, 10]);
+    expect(listPageWindow(20, 30)).toEqual([18, 19, 20, 21, 22]);
     expect(listPageWindow(30, 30)).toEqual([26, 27, 28, 29, 30]);
-  });
-
-  it("turns cursor navigation into reachable numeric page buttons", () => {
-    expect(cursorPageWindow(1, false, true)).toEqual([1, 2]);
-    expect(cursorPageWindow(2, true, true)).toEqual([1, 2, 3]);
-    expect(cursorPageWindow(3, true, false)).toEqual([2, 3]);
   });
 
   it("is used by every independent business list route", async () => {
@@ -56,7 +49,10 @@ describe("shared list pagination", () => {
     expect(source).toContain('import "./my-todos.css"');
     expect(source).toContain('<nav className="my-todos-pagination"');
     expect(source).toContain('className="my-todos-pagination__ellipsis"');
-    expect(source.match(/<PaginationNav/g)).toHaveLength(2);
+    expect(source.match(/<PaginationNav/g)).toHaveLength(1);
+    expect(source).toContain('page: 1');
+    expect(source).toContain('page: pageCount');
+    expect(source).not.toContain("CursorListPagination");
     expect(source).not.toContain('"./list-pagination.css"');
     expect(source).not.toMatch(/[‹›]/);
     expect(shellStyles).toContain(".app-shell > aside > nav { display: grid;");

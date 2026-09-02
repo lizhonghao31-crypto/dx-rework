@@ -21,7 +21,7 @@ export const AdminAttachmentsQuerySchema = z.object({
   mimeType: z.string().min(1).max(120).optional(),
   from: DateTimeSchema.optional(),
   to: DateTimeSchema.optional(),
-  cursor: CursorSchema.optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
   limit: LimitSchema,
 }).strict();
 
@@ -41,7 +41,13 @@ export const AdminAttachmentSchema = z.object({
   readyAt: z.string().datetime().nullable(),
 }).strict();
 
-export const AdminAttachmentsPageSchema = z.object({ items: z.array(AdminAttachmentSchema), nextCursor: z.string().nullable() }).strict();
+export const AdminAttachmentsPageSchema = z.object({
+  items: z.array(AdminAttachmentSchema),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  totalCount: z.number().int().nonnegative(),
+  totalPages: z.number().int().positive(),
+}).strict();
 
 export const AdminDelegationsQuerySchema = z.object({
   grantorUserId: IdSchema.optional(),

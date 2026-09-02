@@ -73,7 +73,7 @@ const site: SiteDashboardResponse = {
   recentOrders: [order],
   availableActions: ["assign_work", "export_reports"],
 };
-const page: ManagementReworkPage = { asOf: now, items: [order], nextCursor: null, canViewReports: true };
+const page: ManagementReworkPage = { asOf: now, items: [order], page: 1, pageSize: 25, totalCount: 1, totalPages: 1, canViewReports: true };
 const preview: ReportPreviewResponse = {
   reportType: "rework_overview",
   asOf: now,

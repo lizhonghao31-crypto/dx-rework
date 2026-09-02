@@ -138,13 +138,12 @@ export function registerSourcingRoutes(
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));
 
-  app.get<{ Querystring: { cursor?: string; q?: string; status?: string } }>("/sourcing/cases", async (request) => {
+  app.get<{ Querystring: { page?: string; q?: string; status?: string } }>("/sourcing/cases", async (request) => {
     if (request.query.q !== undefined && typeof request.query.q !== "string") {
       validationError("搜索内容无效");
     }
-    if (request.query.cursor !== undefined && typeof request.query.cursor !== "string") {
-      validationError("分页游标无效");
-    }
+    const page = Number(request.query.page ?? "1");
+    if (!Number.isInteger(page) || page < 1 || page > 100_000) validationError("分页页码无效");
     const status = request.query.status;
     if (status !== undefined && status !== "pending" && status !== "closed") {
       validationError("订单状态筛选无效");
@@ -154,7 +153,7 @@ export function registerSourcingRoutes(
       await readActor(request),
       request.query.q ?? "",
       statusFilter,
-      request.query.cursor ?? "",
+      page,
     );
   });
 

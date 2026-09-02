@@ -219,7 +219,10 @@ export const SourcingCaseSummarySchema = z.object({
 
 export const SourcingCaseListResponseSchema = z.object({
   items: z.array(SourcingCaseSummarySchema).max(15),
-  nextCursor: z.string().nullable(),
+  page: z.number().int().positive(),
+  pageSize: z.literal(15),
+  totalCount: z.number().int().nonnegative(),
+  totalPages: z.number().int().positive(),
 }).strict();
 
 export const DeleteSourcingCaseResponseSchema = z.object({

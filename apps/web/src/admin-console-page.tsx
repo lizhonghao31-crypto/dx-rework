@@ -4,7 +4,7 @@ import type { AdminAuditEventsPage, AdminAuditExportsPage } from "@dx-rework/con
 import type { AdminAttachmentsPage, AdminDelegationsPage, AdminExceptionsPage } from "@dx-rework/contracts/admin-console";
 import { createWebUrls } from "../url-contract.js";
 import type { AuthorizedUser } from "./auth.js";
-import { CursorListPagination, ListPagination, usePaginatedItems } from "./list-pagination.js";
+import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation, type SystemManagementTechnicalTab } from "./system-management-navigation.js";
 import {
   businessActionLabel,
@@ -115,12 +115,11 @@ export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab })
 }
 
 function AuditTab() {
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
+  const [page, setPage] = useState(1);
   const [searchVersion, setSearchVersion] = useState(0);
   const [state, setState] = useState<LoadState<{ events: AdminAuditEventsPage; exports: AdminAuditExportsPage }>>({ kind: "loading" });
   const [filters, setFilters] = useState({ from: "", to: "", actorId: "", action: "", entityType: "", entityId: "", authorizationCapability: "", requestId: "" });
-  const query = () => new URLSearchParams(Object.entries({ ...filters, cursor: cursor ?? "", limit: "15" }).filter((entry): entry is [string, string] => entry[1] !== "")).toString();
+  const query = () => new URLSearchParams(Object.entries({ ...filters, page: String(page), limit: "15" }).filter((entry): entry is [string, string] => entry[1] !== "")).toString();
   useEffect(() => {
     setState({ kind: "loading" });
     void Promise.all([
@@ -129,10 +128,9 @@ function AuditTab() {
     ])
       .then(([events, exports]) => setState({ kind: "ready", data: { events, exports } }))
       .catch((error: unknown) => setState(loadError(error)));
-  }, [cursor, searchVersion]);
+  }, [page, searchVersion]);
   const submitSearch = () => {
-    setCursor(undefined);
-    setCursorHistory([]);
+    setPage(1);
     setSearchVersion((value) => value + 1);
   };
   return (
@@ -152,20 +150,11 @@ function AuditTab() {
               </article>
             ))}
           </div>
-          <CursorListPagination
-            page={cursorHistory.length + 1}
-            canGoPrevious={cursorHistory.length > 0}
-            canGoNext={Boolean(events.nextCursor)}
+          <ListPagination
+            page={events.page}
+            totalPages={events.totalPages}
             ariaLabel="审计日志分页"
-            onPrevious={() => {
-              setCursor(cursorHistory[cursorHistory.length - 1] || undefined);
-              setCursorHistory((history) => history.slice(0, -1));
-            }}
-            onNext={() => {
-              if (!events.nextCursor) return;
-              setCursorHistory((history) => [...history, cursor ?? ""]);
-              setCursor(events.nextCursor);
-            }}
+            onPageChange={setPage}
           />
           <h2>导出记录</h2>
           {exports.items.map((item) => <article key={item.eventId}><b>{businessActionLabel(item.action)}</b><p>{businessValue("reportType", item.exportType ?? item.reportType ?? "未知导出类型")} · {formatBusinessTime(item.createdAt)}</p></article>)}
@@ -199,18 +188,17 @@ const attachmentStatusLabel: Record<"pending" | "ready" | "rejected", string> = 
 };
 
 function AttachmentsTab() {
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [cursorHistory, setCursorHistory] = useState<readonly string[]>([]);
+  const [page, setPage] = useState(1);
   const [state, setState] = useState<LoadState<AdminAttachmentsPage>>({ kind: "loading" });
   useEffect(() => {
     setState({ kind: "loading" });
-    void getJson<AdminAttachmentsPage>(`admin/attachments?limit=15${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`)
+    void getJson<AdminAttachmentsPage>(`admin/attachments?limit=15&page=${page}`)
       .then((data) => setState({ kind: "ready", data }))
       .catch((error: unknown) => setState(loadError(error)));
-  }, [cursor]);
+  }, [page]);
   return (
     <section className="admin-panel">
-      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {businessValue("mimeType", item.mimeType)} · {formatFileSize(item.sizeBytes)}</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ? businessEntityLabel(item.entityType) : "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><CursorListPagination page={cursorHistory.length + 1} canGoPrevious={cursorHistory.length > 0} canGoNext={Boolean(data.nextCursor)} ariaLabel="附件分页" onPrevious={() => { setCursor(cursorHistory[cursorHistory.length - 1] || undefined); setCursorHistory((history) => history.slice(0, -1)); }} onNext={() => { if (!data.nextCursor) return; setCursorHistory((history) => [...history, cursor ?? ""]); setCursor(data.nextCursor); }} /></>} />
+      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {businessValue("mimeType", item.mimeType)} · {formatFileSize(item.sizeBytes)}</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ? businessEntityLabel(item.entityType) : "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><ListPagination page={data.page} totalPages={data.totalPages} onPageChange={setPage} ariaLabel="附件分页" /></>} />
     </section>
   );
 }
