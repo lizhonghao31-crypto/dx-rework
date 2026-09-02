@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-describe("sourcing PC role-aware transfer UI", () => {
+describe("sourcing role-aware transfer UI", () => {
   it("keeps five main nodes and exposes transfer only from the three business role pages", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain('{ key: "finance", number: "05", label: "财务核对", role: "财务" }');
@@ -37,7 +37,7 @@ describe("sourcing PC role-aware transfer UI", () => {
     expect(page).toContain("requestedNodeIsAccessible");
   });
 
-  it("normalizes monetary inputs and preserves the deliberate PC-only boundary", async () => {
+  it("normalizes monetary inputs and preserves the responsive mobile boundary", async () => {
     const [page, css] = await Promise.all([
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
@@ -54,8 +54,10 @@ describe("sourcing PC role-aware transfer UI", () => {
     expect(page).toContain('setFactoryChangeReviewReason("");');
     expect(page).toContain('"转厂申请已提交", true');
     expect(page).toContain("formatBusinessCurrency(factoryChange.proposedUnitPrice)");
-    expect(page).toContain("if (isMobileClient())");
-    expect(page).toContain("该模块当前仅开放电脑端");
+    expect(page).not.toContain("isMobileClient");
+    expect(page).not.toContain("该模块当前仅开放电脑端");
+    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain(".sourcing-factory-change__review > div");
     expect(css).toContain(".sourcing-factory-change__review input");
     expect(css).toContain(".sourcing-order-detail .rework-workflow__node.is-future");
   });
