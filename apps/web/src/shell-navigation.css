@@ -152,9 +152,10 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border: 2px solid var(--dx-v2-color-control);
+  border: 0;
   border-radius: 999px;
-  background: var(--color-danger);
+  background: #ff3b30;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .32);
   color: #fff !important;
   font-size: 10px;
   font-weight: 800;
@@ -162,11 +163,6 @@
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
-}
-
-.primary-navigation__entry .dx-nav-item.is-active .todo-count-badge,
-.mobile-primary-navigation__entry .dx-nav-item.is-active .todo-count-badge {
-  border-color: var(--dx-v2-color-primary);
 }
 
 @media (max-width: 800px) {

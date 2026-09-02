@@ -26,6 +26,10 @@ describe("todo navigation count badge", () => {
     expect(styles).toContain(".todo-count-badge");
     expect(styles).toContain("position: absolute");
     expect(styles).toContain("border-radius: 999px");
+    expect(styles).toContain("background: #ff3b30");
+    expect(styles).toContain("border: 0");
+    expect(styles).not.toContain("background: var(--color-danger)");
+    expect(styles).not.toContain("border-color: var(--dx-v2-color-primary)");
     expect(styles).toContain("min-width: 18px");
     expect(styles).toContain("left: calc(50% - 10px)");
     expect(styles).not.toContain("todo-new-indicator-pulse");
