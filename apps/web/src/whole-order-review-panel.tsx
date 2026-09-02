@@ -354,10 +354,10 @@ export function WholeOrderReviewPanel({
   const changedPriceIds = ieStage
     ? data.finalConfirmation?.prices.filter((price) => price.changed).map((price) => price.configurationItemId) ?? []
     : [];
+  const allChangedPricesDecided = changedPriceIds.length > 0
+    && changedPriceIds.every((id) => priceReviewDecisions[id] === "approved" || priceReviewDecisions[id] === "rejected");
   const anyPriceRejected = changedPriceIds.some((id) => priceReviewDecisions[id] === "rejected");
-  const allChangedPricesApproved = changedPriceIds.length > 0
-    && changedPriceIds.every((id) => priceReviewDecisions[id] === "approved");
-  const priceReviewReady = changedPriceIds.length === 0 || anyPriceRejected || allChangedPricesApproved;
+  const priceReviewReady = changedPriceIds.length === 0 || allChangedPricesDecided;
   const submittedTailAssignments = tailData?.assignments.filter((assignment) => assignment.submittedAt !== null) ?? [];
   const priceIssue = data.processes.some((process) => {
     const value = priceInputs[process.configurationItemId]?.trim() ?? "";
@@ -530,7 +530,7 @@ export function WholeOrderReviewPanel({
               <div className="quantity-process-price__review">
                 <span><small>原价</small><strong>{formatUnitPrice(reviewedPrice.originalUnitPrice)}</strong></span>
                 <span><small>提议价</small><strong>{formatUnitPrice(reviewedPrice.proposedUnitPrice)}</strong></span>
-                <div className="quantity-price-decision" aria-label={`${process.processName}调价决定`}>
+                {data.canIeReview && <div className="quantity-price-decision" aria-label={`${process.processName}调价决定`}>
                   <button
                     className="quantity-price-decision__button is-approve"
                     type="button"
@@ -551,7 +551,7 @@ export function WholeOrderReviewPanel({
                       [process.configurationItemId]: "rejected",
                     }))}
                   >驳回</button>
-                </div>
+                </div>}
               </div>
             </div>}
             {open && <div className="quantity-process-detail">
