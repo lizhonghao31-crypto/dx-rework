@@ -439,6 +439,7 @@ export function Shell({
     href: "/ui/wages",
   });
 
+  // Desktop-only sourcing navigation keeps the full create / pending / history workspace.
   const sourcingNavigation: NavigationEntry[] = [];
   if (currentUser && canAccessSourcing(currentUser)) {
     if (isRoot || (hasRole("order_merchandiser") && hasCapability("sourcing:inquiry:create"))) {
