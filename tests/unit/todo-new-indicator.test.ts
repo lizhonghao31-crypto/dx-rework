@@ -1,61 +1,33 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
-import {
-  indicatorMarker,
-  isUnseenTodoMarker,
-  readSeenTodoMarker,
-  writeSeenTodoMarker,
-} from "../../apps/web/src/todo-new-indicator.js";
+import { formatTodoBadgeCount } from "../../apps/web/src/todo-new-indicator.js";
 
-const memoryStorage = () => {
-  const values = new Map<string, string>();
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-  };
-};
-
-describe("todo navigation unread marker", () => {
-  it("isolates seen markers by user and only advances the high-watermark", () => {
-    const storage = memoryStorage();
-    const newer = { todoId: "b", receivedAt: "2026-09-01T04:00:00.000Z" };
-    const older = { todoId: "a", receivedAt: "2026-09-01T03:00:00.000Z" };
-
-    writeSeenTodoMarker(storage, "user-a", newer);
-    writeSeenTodoMarker(storage, "user-a", older);
-
-    expect(readSeenTodoMarker(storage, "user-a")).toEqual(newer);
-    expect(readSeenTodoMarker(storage, "user-b")).toBeNull();
-    expect(isUnseenTodoMarker(older, newer)).toBe(false);
+describe("todo navigation count badge", () => {
+  it("shows exact counts through 99 and caps larger values", () => {
+    expect(formatTodoBadgeCount(1)).toBe("1");
+    expect(formatTodoBadgeCount(99)).toBe("99");
+    expect(formatTodoBadgeCount(100)).toBe("99+");
   });
 
-  it("uses the todo id as a stable tie-breaker for equal arrival times", () => {
-    const receivedAt = "2026-09-01T04:00:00.000Z";
-    expect(isUnseenTodoMarker(
-      { todoId: "b", receivedAt },
-      { todoId: "a", receivedAt },
-    )).toBe(true);
+  it("uses the server count regardless of navigation clicks or active page", async () => {
+    const source = await readFile("apps/web/src/components.tsx", "utf8");
+    expect(source).toContain("setPendingTodoCount(indicator.pendingCount)");
+    expect(source).toContain("<TodoCountBadge count={pendingTodoCount} />");
+    expect(source).not.toContain("localStorage");
+    expect(source).not.toContain("writeSeenTodoMarker");
+    expect(source).not.toContain('active === "我的待办"');
+    expect(source).not.toContain("onOpenTodos");
   });
 
-  it("degrades safely when browser storage is unavailable", () => {
-    const marker = { todoId: "b", receivedAt: "2026-09-01T04:00:00.000Z" };
-    expect(readSeenTodoMarker(null, "user-a")).toBeNull();
-    expect(() => writeSeenTodoMarker(null, "user-a", marker)).not.toThrow();
-  });
-
-  it("binds the indicator response to the authenticated actor without refetching auth", async () => {
-    const source = await import("node:fs/promises")
-      .then(({ readFile }) => readFile("apps/web/src/components.tsx", "utf8"));
-    expect(source).toContain('response.headers.get("x-dx-rework-actor-id")');
-    expect(source).toContain("responseActorId !== currentUser.id");
-    expect(source).not.toContain('apiUrl("auth/me")');
-  });
-
-  it("rejects incomplete server markers", () => {
-    expect(indicatorMarker({ latestTodoId: null, latestReceivedAt: null })).toBeNull();
-    expect(indicatorMarker({
-      latestTodoId: "00000000-0000-4000-8000-000000000013",
-      latestReceivedAt: null,
-    })).toBeNull();
+  it("renders a compact icon-attached iOS-style badge without changing card height", async () => {
+    const styles = await readFile("apps/web/src/shell-navigation.css", "utf8");
+    expect(styles).toContain(".todo-count-badge");
+    expect(styles).toContain("position: absolute");
+    expect(styles).toContain("border-radius: 999px");
+    expect(styles).toContain("min-width: 18px");
+    expect(styles).toContain("left: calc(50% - 10px)");
+    expect(styles).not.toContain("todo-new-indicator-pulse");
   });
 });

@@ -71,9 +71,8 @@ const createApp = () => {
       totalPages: 2,
     })),
     getForActor: vi.fn(async () => todo),
-    latestIndicatorForActor: vi.fn(async () => ({
-      latestTodoId: todo.todoId,
-      latestReceivedAt: todo.createdAt,
+    countIndicatorForActor: vi.fn(async () => ({
+      pendingCount: 3,
     })),
     listRoutingExceptionsForActor: vi.fn(async () => []),
     transferRoutingException: vi.fn(async () => todo),
@@ -149,10 +148,9 @@ describe("todo HTTP boundaries", () => {
     expect(indicator.statusCode).toBe(200);
     expect(indicator.headers["x-dx-rework-actor-id"]).toBe(todo.recipientUserId);
     expect(indicator.json()).toEqual({
-      latestTodoId: todo.todoId,
-      latestReceivedAt: todo.createdAt,
+      pendingCount: 3,
     });
-    expect(service.latestIndicatorForActor).toHaveBeenCalledWith(expect.objectContaining({
+    expect(service.countIndicatorForActor).toHaveBeenCalledWith(expect.objectContaining({
       actorId: todo.recipientUserId,
       authorizationCapability: "todo:view",
     }));
