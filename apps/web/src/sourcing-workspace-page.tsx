@@ -199,14 +199,6 @@ const clearLocalSourcingDraft = (userId: string): void => {
   if (typeof window !== "undefined") window.localStorage.removeItem(localSourcingDraftKey(userId));
 };
 
-const isMobileClient = (): boolean => {
-  if (typeof navigator === "undefined") return false;
-  const client = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
-  if (client.userAgentData?.mobile === true) return true;
-  if (/Android|iPhone|iPad|iPod|Mobile/i.test(client.userAgent)) return true;
-  return client.platform === "MacIntel" && client.maxTouchPoints > 1;
-};
-
 const detailHref = (item: SourcingCaseSummary): string =>
   pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
 
@@ -269,15 +261,6 @@ export function SourcingWorkspacePage({
     });
     return () => { mounted = false; };
   }, []);
-
-  if (isMobileClient()) {
-    return <Shell active={ACTIVE_NAVIGATION[view]}>
-      <div className="sourcing-workspace">
-        <Header title="外发定价&选厂" subtitle="该模块当前仅开放电脑端。" badge="PC 端" />
-        <Surface><h2>请在电脑端打开</h2><p>外发定价选厂移动端尚未建设，手机端暂不展示或办理订单流程。</p></Surface>
-      </div>
-    </Shell>;
-  }
 
   return (
     <Shell active={ACTIVE_NAVIGATION[view]}>
