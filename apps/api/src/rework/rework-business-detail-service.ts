@@ -66,6 +66,7 @@ export type ReworkBusinessDetail = Readonly<{
   }>;
   defectiveQuantity: Readonly<{
     receiving: number;
+    receivingLinked: boolean;
     tail: number;
     total: number;
     canAddTail: boolean;
@@ -483,6 +484,7 @@ export class ReworkBusinessDetailService {
       },
       defectiveQuantity: {
         receiving: Number(row.source_receiving_defective_quantity ?? 0),
+        receivingLinked: row.source_receiving_defective_quantity !== null,
         tail: Number(row.tail_defective_quantity ?? 0),
         total: Number(row.source_receiving_defective_quantity ?? 0) + Number(row.tail_defective_quantity ?? 0),
         canAddTail: canAddTailDefectiveQuantity(actor) && tailDefectMutableStatuses.has(row.status),
@@ -769,9 +771,9 @@ export class ReworkBusinessDetailService {
     );
     await client.query(
       `UPDATE rework_orders
-       SET version=version+1,updated_at=CURRENT_TIMESTAMP
+       SET version=version+1,updated_by=$3,updated_at=clock_timestamp()
        WHERE rework_order_id=$1 AND version=$2`,
-      [reworkOrderId, order.version],
+      [reworkOrderId, order.version, actor.actorId],
     );
     return { entryId, reworkOrderId, quantity: input.quantity, version: order.version + 1 };
   }

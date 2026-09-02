@@ -24,6 +24,7 @@ import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rew
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
+import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { ReworkSupplyContextService } from "../../apps/api/src/rework/supply-context-service.js";
 import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
@@ -121,6 +122,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   const supplyContext = new ReworkSupplyContextService(database, "corp");
   const external = new ExternalResponsibilityApplicationService(database, todoProjection);
   const wages = new WageService(database, undefined, undefined, todoProjection);
+  const businessDetail = new ReworkBusinessDetailService(database);
 
   const ids = {
     ownerOne: randomUUID(),
@@ -1728,5 +1730,90 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       inspectionReport: null,
     });
     expect(submitted.value.reworkNo).toMatch(/^RW-\d{4}-\d{4}-\d{3,}$/);
+  });
+
+  it("appends tail defective quantity under audit and distinguishes an unlinked receiving source", async () => {
+    const initialImageId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,
+         sha256,uploaded_by,status,ready_at
+       ) VALUES($1,$2,'tail-defective.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [initialImageId, `private/${initialImageId}.webp`, "7".repeat(64), ids.qc],
+    );
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "UAT-TAIL-DEFECTIVE",
+      orderQuantity: 20,
+      orderNo: "ORDER-TAIL-DEFECTIVE",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
+      inspectionReport: n01CoreInspectionReport("尾部次品链路"),
+      problemPart: "尾部",
+      problemDescription: "尾部次品追加真实链路验收",
+      reworkQuantity: 20,
+      attachmentIds: [initialImageId],
+    }, randomUUID());
+    await supplyContext.save(qc(), draft.value.reworkOrderId, {
+      washingSupplierId: null,
+      embroiderySupplierId: null,
+      fabricSupplierId: null,
+      embroideryMerchandiserUserId: ids.embroideryMerchandiser,
+    });
+    const submitted = await initiation.submit(
+      qc(),
+      draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version },
+      randomUUID(),
+    );
+
+    const tailActor = actor(ids.tail, ["tail_supervisor"], "tools:user");
+    const before = await businessDetail.get(tailActor, submitted.value.reworkOrderId);
+    expect(before.defectiveQuantity).toMatchObject({
+      receiving: 0,
+      receivingLinked: false,
+      tail: 0,
+      total: 0,
+    });
+
+    const idempotencyKey = randomUUID();
+    const added = await businessDetail.addTailDefectiveQuantity(
+      tailActor,
+      submitted.value.reworkOrderId,
+      { expectedVersion: before.version, quantity: 2 },
+      idempotencyKey,
+    );
+    expect(added).toMatchObject({
+      reused: false,
+      value: {
+        version: before.version + 1,
+        defectiveQuantity: {
+          receiving: 0,
+          receivingLinked: false,
+          tail: 2,
+          total: 2,
+        },
+      },
+    });
+    const reused = await businessDetail.addTailDefectiveQuantity(
+      tailActor,
+      submitted.value.reworkOrderId,
+      { expectedVersion: before.version, quantity: 2 },
+      idempotencyKey,
+    );
+    expect(reused).toMatchObject({ reused: true });
+    expect((await database.query(
+      `SELECT entry.quantity,event.action,event.actor_id,orders.updated_by
+       FROM rework_tail_defective_quantity_entries entry
+       JOIN operation_events event ON event.event_id=entry.operation_event_id
+       JOIN rework_orders orders ON orders.rework_order_id=entry.rework_order_id
+       WHERE entry.rework_order_id=$1`,
+      [submitted.value.reworkOrderId],
+    )).rows).toEqual([{
+      quantity: 2,
+      action: "rework.tail_defective_quantity.add",
+      actor_id: ids.tail,
+      updated_by: ids.tail,
+    }]);
   });
 });
