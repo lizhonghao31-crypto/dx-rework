@@ -27,6 +27,9 @@ describe("system dialog automation contract", () => {
     expect(source).toContain('data-system-dialog-input="true"');
     expect(source).toContain("if (completed) return");
     expect(source).toContain('request.kind === "prompt"');
+    expect(source).toContain('kind: "alert"');
+    expect(source).toContain("export const alertInApp");
+    expect(source).toContain('request.kind !== "alert"');
     expect(source).toContain("mountNextDialog");
     expect(css).toContain(".system-dialog-backdrop");
     expect(css).toContain("background: #fff;");
@@ -54,13 +57,17 @@ describe("system dialog automation contract", () => {
       readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
+      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
     ]);
 
+    expect(sources[0]).toContain("await alertInApp");
     expect(sources[0]).toContain('await confirmInApp("确认提交返工单？")');
     expect(sources[1]).toContain('await confirmInApp("确认提交当前工序、候选单价和预分配工人给 IE 核价？")');
     expect(sources[2]).toContain("await confirmInApp");
     expect(sources[2]).toContain("await promptInApp");
     expect(sources[3]).toContain("await confirmInApp");
+    expect(sources[3]).toContain("await alertInApp");
+    expect(sources[4]).toContain("await alertInApp");
   });
 
   it("keeps custom report and image dialogs on the same clean overlay treatment", async () => {
