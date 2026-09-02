@@ -15,6 +15,8 @@ describe("mobile primary navigation", () => {
     expect(components).toContain("...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),");
     expect(components).toContain("mobileSourcingNavigation");
     expect(components).toContain('label: "外发", glyph: "发"');
+    expect(components).toContain("sourcingNavigation.some((entry) => entry.name === active)");
+    expect(components).toContain("active={mobileActive}");
     expect(components).not.toContain("showPlatformHome");
     expect(components).not.toContain('mobile-primary-navigation__label">平台');
     expect(components).toContain("<PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />");
