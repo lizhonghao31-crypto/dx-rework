@@ -42,8 +42,9 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain('name: "外发定价&选厂"');
     expect(components).toContain('name: "平台管理"');
     expect(components).toContain("currentUser && canAccessSourcing(currentUser)");
-    expect(components).toContain("Desktop-only sourcing");
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板"]');
+    expect(components).toContain("mobileSourcingNavigation");
+    expect(components).toContain('name: "外发定价&选厂"');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂"]');
     expect(components).not.toContain('name: "发起返工"');
     expect(employeeAccess).toContain('<h1>人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
