@@ -12,6 +12,11 @@ describe("mobile sourcing workspace", () => {
     expect(page).toContain('view === "pending" ? <OrderListPage');
     expect(page).toContain('view === "history" ? <OrderListPage');
     expect(page).toContain('view === "detail" && sourcingCaseId');
+    expect(page).toContain('className="sourcing-mobile-navigation"');
+    expect(page).toContain('canAct(user, "order_merchandiser", "sourcing:inquiry:create")');
+    expect(page).toContain('href={pageUrl("ui/sourcing/create")}');
+    expect(page).toContain('href={pageUrl("ui/sourcing/pending")}');
+    expect(page).toContain('href={pageUrl("ui/sourcing/history")}');
     expect(page).toContain('canAct(user, "order_merchandiser", "sourcing:inquiry:create")');
     expect(page).toContain('canAct(user, "ie_reviewer", "sourcing:price:quote")');
     expect(page).toContain('canAct(user, "production_management", "sourcing:decision:record")');
@@ -27,7 +32,7 @@ describe("mobile sourcing workspace", () => {
 
     expect(page).toContain('className="sourcing-process-editor sourcing-form-wide"');
     expect(page).toContain("processes.map((process, index)");
-    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain(".sourcing-process-mobile {\n    display: none;");
     expect(css).toContain(".sourcing-process-editor {\n    display: grid;");
     expect(css).toContain(".sourcing-form-grid {\n    grid-template-columns: minmax(0, 1fr);");
