@@ -17,6 +17,8 @@ describe("business action readiness contract", () => {
 
     expect(tailInspection).toContain('title: "整查数量暂不能提交"');
     expect(tailInspection).toContain('data-ready={tailSubmitReady ? "true" : "false"}');
+    expect(tailInspection).toContain("const quantityText = processQuantities[process.configurationItemId]?.trim() ??");
+    expect(tailInspection).toContain("!isPieceCount(item.quantityText)");
     expect(tailInspection).toContain('disabled={busy} onClick={() => void submit()}');
 
     expect(responsibility).toContain("const processValidationIssue =");
