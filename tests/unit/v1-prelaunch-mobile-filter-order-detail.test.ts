@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("v1 prelaunch mobile filters and final order detail UI", () => {
-  it("keeps the phone order filters in two primary rows with a compact refresh action", async () => {
+  it("keeps the phone order filters compact without nesting a second input frame", async () => {
     const [page, styles] = await Promise.all([
       readFile("apps/web/src/reporting/rework-query-page.tsx", "utf8"),
       readFile("apps/web/src/reporting/rework-query-mobile.css", "utf8"),
@@ -12,7 +12,9 @@ describe("v1 prelaunch mobile filters and final order detail UI", () => {
     expect(page).toContain('className="reporting-date-range"');
     expect(page).toContain('className="reporting-filters__refresh"');
     expect(page).toContain("刷新</Button>");
-    expect(styles).toContain("grid-template-columns:minmax(0,1.35fr) minmax(0,.825fr) minmax(0,.825fr)");
+    expect(styles).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
+    expect(styles).toContain(".reporting-filters--orders .dx-field__control input");
+    expect(styles).toContain("min-height:0;max-height:none;padding:0;border:0");
     expect(styles).toContain(".reporting-filters--orders .reporting-filters__refresh{grid-column:3;width:auto");
   });
 

@@ -3,13 +3,15 @@
 .reporting-filters--orders .reporting-date-range i{color:var(--dx-v2-color-text-secondary);font-size:12px;font-style:normal;font-weight:600}
 .reporting-filters--orders .reporting-filters__refresh{justify-self:end;min-width:0;padding-inline:12px}
 
-@media(min-width:521px) and (max-width:980px){.reporting-filters.reporting-filters--orders{grid-template-columns:1fr 1fr}}
+@media(min-width:561px) and (max-width:980px){.reporting-filters.reporting-filters--orders{grid-template-columns:1fr 1fr}}
 
-@media(max-width:520px){
-  .reporting-filters.reporting-filters--orders{grid-template-columns:minmax(0,1.35fr) minmax(0,.825fr) minmax(0,.825fr);gap:8px;padding:10px}
+@media(max-width:560px){
+  .reporting-filters.reporting-filters--orders{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:10px}
   .reporting-filters--orders>*{width:auto;min-width:0;grid-column:auto}
   .reporting-filters--orders .dx-field,.reporting-filters--orders label{gap:4px;font-size:11px}
-  .reporting-filters--orders select,.reporting-filters--orders input{box-sizing:border-box;width:100%;min-width:0;height:36px;min-height:36px;max-height:36px;padding:0 7px;border-radius:8px;font-size:12px}
+  .reporting-filters--orders .dx-field__control,.reporting-filters--orders select,.reporting-filters--orders .reporting-date-range input{box-sizing:border-box;width:100%;min-width:0;height:36px;min-height:36px;max-height:36px;padding:0 7px;border:1px solid var(--color-border,#c9d1d6);border-radius:8px;background:white;color:inherit;font-size:12px}
+  .reporting-filters--orders .dx-field__control{background:var(--dx-v2-color-inset);box-shadow:inset 2px 2px 5px rgba(75,90,105,.12)}
+  .reporting-filters--orders .dx-field__control input{width:100%;min-width:0;height:auto;min-height:0;max-height:none;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;font-size:12px}
   .reporting-filters--orders .reporting-date-range>span{grid-template-columns:minmax(0,1fr);gap:4px}
   .reporting-filters--orders .reporting-date-range i{display:none}
   .reporting-filters--orders .reporting-filters__refresh{grid-column:3;width:auto;min-height:32px;justify-self:end;padding-inline:11px;font-size:12px}

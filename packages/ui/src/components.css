@@ -38,3 +38,7 @@
 .dx-field__control { display: flex; align-items: center; min-height: 44px; padding: 0 12px; background: var(--dx-v2-color-inset); border: 1px solid #b9c8d6; border-radius: var(--dx-v2-radius-md); box-shadow: inset 2px 2px 5px rgba(75, 90, 105, 0.12); }
 .dx-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--dx-v2-color-text); font: inherit; }
 .dx-field em { font-style: normal; color: var(--dx-v2-color-text-secondary); }
+
+@media (max-width: 800px) {
+  .dx-field { min-width: 0; }
+}
