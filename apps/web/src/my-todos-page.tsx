@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { verifySession } from "./auth.js";
 import { Shell } from "./components.js";
-import { accessiblePlatformModules } from "./platform-modules.js";
+import { todoModuleIdsForUser } from "./platform-access.js";
 import { todoPageWindow } from "./todo-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./my-todos.css";
@@ -198,7 +198,7 @@ export function MyTodosPage() {
     void verifySession().then((session) => {
       if (!mounted) return;
       const modules = session !== "denied" && session.status === "authorized"
-        ? accessiblePlatformModules(session.user).map((module) => module.id)
+        ? todoModuleIdsForUser(session.user)
         : [];
       setAccessibleTodoModules(new Set(modules));
     });
