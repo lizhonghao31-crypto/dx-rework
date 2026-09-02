@@ -7,7 +7,7 @@ import {
   type TodoModuleCounts,
   type TodoResponse,
   type TodoRouteDescriptor,
-  type TodoNewIndicator,
+  type TodoCountIndicator,
   type TodoRoutingException,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
@@ -361,37 +361,25 @@ export class TodoService {
     return todoResponse(row);
   }
 
-  async latestIndicatorForActor(actor: TrustedActorContext): Promise<TodoNewIndicator> {
+  async countIndicatorForActor(actor: TrustedActorContext): Promise<TodoCountIndicator> {
     this.requireCapability(actor, "todo:view");
-    const result = await this.database.query<{ todo_id: string; received_at: Date }>(
-      `SELECT todos.todo_id,COALESCE(latest_transfer.transferred_at,todos.created_at) received_at
+    const result = await this.database.query<{ pending_count: number | string }>(
+      `SELECT COUNT(*) pending_count
        FROM rework_todos todos
        LEFT JOIN rework_orders orders
          ON orders.rework_order_id=COALESCE(
            NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
            CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
          )
-       LEFT JOIN LATERAL (
-         SELECT transfer.transferred_at
-         FROM todo_recipient_transfers transfer
-         WHERE transfer.todo_id=todos.todo_id
-           AND transfer.to_recipient_user_id=todos.recipient_user_id
-         ORDER BY transfer.transferred_at DESC,transfer.transfer_id DESC
-         LIMIT 1
-       ) latest_transfer ON true
        WHERE todos.recipient_user_id=$1
          AND todos.todo_type<>'information'
          AND todos.status IN ('pending','blocked_recipient')
          AND todos.category<>'wage_month_close'
-         AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')
-       ORDER BY received_at DESC,todos.todo_id DESC
-       LIMIT 1`,
+         AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')`,
       [actor.actorId],
     );
-    const latest = result.rows[0];
     return {
-      latestTodoId: latest?.todo_id ?? null,
-      latestReceivedAt: latest?.received_at.toISOString() ?? null,
+      pendingCount: Number(result.rows[0]?.pending_count ?? 0),
     };
   }
 

@@ -139,9 +139,8 @@ export const TodoMineParamsSchema = z.object({
   todoId: TodoIdSchema,
 }).strict();
 
-export const TodoNewIndicatorSchema = z.object({
-  latestTodoId: TodoIdSchema.nullable(),
-  latestReceivedAt: z.string().datetime().nullable(),
+export const TodoCountIndicatorSchema = z.object({
+  pendingCount: z.number().int().nonnegative(),
 }).strict();
 
 export const TodoRoutingExceptionListResponseSchema = z.object({
@@ -167,6 +166,6 @@ export type TodoModuleCounts = z.infer<typeof TodoModuleCountsSchema>;
 export type TodoDeliveryAttempt = z.infer<typeof TodoDeliveryAttemptSchema>;
 export type TodoRoutingException = z.infer<typeof TodoRoutingExceptionSchema>;
 export type TodoListResponse = z.infer<typeof TodoListResponseSchema>;
-export type TodoNewIndicator = z.infer<typeof TodoNewIndicatorSchema>;
+export type TodoCountIndicator = z.infer<typeof TodoCountIndicatorSchema>;
 export type TodoRoutingExceptionListResponse = z.infer<typeof TodoRoutingExceptionListResponseSchema>;
 export type TransferTodoRoutingException = z.infer<typeof TransferTodoRoutingExceptionSchema>;

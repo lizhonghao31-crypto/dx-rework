@@ -135,52 +135,43 @@
 }
 
 
-.todo-new-indicator {
+.primary-navigation__entry .dx-nav-item,
+.mobile-primary-navigation__entry .dx-nav-item {
+  position: relative;
+}
+
+.todo-count-badge {
+  position: absolute;
+  z-index: 2;
+  top: 2px;
+  left: 32px;
   display: inline-flex;
-  width: fit-content;
-  margin-top: var(--dx-v2-space-1);
-  padding: var(--dx-v2-space-1) var(--dx-v2-space-2);
-  border-radius: var(--dx-v2-radius-lg);
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid var(--dx-v2-color-control);
+  border-radius: 999px;
   background: var(--color-danger);
   color: #fff !important;
   font-size: 10px;
   font-weight: 800;
-  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
   white-space: nowrap;
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 50%, transparent);
-  animation: todo-new-indicator-pulse 1.35s ease-in-out infinite;
+  pointer-events: none;
 }
 
-@keyframes todo-new-indicator-pulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 50%, transparent);
-  }
-
-  50% {
-    opacity: .62;
-    box-shadow: 0 0 0 5px transparent;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .todo-new-indicator {
-    animation: none;
-  }
+.primary-navigation__entry .dx-nav-item.is-active .todo-count-badge,
+.mobile-primary-navigation__entry .dx-nav-item.is-active .todo-count-badge {
+  border-color: var(--dx-v2-color-primary);
 }
 
 @media (max-width: 800px) {
-  .mobile-primary-navigation__entry {
-    position: relative;
-  }
-
-  .todo-new-indicator--mobile {
-    position: absolute;
-    z-index: 2;
-    top: calc(-1 * var(--dx-v2-space-3));
-    left: 50%;
-    margin: 0;
-    transform: translateX(-50%);
-    pointer-events: none;
+  .todo-count-badge {
+    top: 1px;
+    left: calc(50% - 10px);
   }
 }

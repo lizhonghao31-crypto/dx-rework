@@ -1,7 +1,7 @@
 import {
   TodoListResponseSchema,
   TodoMineParamsSchema,
-  TodoNewIndicatorSchema,
+  TodoCountIndicatorSchema,
   TodoResponseSchema,
   TodoRoutingExceptionListResponseSchema,
   TodoRoutingExceptionParamsSchema,
@@ -35,7 +35,7 @@ const parse = <T>(
 export type TodoHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: Pick<TodoService,
-    "getForActor" | "listForActor" | "latestIndicatorForActor"
+    "getForActor" | "listForActor" | "countIndicatorForActor"
       | "listRoutingExceptionsForActor" | "transferRoutingException">;
 }>;
 
@@ -94,8 +94,8 @@ export function registerTodoRoutes(
   app.get("/todos/mine/indicator", async (request, reply) => {
     const currentActor = await actor(request, "todo:view");
     reply.header("x-dx-rework-actor-id", currentActor.actorId);
-    return TodoNewIndicatorSchema.parse(
-      await dependencies.service.latestIndicatorForActor(currentActor),
+    return TodoCountIndicatorSchema.parse(
+      await dependencies.service.countIndicatorForActor(currentActor),
     );
   });
 

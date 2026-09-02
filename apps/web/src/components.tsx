@@ -1,4 +1,4 @@
-import { TodoNewIndicatorSchema } from "@dx-rework/contracts";
+import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
@@ -13,22 +13,9 @@ import type { Task } from "./types.js";
 import "./shell-navigation.css";
 import { canAccessSourcing } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
-import {
-  indicatorMarker,
-  isUnseenTodoMarker,
-  readSeenTodoMarker,
-  writeSeenTodoMarker,
-  type TodoArrivalMarker,
-} from "./todo-new-indicator.js";
+import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const browserTodoStorage = (): Storage | null => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
 
@@ -80,18 +67,30 @@ function loadEmployeeAccessPermission(): Promise<boolean> {
   return employeeAccessPermission;
 }
 
+function TodoCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  const label = formatTodoBadgeCount(count);
+  return (
+    <span
+      className="todo-count-badge"
+      role="status"
+      aria-label={`${count}项未完成待办`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function PrimaryNavigation({
   navigation,
   active,
   basePath,
-  hasNewTodos = false,
-  onOpenTodos,
+  pendingTodoCount = 0,
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
-  hasNewTodos?: boolean;
-  onOpenTodos?: () => void;
+  pendingTodoCount?: number;
 }) {
   return (
     <nav className="primary-navigation" aria-label="主导航">
@@ -99,14 +98,13 @@ function PrimaryNavigation({
         <div className="primary-navigation__entry" key={entry.name}>
           <a
             href={`${basePath}${entry.href}`}
-            onClick={entry.name === "我的待办" ? onOpenTodos : undefined}
           >
             <NavigationItem icon="•" active={active === entry.name}>
               <span className="primary-navigation__copy">
                 <strong>{entry.name}</strong>
                 <small>{entry.description}</small>
-                {entry.name === "我的待办" && hasNewTodos
-                  ? <span className="todo-new-indicator" role="status">您有新的待办</span>
+                {entry.name === "我的待办"
+                  ? <TodoCountBadge count={pendingTodoCount} />
                   : null}
               </span>
             </NavigationItem>
@@ -122,15 +120,13 @@ function DesktopNavigation({
   groups,
   active,
   basePath,
-  hasNewTodos,
-  onOpenTodos,
+  pendingTodoCount,
 }: {
   globalNavigation: readonly NavigationEntry[];
   groups: readonly NavigationGroup[];
   active: string;
   basePath: string;
-  hasNewTodos: boolean;
-  onOpenTodos: () => void;
+  pendingTodoCount: number;
 }) {
   return (
     <nav className="desktop-navigation" aria-label="桌面端主导航">
@@ -139,8 +135,7 @@ function DesktopNavigation({
           navigation={globalNavigation}
           active={active}
           basePath={basePath}
-          hasNewTodos={hasNewTodos}
-          onOpenTodos={onOpenTodos}
+          pendingTodoCount={pendingTodoCount}
         />
       </div>
       {groups.filter((group) => group.entries.length > 0).map((group) => {
@@ -185,14 +180,12 @@ function MobileNavigationLink({
   entry,
   active,
   basePath,
-  hasNewTodos,
-  onOpenTodos,
+  pendingTodoCount,
 }: {
   entry: NavigationEntry;
   active: string;
   basePath: string;
-  hasNewTodos: boolean;
-  onOpenTodos: () => void;
+  pendingTodoCount: number;
 }) {
   const meta = MOBILE_NAVIGATION_META[entry.name] ?? { label: entry.name, glyph: "目" };
   const isActive = active === entry.name;
@@ -200,12 +193,11 @@ function MobileNavigationLink({
     <a
       href={basePath + entry.href}
       aria-current={isActive ? "page" : undefined}
-      onClick={entry.name === "我的待办" ? onOpenTodos : undefined}
     >
       <NavigationItem icon={meta.glyph} active={isActive}>
         <span className="mobile-primary-navigation__label">{meta.label}</span>
-        {entry.name === "我的待办" && hasNewTodos
-          ? <span className="todo-new-indicator todo-new-indicator--mobile" role="status">您有新的待办</span>
+        {entry.name === "我的待办"
+          ? <TodoCountBadge count={pendingTodoCount} />
           : null}
       </NavigationItem>
     </a>
@@ -216,14 +208,12 @@ function MobilePrimaryNavigation({
   navigation,
   active,
   basePath,
-  hasNewTodos,
-  onOpenTodos,
+  pendingTodoCount,
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
-  hasNewTodos: boolean;
-  onOpenTodos: () => void;
+  pendingTodoCount: number;
 }) {
   const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);
   const primaryNavigation = mobileCandidates.slice(0, 4);
@@ -241,8 +231,7 @@ function MobilePrimaryNavigation({
             entry={entry}
             active={active}
             basePath={basePath}
-            hasNewTodos={hasNewTodos}
-            onOpenTodos={onOpenTodos}
+            pendingTodoCount={pendingTodoCount}
           />
         </div>
       ))}
@@ -275,8 +264,7 @@ export function Shell({
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
-  const [latestTodoMarker, setLatestTodoMarker] = useState<TodoArrivalMarker | null>(null);
-  const [hasNewTodos, setHasNewTodos] = useState(false);
+  const [pendingTodoCount, setPendingTodoCount] = useState(0);
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartY = useRef<number | null>(null);
   const pullDistanceRef = useRef(0);
@@ -295,13 +283,11 @@ export function Shell({
 
   useEffect(() => {
     if (!currentUser?.capabilities.includes("todo:view")) {
-      setLatestTodoMarker(null);
-      setHasNewTodos(false);
+      setPendingTodoCount(0);
       return;
     }
 
-    setLatestTodoMarker(null);
-    setHasNewTodos(false);
+    setPendingTodoCount(0);
     const controller = new AbortController();
     let checking = false;
     const checkIndicator = async () => {
@@ -319,16 +305,8 @@ export function Shell({
           window.location.reload();
           return;
         }
-        const marker = indicatorMarker(TodoNewIndicatorSchema.parse(await response.json()));
-        setLatestTodoMarker(marker);
-        if (active === "我的待办") {
-          if (marker) writeSeenTodoMarker(browserTodoStorage(), currentUser.id, marker);
-          setHasNewTodos(false);
-          return;
-        }
-        setHasNewTodos(marker
-          ? isUnseenTodoMarker(marker, readSeenTodoMarker(browserTodoStorage(), currentUser.id))
-          : false);
+        const indicator = TodoCountIndicatorSchema.parse(await response.json());
+        setPendingTodoCount(indicator.pendingCount);
       } catch (error: unknown) {
         if (!controller.signal.aborted) console.warn("Todo indicator refresh failed", error);
       } finally {
@@ -340,14 +318,7 @@ export function Shell({
       controller.abort();
       stopRefreshing();
     };
-  }, [active, currentUser]);
-
-  const acknowledgeNewTodos = () => {
-    if (currentUser && latestTodoMarker) {
-      writeSeenTodoMarker(browserTodoStorage(), currentUser.id, latestTodoMarker);
-    }
-    setHasNewTodos(false);
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 800px)");
@@ -533,8 +504,7 @@ export function Shell({
           groups={desktopNavigationGroups}
           active={active}
           basePath={basePath}
-          hasNewTodos={hasNewTodos}
-          onOpenTodos={acknowledgeNewTodos}
+          pendingTodoCount={pendingTodoCount}
         />
         <div className="org app-shell__identity">
           {currentUser ? (
@@ -552,8 +522,7 @@ export function Shell({
           navigation={navigation}
           active={mobileActive}
           basePath={basePath}
-          hasNewTodos={hasNewTodos}
-          onOpenTodos={acknowledgeNewTodos}
+          pendingTodoCount={pendingTodoCount}
         />
       ) : null}
 
