@@ -56,7 +56,7 @@ describe("sourcing role-aware transfer UI", () => {
     expect(page).toContain("formatBusinessCurrency(factoryChange.proposedUnitPrice)");
     expect(page).not.toContain("isMobileClient");
     expect(page).not.toContain("该模块当前仅开放电脑端");
-    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain("@media (max-width: 800px)");
     expect(css).toContain(".sourcing-factory-change__review > div");
     expect(css).toContain(".sourcing-factory-change__review input");
     expect(css).toContain(".sourcing-order-detail .rework-workflow__node.is-future");
