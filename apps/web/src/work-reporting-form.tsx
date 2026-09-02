@@ -579,7 +579,7 @@ export function WorkReportingForm({
     if (!data || data.reworkStatus !== "in_progress" || !reportTasks || busy) return;
     const quantities = reportTasks.map((task) => ({ task, text: reportQuantities[task.workTaskId]?.trim() ?? "" }));
     if (quantities.some(({ text }) => !/^\d+$/.test(text) || Number(text) <= 0)) {
-      const issue = "请把每项实际完工件数填写为大于 0 的整数。";
+      const issue = "请把每项实际完工件数填写为大于 0 的整数件数。";
       setMessage(issue);
       await alertInApp(issue, { title: "返工报数暂不能提交", confirmLabel: "知道了" });
       return;
