@@ -88,7 +88,8 @@ describe("thin platform module routing", () => {
     expect(app).toContain("useInitialPlatformEntryCheck(path, search)");
     expect(app).not.toContain("PlatformHomePage");
     expect(app).toContain('if (path === "/ui/home") page = <HomeLanding />');
-    expect(components).toContain('mobile-primary-navigation__label">平台');
+    expect(components).not.toContain('mobile-primary-navigation__label">平台');
+    expect(components).toContain('"外发定价&选厂": { label: "外发", glyph: "发" }');
     expect(shellCss).toContain(".dx-nav-item.is-active .primary-navigation__copy small");
     expect(shellCss).toContain("color: #fff");
     expect(sourcingCss).toContain("border: 1px solid #c9ced6");

@@ -7,14 +7,18 @@ describe("mobile primary navigation", () => {
   it("derives the visible mobile entry list from the existing authorized navigation", async () => {
     const components = await read("apps/web/src/components.tsx");
 
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂"]');
     expect(components).not.toContain('name: "发起返工"');
     expect(components).toContain("const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);");
-    expect(components).toContain("const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;");
-    expect(components).toContain("...(showPlatformHome ? mobileCandidates.slice(3) : []),");
+    expect(components).toContain("const primaryNavigation = mobileCandidates.slice(0, 4);");
+    expect(components).toContain("...mobileCandidates.slice(4),");
     expect(components).toContain("...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),");
-    expect(components).toContain("showPlatformHome");
-    expect(components).toContain('mobile-primary-navigation__label">平台');
+    expect(components).toContain("mobileSourcingNavigation");
+    expect(components).toContain('label: "外发", glyph: "发"');
+    expect(components).toContain("sourcingNavigation.some((entry) => entry.name === active)");
+    expect(components).toContain("active={mobileActive}");
+    expect(components).not.toContain("showPlatformHome");
+    expect(components).not.toContain('mobile-primary-navigation__label">平台');
     expect(components).toContain("<PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />");
     expect(components).toContain('mobileNavigation?: "primary" | "transaction";');
     expect(components).toContain('mobileNavigation === "primary"');

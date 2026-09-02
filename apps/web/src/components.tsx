@@ -166,12 +166,13 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
   "返工单看板": { label: "返工", glyph: "返" },
+  "外发定价&选厂": { label: "外发", glyph: "发" },
 };
 
 function isMobilePrimaryNavigation(entry: NavigationEntry): boolean {
@@ -215,36 +216,25 @@ function MobilePrimaryNavigation({
   navigation,
   active,
   basePath,
-  showPlatformHome,
   hasNewTodos,
   onOpenTodos,
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
-  showPlatformHome: boolean;
   hasNewTodos: boolean;
   onOpenTodos: () => void;
 }) {
   const mobileCandidates = navigation.filter(isMobilePrimaryNavigation);
-  const primaryNavigation = showPlatformHome ? mobileCandidates.slice(0, 3) : mobileCandidates;
+  const primaryNavigation = mobileCandidates.slice(0, 4);
   const moreNavigation = [
-    ...(showPlatformHome ? mobileCandidates.slice(3) : []),
+    ...mobileCandidates.slice(4),
     ...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),
   ];
   const moreIsActive = moreNavigation.some((entry) => entry.name === active);
 
   return (
     <nav className="mobile-primary-navigation" aria-label="移动端主导航">
-      {showPlatformHome ? (
-        <div className="mobile-primary-navigation__entry">
-          <a href={`${basePath}/ui/home`}>
-            <NavigationItem icon="台">
-              <span className="mobile-primary-navigation__label">平台</span>
-            </NavigationItem>
-          </a>
-        </div>
-      ) : null}
       {primaryNavigation.map((entry) => (
         <div className="mobile-primary-navigation__entry" key={entry.name}>
           <MobileNavigationLink
@@ -449,6 +439,7 @@ export function Shell({
     href: "/ui/wages",
   });
 
+  // Desktop-only sourcing navigation keeps the full create / pending / history workspace.
   const sourcingNavigation: NavigationEntry[] = [];
   if (currentUser && canAccessSourcing(currentUser)) {
     if (isRoot || (hasRole("order_merchandiser") && hasCapability("sourcing:inquiry:create"))) {
@@ -486,11 +477,17 @@ export function Shell({
     });
   }
 
-  // Keep the existing flat collection for the mobile shell. Desktop-only sourcing
-  // navigation is deliberately excluded until the dedicated mobile pass.
+  const mobileSourcingNavigation: NavigationEntry[] = currentUser && canAccessSourcing(currentUser)
+    ? [{
+        name: "外发定价&选厂",
+        description: "查看外发定价、选厂和审批事项",
+        href: "/ui/sourcing/pending",
+      }]
+    : [];
   const navigation: NavigationEntry[] = [
     ...globalNavigation,
     ...reworkNavigation,
+    ...mobileSourcingNavigation,
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
@@ -514,6 +511,9 @@ export function Shell({
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
+  const mobileActive = sourcingNavigation.some((entry) => entry.name === active)
+    ? "外发定价&选厂"
+    : activeEntry?.name ?? active;
 
   return (
     <div className="app-shell">
@@ -550,9 +550,8 @@ export function Shell({
       {mobileNavigation === "primary" ? (
         <MobilePrimaryNavigation
           navigation={navigation}
-          active={activeEntry?.name ?? active}
+          active={mobileActive}
           basePath={basePath}
-          showPlatformHome={currentUser ? canAccessSourcing(currentUser) : false}
           hasNewTodos={hasNewTodos}
           onOpenTodos={acknowledgeNewTodos}
         />

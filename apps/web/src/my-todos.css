@@ -240,9 +240,18 @@
 }
 
 .my-todos-pagination button.is-active {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
+  border-color: var(--dx-v2-color-control);
+  background: var(--dx-v2-color-control);
   color: #fff;
+}
+
+.my-todos-pagination__ellipsis {
+  display: grid;
+  width: 20px;
+  height: 34px;
+  place-items: center;
+  color: var(--dx-v2-color-text);
+  font-weight: 750;
 }
 
 .my-todos-pagination button:disabled {
@@ -262,47 +271,51 @@
   }
 
   .my-todos-hero {
-    margin: -20px -20px var(--dx-v2-space-3);
-    padding: var(--dx-v2-space-4);
-    background: var(--dx-v2-color-control);
+    align-items: flex-start;
+    margin: 0 0 var(--dx-v2-space-3);
+    padding: 0;
+    background: transparent;
   }
 
   .my-todos-hero__title h1 {
-    color: #fff;
+    color: var(--dx-v2-color-text);
   }
 
   .my-todos-hero__title > p {
-    color: rgba(255, 255, 255, .76);
+    color: var(--color-primary);
     font-size: 13px;
     line-height: 20px;
   }
 
   .my-todos-workspace {
-    margin-inline: -4px;
+    margin-inline: 0;
   }
 
   .my-todos-toolbar {
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
     padding: 12px;
-    overflow-x: auto;
+    overflow: visible;
   }
 
   .my-todos-modules {
-    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+    width: 100%;
     gap: 8px;
   }
 
   .my-todos-modules button {
-    flex-basis: 140px;
-    width: 140px;
+    width: 100%;
     min-height: 42px;
     padding: 0 10px;
   }
 
   .my-todos-search {
-    flex: 0 0 260px;
-    width: 260px;
-    min-width: 260px;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
   }
 
   .my-todos-search input {
@@ -362,7 +375,19 @@
   }
 
   .my-todos-pagination {
-    padding-inline: 14px;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 14px 10px 18px;
+  }
+
+  .my-todos-pagination button {
+    width: 32px;
+    height: 32px;
+    color: var(--dx-v2-color-text);
+  }
+
+  .my-todos-pagination__ellipsis {
+    height: 32px;
   }
 }
 
