@@ -8,7 +8,9 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { verifySession } from "./auth.js";
 import { Shell } from "./components.js";
+import { accessiblePlatformModules } from "./platform-modules.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./my-todos.css";
 
@@ -149,6 +151,7 @@ export function MyTodosPage() {
   const [requestedModule, setRequestedModule] = useState<TodoModule | undefined>();
   const [requestedPage, setRequestedPage] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
   const loadVersion = useRef(0);
   const activeQuery = useDebouncedValue(searchQuery.trim(), 250);
 
@@ -190,6 +193,20 @@ export function MyTodosPage() {
   };
 
   useEffect(() => {
+    let mounted = true;
+    void verifySession().then((session) => {
+      if (!mounted) return;
+      const modules = session !== "denied" && session.status === "authorized"
+        ? accessiblePlatformModules(session.user).map((module) => module.id)
+        : [];
+      setAccessibleTodoModules(new Set(modules));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     void load(requestedModule, activeQuery, requestedPage, controller.signal);
     return () => controller.abort();
@@ -205,11 +222,21 @@ export function MyTodosPage() {
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const renderedTotalPages = Math.max(totalPages, 1);
   const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
-  const pageGroupStart = Math.floor((Math.max(page, 1) - 1) / 5) * 5 + 1;
+  const pageWindowStart = renderedTotalPages <= 5
+    ? 1
+    : page <= 3
+      ? 1
+      : page >= renderedTotalPages - 2
+        ? renderedTotalPages - 4
+        : page - 2;
+  const pageWindowEnd = Math.min(renderedTotalPages, pageWindowStart + 4);
   const visiblePages = Array.from(
-    { length: Math.min(5, renderedTotalPages - pageGroupStart + 1) },
-    (_, index) => pageGroupStart + index,
+    { length: pageWindowEnd - pageWindowStart + 1 },
+    (_, index) => pageWindowStart + index,
   );
+  const visibleTodoModules = accessibleTodoModules === null
+    ? todoModules
+    : todoModules.filter((module) => accessibleTodoModules.has(module.id));
 
   const openModule = (module: TodoModule): void => {
     setRequestedModule(module);
@@ -237,7 +264,7 @@ export function MyTodosPage() {
       {state.kind === "ready" && <Surface className="my-todos-workspace">
         <div className="my-todos-toolbar">
           <div className="my-todos-modules" role="tablist" aria-label="待办模块">
-            {todoModules.map((module) => <button
+            {visibleTodoModules.map((module) => <button
               type="button"
               className={module.id === activeModule ? "is-active" : ""}
               aria-current={module.id === activeModule ? "page" : undefined}
@@ -318,12 +345,14 @@ export function MyTodosPage() {
         </div>
       )}
       <nav className="my-todos-pagination" aria-label="待办列表分页">
-        <button
+        {pageWindowStart > 1 && <button
           type="button"
-          aria-label="前五页"
-          disabled={busy || pageGroupStart === 1}
-          onClick={() => setRequestedPage(Math.max(1, pageGroupStart - 5))}
-        >‹</button>
+          className={page === 1 ? "is-active" : ""}
+          aria-current={page === 1 ? "page" : undefined}
+          disabled={busy}
+          onClick={() => setRequestedPage(1)}
+        >1</button>}
+        {pageWindowStart > 2 && <span className="my-todos-pagination__ellipsis" aria-hidden="true">…</span>}
         {visiblePages.map((pageNumber) => <button
           type="button"
           className={pageNumber === page ? "is-active" : ""}
@@ -332,12 +361,14 @@ export function MyTodosPage() {
           onClick={() => setRequestedPage(pageNumber)}
           key={pageNumber}
         >{pageNumber}</button>)}
-        <button
+        {pageWindowEnd < renderedTotalPages - 1 && <span className="my-todos-pagination__ellipsis" aria-hidden="true">…</span>}
+        {pageWindowEnd < renderedTotalPages && <button
           type="button"
-          aria-label="后五页"
-          disabled={busy || pageGroupStart + 5 > renderedTotalPages}
-          onClick={() => setRequestedPage(pageGroupStart + 5)}
-        >›</button>
+          className={page === renderedTotalPages ? "is-active" : ""}
+          aria-current={page === renderedTotalPages ? "page" : undefined}
+          disabled={busy}
+          onClick={() => setRequestedPage(renderedTotalPages)}
+        >{renderedTotalPages}</button>}
       </nav>
       </Surface>}
       </div>
