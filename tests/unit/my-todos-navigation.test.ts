@@ -31,7 +31,10 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain("visiblePages.map");
     expect(page).toContain("Math.max(totalPages, 1)");
     expect(page).not.toContain("{totalPages > 1 && <nav");
-    expect(page).toContain('aria-label="后五页"');
+    expect(page).not.toContain('aria-label="前五页"');
+    expect(page).not.toContain('aria-label="后五页"');
+    expect(page).toContain("todoPageWindow(page, renderedTotalPages)");
+    expect(page).toContain('className="my-todos-pagination__ellipsis"');
     expect(page).toContain("my-todo-index");
     expect(page).toContain("节点停留");
     expect(page).toContain("您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。");
@@ -47,6 +50,8 @@ describe("my todos first-entry navigation", () => {
     );
     expect(page).not.toContain("<span>搜索待办</span>");
     expect(page).toContain('aria-label="搜索待办"');
+    expect(page).toContain("accessiblePlatformModules(session.user)");
+    expect(page).toContain("visibleTodoModules.map");
   });
 
   it("keeps the mobile task list aligned to the product hierarchy without changing the action path", async () => {
@@ -67,15 +72,15 @@ describe("my todos first-entry navigation", () => {
     expect(css).toContain(".my-todos-modules");
     expect(css).toContain("background: var(--dx-v2-color-control);");
     expect(css).toContain("justify-content: center;");
-    expect(css).toContain("flex-wrap: nowrap;");
-    expect(css).toContain("flex: 0 0 40%;");
-    expect(css).toContain("flex: 1 1 0;");
-    expect(css).toContain("width: auto;");
-    expect(css).toContain("flex: 0 1 440px;");
-    expect(css).toContain("width: 440px;");
-    expect(css).toContain("margin-left: auto;");
+    expect(css).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(css).toContain("repeat(auto-fit, minmax(min(140px, 100%), 1fr))");
+    expect(css).toContain("width: 100%;");
+    expect(css).toContain("margin-left: 0;");
     expect(css).toContain("background: var(--dx-v2-color-inset);");
-    expect(css).toContain("overflow-x: auto;");
+    expect(css).toContain("overflow: visible;");
+    expect(css).not.toContain("overflow-x: auto;");
+    expect(css).toContain("background: transparent;");
+    expect(css).toContain("background: var(--dx-v2-color-control);");
     expect(css).toContain(".my-todo-index {");
     expect(css).toContain("display: none;");
     expect(css).toContain(".my-todo-metrics span:nth-child(2)");
