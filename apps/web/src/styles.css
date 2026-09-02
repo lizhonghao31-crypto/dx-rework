@@ -586,3 +586,44 @@ dd { margin: 8px 0 0; overflow-wrap: anywhere; font-size: 18px; font-weight: 700
     border-radius: var(--dx-v2-radius-md);
   }
 }
+
+
+.quantity-price-decision {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dx-v2-space-2);
+}
+
+.quantity-price-decision__button {
+  min-height: 32px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.quantity-price-decision__button.is-approve {
+  color: var(--color-success, #176b45);
+}
+
+.quantity-price-decision__button.is-reject {
+  color: var(--color-danger, #a12b2b);
+}
+
+.quantity-price-decision__button[aria-pressed="true"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.quantity-price-decision__button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.quantity-price-decision__button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
