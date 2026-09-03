@@ -13,8 +13,13 @@ const MAX_RECEIVING_IMAGES = 3;
 const RECEIVING_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+type RepeatedReceivingSource = "jiashun" | "other_factory";
+type ReceiptSource = "legacy" | "initial" | "backfill" | RepeatedReceivingSource;
+
 type CreateRepeatedReceivingInput = Readonly<{
   receivingBatchId: string;
+  source: RepeatedReceivingSource;
+  documentQuantity?: number;
   actualQuantity: number;
   defectiveQuantity?: number;
 }>;
@@ -35,6 +40,7 @@ type NormalizedCreateReceivingInput = Readonly<{
   defectiveQuantity: number;
   attachmentIds: readonly string[];
   receivedDate: string | null;
+  receivingSource: Exclude<ReceiptSource, "legacy">;
 }>;
 
 type CorrectReceivingBatchInput = Readonly<{
@@ -325,6 +331,11 @@ const validateQuantity = (value: number, label: string, allowZero: boolean): num
   return value;
 };
 
+const normalizeRepeatedReceivingSource = (value: unknown): RepeatedReceivingSource => {
+  if (value === "jiashun" || value === "other_factory") return value;
+  return fail("请选择嘉顺收货或其他工厂收货");
+};
+
 const normalizeAttachmentIds = (values: readonly string[] | undefined): readonly string[] => {
   const attachmentIds = values ?? [];
   if (attachmentIds.length > MAX_RECEIVING_IMAGES) fail("送货单图片最多3张");
@@ -406,6 +417,7 @@ export class ReceivingService {
       defectiveQuantity,
       attachmentIds: normalizeAttachmentIds(input.attachmentIds),
       receivedDate: normalizeReceivingBackfillDate(input.receivedDate),
+      receivingSource: input.receivedDate === undefined ? "initial" : "backfill",
     };
     const scope = "receiving.receipt.create";
     const client = await this.database.connect();
@@ -422,6 +434,7 @@ export class ReceivingService {
           defectiveQuantity: normalized.defectiveQuantity,
           attachmentIds: normalized.attachmentIds,
           ...(normalized.receivedDate ? { receivedDate: normalized.receivedDate } : {}),
+          receivingSource: normalized.receivingSource,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => ({ statusCode: 201, response: await this.createInTransaction(client, actor, normalized) }));
@@ -443,6 +456,10 @@ export class ReceivingService {
     if (!UUID_PATTERN.test(input.receivingBatchId)) fail("收货订单标识无效");
     const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
     const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
+    const source = normalizeRepeatedReceivingSource(input.source);
+    const documentQuantity = source === "other_factory"
+      ? validateQuantity(input.documentQuantity ?? Number.NaN, "本次送货单数量", false)
+      : undefined;
     if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     const scope = "receiving.receipt.repeat";
     const client = await this.database.connect();
@@ -452,7 +469,13 @@ export class ReceivingService {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
-        requestHash: hash(scope, { receivingBatchId: input.receivingBatchId, actualQuantity, defectiveQuantity }),
+        requestHash: hash(scope, {
+          receivingBatchId: input.receivingBatchId,
+          source,
+          ...(documentQuantity === undefined ? {} : { documentQuantity }),
+          actualQuantity,
+          defectiveQuantity,
+        }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const target = await this.repeatReceivingBatch(client, input.receivingBatchId);
@@ -460,11 +483,12 @@ export class ReceivingService {
           statusCode: 201,
           response: await this.createInTransaction(client, actor, {
             styleNo: target.styleNo,
-            documentQuantity: target.documentQuantity,
+            documentQuantity: documentQuantity ?? target.documentQuantity,
             actualQuantity,
             defectiveQuantity,
             attachmentIds: [],
             receivedDate: null,
+            receivingSource: source,
           }, target.receivingBatchId),
         };
       });
@@ -1048,7 +1072,9 @@ export class ReceivingService {
       [styleNo],
     );
     const current = latest.rows[0];
-    if (!receivedDate && current && !current.closed) return { receivingBatchId: current.receiving_batch_id, isNew: false };
+    if (!receivedDate && current && !current.closed) {
+      return fail("该款号已有收货记录，请到“多次收货”录入", 409, "REPEAT_RECEIVING_REQUIRED");
+    }
 
     const receivingBatchId = randomUUID();
     await client.query(
@@ -1148,6 +1174,8 @@ export class ReceivingService {
         actualQuantity: input.actualQuantity,
         defectiveQuantity: input.defectiveQuantity,
         differenceQuantity: input.actualQuantity - input.documentQuantity,
+        receivingSource: input.receivingSource,
+        deliveryNoteIncrement: input.receivingSource === "other_factory" ? input.documentQuantity : 0,
         attachmentIds: input.attachmentIds,
         ...(input.receivedDate ? { receivedDate: input.receivedDate, backfilled: true } : {}),
       },
@@ -1171,9 +1199,9 @@ export class ReceivingService {
     }>(
       `INSERT INTO receiving_receipts(
          receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
-         received_by,operation_event_id,request_id,received_at
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE(
-         ($10::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+         receiving_source,received_by,operation_event_id,request_id,received_at
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE(
+         ($11::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
          CURRENT_TIMESTAMP
        ))
        RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
@@ -1185,12 +1213,25 @@ export class ReceivingService {
         input.documentQuantity,
         input.actualQuantity,
         input.defectiveQuantity,
+        input.receivingSource,
         actor.actorId,
         eventId,
         actor.requestId,
         input.receivedDate,
       ],
     );
+    if (input.receivingSource === "other_factory") {
+      await client.query("SELECT set_config('dx_rework.receiving_root_action','append_other_factory',true)");
+      const updated = await client.query(
+        `UPDATE receiving_batches
+         SET delivery_note_quantity=delivery_note_quantity+$2,
+             version=version+1,updated_by=$3,updated_at=clock_timestamp(),
+             last_operation_event_id=$4,last_request_id=$5
+         WHERE receiving_batch_id=$1 AND deleted_at IS NULL`,
+        [receivingBatchId, input.documentQuantity, actor.actorId, eventId, actor.requestId],
+      );
+      if (updated.rowCount !== 1) fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
+    }
     const row = inserted.rows[0]!;
     return {
       receiptId: row.receipt_id,
