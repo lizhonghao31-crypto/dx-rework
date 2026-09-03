@@ -121,6 +121,7 @@ export function ReceivingPage() {
   const [open, setOpen] = useState(false);
   const [backfill, setBackfill] = useState(false);
   const [repeat, setRepeat] = useState(false);
+  const [repeatSource, setRepeatSource] = useState<"jiashun" | "other_factory" | null>(null);
   const [repeatQuery, setRepeatQuery] = useState("");
   const debouncedRepeatQuery = useDebouncedValue(repeatQuery, 180);
   const [repeatOrders, setRepeatOrders] = useState<readonly RepeatOrder[]>([]);
@@ -139,6 +140,7 @@ export function ReceivingPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const pendingKey = useRef<string | null>(null);
+  const submitting = useRef(false);
   const uploadedIds = useRef(new Map<string, string>());
   const previewUrls = useRef(new Set<string>());
 
@@ -152,7 +154,7 @@ export function ReceivingPage() {
   useEffect(() => { void loadStyles(); }, []);
   useEffect(() => {
     const needle = debouncedRepeatQuery.trim();
-    if (!repeat || needle.length < 4) {
+    if (!repeat || !repeatSource || needle.length < 4) {
       setRepeatOrders([]);
       setRepeatOptionsQuery("");
       setRepeatSearching(false);
@@ -178,7 +180,7 @@ export function ReceivingPage() {
       })
       .finally(() => { if (!controller.signal.aborted) setRepeatSearching(false); });
     return () => { controller.abort(); };
-  }, [repeat, debouncedRepeatQuery]);
+  }, [repeat, repeatSource, debouncedRepeatQuery]);
   useEffect(() => () => {
     for (const previewUrl of previewUrls.current) URL.revokeObjectURL(previewUrl);
     previewUrls.current.clear();
@@ -199,6 +201,15 @@ export function ReceivingPage() {
       }
       return [];
     });
+  };
+
+  const clearNormalDraft = () => {
+    setStyleNo("");
+    setDocumentQuantity("");
+    setActualQuantity("");
+    setDefectiveQuantity("0");
+    clearImages();
+    setStyleMenuOpen(false);
   };
 
   const selectImages = (files: FileList | null) => {
@@ -238,7 +249,10 @@ export function ReceivingPage() {
   const submitRepeated = async () => {
     const actualCount = Number(actualQuantity);
     const defectiveCount = Number(defectiveQuantity);
+    const addedDocumentCount = Number(documentQuantity);
+    if (!repeatSource) { setMessage("请先选择嘉顺收货或其他工厂收货"); return; }
     if (!selectedRepeatOrder) { setMessage("请先搜索并选择要追加收货的订单"); return; }
+    if (repeatSource === "other_factory" && (!/^\d+$/.test(documentQuantity) || addedDocumentCount <= 0)) { setMessage("本次送货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
     if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
     if (defectiveCount > actualCount) { setMessage("次品数量不能超过实际收货数量"); return; }
@@ -253,6 +267,8 @@ export function ReceivingPage() {
         headers: { "idempotency-key": key },
         body: JSON.stringify({
           receivingBatchId: selectedRepeatOrder.receivingBatchId,
+          source: repeatSource,
+          ...(repeatSource === "other_factory" ? { documentQuantity: addedDocumentCount } : {}),
           actualQuantity: actualCount,
           defectiveQuantity: defectiveCount,
         }),
@@ -263,8 +279,8 @@ export function ReceivingPage() {
       setRepeatOrders([]);
       setSelectedRepeatOrder(null);
       setRepeatMenuOpen(false);
-      setActualQuantity("");
-      setDefectiveQuantity("0");
+      clearNormalDraft();
+      setRepeatSource(null);
       setRepeat(false);
       setOpen(false);
     } catch (cause) {
@@ -289,6 +305,31 @@ export function ReceivingPage() {
     if (backfill && receivedDate !== businessDateDaysAgo(1) && receivedDate !== businessDateDaysAgo(2)) {
       setMessage("补录仅支持昨天和前天");
       return;
+    }
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    if (!backfill) {
+      try {
+        const options = await requestJson<RepeatOptions>(`receiving/repeat-options?${new URLSearchParams({ q: trimmedStyle }).toString()}`, { method: "GET" });
+        if (options.orders.some((order) => order.styleNo === trimmedStyle)) {
+          setRepeat(true);
+          setRepeatSource(null);
+          setRepeatQuery("");
+          setRepeatOrders([]);
+          setSelectedRepeatOrder(null);
+          clearNormalDraft();
+          setMessage("该款号已有收货记录，请到“多次收货”录入");
+          submitting.current = false;
+          setBusy(false);
+          return;
+        }
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : "收货记录核对失败，请稍后重试");
+        submitting.current = false;
+        setBusy(false);
+        return;
+      }
     }
 
     setBusy(true);
@@ -333,8 +374,18 @@ export function ReceivingPage() {
       setBackfill(false);
       void loadStyles();
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "提交失败，请稍后重试");
+      const nextMessage = cause instanceof Error ? cause.message : "提交失败，请稍后重试";
+      if (nextMessage.includes("请到“多次收货”录入")) {
+        setRepeat(true);
+        setRepeatSource(null);
+        setRepeatQuery("");
+        setRepeatOrders([]);
+        setSelectedRepeatOrder(null);
+        clearNormalDraft();
+      }
+      setMessage(nextMessage);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -344,12 +395,13 @@ export function ReceivingPage() {
       <div className="receiving-brand">达兴 · 仓库收货</div>
       {!open ? (
         <div className="receiving-entry-actions">
-          <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setBackfill(false); setOpen(true); setMessage(""); }}>
+          <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(false); setOpen(true); setMessage(""); }}>
             <span aria-hidden="true">＋</span>
             <strong>点击收货</strong>
           </button>
           <button className="receiving-repeat-start" type="button" onClick={() => {
             setRepeat(true);
+            setRepeatSource(null);
             setBackfill(false);
             setRepeatQuery("");
             setRepeatOrders([]);
@@ -361,13 +413,25 @@ export function ReceivingPage() {
           }}>
             多次收货
           </button>
-          <button className="receiving-backfill-start" type="button" onClick={() => { setRepeat(false); setBackfill(true); setReceivedDate(businessDateDaysAgo(1)); setOpen(true); setMessage(""); }}>
+          <button className="receiving-backfill-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(true); setReceivedDate(businessDateDaysAgo(1)); setOpen(true); setMessage(""); }}>
             补录
           </button>
         </div>
-      ) : repeat ? (
+      ) : repeat && !repeatSource ? (
         <Surface className="receiving-form-card">
           <h1>多次收货</h1>
+          <p className="receiving-repeat-hint">请选择本次收货来源</p>
+          <button className="receiving-source-choice receiving-source-choice-jiashun" type="button" onClick={() => { setRepeatSource("jiashun"); setDocumentQuantity(""); setMessage(""); }}>
+            嘉顺收货
+          </button>
+          <button className="receiving-source-choice receiving-source-choice-other" type="button" onClick={() => { setRepeatSource("other_factory"); setDocumentQuantity(""); setMessage(""); }}>
+            其他工厂收货
+          </button>
+          <button className="receiving-cancel" type="button" onClick={() => { setRepeat(false); setOpen(false); }}>返回</button>
+        </Surface>
+      ) : repeat ? (
+        <Surface className="receiving-form-card">
+          <h1>{repeatSource === "jiashun" ? "嘉顺多次收货" : "其他工厂多次收货"}</h1>
           <label className="receiving-field">
             <span>款号</span>
             <div className="receiving-style-input">
@@ -408,6 +472,10 @@ export function ReceivingPage() {
           {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · 原送货单 {selectedRepeatOrder.documentQuantity} 件</p> : (
             <p className="receiving-repeat-hint">{repeatSearching ? "正在搜索…" : repeatQuery.trim().length < 4 ? "请输入款号末尾至少4位" : "没有可追加收货的匹配订单"}</p>
           )}
+          {repeatSource === "other_factory" ? <label className="receiving-field">
+            <span>本次送货单数量</span>
+            <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
+          </label> : null}
           <label className="receiving-field">
             <span>实际收货数量</span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
@@ -419,7 +487,7 @@ export function ReceivingPage() {
           <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submitRepeated()}>{busy ? "提交中…" : "提交多次收货"}</Button>
           <button className="receiving-cancel" type="button" disabled={busy} onClick={() => {
             pendingKey.current = null;
-            setRepeat(false);
+            setRepeatSource(null);
             setRepeatQuery("");
             setRepeatOrders([]);
             setSelectedRepeatOrder(null);

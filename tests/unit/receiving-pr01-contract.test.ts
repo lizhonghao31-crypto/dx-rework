@@ -18,7 +18,7 @@ describe("PR-01 receiving fact layer", () => {
     expect(page).not.toContain("下一步");
   });
 
-  it("keeps repeat receiving to a selected order plus actual and defective quantities", async () => {
+  it("keeps source-classified repeat receiving concise and explicit", async () => {
     const [page, css] = await Promise.all([
       read("apps/web/src/receiving-page.tsx"),
       read("apps/web/src/receiving-page.css"),
@@ -32,10 +32,16 @@ describe("PR-01 receiving fact layer", () => {
     expect(page).toContain("receiving/repeat-receipts");
     expect(page).toContain("receivingBatchId: selectedRepeatOrder.receivingBatchId");
     expect(page.indexOf("receiving-repeat-start")).toBeLessThan(page.indexOf("receiving-backfill-start"));
+    expect(page).toContain("嘉顺收货");
+    expect(page).toContain("其他工厂收货");
+    expect(page).toContain('source: repeatSource');
     const repeatSubmit = page.slice(page.indexOf("const submitRepeated"), page.indexOf("const submit ="));
-    expect(repeatSubmit).not.toContain("documentQuantity:");
+    expect(repeatSubmit).toContain('repeatSource === "other_factory"');
+    expect(repeatSubmit).toContain("documentQuantity: addedDocumentCount");
     expect(repeatSubmit).not.toContain("attachmentIds");
     expect(css).toContain(".receiving-repeat-start,.receiving-backfill-start");
+    expect(css).toContain(".receiving-source-choice-jiashun{color:#c62828}");
+    expect(css).toContain(".receiving-source-choice-other{color:#1268e8}");
   });
 
   it("records immutable receiving facts and gives Root the same receiving path", async () => {
