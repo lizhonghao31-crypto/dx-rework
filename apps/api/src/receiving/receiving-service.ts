@@ -1443,17 +1443,19 @@ export class ReceivingService {
       const nextDeliveryIncrement = normalized.source === "other_factory"
         ? normalized.documentQuantity
         : 0;
+      const documentQuantity = Number(batch.document_quantity) + nextDeliveryIncrement - oldDeliveryIncrement;
+      const actualQuantity = Number(batch.actual_quantity) + normalized.actualQuantity - beforeReceipt.actualQuantity;
+      const defectiveQuantity = Number(batch.defective_quantity) + normalized.defectiveQuantity - beforeReceipt.defectiveQuantity;
+      if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
       const after: ReceivingBatchSnapshot = {
         receivingBatchId: fact.receiving_batch_id,
         styleNo: batch.style_no,
-        documentQuantity: Number(batch.document_quantity) + nextDeliveryIncrement - oldDeliveryIncrement,
-        actualQuantity: Number(batch.actual_quantity) + normalized.actualQuantity - beforeReceipt.actualQuantity,
-        defectiveQuantity: Number(batch.defective_quantity) + normalized.defectiveQuantity - beforeReceipt.defectiveQuantity,
-        differenceQuantity: 0,
+        documentQuantity,
+        actualQuantity,
+        defectiveQuantity,
+        differenceQuantity: actualQuantity - documentQuantity,
         version: batch.version + 1,
       };
-      if (after.defectiveQuantity > after.actualQuantity) fail("次品数量不能超过实际收货数量");
-      after.differenceQuantity = after.actualQuantity - after.documentQuantity;
       const eventId = await this.events.append(client, actor, {
         action: "receiving.batch.correct",
         entityType: "receiving_batch",
