@@ -286,6 +286,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0130_root_receiving_correction_after_rework.sql");
     await migration("0132_receiving_merge_into_rework_target.sql");
     await migration("0137_receiving_source_classification.sql");
+    await migration("0138_receiving_receipt_corrections.sql");
   });
 
   afterAll(async () => {
@@ -461,6 +462,86 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
       [first.value.receiptId],
     )).rejects.toThrow();
+  });
+
+  it("lets Root correct one historical receipt without rewriting receipt facts", async () => {
+    const initial = await service.create(receiver(), {
+      styleNo: "STYLE-RECEIPT-CORRECTION-01",
+      documentQuantity: 100,
+      actualQuantity: 80,
+      defectiveQuantity: 5,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const repeated = await service.createRepeated(receiver(), {
+      receivingBatchId: initial.value.receivingBatchId,
+      source: "jiashun",
+      actualQuantity: 20,
+      defectiveQuantity: 2,
+    }, randomUUID());
+    const before = (await service.board(businessDate(), businessDate(), "STYLE-RECEIPT-CORRECTION-01")).rows[0]!;
+    const corrected = await service.correctReceipt(rootCorrector(), repeated.value.receiptId, {
+      expectedVersion: before.version,
+      source: "other_factory",
+      documentQuantity: 30,
+      actualQuantity: 25,
+      defectiveQuantity: 3,
+    });
+    expect(corrected).toMatchObject({
+      receivingBatchId: initial.value.receivingBatchId,
+      documentQuantity: 130,
+      actualQuantity: 105,
+      defectiveQuantity: 8,
+      differenceQuantity: -25,
+    });
+    const board = await service.board(businessDate(), businessDate(), "STYLE-RECEIPT-CORRECTION-01");
+    expect(board.rows[0]).toMatchObject({
+      documentQuantity: 130,
+      currentActualQuantity: 105,
+      currentDefectiveQuantity: 8,
+      differenceQuantity: -25,
+    });
+    expect(board.rows[0]?.receivingHistory.find((item) => item.receiptId === repeated.value.receiptId)).toMatchObject({
+      receivingSource: "other_factory",
+      receiptDocumentQuantity: 30,
+      actualQuantity: 25,
+      defectiveQuantity: 3,
+    });
+    const original = await database.query<{
+      receiving_source: string;
+      document_quantity: string;
+      actual_quantity: string;
+      defective_quantity: string;
+    }>(
+      `SELECT receiving_source,document_quantity::text,actual_quantity::text,defective_quantity::text
+       FROM receiving_receipts WHERE receipt_id=$1`,
+      [repeated.value.receiptId],
+    );
+    expect(original.rows[0]).toEqual({
+      receiving_source: "jiashun",
+      document_quantity: "100",
+      actual_quantity: "20",
+      defective_quantity: "2",
+    });
+    const correction = await database.query<{
+      receiving_source: string;
+      document_quantity: string;
+      actual_quantity: string;
+      defective_quantity: string;
+    }>(
+      `SELECT receiving_source,document_quantity::text,actual_quantity::text,defective_quantity::text
+       FROM receiving_receipt_corrections WHERE receipt_id=$1`,
+      [repeated.value.receiptId],
+    );
+    expect(correction.rows[0]).toEqual({
+      receiving_source: "other_factory",
+      document_quantity: "30",
+      actual_quantity: "25",
+      defective_quantity: "3",
+    });
+    await expect(database.query(
+      "UPDATE receiving_receipt_corrections SET actual_quantity=1 WHERE receipt_id=$1",
+      [repeated.value.receiptId],
+    )).rejects.toThrow("immutable");
   });
 
   it("separates prior and in-range receipts while keeping the cumulative delivery-note difference", async () => {
