@@ -405,10 +405,10 @@ export function ReceivingPage() {
         <Surface className="receiving-form-card">
           <h1>多次收货</h1>
           <p className="receiving-repeat-hint">请选择本次收货来源</p>
-          <button className="receiving-source-choice receiving-source-choice-jiashun" type="button" onClick={() => { setRepeatSource("jiashun"); setMessage(""); }}>
+          <button className="receiving-source-choice receiving-source-choice-jiashun" type="button" onClick={() => { setRepeatSource("jiashun"); setDocumentQuantity(""); setMessage(""); }}>
             嘉顺收货
           </button>
-          <button className="receiving-source-choice receiving-source-choice-other" type="button" onClick={() => { setRepeatSource("other_factory"); setMessage(""); }}>
+          <button className="receiving-source-choice receiving-source-choice-other" type="button" onClick={() => { setRepeatSource("other_factory"); setDocumentQuantity(""); setMessage(""); }}>
             其他工厂收货
           </button>
           <button className="receiving-cancel" type="button" onClick={() => { setRepeat(false); setOpen(false); }}>返回</button>
