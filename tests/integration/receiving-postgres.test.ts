@@ -544,6 +544,71 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     )).rejects.toThrow("immutable");
   });
 
+  it("replaces the base delivery note and keeps later corrections out of earlier board ranges", async () => {
+    const yesterday = pastBusinessDate(1);
+    const initial = await service.create(receiver(), {
+      styleNo: "STYLE-BASE-RECEIPT-CORRECTION",
+      documentQuantity: 100,
+      actualQuantity: 80,
+      defectiveQuantity: 5,
+      attachmentIds: [await readyImage()],
+      receivedDate: yesterday,
+    }, randomUUID());
+    const currentBefore = (await service.board(
+      businessDate(),
+      businessDate(),
+      "STYLE-BASE-RECEIPT-CORRECTION",
+    )).rows[0]!;
+
+    const corrected = await service.correctReceipt(rootCorrector(), initial.value.receiptId, {
+      expectedVersion: currentBefore.version,
+      source: "other_factory",
+      documentQuantity: 120,
+      actualQuantity: 90,
+      defectiveQuantity: 6,
+    });
+    expect(corrected).toMatchObject({
+      documentQuantity: 120,
+      actualQuantity: 90,
+      defectiveQuantity: 6,
+      differenceQuantity: -30,
+    });
+
+    const current = (await service.board(
+      businessDate(),
+      businessDate(),
+      "STYLE-BASE-RECEIPT-CORRECTION",
+    )).rows[0]!;
+    expect(current).toMatchObject({
+      documentQuantity: 120,
+      currentActualQuantity: 90,
+      currentDefectiveQuantity: 6,
+      differenceQuantity: -30,
+    });
+    expect(current.receivingHistory[0]).toMatchObject({
+      receivingSource: "other_factory",
+      receiptDocumentQuantity: 120,
+      actualQuantity: 90,
+      defectiveQuantity: 6,
+    });
+
+    const historical = (await service.board(yesterday, yesterday)).rows
+      .find((row) => row.styleNo === "STYLE-BASE-RECEIPT-CORRECTION")!;
+    expect(historical).toMatchObject({
+      documentQuantity: 100,
+      actualQuantity: 80,
+      cumulativeActualQuantity: 80,
+      differenceQuantity: -20,
+    });
+    expect(historical.receivingHistory[0]).toMatchObject({
+      receivingSource: "backfill",
+      receiptDocumentQuantity: 100,
+      actualQuantity: 80,
+      defectiveQuantity: 5,
+      cumulativeActualQuantity: 80,
+    });
+  });
+
   it("separates prior and in-range receipts while keeping the cumulative delivery-note difference", async () => {
     const today = businessDate();
     const yesterday = pastBusinessDate(1);
