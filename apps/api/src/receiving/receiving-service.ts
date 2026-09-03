@@ -410,6 +410,7 @@ export class ReceivingService {
     const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
     const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
     if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
+    const receivingSource: "initial" | "backfill" = input.receivedDate === undefined ? "initial" : "backfill";
     const normalized = {
       styleNo: normalizeStyleNo(input.styleNo),
       documentQuantity: validateQuantity(input.documentQuantity, "送货单数量", false),
@@ -417,7 +418,7 @@ export class ReceivingService {
       defectiveQuantity,
       attachmentIds: normalizeAttachmentIds(input.attachmentIds),
       receivedDate: normalizeReceivingBackfillDate(input.receivedDate),
-      receivingSource: input.receivedDate === undefined ? "initial" : "backfill",
+      receivingSource,
     };
     const scope = "receiving.receipt.create";
     const client = await this.database.connect();
