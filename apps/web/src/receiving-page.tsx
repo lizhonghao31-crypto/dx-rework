@@ -140,6 +140,7 @@ export function ReceivingPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const pendingKey = useRef<string | null>(null);
+  const submitting = useRef(false);
   const uploadedIds = useRef(new Map<string, string>());
   const previewUrls = useRef(new Set<string>());
 
@@ -200,6 +201,15 @@ export function ReceivingPage() {
       }
       return [];
     });
+  };
+
+  const clearNormalDraft = () => {
+    setStyleNo("");
+    setDocumentQuantity("");
+    setActualQuantity("");
+    setDefectiveQuantity("0");
+    clearImages();
+    setStyleMenuOpen(false);
   };
 
   const selectImages = (files: FileList | null) => {
@@ -269,9 +279,7 @@ export function ReceivingPage() {
       setRepeatOrders([]);
       setSelectedRepeatOrder(null);
       setRepeatMenuOpen(false);
-      setActualQuantity("");
-      setDefectiveQuantity("0");
-      setDocumentQuantity("");
+      clearNormalDraft();
       setRepeatSource(null);
       setRepeat(false);
       setOpen(false);
@@ -298,6 +306,9 @@ export function ReceivingPage() {
       setMessage("补录仅支持昨天和前天");
       return;
     }
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
     if (!backfill) {
       try {
         const options = await requestJson<RepeatOptions>(`receiving/repeat-options?${new URLSearchParams({ q: trimmedStyle }).toString()}`, { method: "GET" });
@@ -307,13 +318,16 @@ export function ReceivingPage() {
           setRepeatQuery("");
           setRepeatOrders([]);
           setSelectedRepeatOrder(null);
-          setActualQuantity("");
-          setDefectiveQuantity("0");
+          clearNormalDraft();
           setMessage("该款号已有收货记录，请到“多次收货”录入");
+          submitting.current = false;
+          setBusy(false);
           return;
         }
       } catch (cause) {
         setMessage(cause instanceof Error ? cause.message : "收货记录核对失败，请稍后重试");
+        submitting.current = false;
+        setBusy(false);
         return;
       }
     }
@@ -367,9 +381,11 @@ export function ReceivingPage() {
         setRepeatQuery("");
         setRepeatOrders([]);
         setSelectedRepeatOrder(null);
+        clearNormalDraft();
       }
       setMessage(nextMessage);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
