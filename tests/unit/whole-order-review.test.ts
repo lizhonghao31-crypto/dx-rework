@@ -89,8 +89,10 @@ describe("whole-order review contracts", () => {
     expect(service).not.toContain("async reviewTailPricing");
     expect(service).toContain('this.orderAudit(order, "pending_final_quantity_ie_review"');
     expect(service).toContain("async reviewFinalQuantity");
-    expect(service).toContain("ELSE 1\n                    END,\n                    3\n                  ) AS amount");
-    expect(service).not.toContain("ELSE 1\n                    END,\n                    8\n                  ) AS amount");
+    expect(service).toContain("END AS raw_amount");
+    expect(service).toContain("round(sum(raw_amount) OVER(PARTITION BY work_report_id),3)");
+    expect(service).toContain("sum(round(raw_amount,3)) OVER(PARTITION BY work_report_id)");
+    expect(service).not.toContain("END,\n                    8\n                  ) AS amount");
     expect(ReviewFinalQuantitySchema.safeParse({ expectedOrderVersion: 2, decision: "rejected" }).success).toBe(false);
     expect(migration).toContain("rework_tail_completion_coefficients");
     expect(migration).toContain("rework.whole_order.approve");

@@ -344,7 +344,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       [draft.value.reworkOrderId],
     )).rows).toEqual([{
       settlement_quantity: "10.00",
-      group_amount: "2.499",
+      group_amount: "2.500",
     }]);
     expect((await database.query(
       `SELECT amount::text FROM rework_work_report_member_shares share
@@ -352,7 +352,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
        WHERE report.rework_order_id=$1 ORDER BY share.person_id`,
       [draft.value.reworkOrderId],
     )).rows).toEqual([
-      { amount: "0.833" },
+      { amount: "0.834" },
       { amount: "0.833" },
       { amount: "0.833" },
     ]);

@@ -309,10 +309,9 @@ export class WholeOrderReviewService {
         );
       }
       await client.query(
-        `WITH amounts AS (
+        `WITH raw_amounts AS (
            SELECT share.work_report_id,share.person_id,
-                  round(
-                    rework_work_report_effective_quantity(report.work_report_id)*item.unit_price*
+                  rework_work_report_effective_quantity(report.work_report_id)*item.unit_price*
                     CASE WHEN task.assignment_mode='collective'
                       THEN 1::numeric / NULLIF(count(*) OVER(PARTITION BY share.work_report_id),0)
                       ELSE 1
@@ -320,9 +319,8 @@ export class WholeOrderReviewService {
                     CASE WHEN member.person_type_snapshot='temporary'
                       THEN COALESCE(coefficient.multiplier,1)
                       ELSE 1
-                    END,
-                    3
-                  ) AS amount
+                    END AS raw_amount,
+                  row_number() OVER(PARTITION BY share.work_report_id ORDER BY share.person_id) AS member_position
            FROM rework_work_report_member_shares share
            JOIN rework_work_reports report ON report.work_report_id=share.work_report_id
            JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
@@ -336,6 +334,14 @@ export class WholeOrderReviewService {
             AND coefficient.person_id=share.person_id
            WHERE report.rework_order_id=$2 AND share.amount=0
              AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+         ), amounts AS (
+           SELECT work_report_id,person_id,
+                  round(raw_amount,3) +
+                    CASE WHEN member_position=1 THEN
+                      round(sum(raw_amount) OVER(PARTITION BY work_report_id),3)
+                      - sum(round(raw_amount,3)) OVER(PARTITION BY work_report_id)
+                    ELSE 0 END AS amount
+           FROM raw_amounts
          )
          UPDATE rework_work_report_member_shares share SET amount=amounts.amount
          FROM amounts WHERE share.work_report_id=amounts.work_report_id AND share.person_id=amounts.person_id`,
@@ -434,10 +440,9 @@ export class WholeOrderReviewService {
         );
         }
         await client.query(
-        `WITH amounts AS (
+        `WITH raw_amounts AS (
            SELECT share.work_report_id,share.person_id,
-                  round(
-                    report.actual_quantity*item.unit_price*
+                  report.actual_quantity*item.unit_price*
                     CASE WHEN task.assignment_mode='collective'
                       THEN 1::numeric / NULLIF(count(*) OVER(PARTITION BY share.work_report_id),0)
                       ELSE 1
@@ -445,9 +450,8 @@ export class WholeOrderReviewService {
                     CASE WHEN member.person_type_snapshot='temporary'
                       THEN COALESCE(coefficient.multiplier,1)
                       ELSE 1
-                    END,
-                    3
-                  ) AS amount
+                    END AS raw_amount,
+                  row_number() OVER(PARTITION BY share.work_report_id ORDER BY share.person_id) AS member_position
            FROM rework_work_report_member_shares share
            JOIN rework_work_reports report ON report.work_report_id=share.work_report_id
            JOIN rework_work_tasks task ON task.work_task_id=report.work_task_id
@@ -465,6 +469,14 @@ export class WholeOrderReviewService {
                SELECT 1 FROM rework_work_report_rejections rejection
                WHERE rejection.work_report_id=report.work_report_id
              )
+         ), amounts AS (
+           SELECT work_report_id,person_id,
+                  round(raw_amount,3) +
+                    CASE WHEN member_position=1 THEN
+                      round(sum(raw_amount) OVER(PARTITION BY work_report_id),3)
+                      - sum(round(raw_amount,3)) OVER(PARTITION BY work_report_id)
+                    ELSE 0 END AS amount
+           FROM raw_amounts
          )
          UPDATE rework_work_report_member_shares share SET amount=amounts.amount
          FROM amounts
