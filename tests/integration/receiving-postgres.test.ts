@@ -285,6 +285,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0119_tail_inspection_cost_bearer_provenance.sql");
     await migration("0130_root_receiving_correction_after_rework.sql");
     await migration("0132_receiving_merge_into_rework_target.sql");
+    await migration("0137_receiving_source_classification.sql");
   });
 
   afterAll(async () => {
@@ -380,26 +381,50 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     }, firstKey);
     expect(replay.reused).toBe(true);
 
-    const second = await service.create(receiver(), {
+    await expect(service.create(receiver(), {
       styleNo: "STYLE-RECEIVING-01",
       documentQuantity: 100,
       actualQuantity: 20,
       defectiveQuantity: 2,
       attachmentIds: [],
+    }, randomUUID())).rejects.toThrow("请到“多次收货”录入");
+
+    const jiashun = await service.createRepeated(receiver(), {
+      receivingBatchId: first.value.receivingBatchId,
+      source: "jiashun",
+      actualQuantity: 20,
+      defectiveQuantity: 2,
     }, randomUUID());
-    expect(second.value.receivingBatchId).toBe(first.value.receivingBatchId);
-    expect(second.value.differenceQuantity).toBe(-80);
+    expect(jiashun.value.receivingBatchId).toBe(first.value.receivingBatchId);
+    expect(jiashun.value.differenceQuantity).toBe(-80);
+
+    await expect(service.createRepeated(receiver(), {
+      receivingBatchId: first.value.receivingBatchId,
+      source: "other_factory",
+      actualQuantity: 30,
+      defectiveQuantity: 1,
+    }, randomUUID())).rejects.toThrow("本次送货单数量");
+
+    const otherFactory = await service.createRepeated(receiver(), {
+      receivingBatchId: first.value.receivingBatchId,
+      source: "other_factory",
+      documentQuantity: 30,
+      actualQuantity: 30,
+      defectiveQuantity: 1,
+    }, randomUUID());
+    expect(otherFactory.value.receivingBatchId).toBe(first.value.receivingBatchId);
+    expect(otherFactory.value.differenceQuantity).toBe(0);
 
     const board = await service.board(businessDate());
     const row = board.rows.find((item) => item.receivingBatchId === first.value.receivingBatchId);
     expect(row).toMatchObject({
       styleNo: "STYLE-RECEIVING-01",
-      documentQuantity: 100,
+      documentQuantity: 130,
       attachments: [{ attachmentId: firstImage, filename: `${firstImage}.jpg` }],
-      actualQuantity: 100,
-      defectiveQuantity: 7,
+      actualQuantity: 130,
+      defectiveQuantity: 8,
       differenceQuantity: 0,
-      receiptCount: 2,
+      receiptCount: 3,
       reworkOrderId: null,
       reworkStatus: null,
     });
@@ -419,13 +444,19 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       attachmentIds: [],
     }, randomUUID())).rejects.toThrow("次品数量不能超过实际收货数量");
 
-    const facts = await database.query<{ document_quantity: number; difference_quantity: number; defective_quantity: number }>(
-      "SELECT document_quantity,difference_quantity,defective_quantity FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
+    const facts = await database.query<{ document_quantity: number; difference_quantity: number; defective_quantity: number; receiving_source: string }>(
+      "SELECT document_quantity,difference_quantity,defective_quantity,receiving_source FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id",
       [first.value.receivingBatchId],
     );
-    expect(facts.rows.map((item) => item.document_quantity)).toEqual([100, 100]);
-    expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-80, -20]);
-    expect(facts.rows.map((item) => item.defective_quantity).sort((left, right) => left - right)).toEqual([2, 5]);
+    expect(facts.rows.map((item) => item.document_quantity).sort((left, right) => left - right)).toEqual([100, 100, 30].sort((left, right) => left - right));
+    expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-80, -20, 0]);
+    expect(facts.rows.map((item) => item.defective_quantity).sort((left, right) => left - right)).toEqual([1, 2, 5]);
+    expect(facts.rows.map((item) => item.receiving_source).sort()).toEqual(["initial", "jiashun", "other_factory"].sort());
+    const batch = await database.query<{ delivery_note_quantity: number }>(
+      "SELECT delivery_note_quantity FROM receiving_batches WHERE receiving_batch_id=$1",
+      [first.value.receivingBatchId],
+    );
+    expect(batch.rows[0]?.delivery_note_quantity).toBe(130);
     await expect(database.query(
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
       [first.value.receiptId],
