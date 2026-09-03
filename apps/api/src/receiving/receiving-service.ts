@@ -237,7 +237,19 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
        ), batch_totals AS (
          SELECT r.receiving_batch_id,
                 scope.style_key,
-                batch.delivery_note_quantity::bigint AS document_quantity,
+                (
+                  batch.delivery_note_quantity
+                  -COALESCE(sum(r.document_quantity) FILTER (
+                    WHERE r.receiving_source='other_factory'
+                  ),0)
+                )::bigint AS base_document_quantity,
+                COALESCE(sum(r.document_quantity) FILTER (
+                  WHERE r.receiving_source='other_factory'
+                    AND (
+                      $3::text<>''
+                      OR r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                    )
+                ),0)::bigint AS other_factory_document_increment,
                 min(r.received_at) AS first_received_at,
                 max(r.received_at) AS last_all_received_at,
                 max(r.received_at) FILTER (
@@ -307,10 +319,13 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
                   adjustments.period_defective_adjustment
        ), style_totals AS (
          SELECT totals.style_key,
-                (array_agg(
-                  totals.document_quantity
-                  ORDER BY totals.first_received_at,totals.receiving_batch_id
-                ))[1]::bigint AS document_quantity,
+                (
+                  (array_agg(
+                    totals.base_document_quantity
+                    ORDER BY totals.first_received_at,totals.receiving_batch_id
+                  ))[1]
+                  +sum(totals.other_factory_document_increment)
+                )::bigint AS document_quantity,
                 sum(totals.prior_actual_quantity)::bigint AS prior_actual_quantity,
                 sum(totals.actual_quantity)::bigint AS actual_quantity,
                 sum(totals.defective_quantity)::bigint AS defective_quantity,
