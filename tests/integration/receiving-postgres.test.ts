@@ -641,8 +641,25 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       actualQuantity: 100,
       defectiveQuantity: 2,
     });
+    const otherFactory = await service.createRepeated(receiver(), {
+      receivingBatchId: current.value.receivingBatchId,
+      source: "other_factory",
+      documentQuantity: 200,
+      actualQuantity: 200,
+      defectiveQuantity: 0,
+    }, randomUUID());
+    expect(otherFactory.value).toMatchObject({
+      documentQuantity: 200,
+      actualQuantity: 200,
+      differenceQuantity: 0,
+    });
     const afterRepeat = await service.board(today, today, "in20546664");
-    expect(afterRepeat.rows[0]).toMatchObject({ cumulativeActualQuantity: 3758, receiptCount: 3 });
+    expect(afterRepeat.rows[0]).toMatchObject({
+      documentQuantity: 4217,
+      cumulativeActualQuantity: 3958,
+      differenceQuantity: -259,
+      receiptCount: 4,
+    });
     await expect(service.createRepeated(receiver(), {
       receivingBatchId: backfilled.value.receivingBatchId,
       source: "jiashun",
