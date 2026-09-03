@@ -232,6 +232,16 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
                   END
                 ),0)::bigint AS all_actual_adjustment,
                 COALESCE(sum(
+                  (event.after_state->>'documentQuantity')::bigint
+                    -(event.before_state->>'documentQuantity')::bigint
+                ) FILTER (
+                  WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS through_end_document_adjustment,
+                COALESCE(sum(
+                  (event.after_state->>'documentQuantity')::bigint
+                    -(event.before_state->>'documentQuantity')::bigint
+                ),0)::bigint AS all_document_adjustment,
+                COALESCE(sum(
                   CASE WHEN event.action='receiving.batch.merge'
                     THEN (event.after_state->>'defectiveQuantityAdjustment')::bigint
                     ELSE (event.after_state->>'defectiveQuantity')::bigint
@@ -250,13 +260,27 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
          SELECT r.receiving_batch_id,
                 scope.style_key,
                 (
-                  batch.delivery_note_quantity
+                  CASE WHEN $3::text<>'' THEN batch.delivery_note_quantity
+                    ELSE batch.delivery_note_quantity
+                      -COALESCE(adjustments.all_document_adjustment,0)
+                      +COALESCE(adjustments.through_end_document_adjustment,0)
+                  END
                   -COALESCE(sum(COALESCE(receipt_correction.document_quantity,r.document_quantity)) FILTER (
                     WHERE COALESCE(receipt_correction.receiving_source,r.receiving_source)='other_factory'
+                      AND r.receipt_id<>(SELECT base.receipt_id
+                        FROM receiving_receipts base
+                        WHERE base.receiving_batch_id=r.receiving_batch_id
+                        ORDER BY base.received_at,base.receipt_id
+                        LIMIT 1)
                   ),0)
                 )::bigint AS base_document_quantity,
                 COALESCE(sum(COALESCE(receipt_correction.document_quantity,r.document_quantity)) FILTER (
                   WHERE COALESCE(receipt_correction.receiving_source,r.receiving_source)='other_factory'
+                    AND r.receipt_id<>(SELECT base.receipt_id
+                      FROM receiving_receipts base
+                      WHERE base.receiving_batch_id=r.receiving_batch_id
+                      ORDER BY base.received_at,base.receipt_id
+                      LIMIT 1)
                     AND (
                       $3::text<>''
                       OR r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
@@ -326,6 +350,10 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
            SELECT correction.receiving_source,correction.document_quantity
            FROM receiving_receipt_corrections correction
            WHERE correction.receipt_id=r.receipt_id
+             AND (
+               $3::text<>''
+               OR correction.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+             )
            ORDER BY correction.created_at DESC,correction.correction_id DESC
            LIMIT 1
          ) receipt_correction ON true
@@ -335,6 +363,7 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
                   scope.style_key,
                   adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
                   adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
+                  adjustments.through_end_document_adjustment,adjustments.all_document_adjustment,
                   adjustments.period_defective_adjustment
        ), style_totals AS (
          SELECT totals.style_key,
@@ -1391,6 +1420,7 @@ export class ReceivingService {
         corrected_actual_quantity: string | null;
         corrected_defective_quantity: string | null;
         corrected_receiving_source: RepeatedReceivingSource | null;
+        is_base_receipt: boolean;
       }>(
         `SELECT receipt.receiving_batch_id,receipt.style_no,
                 receipt.document_quantity::bigint,receipt.actual_quantity::bigint,
@@ -1398,7 +1428,14 @@ export class ReceivingService {
                 correction.document_quantity::bigint AS corrected_document_quantity,
                 correction.actual_quantity::bigint AS corrected_actual_quantity,
                 correction.defective_quantity::bigint AS corrected_defective_quantity,
-                correction.receiving_source AS corrected_receiving_source
+                correction.receiving_source AS corrected_receiving_source,
+                receipt.receipt_id=(
+                  SELECT base.receipt_id
+                  FROM receiving_receipts base
+                  WHERE base.receiving_batch_id=receipt.receiving_batch_id
+                  ORDER BY base.received_at,base.receipt_id
+                  LIMIT 1
+                ) AS is_base_receipt
          FROM receiving_receipts receipt
          LEFT JOIN LATERAL (
            SELECT item.document_quantity,item.actual_quantity,item.defective_quantity,item.receiving_source
@@ -1437,13 +1474,14 @@ export class ReceivingService {
         [fact.receiving_batch_id],
       );
       const raw = rawTotals.rows[0]!;
-      const oldDeliveryIncrement = beforeReceipt.source === "other_factory"
+      const oldDeliveryContribution = fact.is_base_receipt
         ? beforeReceipt.documentQuantity
-        : 0;
-      const nextDeliveryIncrement = normalized.source === "other_factory"
+        : beforeReceipt.source === "other_factory" ? beforeReceipt.documentQuantity : 0;
+      const nextDeliveryContribution = fact.is_base_receipt
         ? normalized.documentQuantity
-        : 0;
-      const documentQuantity = Number(batch.document_quantity) + nextDeliveryIncrement - oldDeliveryIncrement;
+        : normalized.source === "other_factory" ? normalized.documentQuantity : 0;
+      const documentQuantity = Number(batch.document_quantity)
+        + nextDeliveryContribution - oldDeliveryContribution;
       const actualQuantity = Number(batch.actual_quantity) + normalized.actualQuantity - beforeReceipt.actualQuantity;
       const defectiveQuantity = Number(batch.defective_quantity) + normalized.defectiveQuantity - beforeReceipt.defectiveQuantity;
       if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
@@ -1757,6 +1795,10 @@ export class ReceivingService {
              SELECT item.document_quantity,item.actual_quantity,item.defective_quantity,item.receiving_source
              FROM receiving_receipt_corrections item
              WHERE item.receipt_id=receipt.receipt_id
+               AND (
+                 $3::text<>''
+                 OR item.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+               )
              ORDER BY item.created_at DESC,item.correction_id DESC
              LIMIT 1
            ) correction ON true
