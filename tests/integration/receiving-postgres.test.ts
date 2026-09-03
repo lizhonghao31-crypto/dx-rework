@@ -452,11 +452,11 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(facts.rows.map((item) => item.difference_quantity).sort((left, right) => left - right)).toEqual([-80, -20, 0]);
     expect(facts.rows.map((item) => item.defective_quantity).sort((left, right) => left - right)).toEqual([1, 2, 5]);
     expect(facts.rows.map((item) => item.receiving_source).sort()).toEqual(["initial", "jiashun", "other_factory"].sort());
-    const batch = await database.query<{ delivery_note_quantity: number }>(
+    const batch = await database.query<{ delivery_note_quantity: string }>(
       "SELECT delivery_note_quantity FROM receiving_batches WHERE receiving_batch_id=$1",
       [first.value.receivingBatchId],
     );
-    expect(batch.rows[0]?.delivery_note_quantity).toBe(130);
+    expect(batch.rows[0]?.delivery_note_quantity).toBe("130");
     await expect(database.query(
       "UPDATE receiving_receipts SET actual_quantity=100 WHERE receipt_id=$1",
       [first.value.receiptId],
@@ -622,11 +622,13 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const repeatKey = randomUUID();
     const repeated = await service.createRepeated(receiver(), {
       receivingBatchId: current.value.receivingBatchId,
+      source: "jiashun",
       actualQuantity: 100,
       defectiveQuantity: 2,
     }, repeatKey);
     const replayed = await service.createRepeated(receiver(), {
       receivingBatchId: current.value.receivingBatchId,
+      source: "jiashun",
       actualQuantity: 100,
       defectiveQuantity: 2,
     }, repeatKey);
@@ -643,6 +645,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(afterRepeat.rows[0]).toMatchObject({ cumulativeActualQuantity: 3758, receiptCount: 3 });
     await expect(service.createRepeated(receiver(), {
       receivingBatchId: backfilled.value.receivingBatchId,
+      source: "jiashun",
       actualQuantity: 1,
       defectiveQuantity: 0,
     }, randomUUID())).rejects.toThrow("该订单已不可追加收货，请重新搜索选择");
