@@ -242,7 +242,7 @@ export function ReceivingPage() {
     const addedDocumentCount = Number(documentQuantity);
     if (!repeatSource) { setMessage("请先选择嘉顺收货或其他工厂收货"); return; }
     if (!selectedRepeatOrder) { setMessage("请先搜索并选择要追加收货的订单"); return; }
-    if (repeatSource === "other_factory" && (!/^\\d+$/.test(documentQuantity) || addedDocumentCount <= 0)) { setMessage("本次送货单数量请输入大于0的整数"); return; }
+    if (repeatSource === "other_factory" && (!/^\d+$/.test(documentQuantity) || addedDocumentCount <= 0)) { setMessage("本次送货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
     if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
     if (defectiveCount > actualCount) { setMessage("次品数量不能超过实际收货数量"); return; }
