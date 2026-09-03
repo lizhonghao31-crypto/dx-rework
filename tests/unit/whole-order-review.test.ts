@@ -82,10 +82,17 @@ describe("whole-order review contracts", () => {
     expect(panel).toContain('priceReviewDecisions[id] === "approved" || priceReviewDecisions[id] === "rejected"');
     expect(panel).not.toContain("changedPriceIds.length === 0 || anyPriceRejected");
     expect(panel).toContain("系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。");
+    expect(panel).toContain('const failure = describeRequestFailure(cause, "IE 复核失败");');
+    expect(panel).toContain('await alertInApp(failure, { title: "IE 复核失败", confirmLabel: "知道了" });');
+    expect(panel).toContain("body?.error?.requestId");
     expect(service).not.toContain("async submitTailPricing");
     expect(service).not.toContain("async reviewTailPricing");
     expect(service).toContain('this.orderAudit(order, "pending_final_quantity_ie_review"');
     expect(service).toContain("async reviewFinalQuantity");
+    expect(service).toContain("END AS raw_amount");
+    expect(service).toContain("round(sum(raw_amount) OVER(PARTITION BY work_report_id),3)");
+    expect(service).toContain("sum(round(raw_amount,3)) OVER(PARTITION BY work_report_id)");
+    expect(service).not.toContain("END,\n                    8\n                  ) AS amount");
     expect(ReviewFinalQuantitySchema.safeParse({ expectedOrderVersion: 2, decision: "rejected" }).success).toBe(false);
     expect(migration).toContain("rework_tail_completion_coefficients");
     expect(migration).toContain("rework.whole_order.approve");
