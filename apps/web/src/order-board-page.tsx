@@ -22,8 +22,12 @@ type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple";
 
 type ReceivingHistoryItem = Readonly<{
   receiptId: string;
+  receivingBatchId: string;
+  batchVersion: number;
   sequence: number;
   documentQuantity: number;
+  receiptDocumentQuantity: number;
+  receivingSource: "legacy" | "initial" | "backfill" | "jiashun" | "other_factory";
   actualQuantity: number;
   defectiveQuantity: number;
   cumulativeActualQuantity: number;
@@ -181,12 +185,17 @@ export function OrderBoardPage() {
   const [page, setPage] = useState(1);
   const [expandedStyles, setExpandedStyles] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<BoardRow | null>(null);
+  const [correctingReceipt, setCorrectingReceipt] = useState<ReceivingHistoryItem | null>(null);
   const [deleting, setDeleting] = useState<BoardRow | null>(null);
   const [editStyleNo, setEditStyleNo] = useState("");
   const [editDocumentQuantity, setEditDocumentQuantity] = useState("");
   const [editActualQuantity, setEditActualQuantity] = useState("");
   const [editDefectiveQuantity, setEditDefectiveQuantity] = useState("");
   const [editImages, setEditImages] = useState<readonly File[]>([]);
+  const [receiptSource, setReceiptSource] = useState<"" | "jiashun" | "other_factory">("");
+  const [receiptDocumentQuantity, setReceiptDocumentQuantity] = useState("");
+  const [receiptActualQuantity, setReceiptActualQuantity] = useState("");
+  const [receiptDefectiveQuantity, setReceiptDefectiveQuantity] = useState("");
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
   const [attachmentViewer, setAttachmentViewer] = useState<Readonly<{
@@ -314,6 +323,53 @@ export function OrderBoardPage() {
       else next.add(styleNo);
       return next;
     });
+  };
+
+  const openReceiptCorrection = (item: ReceivingHistoryItem) => {
+    setEditing(null);
+    setDeleting(null);
+    setCorrectingReceipt(item);
+    setReceiptSource(
+      item.receivingSource === "jiashun" || item.receivingSource === "other_factory"
+        ? item.receivingSource
+        : "",
+    );
+    setReceiptDocumentQuantity(String(item.receiptDocumentQuantity));
+    setReceiptActualQuantity(String(item.actualQuantity));
+    setReceiptDefectiveQuantity(String(item.defectiveQuantity));
+    setMutationMessage("");
+  };
+
+  const submitReceiptCorrection = async () => {
+    if (!correctingReceipt || mutationBusy) return;
+    if (Number(receiptDefectiveQuantity) > Number(receiptActualQuantity)) {
+      setMutationMessage("次品数量不能超过实际收货数量");
+      return;
+    }
+    setMutationBusy(true);
+    setMutationMessage("");
+    try {
+      const response = await fetch(apiUrl(`receiving/receipts/${correctingReceipt.receiptId}/corrections`), {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedVersion: correctingReceipt.batchVersion,
+          source: receiptSource,
+          documentQuantity: Number(receiptDocumentQuantity),
+          actualQuantity: Number(receiptActualQuantity),
+          defectiveQuantity: Number(receiptDefectiveQuantity),
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "收货记录修正失败"));
+      setCorrectingReceipt(null);
+      setRefreshToken((value) => value + 1);
+      setMutationMessage("本次收货已修正");
+    } catch (error) {
+      setMutationMessage(error instanceof Error ? error.message : "收货记录修正失败");
+    } finally {
+      setMutationBusy(false);
+    }
   };
 
   const submitCorrection = async () => {
@@ -481,12 +537,17 @@ export function OrderBoardPage() {
                 : "正常";
             return <article className={`order-board-history__entry is-${historyTone}`} key={item.receiptId}>
               <strong>第{item.sequence}次收货</strong>
-              <span>送货单 {item.documentQuantity}件</span>
+              <span>{item.receivingSource === "other_factory"
+                ? "其他工厂"
+                : item.receivingSource === "jiashun"
+                  ? "嘉顺"
+                  : "来源待确认"} · 本次送货单 {item.receiptDocumentQuantity}件</span>
               <span>本次实收 {item.actualQuantity}件</span>
               <span>累计实收 {item.cumulativeActualQuantity}件</span>
               <span className="order-board-history__status">{historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
               <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>
+              {isRoot ? <button type="button" onClick={() => openReceiptCorrection(item)}>修正本次</button> : null}
             </article>;
           })}
         </section> : null}
@@ -536,6 +597,28 @@ export function OrderBoardPage() {
           <a href={attachmentUrl(selectedAttachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
         </div>
       </section>
+    </div> : null}
+
+    {correctingReceipt ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setCorrectingReceipt(null)}>
+      <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修正本次收货" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitReceiptCorrection(); }}>
+        <h2>修正第{correctingReceipt.sequence}次收货</h2>
+        <p>原始收货记录不会被覆盖，本次修正会单独保存操作人和时间。</p>
+        <label>收货来源<select value={receiptSource} disabled={mutationBusy} onChange={(event) => setReceiptSource(event.target.value as "" | "jiashun" | "other_factory")}>
+          <option value="" disabled>请选择收货来源</option>
+          <option value="jiashun">嘉顺收货</option>
+          <option value="other_factory">其他工厂收货</option>
+        </select></label>
+        <div className="order-board-dialog__quantity-grid">
+          <label>本次送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={receiptDocumentQuantity} disabled={mutationBusy} onChange={(event) => setReceiptDocumentQuantity(event.target.value)} /></label>
+          <label>本次实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptActualQuantity} disabled={mutationBusy} onChange={(event) => setReceiptActualQuantity(event.target.value)} /></label>
+          <label>本次次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setReceiptDefectiveQuantity(event.target.value)} /></label>
+        </div>
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        <div className="order-board-dialog__actions">
+          <button type="button" disabled={mutationBusy} onClick={() => setCorrectingReceipt(null)}>取消</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || !receiptSource || !receiptDocumentQuantity || receiptActualQuantity === "" || receiptDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修正"}</button>
+        </div>
+      </form>
     </div> : null}
 
     {editing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setEditing(null)}>

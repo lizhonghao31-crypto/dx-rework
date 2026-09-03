@@ -136,6 +136,7 @@
     { "version": "0134_versioned_craft_catalog", "checksum": "25f2b3dba7791e1b322d0e9f03d7597d4ff6cc07a04bbdd4bee821551a14f246" },
     { "version": "0135_sourcing_case_craft_snapshots", "checksum": "d9ff6a7686813a324caab6a5b219a6f28a42c64f5530ee8566dcaf769072bdb1" },
     { "version": "0136_tail_defective_quantity_integrity", "checksum": "7e8c898ebcf65a6842abede836c5f3f2f5c12d37877134737c09d0d7dc3cfdf7" },
-    { "version": "0137_receiving_source_classification", "checksum": "a41b309ba9c43a0acbe74ce7b3dd2a221d23b1cb1b47b43cdb28d1823d8b0c3b" }
+    { "version": "0137_receiving_source_classification", "checksum": "a41b309ba9c43a0acbe74ce7b3dd2a221d23b1cb1b47b43cdb28d1823d8b0c3b" },
+    { "version": "0138_receiving_receipt_corrections", "checksum": "9cfe64fb614728ed6d6953b3a8f2233f1a65bf0f6ec955f25ef29f6ce69d5f0c" }
   ]
 }

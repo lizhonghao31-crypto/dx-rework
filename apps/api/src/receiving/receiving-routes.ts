@@ -89,6 +89,29 @@ const mutationBody = (input: unknown): {
   };
 };
 
+const receiptCorrectionBody = (input: unknown): {
+  expectedVersion: number;
+  source: "jiashun" | "other_factory";
+  documentQuantity: number;
+  actualQuantity: number;
+  defectiveQuantity: number;
+} => {
+  if (!input || typeof input !== "object") {
+    throw new ApplicationError("VALIDATION_ERROR", "收货记录修正信息不完整", 400);
+  }
+  const body = input as Record<string, unknown>;
+  if (body.source !== "jiashun" && body.source !== "other_factory") {
+    throw new ApplicationError("VALIDATION_ERROR", "请选择嘉顺收货或其他工厂收货", 400);
+  }
+  return {
+    expectedVersion: Number(body.expectedVersion),
+    source: body.source,
+    documentQuantity: Number(body.documentQuantity),
+    actualQuantity: Number(body.actualQuantity),
+    defectiveQuantity: Number(body.defectiveQuantity),
+  };
+};
+
 const deleteBody = (input: unknown): { expectedVersion: number } => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "收货订单版本无效", 400);
@@ -237,6 +260,15 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
+
+  app.post<{ Params: { receiptId: string } }>(
+    "/receiving/receipts/:receiptId/corrections",
+    async (request) => dependencies.service.correctReceipt(
+      await rootCorrector(request),
+      batchId(request.params.receiptId),
+      receiptCorrectionBody(request.body),
+    ),
+  );
 
   app.patch<{ Params: { receivingBatchId: string } }>(
     "/receiving/batches/:receivingBatchId",
