@@ -1497,10 +1497,10 @@ export class ReceivingService {
       );
       const updated = await client.query(
         `UPDATE receiving_batches
-         SET delivery_note_quantity=$2,
-             document_quantity_adjustment=$2-$3,
-             actual_quantity_adjustment=$4-$5,
-             defective_quantity_adjustment=$6-$7,
+         SET delivery_note_quantity=$2::bigint,
+             document_quantity_adjustment=$2::bigint-$3::bigint,
+             actual_quantity_adjustment=$4::bigint-$5::bigint,
+             defective_quantity_adjustment=$6::bigint-$7::bigint,
              version=version+1,updated_at=CURRENT_TIMESTAMP,
              last_operation_event_id=$8,last_request_id=$9
          WHERE receiving_batch_id=$1 AND version=$10`,
