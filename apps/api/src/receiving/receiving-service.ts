@@ -1501,12 +1501,12 @@ export class ReceivingService {
              document_quantity_adjustment=$2::bigint-$3::bigint,
              actual_quantity_adjustment=$4::bigint-$5::bigint,
              defective_quantity_adjustment=$6::bigint-$7::bigint,
-             version=version+1,updated_at=CURRENT_TIMESTAMP,
-             last_operation_event_id=$8,last_request_id=$9
-         WHERE receiving_batch_id=$1 AND version=$10`,
+             version=version+1,updated_by=$8,updated_at=CURRENT_TIMESTAMP,
+             last_operation_event_id=$9,last_request_id=$10
+         WHERE receiving_batch_id=$1 AND version=$11`,
         [fact.receiving_batch_id, after.documentQuantity, Number(raw.document_quantity),
           after.actualQuantity, Number(raw.actual_quantity), after.defectiveQuantity,
-          Number(raw.defective_quantity), eventId, actor.requestId, batch.version],
+          Number(raw.defective_quantity), actor.actorId, eventId, actor.requestId, batch.version],
       );
       if (updated.rowCount !== 1) fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
       await client.query("COMMIT");
