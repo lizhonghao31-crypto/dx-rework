@@ -321,7 +321,7 @@ export class WholeOrderReviewService {
                       THEN COALESCE(coefficient.multiplier,1)
                       ELSE 1
                     END,
-                    8
+                    3
                   ) AS amount
            FROM rework_work_report_member_shares share
            JOIN rework_work_reports report ON report.work_report_id=share.work_report_id
@@ -446,7 +446,7 @@ export class WholeOrderReviewService {
                       THEN COALESCE(coefficient.multiplier,1)
                       ELSE 1
                     END,
-                    8
+                    3
                   ) AS amount
            FROM rework_work_report_member_shares share
            JOIN rework_work_reports report ON report.work_report_id=share.work_report_id

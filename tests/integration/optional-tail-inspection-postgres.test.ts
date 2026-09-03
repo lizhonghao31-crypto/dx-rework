@@ -73,9 +73,11 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
     tail: randomUUID(),
     ie: randomUUID(),
     worker: randomUUID(),
+    workerTwo: randomUUID(),
+    workerThree: randomUUID(),
     merchandiser: randomUUID(),
   };
-  let workerPersonId = "";
+  let workerPersonIds: string[] = [];
 
   const actor = (
     actorId: string,
@@ -127,6 +129,8 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       [ids.tail, "尾部主管", "tail_supervisor"],
       [ids.ie, "IE", "ie_reviewer"],
       [ids.worker, "工人", "worker"],
+      [ids.workerTwo, "工人二", "worker"],
+      [ids.workerThree, "工人三", "worker"],
       [ids.merchandiser, "订单跟单", "order_merchandiser"],
     ] as const;
     for (const [userId, displayName, roleCode] of users) {
@@ -149,13 +153,17 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       );
     }
     await access.ensureOrganizationPolicy();
-    workerPersonId = (await access.createPerson(owner(), {
+    workerPersonIds = await Promise.all([
+      [ids.worker, "工人"],
+      [ids.workerTwo, "工人二"],
+      [ids.workerThree, "工人三"],
+    ].map(async ([appUserId, displayName]) => (await access.createPerson(owner(), {
       personType: "internal",
-      appUserId: ids.worker,
-      displayName: "工人",
+      appUserId,
+      displayName,
       aliases: [],
       reason: "不整查全链回归",
-    })).personId;
+    })).personId));
   });
 
   afterAll(async () => {
@@ -219,7 +227,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
         expectedOrderVersion: saved.value.orderVersion,
         configurationId: saved.value.configuration!.configurationId,
         expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
-        assignments: [{ configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonId] }],
+        assignments: [{ configurationItemId: workerItem.configurationItemId, memberIds: workerPersonIds }],
       },
       randomUUID(),
     );
@@ -252,7 +260,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
 
     const tasks = await reporting.list(tailAssign(), draft.value.reworkOrderId);
     expect(tasks.tasks).toHaveLength(1);
-    expect(tasks.tasks[0]).toMatchObject({ executionKind: "worker" });
+    expect(tasks.tasks[0]).toMatchObject({ executionKind: "worker", mode: "collective" });
     await reporting.submitReport(
       worker(),
       tasks.tasks[0]!.workTaskId,
@@ -330,14 +338,24 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
     });
     expect(ieApproved.value.orderVersion).toBe(confirmed.value.orderVersion + 1);
     expect((await database.query(
-      `SELECT report.settlement_quantity::text,report.group_amount=2.5 AS uses_repriced_wage
+      `SELECT report.settlement_quantity::text,report.group_amount::text
        FROM rework_work_reports report
        WHERE report.rework_order_id=$1 AND report.status='submitted'`,
       [draft.value.reworkOrderId],
     )).rows).toEqual([{
       settlement_quantity: "10.00",
-      uses_repriced_wage: true,
+      group_amount: "2.499",
     }]);
+    expect((await database.query(
+      `SELECT amount::text FROM rework_work_report_member_shares share
+       JOIN rework_work_reports report USING(work_report_id)
+       WHERE report.rework_order_id=$1 ORDER BY share.person_id`,
+      [draft.value.reworkOrderId],
+    )).rows).toEqual([
+      { amount: "0.833" },
+      { amount: "0.833" },
+      { amount: "0.833" },
+    ]);
     expect((await database.query(
       "SELECT unit_price::text FROM rework_process_configuration_items WHERE configuration_item_id=$1",
       [workerItem.configurationItemId],

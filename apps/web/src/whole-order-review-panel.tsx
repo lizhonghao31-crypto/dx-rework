@@ -13,6 +13,26 @@ import { createClientRequestId } from "./client-request-id.js";
 import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+    readonly requestId: string | null,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+const describeRequestFailure = (cause: unknown, fallback: string): string => {
+  const message = cause instanceof ApiRequestError && cause.code === "INTERNAL_ERROR"
+    ? "系统处理失败，订单尚未流转。"
+    : cause instanceof Error ? cause.message : fallback;
+  return cause instanceof ApiRequestError && cause.requestId
+    ? `${message} 错误编号：${cause.requestId}`
+    : message;
+};
+
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), {
     credentials: "include",
@@ -24,8 +44,14 @@ const request = async <T,>(path: string, parse: (value: unknown) => T, init?: Re
     },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? "请求未完成，请稍后重试");
+    const body = await response.json().catch(() => null) as {
+      error?: { code?: string; message?: string; requestId?: string };
+    } | null;
+    throw new ApiRequestError(
+      body?.error?.message ?? "请求未完成，请稍后重试",
+      body?.error?.code ?? null,
+      body?.error?.requestId ?? null,
+    );
   }
   return parse(await response.json());
 };
@@ -367,7 +393,9 @@ export function WholeOrderReviewPanel({
         ? "IE 复核已通过，工资已按批准的有效数量和最终价格锁定并进入责任判定。"
         : "已退回尾部最终数量确认。");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "IE 复核失败");
+      const failure = describeRequestFailure(cause, "IE 复核失败");
+      setMessage(failure);
+      await alertInApp(failure, { title: "IE 复核失败", confirmLabel: "知道了" });
     }
   };
 
