@@ -105,6 +105,8 @@ const batchId = (input: string): string => {
 
 const repeatBody = (input: unknown): {
   receivingBatchId: string;
+  source: "jiashun" | "other_factory";
+  documentQuantity?: number;
   actualQuantity: number;
   defectiveQuantity: number;
 } => {
@@ -115,8 +117,16 @@ const repeatBody = (input: unknown): {
   if (typeof body.receivingBatchId !== "string") {
     throw new ApplicationError("VALIDATION_ERROR", "请选择要追加收货的订单", 400);
   }
+  if (body.source !== "jiashun" && body.source !== "other_factory") {
+    throw new ApplicationError("VALIDATION_ERROR", "请选择嘉顺收货或其他工厂收货", 400);
+  }
+  if (body.source === "other_factory" && body.documentQuantity === undefined) {
+    throw new ApplicationError("VALIDATION_ERROR", "请填写本次送货单数量", 400);
+  }
   return {
     receivingBatchId: batchId(body.receivingBatchId),
+    source: body.source,
+    ...(body.source === "other_factory" ? { documentQuantity: Number(body.documentQuantity) } : {}),
     actualQuantity: Number(body.actualQuantity),
     defectiveQuantity: body.defectiveQuantity === undefined ? 0 : Number(body.defectiveQuantity),
   };
