@@ -28,6 +28,7 @@ const webGuard = "if: ${{ steps.classify.outputs.web_only == 'true' }}";
 const governanceGuard = "if: ${{ steps.classify.outputs.governance_only == 'true' }}";
 
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
+assert(quick.includes("github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'full-gate')"), "Quick Gate must skip duplicate validation when Full Gate is active");
 assert(quick.includes("cancel-in-progress: true"), "Quick Gate must cancel stale runs");
 assert(quick.includes("node scripts/ci/verify-actions-policy.mjs"), "Quick Gate must verify its own usage policy");
 
@@ -86,7 +87,9 @@ for (const name of [
 ]) {
   assert(stepBlock(name).includes(webGuard), `${name} must run only for web-only changes`);
 }
+assert(stepBlock("Install locked dependencies").includes("npm ci --no-audit --no-fund --prefer-offline"), "business dependency install must avoid audit/fund network stalls and prefer cache");
 assert(stepBlock("Install web locked dependencies").includes("--workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui"), "web-only install must stay workspace-scoped");
+assert(stepBlock("Install web locked dependencies").includes("--no-audit --no-fund --prefer-offline"), "web dependency install must avoid audit/fund network stalls and prefer cache");
 assert(stepBlock("Lint changed web files").includes("git diff --name-only"), "web-only lint must use the exact changed-file set");
 assert(stepBlock("Run changed web unit tests").includes("changed_tests"), "web-only tests must stay limited to changed unit tests");
 
@@ -116,6 +119,7 @@ for (const forbidden of [
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
 assert(full.includes("contains(github.event.pull_request.labels.*.name, 'full-gate')"), "Full Gate label guard must remain explicit");
+assert(full.includes("npm ci --no-audit --no-fund --prefer-offline"), "Full Gate dependency install must avoid audit/fund network stalls and prefer cache");
 assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
 assert(full.includes("synchronize"), "a labeled PR must re-run Full Gate when its Head changes");
 assert(full.includes("Classify Full Gate risk from exact PR diff"), "Full Gate must classify the exact PR diff before heavy work");
