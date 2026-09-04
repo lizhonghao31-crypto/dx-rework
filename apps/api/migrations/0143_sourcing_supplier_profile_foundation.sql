@@ -202,6 +202,8 @@ BEGIN
       'payeeName',previous_record.payee_name,
       'bankAccountMasked',CASE
         WHEN previous_record.bank_account IS NULL THEN NULL
+        WHEN length(previous_record.bank_account)<=6
+          THEN repeat('*',length(previous_record.bank_account))
         ELSE left(previous_record.bank_account,2)
           || repeat('*',greatest(length(previous_record.bank_account)-6,0))
           || right(previous_record.bank_account,4)
@@ -235,6 +237,7 @@ BEGIN
       'payeeName',NEW.payee_name,
       'bankAccountMasked',CASE
         WHEN NEW.bank_account IS NULL THEN NULL
+        WHEN length(NEW.bank_account)<=6 THEN repeat('*',length(NEW.bank_account))
         ELSE left(NEW.bank_account,2)
           || repeat('*',greatest(length(NEW.bank_account)-6,0))
           || right(NEW.bank_account,4)
