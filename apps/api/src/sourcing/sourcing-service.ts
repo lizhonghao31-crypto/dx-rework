@@ -90,6 +90,7 @@ type SourcingCaseRow = Readonly<{
   lane_key: string;
   order_quantity: number | string;
   daxing_unit_price: string | null;
+  estimated_cut_piece_send_date: string | null;
   line_items: readonly {
     position: number;
     styleNo: string;
@@ -210,13 +211,18 @@ const toIso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 
 export const canViewSourcingDaxingPrice = (
-  actor: Pick<TrustedActorContext, "actorRoles">,
+  actor: Pick<TrustedActorContext, "actorId" | "actorRoles">,
+  createdBy: string,
 ): boolean => actor.actorRoles.includes(ROOT_ROLE)
-  || actor.actorRoles.some((role) => DAXING_PRICE_ROLES.has(role));
+  || (
+    actor.actorRoles.includes(CASE_CREATE_ROLE)
+    && actor.actorId === createdBy
+  )
+  || actor.actorRoles.some((role) => role !== CASE_CREATE_ROLE && DAXING_PRICE_ROLES.has(role));
 
 const mapCase = (
   row: SourcingCaseRow,
-  includeDaxingPrice: boolean,
+  actor: TrustedActorContext,
 ): SourcingCaseSummary => {
   const crafts = [...(row.crafts ?? [])];
   const lineItems = row.line_items?.length
@@ -241,9 +247,10 @@ const mapCase = (
   laneKey: LANE_KEY,
   orderQuantity: Number(row.order_quantity),
   lineItems,
-  ...(includeDaxingPrice && row.daxing_unit_price !== null
+  ...(canViewSourcingDaxingPrice(actor, row.created_by) && row.daxing_unit_price !== null
     ? { daxingUnitPrice: row.daxing_unit_price }
     : {}),
+  estimatedCutPieceSendDate: row.estimated_cut_piece_send_date,
   deliveryDate: row.delivery_date,
   processDescription: row.process_description,
   processes: crafts.length
@@ -377,6 +384,8 @@ export class SourcingService {
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          source_case.daxing_unit_price::text AS daxing_unit_price,
+         to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
+           AS estimated_cut_piece_send_date,
          lines_row.line_items,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
@@ -458,7 +467,7 @@ export class SourcingService {
     );
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
-    return mapCase(row, canViewSourcingDaxingPrice(actor));
+    return mapCase(row, actor);
   }
 
   async listCases(
@@ -479,6 +488,8 @@ export class SourcingService {
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          source_case.daxing_unit_price::text AS daxing_unit_price,
+         to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
+           AS estimated_cut_piece_send_date,
          lines_row.line_items,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
@@ -590,7 +601,7 @@ export class SourcingService {
     const pageRows = result.rows;
     const totalCount = Number(pageRows[0]?.total_count ?? "0");
     return {
-      items: pageRows.map((row) => mapCase(row, canViewSourcingDaxingPrice(actor))),
+      items: pageRows.map((row) => mapCase(row, actor)),
       page,
       pageSize: SOURCING_LIST_PAGE_SIZE,
       totalCount,
@@ -1109,6 +1120,7 @@ export class SourcingService {
     const normalized = {
       erpOrderNo,
       erpOrderId: erpOrderNo,
+      estimatedCutPieceSendDate: input.estimatedCutPieceSendDate,
       deliveryDate: input.deliveryDate,
       craftIds,
       lineItems,
@@ -1182,8 +1194,9 @@ export class SourcingService {
           `INSERT INTO sourcing_cases(
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
              order_quantity,delivery_date,process_description,process_items,
-             created_by,operation_event_id,request_id,creation_reason,daxing_unit_price
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+             created_by,operation_event_id,request_id,creation_reason,daxing_unit_price,
+             estimated_cut_piece_send_date
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [
             sourcingCaseId,
             normalized.erpOrderId,
@@ -1199,6 +1212,7 @@ export class SourcingService {
             actor.requestId,
             DEFAULT_CREATION_REASON,
             normalized.daxingUnitPrice,
+            normalized.estimatedCutPieceSendDate,
           ],
         );
         for (const line of normalized.lineItems) {
