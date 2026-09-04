@@ -4,7 +4,7 @@ import { landingTarget } from "./landing-target.js";
 export const PLATFORM_MODULE_QUERY = "platform_module";
 
 export type PlatformModule = Readonly<{
-  id: "rework" | "sourcing";
+  id: "rework" | "sourcing" | "suppliers";
   href: string;
 }>;
 
@@ -14,10 +14,15 @@ export function canAccessSourcing(user: AuthorizedUser): boolean {
     || user.capabilities.includes("sourcing:view");
 }
 
+export function canAccessSupplierCenter(user: AuthorizedUser): boolean {
+  return user.isRoot === true || user.capabilities.includes("supplier_profile:read");
+}
+
 export function accessiblePlatformModules(user: AuthorizedUser): readonly PlatformModule[] {
   const modules: PlatformModule[] = [];
   const reworkHref = landingTarget(user);
   if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing/pending" });
+  if (canAccessSupplierCenter(user)) modules.push({ id: "suppliers", href: "ui/suppliers" });
   if (reworkHref) modules.push({ id: "rework", href: reworkHref });
   return modules;
 }

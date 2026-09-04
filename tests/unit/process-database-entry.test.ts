@@ -11,13 +11,17 @@ describe("process database entry", () => {
     ]);
 
     expect(app).not.toContain('path === "/ui/process-database"');
-    expect(app).toContain('masterDataView === "suppliers" || masterDataView === "processes" ? masterDataView : "crafts"');
+    expect(app).toContain('masterDataView === "suppliers"');
     expect(navigation).toContain("工厂、供应商、工艺与工序数据库");
+    expect(app).toContain("<LegacySupplierCenterRedirect />");
+    expect(app).toContain('parameters.get("tool") === "onboarding"');
+    expect(app).toContain('<MasterDataPage view="suppliers" />');
+    expect(app).toContain('<SupplierCenterPage mode="directory" />');
+    expect(page).toContain('href={pageUrl("ui/suppliers")}>供应商中心</a>');
     expect(navigation).not.toContain('pageUrl("ui/process-database")');
     expect(page).toContain('view === "crafts" ? "工艺数据库" : view === "processes" ? "工序数据库" : "工厂与供应商"');
     expect(page).toContain('?view=crafts`}>工艺数据库</a>');
     expect(page).toContain('?view=processes`}>工序数据库</a>');
-    expect(page).toContain('?view=suppliers`}>工厂与供应商</a>');
     expect(page).toContain('view === "crafts" ? <Surface');
     expect(page).toContain('view === "suppliers" ? <Surface');
     expect(page).toContain('view === "processes" ? <Surface');
