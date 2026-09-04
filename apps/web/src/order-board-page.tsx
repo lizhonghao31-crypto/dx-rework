@@ -700,6 +700,10 @@ export function OrderBoardPage() {
                 onClick={() => toggleHistory(row.styleNo)}
               >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button> : null}
             </div>
+            {actionControls(row, false)}
+            {actionControls(row, true)}
+          </div>
+          <div className="order-board-row__facts">
             <div className="order-board-row__document">
               <span>送货单数量</span>
               <div className="order-board-row__document-value">
@@ -714,12 +718,6 @@ export function OrderBoardPage() {
             </div>
             <div className="order-board-row__actual"><span>实收</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
             <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
-            <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
-            <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
-            {actionControls(row, false)}
-            {actionControls(row, true)}
-          </div>
-          <div className="order-board-row__operations">
             <div className="order-board-operation order-board-row__difference">
               <span>收货差异</span>
               <div>{differenceControl(row, "receiving")}</div>
@@ -739,6 +737,10 @@ export function OrderBoardPage() {
               <span>装箱差异</span>
               <div>{differenceControl(row, "packing")}</div>
             </div>
+          </div>
+          <div className="order-board-row__confirmation">
+            <div className="order-board-row__receiving-confirmation"><span>收货人 &amp; 收货时间</span><strong>{row.lastReceiverName} · {dateTime(row.lastReceivedAt)}</strong></div>
+            <div className="order-board-row__packing-confirmation"><span>装箱确认人 &amp; 装箱确认时间</span><strong>{row.packingRecordedBy && row.packingRecordedAt ? `${row.packingRecordedBy} · ${dateTime(row.packingRecordedAt)}` : "-"}</strong></div>
           </div>
         </Surface>
         {historyExpanded ? <section className="order-board-history" aria-label={`${row.styleNo}多次收货记录`}>

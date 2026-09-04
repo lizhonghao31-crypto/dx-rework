@@ -138,6 +138,7 @@
     { "version": "0136_tail_defective_quantity_integrity", "checksum": "7e8c898ebcf65a6842abede836c5f3f2f5c12d37877134737c09d0d7dc3cfdf7" },
     { "version": "0137_receiving_source_classification", "checksum": "a41b309ba9c43a0acbe74ce7b3dd2a221d23b1cb1b47b43cdb28d1823d8b0c3b" },
     { "version": "0138_receiving_receipt_corrections", "checksum": "9cfe64fb614728ed6d6953b3a8f2233f1a65bf0f6ec955f25ef29f6ce69d5f0c" },
-    { "version": "0139_receiving_packing_difference_resolution", "checksum": "dda7d1278ac1fed989d0177d44934f458f38e77898990a8282892854c83ed68b" }
+    { "version": "0139_receiving_packing_difference_resolution", "checksum": "dda7d1278ac1fed989d0177d44934f458f38e77898990a8282892854c83ed68b" },
+    { "version": "0140_receiving_packing_difference_direction", "checksum": "708fe59c1fac00334708fe5132679c57f37737b50fa7169c59494616043c9dec" }
   ]
 }

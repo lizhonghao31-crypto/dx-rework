@@ -304,6 +304,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0137_receiving_source_classification.sql");
     await migration("0138_receiving_receipt_corrections.sql");
     await migration("0139_receiving_packing_difference_resolution.sql");
+    await migration("0140_receiving_packing_difference_direction.sql");
   });
 
   afterAll(async () => {
@@ -860,7 +861,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     )).rows[0]!;
     expect(afterPacking).toMatchObject({
       packingQuantity: 1_700,
-      packingDifferenceQuantity: 36,
+      packingDifferenceQuantity: -36,
       receivingDifferenceResolution: null,
       packingDifferenceResolution: null,
     });
@@ -881,7 +882,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       expectedActualQuantity: afterPacking.cumulativeActualQuantity,
       expectedPackingRevisionId: afterPacking.packingRevisionId,
       differenceType: "packing",
-      result: "尾部复核完成，36件待补装",
+      result: "尾部复核完成，装箱差异为-36件",
     }, randomUUID());
 
     const resolved = (await service.board(
@@ -892,7 +893,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       handledBy: "仓管测试",
     });
     expect(resolved.packingDifferenceResolution).toMatchObject({
-      result: "尾部复核完成，36件待补装",
+      result: "尾部复核完成，装箱差异为-36件",
       handledBy: "仓管测试",
     });
 
@@ -924,6 +925,33 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       differenceType: "receiving",
       result: "旧数量不可继续提交",
     }, randomUUID())).rejects.toThrow("订单数量已变化");
+  });
+
+  it.each([
+    { styleNo: "STYLE-PACKING-DIRECTION-SHORT", packingQuantity: 90, expectedDifference: -10 },
+    { styleNo: "STYLE-PACKING-DIRECTION-EXTRA", packingQuantity: 110, expectedDifference: 10 },
+  ])("calculates $packingQuantity packed against 100 received as $expectedDifference", async ({
+    styleNo,
+    packingQuantity,
+    expectedDifference,
+  }) => {
+    const created = await service.create(receiver(), {
+      styleNo,
+      documentQuantity: 100,
+      actualQuantity: 100,
+      defectiveQuantity: 0,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const initial = (await service.board(businessDate(), businessDate(), styleNo)).rows[0]!;
+    await service.recordPacking(tailSupervisor(), {
+      receivingBatchId: created.value.receivingBatchId,
+      expectedVersion: initial.version,
+      expectedPackingRevisionId: null,
+      packingQuantity,
+    }, randomUUID());
+
+    expect((await service.board(businessDate(), businessDate(), styleNo)).rows[0])
+      .toMatchObject({ cumulativeActualQuantity: 100, packingQuantity, packingDifferenceQuantity: expectedDifference });
   });
 
   it("keeps an open rework action visible when same-style receiving batches consolidate", async () => {

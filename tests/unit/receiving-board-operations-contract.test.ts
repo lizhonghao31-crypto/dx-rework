@@ -23,8 +23,9 @@ describe("receiving board operations", () => {
   });
 
   it("keeps packing and both difference resolutions audited and immutable", async () => {
-    const [migration, routes, service] = await Promise.all([
+    const [migration, correctiveMigration, routes, service] = await Promise.all([
       read("apps/api/migrations/0139_receiving_packing_difference_resolution.sql"),
+      read("apps/api/migrations/0140_receiving_packing_difference_direction.sql"),
       read("apps/api/src/receiving/receiving-routes.ts"),
       read("apps/api/src/receiving/receiving-service.ts"),
     ]);
@@ -43,9 +44,12 @@ describe("receiving board operations", () => {
     expect(migration).toContain("('owner_group','receiving:export')");
     expect(migration).not.toContain("WHERE capability='tools:user'");
     expect(migration).not.toContain("('worker','receiving:export')");
+    expect(correctiveMigration).toContain("difference_quantity_snapshot=packing_quantity_snapshot-actual_quantity_snapshot");
+    expect(service).toContain("snapshot.packingQuantity! - snapshot.actualQuantity");
+    expect(service).toContain("Number(row.packing_quantity) - Number(row.cumulative_actual_quantity)");
   });
 
-  it("shows a compact operations band and prevents four-digit history collisions", async () => {
+  it("shows the confirmed two-layer facts and confirmation ownership", async () => {
     const [page, css] = await Promise.all([
       read("apps/web/src/order-board-page.tsx"),
       read("apps/web/src/order-board-page.css"),
@@ -56,8 +60,19 @@ describe("receiving board operations", () => {
     expect(page).toContain("本次送货单");
     expect(page).toContain("本次实收");
     expect(page).toContain("alertInApp(text, { title: \"提交失败\" })");
-    expect(css).toContain(".order-board-row__operations");
-    expect(css).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
+    const facts = page.slice(page.indexOf('<div className="order-board-row__facts">'), page.indexOf('<div className="order-board-row__confirmation">'));
+    const fieldOrder = ["送货单数量", "实收", "次品", "收货差异", "装箱数量", "装箱差异"];
+    fieldOrder.slice(1).forEach((label, index) => {
+      expect(facts.indexOf(fieldOrder[index]!)).toBeLessThan(facts.indexOf(label));
+    });
+    expect(page.indexOf("收货人 &amp; 收货时间")).toBeLessThan(page.indexOf("装箱确认人 &amp; 装箱确认时间"));
+    expect(page).toContain("row.lastReceiverName} · {dateTime(row.lastReceivedAt)");
+    expect(page).toContain("row.packingRecordedBy && row.packingRecordedAt");
+    expect(css).toContain(".order-board-row__facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))");
+    expect(css).toContain(".order-board-row__confirmation{display:grid;grid-template-columns:1fr 1fr");
+    expect(css).toContain(".order-board-operation-button{flex:0 0 auto;min-height:20px");
+    expect(css).toContain("padding:1px 5px");
+    expect(css).toContain("font:800 7px/1 inherit");
     expect(page).toContain("<span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>");
     expect(page).toContain("const liveOperationSnapshot = searchMode || endDate >= localDate()");
     expect(page).toContain("canManagePacking && liveOperationSnapshot");
