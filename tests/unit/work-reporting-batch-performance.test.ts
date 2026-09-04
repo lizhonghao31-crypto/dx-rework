@@ -166,7 +166,8 @@ describe("work report batch set-based persistence", () => {
     expect(harness.insertedEvents()).toBe(50);
     expect(harness.insertedShares()).toBe(400);
     expect(writesAfterFirst).toHaveLength(3);
-    expect(callsAfterFirst).toBeLessThanOrEqual(13);
+    expect(callsAfterFirst).toBeLessThanOrEqual(14);
+    expect(harness.commands.filter((sql) => sql.includes("source_receiving_batch_id IS NULL"))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO operation_events("))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_reports("))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_report_member_shares"))).toHaveLength(1);

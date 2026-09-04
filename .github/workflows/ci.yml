@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   validate:
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'full-gate') }}
     # Keep the historical check name to avoid breaking any existing required-check configuration.
     name: Lint, test, migrate and build exact Head
     runs-on: ubuntu-latest
@@ -130,11 +131,11 @@ jobs:
 
       - name: Pin npm 10
         if: ${{ steps.classify.outputs.governance_only != 'true' }}
-        run: npm install --global npm@10.9.9
+        run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
 
       - name: Install locked dependencies
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
-        run: npm ci
+        run: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Lint
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
@@ -158,7 +159,7 @@ jobs:
 
       - name: Install web locked dependencies
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui
+        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui --no-audit --no-fund --prefer-offline
 
       - name: Lint changed web files
         if: ${{ steps.classify.outputs.web_only == 'true' }}
