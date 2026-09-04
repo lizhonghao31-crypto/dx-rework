@@ -60,18 +60,22 @@ describe("receiving board operations", () => {
     expect(page).toContain("本次送货单");
     expect(page).toContain("本次实收");
     expect(page).toContain("alertInApp(text, { title: \"提交失败\" })");
-    const facts = page.slice(page.indexOf('<div className="order-board-row__facts">'), page.indexOf('<div className="order-board-row__confirmation">'));
+    const main = page.slice(page.indexOf('<div className="order-board-row__main">'), page.indexOf('<div className="order-board-row__facts">'));
+    const facts = page.slice(page.indexOf('<div className="order-board-row__facts">'), page.indexOf("</Surface>", page.indexOf('<div className="order-board-row__facts">')));
     const fieldOrder = ["送货单数量", "实收", "次品", "收货差异", "装箱数量", "装箱差异"];
     fieldOrder.slice(1).forEach((label, index) => {
       expect(facts.indexOf(fieldOrder[index]!)).toBeLessThan(facts.indexOf(label));
     });
-    expect(page.indexOf("<span>收货人</span>")).toBeLessThan(page.indexOf("<span>装箱确认人</span>"));
+    expect(main.indexOf("<span>收货人</span>")).toBeLessThan(main.indexOf("<span>装箱确认人</span>"));
+    expect(main.indexOf("<span>装箱确认人</span>")).toBeLessThan(main.indexOf("{actionControls(row, false)}"));
+    expect(page).not.toContain('<div className="order-board-row__confirmation">');
     expect(page).toContain("row.lastReceiverName} · {dateTime(row.lastReceivedAt)");
     expect(page).toContain("row.packingRecordedBy && row.packingRecordedAt");
+    expect(css).toContain(".order-board-row__main{display:grid;grid-template-columns:minmax(205px,1fr) minmax(210px,.9fr) minmax(210px,.9fr) auto");
     expect(css).toContain(".order-board-row__facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))");
-    expect(css).toContain(".order-board-row__confirmation{display:grid;grid-template-columns:1fr 1fr");
     expect(css).toContain(".order-board-row__facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;border-top:1px solid #d5dde7;background:transparent");
-    expect(css).toContain(".order-board-row__confirmation>div{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:30px");
+    expect(css).toContain(".order-board-row__facts>div{display:grid;align-content:center;justify-items:center");
+    expect(css).toContain(".order-board-row__main>.order-board-row__confirmation-item{display:flex;align-self:stretch;align-items:center;justify-content:center");
     expect(css).toContain(".order-board-operation-button,.order-board-packing-button{flex:0 0 auto;min-height:24px");
     expect(css).toContain("font-family:inherit;font-size:12px;font-weight:700;line-height:1");
     expect(css).not.toContain("font:800 7px/1 inherit");
