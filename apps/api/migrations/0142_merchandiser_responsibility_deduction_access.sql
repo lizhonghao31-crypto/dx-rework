@@ -13,11 +13,11 @@ CREATE TRIGGER role_capabilities_no_insert
   EXECUTE FUNCTION reject_operation_event_mutation();
 
 CREATE OR REPLACE FUNCTION external_responsibility_assigned_merchandiser(
-  candidate uuid, order_id uuid, responsibility_type_value text,
+  candidate uuid, order_id uuid, responsibility_type text,
   required_capability text
 ) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT CASE
-    WHEN responsibility_type_value IN ('processing_factory','fabric_supplier') THEN
+    WHEN responsibility_type IN ('processing_factory','fabric_supplier') THEN
       EXISTS (
         SELECT 1 FROM rework_orders order_record
         WHERE order_record.rework_order_id=order_id
@@ -26,7 +26,7 @@ CREATE OR REPLACE FUNCTION external_responsibility_assigned_merchandiser(
             candidate,required_capability,ARRAY['order_merchandiser']
           )
       )
-    WHEN responsibility_type_value IN ('embroidery_factory','washing_factory') THEN
+    WHEN responsibility_type IN ('embroidery_factory','washing_factory') THEN
       EXISTS (
         SELECT 1 FROM rework_order_supply_context supply
         WHERE supply.rework_order_id=order_id
@@ -41,20 +41,20 @@ CREATE OR REPLACE FUNCTION external_responsibility_assigned_merchandiser(
 $$;
 
 CREATE OR REPLACE FUNCTION external_responsibility_can_sign(
-  candidate uuid, order_id uuid, responsibility_type_value text
+  candidate uuid, order_id uuid, responsibility_type text
 ) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT access_is_root_actor(candidate)
     OR external_responsibility_assigned_merchandiser(
-      candidate,order_id,responsibility_type_value,
+      candidate,order_id,responsibility_type,
       'external_responsibility:sign'
     )
     OR CASE
-      WHEN responsibility_type_value IN ('processing_factory','fabric_supplier') THEN
+      WHEN responsibility_type IN ('processing_factory','fabric_supplier') THEN
         external_responsibility_active_delegation(
           candidate,'external_responsibility:sign',order_id,
           ARRAY['order_merchandiser']
         )
-      WHEN responsibility_type_value IN ('embroidery_factory','washing_factory') THEN
+      WHEN responsibility_type IN ('embroidery_factory','washing_factory') THEN
         external_responsibility_active_delegation(
           candidate,'external_responsibility:sign',order_id,
           ARRAY['embroidery_washing_merchandiser']
@@ -64,11 +64,11 @@ CREATE OR REPLACE FUNCTION external_responsibility_can_sign(
 $$;
 
 CREATE OR REPLACE FUNCTION external_responsibility_can_payables(
-  candidate uuid, order_id uuid, responsibility_type_value text,
+  candidate uuid, order_id uuid, responsibility_type text,
   required_capability text
 ) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT access_is_root_actor(candidate)
-    OR CASE responsibility_type_value
+    OR CASE responsibility_type
       WHEN 'processing_factory' THEN
         responsibility_actor_has_direct_role(
           candidate,required_capability,ARRAY['factory_payables']
@@ -104,24 +104,24 @@ CREATE OR REPLACE FUNCTION external_responsibility_can_payables(
         'external_deduction:close'
       ])
       AND external_responsibility_assigned_merchandiser(
-        candidate,order_id,responsibility_type_value,required_capability
+        candidate,order_id,responsibility_type,required_capability
       )
     )
 $$;
 
 CREATE OR REPLACE FUNCTION external_responsibility_can_payables(
-  candidate uuid, order_id uuid, responsibility_type_value text
+  candidate uuid, order_id uuid, responsibility_type text
 ) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT external_responsibility_can_payables(
-           candidate,order_id,responsibility_type_value,
+           candidate,order_id,responsibility_type,
            'external_responsibility:payables_confirm')
       OR external_responsibility_can_payables(
-           candidate,order_id,responsibility_type_value,
+           candidate,order_id,responsibility_type,
            'external_deduction:follow_up')
       OR external_responsibility_can_payables(
-           candidate,order_id,responsibility_type_value,
+           candidate,order_id,responsibility_type,
            'external_deduction:record')
       OR external_responsibility_can_payables(
-           candidate,order_id,responsibility_type_value,
+           candidate,order_id,responsibility_type,
            'external_deduction:close')
 $$;
