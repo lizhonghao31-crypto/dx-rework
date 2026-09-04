@@ -46,6 +46,11 @@ runWithPostgres("role permissions and versioned master data", () => {
     ...adminActor,
     authorizationCapability: "master_data:manage",
   };
+  const supplierWriteActor: TrustedActorContext = {
+    ...adminActor,
+    authorizationCapability: "supplier_profile:write",
+    authorizationCapabilities: ["supplier_profile:write"],
+  };
   const ownerPrivateProfileActor: TrustedActorContext = {
     ...ownerActor,
     authorizationCapability: "people:read",
@@ -108,6 +113,10 @@ runWithPostgres("role permissions and versioned master data", () => {
     ));
     await database.query(await readFile(
       new URL("../../apps/api/migrations/0092_temporary_worker_profile_update.sql", import.meta.url),
+      "utf8",
+    ));
+    await database.query(await readFile(
+      new URL("../../apps/api/migrations/0143_sourcing_supplier_profile_foundation.sql", import.meta.url),
       "utf8",
     ));
     for (const [index, userId] of userIds.entries()) {
@@ -717,11 +726,22 @@ runWithPostgres("role permissions and versioned master data", () => {
       "DELETE FROM tail_inspection_default_worker_roster_versions",
     )).rejects.toMatchObject({ code: "55000" });
 
-    const supplier = await service.createSupplier(masterDataActor, {
+    const supplier = await service.createSupplier(supplierWriteActor, {
       supplierCode: "FACTORY_01",
       supplierType: "factory",
       supplierName: "加工厂一",
       active: true,
+      notes: "首批试点供应商",
+      contactPerson: "陈经理",
+      contactPhone: "13800138000",
+      address: "广州市海珠区测试路1号",
+      contractEntityName: "广州加工厂一有限公司",
+      partyBRepresentative: "陈经理",
+      payeeName: "广州加工厂一有限公司",
+      bankAccount: "6222000000000000",
+      bankName: "测试银行广州支行",
+      supportedCrafts: ["车缝", "整烫"],
+      dailyCapacity: 1200,
       changeReason: "建档",
     });
     await expect(database.query(
@@ -730,16 +750,63 @@ runWithPostgres("role permissions and versioned master data", () => {
        ) VALUES($1,2,'绕过审计的供应商',true,'绕过受控服务',$2)`,
       [supplier.supplierId, adminId],
     )).rejects.toMatchObject({ code: "55000" });
-    await service.reviseSupplier(masterDataActor, supplier.supplierId, {
+    await expect(service.createSupplier(supplierWriteActor, {
+      supplierCode: "FACTORY_DUPLICATE",
+      supplierType: "factory",
+      supplierName: " 加工厂一 ",
+      active: true,
+      notes: "",
+      supportedCrafts: [],
+      changeReason: "验证启用供应商重名",
+    })).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    await service.reviseSupplier(supplierWriteActor, supplier.supplierId, {
       supplierName: "加工厂一号",
       active: true,
-      changeReason: "名称修订",
+      notes: "首批试点供应商",
+      contactPerson: "陈经理",
+      contactPhone: "13800138000",
+      address: "广州市海珠区测试路2号",
+      contractEntityName: "广州加工厂一有限公司",
+      partyBRepresentative: "陈经理",
+      payeeName: "广州加工厂一有限公司",
+      bankAccount: "6222000000000000",
+      bankName: "测试银行广州支行",
+      supportedCrafts: ["车缝", "整烫"],
+      dailyCapacity: 1500,
+      expectedVersion: 1,
+      changeReason: "名称和产能修订",
     });
+    await expect(service.reviseSupplier(supplierWriteActor, supplier.supplierId, {
+      supplierName: "并发覆盖名称",
+      active: true,
+      notes: "",
+      supportedCrafts: [],
+      expectedVersion: 1,
+      changeReason: "验证旧版本拒绝",
+    })).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
     const supplierCurrent = await database.query<{ version: number; supplier_name: string }>(
       "SELECT version,supplier_name FROM current_supplier_catalog WHERE supplier_id=$1",
       [supplier.supplierId],
     );
     expect(supplierCurrent.rows[0]).toEqual({ version: 2, supplier_name: "加工厂一号" });
+    expect(await service.getSupplier(supplier.supplierId, false)).toEqual(expect.objectContaining({
+      supplierId: supplier.supplierId,
+      version: 2,
+      supplierName: "加工厂一号",
+      dailyCapacity: 1500,
+      supportedCrafts: ["车缝", "整烫"],
+      contractDataMissing: [],
+    }));
+    expect(await service.getSupplier(supplier.supplierId, false)).not.toHaveProperty("bankAccount");
+    expect(await service.getSupplier(supplier.supplierId, true)).toEqual(expect.objectContaining({
+      contractEntityName: "广州加工厂一有限公司",
+      bankAccount: "6222000000000000",
+    }));
+    expect(await service.listSupplierHistory(supplier.supplierId, true)).toEqual([
+      expect.objectContaining({ supplierId: supplier.supplierId, version: 2, dailyCapacity: 1500 }),
+      expect.objectContaining({ supplierId: supplier.supplierId, version: 1, dailyCapacity: 1200 }),
+    ]);
     const supplierAudit = await database.query<{ before_state: Record<string, unknown>; after_state: Record<string, unknown> }>(
       "SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.supplier.revise'",
       [supplier.supplierId],
