@@ -5,6 +5,7 @@ import {
   canAccessSupplierCenter,
   canWriteSupplierProfiles,
   filterSupplierDirectory,
+  nextSupplierSelection,
   supplierContractMissingLabels,
   type SupplierSummary,
 } from "../../apps/web/src/supplier-center-model.js";
@@ -59,5 +60,11 @@ describe("SSP-02 supplier center model", () => {
   it("renders concrete contract field names instead of a percentage score", () => {
     expect(supplierContractMissingLabels(["partyBRepresentative", "bankAccount", "bankName"]))
       .toEqual(["乙方代表", "收款账号", "开户行"]);
+  });
+
+  it("starts mobile users in the directory and desktop users in the first detail", () => {
+    expect(nextSupplierSelection("", suppliers, true)).toBe("");
+    expect(nextSupplierSelection("", suppliers, false)).toBe(suppliers[0]?.supplierId);
+    expect(nextSupplierSelection(suppliers[1]!.supplierId, suppliers, true)).toBe(suppliers[1]?.supplierId);
   });
 });
