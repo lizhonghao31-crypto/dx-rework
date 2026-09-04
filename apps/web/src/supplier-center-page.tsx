@@ -246,7 +246,10 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
           <h1>供应商中心</h1>
           <p>统一查看供应商资料、合同缺项、工艺产能和变更历史。</p>
         </div>
-        <StatusBadge tone={canWrite ? "info" : "neutral"}>{canWrite ? "Root 可维护" : "只读"}</StatusBadge>
+        <div className="supplier-center-heading__actions">
+          <StatusBadge tone={canWrite ? "info" : "neutral"}>{canWrite ? "Root 可维护" : "只读"}</StatusBadge>
+          {canWrite && mode === "manage" ? <a className="dx-button" href={`${pageUrl("ui/master-data")}?view=suppliers&tool=onboarding`}>新增与批量导入</a> : null}
+        </div>
       </header>
       <SupplierCenterNavigation active={mode} />
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
@@ -293,7 +296,10 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
                 <div><h2>{profile.supplierName}</h2><p>{profile.supplierCode} · 版本 {profile.version}</p></div>
                 <StatusBadge tone={profile.active ? "success" : "warning"}>{profile.active ? "启用" : "停用"}</StatusBadge>
                 {canWrite ? <div className="supplier-profile__actions">
-                  <Button onClick={() => setEditing((current) => !current)}>{editing ? "取消编辑" : "编辑资料"}</Button>
+                  <Button onClick={() => {
+                    if (editing) setDraft(draftFromProfile(profile));
+                    setEditing((current) => !current);
+                  }}>{editing ? "取消编辑" : "编辑资料"}</Button>
                   <Button onClick={() => void toggleActive()}>{profile.active ? "停用" : "恢复"}</Button>
                 </div> : null}
               </div>
