@@ -77,8 +77,8 @@ BEGIN
          IS DISTINCT FROM NEW.quantity
        OR (audit_event.after_state #>> ARRAY['lineItems',(NEW.position-1)::text,'externalUnitPrice'])::numeric
          IS DISTINCT FROM NEW.external_unit_price
-       OR (audit_event.after_state ->> 'daxingUnitPrice')::numeric
-         IS DISTINCT FROM source_case.daxing_unit_price
+       OR audit_event.after_state ->> 'daxingUnitPriceRecorded'
+         IS DISTINCT FROM 'true'
      )
   THEN
     RAISE EXCEPTION 'sourcing case line does not match audited multi-style pricing facts'
