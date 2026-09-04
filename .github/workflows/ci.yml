@@ -59,6 +59,8 @@ jobs:
         run: |
           set -euo pipefail
           governance_only=false
+          web_only=false
+          has_web_source=false
 
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
             test -n "${BASE_SHA}"
@@ -69,6 +71,7 @@ jobs:
             mapfile -t changed_files < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
             if (( ${#changed_files[@]} > 0 )); then
               governance_only=true
+              web_only=true
               for path in "${changed_files[@]}"; do
                 case "${path}" in
                   .github/workflows/*|.github/pull_request_template.md|AGENTS.md|docs/governance/*|scripts/ci/*)
@@ -77,13 +80,29 @@ jobs:
                     governance_only=false
                     ;;
                 esac
+                case "${path}" in
+                  apps/web/*|packages/ui/*)
+                    has_web_source=true
+                    ;;
+                  tests/unit/*)
+                    ;;
+                  *)
+                    web_only=false
+                    ;;
+                esac
               done
+              if [[ "${has_web_source}" != "true" ]]; then
+                web_only=false
+              fi
             fi
           fi
 
           echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
+          echo "web_only=${web_only}" >> "${GITHUB_OUTPUT}"
           echo "GOVERNANCE_ONLY=${governance_only}" >> "${GITHUB_ENV}"
+          echo "WEB_ONLY=${web_only}" >> "${GITHUB_ENV}"
           echo "Quick Gate governance-only: ${governance_only}"
+          echo "Quick Gate web-only: ${web_only}"
 
       - name: Verify Actions usage policy
         run: node scripts/ci/verify-actions-policy.mjs
@@ -114,28 +133,85 @@ jobs:
         run: npm install --global npm@10.9.9
 
       - name: Install locked dependencies
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm ci
 
       - name: Lint
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run lint
 
       - name: Typecheck
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run typecheck
 
       - name: Build workspaces without root postbuild business-chain gate
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run build --workspaces --if-present
 
       - name: Validate migration files statically
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run db:migrate:lint
 
       - name: Scan repository for committed secret signatures
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run secret:scan
+
+      - name: Install web locked dependencies
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui
+
+      - name: Lint changed web files
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t lint_files < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^(apps/web|packages/ui|tests/unit)/.*\.(js|jsx|ts|tsx)$' || true)
+          if (( ${#lint_files[@]} > 0 )); then
+            npx eslint --max-warnings=0 "${lint_files[@]}"
+          fi
+
+      - name: Typecheck web workspaces
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        run: npm run typecheck --workspace @dx-rework/contracts --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
+
+      - name: Build web workspaces
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        run: npm run build --workspace @dx-rework/contracts --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
+
+      - name: Run changed web unit tests
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t changed_tests < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^tests/unit/.*\.test\.(js|jsx|ts|tsx)$' || true)
+          if (( ${#changed_tests[@]} > 0 )); then
+            npx vitest run "${changed_tests[@]}"
+          fi
+
+      - name: Scan web-only changes for committed secret signatures
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        run: npm run secret:scan
+
+      - name: Write web-only quick-gate summary
+        if: ${{ steps.classify.outputs.web_only == 'true' }}
+        shell: bash
+        run: |
+          {
+            echo "## Web Quick Gate"
+            echo
+            echo "- Head SHA: $(git rev-parse HEAD)"
+            echo "- Exact Head / Actions policy: passed"
+            echo "- Scoped dependency install: web + contracts + UI"
+            echo "- Changed-file lint / web typecheck / web build: passed"
+            echo "- Changed web unit tests / secret scan: passed"
+            echo "- API, migration and full business-chain checks skipped: web-only diff"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Write governance-only quick-gate summary
         if: ${{ steps.classify.outputs.governance_only == 'true' }}
@@ -153,7 +229,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Write business quick-gate summary
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         shell: bash
         run: |
           {
