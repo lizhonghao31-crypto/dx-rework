@@ -676,7 +676,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 <p>外发跟单在创建订单时可直接录入新工艺；系统自动建档，后续订单可直接搜索复用。</p>
               </div>
             </div>
-            {canWriteSuppliers ? <div className="master-data-create">
+            <div className="master-data-create">
               <input
                 value={craftName}
                 maxLength={100}
@@ -687,7 +687,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               <Button data-ready={craftName.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void createCraft()}>
                 {busy === "create-craft" ? "新增中…" : "新增工艺"}
               </Button>
-            </div> : null}
+            </div>
             <div className="master-data-list">
               {crafts.length === 0 ? <p>暂无外发工艺；提交第一张外发订单时也会自动建档。</p> : craftPage.items.map((craft) => (
                 <article key={craft.craftId} className="master-data-row">
@@ -696,10 +696,10 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                     <p>{craft.craftCode} · 版本 {craft.version}</p>
                   </div>
                   <StatusBadge tone={craft.active ? "success" : "warning"}>{craft.active ? "启用" : "停用"}</StatusBadge>
-                  {canWriteSuppliers ? <div className="master-data-actions">
+                  <div className="master-data-actions">
                     <Button disabled={Boolean(busy)} onClick={() => void reviseCraft(craft, "rename")}>修改名称</Button>
                     <Button disabled={Boolean(busy)} onClick={() => void reviseCraft(craft, "toggle")}>{craft.active ? "停用" : "恢复"}</Button>
-                  </div> : null}
+                  </div>
                 </article>
               ))}
             </div>
@@ -726,7 +726,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 </label> : null}
               </div>
             </div>
-            <div className="master-data-create">
+            {canWriteSuppliers ? <div className="master-data-create">
               <input
                 value={supplierName}
                 placeholder="输入供应商名称"
@@ -745,7 +745,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               <Button data-ready={supplierName.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void createSupplier()}>
                 {busy === "create-supplier" ? "新增中…" : "新增"}
               </Button>
-            </div>
+            </div> : null}
             <div className="master-data-list">
               {suppliers.length === 0 ? <p>暂无供应商。</p> : supplierPage.items.map((supplier) => (
                 <article key={supplier.supplierId} className="master-data-row">
@@ -754,10 +754,10 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                     <p>{supplier.supplierCode} · {supplierTypeLabels[supplier.supplierType]} · 版本 {supplier.version}</p>
                   </div>
                   <StatusBadge tone={supplier.active ? "success" : "warning"}>{supplier.active ? "启用" : "停用"}</StatusBadge>
-                  <div className="master-data-actions">
+                  {canWriteSuppliers ? <div className="master-data-actions">
                     <Button disabled={Boolean(busy)} onClick={() => void reviseSupplier(supplier, "rename")}>修改名称</Button>
                     <Button disabled={Boolean(busy)} onClick={() => void reviseSupplier(supplier, "toggle")}>{supplier.active ? "停用" : "恢复"}</Button>
-                  </div>
+                  </div> : null}
                 </article>
               ))}
             </div>
