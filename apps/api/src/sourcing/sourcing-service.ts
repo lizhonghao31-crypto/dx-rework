@@ -1173,12 +1173,23 @@ export class SourcingService {
         const persistedProcessItems = selectedCrafts.map((craft) => craft.craftName);
         const persistedProcessDescription = persistedProcessItems.join("、");
         const sourcingCaseId = randomUUID();
+        const auditedCreationFacts = {
+          erpOrderNo: normalized.erpOrderNo,
+          erpOrderId: normalized.erpOrderId,
+          estimatedCutPieceSendDate: normalized.estimatedCutPieceSendDate,
+          deliveryDate: normalized.deliveryDate,
+          craftIds: normalized.craftIds,
+          lineItems: normalized.lineItems,
+          orderQuantity: normalized.orderQuantity,
+          attachmentIds: normalized.attachmentIds,
+          daxingUnitPriceRecorded: true,
+        };
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.create",
           entityType: "sourcing_case",
           entityId: sourcingCaseId,
           after: {
-            ...normalized,
+            ...auditedCreationFacts,
             processes: persistedProcessItems,
             processItems: persistedProcessItems,
             processDescription: persistedProcessDescription,
