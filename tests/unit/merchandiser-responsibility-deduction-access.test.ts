@@ -42,7 +42,7 @@ describe("merchandiser responsibility and deduction access", () => {
     const queue = await readFile(queueUrl, "utf8");
     expect(queue).toContain("扣款状态");
     expect(queue).toContain('item.status === "closed" ? "已完成"');
-    expect(queue).toContain('item.status === "closed" ? "success"');
+    expect(queue).toContain('tone: item.overdue ? "danger" : item.canAct ? "warning" : "info"');
   });
 
   it("registers migration 0142 with its exact checksum", async () => {
