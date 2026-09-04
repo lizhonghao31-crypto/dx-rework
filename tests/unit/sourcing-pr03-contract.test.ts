@@ -73,6 +73,14 @@ describe("sourcing PR03 contracts", () => {
       ...valid,
       styleNo: "CALLER-CONTROLLED",
     })).toThrow();
+    expect(() => CreateSourcingCaseSchema.parse({
+      ...valid,
+      estimatedCutPieceSendDate: "2026-02-31",
+    })).toThrow(/日历日期/);
+    expect(() => CreateSourcingCaseSchema.parse({
+      ...valid,
+      estimatedCutPieceSendDate: "2026-99-99",
+    })).toThrow();
   });
 
   it("keeps IE price at four decimals and calculates the two-decimal total exactly", () => {
@@ -147,6 +155,8 @@ describe("sourcing PR03 contracts", () => {
     expect(migration).toContain("CREATE TABLE sourcing_case_lines");
     expect(migration).toContain("sourcing_case_lines_no_update");
     expect(migration).toContain("sourcing_case_lines_no_delete");
+    expect(migration).toContain("daxingUnitPriceRecorded");
+    expect(migration).not.toContain("after_state ->> 'daxingUnitPrice'");
     expect(service).toContain("canViewSourcingDaxingPrice(actor, row.created_by)");
     expect(contracts).toContain("daxingUnitPrice: z.string().optional()");
     expect(contracts).not.toMatch(/RecordSourcingContractSchema[\s\S]{0,400}daxingUnitPrice/);
