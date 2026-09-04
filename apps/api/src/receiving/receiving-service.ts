@@ -1837,7 +1837,7 @@ export class ReceivingService {
         }
         const differenceQuantity = differenceType === "receiving"
           ? snapshot.actualQuantity - snapshot.documentQuantity
-          : snapshot.actualQuantity - snapshot.packingQuantity!;
+          : snapshot.packingQuantity! - snapshot.actualQuantity;
         if (differenceQuantity === 0) fail("当前没有需要处理的差异", 409, "CONFLICT");
         const resolutionId = randomUUID();
         const eventId = await this.events.append(client, actor, {
@@ -2131,7 +2131,7 @@ export class ReceivingService {
            AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
            AND resolution.packing_revision_id=packing.packing_revision_id
            AND resolution.packing_quantity_snapshot=packing.packing_quantity
-           AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-packing.packing_quantity
+           AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.cumulative_actual_quantity
          ORDER BY resolution.created_at DESC,resolution.resolution_id DESC
          LIMIT 1
        ) packing_resolution ON true
@@ -2276,7 +2276,7 @@ export class ReceivingService {
       packingQuantity: row.packing_quantity === null ? null : Number(row.packing_quantity),
       packingDifferenceQuantity: row.packing_quantity === null
         ? null
-        : Number(row.cumulative_actual_quantity) - Number(row.packing_quantity),
+        : Number(row.packing_quantity) - Number(row.cumulative_actual_quantity),
       packingRecordedBy: row.packing_recorded_by,
       packingRecordedAt: row.packing_recorded_at?.toISOString() ?? null,
       receivingDifferenceResolution: row.receiving_resolution_id === null ? null : {
