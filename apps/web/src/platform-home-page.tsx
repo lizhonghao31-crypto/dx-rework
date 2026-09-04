@@ -22,6 +22,10 @@ const moduleCopy = {
     title: "订单返工",
     description: "收货、返工处理、责任判定、工资与扣款",
   },
+  suppliers: {
+    title: "供应商中心",
+    description: "检索供应商目录、维护基础与合同资料、核对版本变更",
+  },
 } as const;
 
 export function PlatformHomePage() {
