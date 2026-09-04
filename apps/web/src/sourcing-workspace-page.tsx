@@ -3,6 +3,7 @@ import {
   CraftCatalogListResponseSchema,
   DeleteSourcingCaseResponseSchema,
   MAX_SOURCING_ATTACHMENTS,
+  MAX_SOURCING_LINE_ITEMS,
   MAX_SOURCING_PROCESSES,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
   SourcingAttachmentListResponseSchema,
@@ -12,6 +13,7 @@ import {
   SourcingFactoryChangeStateResponseSchema,
   SourcingTimelineResponseSchema,
   UploadIntentResponseSchema,
+  calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   type CraftCatalogItem,
   type SourcingAttachment,
@@ -76,12 +78,19 @@ type UploadedImage = Readonly<{
   mimeType: string;
   previewUrl: string;
 }>;
+type SourcingLineDraft = Readonly<{
+  styleNo: string;
+  alternateStyleNo: string;
+  color: string;
+  quantity: string;
+  externalUnitPrice: string;
+}>;
 type LocalSourcingDraft = Readonly<{
   erpOrderNo: string;
-  styleNo: string;
   deliveryDate: string;
   processes: readonly string[];
-  orderQuantity: string;
+  lineItems: readonly SourcingLineDraft[];
+  daxingUnitPrice: string;
   images: readonly UploadedImage[];
   savedAt: string;
 }>;
@@ -167,12 +176,32 @@ const localSourcingDraftKey = (userId: string): string => `${LOCAL_SOURCING_DRAF
 const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
   if (typeof window === "undefined") return null;
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(localSourcingDraftKey(userId)) ?? "null") as Partial<LocalSourcingDraft> | null;
-    if (!parsed || typeof parsed.erpOrderNo !== "string" || typeof parsed.styleNo !== "string"
-      || typeof parsed.deliveryDate !== "string" || typeof parsed.orderQuantity !== "string"
+    const parsed = JSON.parse(window.localStorage.getItem(localSourcingDraftKey(userId)) ?? "null") as
+      (Partial<LocalSourcingDraft> & { styleNo?: unknown; orderQuantity?: unknown }) | null;
+    if (!parsed || typeof parsed.erpOrderNo !== "string"
+      || typeof parsed.deliveryDate !== "string"
       || !Array.isArray(parsed.processes) || parsed.processes.length < 1
       || !parsed.processes.every((process) => typeof process === "string")
       || !Array.isArray(parsed.images)) return null;
+    const lineItems = Array.isArray(parsed.lineItems)
+      ? parsed.lineItems.filter((line): line is SourcingLineDraft => (
+          typeof line === "object" && line !== null
+          && typeof line.styleNo === "string"
+          && typeof line.alternateStyleNo === "string"
+          && typeof line.color === "string"
+          && typeof line.quantity === "string"
+          && typeof line.externalUnitPrice === "string"
+        )).slice(0, MAX_SOURCING_LINE_ITEMS)
+      : typeof parsed.styleNo === "string" && typeof parsed.orderQuantity === "string"
+        ? [{
+            styleNo: parsed.styleNo,
+            alternateStyleNo: "",
+            color: "",
+            quantity: parsed.orderQuantity,
+            externalUnitPrice: "",
+          }]
+        : [];
+    if (!lineItems.length) return null;
     const images = parsed.images.filter((image): image is UploadedImage => (
       typeof image === "object" && image !== null
       && typeof image.attachmentId === "string"
@@ -184,10 +213,10 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
     }));
     return {
       erpOrderNo: parsed.erpOrderNo,
-      styleNo: parsed.styleNo,
       deliveryDate: parsed.deliveryDate,
       processes: parsed.processes.slice(0, MAX_SOURCING_PROCESSES),
-      orderQuantity: parsed.orderQuantity,
+      lineItems,
+      daxingUnitPrice: typeof parsed.daxingUnitPrice === "string" ? parsed.daxingUnitPrice : "",
       images,
       savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
     };
@@ -218,15 +247,25 @@ function SourcingOrderCard({
     <a className="sourcing-order-card__main" href={detailHref(item)}>
       <div className="sourcing-order-card__heading">
         <div>
-          <strong>{item.styleNo}</strong>
+          <strong>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? ` 等 ${item.lineItems.length} 行` : ""}</strong>
           <small>{item.erpOrderNo}</small>
         </div>
         <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
           {STATUS_LABELS[item.status]}
         </StatusBadge>
       </div>
+      <ul className="sourcing-order-card__lines" aria-label="款色明细">
+        {item.lineItems.slice(0, 3).map((line) => <li key={line.position}>
+          <span>{line.styleNo}{line.alternateStyleNo ? ` / ${line.alternateStyleNo}` : ""}</span>
+          <span>{line.color ?? "历史未维护颜色"}</span>
+          <span>{formatBusinessDecimal(line.quantity)} 件</span>
+          <span>{line.externalUnitPrice ? formatBusinessCurrency(line.externalUnitPrice) : "历史未维护价格"}</span>
+        </li>)}
+        {item.lineItems.length > 3 ? <li><span>另有 {item.lineItems.length - 3} 行</span></li> : null}
+      </ul>
       <dl>
-        <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
+        <div><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
+        {"daxingUnitPrice" in item ? <div><dt>大兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
         <div><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
         <div><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
         <div><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
@@ -297,12 +336,18 @@ export function SourcingWorkspacePage({
 
 function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [erpOrderNo, setErpOrderNo] = useState("");
-  const [styleNo, setStyleNo] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [processes, setProcesses] = useState<string[]>([""]);
   const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
   const [activeCraftQuery, setActiveCraftQuery] = useState("");
-  const [orderQuantity, setOrderQuantity] = useState("");
+  const [lineItems, setLineItems] = useState<SourcingLineDraft[]>([{
+    styleNo: "",
+    alternateStyleNo: "",
+    color: "",
+    quantity: "",
+    externalUnitPrice: "",
+  }]);
+  const [daxingUnitPrice, setDaxingUnitPrice] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -334,10 +379,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const localDraft = readLocalSourcingDraft(user.id);
     if (!localDraft) return;
     setErpOrderNo(localDraft.erpOrderNo);
-    setStyleNo(localDraft.styleNo);
     setDeliveryDate(localDraft.deliveryDate);
     setProcesses([...localDraft.processes]);
-    setOrderQuantity(localDraft.orderQuantity);
+    setLineItems([...localDraft.lineItems]);
+    setDaxingUnitPrice(localDraft.daxingUnitPrice);
     setImages([...localDraft.images]);
     setMessage("已恢复当前账号在本机保存的订单草稿。");
   }, [user?.id]);
@@ -368,6 +413,39 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     setProcesses((current) => current.length === 1
       ? [""]
       : current.filter((_process, currentIndex) => currentIndex !== index));
+    createKey.current = null;
+  };
+
+  const updateLineItem = (
+    index: number,
+    field: keyof SourcingLineDraft,
+    value: string,
+  ): void => {
+    setLineItems((current) => current.map((line, currentIndex) => (
+      currentIndex === index ? { ...line, [field]: value } : line
+    )));
+    createKey.current = null;
+  };
+
+  const addLineItem = (): void => {
+    if (lineItems.length >= MAX_SOURCING_LINE_ITEMS) {
+      setMessage(`每张订单最多登记 ${MAX_SOURCING_LINE_ITEMS} 行款色`);
+      return;
+    }
+    setLineItems((current) => [...current, {
+      styleNo: "",
+      alternateStyleNo: "",
+      color: "",
+      quantity: "",
+      externalUnitPrice: current[0]?.externalUnitPrice ?? "",
+    }]);
+    createKey.current = null;
+  };
+
+  const removeLineItem = async (index: number): Promise<void> => {
+    if (lineItems.length === 1) return;
+    if (!(await confirmInApp(`确认删除第 ${index + 1} 行未提交款色吗？`))) return;
+    setLineItems((current) => current.filter((_line, currentIndex) => currentIndex !== index));
     createKey.current = null;
   };
 
@@ -492,10 +570,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     }
     const draft: LocalSourcingDraft = {
       erpOrderNo,
-      styleNo,
       deliveryDate,
       processes,
-      orderQuantity,
+      lineItems,
+      daxingUnitPrice,
       images,
       savedAt: new Date().toISOString(),
     };
@@ -504,10 +582,17 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   };
 
   const createOrder = async (): Promise<void> => {
-    const quantity = Number(orderQuantity);
     const normalizedProcesses = processes.map((process) => process.trim());
+    const normalizedLines = lineItems.map((line) => ({
+      styleNo: line.styleNo.trim(),
+      ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
+      color: line.color.trim(),
+      quantity: Number(line.quantity),
+      externalUnitPrice: businessInputChange(line.externalUnitPrice).trim(),
+    }));
+    const pricePattern = /^\d{1,10}(?:\.\d{1,4})?$/;
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
-    if (!erpOrderNo.trim() || !styleNo.trim()) { setMessage("请填写 ERP 订单号和款号"); return; }
+    if (!erpOrderNo.trim()) { setMessage("请填写平台订单号"); return; }
     if (!deliveryDate || normalizedProcesses.some((process) => !process)) {
       setMessage("请填写交货日期和所有工艺");
       return;
@@ -516,8 +601,29 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       setMessage("工艺不能重复，请合并或修改重复项");
       return;
     }
-    if (!/^\d+$/.test(orderQuantity) || quantity < 1 || quantity > 10_000_000) {
-      setMessage("订单数量必须是1至10000000之间的整数");
+    if (normalizedLines.some((line) => !line.styleNo || !line.color)) {
+      setMessage("每行都必须填写款号和颜色");
+      return;
+    }
+    if (lineItems.some((line) => !/^\d+$/.test(line.quantity))
+      || normalizedLines.some((line) => line.quantity < 1 || line.quantity > 10_000_000)) {
+      setMessage("每行数量必须是1至10000000之间的整数");
+      return;
+    }
+    if (normalizedLines.some((line) => !pricePattern.test(line.externalUnitPrice)
+      || Number(line.externalUnitPrice) <= 0)) {
+      setMessage("每行对外加工价格必须大于0且最多4位小数");
+      return;
+    }
+    const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
+    if (!pricePattern.test(normalizedDaxingPrice) || Number(normalizedDaxingPrice) <= 0) {
+      setMessage("请填写大兴价，最多4位小数且必须大于0");
+      return;
+    }
+    try {
+      calculateSourcingOrderQuantity(normalizedLines);
+    } catch {
+      setMessage("订单总数量必须是1至10000000之间的整数");
       return;
     }
     if (images.length === 0) { setMessage("请至少上传一张订单照片"); return; }
@@ -538,10 +644,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         headers: { "idempotency-key": createKey.current },
         body: JSON.stringify({
           erpOrderNo: erpOrderNo.trim(),
-          styleNo: styleNo.trim(),
           deliveryDate,
           craftIds: ensuredCrafts.map((craft) => craft.craftId),
-          orderQuantity: quantity,
+          lineItems: normalizedLines,
+          daxingUnitPrice: normalizedDaxingPrice,
           attachmentIds: images.map((image) => image.attachmentId),
         }),
       });
@@ -557,19 +663,41 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     <div className="sourcing-workspace sourcing-workspace--create">
       <Header
         title="创建订单"
-        subtitle="跟单只需登记订单核心资料和照片，提交后自动进入待审批订单。"
+        subtitle="跟单登记平台订单、款色价格和照片，提交后自动进入待审批订单。"
         badge="外发定价&选厂"
       />
       <Surface className="sourcing-create-card">
         <div className="section-title">
-          <div><h2>订单资料</h2><p>请以正式 ERP 订单为准。</p></div>
+          <div><h2>订单资料</h2><p>请以平台订单事实为准；大兴价仅供内部核价。</p></div>
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
-          <label><span>ERP 订单号</span><input value={erpOrderNo} maxLength={100} onChange={(event) => { setErpOrderNo(event.target.value); createKey.current = null; }} placeholder="请输入正式 ERP 订单号" /></label>
-          <label><span>款号</span><input value={styleNo} maxLength={100} onChange={(event) => { setStyleNo(event.target.value); createKey.current = null; }} placeholder="请输入款号" /></label>
-          <label><span>订单数量</span><input value={orderQuantity} inputMode="numeric" onChange={(event) => { setOrderQuantity(event.target.value); createKey.current = null; }} placeholder="请输入整数" /></label>
+          <label><span>平台订单号</span><input value={erpOrderNo} maxLength={100} onChange={(event) => { setErpOrderNo(event.target.value); createKey.current = null; }} placeholder="请输入平台订单号" /></label>
           <label><span>交货日期</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>大兴价（内部）</span><input value={daxingUnitPrice} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="仅内部授权岗位可见" /></label>
+          <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
+            <div className="sourcing-line-editor__heading">
+              <div>
+                <strong>款色与对外加工价格</strong>
+                <small>一份订单可登记多行款色；新增行沿用首行当前对外价格，总数量由各行自动汇总。</small>
+              </div>
+              <div className="sourcing-line-editor__actions">
+                <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
+                <button type="button" disabled={lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
+              </div>
+            </div>
+            <div className="sourcing-line-editor__list">
+              {lineItems.map((line, index) => <article className="sourcing-line-row" key={index}>
+                <b>{String(index + 1).padStart(2, "0")}</b>
+                <label><span>款号</span><input value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="必填" /></label>
+                <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="选填" /></label>
+                <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
+                <label><span>数量</span><input value={line.quantity} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", event.target.value)} placeholder="整数" /></label>
+                <label><span>对外加工价格</span><input value={line.externalUnitPrice} inputMode="decimal" onChange={(event) => updateLineItem(index, "externalUnitPrice", businessInputChange(event.target.value))} placeholder="最多4位小数" /></label>
+                <button type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
+              </article>)}
+            </div>
+          </section>
           <label className="sourcing-process-mobile"><span>工艺</span><input list="sourcing-craft-options" value={processes[0]} maxLength={100} onChange={(event) => updateProcess(0, event.target.value)} placeholder="请输入订单工艺要求" /></label>
           <section className="sourcing-process-editor sourcing-form-wide" aria-label="订单工艺清单">
             <div className="sourcing-process-editor__heading">
@@ -973,7 +1101,8 @@ function OrderDetailPage({
       />
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
-          <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
+          <div className="rework-detail-core-fact"><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
+          {"daxingUnitPrice" in item ? <div className="rework-detail-core-fact"><dt>大兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
           <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
@@ -982,6 +1111,26 @@ function OrderDetailPage({
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
           <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
         </dl>
+
+        <section className="sourcing-line-facts" aria-label="订单款色价格事实">
+          <div className="section-title">
+            <div><h2>款色与对外加工价格</h2><p>节点一提交后锁定；历史单缺失字段明确标记，不补造数据。</p></div>
+            <StatusBadge tone="info">{item.lineItems.length} 行 · {formatBusinessDecimal(item.orderQuantity)} 件</StatusBadge>
+          </div>
+          <div className="sourcing-line-facts__table">
+            <div className="sourcing-line-facts__header">
+              <span>序号</span><span>款号</span><span>代用款号</span><span>颜色</span><span>数量</span><span>对外加工价格</span>
+            </div>
+            {item.lineItems.map((line) => <div className="sourcing-line-facts__row" key={line.position}>
+              <b>{String(line.position).padStart(2, "0")}</b>
+              <span data-label="款号">{line.styleNo}</span>
+              <span data-label="代用款号">{line.alternateStyleNo ?? "—"}</span>
+              <span data-label="颜色">{line.color ?? "历史未维护"}</span>
+              <span data-label="数量">{formatBusinessDecimal(line.quantity)} 件</span>
+              <span data-label="对外加工价格">{line.externalUnitPrice ? formatBusinessCurrency(line.externalUnitPrice) : "历史未维护"}</span>
+            </div>)}
+          </div>
+        </section>
 
         <div className="rework-detail-overview-grid">
           <section className="rework-detail-images" aria-label="订单图片">
@@ -1084,7 +1233,7 @@ function OrderDetailPage({
               <p>相对 IE 报价 {item.ieQuote ? `${formatBusinessCurrency(item.ieQuote.unitPrice)}/件` : "—"}，单价变化 <strong>{ownerUnitPriceDelta ?? "—"}/件</strong>，总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
               <details className="sourcing-owner-decision__details">
                 <summary>查看完整订单资料</summary>
-                <p>ERP：{item.erpOrderNo}；款号：{item.styleNo}；交货日期：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
+                <p>平台订单：{item.erpOrderNo}；款色：{item.lineItems.length} 行；交货日期：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
               </details>
             </div>
             {canOwner ? <div className="sourcing-owner-actions" aria-label="老板审批操作">
