@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   AttachmentResponseSchema,
   MAX_REWORK_ATTACHMENTS,
@@ -316,7 +317,7 @@ export function ReworkInitiationV2Form({
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
           embroideryMerchandiserUserId: context.embroideryMerchandiserUserId ?? "",
         });
-        setMessage(`草稿已读取 · 当前已有 ${draft.attachmentIds.length} 份报告`);
+        setMessage(`草稿已读取 · 当前已有 ${formatBusinessDecimal(draft.attachmentIds.length)} 份报告`);
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "返工草稿加载失败");
@@ -561,7 +562,7 @@ export function ReworkInitiationV2Form({
       return;
     }
     setUploading(true);
-    setMessage(`正在上传 ${selected.length} 张报告图片…`);
+    setMessage(`正在上传 ${formatBusinessDecimal(selected.length)} 张报告图片…`);
     const uploadConcurrency = currentQcUploadConcurrency();
     try {
       const profile = currentUploadClientProfile();
@@ -647,7 +648,7 @@ export function ReworkInitiationV2Form({
       setImages((current) => [...current, ...uploaded]);
       pendingSave.current = null;
       pendingSubmit.current = null;
-      setMessage(`报告上传完成，共 ${images.length + uploaded.length} 张`);
+      setMessage(`报告上传完成，共 ${formatBusinessDecimal(images.length + uploaded.length)} 张`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "报告上传失败");
     } finally {
@@ -689,7 +690,7 @@ export function ReworkInitiationV2Form({
     <Surface className="rework-v2-core">
       <div className="rework-v2-section-heading">
         <div><h2>{embedded ? "返工核心资料" : "核心资料"}</h2><p><strong>*</strong> 为必填；其他资料按实际情况补充。</p></div>
-        {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{availableImageCount} 份报告</StatusBadge> : null}
+        {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{formatBusinessDecimal(availableImageCount)} 份报告</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
         <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId || order?.receivingBatchId)} readOnly={Boolean(receivingBatchId || order?.receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="从订单回货自动带入" /></label>

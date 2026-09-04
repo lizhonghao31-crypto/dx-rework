@@ -1,5 +1,5 @@
 import type { ManagementReworkRow } from "@dx-rework/contracts/reporting";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 
 import { reportingPageUrl } from "./reporting-client.js";
@@ -34,7 +34,7 @@ export function ManagementOrderCard({
   const activityMessage = order.status === "cancelled"
     ? "已退出在途、逾期和当前异常统计"
     : order.exceptionCount > 0
-      ? `${order.status === "completed" ? "生产返工已结束 · " : ""}${order.exceptionCount} 项后续异常`
+      ? `${order.status === "completed" ? "生产返工已结束 · " : ""}${formatBusinessDecimal(order.exceptionCount)} 项后续异常`
       : order.overdue
         ? `${order.status === "completed" ? "生产返工已结束 · " : ""}存在逾期后续事项`
         : order.status === "completed"
@@ -54,7 +54,7 @@ export function ManagementOrderCard({
           <div><dt>工资</dt><dd>{formatBusinessCurrency(order.wageAmount)}</dd></div>
           <div><dt>责任</dt><dd>{formatBusinessCurrency(order.responsibilityAmount)}</dd></div>
           <div><dt>外部差额</dt><dd>{formatBusinessCurrency(order.externalRemainingAmount)}</dd></div>
-          <div><dt>附件</dt><dd>{order.attachmentCount > 0 ? `${order.attachmentCount} 份 · 点击订单查阅` : "无附件"}</dd></div>
+          <div><dt>附件</dt><dd>{order.attachmentCount > 0 ? `${formatBusinessDecimal(order.attachmentCount)} 份 · 点击订单查阅` : "无附件"}</dd></div>
         </dl>
         <small className="reporting-order-card__activity">{activityMessage}</small>
     </a>

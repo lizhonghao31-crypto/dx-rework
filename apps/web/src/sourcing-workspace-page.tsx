@@ -463,7 +463,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         },
       );
       setImages((current) => [...current, ...uploaded]);
-      setMessage(`已上传 ${uploaded.length} 张图片；请核对订单资料后提交`);
+      setMessage(`已上传 ${formatBusinessDecimal(uploaded.length)} 张图片；请核对订单资料后提交`);
       createKey.current = null;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单图片上传失败");
@@ -701,7 +701,7 @@ function OrderListPage({
       <Header
         title={mode === "pending" ? "待审批订单" : "历史订单"}
         subtitle={mode === "pending" ? "所有未完成订单集中在这里，点击订单查看完整流程和当前办理区。" : "所有已完成订单集中归档，保留报价、调价、选厂和审批证据。"}
-        badge={`${visible.length} 条当前页`}
+        badge={`${formatBusinessDecimal(visible.length)} 条当前页`}
       />
       <Surface className="sourcing-list-card">
         <form className="sourcing-search" onSubmit={(event) => { event.preventDefault(); searchFromFirstPage(); }}>
@@ -973,7 +973,7 @@ function OrderDetailPage({
       />
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
-          <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{item.orderQuantity.toLocaleString("zh-CN")} 件</dd></div>
+          <div className="rework-detail-core-fact"><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
           <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
@@ -987,7 +987,7 @@ function OrderDetailPage({
           <section className="rework-detail-images" aria-label="订单图片">
             <div className="section-title rework-detail-panel-title">
               <div><h2>订单图片</h2><p>跟单提交时上传的订单证据。</p></div>
-              <StatusBadge tone="info">{attachments.length} 张</StatusBadge>
+              <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
             </div>
             {attachments.length > 0 ? <div className="rework-detail-image-grid">
               {attachments.map((attachment) => <button className="rework-detail-image-card" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
@@ -1030,7 +1030,7 @@ function OrderDetailPage({
             <p>{WORKFLOW_PREVIEWS[selectedWorkflow.key]}</p>
             <p>负责角色：{selectedWorkflow.role}</p>
             {selectedState === "completed" ? <details className="rework-detail-node-history">
-              <summary>处理历史{selectedTimeline.length ? ` · ${selectedTimeline.length} 条` : ""}</summary>
+              <summary>处理历史{selectedTimeline.length ? ` · ${formatBusinessDecimal(selectedTimeline.length)} 条` : ""}</summary>
               {selectedTimeline.length ? <div className="sourcing-timeline">
                 {selectedTimeline.map((entry) => <article key={entry.entryId}>
                   <div><strong>{timelineLabel(entry)}</strong><small>{formatDateTime(entry.handledAt)} · {entry.handledBy}</small></div>
@@ -1038,7 +1038,7 @@ function OrderDetailPage({
                   <dl>
                     {entry.unitPrice ? <div><dt>单价</dt><dd>{formatBusinessCurrency(entry.unitPrice)}</dd></div> : null}
                     {entry.totalAmount ? <div><dt>总额</dt><dd>{formatBusinessCurrency(entry.totalAmount)}</dd></div> : null}
-                    {entry.quantity ? <div><dt>数量</dt><dd>{entry.quantity.toLocaleString("zh-CN")} 件</dd></div> : null}
+                    {entry.quantity ? <div><dt>数量</dt><dd>{formatBusinessDecimal(entry.quantity)} 件</dd></div> : null}
                     {entry.supplierName ? <div><dt>加工厂</dt><dd>{entry.supplierName}</dd></div> : null}
                     {entry.contractReference ? <div><dt>合同编号</dt><dd>{entry.contractReference}</dd></div> : null}
                     {entry.signedOn ? <div><dt>签署日期</dt><dd>{entry.signedOn}</dd></div> : null}

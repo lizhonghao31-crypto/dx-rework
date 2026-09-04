@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   TailInspectionResponseSchema,
   type TailInspectionResponse,
@@ -186,7 +187,7 @@ export function TailInspectionPanel({
       <div className="tail-inspection-assignment-list">
         {data.assignments.map((assignment) => <div key={assignment.assignmentId}>
           <div><b>{assignment.tailInspectorName}</b><small>{assignment.boxScope ? `清点范围：${assignment.boxScope}` : "未填写箱数或范围"}</small></div>
-          <StatusBadge tone={assignment.submittedAt ? "success" : assignment.canSubmit ? "warning" : "info"}>{assignment.submittedAt ? `${assignment.returnedQuantity} 件已提交` : assignment.canSubmit ? isRoot ? "可代清点" : "待本人清点" : "待清点"}</StatusBadge>
+          <StatusBadge tone={assignment.submittedAt ? "success" : assignment.canSubmit ? "warning" : "info"}>{assignment.submittedAt ? `${assignment.returnedQuantity === null ? "—" : formatBusinessDecimal(assignment.returnedQuantity)} 件已提交` : assignment.canSubmit ? isRoot ? "可代清点" : "待本人清点" : "待清点"}</StatusBadge>
         </div>)}
       </div>
     </Surface>}
@@ -202,7 +203,7 @@ export function TailInspectionPanel({
       <InsetField label="返件总数（件）" type="number" min="1" step="1" inputMode="numeric" value={returnedQuantity} disabled={busy} onChange={(event) => updateReturnedQuantity(event.target.value)} />
       <div className="tail-inspection-processes">
         {data.processes.map((process) => <div className="tail-inspection-process" key={process.configurationItemId}>
-          <div><b>{process.processName}</b><small>全部整查累计：{process.inspectedQuantity} 件</small></div>
+          <div><b>{process.processName}</b><small>全部整查累计：{formatBusinessDecimal(process.inspectedQuantity)} 件</small></div>
           <InsetField label="本次工序数量（件）" type="number" min="0" step="1" inputMode="numeric" value={processQuantities[process.configurationItemId] ?? ""} disabled={busy} onChange={(event) => setProcessQuantities((current) => ({ ...current, [process.configurationItemId]: event.target.value }))} />
         </div>)}
       </div>

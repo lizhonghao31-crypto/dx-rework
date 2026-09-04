@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -74,7 +75,7 @@ function TodoCountBadge({ count }: { count: number }) {
     <span
       className="todo-count-badge"
       role="status"
-      aria-label={`${count}项未完成待办`}
+      aria-label={`${formatBusinessDecimal(count)}项未完成待办`}
     >
       {label}
     </span>

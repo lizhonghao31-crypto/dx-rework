@@ -359,13 +359,21 @@ export const formatBusinessMoney = (value: string | number): string =>
 export const formatBusinessCurrency = (value: string | number): string =>
   `¥${formatBusinessMoney(value)}`;
 
+export const isBusinessMoneyField = (key: string): boolean => MONEY_FIELDS.has(key);
+
+export const isBusinessNumberField = (key: string): boolean =>
+  key === "quantity"
+  || key === "count"
+  || /(?:Quantity|Count)$/.test(key);
+
 export const businessValue = (
   key: string,
   value: string | number | boolean | null | undefined,
 ): string => {
   if (value === null || value === undefined || value === "") return "—";
   const text = businessCellValue(key, value);
-  return MONEY_FIELDS.has(key) ? formatBusinessCurrency(text) : text;
+  if (isBusinessMoneyField(key)) return formatBusinessCurrency(text);
+  return isBusinessNumberField(key) ? formatBusinessDecimal(text) : text;
 };
 
 export const translateTechnicalDetails = (value: unknown, key = ""): unknown => {

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import { BUSINESS_TIME_ZONE, businessCellValue, businessFieldLabel } from "@dx-rework/contracts/business-display";
+import { BUSINESS_TIME_ZONE, businessCellValue, businessFieldLabel, isBusinessMoneyField, isBusinessNumberField } from "@dx-rework/contracts/business-display";
 import type { ReportQuery, ReportType } from "@dx-rework/contracts/reporting";
 
 import { OperationEventRepository, type SqlClient, type TrustedActorContext } from "../tools/repositories.js";
 import type { ManagementReportingService } from "./management-reporting-service.js";
-import { buildWorkbook, type WorkbookCell } from "./xlsx-workbook.js";
+import { buildWorkbook, workbookNumberCell, type WorkbookCell } from "./xlsx-workbook.js";
 
 const reportNames: Record<ReportType, string> = {
   rework_overview: "返工总览",
@@ -16,13 +16,26 @@ const reportNames: Record<ReportType, string> = {
   exceptions: "异常明细",
 };
 
+const exportCell = (
+  key: string,
+  value: string | number | boolean | null,
+): WorkbookCell => {
+  if (
+    (typeof value === "string" || typeof value === "number")
+    && (isBusinessMoneyField(key) || isBusinessNumberField(key))
+  ) {
+    return workbookNumberCell(value);
+  }
+  return businessCellValue(key, value);
+};
+
 const sheetRows = (
   columns: readonly { key: string; label: string }[],
   rows: readonly Record<string, string | number | boolean | null>[],
 ): WorkbookCell[][] => [
   columns.map((column) => column.label),
   ...rows.map((row) => columns.map((column) =>
-    businessCellValue(column.key, row[column.key] ?? null))),
+    exportCell(column.key, row[column.key] ?? null))),
 ];
 
 export class ReportExportService {
@@ -49,12 +62,12 @@ export class ReportExportService {
       ["状态", businessCellValue("status", query.status ?? "")],
       ["明细行数", data.rows.length],
       ["Git SHA", this.gitSha],
-      ...Object.entries(data.totals).map(([key, value]) => [`合计 ${businessFieldLabel(key)}`, value]),
+      ...Object.entries(data.totals).map(([key, value]) => [`合计 ${businessFieldLabel(key)}`, exportCell(key, value)]),
     ];
     const summaryRows: WorkbookCell[][] = [
       ["指标", "值"],
       ["明细行数", data.rows.length],
-      ...Object.entries(data.totals).map(([key, value]) => [businessFieldLabel(key), value]),
+      ...Object.entries(data.totals).map(([key, value]) => [businessFieldLabel(key), exportCell(key, value)]),
     ];
     const content = buildWorkbook([
       { name: "导出说明", rows: filterRows },

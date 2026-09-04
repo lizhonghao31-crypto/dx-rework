@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -196,7 +197,7 @@ export function WorkforceMasterDataPage() {
               <h2>查找人员</h2>
               <p>按姓名、现场别名、人员类型或状态搜索；业务页面不展示系统内部 ID。</p>
             </div>
-            <StatusBadge tone="info">{filteredPeople.length} / {people.length} 人</StatusBadge>
+            <StatusBadge tone="info">{formatBusinessDecimal(filteredPeople.length)} / {formatBusinessDecimal(people.length)} 人</StatusBadge>
           </div>
           <InsetField
             label="搜索人员"

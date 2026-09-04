@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   AttachmentResponseSchema,
   UploadIntentResponseSchema,
@@ -167,7 +168,7 @@ export function ExternalEvidenceUploader({
       }
       onChange([...new Set(nextIds)]);
       setUploaded(nextUploaded);
-      onMessage(`${nextIds.length} 份证据附件已就绪，提交动作后将锁定到该台账。`);
+      onMessage(`${formatBusinessDecimal(nextIds.length)} 份证据附件已就绪，提交动作后将锁定到该台账。`);
     } catch (error: unknown) {
       setFailedFile(activeFileName);
       onMessage(`${error instanceof Error ? error.message : "附件上传失败"}，请重新选择文件重试。`);

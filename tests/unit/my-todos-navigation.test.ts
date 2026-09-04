@@ -22,7 +22,7 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain('{ id: "rework", label: "订单返工" }');
     expect(page).toContain('{ id: "sourcing", label: "外发定价&选厂" }');
     expect(page).not.toContain('{ id: "wages", label: "返工工资" }');
-    expect(page).toContain("{moduleCounts[module.id]}件");
+    expect(page).toContain("{formatBusinessDecimal(moduleCounts[module.id])}件");
     expect(page).toContain("useDebouncedValue(searchQuery.trim(), 250)");
     expect(page).toContain("maxLength={100}");
     expect(page).not.toContain('type="submit"');

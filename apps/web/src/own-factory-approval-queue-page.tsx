@@ -2,7 +2,7 @@ import {
   OwnFactoryApprovalQueueResponseSchema,
   type OwnFactoryApprovalQueueResponse,
 } from "@dx-rework/contracts";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -69,7 +69,7 @@ export function OwnFactoryApprovalQueuePage() {
       <Header
         title="本厂承担审批"
         subtitle="需要审批的本厂承担事项集中在这里"
-        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"}
+        badge={state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "加载中"}
       />
       <Surface className="responsibility-queue-summary">
         <div>

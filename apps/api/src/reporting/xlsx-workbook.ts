@@ -1,5 +1,23 @@
-export type WorkbookCell = string | number | boolean | null;
+export type WorkbookNumberFormat = "business" | "precise";
+export type WorkbookNumberCell = Readonly<{
+  value: string | number;
+  numberFormat?: WorkbookNumberFormat;
+}>;
+export type WorkbookCell = string | number | boolean | null | WorkbookNumberCell;
 export type WorkbookSheet = Readonly<{ name: string; rows: readonly (readonly WorkbookCell[])[] }>;
+
+export const workbookNumberCell = (
+  value: string | number,
+  numberFormat: WorkbookNumberFormat = "business",
+): WorkbookNumberCell => ({ value, numberFormat });
+
+const numericCellXml = (ref: string, value: string | number, style: number): string => {
+  const text = String(value).trim();
+  if (!/^-?\d+(?:\.\d+)?$/.test(text) || !Number.isFinite(Number(text))) {
+    throw new Error("Workbook numeric cell requires a finite plain decimal");
+  }
+  return `<c r="${ref}" s="${style}" t="n"><v>${text}</v></c>`;
+};
 
 const escapeXml = (value: string): string => value
   .replaceAll("&", "&amp;")
@@ -24,7 +42,10 @@ const worksheet = (rows: readonly (readonly WorkbookCell[])[]): string => {
     const cells = row.map((value, columnIndex) => {
       const ref = `${column(columnIndex)}${rowIndex + 1}`;
       if (typeof value === "number" && Number.isFinite(value)) {
-        return `<c r="${ref}" t="n"><v>${value}</v></c>`;
+        return numericCellXml(ref, value, 1);
+      }
+      if (value !== null && typeof value === "object") {
+        return numericCellXml(ref, value.value, value.numberFormat === "precise" ? 2 : 1);
       }
       const text = value === null ? "" : typeof value === "boolean" ? (value ? "true" : "false") : String(value);
       return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
@@ -99,7 +120,7 @@ export function buildWorkbook(sheets: readonly WorkbookSheet[]): Buffer {
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
     { name: "xl/workbook.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>` },
     { name: "xl/_rels/workbook.xml.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "xl/styles.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Noto Sans SC"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="1"><xf xfId="0"/></cellXfs></styleSheet>` },
+    { name: "xl/styles.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.##"/><numFmt numFmtId="165" formatCode="#,##0.########"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Noto Sans SC"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="3"><xf xfId="0"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/><xf xfId="0" numFmtId="165" applyNumberFormat="1"/></cellXfs></styleSheet>` },
     ...sheets.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, content: worksheet(sheet.rows) })),
   ]);
 }

@@ -133,7 +133,7 @@ describe("UAT interface closure", () => {
       read("apps/api/src/wages/wage-export-service.ts"),
       read("apps/api/src/reporting/management-reporting-shared.ts"),
     ]);
-    expect(reportExport).toContain("businessCellValue(column.key");
+    expect(reportExport).toContain("exportCell(column.key");
     expect(reportExport).toContain("businessFieldLabel(key)");
     expect(reportExport).toContain("BUSINESS_TIME_ZONE");
     expect(reportExport).not.toContain("Asia/Singapore");

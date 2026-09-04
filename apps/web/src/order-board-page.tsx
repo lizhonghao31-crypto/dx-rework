@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -126,7 +127,7 @@ const historyDateTime = (value: string): string => new Intl.DateTimeFormat("zh-C
   hour12: false,
 }).format(new Date(value));
 
-const quantity = (value: number): string => value.toLocaleString("zh-CN");
+const quantity = (value: number): string => formatBusinessDecimal(value);
 const signedQuantity = (value: number): string => `${value > 0 ? "+" : ""}${quantity(value)}件`;
 
 const reworkLabel = (status: ReworkStatus): string => {
@@ -653,23 +654,23 @@ export function OrderBoardPage() {
     <div className="order-board-kpis">
       <KpiInstrument
         label={searchMode ? "搜索结果订单数" : "期间收货订单数"}
-        value={kpis.orderCount}
+        value={quantity(kpis.orderCount)}
         detail={kpiRangeLabel}
         tone="info"
       />
       <KpiInstrument
         label={searchMode ? "搜索结果累计实收" : "期间实收数量"}
-        value={`${kpis.receivedQuantity}件`}
+        value={`${quantity(kpis.receivedQuantity)}件`}
         detail={searchMode ? kpiRangeLabel : `${kpiRangeLabel} · 本期实收`}
         tone="info"
       />
       <KpiInstrument
         label="异常订单数量"
-        value={kpis.abnormalOrderCount}
+        value={quantity(kpis.abnormalOrderCount)}
         detail={searchMode ? "全时间累计实收与送货单数量不一致" : "截至结束日期累计实收与送货单数量不一致"}
         tone={kpis.abnormalOrderCount ? "warning" : "success"}
       />
-      <KpiInstrument label="差异率" value={`${kpis.differenceRate}%`} detail={`绝对差异 ${kpis.differenceQuantity} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
+      <KpiInstrument label="差异率" value={`${formatBusinessDecimal(kpis.differenceRate)}%`} detail={`绝对差异 ${quantity(kpis.differenceQuantity)} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
     </div>
 
     <div className="order-board-legend" aria-label="差异颜色说明">
@@ -719,13 +720,13 @@ export function OrderBoardPage() {
                 {row.attachments.length ? <button
                   type="button"
                   className="order-board-attachment-button"
-                  aria-label={`查看${row.styleNo}的送货单附件，共${row.attachments.length}张`}
+                  aria-label={`查看${row.styleNo}的送货单附件，共${quantity(row.attachments.length)}张`}
                   onClick={() => setAttachmentViewer({ attachments: row.attachments, index: 0 })}
                 >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
               </div>
             </div>
             <div className="order-board-row__actual"><span>实收</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
-            <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
+            <div className="order-board-row__defective"><span>次品</span><strong>{quantity(row.defectiveQuantity)}件</strong></div>
             <div className="order-board-operation order-board-row__difference">
               <span>收货差异</span>
               <div>{differenceControl(row, "receiving")}</div>
@@ -764,7 +765,7 @@ export function OrderBoardPage() {
                   : "来源待确认"}</span>
               <span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>
               <span>本次实收 <strong>{quantity(item.actualQuantity)}件</strong></span>
-              <span>累计实收 {item.cumulativeActualQuantity}件</span>
+              <span>累计实收 {quantity(item.cumulativeActualQuantity)}件</span>
               <span className="order-board-history__status">{historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
               <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>
@@ -913,7 +914,7 @@ export function OrderBoardPage() {
         </label> : null}
         {editing.rootDeletable
           ? editImages.length > 0
-            ? <small>已选择{editImages.length}张；保存后整体替换当前图片。</small>
+            ? <small>已选择{quantity(editImages.length)}张；保存后整体替换当前图片。</small>
             : <small>不选择新图则保留当前图片。</small>
           : <small>返工已发起，送货单图片已锁定。</small>}
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}

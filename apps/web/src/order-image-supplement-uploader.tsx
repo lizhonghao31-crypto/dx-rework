@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   AttachmentResponseSchema,
   MAX_REWORK_ATTACHMENTS,
@@ -74,12 +75,12 @@ export function OrderImageSupplementUploader({
       return;
     }
     if (selected.length > remaining) {
-      setMessage(`还可补充 ${remaining} 张；请减少本次选择数量后重试`);
+      setMessage(`还可补充 ${formatBusinessDecimal(remaining)} 张；请减少本次选择数量后重试`);
       return;
     }
 
     setUploading(true);
-    setMessage(`正在处理 ${selected.length} 张订单图片…`);
+    setMessage(`正在处理 ${formatBusinessDecimal(selected.length)} 张订单图片…`);
     let completedUploadCount = 0;
     try {
       const profile = currentUploadClientProfile();
@@ -149,7 +150,7 @@ export function OrderImageSupplementUploader({
               ),
             );
             completedUploadCount += 1;
-            setMessage(`已上传 ${completedUploadCount}/${selected.length} 张订单图片…`);
+            setMessage(`已上传 ${formatBusinessDecimal(completedUploadCount)}/${formatBusinessDecimal(selected.length)} 张订单图片…`);
             return finalized.attachmentId;
           });
         },
@@ -164,7 +165,7 @@ export function OrderImageSupplementUploader({
         },
       );
       await onUploaded();
-      setMessage(`已补充 ${attachmentIds.length} 张订单图片`);
+      setMessage(`已补充 ${formatBusinessDecimal(attachmentIds.length)} 张订单图片`);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "订单图片上传失败");
     } finally {

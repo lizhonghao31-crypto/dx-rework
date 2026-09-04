@@ -272,7 +272,7 @@ export function WholeOrderReviewPanel({
           }));
         },
       );
-      setMessage(`已一次保存${processName}的 ${corrections.length} 条数量修正；原值永久保留。`);
+      setMessage(`已一次保存${processName}的 ${formatBusinessDecimal(corrections.length)} 条数量修正；原值永久保留。`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "整组有效数量修正失败");
     }
@@ -458,8 +458,8 @@ export function WholeOrderReviewPanel({
         </span>
       </div>
       <div className="quantity-report-value">
-        <strong>{report.effectiveQuantity} 件</strong>
-        {report.corrected && <small>主管修改，原值 {report.actualQuantity}</small>}
+        <strong>{formatBusinessDecimal(report.effectiveQuantity)} 件</strong>
+        {report.corrected && <small>主管修改，原值 {formatBusinessDecimal(report.actualQuantity)}</small>}
       </div>
       {canCorrect && <div className="quantity-report-actions">
         <InsetField
@@ -538,11 +538,11 @@ export function WholeOrderReviewPanel({
               }))}
             >
               <span className="quantity-process-name">{process.processName}</span>
-              <span><small>工人合计</small><strong>{process.completedQuantity}</strong></span>
-              {iePrecounts ? <span><small>IE预核</small><strong>{iePrecount?.quantity ?? "—"}</strong></span> : null}
+              <span><small>工人合计</small><strong>{formatBusinessDecimal(process.completedQuantity)}</strong></span>
+              {iePrecounts ? <span><small>IE预核</small><strong>{iePrecount ? formatBusinessDecimal(iePrecount.quantity) : "—"}</strong></span> : null}
               {data.tailInspectionRequired ? <>
-                <span><small>整查</small><strong>{process.tailCheckedQuantity}</strong></span>
-                <span><small>整查余量</small><strong>{process.tailCheckedQuantity - process.completedQuantity}</strong></span>
+                <span><small>整查</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity)}</strong></span>
+                <span><small>整查余量</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity - process.completedQuantity)}</strong></span>
               </> : null}
               <StatusBadge tone={process.complete ? "success" : "danger"}>
                 {data.tailInspectionRequired
@@ -612,7 +612,7 @@ export function WholeOrderReviewPanel({
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
               {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
                 <div className="quantity-report-person"><b>整查</b><span>有效合计</span></div>
-                <div className="quantity-report-value"><strong>{process.tailCheckedQuantity} 件</strong></div>
+                <div className="quantity-report-value"><strong>{formatBusinessDecimal(process.tailCheckedQuantity)} 件</strong></div>
               </div> : null}
             </div>}
           </section>;
@@ -627,13 +627,13 @@ export function WholeOrderReviewPanel({
         aria-expanded={tailExpanded}
         onClick={() => setTailExpanded((value) => !value)}
       >
-        <span><b>整查报数</b><small>{tailReports.length} 人/条记录</small></span>
-        <strong>{data.processes[0]?.tailCheckedQuantity ?? 0} 件</strong>
+        <span><b>整查报数</b><small>{formatBusinessDecimal(tailReports.length)} 人/条记录</small></span>
+        <strong>{formatBusinessDecimal(data.processes[0]?.tailCheckedQuantity ?? 0)} 件</strong>
         <b>{tailExpanded ? "−" : "+"}</b>
       </button>
       {tailExpanded && <div className="quantity-process-detail">
         {tailStage && data.canReview && tailReports.some(canCorrectReport) && <div className="quantity-report-actions quantity-process-save">
-          <strong>{data.processes[0]?.tailCheckedQuantity ?? 0} 件</strong>
+          <strong>{formatBusinessDecimal(data.processes[0]?.tailCheckedQuantity ?? 0)} 件</strong>
           <Button
             disabled={busy || !tailReports.some(hasChangedCorrection)}
             onClick={() => void correctProcess(tailReports[0]!.configurationItemId, tailReports, "整查报数")}
@@ -646,7 +646,7 @@ export function WholeOrderReviewPanel({
     {data.tailInspectionRequired && !data.unifiedExecutionRequired && tailStage && submittedTailAssignments.length > 0 && <Surface>
       <h2>历史整查报数记录</h2>
       {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>
-        <div><b>{assignment.tailInspectorName}</b><p>返件总数 {assignment.returnedQuantity ?? 0} 件</p></div>
+        <div><b>{assignment.tailInspectorName}</b><p>返件总数 {formatBusinessDecimal(assignment.returnedQuantity ?? 0)} 件</p></div>
         {data.canReview && <Button disabled={busy} onClick={() => void rejectTailInspection(assignment.assignmentId, assignment.tailInspectorName)}>驳回整查</Button>}
       </div>)}
     </Surface>}
@@ -660,7 +660,7 @@ export function WholeOrderReviewPanel({
         onClick={() => setCoefficientSectionExpanded((value) => !value)}
       >
         <strong>临时工工资调整</strong>
-        <StatusBadge tone={coefficientIssue ? "danger" : "success"}>{coefficientIssue ? "待完善" : `${data.temporaryWorkers.length} 人`}</StatusBadge>
+        <StatusBadge tone={coefficientIssue ? "danger" : "success"}>{coefficientIssue ? "待完善" : `${formatBusinessDecimal(data.temporaryWorkers.length)} 人`}</StatusBadge>
         <b className="quantity-process-expander" aria-hidden="true">{coefficientSectionExpanded ? "−" : "+"}</b>
       </button>
       {coefficientSectionExpanded && <div className="quantity-process-list" id="temporary-wage-adjustment-content">
@@ -686,7 +686,7 @@ export function WholeOrderReviewPanel({
               }))}
             >
               <span className="quantity-process-name">{group.processName}</span>
-              <span><small>临时工</small><strong>{group.workers.length} 人</strong></span>
+              <span><small>临时工</small><strong>{formatBusinessDecimal(group.workers.length)} 人</strong></span>
               <StatusBadge tone={groupIssue ? "danger" : "success"}>{groupIssue ? "待完善" : "已完整"}</StatusBadge>
               <b className="quantity-process-expander">{open ? "−" : "+"}</b>
             </button>
