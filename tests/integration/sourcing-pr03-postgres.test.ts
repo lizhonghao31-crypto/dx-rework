@@ -95,6 +95,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     ...merchandiserActor(),
     authorizationCapability: "sourcing:view",
   });
+  const unrelatedReaderActor = (): TrustedActorContext => ({
+    actorId: randomUUID(),
+    actorRoles: ["warehouse_keeper"],
+    authorizationCapability: "sourcing:view",
+    authorizationCapabilities: ["sourcing:view"],
+    requestId: randomUUID(),
+  });
   const rootActor = (requestId = randomUUID()): TrustedActorContext => ({
     actorId: merchandiserId,
     actorRoles: ["root_superuser"],
@@ -143,6 +150,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0133_sourcing_craft_catalog.sql",
       "0134_versioned_craft_catalog.sql",
       "0135_sourcing_case_craft_snapshots.sql",
+      "0144_sourcing_multi_style_pricing.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -217,10 +225,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const createKey = randomUUID();
     const input = {
       erpOrderNo: "ERP-20260826-001",
-      styleNo: "DX-260826",
       deliveryDate: "2026-09-15",
       craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
-      orderQuantity: 137,
+      lineItems: [{
+        styleNo: "DX-260826",
+        color: "黑色",
+        quantity: 137,
+        externalUnitPrice: "12.0000",
+      }],
+      daxingUnitPrice: "10.0000",
       attachmentIds: [evidenceId],
     };
 
@@ -229,9 +242,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(created.value).toMatchObject({
       erpOrderId: input.erpOrderNo,
       erpOrderNo: input.erpOrderNo,
-      styleNo: input.styleNo,
+      styleNo: input.lineItems[0]!.styleNo,
       laneKey: "garment_processing",
       orderQuantity: 137,
+      lineItems: [{
+        position: 1,
+        styleNo: "DX-260826",
+        alternateStyleNo: null,
+        color: "黑色",
+        quantity: 137,
+        externalUnitPrice: "12.0000",
+        legacy: false,
+      }],
+      daxingUnitPrice: "10.0000",
       deliveryDate: "2026-09-15",
       processDescription: "净色车缝、整烫、按样衣复核",
       processes: ["净色车缝", "整烫", "按样衣复核"],
@@ -244,6 +267,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(replay.reused).toBe(true);
     expect(replay.value.sourcingCaseId).toBe(created.value.sourcingCaseId);
     expect((await database.query("SELECT 1 FROM sourcing_cases")).rowCount).toBe(1);
+    expect(await service.getCase(unrelatedReaderActor(), created.value.sourcingCaseId))
+      .not.toHaveProperty("daxingUnitPrice");
     expect((await database.query(
       "SELECT 1 FROM attachments WHERE attachment_id=$1 AND entity_type='sourcing_case' AND entity_id=$2",
       [evidenceId, created.value.sourcingCaseId],
@@ -658,10 +683,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       serial += 1;
       const created = await service.createCase(merchandiserActor(), {
         erpOrderNo: "ERP-TRANSFER-" + label + "-" + serial,
-        styleNo: "TRANSFER-" + label + "-" + serial,
         deliveryDate: "2026-10-20",
         craftIds: [craftId("车缝"), craftId("整烫")],
-        orderQuantity: 100,
+        lineItems: [{
+          styleNo: "TRANSFER-" + label + "-" + serial,
+          color: "黑色",
+          quantity: 100,
+          externalUnitPrice: "12.0000",
+        }],
+        daxingUnitPrice: "10.0000",
       }, randomUUID());
       await service.quoteIePrice(
         ieActor(),
@@ -684,10 +714,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
     const locked = await service.createCase(merchandiserActor(), {
       erpOrderNo: "ERP-TRANSFER-LOCKED",
-      styleNo: "TRANSFER-LOCKED",
       deliveryDate: "2026-10-20",
       craftIds: [craftId("车缝")],
-      orderQuantity: 100,
+      lineItems: [{
+        styleNo: "TRANSFER-LOCKED",
+        color: "黑色",
+        quantity: 100,
+        externalUnitPrice: "12.0000",
+      }],
+      daxingUnitPrice: "10.0000",
     }, randomUUID());
     await expect(service.requestFactoryChange(
       ownerActor(),
@@ -1159,10 +1194,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     const created = await service.createCase(merchandiserActor(), {
       erpOrderNo: "ERP-DELETE-1",
-      styleNo: "DELETE-STYLE-1",
       deliveryDate: "2026-10-01",
       craftIds: [craftId(deletionCraftName)],
-      orderQuantity: 88,
+      lineItems: [{
+        styleNo: "DELETE-STYLE-1",
+        color: "黑色",
+        quantity: 88,
+        externalUnitPrice: "12.0000",
+      }],
+      daxingUnitPrice: "10.0000",
       attachmentIds: [attachmentId],
     }, randomUUID());
     expect(created.value).toMatchObject({
@@ -1246,10 +1286,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
     const replacement = await service.createCase(merchandiserActor(), {
       erpOrderNo: "ERP-DELETE-1",
-      styleNo: "DELETE-STYLE-2",
       deliveryDate: "2026-10-02",
       craftIds: [craftId("重建订单工艺")],
-      orderQuantity: 99,
+      lineItems: [{
+        styleNo: "DELETE-STYLE-2",
+        color: "黑色",
+        quantity: 99,
+        externalUnitPrice: "12.0000",
+      }],
+      daxingUnitPrice: "10.0000",
     }, randomUUID());
     expect(replacement.value.sourcingCaseId).not.toBe(created.value.sourcingCaseId);
     expect((await service.listCases(readerActor(), "ERP-DELETE-1")).items)
