@@ -304,6 +304,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0137_receiving_source_classification.sql");
     await migration("0138_receiving_receipt_corrections.sql");
     await migration("0139_receiving_packing_difference_resolution.sql");
+    await migration("0140_receiving_packing_difference_direction.sql");
   });
 
   afterAll(async () => {
