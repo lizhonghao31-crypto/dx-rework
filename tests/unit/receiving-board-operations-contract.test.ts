@@ -65,14 +65,18 @@ describe("receiving board operations", () => {
     fieldOrder.slice(1).forEach((label, index) => {
       expect(facts.indexOf(fieldOrder[index]!)).toBeLessThan(facts.indexOf(label));
     });
-    expect(page.indexOf("收货人 &amp; 收货时间")).toBeLessThan(page.indexOf("装箱确认人 &amp; 装箱确认时间"));
+    expect(page.indexOf("<span>收货人</span>")).toBeLessThan(page.indexOf("<span>装箱确认人</span>"));
     expect(page).toContain("row.lastReceiverName} · {dateTime(row.lastReceivedAt)");
     expect(page).toContain("row.packingRecordedBy && row.packingRecordedAt");
     expect(css).toContain(".order-board-row__facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))");
     expect(css).toContain(".order-board-row__confirmation{display:grid;grid-template-columns:1fr 1fr");
-    expect(css).toContain(".order-board-operation-button{flex:0 0 auto;min-height:20px");
-    expect(css).toContain("padding:1px 5px");
-    expect(css).toContain("font:800 7px/1 inherit");
+    expect(css).toContain(".order-board-row__facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;border-top:1px solid #d5dde7;background:transparent");
+    expect(css).toContain(".order-board-row__confirmation>div{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:30px");
+    expect(css).toContain(".order-board-operation-button,.order-board-packing-button{flex:0 0 auto;min-height:24px");
+    expect(css).toContain("font-family:inherit;font-size:12px;font-weight:700;line-height:1");
+    expect(css).not.toContain("font:800 7px/1 inherit");
+    expect(css).toContain(".order-board-history__entry>button{justify-self:end;width:max-content;min-width:max-content;white-space:nowrap");
+    expect(page).toContain('>{row.packingQuantity === null ? "录入" : "修改"}</button>');
     expect(page).toContain("<span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>");
     expect(page).toContain("const liveOperationSnapshot = searchMode || endDate >= localDate()");
     expect(page).toContain("canManagePacking && liveOperationSnapshot");
