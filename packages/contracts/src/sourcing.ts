@@ -6,6 +6,12 @@ const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
+const BusinessDateSchema = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式无效")
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "日期必须是真实的日历日期");
 const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
 
 export const calculateSourcingTotalExact = (
@@ -41,6 +47,7 @@ export const SourcingCaseStatusSchema = z.enum([
 
 export const MAX_SOURCING_ATTACHMENTS = 8;
 export const MAX_SOURCING_PROCESSES = 20;
+export const MAX_SOURCING_LINE_ITEMS = 20;
 export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
   "order_merchandiser",
   "ie_reviewer",
@@ -49,13 +56,42 @@ export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
   "factory_payables",
 ] as const;
 
+export const SourcingCaseLineInputSchema = z.object({
+  styleNo: ShortTextSchema,
+  alternateStyleNo: ShortTextSchema.optional(),
+  color: ShortTextSchema,
+  quantity: z.number().int().positive().max(10_000_000),
+  externalUnitPrice: MoneyInputSchema,
+}).strict();
+
+export const calculateSourcingOrderQuantity = (
+  lineItems: readonly Readonly<{ quantity: number }>[],
+): number => {
+  const total = lineItems.reduce((sum, line) => sum + line.quantity, 0);
+  if (!Number.isSafeInteger(total) || total < 1 || total > 10_000_000) {
+    throw new RangeError("订单总数量必须是1至10000000之间的整数");
+  }
+  return total;
+};
+
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
-  styleNo: ShortTextSchema,
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
+  estimatedCutPieceSendDate: BusinessDateSchema,
+  deliveryDate: BusinessDateSchema,
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
     .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复"),
-  orderQuantity: z.number().int().positive().max(10_000_000),
+  lineItems: z.array(SourcingCaseLineInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+    .superRefine((lines, context) => {
+      try {
+        calculateSourcingOrderQuantity(lines);
+      } catch (error) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: error instanceof Error ? error.message : "订单总数量无效",
+        });
+      }
+    }),
+  daxingUnitPrice: MoneyInputSchema,
   attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
     .optional(),
@@ -196,6 +232,16 @@ export const SourcingCraftSnapshotSchema = z.object({
   craftName: z.string(),
 }).strict();
 
+export const SourcingCaseLineSchema = z.object({
+  position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
+  styleNo: z.string(),
+  alternateStyleNo: z.string().nullable(),
+  color: z.string().nullable(),
+  quantity: z.number().int().positive(),
+  externalUnitPrice: z.string().nullable(),
+  legacy: z.boolean(),
+}).strict();
+
 export const SourcingCaseSummarySchema = z.object({
   sourcingCaseId: IdSchema,
   erpOrderId: z.string(),
@@ -203,7 +249,10 @@ export const SourcingCaseSummarySchema = z.object({
   styleNo: z.string(),
   laneKey: z.literal("garment_processing"),
   orderQuantity: z.number().int().positive(),
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  lineItems: z.array(SourcingCaseLineSchema).min(1).max(MAX_SOURCING_LINE_ITEMS),
+  daxingUnitPrice: z.string().optional(),
+  estimatedCutPieceSendDate: BusinessDateSchema.nullable(),
+  deliveryDate: BusinessDateSchema.nullable(),
   processDescription: z.string().nullable(),
   processes: z.array(z.string()).max(MAX_SOURCING_PROCESSES),
   crafts: z.array(SourcingCraftSnapshotSchema).max(MAX_SOURCING_PROCESSES).optional(),
@@ -278,6 +327,8 @@ export const SourcingTimelineResponseSchema = z.object({
   items: z.array(SourcingTimelineEntrySchema),
 }).strict();
 
+export type SourcingCaseLineInput = z.infer<typeof SourcingCaseLineInputSchema>;
+export type SourcingCaseLine = z.infer<typeof SourcingCaseLineSchema>;
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
 export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
 export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema>;

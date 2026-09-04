@@ -25,6 +25,17 @@ const caseSummary: SourcingCaseSummary = {
   styleNo: "DX-100",
   laneKey: "garment_processing",
   orderQuantity: 120,
+  lineItems: [{
+    position: 1,
+    styleNo: "DX-100",
+    alternateStyleNo: null,
+    color: "黑色",
+    quantity: 120,
+    externalUnitPrice: "12.0000",
+    legacy: false,
+  }],
+  daxingUnitPrice: "10.0000",
+  estimatedCutPieceSendDate: "2026-09-10",
   deliveryDate: "2026-09-15",
   craftIds: ["00000000-0000-4000-8000-000000000401"],
   processes: ["净色车缝并整烫"],
@@ -138,10 +149,16 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         erpOrderNo: "ERP-100",
-        styleNo: "DX-100",
+        estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
         craftIds: ["00000000-0000-4000-8000-000000000401"],
-        orderQuantity: 120,
+        lineItems: [{
+          styleNo: "DX-100",
+          color: "黑色",
+          quantity: 120,
+          externalUnitPrice: "12.0000",
+        }],
+        daxingUnitPrice: "10.0000",
       },
     });
 
@@ -155,10 +172,16 @@ describe("sourcing PR03 routes", () => {
       }),
       {
         erpOrderNo: "ERP-100",
-        styleNo: "DX-100",
+        estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
         craftIds: ["00000000-0000-4000-8000-000000000401"],
-        orderQuantity: 120,
+        lineItems: [{
+          styleNo: "DX-100",
+          color: "黑色",
+          quantity: 120,
+          externalUnitPrice: "12.0000",
+        }],
+        daxingUnitPrice: "10.0000",
       },
       "sourcing-create-key-1",
     );
@@ -200,10 +223,16 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         erpOrderNo: "ERP-101",
-        styleNo: "DX-101",
+        estimatedCutPieceSendDate: "2026-09-11",
         deliveryDate: "2026-09-16",
         craftIds: ["00000000-0000-4000-8000-000000000402"],
-        orderQuantity: 50,
+        lineItems: [{
+          styleNo: "DX-101",
+          color: "黑色",
+          quantity: 50,
+          externalUnitPrice: "12.0000",
+        }],
+        daxingUnitPrice: "10.0000",
       },
     });
     expect(forbidden.statusCode).toBe(403);
@@ -249,10 +278,16 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         erpOrderNo: "ERP-ROOT",
-        styleNo: "DX-ROOT",
+        estimatedCutPieceSendDate: "2026-09-12",
         deliveryDate: "2026-09-17",
         craftIds: ["00000000-0000-4000-8000-000000000403"],
-        orderQuantity: 10,
+        lineItems: [{
+          styleNo: "DX-ROOT",
+          color: "黑色",
+          quantity: 10,
+          externalUnitPrice: "12.0000",
+        }],
+        daxingUnitPrice: "10.0000",
       },
     })).statusCode).toBe(201);
     expect(service.createCase.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
