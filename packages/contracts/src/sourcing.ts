@@ -70,6 +70,7 @@ export const calculateSourcingOrderQuantity = (
 
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
+  estimatedCutPieceSendDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "预计裁片发出日期格式无效"),
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
     .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复"),
@@ -244,6 +245,7 @@ export const SourcingCaseSummarySchema = z.object({
   orderQuantity: z.number().int().positive(),
   lineItems: z.array(SourcingCaseLineSchema).min(1).max(MAX_SOURCING_LINE_ITEMS),
   daxingUnitPrice: z.string().optional(),
+  estimatedCutPieceSendDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   processDescription: z.string().nullable(),
   processes: z.array(z.string()).max(MAX_SOURCING_PROCESSES),
