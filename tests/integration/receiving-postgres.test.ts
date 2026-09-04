@@ -889,11 +889,11 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     )).rows[0]!;
     expect(resolved.receivingDifferenceResolution).toMatchObject({
       result: "已与送货工厂核对，差额转下一批补回",
-      handledBy: receiverId,
+      handledBy: "仓管测试",
     });
     expect(resolved.packingDifferenceResolution).toMatchObject({
       result: "尾部复核完成，36件待补装",
-      handledBy: receiverId,
+      handledBy: "仓管测试",
     });
 
     await expect(database.query(
