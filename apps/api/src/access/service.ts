@@ -691,6 +691,7 @@ export class AccessMasterDataService {
       version: number;
       supplier_name: string;
       active: boolean;
+      address: string | null;
       supported_crafts: string[];
       daily_capacity: number | null;
       contract_entity_name: string | null;
@@ -699,7 +700,7 @@ export class AccessMasterDataService {
       bank_account: string | null;
       bank_name: string | null;
     }>(
-      `SELECT supplier_id,supplier_code,supplier_type,version,supplier_name,active,
+      `SELECT supplier_id,supplier_code,supplier_type,version,supplier_name,active,address,
               supported_crafts,daily_capacity,contract_entity_name,party_b_representative,
               payee_name,bank_account,bank_name
        FROM current_supplier_catalog
@@ -1610,6 +1611,7 @@ export class AccessMasterDataService {
   }
 
   private contractDataMissing(row: {
+    address: string | null;
     contract_entity_name: string | null;
     party_b_representative: string | null;
     payee_name: string | null;
@@ -1617,6 +1619,7 @@ export class AccessMasterDataService {
     bank_name: string | null;
   }): string[] {
     return [
+      ["address", row.address],
       ["contractEntityName", row.contract_entity_name],
       ["partyBRepresentative", row.party_b_representative],
       ["payeeName", row.payee_name],
