@@ -1533,12 +1533,16 @@ export class AccessMasterDataService {
     version: number,
     input: Omit<ReviseSupplier, "expectedVersion">,
   ): Promise<void> {
+    const authorizationCapability = actor.authorizationCapability === "supplier_profile:write"
+      || actor.authorizationCapabilities?.includes("supplier_profile:write") === true
+      ? "supplier_profile:write"
+      : "master_data:manage";
     await client.query(
       `SELECT
          set_config('dx_rework.supplier_version_event_id',$1,true),
          set_config('dx_rework.supplier_version_request_id',$2,true),
-         set_config('dx_rework.supplier_version_authorization_capability','supplier_profile:write',true)`,
-      [randomUUID(), actor.requestId],
+         set_config('dx_rework.supplier_version_authorization_capability',$3,true)`,
+      [randomUUID(), actor.requestId, authorizationCapability],
     );
     await client.query(
       `INSERT INTO supplier_catalog_versions(
@@ -1551,7 +1555,7 @@ export class AccessMasterDataService {
         version,
         input.supplierName,
         input.active,
-        input.notes,
+        input.notes ?? "",
         input.contactPerson ?? null,
         input.contactPhone ?? null,
         input.address ?? null,
@@ -1560,7 +1564,7 @@ export class AccessMasterDataService {
         input.payeeName ?? null,
         input.bankAccount ?? null,
         input.bankName ?? null,
-        input.supportedCrafts,
+        input.supportedCrafts ?? [],
         input.dailyCapacity ?? null,
         input.changeReason,
         actor.actorId,
