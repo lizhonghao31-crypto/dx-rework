@@ -316,6 +316,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
         body: JSON.stringify({
           supplierName: nextName,
           active: change === "toggle" ? !supplier.active : supplier.active,
+          expectedVersion: supplier.version,
           changeReason: reason,
         }),
       }));
@@ -578,6 +579,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 supplierType: row.supplier.supplierType,
                 supplierName: row.supplier.supplierName,
                 active: row.supplier.active,
+                expectedVersion: existing.version,
                 changeReason: reason,
               }),
             });
