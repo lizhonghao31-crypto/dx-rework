@@ -168,7 +168,8 @@ const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: st
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
   "返工单看板": { label: "返工", glyph: "返" },
-  "外发定价&选厂": { label: "外发", glyph: "发" },\n  "供应商中心": { label: "供应商", glyph: "供" },
+  "外发定价&选厂": { label: "外发", glyph: "发" },
+  "供应商中心": { label: "供应商", glyph: "供" },
 };
 
 function isMobilePrimaryNavigation(entry: NavigationEntry): boolean {
