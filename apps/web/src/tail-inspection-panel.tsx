@@ -138,7 +138,9 @@ export function TailInspectionPanel({
       setMessage("历史整查报数已提交；旧订单会继续按原兼容链路进入尾部主管整单确认。 ");
       await onOrderChanged?.();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "整查报数提交失败");
+      const failure = error instanceof Error ? error.message : "整查报数提交失败";
+      setMessage(failure);
+      await alertInApp(failure, { title: "整查报数提交失败", confirmLabel: "知道了" });
     } finally {
       setBusy(false);
     }

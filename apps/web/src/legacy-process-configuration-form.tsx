@@ -211,7 +211,9 @@ export function LegacyProcessConfigurationForm({ reworkOrderId: providedReworkOr
       const submitted = await request("rework-orders/" + attempt.reworkOrderId + "/process-configuration/submit", ProcessConfigurationResponseSchema, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(attempt.body) });
       pendingSubmit.current = null; setResponse(submitted); setMessage("已提交 IE 审核；当前工序配置已锁定，等待 IE 处理。"); await onOrderChanged?.();
     } catch (error: unknown) {
-      setMessage(pendingSubmit.current ? "提交结果暂未确认；请直接再次点击“提交 IE 审核”，系统会复用同一次提交，不会重复生成配置。" : error instanceof Error ? error.message : "提交 IE 审核失败");
+      const failure = pendingSubmit.current ? "提交结果暂未确认；请直接再次点击“提交 IE 审核”，系统会复用同一次提交，不会重复生成配置。" : error instanceof Error ? error.message : "提交 IE 审核失败";
+      setMessage(failure);
+      await alertInApp(failure, { title: "工序配置提交失败", confirmLabel: "知道了" });
     } finally { setBusy(false); }
   };
   const review = async (decision: "approved" | "rejected") => {

@@ -9,6 +9,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
   OperationEventRepository,
@@ -173,6 +174,10 @@ export class TailInspectionService {
       if (input.items.length !== expected.size || input.items.some((item) => !expected.has(item.configurationItemId))) {
         fail("整查报数必须覆盖当前工序且不能包含其他工序", 400, "VALIDATION_ERROR");
       }
+      await ensureWithinSourceReceivingActualQuantity(client, assignment.rework_order_id, [
+        { label: "整查返件总数", quantity: input.returnedQuantity },
+        ...input.items.map((item) => ({ label: "整查工序数量", quantity: item.inspectedQuantity })),
+      ]);
       const readyAfterSubmit = order.status === "in_progress"
         && await this.readyForWholeOrderReview(client, assignment.rework_order_id, assignmentId);
       const reportId = randomUUID();

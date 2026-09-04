@@ -356,7 +356,9 @@ export function WholeOrderReviewPanel({
       );
       setMessage("系统已锁定本版最终数量与价格提案，等待 IE 复核。");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "数量提交失败");
+      const failure = describeRequestFailure(cause, "数量提交失败");
+      setMessage(failure);
+      await alertInApp(failure, { title: "数量提交失败", confirmLabel: "知道了" });
     }
   };
 

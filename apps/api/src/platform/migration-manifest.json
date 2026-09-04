@@ -139,6 +139,7 @@
     { "version": "0137_receiving_source_classification", "checksum": "a41b309ba9c43a0acbe74ce7b3dd2a221d23b1cb1b47b43cdb28d1823d8b0c3b" },
     { "version": "0138_receiving_receipt_corrections", "checksum": "9cfe64fb614728ed6d6953b3a8f2233f1a65bf0f6ec955f25ef29f6ce69d5f0c" },
     { "version": "0139_receiving_packing_difference_resolution", "checksum": "dda7d1278ac1fed989d0177d44934f458f38e77898990a8282892854c83ed68b" },
-    { "version": "0140_receiving_packing_difference_direction", "checksum": "708fe59c1fac00334708fe5132679c57f37737b50fa7169c59494616043c9dec" }
+    { "version": "0140_receiving_packing_difference_direction", "checksum": "708fe59c1fac00334708fe5132679c57f37737b50fa7169c59494616043c9dec" },
+    { "version": "0141_rework_receiving_quantity_ceiling", "checksum": "939d22fa93017263987df72411fe5595db9b4bf1a3bee33e43e9088dd5d8a234" }
   ]
 }
