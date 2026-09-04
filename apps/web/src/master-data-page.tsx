@@ -676,7 +676,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 <p>外发跟单在创建订单时可直接录入新工艺；系统自动建档，后续订单可直接搜索复用。</p>
               </div>
             </div>
-            {canWriteSuppliers ?             <div className="master-data-create">
+            {canWriteSuppliers ? <div className="master-data-create">
               <input
                 value={craftName}
                 maxLength={100}
