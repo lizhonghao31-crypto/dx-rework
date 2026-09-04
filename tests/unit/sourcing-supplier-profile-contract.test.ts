@@ -50,13 +50,10 @@ describe("SSP-01 supplier profile contract", () => {
       changeReason: "资料修订",
     };
     expect(ReviseSupplierSchema.safeParse(base).success).toBe(false);
-    expect(ReviseSupplierSchema.parse({ ...base, expectedVersion: 3 })).toEqual(
-      expect.objectContaining({
-        expectedVersion: 3,
-        notes: "",
-        supportedCrafts: [],
-      }),
-    );
+    const revision = ReviseSupplierSchema.parse({ ...base, expectedVersion: 3 });
+    expect(revision).toEqual(expect.objectContaining({ expectedVersion: 3 }));
+    expect(revision).not.toHaveProperty("notes");
+    expect(revision).not.toHaveProperty("supportedCrafts");
   });
 
   it("adds no import or synchronization path from another business system", async () => {
