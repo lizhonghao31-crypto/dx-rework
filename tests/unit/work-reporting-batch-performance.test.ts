@@ -66,6 +66,9 @@ const createHarness = (input: {
     if (sql.includes("SELECT task.work_task_id,task.rework_order_id") && sql.includes("task.work_task_id=ANY")) {
       return { rowCount: tasks.length, rows: tasks };
     }
+    if (sql.includes("source_receiving_batch_id IS NULL") && sql.includes("AS quantity")) {
+      return { rowCount: 1, rows: [{ quantity: null }] };
+    }
     if (sql.includes("FROM rework_orders WHERE rework_order_id=$1")) {
       return {
         rowCount: 1,
