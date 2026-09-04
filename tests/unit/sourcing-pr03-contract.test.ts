@@ -29,6 +29,7 @@ describe("sourcing PR03 contracts", () => {
     });
     const parse = (count: number) => CreateSourcingCaseSchema.parse({
       erpOrderNo: `PLATFORM-2026-00${count}`,
+      estimatedCutPieceSendDate: "2026-09-10",
       deliveryDate: "2026-09-15",
       craftIds: ["00000000-0000-4000-8000-000000000401"],
       lineItems: Array.from({ length: count }, (_value, index) => line(index + 1)),
@@ -45,6 +46,7 @@ describe("sourcing PR03 contracts", () => {
   it("rejects illegal row quantities, excessive precision, and caller totals", () => {
     const valid = {
       erpOrderNo: "PLATFORM-2026-001",
+      estimatedCutPieceSendDate: "2026-09-10",
       deliveryDate: "2026-09-15",
       craftIds: ["00000000-0000-4000-8000-000000000401"],
       lineItems: [{
@@ -118,10 +120,20 @@ describe("sourcing PR03 contracts", () => {
       "owner_group",
       "factory_payables",
     ]) {
-      expect(canViewSourcingDaxingPrice({ actorRoles: [role] })).toBe(true);
+      expect(canViewSourcingDaxingPrice({
+        actorId: "00000000-0000-4000-8000-000000000001",
+        actorRoles: [role],
+      }, "00000000-0000-4000-8000-000000000001")).toBe(true);
     }
+    expect(canViewSourcingDaxingPrice({
+      actorId: "00000000-0000-4000-8000-000000000002",
+      actorRoles: ["order_merchandiser"],
+    }, "00000000-0000-4000-8000-000000000001")).toBe(false);
     for (const role of ["worker", "warehouse_keeper", "external_production_reporter", "unrelated_role"]) {
-      expect(canViewSourcingDaxingPrice({ actorRoles: [role] })).toBe(false);
+      expect(canViewSourcingDaxingPrice({
+        actorId: "00000000-0000-4000-8000-000000000002",
+        actorRoles: [role],
+      }, "00000000-0000-4000-8000-000000000001")).toBe(false);
     }
   });
 
