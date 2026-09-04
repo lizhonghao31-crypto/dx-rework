@@ -10,6 +10,7 @@ import {
   sha256Hex,
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
 import { alertInApp } from "./system-dialog.js";
@@ -349,7 +350,7 @@ export function OrderBoardPage() {
     setDifferenceEditing(null);
     setPackingEditing(row);
     setPackingQuantity(row.packingQuantity === null ? "" : String(row.packingQuantity));
-    setPackingRequestKey(crypto.randomUUID());
+    setPackingRequestKey(createClientRequestId());
     setMutationMessage("");
   };
 
@@ -393,7 +394,7 @@ export function OrderBoardPage() {
     setPackingEditing(null);
     setDifferenceEditing({ row, type, resolution });
     setDifferenceResult("");
-    setDifferenceRequestKey(crypto.randomUUID());
+    setDifferenceRequestKey(createClientRequestId());
     setMutationMessage("");
   };
 
@@ -710,7 +711,7 @@ export function OrderBoardPage() {
               </div>
             </div>
             <div className="order-board-row__actual"><span>实收</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
-            <div className="order-board-row__defective"><span>次品</span><strong>{quantity(row.currentDefectiveQuantity)}件</strong></div>
+            <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
             <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
             <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
             {actionControls(row, false)}
@@ -755,7 +756,7 @@ export function OrderBoardPage() {
                   : "来源待确认"}</span>
               <span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>
               <span>本次实收 <strong>{quantity(item.actualQuantity)}件</strong></span>
-              <span>累计实收 <strong>{quantity(item.cumulativeActualQuantity)}件</strong></span>
+              <span>累计实收 {item.cumulativeActualQuantity}件</span>
               <span className="order-board-history__status">{historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
               <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>

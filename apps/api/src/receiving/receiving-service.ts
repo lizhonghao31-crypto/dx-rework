@@ -1995,6 +1995,11 @@ export class ReceivingService {
     );
     const summary = summaryResult.rows[0]!;
 
+      const defaultPage = pageSize === 15;
+      const pageWindowSql = defaultPage ? "LIMIT 15 OFFSET $5" : "LIMIT $5 OFFSET $6";
+      const pageWindowParameters = defaultPage
+        ? [startDate, endDate, needle, status, offset]
+        : [startDate, endDate, needle, status, pageSize, offset];
       const rowsResult = await client.query<{
       receiving_batch_id: string;
       style_no: string;
@@ -2051,7 +2056,7 @@ export class ReceivingService {
          SELECT *
          FROM filtered_totals
          ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC
-         LIMIT $5 OFFSET $6
+         ${pageWindowSql}
        )
        SELECT action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
@@ -2253,14 +2258,7 @@ export class ReceivingService {
        ) receiving_history ON true
        ORDER BY totals.difference_rank ASC,totals.absolute_difference DESC,
                 totals.last_received_at DESC,totals.style_key ASC`,
-      [
-        startDate,
-        endDate,
-        needle,
-        status,
-        pageSize,
-        offset,
-      ],
+      pageWindowParameters,
     );
     const allRows: BoardRow[] = rowsResult.rows.map((row) => ({
       receivingBatchId: row.receiving_batch_id,
