@@ -579,7 +579,6 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 supplierType: row.supplier.supplierType,
                 supplierName: row.supplier.supplierName,
                 active: row.supplier.active,
-                expectedVersion: existing.version,
                 changeReason: reason,
               }),
             });
@@ -591,6 +590,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               body: JSON.stringify({
                 supplierName: row.supplier.supplierName,
                 active: row.supplier.active,
+                expectedVersion: existing.version,
                 changeReason: reason,
               }),
             });
