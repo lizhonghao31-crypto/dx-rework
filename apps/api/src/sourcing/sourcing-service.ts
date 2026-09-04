@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
+  calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   MAX_SOURCING_ATTACHMENTS,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
@@ -58,8 +59,15 @@ const FACTORY_CHANGE_VERIFY_ROLE = "production_management";
 const FACTORY_CHANGE_OWNER_ROLE = "owner_group";
 const FINANCE_RECONCILE_ROLE = "factory_payables";
 const EXCEPTION_VERIFY_ROLE = "production_management";
+const DAXING_PRICE_ROLES = new Set([
+  CASE_CREATE_ROLE,
+  IE_QUOTE_ROLE,
+  MANAGEMENT_DECISION_ROLE,
+  OWNER_DECISION_ROLE,
+  FINANCE_RECONCILE_ROLE,
+]);
 const LANE_KEY = "garment_processing" as const;
-const DEFAULT_CREATION_REASON = "基于正式 ERP 订单创建报价选厂询价";
+const DEFAULT_CREATION_REASON = "基于平台订单创建外发定价选厂询价";
 const DEFAULT_QUOTE_REASON = "IE核定加工价格";
 const DEFAULT_MANAGEMENT_REASON = "生产管理确认加工厂与价格";
 const DEFAULT_OWNER_APPROVAL_REASON = "老板批准选厂决定";
@@ -81,6 +89,16 @@ type SourcingCaseRow = Readonly<{
   style_no: string;
   lane_key: string;
   order_quantity: number | string;
+  daxing_unit_price: string | null;
+  line_items: readonly {
+    position: number;
+    styleNo: string;
+    alternateStyleNo: string | null;
+    color: string | null;
+    quantity: number;
+    externalUnitPrice: string | null;
+    legacy: boolean;
+  }[] | null;
   delivery_date: string | null;
   process_description: string | null;
   process_items: string[] | null;
@@ -191,8 +209,30 @@ const requestHash = (scope: string, payload: unknown): string =>
 const toIso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 
-const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => {
+export const canViewSourcingDaxingPrice = (
+  actor: Pick<TrustedActorContext, "actorRoles">,
+): boolean => actor.actorRoles.includes(ROOT_ROLE)
+  || actor.actorRoles.some((role) => DAXING_PRICE_ROLES.has(role));
+
+const mapCase = (
+  row: SourcingCaseRow,
+  includeDaxingPrice: boolean,
+): SourcingCaseSummary => {
   const crafts = [...(row.crafts ?? [])];
+  const lineItems = row.line_items?.length
+    ? row.line_items.map((line) => ({
+        ...line,
+        quantity: Number(line.quantity),
+      }))
+    : [{
+        position: 1,
+        styleNo: row.style_no,
+        alternateStyleNo: null,
+        color: null,
+        quantity: Number(row.order_quantity),
+        externalUnitPrice: null,
+        legacy: true,
+      }];
   return {
   sourcingCaseId: row.sourcing_case_id,
   erpOrderId: row.erp_order_id,
@@ -200,6 +240,10 @@ const mapCase = (row: SourcingCaseRow): SourcingCaseSummary => {
   styleNo: row.style_no,
   laneKey: LANE_KEY,
   orderQuantity: Number(row.order_quantity),
+  lineItems,
+  ...(includeDaxingPrice && row.daxing_unit_price !== null
+    ? { daxingUnitPrice: row.daxing_unit_price }
+    : {}),
   deliveryDate: row.delivery_date,
   processDescription: row.process_description,
   processes: crafts.length
@@ -326,11 +370,14 @@ export class SourcingService {
   private async readCase(
     client: Pick<PoolClient, "query">,
     sourcingCaseId: string,
+    actor: TrustedActorContext,
   ): Promise<SourcingCaseSummary> {
     const result = await client.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         source_case.daxing_unit_price::text AS daxing_unit_price,
+         lines_row.line_items,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
          crafts_row.crafts,
@@ -357,7 +404,25 @@ export class SourcingService {
          owner_row.decided_by AS owner_decided_by,
          owner_row.decided_at AS owner_decided_at
        FROM current_sourcing_cases case_view
+       JOIN sourcing_cases source_case
+         ON source_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'position',line.position,
+             'styleNo',line.style_no,
+             'alternateStyleNo',line.alternate_style_no,
+             'color',line.color,
+             'quantity',line.quantity,
+             'externalUnitPrice',line.external_unit_price::text,
+             'legacy',line.legacy_source
+           )
+           ORDER BY line.position
+         ) AS line_items
+         FROM sourcing_case_lines line
+         WHERE line.sourcing_case_id=case_view.sourcing_case_id
+       ) lines_row ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(
@@ -393,7 +458,7 @@ export class SourcingService {
     );
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
-    return mapCase(row);
+    return mapCase(row, canViewSourcingDaxingPrice(actor));
   }
 
   async listCases(
@@ -413,6 +478,8 @@ export class SourcingService {
          count(*) OVER()::text AS total_count,
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         source_case.daxing_unit_price::text AS daxing_unit_price,
+         lines_row.line_items,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
          crafts_row.crafts,
@@ -439,7 +506,25 @@ export class SourcingService {
          owner_row.decided_by AS owner_decided_by,
          owner_row.decided_at AS owner_decided_at
        FROM current_sourcing_cases case_view
+       JOIN sourcing_cases source_case
+         ON source_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'position',line.position,
+             'styleNo',line.style_no,
+             'alternateStyleNo',line.alternate_style_no,
+             'color',line.color,
+             'quantity',line.quantity,
+             'externalUnitPrice',line.external_unit_price::text,
+             'legacy',line.legacy_source
+           )
+           ORDER BY line.position
+         ) AS line_items
+         FROM sourcing_case_lines line
+         WHERE line.sourcing_case_id=case_view.sourcing_case_id
+       ) lines_row ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(
@@ -472,6 +557,16 @@ export class SourcingService {
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
        WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
           OR case_view.style_no ILIKE '%'||$1||'%'
+          OR EXISTS (
+            SELECT 1
+            FROM sourcing_case_lines search_line
+            WHERE search_line.sourcing_case_id=case_view.sourcing_case_id
+              AND (
+                search_line.style_no ILIKE '%'||$1||'%'
+                OR search_line.alternate_style_no ILIKE '%'||$1||'%'
+                OR search_line.color ILIKE '%'||$1||'%'
+              )
+          )
           OR creator_user.display_name ILIKE '%'||$1||'%'
           OR decision_row.supplier_name_snapshot ILIKE '%'||$1||'%'
           OR decision_row.supplier_code_snapshot ILIKE '%'||$1||'%'
@@ -495,7 +590,7 @@ export class SourcingService {
     const pageRows = result.rows;
     const totalCount = Number(pageRows[0]?.total_count ?? "0");
     return {
-      items: pageRows.map(mapCase),
+      items: pageRows.map((row) => mapCase(row, canViewSourcingDaxingPrice(actor))),
       page,
       pageSize: SOURCING_LIST_PAGE_SIZE,
       totalCount,
@@ -509,7 +604,7 @@ export class SourcingService {
   ): Promise<SourcingCaseSummary> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
-    return this.readCase(this.database, sourcingCaseId);
+    return this.readCase(this.database, sourcingCaseId, actor);
   }
 
   async deleteByRoot(
@@ -550,7 +645,7 @@ export class SourcingService {
             response: { sourcingCaseId, deleted: true as const },
           };
         }
-        const before = await this.readCase(client, sourcingCaseId);
+        const before = await this.readCase(client, sourcingCaseId, actor);
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.delete",
           entityType: "sourcing_case",
@@ -594,7 +689,7 @@ export class SourcingService {
   ): Promise<SourcingAttachmentListResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
-    await this.readCase(this.database, sourcingCaseId);
+    await this.readCase(this.database, sourcingCaseId, actor);
     const result = await this.database.query<{
       attachment_id: string;
       original_filename: string;
@@ -730,7 +825,7 @@ export class SourcingService {
   ): Promise<SourcingTimelineResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
-    await this.readCase(this.database, sourcingCaseId);
+    await this.readCase(this.database, sourcingCaseId, actor);
     const result = await this.database.query<{
       entry_id: string;
       kind: "created" | "ie_quote" | "management_decision" | "owner_decision"
@@ -988,20 +1083,37 @@ export class SourcingService {
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
-    const erpOrderNo = normalizeText(input.erpOrderNo, "ERP订单号", 100);
+    const erpOrderNo = normalizeText(input.erpOrderNo, "平台订单号", 100);
     const craftIds = [...input.craftIds];
     if (
       craftIds.length < 1 || craftIds.length > 20
       || new Set(craftIds).size !== craftIds.length
       || craftIds.some((craftId) => !UUID_PATTERN.test(craftId))
     ) fail("工艺标识无效或重复");
+    const lineItems = input.lineItems.map((line, index) => ({
+      position: index + 1,
+      styleNo: normalizeText(line.styleNo, "款号", 100),
+      alternateStyleNo: line.alternateStyleNo
+        ? normalizeText(line.alternateStyleNo, "代用款号", 100)
+        : null,
+      color: normalizeText(line.color, "颜色", 100),
+      quantity: normalizeQuantity(line.quantity),
+      externalUnitPrice: normalizeSourcingUnitPrice(line.externalUnitPrice),
+    }));
+    let orderQuantity: number;
+    try {
+      orderQuantity = calculateSourcingOrderQuantity(lineItems);
+    } catch {
+      return fail("订单总数量必须是1至10000000之间的整数");
+    }
     const normalized = {
       erpOrderNo,
       erpOrderId: erpOrderNo,
-      styleNo: normalizeText(input.styleNo, "款号", 100),
       deliveryDate: input.deliveryDate,
       craftIds,
-      orderQuantity: normalizeQuantity(input.orderQuantity),
+      lineItems,
+      orderQuantity,
+      daxingUnitPrice: normalizeSourcingUnitPrice(input.daxingUnitPrice),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
     const scope = "sourcing.case.create";
@@ -1070,13 +1182,13 @@ export class SourcingService {
           `INSERT INTO sourcing_cases(
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
              order_quantity,delivery_date,process_description,process_items,
-             created_by,operation_event_id,request_id,creation_reason
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+             created_by,operation_event_id,request_id,creation_reason,daxing_unit_price
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
           [
             sourcingCaseId,
             normalized.erpOrderId,
             normalized.erpOrderNo,
-            normalized.styleNo,
+            normalized.lineItems[0]!.styleNo,
             LANE_KEY,
             normalized.orderQuantity,
             normalized.deliveryDate,
@@ -1086,8 +1198,29 @@ export class SourcingService {
             eventId,
             actor.requestId,
             DEFAULT_CREATION_REASON,
+            normalized.daxingUnitPrice,
           ],
         );
+        for (const line of normalized.lineItems) {
+          await client.query(
+            `INSERT INTO sourcing_case_lines(
+               sourcing_case_id,position,style_no,alternate_style_no,color,quantity,
+               external_unit_price,legacy_source,created_by,operation_event_id,request_id
+             ) VALUES($1,$2,$3,$4,$5,$6,$7,false,$8,$9,$10)`,
+            [
+              sourcingCaseId,
+              line.position,
+              line.styleNo,
+              line.alternateStyleNo,
+              line.color,
+              line.quantity,
+              line.externalUnitPrice,
+              actor.actorId,
+              eventId,
+              actor.requestId,
+            ],
+          );
+        }
         for (const craft of selectedCrafts) {
           await client.query(
             `INSERT INTO sourcing_case_crafts(
@@ -1159,14 +1292,14 @@ export class SourcingService {
           policyKey: "general",
           dedupeKey: `sourcing:${sourcingCaseId}:ie_quote:1`,
         });
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23505") {
-        fail("该 ERP 订单已经创建过加工厂报价选厂询价", 409, "CONFLICT");
+        fail("该平台订单已经创建过外发定价选厂询价", 409, "CONFLICT");
       }
       throw error;
     } finally {
@@ -1301,7 +1434,7 @@ export class SourcingService {
           policyKey: "general",
           dedupeKey: `sourcing:${sourcingCaseId}:management:${quoteVersion}`,
         });
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -1511,7 +1644,7 @@ export class SourcingService {
           policyKey: "general",
           dedupeKey: `sourcing:${sourcingCaseId}:owner:${decisionVersion}`,
         });
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -1692,7 +1825,7 @@ export class SourcingService {
             dedupeKey: `sourcing:${sourcingCaseId}:finance:${decisionVersion}:1`,
           });
         }
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -1829,7 +1962,7 @@ export class SourcingService {
           policyKey: "general",
           dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${nextReconciliationVersion}`,
         });
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -2200,7 +2333,7 @@ export class SourcingService {
             dedupeKey: `sourcing:${sourcingCaseId}:factory_change:${factoryChangeRequestId}`,
           });
         }
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -2419,7 +2552,7 @@ export class SourcingService {
             dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${Number(source.reconciliation_version)+1}:resume:${factoryChangeRequestId}`,
           });
         }
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -2628,7 +2761,7 @@ export class SourcingService {
             });
           }
         }
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
@@ -2742,7 +2875,7 @@ export class SourcingService {
             dedupeKey: `sourcing:${sourcingCaseId}:finance:${Number(source.decision_version)}:${nextReconciliationVersion}`,
           });
         }
-        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId) };
+        return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
