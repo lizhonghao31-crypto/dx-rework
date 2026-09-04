@@ -20,7 +20,10 @@ const exportCell = (
   key: string,
   value: string | number | boolean | null,
 ): WorkbookCell => {
-  if (value !== null && (isBusinessMoneyField(key) || isBusinessNumberField(key))) {
+  if (
+    (typeof value === "string" || typeof value === "number")
+    && (isBusinessMoneyField(key) || isBusinessNumberField(key))
+  ) {
     return workbookNumberCell(value);
   }
   return businessCellValue(key, value);

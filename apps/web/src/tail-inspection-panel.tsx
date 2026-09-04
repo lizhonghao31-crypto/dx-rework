@@ -187,7 +187,7 @@ export function TailInspectionPanel({
       <div className="tail-inspection-assignment-list">
         {data.assignments.map((assignment) => <div key={assignment.assignmentId}>
           <div><b>{assignment.tailInspectorName}</b><small>{assignment.boxScope ? `清点范围：${assignment.boxScope}` : "未填写箱数或范围"}</small></div>
-          <StatusBadge tone={assignment.submittedAt ? "success" : assignment.canSubmit ? "warning" : "info"}>{assignment.submittedAt ? `${formatBusinessDecimal(assignment.returnedQuantity)} 件已提交` : assignment.canSubmit ? isRoot ? "可代清点" : "待本人清点" : "待清点"}</StatusBadge>
+          <StatusBadge tone={assignment.submittedAt ? "success" : assignment.canSubmit ? "warning" : "info"}>{assignment.submittedAt ? `${assignment.returnedQuantity === null ? "—" : formatBusinessDecimal(assignment.returnedQuantity)} 件已提交` : assignment.canSubmit ? isRoot ? "可代清点" : "待本人清点" : "待清点"}</StatusBadge>
         </div>)}
       </div>
     </Surface>}
