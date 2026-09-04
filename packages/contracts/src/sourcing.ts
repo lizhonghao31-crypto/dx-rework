@@ -6,6 +6,12 @@ const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
+const BusinessDateSchema = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式无效")
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "日期必须是真实的日历日期");
 const MAX_TOTAL_CENTS = 999_999_999_999_999_999n;
 
 export const calculateSourcingTotalExact = (
@@ -70,8 +76,8 @@ export const calculateSourcingOrderQuantity = (
 
 export const CreateSourcingCaseSchema = z.object({
   erpOrderNo: ShortTextSchema,
-  estimatedCutPieceSendDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "预计裁片发出日期格式无效"),
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "交货日期格式无效"),
+  estimatedCutPieceSendDate: BusinessDateSchema,
+  deliveryDate: BusinessDateSchema,
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
     .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复"),
   lineItems: z.array(SourcingCaseLineInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
@@ -245,8 +251,8 @@ export const SourcingCaseSummarySchema = z.object({
   orderQuantity: z.number().int().positive(),
   lineItems: z.array(SourcingCaseLineSchema).min(1).max(MAX_SOURCING_LINE_ITEMS),
   daxingUnitPrice: z.string().optional(),
-  estimatedCutPieceSendDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  estimatedCutPieceSendDate: BusinessDateSchema.nullable(),
+  deliveryDate: BusinessDateSchema.nullable(),
   processDescription: z.string().nullable(),
   processes: z.array(z.string()).max(MAX_SOURCING_PROCESSES),
   crafts: z.array(SourcingCraftSnapshotSchema).max(MAX_SOURCING_PROCESSES).optional(),
