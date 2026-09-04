@@ -68,10 +68,17 @@ runWithPostgres("versioned sourcing craft catalog", () => {
 
     const created = await sourcingService.createCase(sourcingActor("order-create"), {
       erpOrderNo: "ERP-CRAFT-001",
-      styleNo: "CRAFT-001",
+      estimatedCutPieceSendDate: "2026-09-25",
       deliveryDate: "2026-09-30",
+      lineItems: [{
+        styleNo: "CRAFT-001",
+        color: "黑色",
+        quantity: 80,
+        externalUnitPrice: "12.0000",
+      }],
+      daxingUnitPrice: "10.0000",
       craftIds: [buttoning!.craftId, cutting!.craftId],
-      orderQuantity: 80,
+
     }, "order-craft-create-key");
 
     expect(created.value).toMatchObject({
@@ -125,10 +132,17 @@ runWithPostgres("versioned sourcing craft catalog", () => {
 
     await expect(sourcingService.createCase(sourcingActor("inactive-order"), {
       erpOrderNo: "ERP-CRAFT-002",
-      styleNo: "CRAFT-002",
+      estimatedCutPieceSendDate: "2026-09-26",
       deliveryDate: "2026-10-01",
+      lineItems: [{
+        styleNo: "CRAFT-002",
+        color: "黑色",
+        quantity: 20,
+        externalUnitPrice: "12.0000",
+      }],
+      daxingUnitPrice: "10.0000",
       craftIds: [buttoning!.craftId],
-      orderQuantity: 20,
+
     }, "inactive-order-key")).rejects.toThrow("所选工艺已停用或不存在");
   });
 
