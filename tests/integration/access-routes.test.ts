@@ -44,6 +44,8 @@ const create = (
     listProcessPage: vi.fn(async (input: { page?: number }) => ({ items: [], page: input.page ?? 1, pageSize: 15 as const, totalCount: 0, totalPages: 1 })),
     listProcessDefaultWorkerCandidates: vi.fn(async () => []),
     listSuppliers: vi.fn(async () => []),
+    getSupplier: vi.fn(async () => ({ supplierId: "00000000-0000-4000-8000-000000000050" })),
+    listSupplierHistory: vi.fn(async () => []),
     assignRole: vi.fn(async () => ({ assignmentId: "00000000-0000-4000-8000-000000000010" })),
     revokeRole: vi.fn(),
     createPerson: vi.fn(),
@@ -68,8 +70,8 @@ const create = (
     reviseProcess: vi.fn(),
     replaceProcessDefaultWorkers: vi.fn(async () => ({ processId: "00000000-0000-4000-8000-000000000020", rosterVersion: 1, personIds: [] })),
     replaceTailInspectionDefaultWorkers: vi.fn(async () => ({ executionKind: "tail_inspection" as const, rosterVersion: 1, personIds: [] })),
-    createSupplier: vi.fn(),
-    reviseSupplier: vi.fn(),
+    createSupplier: vi.fn(async () => ({ supplierId: "00000000-0000-4000-8000-000000000050", version: 1 })),
+    reviseSupplier: vi.fn(async () => ({ supplierId: "00000000-0000-4000-8000-000000000050", version: 2 })),
     createDelegation: vi.fn(),
     revokeDelegation: vi.fn(),
   };
@@ -417,6 +419,111 @@ describe("access routes", () => {
       url: "/master-data/people",
       headers: { cookie: "dx_rework_session=trusted" },
     })).statusCode).toBe(403);
+  });
+
+  it("separates supplier profile, contract-data, and root-only write access", async () => {
+    const supplierId = "00000000-0000-4000-8000-000000000050";
+    const profileReader = create(["supplier_profile:read"], ["order_merchandiser"]);
+    const detail = await profileReader.app.inject({
+      method: "GET",
+      url: `/master-data/suppliers/${supplierId}`,
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(profileReader.service.getSupplier).toHaveBeenCalledWith(supplierId, false);
+
+    const contractReader = create(
+      ["supplier_profile:read", "supplier_contract_data:read"],
+      ["factory_payables"],
+    );
+    expect((await contractReader.app.inject({
+      method: "GET",
+      url: `/master-data/suppliers/${supplierId}/history`,
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(200);
+    expect(contractReader.service.listSupplierHistory).toHaveBeenCalledWith(supplierId, true);
+
+    const deniedReader = create(["tools:user"], ["worker"]);
+    expect((await deniedReader.app.inject({
+      method: "GET",
+      url: `/master-data/suppliers/${supplierId}`,
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(403);
+    expect(deniedReader.service.getSupplier).not.toHaveBeenCalled();
+
+    const nonRootWriter = create(["supplier_profile:write"], ["system_admin"], false);
+    expect((await nonRootWriter.app.inject({
+      method: "POST",
+      url: "/master-data/suppliers",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        supplierCode: "FACTORY_01",
+        supplierType: "factory",
+        supplierName: "加工厂一",
+        changeReason: "供应商建档",
+      },
+    })).statusCode).toBe(403);
+    expect(nonRootWriter.service.createSupplier).not.toHaveBeenCalled();
+
+    const rootWriter = create([], [], true);
+    const created = await rootWriter.app.inject({
+      method: "POST",
+      url: "/master-data/suppliers",
+      headers: { cookie: "dx_rework_session=trusted", "x-request-id": "ssp-01-create" },
+      payload: {
+        supplierCode: "FACTORY_01",
+        supplierType: "factory",
+        supplierName: "加工厂一",
+        contactPerson: "陈经理",
+        supportedCrafts: ["车缝"],
+        dailyCapacity: 1200,
+        changeReason: "供应商建档",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(rootWriter.service.createSupplier).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorizationCapability: "supplier_profile:write",
+        actorRoles: ["root_superuser"],
+        requestId: "ssp-01-create",
+      }),
+      expect.objectContaining({
+        supplierName: "加工厂一",
+        notes: "",
+        supportedCrafts: ["车缝"],
+        dailyCapacity: 1200,
+      }),
+    );
+
+    expect((await rootWriter.app.inject({
+      method: "POST",
+      url: `/master-data/suppliers/${supplierId}/versions`,
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        supplierName: "加工厂一号",
+        active: false,
+        notes: "暂停合作",
+        supportedCrafts: [],
+        expectedVersion: 1,
+        changeReason: "暂停新订单选厂",
+      },
+    })).statusCode).toBe(201);
+    expect(rootWriter.service.reviseSupplier).toHaveBeenCalledWith(
+      expect.objectContaining({ authorizationCapability: "supplier_profile:write" }),
+      supplierId,
+      expect.objectContaining({ expectedVersion: 1, active: false }),
+    );
+
+    expect((await rootWriter.app.inject({
+      method: "POST",
+      url: `/master-data/suppliers/${supplierId}/versions`,
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: {
+        supplierName: "缺少并发版本",
+        active: true,
+        changeReason: "无效请求",
+      },
+    })).statusCode).toBe(400);
   });
 
   it("maintains process default workers through the master-data authority", async () => {

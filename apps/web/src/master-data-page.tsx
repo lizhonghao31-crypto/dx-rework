@@ -7,6 +7,7 @@ import { createClientRequestId } from "./client-request-id.js";
 import { Shell } from "./components.js";
 import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
+import { verifySession } from "./auth.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
@@ -177,6 +178,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   const [processPage, setProcessPage] = useState(1);
   const [processTotalPages, setProcessTotalPages] = useState(1);
   const [processPageLoading, setProcessPageLoading] = useState(false);
+  const [canWriteSuppliers, setCanWriteSuppliers] = useState(false);
 
   const load = async () => {
     setError("");
@@ -184,7 +186,12 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       if (view === "crafts") {
         setCrafts(await json<Craft[]>("master-data/crafts?includeInactive=true"));
       } else if (view === "suppliers") {
-        setSuppliers(await json<Supplier[]>("master-data/suppliers?includeInactive=true"));
+        const [nextSuppliers, session] = await Promise.all([
+          json<Supplier[]>("master-data/suppliers?includeInactive=true"),
+          verifySession(),
+        ]);
+        setSuppliers(nextSuppliers);
+        setCanWriteSuppliers(session !== "denied" && session.user.isRoot === true);
       } else {
         const [nextProcessPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
           json<ProcessPage>(processCatalogPath(appliedProcessSearch)),
@@ -316,6 +323,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
         body: JSON.stringify({
           supplierName: nextName,
           active: change === "toggle" ? !supplier.active : supplier.active,
+          expectedVersion: supplier.version,
           changeReason: reason,
         }),
       }));
@@ -545,6 +553,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
 
   const applyImport = async () => {
     if (!preview || busy) return;
+    if (preview.kind === "supplier" && !canWriteSuppliers) return;
     const reason = importReason.trim();
     if (!reason) {
       const issue = "确认导入前请填写操作原因。";
@@ -589,6 +598,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               body: JSON.stringify({
                 supplierName: row.supplier.supplierName,
                 active: row.supplier.active,
+                expectedVersion: existing.version,
                 changeReason: reason,
               }),
             });
@@ -702,7 +712,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               <div className="master-data-batch-actions">
                 <Button disabled={Boolean(busy)} onClick={downloadSupplierTemplate}>下载导入模板</Button>
                 <Button disabled={Boolean(busy)} onClick={exportSuppliers}>导出当前资料</Button>
-                <label className="master-data-file-button">
+                {canWriteSuppliers ? <label className="master-data-file-button">
                   <span>上传批量导入</span>
                   <input
                     type="file"
@@ -713,10 +723,10 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                       event.currentTarget.value = "";
                     }}
                   />
-                </label>
+                </label> : null}
               </div>
             </div>
-            <div className="master-data-create">
+            {canWriteSuppliers ? <div className="master-data-create">
               <input
                 value={supplierName}
                 placeholder="输入供应商名称"
@@ -735,7 +745,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
               <Button data-ready={supplierName.trim() ? "true" : "false"} disabled={Boolean(busy)} onClick={() => void createSupplier()}>
                 {busy === "create-supplier" ? "新增中…" : "新增"}
               </Button>
-            </div>
+            </div> : null}
             <div className="master-data-list">
               {suppliers.length === 0 ? <p>暂无供应商。</p> : supplierPage.items.map((supplier) => (
                 <article key={supplier.supplierId} className="master-data-row">
@@ -744,10 +754,10 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                     <p>{supplier.supplierCode} · {supplierTypeLabels[supplier.supplierType]} · 版本 {supplier.version}</p>
                   </div>
                   <StatusBadge tone={supplier.active ? "success" : "warning"}>{supplier.active ? "启用" : "停用"}</StatusBadge>
-                  <div className="master-data-actions">
+                  {canWriteSuppliers ? <div className="master-data-actions">
                     <Button disabled={Boolean(busy)} onClick={() => void reviseSupplier(supplier, "rename")}>修改名称</Button>
                     <Button disabled={Boolean(busy)} onClick={() => void reviseSupplier(supplier, "toggle")}>{supplier.active ? "停用" : "恢复"}</Button>
-                  </div>
+                  </div> : null}
                 </article>
               ))}
             </div>
@@ -842,7 +852,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
           </Surface> : null}
         </div>
 
-        {preview && previewSummary ? (
+        {preview && previewSummary && (preview.kind !== "supplier" || canWriteSuppliers) ? (
           <Surface className="master-data-import-preview">
             <div className="master-data-section-heading">
               <div>

@@ -100,6 +100,45 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     };
   };
 
+  const supplierReadAccess = async (request: FastifyRequest): Promise<{
+    includeContractData: boolean;
+  }> => {
+    const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    if (!user.businessRoles?.length && !isRoot) {
+      throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    }
+    const canReadProfile = user.capabilities.includes("supplier_profile:read")
+      || user.capabilities.includes("supplier_catalog:read");
+    if (!canReadProfile && !isRoot) {
+      throw new ApplicationError("FORBIDDEN", "无权查看供应商资料", 403);
+    }
+    return {
+      includeContractData: isRoot || user.capabilities.includes("supplier_contract_data:read"),
+    };
+  };
+
+  const supplierWriteActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await authenticated(request);
+    const isRoot = await dependencies.root.isRootUser(user.id);
+    if (!isRoot) {
+      throw new ApplicationError("FORBIDDEN", "供应商资料一期仅允许超级用户维护", 403);
+    }
+    const actorRoles = [...(user.businessRoles ?? [])];
+    if (!actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    const authorizationCapabilities = [...user.capabilities];
+    if (!authorizationCapabilities.includes("supplier_profile:write")) {
+      authorizationCapabilities.push("supplier_profile:write");
+    }
+    return {
+      actorId: user.id,
+      actorRoles,
+      authorizationCapability: "supplier_profile:write",
+      authorizationCapabilities,
+      requestId: request.id,
+    };
+  };
+
   const defaultWorkerRosterActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
     const isRoot = await dependencies.root.isRootUser(user.id);
@@ -298,9 +337,25 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   });
 
   app.get("/master-data/suppliers", async (request) => {
-    await actor(request, "supplier_catalog:read");
+    await supplierReadAccess(request);
     const query = parse(CatalogListQuerySchema, request.query);
     return dependencies.service.listSuppliers(query.includeInactive === "true");
+  });
+
+  app.get<{ Params: { supplierId: string } }>("/master-data/suppliers/:supplierId", async (request) => {
+    const access = await supplierReadAccess(request);
+    return dependencies.service.getSupplier(
+      parse(SupplierParamsSchema, request.params).supplierId,
+      access.includeContractData,
+    );
+  });
+
+  app.get<{ Params: { supplierId: string } }>("/master-data/suppliers/:supplierId/history", async (request) => {
+    const access = await supplierReadAccess(request);
+    return dependencies.service.listSupplierHistory(
+      parse(SupplierParamsSchema, request.params).supplierId,
+      access.includeContractData,
+    );
   });
 
   app.post("/access/role-assignments", async (request, reply) => {
@@ -416,7 +471,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   app.post("/master-data/suppliers", async (request, reply) =>
     reply.code(201).send(
       await dependencies.service.createSupplier(
-        await actor(request, "master_data:manage"),
+        await supplierWriteActor(request),
         parse(CreateSupplierSchema, request.body),
       ),
     ));
@@ -424,7 +479,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   app.post<{ Params: { supplierId: string } }>("/master-data/suppliers/:supplierId/versions", async (request, reply) =>
     reply.code(201).send(
       await dependencies.service.reviseSupplier(
-        await actor(request, "master_data:manage"),
+        await supplierWriteActor(request),
         parse(SupplierParamsSchema, request.params).supplierId,
         parse(ReviseSupplierSchema, request.body),
       ),

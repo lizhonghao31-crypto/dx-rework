@@ -680,6 +680,9 @@ export class AccessMasterDataService {
     version: number;
     supplierName: string;
     active: boolean;
+    supportedCrafts: string[];
+    dailyCapacity: number | null;
+    contractDataMissing: string[];
   }>> {
     const result = await this.database.query<{
       supplier_id: string;
@@ -688,8 +691,17 @@ export class AccessMasterDataService {
       version: number;
       supplier_name: string;
       active: boolean;
+      supported_crafts: string[];
+      daily_capacity: number | null;
+      contract_entity_name: string | null;
+      party_b_representative: string | null;
+      payee_name: string | null;
+      bank_account: string | null;
+      bank_name: string | null;
     }>(
-      `SELECT supplier_id,supplier_code,supplier_type,version,supplier_name,active
+      `SELECT supplier_id,supplier_code,supplier_type,version,supplier_name,active,
+              supported_crafts,daily_capacity,contract_entity_name,party_b_representative,
+              payee_name,bank_account,bank_name
        FROM current_supplier_catalog
        WHERE ($1::boolean OR active=true)
        ORDER BY supplier_name,supplier_code`,
@@ -702,7 +714,86 @@ export class AccessMasterDataService {
       version: row.version,
       supplierName: row.supplier_name,
       active: row.active,
+      supportedCrafts: row.supported_crafts,
+      dailyCapacity: row.daily_capacity,
+      contractDataMissing: this.contractDataMissing(row),
     }));
+  }
+
+  async getSupplier(supplierId: string, includeContractData = false): Promise<Record<string, unknown>> {
+    const result = await this.database.query<{
+      supplier_id: string;
+      supplier_code: string;
+      supplier_type: string;
+      version: number;
+      supplier_name: string;
+      active: boolean;
+      notes: string;
+      contact_person: string | null;
+      contact_phone: string | null;
+      address: string | null;
+      contract_entity_name: string | null;
+      party_b_representative: string | null;
+      payee_name: string | null;
+      bank_account: string | null;
+      bank_name: string | null;
+      supported_crafts: string[];
+      daily_capacity: number | null;
+      change_reason: string;
+      changed_by: string;
+      created_at: Date;
+    }>(
+      `SELECT supplier_id,supplier_code,supplier_type,version,supplier_name,active,
+              notes,contact_person,contact_phone,address,contract_entity_name,
+              party_b_representative,payee_name,bank_account,bank_name,
+              supported_crafts,daily_capacity,change_reason,changed_by,created_at
+       FROM current_supplier_catalog
+       WHERE supplier_id=$1`,
+      [supplierId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
+    return this.serializeSupplierProfile(row, includeContractData);
+  }
+
+  async listSupplierHistory(supplierId: string, includeContractData = false): Promise<Array<Record<string, unknown>>> {
+    const result = await this.database.query<{
+      supplier_id: string;
+      supplier_code: string;
+      supplier_type: string;
+      version: number;
+      supplier_name: string;
+      active: boolean;
+      notes: string;
+      contact_person: string | null;
+      contact_phone: string | null;
+      address: string | null;
+      contract_entity_name: string | null;
+      party_b_representative: string | null;
+      payee_name: string | null;
+      bank_account: string | null;
+      bank_name: string | null;
+      supported_crafts: string[];
+      daily_capacity: number | null;
+      change_reason: string;
+      changed_by: string;
+      created_at: Date;
+    }>(
+      `SELECT item.supplier_id,item.supplier_code,item.supplier_type,
+              version.version,version.supplier_name,version.active,version.notes,
+              version.contact_person,version.contact_phone,version.address,
+              version.contract_entity_name,version.party_b_representative,
+              version.payee_name,version.bank_account,version.bank_name,
+              version.supported_crafts,version.daily_capacity,version.change_reason,
+              version.changed_by,version.created_at
+       FROM supplier_catalog_items item
+       JOIN supplier_catalog_versions version ON version.supplier_id=item.supplier_id
+       WHERE item.supplier_id=$1
+       ORDER BY version.version DESC`,
+      [supplierId],
+    );
+    if (result.rows.length === 0) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
+    return result.rows.map((row) => this.serializeSupplierProfile(row, includeContractData));
   }
 
   async assignRole(actor: TrustedActorContext, input: AssignRole): Promise<{ assignmentId: string }> {
@@ -1179,14 +1270,54 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const item = await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [supplierId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
-      const current = await client.query<{ version: number }>(
-        "SELECT version FROM current_supplier_catalog WHERE supplier_id=$1",
+      const current = await client.query<{
+        version: number;
+        supplier_name: string;
+        active: boolean;
+        notes: string;
+        contact_person: string | null;
+        contact_phone: string | null;
+        address: string | null;
+        contract_entity_name: string | null;
+        party_b_representative: string | null;
+        payee_name: string | null;
+        bank_account: string | null;
+        bank_name: string | null;
+        supported_crafts: string[];
+        daily_capacity: number | null;
+      }>(
+        `SELECT version,supplier_name,active,notes,contact_person,contact_phone,address,
+                contract_entity_name,party_b_representative,payee_name,bank_account,
+                bank_name,supported_crafts,daily_capacity
+         FROM current_supplier_catalog WHERE supplier_id=$1`,
         [supplierId],
       );
       const previous = current.rows[0];
       if (!previous) throw new ApplicationError("CONFLICT", "供应商缺少可修订的当前版本", 409);
+      if (input.expectedVersion !== previous.version) {
+        throw new ApplicationError("CONFLICT", "供应商资料已更新，请刷新后重试", 409);
+      }
       const version = previous.version + 1;
-      await this.insertSupplierVersion(client, actor, supplierId, version, input);
+      await this.insertSupplierVersion(client, actor, supplierId, version, {
+        supplierName: input.supplierName ?? previous.supplier_name,
+        active: input.active ?? previous.active,
+        notes: input.notes ?? previous.notes,
+        contactPerson: input.contactPerson === undefined ? previous.contact_person : input.contactPerson,
+        contactPhone: input.contactPhone === undefined ? previous.contact_phone : input.contactPhone,
+        address: input.address === undefined ? previous.address : input.address,
+        contractEntityName: input.contractEntityName === undefined
+          ? previous.contract_entity_name
+          : input.contractEntityName,
+        partyBRepresentative: input.partyBRepresentative === undefined
+          ? previous.party_b_representative
+          : input.partyBRepresentative,
+        payeeName: input.payeeName === undefined ? previous.payee_name : input.payeeName,
+        bankAccount: input.bankAccount === undefined ? previous.bank_account : input.bankAccount,
+        bankName: input.bankName === undefined ? previous.bank_name : input.bankName,
+        supportedCrafts: input.supportedCrafts ?? previous.supported_crafts,
+        dailyCapacity: input.dailyCapacity === undefined ? previous.daily_capacity : input.dailyCapacity,
+        changeReason: input.changeReason,
+      });
       return { supplierId, version };
     });
   }
@@ -1437,18 +1568,113 @@ export class AccessMasterDataService {
     actor: TrustedActorContext,
     supplierId: string,
     version: number,
-    input: ReviseSupplier,
+    input: Omit<ReviseSupplier, "expectedVersion">,
   ): Promise<void> {
+    const authorizationCapability = actor.authorizationCapability === "supplier_profile:write"
+      || actor.authorizationCapabilities?.includes("supplier_profile:write") === true
+      ? "supplier_profile:write"
+      : "master_data:manage";
     await client.query(
       `SELECT
          set_config('dx_rework.supplier_version_event_id',$1,true),
-         set_config('dx_rework.supplier_version_request_id',$2,true)`,
-      [randomUUID(), actor.requestId],
+         set_config('dx_rework.supplier_version_request_id',$2,true),
+         set_config('dx_rework.supplier_version_authorization_capability',$3,true)`,
+      [randomUUID(), actor.requestId, authorizationCapability],
     );
     await client.query(
-      "INSERT INTO supplier_catalog_versions(supplier_id,version,supplier_name,active,change_reason,changed_by) VALUES($1,$2,$3,$4,$5,$6)",
-      [supplierId, version, input.supplierName, input.active, input.changeReason, actor.actorId],
+      `INSERT INTO supplier_catalog_versions(
+         supplier_id,version,supplier_name,active,notes,contact_person,contact_phone,address,
+         contract_entity_name,party_b_representative,payee_name,bank_account,bank_name,
+         supported_crafts,daily_capacity,change_reason,changed_by
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      [
+        supplierId,
+        version,
+        input.supplierName,
+        input.active,
+        input.notes ?? "",
+        input.contactPerson ?? null,
+        input.contactPhone ?? null,
+        input.address ?? null,
+        input.contractEntityName ?? null,
+        input.partyBRepresentative ?? null,
+        input.payeeName ?? null,
+        input.bankAccount ?? null,
+        input.bankName ?? null,
+        input.supportedCrafts ?? [],
+        input.dailyCapacity ?? null,
+        input.changeReason,
+        actor.actorId,
+      ],
     );
+  }
+
+  private contractDataMissing(row: {
+    contract_entity_name: string | null;
+    party_b_representative: string | null;
+    payee_name: string | null;
+    bank_account: string | null;
+    bank_name: string | null;
+  }): string[] {
+    return [
+      ["contractEntityName", row.contract_entity_name],
+      ["partyBRepresentative", row.party_b_representative],
+      ["payeeName", row.payee_name],
+      ["bankAccount", row.bank_account],
+      ["bankName", row.bank_name],
+    ].filter((entry) => !entry[1]).map((entry) => entry[0] as string);
+  }
+
+  private serializeSupplierProfile(row: {
+    supplier_id: string;
+    supplier_code: string;
+    supplier_type: string;
+    version: number;
+    supplier_name: string;
+    active: boolean;
+    notes: string;
+    contact_person: string | null;
+    contact_phone: string | null;
+    address: string | null;
+    contract_entity_name: string | null;
+    party_b_representative: string | null;
+    payee_name: string | null;
+    bank_account: string | null;
+    bank_name: string | null;
+    supported_crafts: string[];
+    daily_capacity: number | null;
+    change_reason: string;
+    changed_by: string;
+    created_at: Date;
+  }, includeContractData: boolean): Record<string, unknown> {
+    const profile: Record<string, unknown> = {
+      supplierId: row.supplier_id,
+      supplierCode: row.supplier_code,
+      supplierType: row.supplier_type,
+      version: row.version,
+      supplierName: row.supplier_name,
+      active: row.active,
+      notes: row.notes,
+      contactPerson: row.contact_person,
+      contactPhone: row.contact_phone,
+      address: row.address,
+      supportedCrafts: row.supported_crafts,
+      dailyCapacity: row.daily_capacity,
+      contractDataMissing: this.contractDataMissing(row),
+      changeReason: row.change_reason,
+      changedBy: row.changed_by,
+      changedAt: row.created_at.toISOString(),
+    };
+    if (includeContractData) {
+      Object.assign(profile, {
+        contractEntityName: row.contract_entity_name,
+        partyBRepresentative: row.party_b_representative,
+        payeeName: row.payee_name,
+        bankAccount: row.bank_account,
+        bankName: row.bank_name,
+      });
+    }
+    return profile;
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
