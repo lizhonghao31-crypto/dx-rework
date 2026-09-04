@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type {
   InspectionCheckResultSchema,
   InspectionReportDraft,
@@ -418,7 +419,7 @@ export function InspectionReportStepThree({ report, disabled, onChange }: { repo
             </article>
           ))}
         </div>
-        <div className="inspection-issue-total"><span>合计</span><strong>严重 {totalMajor} 件</strong><strong>轻微 {totalMinor} 件</strong></div>
+        <div className="inspection-issue-total"><span>合计</span><strong>严重 {formatBusinessDecimal(totalMajor)} 件</strong><strong>轻微 {formatBusinessDecimal(totalMinor)} 件</strong></div>
         {!disabled ? <Button onClick={() => onChange({ ...report, issues: [...report.issues, { issueId: createClientRequestId(), category: null, description: null, majorCount: 0, minorCount: 0 }] })}>新增问题</Button> : null}
       </Surface>
       <Surface className="inspection-section">

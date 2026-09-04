@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -274,7 +275,7 @@ export function ReceivingPage() {
         }),
       });
       pendingKey.current = null;
-      setMessage(`多次收货成功 · ${receipt.styleNo} · 实收 ${receipt.actualQuantity} 件 · 次品 ${receipt.defectiveQuantity} 件`);
+      setMessage(`多次收货成功 · ${receipt.styleNo} · 实收 ${formatBusinessDecimal(receipt.actualQuantity)} 件 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件`);
       setRepeatQuery("");
       setRepeatOrders([]);
       setSelectedRepeatOrder(null);
@@ -333,7 +334,7 @@ export function ReceivingPage() {
     }
 
     setBusy(true);
-    setMessage(images.length ? `正在上传 ${images.length} 张送货单图片…` : "正在提交收货…");
+    setMessage(images.length ? `正在上传 ${formatBusinessDecimal(images.length)} 张送货单图片…` : "正在提交收货…");
     try {
       const attachmentIds = await mapWithConcurrency(images, 2, async (image) => {
         let attachmentId = uploadedIds.current.get(image.previewUrl);
@@ -363,7 +364,7 @@ export function ReceivingPage() {
       const receipt = await response.json() as Receipt;
       pendingKey.current = null;
       const sign = receipt.differenceQuantity > 0 ? "+" : "";
-      setMessage(`${backfill ? "补录" : "收货"}成功 · 次品 ${receipt.defectiveQuantity} 件 · 差异 ${sign}${receipt.differenceQuantity} 件`);
+      setMessage(`${backfill ? "补录" : "收货"}成功 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件 · 差异 ${sign}${formatBusinessDecimal(receipt.differenceQuantity)} 件`);
       setStyleNo("");
       setDocumentQuantity("");
       setActualQuantity("");
@@ -465,11 +466,11 @@ export function ReceivingPage() {
                     setRepeatMenuOpen(false);
                     pendingKey.current = null;
                   }}
-                ><strong>{order.styleNo}</strong><small>原送货单 {order.documentQuantity} 件</small></button>)}
+                ><strong>{order.styleNo}</strong><small>原送货单 {formatBusinessDecimal(order.documentQuantity)} 件</small></button>)}
               </div> : null}
             </div>
           </label>
-          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · 原送货单 {selectedRepeatOrder.documentQuantity} 件</p> : (
+          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · 原送货单 {formatBusinessDecimal(selectedRepeatOrder.documentQuantity)} 件</p> : (
             <p className="receiving-repeat-hint">{repeatSearching ? "正在搜索…" : repeatQuery.trim().length < 4 ? "请输入款号末尾至少4位" : "没有可追加收货的匹配订单"}</p>
           )}
           {repeatSource === "other_factory" ? <label className="receiving-field">

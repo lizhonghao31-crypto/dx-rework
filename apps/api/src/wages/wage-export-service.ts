@@ -2,10 +2,10 @@ import { businessCellValue, translateTechnicalDetails } from "@dx-rework/contrac
 import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
-import { buildWorkbook } from "../reporting/xlsx-workbook.js";
+import { buildWorkbook, workbookNumberCell, type WorkbookCell } from "../reporting/xlsx-workbook.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 
-type Cell = string | number | null;
+type Cell = WorkbookCell;
 type PeriodRow = {
   period_month: string;
   status: string;
@@ -150,11 +150,13 @@ export class WageExportService {
       ...lines.rows.map((line) => [
         line.period_month.slice(0, 7),line.supplier_name,line.person_id,line.person_name,
         businessCellValue("personType", line.person_type),
-        line.rework_no,line.style_no,line.process_name,line.quantity,
-        businessCellValue("unit", line.unit),line.unit_price,line.temporary_wage_multiplier,
+        line.rework_no,line.style_no,line.process_name,workbookNumberCell(line.quantity),
+        businessCellValue("unit", line.unit),workbookNumberCell(line.unit_price),
+        workbookNumberCell(line.temporary_wage_multiplier, "precise"),
         businessCellValue("assignmentMode", line.assignment_mode),line.member_count,
         JSON.stringify(translateTechnicalDetails(line.member_snapshot)),
-        line.group_amount,line.exact_share,line.wage_amount,
+        workbookNumberCell(line.group_amount),workbookNumberCell(line.exact_share, "precise"),
+        workbookNumberCell(line.wage_amount),
         businessCellValue("periodStatus", period.status),period.locked_by,
         businessCellValue("lockedAt", period.locked_at?.toISOString() ?? ""),
       ]),
@@ -172,8 +174,8 @@ export class WageExportService {
       ["工资月份","工人稳定ID","工人姓名快照","人员类型","工资金额"],
       ...[...summaries.entries()]
         .sort((left, right) => left[1].name.localeCompare(right[1].name))
-        .map(([id, value]) => [period.period_month.slice(0, 7),id,value.name,businessCellValue("personType", value.type),money(value.total)]),
-      ["合计","","","",money(total)],
+        .map(([id, value]) => [period.period_month.slice(0, 7),id,value.name,businessCellValue("personType", value.type),workbookNumberCell(money(value.total))]),
+      ["合计","","","",workbookNumberCell(money(total))],
     ];
     const month = period.period_month.slice(0, 7);
     return {

@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts/employee-access";
@@ -266,8 +267,8 @@ export function EmployeeAccessPage() {
               onChange={(event) => setQuery(event.target.value)}
             />
             <span>
-              显示 {filteredEmployees.length} 人 · 当前生效且已分配角色 {effectiveRoleCount} 人
-              {` · 全部 ${directory?.employees.length ?? 0} 人`}
+              显示 {formatBusinessDecimal(filteredEmployees.length)} 人 · 当前生效且已分配角色 {formatBusinessDecimal(effectiveRoleCount)} 人
+              {` · 全部 ${formatBusinessDecimal(directory?.employees.length ?? 0)} 人`}
             </span>
           </div>
 
@@ -366,7 +367,7 @@ export function EmployeeAccessPage() {
                     </div>
 
                     <details className="employee-access-history">
-                      <summary>角色历史（{employee.roleHistory.length}）</summary>
+                      <summary>角色历史（{formatBusinessDecimal(employee.roleHistory.length)}）</summary>
                       {employee.roleHistory.length === 0 ? <p>暂无角色历史。</p> : employee.roleHistory.map((history) => (
                         <div className="employee-access-history-row" key={history.assignmentId}>
                           <div>

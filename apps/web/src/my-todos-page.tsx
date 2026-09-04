@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   TodoListResponseSchema,
   type TodoModule,
@@ -263,7 +264,7 @@ export function MyTodosPage() {
               disabled={busy}
               onClick={() => openModule(module.id)}
               key={module.id}
-            ><span>{module.label}</span><strong>{moduleCounts[module.id]}件</strong></button>)}
+            ><span>{module.label}</span><strong>{formatBusinessDecimal(moduleCounts[module.id])}件</strong></button>)}
           </div>
           <label className="my-todos-search" htmlFor="my-todos-search">
             <input

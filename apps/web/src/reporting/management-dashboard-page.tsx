@@ -1,5 +1,5 @@
 import type { ManagementDashboardResponse, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -48,7 +48,7 @@ const NodeQueue = ({ items }: { items: ReadonlyArray<{ node: string; label: stri
       const visible = nodePresentation(item.node, item.label);
       return <a className="workflow-dashboard-node" href={reportingPageUrl(nodeTarget(item.node))} key={item.node}>
         <span>{visible.node} · {visible.label}</span>
-        <StatusBadge tone={item.count > 0 ? "info" : "success"}>{item.count} 单</StatusBadge>
+        <StatusBadge tone={item.count > 0 ? "info" : "success"}>{formatBusinessDecimal(item.count)} 单</StatusBadge>
         <small>进入节点工作台 →</small>
       </a>;
     })}
@@ -102,10 +102,10 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
       {management && (
         <>
           <div className="kpis">
-            <KpiInstrument label="未完结返工" value={management.kpis.openOrders} detail="进行中" tone="info" />
-            <KpiInstrument label="本月已完成" value={management.kpis.completedOrders} detail={`${management.range.from} 至 ${management.range.to}`} tone="success" />
-            <KpiInstrument label="逾期待办" value={management.kpis.overdueTodos} detail="待处理" tone="warning" />
-            <KpiInstrument label="当前异常" value={management.kpis.exceptionCount} detail="待处理" tone="warning" />
+            <KpiInstrument label="未完结返工" value={formatBusinessDecimal(management.kpis.openOrders)} detail="进行中" tone="info" />
+            <KpiInstrument label="本月已完成" value={formatBusinessDecimal(management.kpis.completedOrders)} detail={`${management.range.from} 至 ${management.range.to}`} tone="success" />
+            <KpiInstrument label="逾期待办" value={formatBusinessDecimal(management.kpis.overdueTodos)} detail="待处理" tone="warning" />
+            <KpiInstrument label="当前异常" value={formatBusinessDecimal(management.kpis.exceptionCount)} detail="待处理" tone="warning" />
           </div>
           <div className="reporting-dashboard-grid">
             <Surface>
@@ -140,12 +140,12 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
       {site && (
         <>
           <div className="kpis">
-            <KpiInstrument label="待配置工序" value={site.kpis.pendingConfiguration} detail="待处理" tone="info" />
-            <KpiInstrument label="待启动恢复" value={site.kpis.pendingAssignment} detail="待处理" tone="info" />
-            <KpiInstrument label="执行报数中" value={site.kpis.inProgress} detail="进行中" tone="success" />
-            <KpiInstrument label="待最终数量确认 / IE 复核" value={site.kpis.pendingOrderReview} detail="待处理" tone="warning" />
-            <KpiInstrument label="待工资初核" value={site.kpis.pendingWageReview} detail="待处理" tone="info" />
-            <KpiInstrument label="现场异常" value={site.kpis.siteExceptions} detail="待处理" tone="warning" />
+            <KpiInstrument label="待配置工序" value={formatBusinessDecimal(site.kpis.pendingConfiguration)} detail="待处理" tone="info" />
+            <KpiInstrument label="待启动恢复" value={formatBusinessDecimal(site.kpis.pendingAssignment)} detail="待处理" tone="info" />
+            <KpiInstrument label="执行报数中" value={formatBusinessDecimal(site.kpis.inProgress)} detail="进行中" tone="success" />
+            <KpiInstrument label="待最终数量确认 / IE 复核" value={formatBusinessDecimal(site.kpis.pendingOrderReview)} detail="待处理" tone="warning" />
+            <KpiInstrument label="待工资初核" value={formatBusinessDecimal(site.kpis.pendingWageReview)} detail="待处理" tone="info" />
+            <KpiInstrument label="现场异常" value={formatBusinessDecimal(site.kpis.siteExceptions)} detail="待处理" tone="warning" />
           </div>
           <div className="reporting-dashboard-grid">
             <Surface><div className="section-title"><div><h2>今日行动队列</h2><p>点击节点进入当前订单工作台。</p></div></div><NodeQueue items={site.nodeCounts} /></Surface>

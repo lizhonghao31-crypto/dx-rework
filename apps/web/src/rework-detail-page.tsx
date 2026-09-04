@@ -1,6 +1,6 @@
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -540,7 +540,7 @@ export function ReworkDetailPage({
       const latest = await response.json() as ReworkBusinessDetail;
       setState({ kind: "ready", value: latest });
       setTailDefectQuantity("");
-      setTailDefectMessage(`已增加 ${quantity} 件尾部次品`);
+      setTailDefectMessage(`已增加 ${formatBusinessDecimal(quantity)} 件尾部次品`);
     } catch (error: unknown) {
       setTailDefectMessage(error instanceof Error ? error.message : "尾部次品数量保存失败");
     } finally {
@@ -554,11 +554,11 @@ export function ReworkDetailPage({
     { label: "客供款号", value: detail.customerSupplyCode },
     { label: "工厂款号", value: detail.factoryStyleNo },
     { label: "订单号", value: detail.orderNo },
-    { label: "订单数量", value: detail.orderQuantity === null ? null : `${detail.orderQuantity} 件` },
+    { label: "订单数量", value: detail.orderQuantity === null ? null : `${formatBusinessDecimal(detail.orderQuantity)} 件` },
     { label: "返工原因", value: detail.reworkReason },
     { label: "问题部位", value: detail.problemPart },
     { label: "问题描述", value: detail.problemDescription },
-    { label: "返工数量", value: detail.reworkQuantity === null ? null : `${detail.reworkQuantity} 件` },
+    { label: "返工数量", value: detail.reworkQuantity === null ? null : `${formatBusinessDecimal(detail.reworkQuantity)} 件` },
     { label: "洗水厂", value: detail.supplyContext.washingSupplierName },
     { label: "印绣花厂", value: detail.supplyContext.embroiderySupplierName },
     { label: "面辅料供应商", value: detail.supplyContext.fabricSupplierName },
@@ -617,7 +617,7 @@ export function ReworkDetailPage({
       <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
       {selected.state === "completed" && (
         <details className="rework-detail-node-history">
-          <summary>处理历史{nodeHistory.length ? ` · ${nodeHistory.length} 条` : ""}</summary>
+          <summary>处理历史{nodeHistory.length ? ` · ${formatBusinessDecimal(nodeHistory.length)} 条` : ""}</summary>
           {nodeHistory.length ? nodeHistory.map((event, index) => (
             <div key={`${event.action}-${event.handledAt}-${index}`}>
               <b>{historyActionLabel(event.action)}</b>
@@ -713,14 +713,14 @@ export function ReworkDetailPage({
           <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${detail.sourceReceivingActualQuantity} 件`}</dd></div>
-          <div className="rework-detail-core-fact rework-detail-core-fact--defective"><dt>次品数量</dt><dd><button type="button" onClick={() => { setTailDefectMessage(""); setDefectDialogOpen(true); }}>{detail.defectiveQuantity.total} 件 · 查看</button></dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${formatBusinessDecimal(detail.sourceReceivingActualQuantity)} 件`}</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--defective"><dt>次品数量</dt><dd><button type="button" onClick={() => { setTailDefectMessage(""); setDefectDialogOpen(true); }}>{formatBusinessDecimal(detail.defectiveQuantity.total)} 件 · 查看</button></dd></div>
         </dl>
 
         {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
           <div className="section-title rework-detail-panel-title">
             <div><h2>订单补充信息</h2><p>仅展示本单已填写的业务字段。</p></div>
-            <StatusBadge tone="info">{dynamicFacts.length} 项</StatusBadge>
+            <StatusBadge tone="info">{formatBusinessDecimal(dynamicFacts.length)} 项</StatusBadge>
           </div>
           <dl className="rework-detail-dynamic-facts">
             {dynamicFacts.map((fact) => <div key={fact.label}>
@@ -735,7 +735,7 @@ export function ReworkDetailPage({
           <section className="rework-detail-images" aria-label="订单图片">
             <div className="section-title rework-detail-panel-title rework-detail-desktop-panel-heading">
               <div><h2>订单图片</h2></div>
-              {imageAttachments.length > 0 ? <StatusBadge tone="info">{imageAttachments.length} 张图片</StatusBadge> : null}
+              {imageAttachments.length > 0 ? <StatusBadge tone="info">{formatBusinessDecimal(imageAttachments.length)} 张图片</StatusBadge> : null}
             </div>
             <button
               className="rework-detail-mobile-panel-toggle"
@@ -744,7 +744,7 @@ export function ReworkDetailPage({
               aria-expanded={mobileImagesExpanded}
               onClick={() => setMobileImagesExpanded((value) => !value)}
             >
-              <span><strong>订单图片</strong>{imageAttachments.length > 0 ? <small>{imageAttachments.length} 张</small> : null}</span>
+              <span><strong>订单图片</strong>{imageAttachments.length > 0 ? <small>{formatBusinessDecimal(imageAttachments.length)} 张</small> : null}</span>
               <b aria-hidden="true">{mobileImagesExpanded ? "−" : "+"}</b>
             </button>
             <div id="order-images-content" className={`rework-detail-mobile-collapsible${mobileImagesExpanded ? " is-expanded" : ""}`}>
@@ -843,14 +843,14 @@ export function ReworkDetailPage({
           <button type="button" onClick={() => setDefectDialogOpen(false)}>关闭</button>
         </div>
         <div className="rework-defect-dialog__totals">
-          <div><span>收货阶段</span><strong>{detail.defectiveQuantity.receivingLinked ? `${detail.defectiveQuantity.receiving} 件` : "—"}</strong><small>{detail.defectiveQuantity.receivingLinked ? "来自仓库收货记录" : "未关联仓库收货记录"}</small></div>
-          <div><span>尾部阶段</span><strong>{detail.defectiveQuantity.tail} 件</strong><small>{detail.defectiveQuantity.tailEntries.length} 条追加记录</small></div>
-          <div><span>次品总数</span><strong>{detail.defectiveQuantity.total} 件</strong><small>两阶段合计</small></div>
+          <div><span>收货阶段</span><strong>{detail.defectiveQuantity.receivingLinked ? `${formatBusinessDecimal(detail.defectiveQuantity.receiving)} 件` : "—"}</strong><small>{detail.defectiveQuantity.receivingLinked ? "来自仓库收货记录" : "未关联仓库收货记录"}</small></div>
+          <div><span>尾部阶段</span><strong>{formatBusinessDecimal(detail.defectiveQuantity.tail)} 件</strong><small>{detail.defectiveQuantity.tailEntries.length} 条追加记录</small></div>
+          <div><span>次品总数</span><strong>{formatBusinessDecimal(detail.defectiveQuantity.total)} 件</strong><small>两阶段合计</small></div>
         </div>
         {detail.defectiveQuantity.tailEntries.length > 0 ? <div className="rework-defect-dialog__history">
           <h3>尾部追加记录</h3>
           {detail.defectiveQuantity.tailEntries.map((entry) => <div key={entry.entryId}>
-            <strong>+{entry.quantity} 件</strong><span>{entry.recordedBy}</span><time dateTime={entry.recordedAt}>{formatTime(entry.recordedAt)}</time>
+            <strong>+{formatBusinessDecimal(entry.quantity)} 件</strong><span>{entry.recordedBy}</span><time dateTime={entry.recordedAt}>{formatTime(entry.recordedAt)}</time>
           </div>)}
         </div> : <p className="rework-defect-dialog__empty">尾部阶段暂未增加次品。</p>}
         {detail.defectiveQuantity.canAddTail ? <div className="rework-defect-dialog__add">

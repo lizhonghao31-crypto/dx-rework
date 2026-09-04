@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
@@ -184,7 +185,7 @@ export function WorkflowQueuePage({
       <Header
         title={title}
         subtitle="订单按真实当前状态进入对应节点；处理完成后自动离开本节点并流转到下一节点"
-        badge={ready ? `${page?.totalCount ?? items.length} 单当前结果` : "实时节点队列"}
+        badge={ready ? `${formatBusinessDecimal(page?.totalCount ?? items.length)} 单当前结果` : "实时节点队列"}
         {...(canUseUnifiedQuery ? { action: "返工统一查询", actionHref: "/ui/tasks" } : {})}
       />
 
@@ -201,7 +202,7 @@ export function WorkflowQueuePage({
                   {...(selected === status ? { variant: "primary" as const } : {})}
                   onClick={() => selectStatus(status)}
                 >
-                  {queueMeta[status].node} · {queueMeta[status].label} · {statusPage?.totalCount ?? 0} 单
+                  {queueMeta[status].node} · {queueMeta[status].label} · {formatBusinessDecimal(statusPage?.totalCount ?? 0)} 单
                 </Button>
               );
             })}
@@ -246,9 +247,9 @@ export function WorkflowQueuePage({
                     </div>
                     <dl>
                       <div><dt>当前节点停留</dt><dd>{age(order.agingSeconds)}</dd></div>
-                      <div><dt>返工数量</dt><dd>{order.plannedQuantity ?? "—"}</dd></div>
+                      <div><dt>返工数量</dt><dd>{order.plannedQuantity === null ? "—" : formatBusinessDecimal(order.plannedQuantity)}</dd></div>
                       <div><dt>最近更新</dt><dd>{new Date(order.updatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</dd></div>
-                      <div><dt>当前异常</dt><dd>{order.exceptionCount ? `${order.exceptionCount} 项` : "无"}</dd></div>
+                      <div><dt>当前异常</dt><dd>{order.exceptionCount ? `${formatBusinessDecimal(order.exceptionCount)} 项` : "无"}</dd></div>
                     </dl>
                     <div className="workflow-order-card__action"><strong>进入当前节点处理 →</strong></div>
                   </Surface>

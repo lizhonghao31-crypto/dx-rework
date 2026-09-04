@@ -5,7 +5,7 @@ import {
   type ResponsibilityType,
   type TailInspectionCostBearer,
 } from "@dx-rework/contracts";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -384,7 +384,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       : process));
     setBatchDialogOpen(false);
     setSelectedProcessIds([]);
-    setMessage(`已批量填写 ${selected.length} 道工序，检查无误后统一提交责任判定。`);
+    setMessage(`已批量填写 ${formatBusinessDecimal(selected.length)} 道工序，检查无误后统一提交责任判定。`);
   };
   const payloadProcesses = () => processes.map((process) => ({
     configurationItemId: process.configurationItemId,
@@ -537,7 +537,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
 
     {editable && workerProcessIds.length > 0 && <div className="responsibility-batch-toolbar">
       <label><input type="checkbox" checked={allWorkerProcessesSelected} onChange={(event) => setSelectedProcessIds(event.target.checked ? workerProcessIds : [])} />全选工序</label>
-      <span>已选 {selectedProcessIds.length} 道</span>
+      <span>已选 {formatBusinessDecimal(selectedProcessIds.length)} 道</span>
       <Button variant="primary" disabled={selectedProcessIds.length === 0 || Boolean(busyAction)} onClick={openBatchDialog}>批量判责</Button>
     </div>}
 
@@ -596,7 +596,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       if (event.target === event.currentTarget) setBatchDialogOpen(false);
     }}>
       <div ref={batchDialogRef} className="responsibility-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-responsibility-title">
-        <div><h3 id="batch-responsibility-title">批量判责</h3><p>将完整责任配置应用到已选的 {selectedProcessIds.length} 道工序。应用后会覆盖这些工序当前的责任草稿，仍需点击“提交责任判定”才会保存。</p></div>
+        <div><h3 id="batch-responsibility-title">批量判责</h3><p>将完整责任配置应用到已选的 {formatBusinessDecimal(selectedProcessIds.length)} 道工序。应用后会覆盖这些工序当前的责任草稿，仍需点击“提交责任判定”才会保存。</p></div>
         <div className="responsibility-party-list">
           {batchAllocations.map((allocation, allocationIndex) => {
             const meta = typeMeta(allocation.responsibilityType);

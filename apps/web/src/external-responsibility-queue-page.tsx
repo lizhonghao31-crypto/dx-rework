@@ -2,7 +2,7 @@ import {
   ExternalResponsibilityQueueResponseSchema,
   type ExternalResponsibilityQueueResponse,
 } from "@dx-rework/contracts/external-responsibility";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -44,7 +44,7 @@ export function ExternalResponsibilityQueuePage() {
       .filter(Boolean).join(" ").toLocaleLowerCase("zh-CN").includes(needle));
   }, [allItems, q]);
   const page = usePaginatedItems(items, q);
-  return <Shell active="外部扣款"><Header title="供应商扣款处理" subtitle="记录每次实际扣款；扣足后系统自动完成" badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"} />
+  return <Shell active="外部扣款"><Header title="供应商扣款处理" subtitle="记录每次实际扣款；扣足后系统自动完成" badge={state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "加载中"} />
     <Surface className="external-queue-summary"><div><h2>供应商扣款工作台</h2><p>查看应扣、累计已扣和剩余金额，录入本次扣款即可。</p></div><StatusBadge tone="info">扣款台账</StatusBadge></Surface>
     <Surface className="reporting-filters"><InsetField label="搜索当前节点事项" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 供应商 / 状态" /></Surface>
     {state.kind === "loading" && <Surface className="external-state">正在加载外部责任队列…</Surface>}

@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   ResponsibilityQueueResponseSchema,
   type ResponsibilityQueueResponse,
@@ -71,7 +72,7 @@ export function ResponsibilityQueuePage() {
       <Header
         title="待责任判定"
         subtitle="订单完成整单确认后进入这里；责任提交完成后自动离开当前队列"
-        badge={state.kind === "ready" ? `${items.length} 条当前结果` : "加载中"}
+        badge={state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "加载中"}
       />
       <Surface className="responsibility-queue-summary">
         <div>

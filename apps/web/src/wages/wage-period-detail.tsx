@@ -124,7 +124,7 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
 
       <Surface className="wage-summary">
         <dl>
-          <dt>工人 / 明细</dt><dd>{period.personCount} / {period.sourceItemCount}</dd>
+          <dt>工人 / 明细</dt><dd>{formatBusinessDecimal(period.personCount)} / {formatBusinessDecimal(period.sourceItemCount)}</dd>
           <dt>工资总额</dt><dd><strong>{formatBusinessCurrency(period.totalAmount)}</strong></dd>
         </dl>
         <div className="wage-actions">

@@ -1,3 +1,4 @@
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { InspectionReportDraft } from "@dx-rework/contracts";
 
 import "./rework-detail-compact.css";
@@ -25,7 +26,7 @@ export function InspectionReportReadonly({ report }: { report: InspectionReportD
     report.inspectionStage ? labels.stage[report.inspectionStage] : null,
     report.inspectionLocation || null,
     report.color ? `颜色 ${report.color}` : null,
-    report.sampleQuantity ? `抽查 ${report.sampleQuantity} 件` : null,
+    report.sampleQuantity ? `抽查 ${formatBusinessDecimal(report.sampleQuantity)} 件` : null,
   ].filter((item): item is string => Boolean(item)).join(" · ") || "节点 01 验货记录";
 
   return (
@@ -46,7 +47,7 @@ export function InspectionReportReadonly({ report }: { report: InspectionReportD
           <div><dt>验货阶段</dt><dd>{report.inspectionStage ? labels.stage[report.inspectionStage] : "—"}</dd></div>
           <div><dt>验货地点</dt><dd>{valueOrDash(report.inspectionLocation)}</dd></div>
           <div><dt>颜色</dt><dd>{valueOrDash(report.color)}</dd></div>
-          <div><dt>抽查数量</dt><dd>{report.sampleQuantity ? `${report.sampleQuantity} 件` : "—"}</dd></div>
+          <div><dt>抽查数量</dt><dd>{report.sampleQuantity ? `${formatBusinessDecimal(report.sampleQuantity)} 件` : "—"}</dd></div>
           <div><dt>验货日期</dt><dd>{valueOrDash(report.inspectionDate)}</dd></div>
           <div><dt>尺寸精度</dt><dd>厘米 · 0.1</dd></div>
         </dl>
@@ -91,13 +92,13 @@ export function InspectionReportReadonly({ report }: { report: InspectionReportD
         </div>
 
         <div className="inspection-readonly__block">
-          <div className="inspection-readonly__issue-heading"><h3>问题总结</h3><span>严重 {totalMajor} · 轻微 {totalMinor}</span></div>
+          <div className="inspection-readonly__issue-heading"><h3>问题总结</h3><span>严重 {formatBusinessDecimal(totalMajor)} · 轻微 {formatBusinessDecimal(totalMinor)}</span></div>
           <div className="inspection-readonly__issues">
             {report.issues.map((issue) => (
               <article key={issue.issueId}>
                 <strong>{valueOrDash(issue.category)}</strong>
                 <p>{valueOrDash(issue.description)}</p>
-                <small>严重 {issue.majorCount} 件 · 轻微 {issue.minorCount} 件</small>
+                <small>严重 {formatBusinessDecimal(issue.majorCount)} 件 · 轻微 {formatBusinessDecimal(issue.minorCount)} 件</small>
               </article>
             ))}
           </div>

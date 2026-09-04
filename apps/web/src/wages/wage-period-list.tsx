@@ -1,6 +1,6 @@
 import { WagePeriodSchema, type WagePeriod } from "@dx-rework/contracts/wages";
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
@@ -174,7 +174,7 @@ export function WagePeriodList() {
       {value ? (
         <>
           <section className="wage-summary" aria-label="工资查询汇总">
-            <Surface><small>当前明细</small><strong>{value.rowCount} 条</strong></Surface>
+            <Surface><small>当前明细</small><strong>{formatBusinessDecimal(value.rowCount)} 条</strong></Surface>
             {Object.entries(value.totals).map(([key, total]) => (
               <Surface key={key}><small>{businessFieldLabel(key)}</small><strong>{businessValue(key, total)}</strong></Surface>
             ))}
@@ -190,7 +190,7 @@ export function WagePeriodList() {
                 {personPage.items.map((person) => (
                   <article key={person.name}>
                     <b>{person.name}</b>
-                    <span>{person.orderCount.size} 张返工单</span>
+                    <span>{formatBusinessDecimal(person.orderCount.size)} 张返工单</span>
                     <strong>{formatBusinessCurrency(person.amount)}</strong>
                   </article>
                 ))}
@@ -228,7 +228,7 @@ export function WagePeriodList() {
                 <StatusBadge tone={period.status === "locked" ? "success" : "info"}>{statusLabel[period.status]}</StatusBadge>
               </div>
               <dl>
-                <dt>工人 / 明细</dt><dd>{period.personCount} / {period.sourceItemCount}</dd>
+                <dt>工人 / 明细</dt><dd>{formatBusinessDecimal(period.personCount)} / {formatBusinessDecimal(period.sourceItemCount)}</dd>
                 <dt>工资总额</dt><dd><strong>{formatBusinessCurrency(period.totalAmount)}</strong></dd>
               </dl>
             </Surface>

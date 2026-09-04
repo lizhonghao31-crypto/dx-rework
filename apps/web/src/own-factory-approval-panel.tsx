@@ -2,7 +2,7 @@ import {
   OwnFactoryApprovalResponseSchema,
   type OwnFactoryApprovalResponse,
 } from "@dx-rework/contracts";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -55,7 +55,7 @@ const reviewSnapshotSummary = (snapshot: unknown): string => {
     (total, report) => total + (Array.isArray(report.members) ? report.members.length : 0),
     0,
   );
-  return `${processes} 道工序 · ${reports.length} 条上数 · ${members} 位成员`;
+  return `${formatBusinessDecimal(processes)} 道工序 · ${formatBusinessDecimal(reports.length)} 条上数 · ${formatBusinessDecimal(members)} 位成员`;
 };
 
 export function OwnFactoryApprovalPanel({
