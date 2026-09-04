@@ -147,10 +147,11 @@ describe("sourcing PR03 contracts", () => {
     expect(migration).toContain("CREATE TABLE sourcing_case_lines");
     expect(migration).toContain("sourcing_case_lines_no_update");
     expect(migration).toContain("sourcing_case_lines_no_delete");
-    expect(service).toContain("canViewSourcingDaxingPrice(actor)");
+    expect(service).toContain("canViewSourcingDaxingPrice(actor, row.created_by)");
     expect(contracts).toContain("daxingUnitPrice: z.string().optional()");
     expect(contracts).not.toMatch(/RecordSourcingContractSchema[\s\S]{0,400}daxingUnitPrice/);
     expect(page).toContain("新增行沿用首行当前对外价格");
+    expect(page).toContain("预计裁片发出日期");
     expect(page).toContain("current[0]?.externalUnitPrice");
     expect(page).toContain("删除第");
   });
