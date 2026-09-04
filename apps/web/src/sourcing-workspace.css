@@ -1131,18 +1131,6 @@
   color: #64748b;
 }
 
-.sourcing-line-editor__actions button,
-.sourcing-line-row > button {
-  min-height: 38px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #fff;
-  color: #334155;
-  padding: 0 14px;
-  font: inherit;
-  cursor: pointer;
-}
-
 .sourcing-line-editor__list {
   display: grid;
   gap: 10px;
