@@ -852,11 +852,26 @@ runWithPostgres("role permissions and versioned master data", () => {
       }),
     });
     expect(JSON.stringify(supplierCapacityAudit.rows[0])).not.toContain("6222000000000000");
+    await service.reviseSupplier(supplierWriteActor, supplier.supplierId, {
+      bankAccount: "12345",
+      expectedVersion: 3,
+      changeReason: "验证短收款账号脱敏",
+    });
+    const shortBankAccountAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      `SELECT after_state FROM operation_events
+       WHERE entity_id=$1 AND action='master_data.supplier.revise'
+         AND after_state->>'version'='4'`,
+      [supplier.supplierId],
+    );
+    expect(shortBankAccountAudit.rows[0]?.after_state).toEqual(expect.objectContaining({
+      bankAccountMasked: "*****",
+    }));
+    expect(JSON.stringify(shortBankAccountAudit.rows[0])).not.toContain("12345");
     expect(await service.listProcesses()).toEqual([
       expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2, defaultWorkerPersonIds: [] }),
     ]);
     expect(await service.listSuppliers()).toEqual([
-      expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 3 }),
+      expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 4 }),
     ]);
   });
 
