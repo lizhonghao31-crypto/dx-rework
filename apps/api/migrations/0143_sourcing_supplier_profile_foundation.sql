@@ -64,6 +64,208 @@ ALTER TABLE supplier_catalog_versions
   ADD COLUMN daily_capacity integer
     CHECK(daily_capacity IS NULL OR daily_capacity > 0);
 
+-- Preserve the existing order-scoped temporary-supplier path while recording
+-- normal profile maintenance against its dedicated capability.
+CREATE OR REPLACE FUNCTION guard_supplier_catalog_version_creation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  audit_event_id text := nullif(current_setting('dx_rework.supplier_version_event_id', true), '');
+  audit_request_id text := nullif(current_setting('dx_rework.supplier_version_request_id', true), '');
+  audit_authorization_capability text := COALESCE(
+    nullif(current_setting('dx_rework.supplier_version_authorization_capability', true), ''),
+    'master_data:manage'
+  );
+  external_supplier_order_id text := nullif(current_setting('dx_rework.external_supplier_order_id', true), '');
+  audit_actor_roles text[];
+  previous_record supplier_catalog_versions%ROWTYPE;
+  stable_supplier_code text;
+  stable_supplier_type text;
+  previous_state jsonb;
+  audit_action text;
+BEGIN
+  IF audit_event_id IS NULL OR audit_request_id IS NULL
+     OR audit_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+  THEN
+    RAISE EXCEPTION 'supplier catalog version creation requires trusted audit context'
+      USING ERRCODE = '55000';
+  END IF;
+  IF audit_authorization_capability NOT IN (
+    'master_data:manage',
+    'supplier_profile:write',
+    'external_responsibility:sign'
+  ) THEN
+    RAISE EXCEPTION 'supplier catalog creation capability is invalid'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF audit_authorization_capability='external_responsibility:sign' THEN
+    SELECT array_agg(DISTINCT assignment.role_code ORDER BY assignment.role_code)
+    INTO audit_actor_roles
+    FROM user_role_assignments assignment
+    JOIN business_roles role
+      ON role.role_code=assignment.role_code AND role.enabled=true
+    JOIN app_users user_record
+      ON user_record.id=assignment.user_id AND user_record.enabled=true
+    WHERE assignment.user_id=NEW.changed_by
+      AND assignment.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM identity_mappings identity_mapping
+        JOIN access_security_policy policy
+          ON policy.policy_key='primary'
+          AND policy.dingtalk_corp_id=identity_mapping.corp_id
+        WHERE identity_mapping.user_id=assignment.user_id
+          AND identity_mapping.provider='dingtalk'
+          AND identity_mapping.active=true
+          AND identity_mapping.employed=true
+      );
+    IF audit_actor_roles IS NULL THEN
+      RAISE EXCEPTION 'supplier catalog creation requires an active business actor'
+        USING ERRCODE = '42501';
+    END IF;
+  ELSE
+    audit_actor_roles := access_authorized_actor_roles(
+      NEW.changed_by,
+      audit_authorization_capability
+    );
+  END IF;
+
+  SELECT item.supplier_code,item.supplier_type
+  INTO stable_supplier_code,stable_supplier_type
+  FROM supplier_catalog_items item
+  WHERE item.supplier_id=NEW.supplier_id
+  FOR UPDATE;
+  IF stable_supplier_code IS NULL THEN
+    RAISE EXCEPTION 'supplier catalog item does not exist'
+      USING ERRCODE = '23503';
+  END IF;
+
+  SELECT version.*
+  INTO previous_record
+  FROM supplier_catalog_versions version
+  WHERE version.supplier_id=NEW.supplier_id
+  ORDER BY version.version DESC
+  LIMIT 1;
+
+  IF audit_authorization_capability='external_responsibility:sign' THEN
+    IF previous_record.version IS NOT NULL
+       OR external_supplier_order_id IS NULL
+       OR NOT EXISTS (
+         SELECT 1
+         FROM rework_external_responsibility_batches batch
+         JOIN rework_external_responsibility_items item ON item.batch_id=batch.batch_id
+         WHERE batch.rework_order_id=external_supplier_order_id::uuid
+           AND batch.status='active'
+           AND external_responsibility_expected_supplier_type(item.responsibility_type)=stable_supplier_type
+           AND external_responsibility_can_sign(
+             NEW.changed_by,
+             batch.rework_order_id,
+             item.responsibility_type
+           )
+       )
+    THEN
+      RAISE EXCEPTION 'temporary supplier creation is not authorized for this external responsibility'
+        USING ERRCODE = '42501';
+    END IF;
+    IF NEW.version <> 1 THEN
+      RAISE EXCEPTION 'temporary supplier first version must be 1'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := NULL;
+    audit_action := 'rework.external_responsibility.temporary_supplier.create';
+  ELSIF previous_record.version IS NULL THEN
+    IF NEW.version <> 1 THEN
+      RAISE EXCEPTION 'first supplier catalog version must be 1'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := NULL;
+    audit_action := 'master_data.supplier.create';
+  ELSE
+    IF NEW.version <> previous_record.version + 1 THEN
+      RAISE EXCEPTION 'supplier catalog versions must be sequential'
+        USING ERRCODE = '23514';
+    END IF;
+    previous_state := jsonb_build_object(
+      'supplierCode',stable_supplier_code,
+      'supplierType',stable_supplier_type,
+      'version',previous_record.version,
+      'supplierName',previous_record.supplier_name,
+      'active',previous_record.active,
+      'notes',previous_record.notes,
+      'contactPerson',previous_record.contact_person,
+      'contactPhone',previous_record.contact_phone,
+      'address',previous_record.address,
+      'supportedCrafts',previous_record.supported_crafts,
+      'dailyCapacity',previous_record.daily_capacity
+    );
+    audit_action := 'master_data.supplier.revise';
+  END IF;
+
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  ) VALUES (
+    audit_event_id::uuid,audit_request_id,NEW.changed_by,audit_actor_roles,
+    audit_authorization_capability,audit_action,'supplier_catalog',NEW.supplier_id::text,
+    previous_state,
+    jsonb_build_object(
+      'supplierCode',stable_supplier_code,
+      'supplierType',stable_supplier_type,
+      'version',NEW.version,
+      'supplierName',NEW.supplier_name,
+      'active',NEW.active,
+      'notes',NEW.notes,
+      'contactPerson',NEW.contact_person,
+      'contactPhone',NEW.contact_phone,
+      'address',NEW.address,
+      'supportedCrafts',NEW.supported_crafts,
+      'dailyCapacity',NEW.daily_capacity
+    ),
+    NEW.change_reason
+  );
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION require_supplier_catalog_initial_version()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM supplier_catalog_versions version
+    JOIN operation_events event
+      ON event.entity_type='supplier_catalog'
+      AND event.entity_id=NEW.supplier_id::text
+      AND event.actor_id=version.changed_by
+      AND event.reason=version.change_reason
+      AND (
+        (
+          event.action='master_data.supplier.create'
+          AND event.authorization_capability IN ('master_data:manage','supplier_profile:write')
+        )
+        OR (
+          event.action='rework.external_responsibility.temporary_supplier.create'
+          AND event.authorization_capability='external_responsibility:sign'
+        )
+      )
+    WHERE version.supplier_id=NEW.supplier_id AND version.version=1
+      AND event.after_state->>'supplierCode'=NEW.supplier_code
+      AND event.after_state->>'supplierType'=NEW.supplier_type
+      AND (event.after_state->>'version')::integer=1
+      AND event.after_state->>'supplierName'=version.supplier_name
+      AND (event.after_state->>'active')::boolean=version.active
+  ) THEN
+    RAISE EXCEPTION 'supplier catalog item requires an authorized audited initial version in the same transaction'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION guard_active_supplier_profile_name()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
