@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件约束所有在 `dx-rework` 仓库内施工的 Codex/开发人员。除非 PR 明确获得业务负责人批准，不得绕过。
+本文件约束所有在 `dx-rework` 仓库内施工的网页版 ChatGPT Work、Codex Review、其他 Agent 和开发人员。除非 PR 明确获得业务负责人批准，不得绕过。
 
 ## 1. Golden Source
 
@@ -29,8 +29,11 @@ forbidden files: <本次不得修改的路径>
 
 要求：
 
+- 网页版 ChatGPT Work 是本仓库长期、唯一默认的施工入口。其运行目录可能是 `/workspace/scratch/...` 且没有 `.git`；这是正常云端工作形态，不构成初始化失败。此时以 GitHub `main`、目标 PR/branch 元数据以及 GitHub 返回的 blob/commit SHA 作为预检证据。
+- 网页版 Work 不得扫描、比较或复用运行环境中偶然可见的历史克隆、旧分支和旧工作树；scratch 中的临时文件不是代码 Golden Source。
+- 同一任务的远程基线预检只执行一次。只有施工期间 GitHub 出现与本任务相关的新 push、merge 或 PR head 变化时，才按新事实重新核验；附件挂载、scratch 路径或本地目录问题不得触发整套仓库重查。
 - 普通本地或 GitHub 开发环境必须从最新远程 `main` 创建新分支。
-- Codex 托管工作区可能不配置 Git remote、本地 `main`，并使用平台注入的 `work` 分支；此时以平台提供的任务/PR 基线 SHA 和 `git rev-parse HEAD` 作为预检证据。仅缺少 `origin` 或本地 `main` 不构成初始化失败，也不得因此停止施工。
+- 仅当业务负责人在具体任务中明确要求改用 Codex 托管工作区时，才适用其平台注入的任务/PR 基线规则；不得自行切换到 Codex Cloud。
 - 无论采用哪种环境，都不允许根据旧聊天中的 SHA、旧 PR 分支或人工猜测继续施工。
 - 创建或更新 PR 后，必须由 GitHub Actions 对当前 PR head SHA、必需文件与目标分支再次校验；GitHub 上的 PR base/head 元数据是最终合并校验依据。
 - 若平台提供的 base SHA 与当前任务/PR 元数据明确不一致，或 PR head SHA 与本次实际提交 SHA 不一致，立即停止，不得继续测试或要求合并。
@@ -152,9 +155,9 @@ PR 描述必须包含：
 - `scripts/ci/verify-actions-policy.mjs` 是机器红线。未经业务负责人在具体 PR 中明确授权，不得删除、绕过或弱化该脚本及本节规则。
 
 
-## 12. ChatGPT + Codex 固定施工流程（P0）
+## 12. 网页版 ChatGPT Work 固定施工流程（P0）
 
-详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；当前路线与规则入口见 `docs/roadmap/platform-2.0-rules-index-v1.0.md`。任何新聊天窗口、新 Codex 任务或直接施工开始前必须先读取本文件、施工流程和平台 2.0 索引，再按索引读取本次任务唯一对应的业务规则。旧 `docs/roadmap/platform-sourcing-roadmap-v1.0.md` 只作为截至 2026-08-31 的历史施工记录。
+详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；当前路线与规则入口见 `docs/roadmap/platform-2.0-rules-index-v1.0.md`。任何新 Work 窗口或直接施工开始前必须先读取本文件、施工流程和平台 2.0 索引，再按索引读取本次任务唯一对应的业务规则。旧 `docs/roadmap/platform-sourcing-roadmap-v1.0.md` 只作为截至 2026-08-31 的历史施工记录。
 
 涉及样衣模块的任何讨论、设计、编码、测试、PR 或迁移操作，必须在范围预检前完整读取 `docs/requirements/sample-system-migration-v1.0.md`。未读取不得开工；发现聊天内容、旧系统实现或旧文档与该规则冲突时，以该规则为准并报告冲突。身份、权限、数据源、金额口径、状态闭环或上线门槛的变更，必须先更新该规则并获得业务负责人明确批准。
 
@@ -162,9 +165,10 @@ PR 描述必须包含：
 
 以下规则为默认强制流程：
 
-- ChatGPT 是施工控制器，负责读取 Golden Source、冻结范围、选择执行方式、审查 diff、管理 GitHub 交付和向用户汇报。
-- 默认优先由 Codex 执行编码和测试，但 Codex 不是唯一施工渠道。额度不足、服务不可用、环境/remote/push/PR 能力缺失、HEAD 无法对齐或明显卡住时，ChatGPT 应简短告知后自动接管直接施工，不得因此停止项目或反复要求用户确认。
-- Codex 云任务缺少 remote、不能 push 或不能创建 PR，不是业务阻塞；由 ChatGPT 使用可用的 GitHub 能力完成分支和 PR 交付。
+- 网页版 ChatGPT Work 同时承担施工控制器与执行器：读取 Golden Source、冻结范围、直接实施、审查 diff、管理 GitHub 交付并向用户汇报。
+- 不得默认调用、切换或等待 Codex Cloud。只有业务负责人在具体任务中明确要求时，才可改变施工入口。
+- “Codex Review”仅指最终 intended Head 的独立代码审查，不是施工执行渠道；其触发权仍只属于业务负责人。
+- Work 发现当前目录是无 `.git` 的 scratch 时，必须按网页版 Work 规则立即使用 GitHub 远程事实继续，不得寻找旧工作树、反复初始化或把正常形态误报为阻塞。
 - 完成修改和可用门禁后直接创建普通 PR（`draft: false`）；未经业务负责人明确要求，不得创建或转换为 Draft。
 - PR 创建前必须判定门禁等级。数据库迁移/约束、权限身份、财务金额数量合同、核心状态机/审批/审计/幂等、跨模块关键链路、部署基础设施、共享平台壳或 P0/P1 变更，必须在 PR 创建后立即添加 `full-gate` label；不得等业务负责人提醒。
 - PR 创建成功后必须立即报告 PR 链接、范围、测试结果、是否需要 Full Gate、是否需要 Codex Review并结束本轮；不得为了等待 CI、润色描述、整理计划或其他非阻断性收尾继续占用施工窗口。
