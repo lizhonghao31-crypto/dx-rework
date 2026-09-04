@@ -41,7 +41,7 @@ jobs:
           cache: npm
 
       - name: Pin npm 10
-        run: npm install --global npm@10.9.9
+        run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
 
       - name: Verify exact Head
         shell: bash
@@ -104,7 +104,7 @@ jobs:
             "$migration_sensitive" "$receiving_sensitive" "$business_chain_sensitive" "$deployment_sensitive" "$db_required"
 
       - name: Install locked dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Lint
         run: npm run lint
