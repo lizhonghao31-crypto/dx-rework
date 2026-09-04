@@ -177,7 +177,8 @@ Full Gate 成功证据必须属于当前 PR 的当前 Head。任何新提交都�
 
 1. 根目录 `AGENTS.md`；
 2. 本文件；
-3. `docs/roadmap/platform-sourcing-roadmap-v1.0.md`；
-4. GitHub 当前 `main`、开放 PR 和对应 Head 状态。
+3. `docs/roadmap/platform-2.0-rules-index-v1.0.md`；
+4. 索引指定的本次任务唯一业务规则；
+5. GitHub 当前 `main`、开放 PR 和对应 Head 状态。
 
 读取完成后，只报告当前状态、下一步和发现的真实冲突，不重复询问已经版本化确认的问题。
