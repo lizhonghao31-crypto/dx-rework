@@ -700,6 +700,14 @@ export function OrderBoardPage() {
                 onClick={() => toggleHistory(row.styleNo)}
               >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button> : null}
             </div>
+            <div className="order-board-row__confirmation-item order-board-row__receiving-confirmation">
+              <span>收货人</span>
+              <strong>{row.lastReceiverName} · {dateTime(row.lastReceivedAt)}</strong>
+            </div>
+            <div className="order-board-row__confirmation-item order-board-row__packing-confirmation">
+              <span>装箱确认人</span>
+              <strong>{row.packingRecordedBy && row.packingRecordedAt ? `${row.packingRecordedBy} · ${dateTime(row.packingRecordedAt)}` : "-"}</strong>
+            </div>
             {actionControls(row, false)}
             {actionControls(row, true)}
           </div>
@@ -737,10 +745,6 @@ export function OrderBoardPage() {
               <span>装箱差异</span>
               <div>{differenceControl(row, "packing")}</div>
             </div>
-          </div>
-          <div className="order-board-row__confirmation">
-            <div className="order-board-row__receiving-confirmation"><span>收货人</span><strong>{row.lastReceiverName} · {dateTime(row.lastReceivedAt)}</strong></div>
-            <div className="order-board-row__packing-confirmation"><span>装箱确认人</span><strong>{row.packingRecordedBy && row.packingRecordedAt ? `${row.packingRecordedBy} · ${dateTime(row.packingRecordedAt)}` : "-"}</strong></div>
           </div>
         </Surface>
         {historyExpanded ? <section className="order-board-history" aria-label={`${row.styleNo}多次收货记录`}>
