@@ -739,8 +739,8 @@ export function OrderBoardPage() {
             </div>
           </div>
           <div className="order-board-row__confirmation">
-            <div className="order-board-row__receiving-confirmation"><span>收货人 &amp; 收货时间</span><strong>{row.lastReceiverName} · {dateTime(row.lastReceivedAt)}</strong></div>
-            <div className="order-board-row__packing-confirmation"><span>装箱确认人 &amp; 装箱确认时间</span><strong>{row.packingRecordedBy && row.packingRecordedAt ? `${row.packingRecordedBy} · ${dateTime(row.packingRecordedAt)}` : "-"}</strong></div>
+            <div className="order-board-row__receiving-confirmation"><span>收货人</span><strong>{row.lastReceiverName} · {dateTime(row.lastReceivedAt)}</strong></div>
+            <div className="order-board-row__packing-confirmation"><span>装箱确认人</span><strong>{row.packingRecordedBy && row.packingRecordedAt ? `${row.packingRecordedBy} · ${dateTime(row.packingRecordedAt)}` : "-"}</strong></div>
           </div>
         </Surface>
         {historyExpanded ? <section className="order-board-history" aria-label={`${row.styleNo}多次收货记录`}>
