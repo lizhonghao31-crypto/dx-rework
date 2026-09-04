@@ -9,6 +9,7 @@ import {
   SUPPLIER_TYPE_LABELS,
   canWriteSupplierProfiles,
   filterSupplierDirectory,
+  nextSupplierSelection,
   supplierContractMissingLabels,
   type SupplierSummary,
 } from "./supplier-center-model.js";
@@ -128,9 +129,11 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const loadDirectory = async () => {
     const items = await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true");
     setSuppliers(items);
-    setSelectedId((current) => current && items.some((item) => item.supplierId === current)
-      ? current
-      : items[0]?.supplierId ?? "");
+    setSelectedId((current) => nextSupplierSelection(
+      current,
+      items,
+      window.matchMedia("(max-width: 800px)").matches,
+    ));
   };
 
   useEffect(() => {
