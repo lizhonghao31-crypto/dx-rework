@@ -803,6 +803,18 @@ runWithPostgres("role permissions and versioned master data", () => {
       contractEntityName: "广州加工厂一有限公司",
       bankAccount: "6222000000000000",
     }));
+    await service.reviseSupplier(supplierWriteActor, supplier.supplierId, {
+      dailyCapacity: 1600,
+      expectedVersion: 2,
+      changeReason: "只修订常规产能",
+    });
+    expect(await service.getSupplier(supplier.supplierId, true)).toEqual(expect.objectContaining({
+      version: 3,
+      supplierName: "加工厂一号",
+      dailyCapacity: 1600,
+      contractEntityName: "广州加工厂一有限公司",
+      bankAccount: "6222000000000000",
+    }));
     expect((await database.query<{ authorization_capability: string }>(
       `SELECT authorization_capability
        FROM operation_events
@@ -811,6 +823,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       [supplier.supplierId],
     )).rows[0]?.authorization_capability).toBe("supplier_profile:write");
     expect(await service.listSupplierHistory(supplier.supplierId, true)).toEqual([
+      expect.objectContaining({ supplierId: supplier.supplierId, version: 3, dailyCapacity: 1600 }),
       expect.objectContaining({ supplierId: supplier.supplierId, version: 2, dailyCapacity: 1500 }),
       expect.objectContaining({ supplierId: supplier.supplierId, version: 1, dailyCapacity: 1200 }),
     ]);
@@ -822,11 +835,28 @@ runWithPostgres("role permissions and versioned master data", () => {
       before_state: expect.objectContaining({ version: 1, supplierName: "加工厂一", active: true }),
       after_state: expect.objectContaining({ version: 2, supplierName: "加工厂一号", active: true }),
     });
+    const supplierCapacityAudit = await database.query<{ before_state: Record<string, unknown>; after_state: Record<string, unknown> }>(
+      `SELECT before_state,after_state FROM operation_events
+       WHERE entity_id=$1 AND action='master_data.supplier.revise'
+         AND after_state->>'version'='3'`,
+      [supplier.supplierId],
+    );
+    expect(supplierCapacityAudit.rows[0]).toEqual({
+      before_state: expect.objectContaining({
+        contractEntityName: "广州加工厂一有限公司",
+        bankAccountMasked: "62**********0000",
+      }),
+      after_state: expect.objectContaining({
+        contractEntityName: "广州加工厂一有限公司",
+        bankAccountMasked: "62**********0000",
+      }),
+    });
+    expect(JSON.stringify(supplierCapacityAudit.rows[0])).not.toContain("6222000000000000");
     expect(await service.listProcesses()).toEqual([
       expect.objectContaining({ processId: process.processId, processName: "成品返查", version: 2, defaultWorkerPersonIds: [] }),
     ]);
     expect(await service.listSuppliers()).toEqual([
-      expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 2 }),
+      expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 3 }),
     ]);
   });
 
