@@ -175,13 +175,17 @@ export const ReplaceProcessDefaultWorkersSchema = z.object({
 
 const NullableSupplierTextSchema = (maxLength: number) =>
   z.string().trim().min(1).max(maxLength).nullable().optional();
+const SupplierNotesSchema = z.string().trim().max(1_000);
+const SupplierCraftsSchema = z.array(z.string().trim().min(1).max(100))
+  .max(50)
+  .refine((value) => new Set(value).size === value.length, "可承接工艺不能重复");
 
 export const CreateSupplierSchema = z.object({
   supplierCode: CatalogCodeSchema,
   supplierType: z.enum(["factory", "embroidery_washing", "fabric", "other"]),
   supplierName: z.string().trim().min(1).max(200),
   active: z.boolean().default(true),
-  notes: z.string().trim().max(1_000).default(""),
+  notes: SupplierNotesSchema.default(""),
   contactPerson: NullableSupplierTextSchema(100),
   contactPhone: NullableSupplierTextSchema(50),
   address: NullableSupplierTextSchema(500),
@@ -190,17 +194,27 @@ export const CreateSupplierSchema = z.object({
   payeeName: NullableSupplierTextSchema(100),
   bankAccount: NullableSupplierTextSchema(100),
   bankName: NullableSupplierTextSchema(200),
-  supportedCrafts: z.array(z.string().trim().min(1).max(100))
-    .max(50)
-    .refine((value) => new Set(value).size === value.length, "可承接工艺不能重复")
-    .default([]),
+  supportedCrafts: SupplierCraftsSchema.default([]),
   dailyCapacity: z.number().int().positive().max(1_000_000_000).nullable().optional(),
   changeReason: ReasonSchema,
 }).strict();
-export const ReviseSupplierSchema = CreateSupplierSchema
-  .omit({ supplierCode: true, supplierType: true })
-  .extend({ expectedVersion: z.number().int().positive() })
-  .strict();
+export const ReviseSupplierSchema = z.object({
+  supplierName: z.string().trim().min(1).max(200).optional(),
+  active: z.boolean().optional(),
+  notes: SupplierNotesSchema.optional(),
+  contactPerson: NullableSupplierTextSchema(100),
+  contactPhone: NullableSupplierTextSchema(50),
+  address: NullableSupplierTextSchema(500),
+  contractEntityName: NullableSupplierTextSchema(200),
+  partyBRepresentative: NullableSupplierTextSchema(100),
+  payeeName: NullableSupplierTextSchema(100),
+  bankAccount: NullableSupplierTextSchema(100),
+  bankName: NullableSupplierTextSchema(200),
+  supportedCrafts: SupplierCraftsSchema.optional(),
+  dailyCapacity: z.number().int().positive().max(1_000_000_000).nullable().optional(),
+  expectedVersion: z.number().int().positive(),
+  changeReason: ReasonSchema,
+}).strict();
 export const SupplierParamsSchema = z.object({ supplierId: IdSchema }).strict();
 
 export const CreateDelegationSchema = z.object({
