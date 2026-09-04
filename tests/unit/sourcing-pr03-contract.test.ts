@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import {
+  calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   CreateSourcingCaseSchema,
   CreateSourcingIeQuoteSchema,
@@ -13,65 +14,62 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateSourcingTotal,
+  canViewSourcingDaxingPrice,
   normalizeSourcingUnitPrice,
 } from "../../apps/api/src/sourcing/sourcing-service.js";
 
 describe("sourcing PR03 contracts", () => {
-  it("accepts one formal ERP order and rejects invalid quantities", () => {
-    expect(CreateSourcingCaseSchema.parse({
-      erpOrderNo: "ERP-2026-001",
-      styleNo: "DX-100",
-      deliveryDate: "2026-09-15",
-      craftIds: ["00000000-0000-4000-8000-000000000401"],
-      orderQuantity: 120,
-    })).toEqual({
-      erpOrderNo: "ERP-2026-001",
-      styleNo: "DX-100",
-      deliveryDate: "2026-09-15",
-      craftIds: ["00000000-0000-4000-8000-000000000401"],
-      orderQuantity: 120,
+  it("accepts 1, 2, and 5 style/color rows and derives total quantity", () => {
+    const line = (index: number) => ({
+      styleNo: `DX-${index}`,
+      ...(index === 2 ? { alternateStyleNo: "DX-ALT-2" } : {}),
+      color: index % 2 ? "黑色" : "白色",
+      quantity: index * 10,
+      externalUnitPrice: index % 2 ? "12.3456" : "13.5000",
     });
-    expect(() => CreateSourcingCaseSchema.parse({
-      erpOrderNo: "ERP-2026-001",
-      styleNo: "DX-100",
+    const parse = (count: number) => CreateSourcingCaseSchema.parse({
+      erpOrderNo: `PLATFORM-2026-00${count}`,
       deliveryDate: "2026-09-15",
       craftIds: ["00000000-0000-4000-8000-000000000401"],
-      orderQuantity: 1.5,
+      lineItems: Array.from({ length: count }, (_value, index) => line(index + 1)),
+      daxingUnitPrice: "10.2500",
+    });
+
+    expect(parse(1).lineItems).toHaveLength(1);
+    expect(parse(2).lineItems.map((item) => item.externalUnitPrice))
+      .toEqual(["12.3456", "13.5000"]);
+    expect(parse(5).lineItems).toHaveLength(5);
+    expect(calculateSourcingOrderQuantity(parse(5).lineItems)).toBe(150);
+  });
+
+  it("rejects illegal row quantities, excessive precision, and caller totals", () => {
+    const valid = {
+      erpOrderNo: "PLATFORM-2026-001",
+      deliveryDate: "2026-09-15",
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
+      lineItems: [{
+        styleNo: "DX-100",
+        color: "黑色",
+        quantity: 120,
+        externalUnitPrice: "12.3456",
+      }],
+      daxingUnitPrice: "10.0000",
+    };
+    expect(() => CreateSourcingCaseSchema.parse({
+      ...valid,
+      lineItems: [{ ...valid.lineItems[0], quantity: 1.5 }],
     })).toThrow();
-    expect(CreateSourcingCaseSchema.parse({
-      erpOrderNo: "ERP-2026-002",
-      styleNo: "DX-200",
-      deliveryDate: "2026-09-16",
-      craftIds: [
-        "00000000-0000-4000-8000-000000000401",
-        "00000000-0000-4000-8000-000000000402",
-        "00000000-0000-4000-8000-000000000403",
-      ],
-      orderQuantity: 200,
-    })).toMatchObject({
-      craftIds: [
-        "00000000-0000-4000-8000-000000000401",
-        "00000000-0000-4000-8000-000000000402",
-        "00000000-0000-4000-8000-000000000403",
-      ],
-    });
     expect(() => CreateSourcingCaseSchema.parse({
-      erpOrderNo: "ERP-2026-003",
-      styleNo: "DX-300",
-      deliveryDate: "2026-09-17",
-      craftIds: [
-        "00000000-0000-4000-8000-000000000401",
-        "00000000-0000-4000-8000-000000000401",
-      ],
-      orderQuantity: 200,
-    })).toThrow(/工艺不能重复/);
+      ...valid,
+      lineItems: [{ ...valid.lineItems[0], externalUnitPrice: "12.34567" }],
+    })).toThrow();
     expect(() => CreateSourcingCaseSchema.parse({
-      erpOrderId: "caller-controlled-id",
-      erpOrderNo: "ERP-2026-001",
-      styleNo: "DX-100",
-      deliveryDate: "2026-09-15",
-      craftIds: ["00000000-0000-4000-8000-000000000401"],
+      ...valid,
       orderQuantity: 120,
+    })).toThrow();
+    expect(() => CreateSourcingCaseSchema.parse({
+      ...valid,
+      styleNo: "CALLER-CONTROLLED",
     })).toThrow();
   });
 
@@ -109,6 +107,40 @@ describe("sourcing PR03 contracts", () => {
       differenceReason: "发票总额与批准决定不一致",
     })).toMatchObject({ result: "difference", differenceFields: ["total_amount"] });
     expect(() => DecideSourcingExceptionSchema.parse({ resolution: "close" })).toThrow();
+  });
+
+  it("limits Daxing price to the explicit internal role set", () => {
+    for (const role of [
+      "root_superuser",
+      "order_merchandiser",
+      "ie_reviewer",
+      "production_management",
+      "owner_group",
+      "factory_payables",
+    ]) {
+      expect(canViewSourcingDaxingPrice({ actorRoles: [role] })).toBe(true);
+    }
+    for (const role of ["worker", "warehouse_keeper", "external_production_reporter", "unrelated_role"]) {
+      expect(canViewSourcingDaxingPrice({ actorRoles: [role] })).toBe(false);
+    }
+  });
+
+  it("persists immutable line facts and keeps internal price out of unrelated DTOs", async () => {
+    const [migration, service, page, contracts] = await Promise.all([
+      readFile("apps/api/migrations/0144_sourcing_multi_style_pricing.sql", "utf8"),
+      readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8"),
+      readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
+      readFile("packages/contracts/src/sourcing.ts", "utf8"),
+    ]);
+    expect(migration).toContain("CREATE TABLE sourcing_case_lines");
+    expect(migration).toContain("sourcing_case_lines_no_update");
+    expect(migration).toContain("sourcing_case_lines_no_delete");
+    expect(service).toContain("canViewSourcingDaxingPrice(actor)");
+    expect(contracts).toContain("daxingUnitPrice: z.string().optional()");
+    expect(contracts).not.toMatch(/RecordSourcingContractSchema[\s\S]{0,400}daxingUnitPrice/);
+    expect(page).toContain("新增行沿用首行当前对外价格");
+    expect(page).toContain("current[0]?.externalUnitPrice");
+    expect(page).toContain("删除第");
   });
 
   it("keeps the five-stage sourcing flow visible through finance closure", async () => {
