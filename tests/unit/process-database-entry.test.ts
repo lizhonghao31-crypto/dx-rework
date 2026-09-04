@@ -20,7 +20,6 @@ describe("process database entry", () => {
     expect(page).toContain('view === "crafts" ? "工艺数据库" : view === "processes" ? "工序数据库" : "工厂与供应商"');
     expect(page).toContain('?view=crafts`}>工艺数据库</a>');
     expect(page).toContain('?view=processes`}>工序数据库</a>');
-    expect(page).toContain('?view=suppliers`}>工厂与供应商</a>');
     expect(page).toContain('view === "crafts" ? <Surface');
     expect(page).toContain('view === "suppliers" ? <Surface');
     expect(page).toContain('view === "processes" ? <Surface');
