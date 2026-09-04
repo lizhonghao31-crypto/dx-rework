@@ -21,6 +21,7 @@ export const SUPPLIER_TYPE_LABELS: Record<SupplierSummary["supplierType"], strin
 };
 
 export const CONTRACT_FIELD_LABELS: Readonly<Record<string, string>> = {
+  address: "供应商地址",
   contractEntityName: "合同主体名称",
   partyBRepresentative: "乙方代表",
   payeeName: "收款人",
