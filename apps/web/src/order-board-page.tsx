@@ -317,6 +317,7 @@ export function OrderBoardPage() {
   const dateRangeLabel = startDate === endDate ? startDate : `${startDate} 至 ${endDate}`;
   const searchMode = data?.mode === "search";
   const kpiRangeLabel = searchMode ? "全时间 · 不受所选日期影响" : dateRangeLabel;
+  const liveOperationSnapshot = searchMode || endDate >= localDate();
 
   const downloadExport = async () => {
     if (exportBusy) return;
@@ -490,12 +491,13 @@ export function OrderBoardPage() {
         className="order-board-operation-button is-resolved"
         onClick={() => openDifference(row, type)}
       >已处理</button> : null}
-      {value !== 0 && !resolution && canHandle ? <button
+      {value !== 0 && !resolution && canHandle && liveOperationSnapshot ? <button
         type="button"
         className="order-board-operation-button"
         onClick={() => openDifference(row, type)}
       >去处理</button> : null}
       {value !== 0 && !resolution && !canHandle ? <small>未处理</small> : null}
+      {value !== 0 && !resolution && canHandle && !liveOperationSnapshot ? <small>历史只读</small> : null}
     </>;
   };
 
@@ -726,7 +728,7 @@ export function OrderBoardPage() {
               <span>装箱数量</span>
               <div>
                 <strong>{row.packingQuantity === null ? "-" : `${quantity(row.packingQuantity)}件`}</strong>
-                {canManagePacking ? <button
+                {canManagePacking && liveOperationSnapshot ? <button
                   type="button"
                   className="order-board-packing-button"
                   onClick={() => openPacking(row)}

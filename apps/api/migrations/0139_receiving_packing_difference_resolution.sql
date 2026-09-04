@@ -10,13 +10,11 @@ INSERT INTO capability_catalog(capability,display_name,description) VALUES
   ('receiving:packing_manage','管理装箱与装箱差异','尾部主管录入累计装箱数量并处理装箱差异')
 ON CONFLICT (capability) DO NOTHING;
 
-INSERT INTO role_capabilities(role_code,capability)
-SELECT DISTINCT role_code,'receiving:export'
-FROM role_capabilities
-WHERE capability='tools:user'
-ON CONFLICT DO NOTHING;
-
 INSERT INTO role_capabilities(role_code,capability) VALUES
+  ('warehouse_receiver','receiving:export'),
+  ('tail_supervisor','receiving:export'),
+  ('production_management','receiving:export'),
+  ('owner_group','receiving:export'),
   ('warehouse_receiver','receiving:resolve_difference'),
   ('tail_supervisor','receiving:packing_manage')
 ON CONFLICT DO NOTHING;

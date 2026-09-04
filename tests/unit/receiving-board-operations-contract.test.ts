@@ -19,6 +19,7 @@ describe("receiving board operations", () => {
     expect(service).toContain("导出订单超过50000条");
     expect(page.indexOf("order-board-export")).toBeLessThan(page.indexOf("开始日期"));
     expect(page).toContain("URL.createObjectURL(await response.blob())");
+    expect(routes).toContain("row.defectiveQuantity,row.differenceQuantity");
   });
 
   it("keeps packing and both difference resolutions audited and immutable", async () => {
@@ -37,6 +38,11 @@ describe("receiving board operations", () => {
     expect(service).toContain("receiving:packing_manage");
     expect(service).toContain("订单数量已变化，请刷新或搜索款号后再处理");
     expect(service).toContain("difference_quantity_snapshot");
+    expect(migration).toContain("('warehouse_receiver','receiving:export')");
+    expect(migration).toContain("('production_management','receiving:export')");
+    expect(migration).toContain("('owner_group','receiving:export')");
+    expect(migration).not.toContain("WHERE capability='tools:user'");
+    expect(migration).not.toContain("('worker','receiving:export')");
   });
 
   it("shows a compact operations band and prevents four-digit history collisions", async () => {
@@ -53,6 +59,9 @@ describe("receiving board operations", () => {
     expect(css).toContain(".order-board-row__operations");
     expect(css).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
     expect(page).toContain("<span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>");
+    expect(page).toContain("const liveOperationSnapshot = searchMode || endDate >= localDate()");
+    expect(page).toContain("canManagePacking && liveOperationSnapshot");
+    expect(page).toContain("canHandle && !liveOperationSnapshot ? <small>历史只读</small>");
     expect(css).toContain("min-width:0");
   });
 });
