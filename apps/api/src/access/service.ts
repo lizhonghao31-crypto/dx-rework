@@ -1270,8 +1270,26 @@ export class AccessMasterDataService {
     return this.transaction(async (client) => {
       const item = await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [supplierId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
-      const current = await client.query<{ version: number }>(
-        "SELECT version FROM current_supplier_catalog WHERE supplier_id=$1",
+      const current = await client.query<{
+        version: number;
+        supplier_name: string;
+        active: boolean;
+        notes: string;
+        contact_person: string | null;
+        contact_phone: string | null;
+        address: string | null;
+        contract_entity_name: string | null;
+        party_b_representative: string | null;
+        payee_name: string | null;
+        bank_account: string | null;
+        bank_name: string | null;
+        supported_crafts: string[];
+        daily_capacity: number | null;
+      }>(
+        `SELECT version,supplier_name,active,notes,contact_person,contact_phone,address,
+                contract_entity_name,party_b_representative,payee_name,bank_account,
+                bank_name,supported_crafts,daily_capacity
+         FROM current_supplier_catalog WHERE supplier_id=$1`,
         [supplierId],
       );
       const previous = current.rows[0];
@@ -1280,7 +1298,26 @@ export class AccessMasterDataService {
         throw new ApplicationError("CONFLICT", "供应商资料已更新，请刷新后重试", 409);
       }
       const version = previous.version + 1;
-      await this.insertSupplierVersion(client, actor, supplierId, version, input);
+      await this.insertSupplierVersion(client, actor, supplierId, version, {
+        supplierName: input.supplierName ?? previous.supplier_name,
+        active: input.active ?? previous.active,
+        notes: input.notes ?? previous.notes,
+        contactPerson: input.contactPerson === undefined ? previous.contact_person : input.contactPerson,
+        contactPhone: input.contactPhone === undefined ? previous.contact_phone : input.contactPhone,
+        address: input.address === undefined ? previous.address : input.address,
+        contractEntityName: input.contractEntityName === undefined
+          ? previous.contract_entity_name
+          : input.contractEntityName,
+        partyBRepresentative: input.partyBRepresentative === undefined
+          ? previous.party_b_representative
+          : input.partyBRepresentative,
+        payeeName: input.payeeName === undefined ? previous.payee_name : input.payeeName,
+        bankAccount: input.bankAccount === undefined ? previous.bank_account : input.bankAccount,
+        bankName: input.bankName === undefined ? previous.bank_name : input.bankName,
+        supportedCrafts: input.supportedCrafts ?? previous.supported_crafts,
+        dailyCapacity: input.dailyCapacity === undefined ? previous.daily_capacity : input.dailyCapacity,
+        changeReason: input.changeReason,
+      });
       return { supplierId, version };
     });
   }
