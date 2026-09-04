@@ -27,7 +27,7 @@ import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
-import { MasterDataPage } from "./master-data-page.js";
+import { MasterDataPage } from "./master-data-page.js";\nimport { SupplierCenterPage } from "./supplier-center-page.js";
 import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
@@ -274,6 +274,13 @@ function ReceivingReworkEntryRedirect() {
   );
 }
 
+function LegacySupplierCenterRedirect() {
+  useEffect(() => {
+    window.location.replace(pageUrl("ui/suppliers"));
+  }, []);
+  return <Shell active="供应商目录"><Surface className="admin-card"><p>正在进入供应商中心…</p></Surface></Shell>;
+}
+
 export function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { path, search } = useInternalLocation(basePath);
@@ -301,9 +308,13 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
+  else if (path === "/ui/suppliers") page = <SupplierCenterPage view="directory" />;
+  else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage view="manage" />;
   else if (path === "/ui/master-data") {
     const masterDataView = new URLSearchParams(search).get("view");
-    page = <MasterDataPage view={masterDataView === "suppliers" || masterDataView === "processes" ? masterDataView : "crafts"} />;
+    page = masterDataView === "suppliers"
+      ? <LegacySupplierCenterRedirect />
+      : <MasterDataPage view={masterDataView === "processes" ? "processes" : "crafts"} />;
   }
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
@@ -362,6 +373,9 @@ export function App() {
   }
   if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
+  }
+  if (path.startsWith("/ui/suppliers")) {
+    return <AuthGate requiredCapability="supplier_profile:read">{page}</AuthGate>;
   }
   if (path === "/ui/master-data" || path === "/ui/people") {
     return <AuthGate requiredAnyOf={[
