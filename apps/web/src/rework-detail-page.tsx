@@ -588,7 +588,8 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:determine")
     || hasCapability(currentUser, "responsibility:takeover")
     || hasCapability(currentUser, "responsibility:confirm_high_multiplier")
-    || hasCapability(currentUser, "responsibility:owner_sign");
+    || hasCapability(currentUser, "responsibility:owner_sign")
+    || hasCapability(currentUser, "rework:related_orders:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
   const canSeeWages = elevated(currentUser) || hasCapability(currentUser, "wage:view");
   const canSeeWholeOrderReview = elevated(currentUser) || [
