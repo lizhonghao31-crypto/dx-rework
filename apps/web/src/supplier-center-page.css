@@ -1,4 +1,5 @@
 .supplier-center-heading{align-items:flex-start}
+.supplier-center-heading__actions{display:flex;align-items:center;gap:var(--dx-v2-space-2);flex-wrap:wrap;justify-content:flex-end}
 .supplier-center-tabs{display:flex;gap:var(--dx-v2-space-2);margin:0 0 var(--dx-v2-space-4);padding:var(--dx-v2-space-2);border:1px solid var(--dx-v2-color-border);border-radius:var(--dx-v2-radius-lg);background:var(--dx-v2-color-surface)}
 .supplier-center-tabs a{min-height:40px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;color:var(--dx-v2-color-text);font-weight:750;text-decoration:none}
 .supplier-center-tabs a.active{background:var(--dx-v2-color-primary);color:#fff}
