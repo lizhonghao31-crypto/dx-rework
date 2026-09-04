@@ -476,6 +476,9 @@ export class AuthorizedResponsibilityDeterminationService {
     const pendingOwnerSignature = order.status === "pending_owner_signature";
     const root = isRootActor(actor);
     const canView = root ||
+      (caps.includes("rework:related_orders:view") &&
+        (order.merchandiser_user_id === actor.actorId ||
+          order.embroidery_merchandiser_user_id === actor.actorId)) ||
       (row.determine_eligible && caps.includes("responsibility:determine")) ||
       (row.direct_takeover && caps.includes("responsibility:takeover")) ||
       (row.direct_confirm && caps.includes("responsibility:confirm_high_multiplier")) ||
