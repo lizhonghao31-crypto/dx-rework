@@ -10,8 +10,10 @@ import {
   sha256Hex,
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
+import { createClientRequestId } from "./client-request-id.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
+import { alertInApp } from "./system-dialog.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
 
@@ -36,6 +38,12 @@ type ReceivingHistoryItem = Readonly<{
   receiverName: string;
 }>;
 type ReceivingAttachment = Readonly<{ attachmentId: string; filename: string }>;
+type DifferenceResolution = Readonly<{
+  resolutionId: string;
+  result: string;
+  handledBy: string;
+  handledAt: string;
+}>;
 type UploadIntent = Readonly<{
   attachmentId: string;
   uploadUrl: string;
@@ -52,7 +60,15 @@ type BoardRow = Readonly<{
   defectiveQuantity: number;
   currentActualQuantity: number;
   currentDefectiveQuantity: number;
+  cumulativeActualQuantity: number;
   differenceQuantity: number;
+  packingRevisionId: string | null;
+  packingQuantity: number | null;
+  packingDifferenceQuantity: number | null;
+  packingRecordedBy: string | null;
+  packingRecordedAt: string | null;
+  receivingDifferenceResolution: DifferenceResolution | null;
+  packingDifferenceResolution: DifferenceResolution | null;
   receiptCount: number;
   receivingHistory: readonly ReceivingHistoryItem[];
   lastReceivedAt: string;
@@ -109,6 +125,9 @@ const historyDateTime = (value: string): string => new Intl.DateTimeFormat("zh-C
   minute: "2-digit",
   hour12: false,
 }).format(new Date(value));
+
+const quantity = (value: number): string => value.toLocaleString("zh-CN");
+const signedQuantity = (value: number): string => `${value > 0 ? "+" : ""}${quantity(value)}件`;
 
 const reworkLabel = (status: ReworkStatus): string => {
   if (status === "draft") return "继续填写";
@@ -180,6 +199,9 @@ export function OrderBoardPage() {
   const [pageLoading, setPageLoading] = useState(false);
   const [canReceive, setCanReceive] = useState(false);
   const [canInitiate, setCanInitiate] = useState(false);
+  const [canExport, setCanExport] = useState(false);
+  const [canResolveReceivingDifference, setCanResolveReceivingDifference] = useState(false);
+  const [canManagePacking, setCanManagePacking] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [page, setPage] = useState(1);
@@ -198,6 +220,17 @@ export function OrderBoardPage() {
   const [receiptDefectiveQuantity, setReceiptDefectiveQuantity] = useState("");
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [packingEditing, setPackingEditing] = useState<BoardRow | null>(null);
+  const [packingQuantity, setPackingQuantity] = useState("");
+  const [packingRequestKey, setPackingRequestKey] = useState("");
+  const [differenceEditing, setDifferenceEditing] = useState<Readonly<{
+    row: BoardRow;
+    type: "receiving" | "packing";
+    resolution: DifferenceResolution | null;
+  }> | null>(null);
+  const [differenceResult, setDifferenceResult] = useState("");
+  const [differenceRequestKey, setDifferenceRequestKey] = useState("");
   const [attachmentViewer, setAttachmentViewer] = useState<Readonly<{
     attachments: readonly ReceivingAttachment[];
     index: number;
@@ -221,12 +254,22 @@ export function OrderBoardPage() {
           && capabilities.includes("rework:initiate");
         setCanReceive(isRoot || warehouseReceiver);
         setCanInitiate(isRoot || roles.includes("owner_group") || qualityControl);
+        setCanExport(isRoot || capabilities.includes("receiving:export"));
+        setCanResolveReceivingDifference(isRoot || (
+          roles.includes("warehouse_receiver") && capabilities.includes("receiving:resolve_difference")
+        ));
+        setCanManagePacking(isRoot || (
+          roles.includes("tail_supervisor") && capabilities.includes("receiving:packing_manage")
+        ));
         setIsRoot(isRoot);
       })
       .catch(() => {
         if (!active) return;
         setCanReceive(false);
         setCanInitiate(false);
+        setCanExport(false);
+        setCanResolveReceivingDifference(false);
+        setCanManagePacking(false);
         setIsRoot(false);
       });
     return () => { active = false; };
@@ -274,6 +317,124 @@ export function OrderBoardPage() {
   const dateRangeLabel = startDate === endDate ? startDate : `${startDate} 至 ${endDate}`;
   const searchMode = data?.mode === "search";
   const kpiRangeLabel = searchMode ? "全时间 · 不受所选日期影响" : dateRangeLabel;
+  const liveOperationSnapshot = searchMode || endDate >= localDate();
+
+  const downloadExport = async () => {
+    if (exportBusy) return;
+    setExportBusy(true);
+    try {
+      const params = new URLSearchParams({ startDate, endDate, status });
+      if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
+      const response = await fetch(apiUrl(`receiving/board/export?${params.toString()}`), {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await responseError(response, "订单回货导出失败"));
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = `订单回货-${endDate}.xlsx`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "订单回货导出失败";
+      setMutationMessage(text);
+      await alertInApp(text, { title: "导出失败" });
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const openPacking = (row: BoardRow) => {
+    setDifferenceEditing(null);
+    setPackingEditing(row);
+    setPackingQuantity(row.packingQuantity === null ? "" : String(row.packingQuantity));
+    setPackingRequestKey(createClientRequestId());
+    setMutationMessage("");
+  };
+
+  const submitPacking = async () => {
+    if (!packingEditing || mutationBusy) return;
+    const value = Number(packingQuantity);
+    if (!Number.isInteger(value) || value < 0 || value > 10_000_000) {
+      setMutationMessage("装箱数量必须是0到10000000之间的整数");
+      return;
+    }
+    setMutationBusy(true);
+    setMutationMessage("");
+    try {
+      const response = await fetch(apiUrl(`receiving/batches/${packingEditing.receivingBatchId}/packing-revisions`), {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", "idempotency-key": packingRequestKey },
+        body: JSON.stringify({
+          expectedVersion: packingEditing.version,
+          expectedPackingRevisionId: packingEditing.packingRevisionId,
+          packingQuantity: value,
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "装箱数量保存失败"));
+      setPackingEditing(null);
+      setRefreshToken((current) => current + 1);
+      setMutationMessage("装箱数量已保存");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "装箱数量保存失败";
+      setMutationMessage(text);
+      await alertInApp(text, { title: "保存失败" });
+    } finally {
+      setMutationBusy(false);
+    }
+  };
+
+  const openDifference = (row: BoardRow, type: "receiving" | "packing") => {
+    const resolution = type === "receiving"
+      ? row.receivingDifferenceResolution
+      : row.packingDifferenceResolution;
+    setPackingEditing(null);
+    setDifferenceEditing({ row, type, resolution });
+    setDifferenceResult("");
+    setDifferenceRequestKey(createClientRequestId());
+    setMutationMessage("");
+  };
+
+  const submitDifference = async () => {
+    if (!differenceEditing || differenceEditing.resolution || mutationBusy) return;
+    const result = differenceResult.trim();
+    if (!result || result.length > 500) {
+      setMutationMessage("处理结果不能为空且不能超过500个字符");
+      return;
+    }
+    setMutationBusy(true);
+    setMutationMessage("");
+    try {
+      const row = differenceEditing.row;
+      const response = await fetch(apiUrl(`receiving/batches/${row.receivingBatchId}/difference-resolutions`), {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", "idempotency-key": differenceRequestKey },
+        body: JSON.stringify({
+          expectedVersion: row.version,
+          expectedDocumentQuantity: row.documentQuantity,
+          expectedActualQuantity: row.cumulativeActualQuantity,
+          expectedPackingRevisionId: row.packingRevisionId,
+          differenceType: differenceEditing.type,
+          result,
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, "差异处理提交失败"));
+      setDifferenceEditing(null);
+      setRefreshToken((current) => current + 1);
+      setMutationMessage("差异处理结果已保存");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "差异处理提交失败";
+      setMutationMessage(text);
+      await alertInApp(text, { title: "提交失败" });
+    } finally {
+      setMutationBusy(false);
+    }
+  };
 
   const reworkControl = (row: BoardRow) => {
     const className = "order-board-rework-link";
@@ -314,6 +475,30 @@ export function OrderBoardPage() {
     return <div className={`order-board-actions order-board-actions--${mobile ? "mobile" : "desktop"}`}>
       {root}
     </div>;
+  };
+
+  const differenceControl = (row: BoardRow, type: "receiving" | "packing") => {
+    const value = type === "receiving" ? row.differenceQuantity : row.packingDifferenceQuantity;
+    const resolution = type === "receiving"
+      ? row.receivingDifferenceResolution
+      : row.packingDifferenceResolution;
+    const canHandle = type === "receiving" ? canResolveReceivingDifference : canManagePacking;
+    if (value === null) return <strong>-</strong>;
+    return <>
+      <strong>{value === 0 ? "无差异" : signedQuantity(value)}</strong>
+      {value !== 0 && resolution ? <button
+        type="button"
+        className="order-board-operation-button is-resolved"
+        onClick={() => openDifference(row, type)}
+      >已处理</button> : null}
+      {value !== 0 && !resolution && canHandle && liveOperationSnapshot ? <button
+        type="button"
+        className="order-board-operation-button"
+        onClick={() => openDifference(row, type)}
+      >去处理</button> : null}
+      {value !== 0 && !resolution && !canHandle ? <small>未处理</small> : null}
+      {value !== 0 && !resolution && canHandle && !liveOperationSnapshot ? <small>历史只读</small> : null}
+    </>;
   };
 
   const toggleHistory = (styleNo: string) => {
@@ -441,6 +626,14 @@ export function OrderBoardPage() {
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">
+        {canExport ? <button
+          type="button"
+          className="order-board-export-button"
+          title="按当前筛选导出Excel"
+          aria-label="按当前筛选导出Excel"
+          disabled={exportBusy}
+          onClick={() => void downloadExport()}
+        >{exportBusy ? "…" : "导出"}</button> : null}
         <label>开始日期<input type="date" value={startDate} max={endDate} onChange={(event) => { resetPagination(); setStartDate(event.target.value); }} /></label>
         <label>结束日期<input type="date" value={endDate} min={startDate} onChange={(event) => { resetPagination(); setEndDate(event.target.value); }} /></label>
         <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => { resetPagination(); setQuery(event.target.value.toUpperCase()); }} /></label>
@@ -488,61 +681,83 @@ export function OrderBoardPage() {
     <div className="order-board-list">
       {data?.rows.map((row) => {
         const tone = row.differenceQuantity < 0 ? "short" : row.differenceQuantity > 0 ? "extra" : "even";
-        const signed = row.differenceQuantity > 0 ? `+${row.differenceQuantity}` : String(row.differenceQuantity);
         const historyExpanded = expandedStyles.has(row.styleNo);
         return <div className="order-board-item" key={row.receivingBatchId}>
         <Surface className={`order-board-row is-${tone}`}>
-          <div className="order-board-row__style">
-            <div className="order-board-row__style-heading"><span>款号</span>{reworkControl(row)}</div>
-            <div className="order-board-row__style-line">
-              <strong>{row.styleNo}</strong>
-              <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
-                {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
-              </StatusBadge>
-            </div>
-            {row.receiptCount > 1 ? <button
-              type="button"
-              className="order-board-history-toggle"
-              aria-expanded={historyExpanded}
-              onClick={() => toggleHistory(row.styleNo)}
-            >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button> : null}
-          </div>
-          <div className="order-board-row__document">
-            <span>送货单数量</span>
-            <div className="order-board-row__document-value">
-              <strong>{row.documentQuantity}件</strong>
-              {row.attachments.length ? <button
+          <div className="order-board-row__main">
+            <div className="order-board-row__style">
+              <div className="order-board-row__style-heading"><span>款号</span>{reworkControl(row)}</div>
+              <div className="order-board-row__style-line">
+                <strong>{row.styleNo}</strong>
+                <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
+                  {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
+                </StatusBadge>
+              </div>
+              {row.receiptCount > 1 ? <button
                 type="button"
-                className="order-board-attachment-button"
-                aria-label={`查看${row.styleNo}的送货单附件，共${row.attachments.length}张`}
-                onClick={() => setAttachmentViewer({ attachments: row.attachments, index: 0 })}
-              >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
+                className="order-board-history-toggle"
+                aria-expanded={historyExpanded}
+                onClick={() => toggleHistory(row.styleNo)}
+              >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button> : null}
+            </div>
+            <div className="order-board-row__document">
+              <span>送货单数量</span>
+              <div className="order-board-row__document-value">
+                <strong>{quantity(row.documentQuantity)}件</strong>
+                {row.attachments.length ? <button
+                  type="button"
+                  className="order-board-attachment-button"
+                  aria-label={`查看${row.styleNo}的送货单附件，共${row.attachments.length}张`}
+                  onClick={() => setAttachmentViewer({ attachments: row.attachments, index: 0 })}
+                >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
+              </div>
+            </div>
+            <div className="order-board-row__actual"><span>实收</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
+            <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
+            <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
+            <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
+            {actionControls(row, false)}
+            {actionControls(row, true)}
+          </div>
+          <div className="order-board-row__operations">
+            <div className="order-board-operation order-board-row__difference">
+              <span>收货差异</span>
+              <div>{differenceControl(row, "receiving")}</div>
+            </div>
+            <div className="order-board-operation order-board-row__packing">
+              <span>装箱数量</span>
+              <div>
+                <strong>{row.packingQuantity === null ? "-" : `${quantity(row.packingQuantity)}件`}</strong>
+                {canManagePacking && liveOperationSnapshot ? <button
+                  type="button"
+                  className="order-board-packing-button"
+                  onClick={() => openPacking(row)}
+                >{row.packingQuantity === null ? "录入" : "修改"}</button> : null}
+              </div>
+            </div>
+            <div className="order-board-operation order-board-row__packing-difference">
+              <span>装箱差异</span>
+              <div>{differenceControl(row, "packing")}</div>
             </div>
           </div>
-          <div className="order-board-row__actual"><span>实收</span><strong>{row.actualQuantity}件</strong></div>
-          <div className="order-board-row__defective"><span>次品</span><strong>{row.defectiveQuantity}件</strong></div>
-          <div className="order-board-row__difference"><span>差异</span><strong>{signed}件</strong></div>
-          <div className="order-board-row__latest"><span>最近收货</span><strong>{dateTime(row.lastReceivedAt)}</strong></div>
-          <div className="order-board-row__receiver"><span>收货人</span><strong>{row.lastReceiverName}</strong></div>
-          {actionControls(row, false)}
-          {actionControls(row, true)}
         </Surface>
         {historyExpanded ? <section className="order-board-history" aria-label={`${row.styleNo}多次收货记录`}>
           {row.receivingHistory.map((item) => {
             const historyTone = item.differenceQuantity < 0 ? "short" : item.differenceQuantity > 0 ? "extra" : "even";
             const historyStatus = item.differenceQuantity < 0
-              ? `少收${Math.abs(item.differenceQuantity)}件`
+              ? `少收${quantity(Math.abs(item.differenceQuantity))}件`
               : item.differenceQuantity > 0
-                ? `多收${item.differenceQuantity}件`
+                ? `多收${quantity(item.differenceQuantity)}件`
                 : "正常";
             return <article className={`order-board-history__entry is-${historyTone}`} key={item.receiptId}>
               <strong>第{item.sequence}次收货</strong>
-              <span>{item.receivingSource === "other_factory"
+              <span className="order-board-history__source">{item.receivingSource === "other_factory"
                 ? "其他工厂"
                 : item.receivingSource === "jiashun"
                   ? "嘉顺"
-                  : "来源待确认"} · 本次送货单 {item.receiptDocumentQuantity}件</span>
-              <span>本次实收 {item.actualQuantity}件</span>
+                  : "来源待确认"}</span>
+              <span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>
+              <span>本次实收 <strong>{quantity(item.actualQuantity)}件</strong></span>
               <span>累计实收 {item.cumulativeActualQuantity}件</span>
               <span className="order-board-history__status">{historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
@@ -562,7 +777,9 @@ export function OrderBoardPage() {
       ariaLabel="订单回货分页"
       onPageChange={setPage}
     /> : null}
-    {mutationMessage && !editing && !deleting ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p> : null}
+    {mutationMessage && !editing && !deleting && !correctingReceipt && !packingEditing && !differenceEditing
+      ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p>
+      : null}
 
     {attachmentViewer && selectedAttachment ? <div
       className="order-board-attachment-modal"
@@ -597,6 +814,43 @@ export function OrderBoardPage() {
           <a href={attachmentUrl(selectedAttachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
         </div>
       </section>
+    </div> : null}
+
+    {packingEditing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setPackingEditing(null)}>
+      <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="录入装箱数量" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitPacking(); }}>
+        <h2>{packingEditing.packingQuantity === null ? "录入" : "修改"}装箱数量</h2>
+        <p>款号：<strong>{packingEditing.styleNo}</strong>。填写当前累计已装箱数量；保存后保留上一版本。</p>
+        <label>当前累计已装箱数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={packingQuantity} disabled={mutationBusy} onChange={(event) => setPackingQuantity(event.target.value)} /></label>
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        <div className="order-board-dialog__actions">
+          <button type="button" disabled={mutationBusy} onClick={() => setPackingEditing(null)}>取消</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || packingQuantity === ""}>{mutationBusy ? "保存中…" : "保存"}</button>
+        </div>
+      </form>
+    </div> : null}
+
+    {differenceEditing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setDifferenceEditing(null)}>
+      <form className="order-board-dialog order-board-difference-dialog" role="dialog" aria-modal="true" aria-label={`${differenceEditing.type === "receiving" ? "收货" : "装箱"}差异处理`} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitDifference(); }}>
+        <h2>{differenceEditing.type === "receiving" ? "收货差异" : "装箱差异"}{differenceEditing.resolution ? "处理结果" : "去处理"}</h2>
+        <dl className="order-board-difference-snapshot">
+          <div><dt>款号</dt><dd>{differenceEditing.row.styleNo}</dd></div>
+          <div><dt>实收数量</dt><dd>{quantity(differenceEditing.row.cumulativeActualQuantity)}件</dd></div>
+          {differenceEditing.type === "receiving"
+            ? <div><dt>送货单数量</dt><dd>{quantity(differenceEditing.row.documentQuantity)}件</dd></div>
+            : <div><dt>装箱数量</dt><dd>{differenceEditing.row.packingQuantity === null ? "-" : `${quantity(differenceEditing.row.packingQuantity)}件`}</dd></div>}
+          <div><dt>当前差异</dt><dd>{signedQuantity(differenceEditing.type === "receiving" ? differenceEditing.row.differenceQuantity : differenceEditing.row.packingDifferenceQuantity ?? 0)}</dd></div>
+        </dl>
+        {differenceEditing.resolution ? <div className="order-board-resolution-detail">
+          <strong>处理结果</strong>
+          <p>{differenceEditing.resolution.result}</p>
+          <small>处理人：{differenceEditing.resolution.handledBy} · {historyDateTime(differenceEditing.resolution.handledAt)}</small>
+        </div> : <label>处理结果<textarea maxLength={500} rows={4} value={differenceResult} disabled={mutationBusy} onChange={(event) => setDifferenceResult(event.target.value)} placeholder="填写核对结果和后续处理情况" /></label>}
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        <div className="order-board-dialog__actions">
+          <button type="button" disabled={mutationBusy} onClick={() => setDifferenceEditing(null)}>{differenceEditing.resolution ? "关闭" : "取消"}</button>
+          {!differenceEditing.resolution ? <button type="submit" className="is-primary" disabled={mutationBusy || !differenceResult.trim()}>{mutationBusy ? "提交中…" : "提交处理"}</button> : null}
+        </div>
+      </form>
     </div> : null}
 
     {correctingReceipt ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setCorrectingReceipt(null)}>
