@@ -98,7 +98,7 @@ describe("IE pre-count reference ledger", () => {
     expect(page).toContain('selected.key === "final_quantity_ie_review" ? { iePrecounts: detail.iePrecounts }');
     expect(form).toContain("{...(iePrecounts ? { iePrecounts } : {})}");
     expect(review).toContain("<small>IE预核</small>");
-    expect(review).toContain('iePrecount?.quantity ?? "—"');
+    expect(review).toContain('iePrecount ? formatBusinessDecimal(iePrecount.quantity) : "—"');
     expect(review).not.toContain("formatIePrecountTime");
     expect(review).not.toContain("<b>IE预核</b>");
     expect(review).not.toContain("iePrecount.recordedBy");
