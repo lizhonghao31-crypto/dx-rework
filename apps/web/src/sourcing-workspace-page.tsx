@@ -264,7 +264,7 @@ function SourcingOrderCard({
         {item.lineItems.length > 3 ? <li><span>另有 {item.lineItems.length - 3} 行</span></li> : null}
       </ul>
       <dl>
-        <div><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
+        <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
         {"daxingUnitPrice" in item ? <div><dt>大兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
         <div><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
         <div><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
