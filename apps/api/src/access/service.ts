@@ -1536,7 +1536,8 @@ export class AccessMasterDataService {
     await client.query(
       `SELECT
          set_config('dx_rework.supplier_version_event_id',$1,true),
-         set_config('dx_rework.supplier_version_request_id',$2,true)`,
+         set_config('dx_rework.supplier_version_request_id',$2,true),
+         set_config('dx_rework.supplier_version_authorization_capability','supplier_profile:write',true)`,
       [randomUUID(), actor.requestId],
     );
     await client.query(
