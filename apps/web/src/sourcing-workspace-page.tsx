@@ -87,6 +87,7 @@ type SourcingLineDraft = Readonly<{
 }>;
 type LocalSourcingDraft = Readonly<{
   erpOrderNo: string;
+  estimatedCutPieceSendDate: string;
   deliveryDate: string;
   processes: readonly string[];
   lineItems: readonly SourcingLineDraft[];
@@ -213,6 +214,9 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
     }));
     return {
       erpOrderNo: parsed.erpOrderNo,
+      estimatedCutPieceSendDate: typeof parsed.estimatedCutPieceSendDate === "string"
+        ? parsed.estimatedCutPieceSendDate
+        : "",
       deliveryDate: parsed.deliveryDate,
       processes: parsed.processes.slice(0, MAX_SOURCING_PROCESSES),
       lineItems,
@@ -336,6 +340,7 @@ export function SourcingWorkspacePage({
 
 function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [erpOrderNo, setErpOrderNo] = useState("");
+  const [estimatedCutPieceSendDate, setEstimatedCutPieceSendDate] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [processes, setProcesses] = useState<string[]>([""]);
   const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
@@ -379,6 +384,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const localDraft = readLocalSourcingDraft(user.id);
     if (!localDraft) return;
     setErpOrderNo(localDraft.erpOrderNo);
+    setEstimatedCutPieceSendDate(localDraft.estimatedCutPieceSendDate);
     setDeliveryDate(localDraft.deliveryDate);
     setProcesses([...localDraft.processes]);
     setLineItems([...localDraft.lineItems]);
@@ -570,6 +576,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     }
     const draft: LocalSourcingDraft = {
       erpOrderNo,
+      estimatedCutPieceSendDate,
       deliveryDate,
       processes,
       lineItems,
@@ -593,8 +600,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const pricePattern = /^\d{1,10}(?:\.\d{1,4})?$/;
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
     if (!erpOrderNo.trim()) { setMessage("请填写平台订单号"); return; }
-    if (!deliveryDate || normalizedProcesses.some((process) => !process)) {
-      setMessage("请填写交货日期和所有工艺");
+    if (!estimatedCutPieceSendDate || !deliveryDate || normalizedProcesses.some((process) => !process)) {
+      setMessage("请填写预计裁片发出日期、交货日期和所有工艺");
       return;
     }
     if (new Set(normalizedProcesses).size !== normalizedProcesses.length) {
@@ -644,6 +651,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         headers: { "idempotency-key": createKey.current },
         body: JSON.stringify({
           erpOrderNo: erpOrderNo.trim(),
+          estimatedCutPieceSendDate,
           deliveryDate,
           craftIds: ensuredCrafts.map((craft) => craft.craftId),
           lineItems: normalizedLines,
@@ -673,7 +681,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         </div>
         <div className="sourcing-form-grid">
           <label><span>平台订单号</span><input value={erpOrderNo} maxLength={100} onChange={(event) => { setErpOrderNo(event.target.value); createKey.current = null; }} placeholder="请输入平台订单号" /></label>
-          <label><span>交货日期</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>预计裁片发出日期</span><input type="date" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>要求交货日期</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>大兴价（内部）</span><input value={daxingUnitPrice} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="仅内部授权岗位可见" /></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
@@ -683,7 +692,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
               </div>
               <div className="sourcing-line-editor__actions">
                 <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
-                <button type="button" disabled={lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
+                <button className="dx-button dx-button--secondary" type="button" disabled={lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
               </div>
             </div>
             <div className="sourcing-line-editor__list">
@@ -694,7 +703,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
                 <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
                 <label><span>数量</span><input value={line.quantity} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", event.target.value)} placeholder="整数" /></label>
                 <label><span>对外加工价格</span><input value={line.externalUnitPrice} inputMode="decimal" onChange={(event) => updateLineItem(index, "externalUnitPrice", businessInputChange(event.target.value))} placeholder="最多4位小数" /></label>
-                <button type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
+                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
               </article>)}
             </div>
           </section>
@@ -1103,7 +1112,8 @@ function OrderDetailPage({
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
           {"daxingUnitPrice" in item ? <div className="rework-detail-core-fact"><dt>大兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
-          <div className="rework-detail-core-fact"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
@@ -1233,7 +1243,7 @@ function OrderDetailPage({
               <p>相对 IE 报价 {item.ieQuote ? `${formatBusinessCurrency(item.ieQuote.unitPrice)}/件` : "—"}，单价变化 <strong>{ownerUnitPriceDelta ?? "—"}/件</strong>，总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
               <details className="sourcing-owner-decision__details">
                 <summary>查看完整订单资料</summary>
-                <p>平台订单：{item.erpOrderNo}；款色：{item.lineItems.length} 行；交货日期：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
+                <p>平台订单：{item.erpOrderNo}；款色：{item.lineItems.length} 行；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
               </details>
             </div>
             {canOwner ? <div className="sourcing-owner-actions" aria-label="老板审批操作">
