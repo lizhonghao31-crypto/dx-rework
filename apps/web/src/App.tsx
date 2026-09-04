@@ -27,7 +27,8 @@ import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
-import { MasterDataPage } from "./master-data-page.js";\nimport { SupplierCenterPage } from "./supplier-center-page.js";
+import { MasterDataPage } from "./master-data-page.js";
+import { SupplierCenterPage } from "./supplier-center-page.js";
 import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
@@ -308,8 +309,8 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
-  else if (path === "/ui/suppliers") page = <SupplierCenterPage view="directory" />;
-  else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage view="manage" />;
+  else if (path === "/ui/suppliers") page = <SupplierCenterPage mode="directory" />;
+  else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage mode="manage" />;
   else if (path === "/ui/master-data") {
     const masterDataView = new URLSearchParams(search).get("view");
     page = masterDataView === "suppliers"
