@@ -19,6 +19,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
   OperationEventRepository,
@@ -598,6 +599,9 @@ export class WorkReportingService {
       if (reportingCapability === undefined) error("当前用户无权为该任务上数", 403, "FORBIDDEN");
       const reportingActor: TrustedActorContext = { ...actor, authorizationCapability: reportingCapability! };
       if (!Number.isInteger(input.actualQuantity)) error("返工执行报数只能填写整数件数", 400, "VALIDATION_ERROR");
+      await ensureWithinSourceReceivingActualQuantity(client, task.rework_order_id, [{
+        label: `${task.process_name}工序报数`, quantity: input.actualQuantity,
+      }]);
       const existing = await client.query<{ work_report_id: string; quantity: string }>(
         `SELECT report.work_report_id,report.actual_quantity AS quantity
          FROM rework_work_reports report
@@ -719,6 +723,9 @@ export class WorkReportingService {
         const order = await this.order(client, reworkOrderId, true);
         if (order.status !== "in_progress") error("当前返工单不在完成数量登记节点", 409, "INVALID_STATE_TRANSITION");
         if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
+        await ensureWithinSourceReceivingActualQuantity(client, reworkOrderId, lockedTasks.map(({ input: report, task }) => ({
+          label: `${task.process_name}工序报数`, quantity: report.actualQuantity,
+        })));
 
         const membersResult = await client.query<PersonRow & { work_task_id: string }>(
           `SELECT member.work_task_id,member.person_id,

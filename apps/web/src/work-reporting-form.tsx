@@ -638,7 +638,9 @@ export function WorkReportingForm({
         }
         return;
       }
-      setMessage(cause instanceof Error ? cause.message : "完工上数失败");
+      const failure = cause instanceof Error ? cause.message : "完工上数失败";
+      setMessage(failure);
+      await alertInApp(failure, { title: "返工报数提交失败", confirmLabel: "知道了" });
     } finally {
       setBusy(false);
     }
@@ -663,7 +665,9 @@ export function WorkReportingForm({
       setMessage("全部任务已核验，已流转至 N05 · 尾部最终数量确认。");
       try { await onOrderChanged?.(); } catch { /* The committed transition remains successful if the outer refresh fails. */ }
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "无法进入最终数量确认");
+      const failure = cause instanceof Error ? cause.message : "无法进入最终数量确认";
+      setMessage(failure);
+      await alertInApp(failure, { title: "流程提交失败", confirmLabel: "知道了" });
       await reload().catch(() => null);
     } finally {
       setBusy(false);

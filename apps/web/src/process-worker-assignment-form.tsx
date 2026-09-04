@@ -408,7 +408,11 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
       }
       const submitted = await request(`rework-orders/${reworkOrderId}/process-configuration/submit`, ProcessConfigurationResponseSchema.parse, { method: "POST", headers: { "idempotency-key": attempt.key }, body: JSON.stringify(attempt.body) });
       pendingSubmit.current = null; setResponse(submitted); setMessage(tailInspectionRequired ? "已提交 IE 核价；返工人员与整查方案已锁定，IE 通过后统一开始执行。" : "已提交 IE 核价；返工人员方案已锁定，IE 通过后开始执行。"); await onOrderChanged?.();
-    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : "提交 IE 核价失败"); } finally { setBusy(false); }
+    } catch (error: unknown) {
+      const failure = error instanceof Error ? error.message : "提交 IE 核价失败";
+      setMessage(failure);
+      await alertInApp(failure, { title: "工序配置提交失败", confirmLabel: "知道了" });
+    } finally { setBusy(false); }
   };
   const review = async (decision: "approved" | "rejected") => {
     if (!response || !configuration || !reviewable || busy) return;

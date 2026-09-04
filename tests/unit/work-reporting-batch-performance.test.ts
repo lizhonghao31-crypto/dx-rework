@@ -66,6 +66,9 @@ const createHarness = (input: {
     if (sql.includes("SELECT task.work_task_id,task.rework_order_id") && sql.includes("task.work_task_id=ANY")) {
       return { rowCount: tasks.length, rows: tasks };
     }
+    if (sql.includes("source_receiving_batch_id IS NULL") && sql.includes("AS quantity")) {
+      return { rowCount: 1, rows: [{ quantity: null }] };
+    }
     if (sql.includes("FROM rework_orders WHERE rework_order_id=$1")) {
       return {
         rowCount: 1,
@@ -163,7 +166,8 @@ describe("work report batch set-based persistence", () => {
     expect(harness.insertedEvents()).toBe(50);
     expect(harness.insertedShares()).toBe(400);
     expect(writesAfterFirst).toHaveLength(3);
-    expect(callsAfterFirst).toBeLessThanOrEqual(13);
+    expect(callsAfterFirst).toBeLessThanOrEqual(14);
+    expect(harness.commands.filter((sql) => sql.includes("source_receiving_batch_id IS NULL"))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO operation_events("))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_reports("))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_report_member_shares"))).toHaveLength(1);

@@ -13,6 +13,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -236,6 +237,10 @@ export class ProcessConfigurationService {
       const unifiedExecutionRequired = true;
       const workerPreassignmentRequired = true;
       const items = await this.prepareItems(client, input.items, order.tail_inspection_required);
+      await ensureWithinSourceReceivingActualQuantity(client, reworkOrderId, items.map((item) => ({
+        label: item.executionKind === "tail_inspection" ? "整查数量" : `${item.processName}工序数量`,
+        quantity: item.plannedQuantity,
+      })));
       const configurationId = randomUUID();
       const configurationVersion = (current?.configuration_version ?? 0) + 1;
       const nextOrderVersion = order.version + 1;

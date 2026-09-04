@@ -17,6 +17,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -628,6 +629,9 @@ export class WholeOrderReviewService {
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_order_review") error("只有 N05 尾部最终数量确认可以修正有效上数", 409, "INVALID_STATE_TRANSITION");
+      await ensureWithinSourceReceivingActualQuantity(client, row.rework_order_id, [{
+        label: "修正后的返工工序数量", quantity: input.effectiveQuantity,
+      }]);
       if (row.rejected) error("已驳回的上数记录不能再修正", 409, "CONFLICT");
       const members = await client.query<{ person_id: string | null; member_count: number }>(
         `SELECT (array_agg(member.person_id ORDER BY member.person_id))[1] AS person_id,
@@ -709,6 +713,9 @@ export class WholeOrderReviewService {
       if (order.status !== "pending_order_review") {
         error("只有 N05 尾部最终数量确认可以修正有效上数", 409, "INVALID_STATE_TRANSITION");
       }
+      await ensureWithinSourceReceivingActualQuantity(client, reworkOrderId, input.corrections.map((correction) => ({
+        label: "修正后的返工工序数量", quantity: correction.effectiveQuantity,
+      })));
 
       const members = await client.query<{ work_task_id: string; person_id: string | null; member_count: number }>(
         `SELECT task.work_task_id,
@@ -921,6 +928,9 @@ export class WholeOrderReviewService {
       this.ensureQuantityPrecision(item, input.newPlannedQuantity);
       const { currentPlan, nextVersion } = await this.quantityState(client, reworkOrderId, input.configurationItemId, item.planned_quantity);
       if (input.newPlannedQuantity <= currentPlan) error("增加后的计划数量必须大于当前有效计划数量", 400, "VALIDATION_ERROR");
+      await ensureWithinSourceReceivingActualQuantity(client, reworkOrderId, [{
+        label: "增加后的返工工序数量", quantity: input.newPlannedQuantity,
+      }]);
       const adjustmentId = randomUUID();
       const eventId = await this.events.append(client, this.withCapability(actor, "quantity:adjust"), {
         action: "rework.quantity.increase.request", entityType: "rework_order", entityId: reworkOrderId,
