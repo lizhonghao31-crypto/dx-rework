@@ -36,6 +36,15 @@ export function supplierContractMissingLabels(fields: readonly string[]): string
   return fields.map((field) => CONTRACT_FIELD_LABELS[field] ?? field);
 }
 
+export function nextSupplierSelection(
+  current: string,
+  suppliers: readonly Pick<SupplierSummary, "supplierId">[],
+  compact: boolean,
+): string {
+  if (current && suppliers.some((supplier) => supplier.supplierId === current)) return current;
+  return compact ? "" : suppliers[0]?.supplierId ?? "";
+}
+
 export function filterSupplierDirectory(
   suppliers: readonly SupplierSummary[],
   input: Readonly<{ query: string; type: "all" | SupplierSummary["supplierType"]; status: "active" | "inactive" | "all" }>,
