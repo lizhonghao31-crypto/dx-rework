@@ -125,6 +125,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canWrite = user ? canWriteSupplierProfiles(user) : false;
+  const canMaintain = mode === "manage" && canWrite;
 
   const loadDirectory = async () => {
     const items = await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true");
@@ -180,7 +181,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const contractVisible = profile ? Object.hasOwn(profile, "contractEntityName") : false;
 
   const save = async () => {
-    if (!profile || !canWrite || busy) return;
+    if (!profile || !canMaintain || busy) return;
     const errors: string[] = [];
     if (!draft.supplierName.trim()) errors.push("供应商显示名称不能为空");
     if (!draft.changeReason.trim()) errors.push("请填写修改原因");
@@ -234,7 +235,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   };
 
   const toggleActive = async () => {
-    if (!profile || !canWrite || busy) return;
+    if (!profile || !canMaintain || busy) return;
     setDraft({ ...draft, active: !profile.active, changeReason: profile.active ? "供应商停用" : "供应商恢复启用" });
     setEditing(true);
   };
@@ -247,8 +248,8 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
           <p>统一查看供应商资料、合同缺项、工艺产能和变更历史。</p>
         </div>
         <div className="supplier-center-heading__actions">
-          <StatusBadge tone={canWrite ? "info" : "neutral"}>{canWrite ? "Root 可维护" : "只读"}</StatusBadge>
-          {canWrite && mode === "manage" ? <a className="dx-button" href={`${pageUrl("ui/master-data")}?view=suppliers&tool=onboarding`}>新增与批量导入</a> : null}
+          <StatusBadge tone={canMaintain ? "info" : "neutral"}>{canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
+          {canMaintain ? <a className="dx-button" href={`${pageUrl("ui/master-data")}?view=suppliers&tool=onboarding`}>新增与批量导入</a> : null}
         </div>
       </header>
       <SupplierCenterNavigation active={mode} />
@@ -295,7 +296,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
                 <Button className="supplier-profile__back" onClick={() => setSelectedId("")}>返回目录</Button>
                 <div><h2>{profile.supplierName}</h2><p>{profile.supplierCode} · 版本 {profile.version}</p></div>
                 <StatusBadge tone={profile.active ? "success" : "warning"}>{profile.active ? "启用" : "停用"}</StatusBadge>
-                {canWrite ? <div className="supplier-profile__actions">
+                {canMaintain ? <div className="supplier-profile__actions">
                   <Button onClick={() => {
                     if (editing) setDraft(draftFromProfile(profile));
                     setEditing((current) => !current);
@@ -304,7 +305,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
                 </div> : null}
               </div>
 
-              {editing && canWrite ? (
+              {editing && canMaintain ? (
                 <form className="supplier-profile-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
                   <fieldset><legend>基础与联系</legend>
                     <label>供应商显示名称<input value={draft.supplierName} onChange={(event) => setDraft({ ...draft, supplierName: event.target.value })} /></label>
