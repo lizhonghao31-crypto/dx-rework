@@ -4,6 +4,7 @@ import { CreateSourcingCaseSchema } from "@dx-rework/contracts";
 
 const base = {
   erpOrderNo: "ERP-CRAFT-001",
+  estimatedCutPieceSendDate: "2026-09-25",
   deliveryDate: "2026-09-30",
   lineItems: [{
     styleNo: "CRAFT-001",
