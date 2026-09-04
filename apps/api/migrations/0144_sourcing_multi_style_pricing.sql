@@ -4,7 +4,8 @@
 
 ALTER TABLE sourcing_cases
   ADD COLUMN daxing_unit_price numeric(14,4)
-    CHECK (daxing_unit_price IS NULL OR daxing_unit_price > 0);
+    CHECK (daxing_unit_price IS NULL OR daxing_unit_price > 0),
+  ADD COLUMN estimated_cut_piece_send_date date;
 
 CREATE TABLE sourcing_case_lines (
   sourcing_case_id uuid NOT NULL REFERENCES sourcing_cases(sourcing_case_id),
