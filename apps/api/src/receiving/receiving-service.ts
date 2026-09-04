@@ -15,6 +15,31 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 type RepeatedReceivingSource = "jiashun" | "other_factory";
 type ReceiptSource = "legacy" | "initial" | "backfill" | RepeatedReceivingSource;
+type ReceivingDifferenceType = "receiving" | "packing";
+
+type RecordPackingInput = Readonly<{
+  receivingBatchId: string;
+  expectedVersion: number;
+  expectedPackingRevisionId?: string | null;
+  packingQuantity: number;
+}>;
+
+type ResolveReceivingDifferenceInput = Readonly<{
+  receivingBatchId: string;
+  expectedVersion: number;
+  expectedDocumentQuantity: number;
+  expectedActualQuantity: number;
+  expectedPackingRevisionId?: string | null;
+  differenceType: ReceivingDifferenceType;
+  result: string;
+}>;
+
+type DifferenceResolution = Readonly<{
+  resolutionId: string;
+  result: string;
+  handledBy: string;
+  handledAt: string;
+}>;
 
 type CreateRepeatedReceivingInput = Readonly<{
   receivingBatchId: string;
@@ -109,6 +134,13 @@ type BoardRow = Readonly<{
   currentDefectiveQuantity: number;
   cumulativeActualQuantity: number;
   differenceQuantity: number;
+  packingRevisionId: string | null;
+  packingQuantity: number | null;
+  packingDifferenceQuantity: number | null;
+  packingRecordedBy: string | null;
+  packingRecordedAt: string | null;
+  receivingDifferenceResolution: DifferenceResolution | null;
+  packingDifferenceResolution: DifferenceResolution | null;
   receiptCount: number;
   batchCount: number;
   receivingHistory: readonly ReceivingHistoryItem[];
@@ -147,9 +179,37 @@ type BoardResult = Readonly<{
   }>;
   rows: readonly BoardRow[];
   page: number;
-  pageSize: 15;
+  pageSize: number;
   totalCount: number;
   totalPages: number;
+}>;
+
+type StyleOperationSnapshot = Readonly<{
+  receivingBatchId: string;
+  styleNo: string;
+  version: number;
+  documentQuantity: number;
+  actualQuantity: number;
+  packingRevisionId: string | null;
+  packingQuantity: number | null;
+}>;
+
+type PackingRevisionResult = Readonly<{
+  packingRevisionId: string;
+  receivingBatchId: string;
+  packingQuantity: number;
+  recordedBy: string;
+  recordedAt: string;
+}>;
+
+type DifferenceResolutionResult = Readonly<{
+  resolutionId: string;
+  receivingBatchId: string;
+  differenceType: ReceivingDifferenceType;
+  differenceQuantity: number;
+  result: string;
+  handledBy: string;
+  handledAt: string;
 }>;
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
@@ -171,6 +231,23 @@ const normalizeBoardStatus = (value: string): BoardStatus => {
   if (value === "" || value === "all") return "all";
   if (value === "normal" || value === "extra" || value === "short" || value === "multiple") return value;
   return fail("收货状态筛选无效");
+};
+
+const normalizeDifferenceType = (value: string): ReceivingDifferenceType => {
+  if (value === "receiving" || value === "packing") return value;
+  return fail("差异类型无效");
+};
+
+const normalizeResolutionResult = (value: string): string => {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 500) fail("处理结果不能为空且不能超过500个字符");
+  return normalized;
+};
+
+const normalizeOptionalUuid = (value: string | null | undefined, label: string): string | null => {
+  if (value === null || value === undefined || value === "") return null;
+  if (!UUID_PATTERN.test(value)) fail(`${label}无效`);
+  return value;
 };
 
 const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
@@ -573,6 +650,82 @@ export class ReceivingService {
     ) {
       fail("只有Root可以修改或删除收货订单", 403, "FORBIDDEN");
     }
+  }
+
+  private assertBoardOperator(
+    actor: TrustedActorContext,
+    capability: "receiving:packing_manage" | "receiving:resolve_difference" | "receiving:export",
+    role?: "tail_supervisor" | "warehouse_receiver",
+  ): void {
+    const root = actor.actorRoles.includes("root_superuser");
+    if (!root && (
+      actor.authorizationCapability !== capability
+      || !actor.authorizationCapabilities?.includes(capability)
+      || (role !== undefined && !actor.actorRoles.includes(role))
+    )) {
+      fail("没有权限执行此订单回货操作", 403, "FORBIDDEN");
+    }
+  }
+
+  private async styleOperationSnapshot(
+    client: PoolClient,
+    receivingBatchId: string,
+  ): Promise<StyleOperationSnapshot> {
+    if (!UUID_PATTERN.test(receivingBatchId)) fail("收货订单标识无效");
+    const batchResult = await client.query<{ style_no: string }>(
+      "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1 AND deleted_at IS NULL",
+      [receivingBatchId],
+    );
+    const batch = batchResult.rows[0];
+    if (!batch) return fail("收货订单不存在", 404, "NOT_FOUND");
+    const styleNo = normalizeStyleNo(batch.style_no);
+    await this.lockStyles(client, [styleNo]);
+    const snapshotResult = await client.query<{
+      receiving_batch_id: string;
+      style_no: string;
+      version: number;
+      document_quantity: string;
+      actual_quantity: string;
+      packing_revision_id: string | null;
+      packing_quantity: string | null;
+    }>(
+      `${RECEIVING_BOARD_BASE_SQL}
+       SELECT action.receiving_batch_id,totals.style_key AS style_no,action.version,
+              totals.document_quantity,
+              totals.current_actual_quantity AS actual_quantity,
+              packing.packing_revision_id,packing.packing_quantity
+       FROM style_totals totals
+       JOIN LATERAL (
+         SELECT item.receiving_batch_id,item.version
+         FROM batch_totals item
+         WHERE item.style_key=totals.style_key
+         ORDER BY item.last_all_received_at DESC NULLS LAST,item.receiving_batch_id DESC
+         LIMIT 1
+       ) action ON true
+       LEFT JOIN LATERAL (
+         SELECT revision.packing_revision_id,revision.packing_quantity
+         FROM receiving_packing_revisions revision
+         WHERE revision.receiving_batch_id=action.receiving_batch_id
+         ORDER BY revision.created_at DESC,revision.packing_revision_id DESC
+         LIMIT 1
+       ) packing ON true
+       WHERE totals.style_key=$3`,
+      ["2000-01-01", "2999-12-31", styleNo],
+    );
+    const snapshot = snapshotResult.rows[0];
+    if (!snapshot) return fail("收货订单不存在", 404, "NOT_FOUND");
+    if (snapshot.receiving_batch_id !== receivingBatchId) {
+      fail("订单已产生新的收货记录，请刷新后重试", 409, "CONFLICT");
+    }
+    return {
+      receivingBatchId: snapshot.receiving_batch_id,
+      styleNo: snapshot.style_no,
+      version: snapshot.version,
+      documentQuantity: Number(snapshot.document_quantity),
+      actualQuantity: Number(snapshot.actual_quantity),
+      packingRevisionId: snapshot.packing_revision_id,
+      packingQuantity: snapshot.packing_quantity === null ? null : Number(snapshot.packing_quantity),
+    };
   }
 
   private validateExpectedVersion(value: number): number {
@@ -1557,12 +1710,241 @@ export class ReceivingService {
     }
   }
 
+  async recordPacking(
+    actor: TrustedActorContext,
+    input: RecordPackingInput,
+    idempotencyKey: string,
+  ): Promise<Result<PackingRevisionResult>> {
+    this.assertBoardOperator(actor, "receiving:packing_manage", "tail_supervisor");
+    const normalized = {
+      receivingBatchId: input.receivingBatchId,
+      expectedVersion: this.validateExpectedVersion(input.expectedVersion),
+      expectedPackingRevisionId: normalizeOptionalUuid(input.expectedPackingRevisionId, "装箱数量版本"),
+      packingQuantity: validateQuantity(input.packingQuantity, "装箱数量", true),
+    };
+    const scope = "receiving.packing.record";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: hash(scope, normalized),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => {
+        const snapshot = await this.styleOperationSnapshot(client, normalized.receivingBatchId);
+        if (snapshot.version !== normalized.expectedVersion
+            || snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
+          fail("订单或装箱数量已更新，请刷新后重试", 409, "CONFLICT");
+        }
+        const packingRevisionId = randomUUID();
+        const eventId = await this.events.append(client, actor, {
+          action: "receiving.packing.record",
+          entityType: "receiving_batch",
+          entityId: snapshot.receivingBatchId,
+          before: snapshot.packingRevisionId === null ? null : {
+            packingRevisionId: snapshot.packingRevisionId,
+            packingQuantity: snapshot.packingQuantity,
+          },
+          after: { packingRevisionId, packingQuantity: normalized.packingQuantity },
+        });
+        const inserted = await client.query<{
+          packing_revision_id: string;
+          receiving_batch_id: string;
+          packing_quantity: string;
+          recorded_by: string;
+          created_at: Date;
+        }>(
+          `INSERT INTO receiving_packing_revisions(
+             packing_revision_id,receiving_batch_id,packing_quantity,recorded_by,
+             operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6)
+           RETURNING packing_revision_id,receiving_batch_id,packing_quantity,recorded_by,created_at`,
+          [packingRevisionId, snapshot.receivingBatchId, normalized.packingQuantity,
+            actor.actorId, eventId, actor.requestId],
+        );
+        const row = inserted.rows[0]!;
+        return {
+          statusCode: 201,
+          response: {
+            packingRevisionId: row.packing_revision_id,
+            receivingBatchId: row.receiving_batch_id,
+            packingQuantity: Number(row.packing_quantity),
+            recordedBy: row.recorded_by,
+            recordedAt: row.created_at.toISOString(),
+          },
+        };
+      });
+      await client.query("COMMIT");
+      return { value: outcome.response, reused: outcome.reused };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async resolveDifference(
+    actor: TrustedActorContext,
+    input: ResolveReceivingDifferenceInput,
+    idempotencyKey: string,
+  ): Promise<Result<DifferenceResolutionResult>> {
+    const differenceType = normalizeDifferenceType(input.differenceType);
+    const capability = differenceType === "receiving"
+      ? "receiving:resolve_difference" as const
+      : "receiving:packing_manage" as const;
+    this.assertBoardOperator(
+      actor,
+      capability,
+      differenceType === "receiving" ? "warehouse_receiver" : "tail_supervisor",
+    );
+    const normalized = {
+      receivingBatchId: input.receivingBatchId,
+      expectedVersion: this.validateExpectedVersion(input.expectedVersion),
+      expectedDocumentQuantity: validateQuantity(input.expectedDocumentQuantity, "送货单数量", true),
+      expectedActualQuantity: validateQuantity(input.expectedActualQuantity, "实收数量", true),
+      expectedPackingRevisionId: normalizeOptionalUuid(input.expectedPackingRevisionId, "装箱数量版本"),
+      differenceType,
+      result: normalizeResolutionResult(input.result),
+    };
+    const scope = `receiving.difference.resolve.${differenceType}`;
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: hash(scope, normalized),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => {
+        const snapshot = await this.styleOperationSnapshot(client, normalized.receivingBatchId);
+        if (snapshot.version !== normalized.expectedVersion) {
+          fail("订单数量已更新，请刷新后重试", 409, "CONFLICT");
+        }
+        if (snapshot.documentQuantity !== normalized.expectedDocumentQuantity
+            || snapshot.actualQuantity !== normalized.expectedActualQuantity) {
+          fail("订单数量已变化，请刷新或搜索款号后再处理", 409, "CONFLICT");
+        }
+        if (differenceType === "packing"
+            && snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
+          fail("装箱数量已更新，请刷新后重试", 409, "CONFLICT");
+        }
+        if (differenceType === "packing" && snapshot.packingQuantity === null) {
+          fail("请先录入装箱数量");
+        }
+        const differenceQuantity = differenceType === "receiving"
+          ? snapshot.actualQuantity - snapshot.documentQuantity
+          : snapshot.actualQuantity - snapshot.packingQuantity!;
+        if (differenceQuantity === 0) fail("当前没有需要处理的差异", 409, "CONFLICT");
+        const resolutionId = randomUUID();
+        const eventId = await this.events.append(client, actor, {
+          action: "receiving.difference.resolve",
+          entityType: "receiving_batch",
+          entityId: snapshot.receivingBatchId,
+          after: {
+            resolutionId,
+            differenceType,
+            documentQuantity: snapshot.documentQuantity,
+            actualQuantity: snapshot.actualQuantity,
+            packingRevisionId: differenceType === "packing" ? snapshot.packingRevisionId : null,
+            packingQuantity: differenceType === "packing" ? snapshot.packingQuantity : null,
+            differenceQuantity,
+            result: normalized.result,
+          },
+        });
+        const inserted = await client.query<{
+          resolution_id: string;
+          receiving_batch_id: string;
+          difference_type: ReceivingDifferenceType;
+          difference_quantity_snapshot: string;
+          result: string;
+          handled_by: string;
+          created_at: Date;
+        }>(
+          `INSERT INTO receiving_difference_resolutions(
+             resolution_id,receiving_batch_id,difference_type,
+             document_quantity_snapshot,actual_quantity_snapshot,
+             packing_revision_id,packing_quantity_snapshot,difference_quantity_snapshot,
+             result,handled_by,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           RETURNING resolution_id,receiving_batch_id,difference_type,
+                     difference_quantity_snapshot,result,handled_by,created_at`,
+          [resolutionId, snapshot.receivingBatchId, differenceType,
+            snapshot.documentQuantity, snapshot.actualQuantity,
+            differenceType === "packing" ? snapshot.packingRevisionId : null,
+            differenceType === "packing" ? snapshot.packingQuantity : null,
+            differenceQuantity, normalized.result, actor.actorId, eventId, actor.requestId],
+        );
+        const row = inserted.rows[0]!;
+        return {
+          statusCode: 201,
+          response: {
+            resolutionId: row.resolution_id,
+            receivingBatchId: row.receiving_batch_id,
+            differenceType: row.difference_type,
+            differenceQuantity: Number(row.difference_quantity_snapshot),
+            result: row.result,
+            handledBy: row.handled_by,
+            handledAt: row.created_at.toISOString(),
+          },
+        };
+      });
+      await client.query("COMMIT");
+      return { value: outcome.response, reused: outcome.reused };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async exportBoard(
+    actor: TrustedActorContext,
+    startDate: string,
+    endDate: string,
+    query = "",
+    status = "all",
+  ): Promise<BoardResult> {
+    this.assertBoardOperator(actor, "receiving:export");
+    const board = await this.board(startDate, endDate, query, status, 1, 50_001);
+    if (board.totalCount > 50_000) fail("导出订单超过50000条，请缩小筛选范围");
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      await this.events.append(client, actor, {
+        action: "receiving.board.export",
+        entityType: "receiving_board",
+        entityId: "receiving-board",
+        after: {
+          startDate: board.startDate,
+          endDate: board.endDate,
+          query: query.trim().toUpperCase(),
+          status: board.status,
+          mode: board.mode,
+          orderCount: board.totalCount,
+        },
+      });
+      await client.query("COMMIT");
+      return board;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async board(
     startDateInput: string,
     endDateOrQuery = startDateInput,
     query = "",
     statusInput = "all",
     pageInput = 1,
+    pageSizeInput = 15,
   ): Promise<BoardResult> {
     const startDate = normalizeBoardDate(startDateInput);
     const hasExplicitEndDate = /^\d{4}-\d{2}-\d{2}$/.test(endDateOrQuery);
@@ -1572,7 +1954,10 @@ export class ReceivingService {
     const status = normalizeBoardStatus(statusInput);
     const mode = needle ? "search" : "range";
     const page = Number.isInteger(pageInput) && pageInput > 0 ? pageInput : fail("分页页码无效");
-    const offset = (page - 1) * 15;
+    const pageSize = Number.isInteger(pageSizeInput) && pageSizeInput > 0 && pageSizeInput <= 50_001
+      ? pageSizeInput
+      : fail("分页数量无效");
+    const offset = (page - 1) * pageSize;
 
     const client = await this.database.connect();
     try {
@@ -1625,6 +2010,18 @@ export class ReceivingService {
       receipt_count: string;
       batch_count: string;
       receiving_history: ReceivingHistoryItem[];
+      packing_revision_id: string | null;
+      packing_quantity: string | null;
+      packing_recorded_by: string | null;
+      packing_recorded_at: Date | null;
+      receiving_resolution_id: string | null;
+      receiving_resolution_result: string | null;
+      receiving_resolution_handled_by: string | null;
+      receiving_resolution_handled_at: Date | null;
+      packing_resolution_id: string | null;
+      packing_resolution_result: string | null;
+      packing_resolution_handled_by: string | null;
+      packing_resolution_handled_at: Date | null;
       last_received_at: Date;
       last_received_cursor: string;
       last_receiver_name: string;
@@ -1654,13 +2051,24 @@ export class ReceivingService {
          SELECT *
          FROM filtered_totals
          ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC
-         LIMIT 15 OFFSET $5
+         LIMIT $5 OFFSET $6
        )
        SELECT action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
               totals.current_actual_quantity,totals.current_defective_quantity,
               totals.cumulative_actual_quantity,
               totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
+              packing.packing_revision_id,packing.packing_quantity,
+              packing_user.display_name AS packing_recorded_by,
+              packing.created_at AS packing_recorded_at,
+              receiving_resolution.resolution_id AS receiving_resolution_id,
+              receiving_resolution.result AS receiving_resolution_result,
+              receiving_resolution_user.display_name AS receiving_resolution_handled_by,
+              receiving_resolution.created_at AS receiving_resolution_handled_at,
+              packing_resolution.resolution_id AS packing_resolution_id,
+              packing_resolution.result AS packing_resolution_result,
+              packing_resolution_user.display_name AS packing_resolution_handled_by,
+              packing_resolution.created_at AS packing_resolution_handled_at,
               totals.receipt_count,totals.batch_count,
               COALESCE(receiving_history.items,'[]'::jsonb) AS receiving_history,
               totals.last_received_at,
@@ -1690,6 +2098,39 @@ export class ReceivingService {
                   batch.receiving_batch_id DESC
          LIMIT 1
        ) action ON true
+       LEFT JOIN LATERAL (
+         SELECT revision.packing_revision_id,revision.packing_quantity,revision.recorded_by,revision.created_at
+         FROM receiving_packing_revisions revision
+         WHERE revision.receiving_batch_id=action.receiving_batch_id
+         ORDER BY revision.created_at DESC,revision.packing_revision_id DESC
+         LIMIT 1
+       ) packing ON true
+       LEFT JOIN app_users packing_user ON packing_user.id=packing.recorded_by
+       LEFT JOIN LATERAL (
+         SELECT resolution.resolution_id,resolution.result,resolution.handled_by,resolution.created_at
+         FROM receiving_difference_resolutions resolution
+         WHERE resolution.receiving_batch_id=action.receiving_batch_id
+           AND resolution.difference_type='receiving'
+           AND resolution.document_quantity_snapshot=totals.document_quantity
+           AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
+           AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-totals.document_quantity
+         ORDER BY resolution.created_at DESC,resolution.resolution_id DESC
+         LIMIT 1
+       ) receiving_resolution ON true
+       LEFT JOIN app_users receiving_resolution_user ON receiving_resolution_user.id=receiving_resolution.handled_by
+       LEFT JOIN LATERAL (
+         SELECT resolution.resolution_id,resolution.result,resolution.handled_by,resolution.created_at
+         FROM receiving_difference_resolutions resolution
+         WHERE resolution.receiving_batch_id=action.receiving_batch_id
+           AND resolution.difference_type='packing'
+           AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
+           AND resolution.packing_revision_id=packing.packing_revision_id
+           AND resolution.packing_quantity_snapshot=packing.packing_quantity
+           AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-packing.packing_quantity
+         ORDER BY resolution.created_at DESC,resolution.resolution_id DESC
+         LIMIT 1
+       ) packing_resolution ON true
+       LEFT JOIN app_users packing_resolution_user ON packing_resolution_user.id=packing_resolution.handled_by
        JOIN LATERAL (
          SELECT u.display_name
          FROM receiving_receipts latest
@@ -1817,6 +2258,7 @@ export class ReceivingService {
         endDate,
         needle,
         status,
+        pageSize,
         offset,
       ],
     );
@@ -1832,6 +2274,25 @@ export class ReceivingService {
       currentDefectiveQuantity: Number(row.current_defective_quantity),
       cumulativeActualQuantity: Number(row.cumulative_actual_quantity),
       differenceQuantity: Number(row.difference_quantity),
+      packingRevisionId: row.packing_revision_id,
+      packingQuantity: row.packing_quantity === null ? null : Number(row.packing_quantity),
+      packingDifferenceQuantity: row.packing_quantity === null
+        ? null
+        : Number(row.cumulative_actual_quantity) - Number(row.packing_quantity),
+      packingRecordedBy: row.packing_recorded_by,
+      packingRecordedAt: row.packing_recorded_at?.toISOString() ?? null,
+      receivingDifferenceResolution: row.receiving_resolution_id === null ? null : {
+        resolutionId: row.receiving_resolution_id,
+        result: row.receiving_resolution_result!,
+        handledBy: row.receiving_resolution_handled_by!,
+        handledAt: row.receiving_resolution_handled_at!.toISOString(),
+      },
+      packingDifferenceResolution: row.packing_resolution_id === null ? null : {
+        resolutionId: row.packing_resolution_id,
+        result: row.packing_resolution_result!,
+        handledBy: row.packing_resolution_handled_by!,
+        handledAt: row.packing_resolution_handled_at!.toISOString(),
+      },
       receiptCount: Number(row.receipt_count),
       batchCount: Number(row.batch_count),
       receivingHistory: row.receiving_history.map((item) => ({
@@ -1875,9 +2336,9 @@ export class ReceivingService {
       },
       rows,
       page,
-      pageSize: 15,
+      pageSize,
       totalCount,
-      totalPages: Math.max(1, Math.ceil(totalCount / 15)),
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1895,6 +2356,10 @@ export type {
   CorrectReceivingBatchInput,
   CorrectReceivingReceiptInput,
   CreateRepeatedReceivingInput,
+  DifferenceResolutionResult,
+  RecordPackingInput,
+  ResolveReceivingDifferenceInput,
+  PackingRevisionResult,
   RepeatReceivingOption,
   CreateReceivingInput,
   ReceivingBatchSnapshot,

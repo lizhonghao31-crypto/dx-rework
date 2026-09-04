@@ -4,6 +4,7 @@ import { businessActor, isRootUser } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
+import { buildWorkbook } from "../reporting/xlsx-workbook.js";
 import type { ReceivingService } from "./receiving-service.js";
 
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie
@@ -119,6 +120,54 @@ const deleteBody = (input: unknown): { expectedVersion: number } => {
   return { expectedVersion: Number((input as Record<string, unknown>).expectedVersion) };
 };
 
+const packingBody = (input: unknown): {
+  expectedVersion: number;
+  expectedPackingRevisionId: string | null;
+  packingQuantity: number;
+} => {
+  if (!input || typeof input !== "object") {
+    throw new ApplicationError("VALIDATION_ERROR", "装箱数量信息不完整", 400);
+  }
+  const body = input as Record<string, unknown>;
+  return {
+    expectedVersion: Number(body.expectedVersion),
+    expectedPackingRevisionId: typeof body.expectedPackingRevisionId === "string"
+      ? body.expectedPackingRevisionId
+      : null,
+    packingQuantity: Number(body.packingQuantity),
+  };
+};
+
+const resolutionBody = (input: unknown): {
+  expectedVersion: number;
+  expectedDocumentQuantity: number;
+  expectedActualQuantity: number;
+  expectedPackingRevisionId: string | null;
+  differenceType: "receiving" | "packing";
+  result: string;
+} => {
+  if (!input || typeof input !== "object") {
+    throw new ApplicationError("VALIDATION_ERROR", "差异处理信息不完整", 400);
+  }
+  const body = input as Record<string, unknown>;
+  if (body.differenceType !== "receiving" && body.differenceType !== "packing") {
+    throw new ApplicationError("VALIDATION_ERROR", "差异类型无效", 400);
+  }
+  if (typeof body.result !== "string") {
+    throw new ApplicationError("VALIDATION_ERROR", "请填写处理结果", 400);
+  }
+  return {
+    expectedVersion: Number(body.expectedVersion),
+    expectedDocumentQuantity: Number(body.expectedDocumentQuantity),
+    expectedActualQuantity: Number(body.expectedActualQuantity),
+    expectedPackingRevisionId: typeof body.expectedPackingRevisionId === "string"
+      ? body.expectedPackingRevisionId
+      : null,
+    differenceType: body.differenceType,
+    result: body.result,
+  };
+};
+
 const batchId = (input: string): string => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input)) {
     throw new ApplicationError("VALIDATION_ERROR", "收货订单标识无效", 400);
@@ -201,6 +250,21 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     );
   };
 
+  const boardOperator = async (
+    request: FastifyRequest,
+    role: "warehouse_receiver" | "tail_supervisor" | null,
+    capability: "receiving:resolve_difference" | "receiving:packing_manage" | "receiving:export",
+  ) => {
+    const user = await dependencies.authenticate(token(request));
+    const root = await isRootUser(dependencies.root, user.id);
+    const permitted = user.capabilities.includes(capability)
+      && (role === null || user.businessRoles?.includes(role) === true);
+    if (!root && !permitted) {
+      throw new ApplicationError("FORBIDDEN", "没有权限执行此订单回货操作", 403);
+    }
+    return businessActor(dependencies.root, user, request.id, capability, root && role ? role : undefined);
+  };
+
   app.get<{ Querystring: { q?: string } }>("/receiving/repeat-options", async (request) => {
     await creator(request);
     return { orders: await dependencies.service.listRepeatOptions(request.query.q ?? "") };
@@ -240,6 +304,101 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
       page,
     );
   });
+
+  app.get<{ Querystring: {
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    q?: string;
+    status?: string;
+  } }>("/receiving/board/export", async (request, reply) => {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const startDate = request.query.startDate ?? request.query.date ?? today;
+    const endDate = request.query.endDate ?? request.query.date ?? startDate;
+    const board = await dependencies.service.exportBoard(
+      await boardOperator(request, null, "receiving:export"),
+      startDate,
+      endDate,
+      request.query.q ?? "",
+      request.query.status ?? "all",
+    );
+    const resolutionStatus = (value: { result: string; handledBy: string; handledAt: string } | null): string =>
+      value ? "已处理" : "未处理";
+    const workbook = buildWorkbook([
+      {
+        name: "订单汇总",
+        rows: [
+          ["筛选范围", board.mode === "search" ? "全时间款号搜索" : `${board.startDate} 至 ${board.endDate}`, "状态", board.status],
+          ["导出时间", new Date().toISOString(), "订单数", board.totalCount],
+          ["款号", "送货单数量", "实收数量", "次品数量", "收货差异", "收货差异状态", "收货差异处理结果", "收货差异处理人", "收货差异处理时间", "装箱数量", "装箱差异", "装箱差异状态", "装箱差异处理结果", "装箱差异处理人", "装箱差异处理时间", "最近收货", "收货人"],
+          ...board.rows.map((row) => [
+            row.styleNo,row.documentQuantity,row.cumulativeActualQuantity,row.currentDefectiveQuantity,row.differenceQuantity,
+            row.differenceQuantity === 0 ? "无差异" : resolutionStatus(row.receivingDifferenceResolution),
+            row.receivingDifferenceResolution?.result ?? "",row.receivingDifferenceResolution?.handledBy ?? "",row.receivingDifferenceResolution?.handledAt ?? "",
+            row.packingQuantity,row.packingDifferenceQuantity,
+            row.packingDifferenceQuantity === null ? "未录入" : row.packingDifferenceQuantity === 0 ? "无差异" : resolutionStatus(row.packingDifferenceResolution),
+            row.packingDifferenceResolution?.result ?? "",row.packingDifferenceResolution?.handledBy ?? "",row.packingDifferenceResolution?.handledAt ?? "",
+            row.lastReceivedAt,row.lastReceiverName,
+          ]),
+        ],
+      },
+      {
+        name: "收货明细",
+        rows: [
+          ["筛选范围", board.mode === "search" ? "全时间款号搜索" : `${board.startDate} 至 ${board.endDate}`, "状态", board.status],
+          ["导出时间", new Date().toISOString(), "订单数", board.totalCount],
+          ["款号", "收货次序", "来源", "本次送货单", "本次实收", "本次次品", "累计实收", "收货差异", "收货人", "收货时间"],
+          ...board.rows.flatMap((row) => row.receivingHistory.map((item) => [
+            row.styleNo,item.sequence,
+            item.receivingSource === "other_factory" ? "其他工厂" : item.receivingSource === "jiashun" ? "嘉顺" : "来源待确认",
+            item.receiptDocumentQuantity,item.actualQuantity,item.defectiveQuantity,item.cumulativeActualQuantity,item.differenceQuantity,
+            item.receiverName,item.receivedAt,
+          ])),
+        ],
+      },
+    ]);
+    return reply
+      .header("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+      .header("content-disposition", `attachment; filename="receiving-board-${board.endDate}.xlsx"`)
+      .send(workbook);
+  });
+
+  app.post<{ Params: { receivingBatchId: string } }>(
+    "/receiving/batches/:receivingBatchId/packing-revisions",
+    async (request, reply) => {
+      const input = packingBody(request.body);
+      const result = await dependencies.service.recordPacking(
+        await boardOperator(request, "tail_supervisor", "receiving:packing_manage"),
+        { receivingBatchId: batchId(request.params.receivingBatchId), ...input },
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
+
+  app.post<{ Params: { receivingBatchId: string } }>(
+    "/receiving/batches/:receivingBatchId/difference-resolutions",
+    async (request, reply) => {
+      const input = resolutionBody(request.body);
+      const role = input.differenceType === "receiving" ? "warehouse_receiver" : "tail_supervisor";
+      const capability = input.differenceType === "receiving"
+        ? "receiving:resolve_difference" as const
+        : "receiving:packing_manage" as const;
+      const result = await dependencies.service.resolveDifference(
+        await boardOperator(request, role, capability),
+        { receivingBatchId: batchId(request.params.receivingBatchId), ...input },
+        idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(201).send(result.value);
+    },
+  );
 
   app.post("/receiving/repeat-receipts", async (request, reply) => {
     const result = await dependencies.service.createRepeated(

@@ -56,6 +56,22 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     requestId: randomUUID(),
   });
 
+  const tailSupervisor = (): TrustedActorContext => ({
+    actorId: receiverId,
+    actorRoles: ["tail_supervisor"],
+    authorizationCapability: "receiving:packing_manage",
+    authorizationCapabilities: ["receiving:packing_manage"],
+    requestId: randomUUID(),
+  });
+
+  const differenceResolver = (): TrustedActorContext => ({
+    actorId: receiverId,
+    actorRoles: ["warehouse_receiver"],
+    authorizationCapability: "receiving:resolve_difference",
+    authorizationCapabilities: ["receiving:resolve_difference"],
+    requestId: randomUUID(),
+  });
+
   const migration = async (name: string): Promise<void> => {
     await database.query(await readFile(
       new URL(`../../apps/api/migrations/${name}`, import.meta.url),
@@ -287,6 +303,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0132_receiving_merge_into_rework_target.sql");
     await migration("0137_receiving_source_classification.sql");
     await migration("0138_receiving_receipt_corrections.sql");
+    await migration("0139_receiving_packing_difference_resolution.sql");
   });
 
   afterAll(async () => {
@@ -812,6 +829,101 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       actualQuantity: 1,
       defectiveQuantity: 0,
     }, randomUUID())).rejects.toThrow("该订单已不可追加收货，请重新搜索选择");
+  });
+
+  it("records cumulative packing and resolves both live differences with immutable audit", async () => {
+    const created = await service.create(receiver(), {
+      styleNo: "STYLE-BOARD-OPERATIONS-01",
+      documentQuantity: 1_944,
+      actualQuantity: 1_736,
+      defectiveQuantity: 0,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const initial = (await service.board(
+      businessDate(), businessDate(), "STYLE-BOARD-OPERATIONS-01",
+    )).rows[0]!;
+
+    const packingKey = randomUUID();
+    const packingInput = {
+      receivingBatchId: created.value.receivingBatchId,
+      expectedVersion: initial.version,
+      expectedPackingRevisionId: null,
+      packingQuantity: 1_700,
+    };
+    const packing = await service.recordPacking(tailSupervisor(), packingInput, packingKey);
+    const packingReplay = await service.recordPacking(tailSupervisor(), packingInput, packingKey);
+    expect(packingReplay.reused).toBe(true);
+    expect(packingReplay.value.packingRevisionId).toBe(packing.value.packingRevisionId);
+
+    const afterPacking = (await service.board(
+      businessDate(), businessDate(), "STYLE-BOARD-OPERATIONS-01",
+    )).rows[0]!;
+    expect(afterPacking).toMatchObject({
+      packingQuantity: 1_700,
+      packingDifferenceQuantity: 36,
+      receivingDifferenceResolution: null,
+      packingDifferenceResolution: null,
+    });
+
+    await service.resolveDifference(differenceResolver(), {
+      receivingBatchId: afterPacking.receivingBatchId,
+      expectedVersion: afterPacking.version,
+      expectedDocumentQuantity: afterPacking.documentQuantity,
+      expectedActualQuantity: afterPacking.cumulativeActualQuantity,
+      expectedPackingRevisionId: afterPacking.packingRevisionId,
+      differenceType: "receiving",
+      result: "已与送货工厂核对，差额转下一批补回",
+    }, randomUUID());
+    await service.resolveDifference(tailSupervisor(), {
+      receivingBatchId: afterPacking.receivingBatchId,
+      expectedVersion: afterPacking.version,
+      expectedDocumentQuantity: afterPacking.documentQuantity,
+      expectedActualQuantity: afterPacking.cumulativeActualQuantity,
+      expectedPackingRevisionId: afterPacking.packingRevisionId,
+      differenceType: "packing",
+      result: "尾部复核完成，36件待补装",
+    }, randomUUID());
+
+    const resolved = (await service.board(
+      businessDate(), businessDate(), "STYLE-BOARD-OPERATIONS-01",
+    )).rows[0]!;
+    expect(resolved.receivingDifferenceResolution).toMatchObject({
+      result: "已与送货工厂核对，差额转下一批补回",
+      handledBy: receiverId,
+    });
+    expect(resolved.packingDifferenceResolution).toMatchObject({
+      result: "尾部复核完成，36件待补装",
+      handledBy: receiverId,
+    });
+
+    await expect(database.query(
+      "UPDATE receiving_packing_revisions SET packing_quantity=1701 WHERE packing_revision_id=$1",
+      [packing.value.packingRevisionId],
+    )).rejects.toThrow("receiving board operation history is immutable");
+
+    await service.createRepeated(receiver(), {
+      receivingBatchId: created.value.receivingBatchId,
+      source: "jiashun",
+      actualQuantity: 6,
+      defectiveQuantity: 0,
+    }, randomUUID());
+    const changed = (await service.board(
+      businessDate(), businessDate(), "STYLE-BOARD-OPERATIONS-01",
+    )).rows[0]!;
+    expect(changed).toMatchObject({
+      cumulativeActualQuantity: 1_742,
+      receivingDifferenceResolution: null,
+      packingDifferenceResolution: null,
+    });
+    await expect(service.resolveDifference(differenceResolver(), {
+      receivingBatchId: changed.receivingBatchId,
+      expectedVersion: changed.version,
+      expectedDocumentQuantity: 1_944,
+      expectedActualQuantity: 1_736,
+      expectedPackingRevisionId: changed.packingRevisionId,
+      differenceType: "receiving",
+      result: "旧数量不可继续提交",
+    }, randomUUID())).rejects.toThrow("订单数量已变化");
   });
 
   it("keeps an open rework action visible when same-style receiving batches consolidate", async () => {
