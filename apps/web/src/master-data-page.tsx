@@ -663,7 +663,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       <nav className="master-data-view-tabs" aria-label="基础资料数据库">
         <a className={view === "crafts" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=crafts`}>工艺数据库</a>
         <a className={view === "processes" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=processes`}>工序数据库</a>
-        <a className={view === "suppliers" ? "active" : ""} href={`${pageUrl("ui/master-data")}?view=suppliers`}>工厂与供应商</a>
+        <a href={pageUrl("ui/suppliers")}>供应商中心</a>
       </nav>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
