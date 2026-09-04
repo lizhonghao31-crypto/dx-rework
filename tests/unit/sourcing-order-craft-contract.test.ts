@@ -4,9 +4,14 @@ import { CreateSourcingCaseSchema } from "@dx-rework/contracts";
 
 const base = {
   erpOrderNo: "ERP-CRAFT-001",
-  styleNo: "CRAFT-001",
   deliveryDate: "2026-09-30",
-  orderQuantity: 80,
+  lineItems: [{
+    styleNo: "CRAFT-001",
+    color: "黑色",
+    quantity: 80,
+    externalUnitPrice: "12.0000",
+  }],
+  daxingUnitPrice: "10.0000",
 };
 
 describe("sourcing order craft contract", () => {
