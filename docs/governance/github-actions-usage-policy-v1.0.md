@@ -9,7 +9,7 @@ GitHub Actions is an evidence layer, not a development scratchpad. Development, 
 ## Mandatory execution policy
 
 1. Ordinary PR Head updates may allocate only the single Quick Gate hosted job in `.github/workflows/ci.yml`.
-2. Quick Gate is limited to exact-Head/governance checks, Actions-policy verification, dependency install, lint, typecheck, workspace build without the root `postbuild`, migration static lint and secret scan.
+2. Quick Gate uses fail-closed scope routing: governance-only changes skip business dependencies; safe UI-only changes must contain only `apps/web/src` CSS/TSX plus a changed unit contract test and run scoped UI dependencies, changed-file lint, web typecheck, the web dependency-chain build and the changed contract tests; every other change retains the full ordinary Quick Gate.
 3. Quick Gate must not run PostgreSQL, the full test suite, migration replay, backup/restore, PR-17 acceptance, release packaging, Playwright/browser installation or preview generation/deployment.
 4. Heavy validation lives in `.github/workflows/full-gate.yml` and may allocate a runner only while the PR has the `full-gate` label.
 5. Once `full-gate` is present, any new Head invalidates prior Full Gate evidence and must run the Full Gate again.
@@ -23,7 +23,7 @@ GitHub Actions is an evidence layer, not a development scratchpad. Development, 
 
 ## Machine guard
 
-`scripts/ci/verify-actions-policy.mjs` runs inside Quick Gate and rejects restoration of the high-burn topology, including automatic Preview/Governance runners, heavy work in Quick Gate, removal of `full-gate` gating, or stale-run cancellation being disabled.
+`scripts/ci/verify-actions-policy.mjs` runs inside Quick Gate and rejects restoration of the high-burn topology, including automatic Preview/Governance runners, unsafe widening of the UI-only allowlist, removal of UI contract-test requirements, heavy work in Quick Gate, removal of `full-gate` gating, or stale-run cancellation being disabled.
 
 ## Change control
 

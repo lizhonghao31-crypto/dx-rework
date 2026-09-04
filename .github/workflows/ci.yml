@@ -59,6 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           governance_only=false
+          ui_only=false
 
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
             test -n "${BASE_SHA}"
@@ -67,24 +68,49 @@ jobs:
             git fetch --no-tags --depth=1 origin "${BASE_SHA}"
 
             mapfile -t changed_files < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+            printf '%s\n' "${changed_files[@]}" > "$RUNNER_TEMP/ui-quick-gate-files.txt"
             if (( ${#changed_files[@]} > 0 )); then
-              governance_only=true
+              governance_candidate=true
+              ui_candidate=true
+              ui_source_seen=false
+              ui_contract_test_seen=false
               for path in "${changed_files[@]}"; do
                 case "${path}" in
                   .github/workflows/*|.github/pull_request_template.md|AGENTS.md|docs/governance/*|scripts/ci/*)
                     ;;
                   *)
-                    governance_only=false
+                    governance_candidate=false
+                    ;;
+                esac
+                case "${path}" in
+                  apps/web/src/*.css|apps/web/src/*.tsx)
+                    ui_source_seen=true
+                    ;;
+                  tests/unit/*contract.test.ts)
+                    ui_contract_test_seen=true
+                    ;;
+                  *)
+                    ui_candidate=false
                     ;;
                 esac
               done
+              governance_only="${governance_candidate}"
+              if [[ "${ui_candidate}" == true && "${ui_source_seen}" == true && "${ui_contract_test_seen}" == true ]]; then
+                ui_only=true
+              fi
             fi
           fi
 
-          echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
-          echo "GOVERNANCE_ONLY=${governance_only}" >> "${GITHUB_ENV}"
+          {
+            echo "governance_only=${governance_only}"
+            echo "ui_only=${ui_only}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "GOVERNANCE_ONLY=${governance_only}"
+            echo "UI_ONLY=${ui_only}"
+          } >> "${GITHUB_ENV}"
           echo "Quick Gate governance-only: ${governance_only}"
-
+          echo "Quick Gate UI-only: ${ui_only}"
       - name: Verify Actions usage policy
         run: node scripts/ci/verify-actions-policy.mjs
 
@@ -110,33 +136,91 @@ jobs:
           cache: npm
 
       - name: Pin npm 10
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm install --global npm@10.9.9
 
+      - name: Install scoped UI dependencies
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        run: npm ci --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui --include-workspace-root --ignore-scripts
+
+      - name: Validate UI-only diff
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "${BASE_SHA}" "${HEAD_SHA}"
+          while IFS= read -r path; do test -f "${path}"; done < "$RUNNER_TEMP/ui-quick-gate-files.txt"
+
+      - name: Lint changed UI TypeScript
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t lint_files < <(grep -E '\.(ts|tsx)$' "$RUNNER_TEMP/ui-quick-gate-files.txt" || true)
+          test "${#lint_files[@]}" -gt 0
+          npx eslint "${lint_files[@]}" --max-warnings=0
+
+      - name: Typecheck web workspace
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        run: npm run typecheck --workspace @dx-rework/web
+
+      - name: Build web dependency chain
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build --workspace @dx-rework/contracts
+          npm run build --workspace @dx-rework/ui
+          npm run build --workspace @dx-rework/web
+
+      - name: Run changed UI contract tests
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t contract_tests < <(grep -E '^tests/unit/.*contract\.test\.ts$' "$RUNNER_TEMP/ui-quick-gate-files.txt")
+          test "${#contract_tests[@]}" -gt 0
+          npx vitest run "${contract_tests[@]}"
       - name: Install locked dependencies
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm ci
 
       - name: Lint
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm run lint
 
       - name: Typecheck
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm run typecheck
 
       - name: Build workspaces without root postbuild business-chain gate
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm run build --workspaces --if-present
 
       - name: Validate migration files statically
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm run db:migrate:lint
 
       - name: Scan repository for committed secret signatures
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         run: npm run secret:scan
 
+      - name: Write UI-only quick-gate summary
+        if: ${{ steps.classify.outputs.ui_only == 'true' }}
+        shell: bash
+        run: |
+          {
+            echo "## UI-only Quick Gate"
+            echo
+            echo "- Head SHA: $(git rev-parse HEAD)"
+            echo "- Exact Head / Actions policy: passed"
+            echo "- Changed UI lint / web typecheck / web dependency build: passed"
+            echo "- Changed UI contract tests: passed"
+            echo "- API, database, migration and unrelated workspace checks skipped: safe UI-only diff"
+          } >> "${GITHUB_STEP_SUMMARY}"
       - name: Write governance-only quick-gate summary
         if: ${{ steps.classify.outputs.governance_only == 'true' }}
         shell: bash
@@ -153,7 +237,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Write business quick-gate summary
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
+        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.ui_only != 'true' }}
         shell: bash
         run: |
           {
