@@ -35,6 +35,7 @@ const caseSummary: SourcingCaseSummary = {
     legacy: false,
   }],
   daxingUnitPrice: "10.0000",
+  estimatedCutPieceSendDate: "2026-09-10",
   deliveryDate: "2026-09-15",
   craftIds: ["00000000-0000-4000-8000-000000000401"],
   processes: ["净色车缝并整烫"],
@@ -148,6 +149,7 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         erpOrderNo: "ERP-100",
+        estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
         craftIds: ["00000000-0000-4000-8000-000000000401"],
         lineItems: [{
@@ -170,6 +172,7 @@ describe("sourcing PR03 routes", () => {
       }),
       {
         erpOrderNo: "ERP-100",
+        estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
         craftIds: ["00000000-0000-4000-8000-000000000401"],
         lineItems: [{
@@ -220,6 +223,7 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         erpOrderNo: "ERP-101",
+        estimatedCutPieceSendDate: "2026-09-11",
         deliveryDate: "2026-09-16",
         craftIds: ["00000000-0000-4000-8000-000000000402"],
         lineItems: [{
@@ -274,6 +278,7 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         erpOrderNo: "ERP-ROOT",
+        estimatedCutPieceSendDate: "2026-09-12",
         deliveryDate: "2026-09-17",
         craftIds: ["00000000-0000-4000-8000-000000000403"],
         lineItems: [{
