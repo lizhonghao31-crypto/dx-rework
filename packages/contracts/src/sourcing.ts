@@ -34,6 +34,23 @@ export const calculateSourcingTotalExact = (
   return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
 };
 
+export const calculateSourcingLinesTotalExact = (
+  lines: readonly Readonly<{ unitPrice: string; quantity: number }>[],
+): string => {
+  if (!lines.length || lines.length > 20) {
+    throw new RangeError("逐款价格必须包含1至20行");
+  }
+  const cents = lines.reduce((sum, line) => {
+    const amount = calculateSourcingTotalExact(line.unitPrice, line.quantity);
+    const [whole, fraction] = amount.split(".");
+    return sum + BigInt(whole!) * 100n + BigInt(fraction!);
+  }, 0n);
+  if (cents <= 0n || cents > MAX_TOTAL_CENTS) {
+    throw new RangeError("逐款报价总额超出系统允许范围");
+  }
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+};
+
 export const SourcingCaseStatusSchema = z.enum([
   "pending_ie_quote",
   "pending_management_decision",
@@ -95,6 +112,20 @@ export const CreateSourcingCaseSchema = z.object({
   attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
     .optional(),
+}).strict();
+
+export const SourcingLinePriceInputSchema = z.object({
+  position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
+  unitPrice: MoneyInputSchema,
+}).strict();
+
+export const SourcingLinePriceReviewSchema = z.object({
+  linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+    .refine(
+      (items) => new Set(items.map((item) => item.position)).size === items.length,
+      "逐款价格行不能重复",
+    ),
+  reason: z.string().trim().max(500).optional(),
 }).strict();
 
 export const CreateSourcingIeQuoteSchema = z.object({
@@ -327,6 +358,8 @@ export const SourcingTimelineResponseSchema = z.object({
   items: z.array(SourcingTimelineEntrySchema),
 }).strict();
 
+export type SourcingLinePriceInput = z.infer<typeof SourcingLinePriceInputSchema>;
+export type SourcingLinePriceReview = z.infer<typeof SourcingLinePriceReviewSchema>;
 export type SourcingCaseLineInput = z.infer<typeof SourcingCaseLineInputSchema>;
 export type SourcingCaseLine = z.infer<typeof SourcingCaseLineSchema>;
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
