@@ -197,6 +197,16 @@ BEGIN
       'contactPerson',previous_record.contact_person,
       'contactPhone',previous_record.contact_phone,
       'address',previous_record.address,
+      'contractEntityName',previous_record.contract_entity_name,
+      'partyBRepresentative',previous_record.party_b_representative,
+      'payeeName',previous_record.payee_name,
+      'bankAccountMasked',CASE
+        WHEN previous_record.bank_account IS NULL THEN NULL
+        ELSE left(previous_record.bank_account,2)
+          || repeat('*',greatest(length(previous_record.bank_account)-6,0))
+          || right(previous_record.bank_account,4)
+      END,
+      'bankName',previous_record.bank_name,
       'supportedCrafts',previous_record.supported_crafts,
       'dailyCapacity',previous_record.daily_capacity
     );
@@ -220,6 +230,16 @@ BEGIN
       'contactPerson',NEW.contact_person,
       'contactPhone',NEW.contact_phone,
       'address',NEW.address,
+      'contractEntityName',NEW.contract_entity_name,
+      'partyBRepresentative',NEW.party_b_representative,
+      'payeeName',NEW.payee_name,
+      'bankAccountMasked',CASE
+        WHEN NEW.bank_account IS NULL THEN NULL
+        ELSE left(NEW.bank_account,2)
+          || repeat('*',greatest(length(NEW.bank_account)-6,0))
+          || right(NEW.bank_account,4)
+      END,
+      'bankName',NEW.bank_name,
       'supportedCrafts',NEW.supported_crafts,
       'dailyCapacity',NEW.daily_capacity
     ),
