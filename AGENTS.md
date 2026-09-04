@@ -7,9 +7,11 @@
 1. GitHub `main` 是唯一代码 Golden Source。
 2. 业务规则以 `docs/requirements/startup-requirements-v1.2.md` 为当前确认基线。
 3. 样衣模块以 `docs/requirements/sample-system-migration-v1.0.md` 为一期业务、权限、数据、UI、迁移与验收 Golden Source。
-4. Figma「达兴企业 UI 基础库 · Pilot」是 UI 变量与通用组件的设计 Golden Source。
-5. Figma「内部计件返工系统 · Product」是页面布局与交互验收载体。
-6. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
+4. 外发定价、供应商中心、合同、正式派单、生产填报与实时看板以 `docs/requirements/sourcing-supplier-production-v1.0.md` 为一期 Golden Source。
+5. 当前平台化路线、规则隔离和新窗口读取入口以 `docs/roadmap/platform-2.0-rules-index-v1.0.md` 为准。
+6. Figma「达兴企业 UI 基础库 · Pilot」是 UI 变量与通用组件的设计 Golden Source。
+7. Figma「内部计件返工系统 · Product」是页面布局与交互验收载体。
+8. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
 
 ## 2. 每次施工前的强制预检
 
@@ -81,6 +83,7 @@ forbidden files: <本次不得修改的路径>
 - 管理座舱中李总、伍云峰、张文豪使用同一套完整信息界面；李总与伍总同级同权，张文豪按执行职责获得操作能力，本厂承担最终审批仍由李总或伍总完成；所有操作通过审计日志追踪。
 - 李同生使用中层工作台；基础员工只显示与其职责和待办有关的内容。
 - 页面实现不得先于已验收的设计系统基础变量与组件。
+- 为保证新模块与已部署系统像素对齐，最新 `main` 的 `packages/ui` token 和共享组件是现有页面计算尺寸的实施基线；Figma 负责设计意图和验收。若二者数值不一致，必须通过独立设计系统 PR 统一，任何业务模块 PR 不得静默修改全局 token 或自选其中一套。
 
 ## 7. 数据与集成原则
 
@@ -151,9 +154,11 @@ PR 描述必须包含：
 
 ## 12. ChatGPT + Codex 固定施工流程（P0）
 
-详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；平台与报价选厂的已确认决定和当前进度见 `docs/roadmap/platform-sourcing-roadmap-v1.0.md`。任何新聊天窗口、新 Codex 任务或直接施工开始前必须先读取这两个文件。
+详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；当前路线与规则入口见 `docs/roadmap/platform-2.0-rules-index-v1.0.md`。任何新聊天窗口、新 Codex 任务或直接施工开始前必须先读取本文件、施工流程和平台 2.0 索引，再按索引读取本次任务唯一对应的业务规则。旧 `docs/roadmap/platform-sourcing-roadmap-v1.0.md` 只作为截至 2026-08-31 的历史施工记录。
 
 涉及样衣模块的任何讨论、设计、编码、测试、PR 或迁移操作，必须在范围预检前完整读取 `docs/requirements/sample-system-migration-v1.0.md`。未读取不得开工；发现聊天内容、旧系统实现或旧文档与该规则冲突时，以该规则为准并报告冲突。身份、权限、数据源、金额口径、状态闭环或上线门槛的变更，必须先更新该规则并获得业务负责人明确批准。
+
+涉及外发定价、多款价格、供应商中心、合同 PDF、正式派单、生产数据填报、实时生产看板或实时生产待办的任何任务，必须在范围预检前完整读取 `docs/requirements/sourcing-supplier-production-v1.0.md`。ERP 只可作为产品交互原型，不得读取、迁移、同步或引用 ERP 业务数据。样衣规则与外发供应商规则不得互相推导业务含义，也不得夹在同一个业务 PR 中。
 
 以下规则为默认强制流程：
 
