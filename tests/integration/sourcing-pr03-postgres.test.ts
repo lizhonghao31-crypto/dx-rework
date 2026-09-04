@@ -280,6 +280,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .not.toHaveProperty("daxingUnitPrice");
     expect(await service.getCase(anotherMerchandiserReader(), created.value.sourcingCaseId))
       .not.toHaveProperty("daxingUnitPrice");
+    const creationAudit = await database.query<{ after_state: Record<string, unknown> }>(
+      `SELECT after_state
+       FROM operation_events
+       WHERE action='sourcing.case.create' AND entity_id=$1
+       ORDER BY created_at DESC,event_id DESC
+       LIMIT 1`,
+      [created.value.sourcingCaseId],
+    );
+    expect(creationAudit.rows[0]?.after_state).toMatchObject({ daxingUnitPriceRecorded: true });
+    expect(creationAudit.rows[0]?.after_state).not.toHaveProperty("daxingUnitPrice");
     expect((await database.query(
       "SELECT 1 FROM attachments WHERE attachment_id=$1 AND entity_type='sourcing_case' AND entity_id=$2",
       [evidenceId, created.value.sourcingCaseId],
