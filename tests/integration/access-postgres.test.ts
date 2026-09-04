@@ -803,6 +803,13 @@ runWithPostgres("role permissions and versioned master data", () => {
       contractEntityName: "广州加工厂一有限公司",
       bankAccount: "6222000000000000",
     }));
+    expect((await database.query<{ authorization_capability: string }>(
+      `SELECT authorization_capability
+       FROM operation_events
+       WHERE entity_type='supplier_catalog' AND entity_id=$1
+       ORDER BY occurred_at DESC LIMIT 1`,
+      [supplier.supplierId],
+    )).rows[0]?.authorization_capability).toBe("supplier_profile:write");
     expect(await service.listSupplierHistory(supplier.supplierId, true)).toEqual([
       expect.objectContaining({ supplierId: supplier.supplierId, version: 2, dailyCapacity: 1500 }),
       expect.objectContaining({ supplierId: supplier.supplierId, version: 1, dailyCapacity: 1200 }),
