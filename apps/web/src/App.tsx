@@ -312,9 +312,12 @@ export function App() {
   else if (path === "/ui/suppliers") page = <SupplierCenterPage mode="directory" />;
   else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage mode="manage" />;
   else if (path === "/ui/master-data") {
-    const masterDataView = new URLSearchParams(search).get("view");
+    const parameters = new URLSearchParams(search);
+    const masterDataView = parameters.get("view");
     page = masterDataView === "suppliers"
-      ? <LegacySupplierCenterRedirect />
+      ? parameters.get("tool") === "onboarding"
+        ? <MasterDataPage view="suppliers" />
+        : <LegacySupplierCenterRedirect />
       : <MasterDataPage view={masterDataView === "processes" ? "processes" : "crafts"} />;
   }
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
