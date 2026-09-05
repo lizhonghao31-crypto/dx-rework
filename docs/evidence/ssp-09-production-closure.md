@@ -61,3 +61,10 @@ Full Gate 必需，当前 Head 全绿后由业务负责人手动触发一次 Cod
 - 唯一失败套件为新增 production-closure-postgres.test.ts：全量迁移前未创建 schema_migrations，迁移读取历史时触发 42P01，两条新用例未执行。其余业务链 103 项通过。
 - 修复测试初始化：按既有完整业务链夹具创建版本历史表，每个迁移及其 version/checksum 在同一事务提交；保留全部迁移和全部业务断言。应用代码及已发布迁移不变。
 - 修改文件 ESLint 和生产闭环定向单测通过；真实 PostgreSQL 结论以修复 Head 的第二轮 Full Gate 为准，不以本地 skip 代替。
+
+## Full Gate #987 后续初始化修复（待授权验证）
+
+- 迁移历史问题已解除。第二轮仍在新用例 beforeAll 创建工艺时失败：fixture 将 sourcing:view 作为创建工艺审计 capability，而现行守卫要求 master_data:manage 或 sourcing:decision:record。
+- 一并核验供应商资料创建路径，发现它还需要真实的组织身份、有效角色授权和公司策略；原夹具只创建 app_users，不足以通过完整 schema 的受控主档写入。
+- 修复夹具：按既有 full-business-chain 的 bootstrap 顺序建立合成账号身份/角色，随后 ensureOrganizationPolicy；工艺和供应商创建使用 master_data:manage 的受信动作上下文。不修改 Root 身份、业务权限、生产代码或数据库守卫，不停用触发器。
+- 两条 SSP09 新数据库用例仍未取得实际运行通过证据。PR 默认两次 Full Gate 已用满，第三次需业务负责人按 AGENTS.md 第11节明确授权后执行。

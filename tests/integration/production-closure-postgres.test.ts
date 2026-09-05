@@ -19,7 +19,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const schema=`sourcing_${randomUUID().replaceAll("-","")}`,admin=new pg.Pool({connectionString:url!}),database=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const user=randomUUID(),owner=randomUUID(),warehouse=randomUUID();
  const actor=(id:string,roles:string[],capabilities:string[]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:capabilities[0]!,authorizationCapabilities:capabilities,requestId:randomUUID()});
- const root=()=>actor(user,["root_superuser"],["sourcing:view","todo:view","receiving:create"]);
+ const root=(capability="sourcing:view")=>actor(user,["root_superuser"],[capability,"sourcing:view","todo:view","receiving:create"]);
  const merch=()=>actor(user,["order_merchandiser"],["sourcing:inquiry:create","sourcing:view","todo:view"]);
  const boss=()=>actor(owner,["owner_group","production_management"],["sourcing:owner:approve","sourcing:view","todo:view"]);
  const receiver=()=>actor(warehouse,["warehouse_receiver"],["receiving:create"]);
@@ -49,10 +49,23 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       } catch(error) { await client.query("ROLLBACK"); throw error; }
     }
   } finally { client.release(); }
-  await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'SSP09跟单',true),($2,'SSP09老板',true),($3,'SSP09仓库',true)",[user,owner,warehouse]);
+  // Use the established full-chain bootstrap: organization identities and real role grants
+  // are seeded before locking the corporation policy; production guards stay enabled.
+  for(const [id,name,roles] of [
+    [user,"SSP09跟单",["order_merchandiser","ie_reviewer","production_management","system_admin"]],
+    [owner,"SSP09老板",["owner_group","production_management"]],
+    [warehouse,"SSP09仓库",["warehouse_receiver"]],
+  ] as const) {
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,name]);
+    await database.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
+      VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,[randomUUID(),id,`ding-${id}`,`union-${id}`]);
+    for(const role of roles)await database.query(`INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+      VALUES($1,$2,$3,$2,'SSP09 full-chain fixture')`,[randomUUID(),id,role]);
+  }
   const access=new AccessMasterDataService(database,"corp");
-  craftId=(await access.ensureCrafts(root(),{craftNames:["车缝＋线＋包装，回厂装箱＋一程运费"]}))[0]!.craftId;
-  for(let i=1;i<=3;i++)factories.push((await access.createSupplier(root(),CreateSupplierSchema.parse({supplierCode:`SSP09-${i}`,supplierType:"factory",supplierName:`试点厂${i}`,active:true,changeReason:"SSP09合成验收数据",address:`试点路${i}号`,contractEntityName:`试点厂${i}有限公司`,partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62220${i}`,bankName:"测试银行"}))).supplierId);
+  await access.ensureOrganizationPolicy();
+  craftId=(await access.ensureCrafts(root("master_data:manage"),{craftNames:["车缝＋线＋包装，回厂装箱＋一程运费"]}))[0]!.craftId;
+  for(let i=1;i<=3;i++)factories.push((await access.createSupplier(root("master_data:manage"),CreateSupplierSchema.parse({supplierCode:`SSP09-${i}`,supplierType:"factory",supplierName:`试点厂${i}`,active:true,changeReason:"SSP09合成验收数据",address:`试点路${i}号`,contractEntityName:`试点厂${i}有限公司`,partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62220${i}`,bankName:"测试银行"}))).supplierId);
  },60000);
  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
  const create=async(supplierId:string,suffix:string)=>{
