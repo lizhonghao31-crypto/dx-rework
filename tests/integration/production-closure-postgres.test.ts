@@ -31,9 +31,24 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const today=()=>shanghaiDay(new Date());
  beforeAll(async()=>{
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string}[]};
+  const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
+  // Full-schema migrations inspect their recorded predecessors, just as in the deploy runner.
+  await database.query(`CREATE TABLE schema_migrations (
+    version text PRIMARY KEY,
+    checksum char(64) NOT NULL,
+    applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
   const client=await database.connect();
-  try{for(const item of manifest.migrations){await client.query("BEGIN");try{await client.query(await readFile(new URL(`../../apps/api/migrations/${item.version}.sql`,import.meta.url),"utf8"));await client.query("COMMIT");}catch(e){await client.query("ROLLBACK");throw e;}}}finally{client.release();}
+  try {
+    for(const item of manifest.migrations) {
+      await client.query("BEGIN");
+      try {
+        await client.query(await readFile(new URL(`../../apps/api/migrations/${item.version}.sql`,import.meta.url),"utf8"));
+        await client.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[item.version,item.checksum]);
+        await client.query("COMMIT");
+      } catch(error) { await client.query("ROLLBACK"); throw error; }
+    }
+  } finally { client.release(); }
   await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'SSP09跟单',true),($2,'SSP09老板',true),($3,'SSP09仓库',true)",[user,owner,warehouse]);
   const access=new AccessMasterDataService(database,"corp");
   craftId=(await access.ensureCrafts(root(),{craftNames:["车缝＋线＋包装，回厂装箱＋一程运费"]}))[0]!.craftId;

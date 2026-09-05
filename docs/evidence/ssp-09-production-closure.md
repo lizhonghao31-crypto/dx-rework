@@ -54,3 +54,10 @@
 Full Gate 必需，当前 Head 全绿后由业务负责人手动触发一次 Codex Review。PR 创建后立即交接，不自动 Review、合并或部署。
 
 回滚优先关闭试点，再向前修复或回退应用；保留新增表、已读/风险历史和实收关联，不删除生产事实或仓库记录。数据库采用增量迁移，普通未关联收货的既有参数和行为保持不变。
+
+## Full Gate #986 初始化修复
+
+- 精确失败 Head：04912a8a9a816b8982dc01df332ee2c2faa9aee2。lint、typecheck、构建、普通全量测试、迁移升级、收货与 Root 回归通过。
+- 唯一失败套件为新增 production-closure-postgres.test.ts：全量迁移前未创建 schema_migrations，迁移读取历史时触发 42P01，两条新用例未执行。其余业务链 103 项通过。
+- 修复测试初始化：按既有完整业务链夹具创建版本历史表，每个迁移及其 version/checksum 在同一事务提交；保留全部迁移和全部业务断言。应用代码及已发布迁移不变。
+- 修改文件 ESLint 和生产闭环定向单测通过；真实 PostgreSQL 结论以修复 Head 的第二轮 Full Gate 为准，不以本地 skip 代替。
