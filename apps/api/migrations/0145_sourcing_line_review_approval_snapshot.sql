@@ -62,6 +62,13 @@ BEGIN
 END;
 $$;
 
+ALTER TABLE sourcing_ie_quotes DISABLE TRIGGER sourcing_ie_quotes_no_update;
+ALTER TABLE sourcing_decisions DISABLE TRIGGER sourcing_decisions_no_update;
+ALTER TABLE sourcing_factory_change_requests
+  DISABLE TRIGGER sourcing_factory_change_requests_no_update;
+ALTER TABLE sourcing_finance_reconciliations
+  DISABLE TRIGGER sourcing_reconciliations_no_update;
+
 UPDATE sourcing_ie_quotes quote
 SET total_amount=totals.total_amount
 FROM (
@@ -93,6 +100,13 @@ UPDATE sourcing_finance_reconciliations reconciliation
 SET actual_total_amount=decision.total_amount
 FROM sourcing_decisions decision
 WHERE decision.sourcing_decision_id=reconciliation.sourcing_decision_id;
+
+ALTER TABLE sourcing_ie_quotes ENABLE TRIGGER sourcing_ie_quotes_no_update;
+ALTER TABLE sourcing_decisions ENABLE TRIGGER sourcing_decisions_no_update;
+ALTER TABLE sourcing_factory_change_requests
+  ENABLE TRIGGER sourcing_factory_change_requests_no_update;
+ALTER TABLE sourcing_finance_reconciliations
+  ENABLE TRIGGER sourcing_reconciliations_no_update;
 
 CREATE TABLE sourcing_approval_snapshots (
   sourcing_approval_snapshot_id uuid PRIMARY KEY,
@@ -156,7 +170,15 @@ SELECT owner.sourcing_owner_decision_id,decision.sourcing_case_id,decision.sourc
 FROM sourcing_owner_decisions owner
 JOIN sourcing_decisions decision ON decision.sourcing_decision_id=owner.sourcing_decision_id
 JOIN sourcing_cases source_case ON source_case.sourcing_case_id=decision.sourcing_case_id
-LEFT JOIN current_supplier_catalog supplier ON supplier.supplier_id=decision.supplier_id
+LEFT JOIN LATERAL (
+  SELECT version.address,version.contract_entity_name,version.party_b_representative,
+         version.payee_name,version.bank_account,version.bank_name
+  FROM supplier_catalog_versions version
+  WHERE version.supplier_id=decision.supplier_id
+    AND version.created_at <= owner.decided_at
+  ORDER BY version.version DESC
+  LIMIT 1
+) supplier ON true
 WHERE owner.decision='approved';
 
 INSERT INTO sourcing_approval_snapshot_lines(
