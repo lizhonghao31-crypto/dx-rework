@@ -34,6 +34,23 @@ export const calculateSourcingTotalExact = (
   return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
 };
 
+export const calculateSourcingLinesTotalExact = (
+  lines: readonly Readonly<{ unitPrice: string; quantity: number }>[],
+): string => {
+  if (!lines.length || lines.length > 20) {
+    throw new RangeError("逐款价格必须包含1至20行");
+  }
+  const cents = lines.reduce((sum, line) => {
+    const amount = calculateSourcingTotalExact(line.unitPrice, line.quantity);
+    const [whole, fraction] = amount.split(".");
+    return sum + BigInt(whole!) * 100n + BigInt(fraction!);
+  }, 0n);
+  if (cents <= 0n || cents > MAX_TOTAL_CENTS) {
+    throw new RangeError("逐款报价总额超出系统允许范围");
+  }
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+};
+
 export const SourcingCaseStatusSchema = z.enum([
   "pending_ie_quote",
   "pending_management_decision",
@@ -97,16 +114,55 @@ export const CreateSourcingCaseSchema = z.object({
     .optional(),
 }).strict();
 
-export const CreateSourcingIeQuoteSchema = z.object({
+export const SourcingLinePriceInputSchema = z.object({
+  position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
   unitPrice: MoneyInputSchema,
-  quoteReason: z.string().trim().max(500).optional(),
 }).strict();
+
+export const SourcingLinePriceReviewSchema = z.object({
+  linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+    .refine(
+      (items) => new Set(items.map((item) => item.position)).size === items.length,
+      "逐款价格行不能重复",
+    ),
+  reason: z.string().trim().max(500).optional(),
+}).strict();
+
+export const CreateSourcingIeQuoteSchema = z.object({
+  linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+    .refine(
+      (items) => new Set(items.map((item) => item.position)).size === items.length,
+      "逐款价格行不能重复",
+    ).optional(),
+  unitPrice: MoneyInputSchema.optional(),
+  quoteReason: z.string().trim().max(500).optional(),
+}).strict().superRefine((input, context) => {
+  if ((input.linePrices ? 1 : 0) + (input.unitPrice ? 1 : 0) !== 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "请提交逐款价格" });
+  }
+}).transform((input) => ({
+  linePrices: input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }],
+  quoteReason: input.quoteReason,
+}));
 
 export const RecordSourcingManagementDecisionSchema = z.object({
   supplierId: IdSchema,
-  unitPrice: MoneyInputSchema,
+  linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+    .refine(
+      (items) => new Set(items.map((item) => item.position)).size === items.length,
+      "逐款价格行不能重复",
+    ).optional(),
+  unitPrice: MoneyInputSchema.optional(),
   decisionReason: z.string().trim().max(500).optional(),
-}).strict();
+}).strict().superRefine((input, context) => {
+  if ((input.linePrices ? 1 : 0) + (input.unitPrice ? 1 : 0) !== 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "请提交逐款价格" });
+  }
+}).transform((input) => ({
+  supplierId: input.supplierId,
+  linePrices: input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }],
+  decisionReason: input.decisionReason,
+}));
 
 export const DecideSourcingOwnerSchema = z.discriminatedUnion("decision", [
   z.object({
@@ -183,6 +239,12 @@ export const SourcingIeQuoteSchema = z.object({
   unitPrice: z.string(),
   quantity: z.number().int().positive(),
   totalAmount: z.string(),
+  linePrices: z.array(z.object({
+    position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
+    quantity: z.number().int().positive(),
+    unitPrice: z.string(),
+    totalAmount: z.string(),
+  }).strict()).min(1).max(MAX_SOURCING_LINE_ITEMS).default([]),
   quoteReason: z.string(),
   quotedBy: IdSchema,
   quotedAt: z.string().datetime(),
@@ -192,6 +254,17 @@ export const SourcingFactorySchema = z.object({
   supplierId: IdSchema,
   supplierCode: z.string(),
   supplierName: z.string(),
+  supportedCrafts: z.array(z.string()).default([]),
+  dailyCapacity: z.number().int().positive().nullable().default(null),
+  notes: z.string().default(""),
+  contractDataMissing: z.array(z.enum([
+    "address",
+    "contractEntityName",
+    "partyBRepresentative",
+    "payeeName",
+    "bankAccount",
+    "bankName",
+  ])).default([]),
 }).strict();
 
 export const SourcingFactoryListResponseSchema = z.object({
@@ -210,6 +283,12 @@ export const SourcingDecisionSchema = z.object({
   unitPrice: z.string(),
   quantity: z.number().int().positive(),
   totalAmount: z.string(),
+  linePrices: z.array(z.object({
+    position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
+    quantity: z.number().int().positive(),
+    unitPrice: z.string(),
+    totalAmount: z.string(),
+  }).strict()).min(1).max(MAX_SOURCING_LINE_ITEMS).default([]),
   decisionReason: z.string(),
   decidedBy: IdSchema,
   decidedAt: z.string().datetime(),
@@ -222,6 +301,32 @@ export const SourcingOwnerDecisionSchema = z.object({
   decisionReason: z.string(),
   decidedBy: IdSchema,
   decidedAt: z.string().datetime(),
+}).strict();
+
+export const SourcingApprovalSnapshotSchema = z.object({
+  sourcingApprovalSnapshotId: IdSchema,
+  sourcingDecisionId: IdSchema,
+  decisionVersion: z.number().int().positive(),
+  supplierId: IdSchema,
+  supplierCode: z.string(),
+  supplierName: z.string(),
+  quantity: z.number().int().positive(),
+  totalAmount: z.string(),
+  daxingUnitPrice: z.string().optional(),
+  estimatedCutPieceSendDate: BusinessDateSchema.nullable(),
+  deliveryDate: BusinessDateSchema.nullable(),
+  processes: z.array(z.string()),
+  linePrices: z.array(z.object({
+    position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
+    styleNo: z.string(),
+    alternateStyleNo: z.string().nullable(),
+    color: z.string().nullable(),
+    quantity: z.number().int().positive(),
+    unitPrice: z.string(),
+    totalAmount: z.string(),
+  }).strict()).min(1).max(MAX_SOURCING_LINE_ITEMS),
+  approvedBy: IdSchema,
+  approvedAt: z.string().datetime(),
 }).strict();
 
 export const SourcingCraftSnapshotSchema = z.object({
@@ -264,6 +369,7 @@ export const SourcingCaseSummarySchema = z.object({
   ieQuote: SourcingIeQuoteSchema.nullable(),
   decision: SourcingDecisionSchema.nullable(),
   ownerDecision: SourcingOwnerDecisionSchema.nullable(),
+  approvalSnapshot: SourcingApprovalSnapshotSchema.nullable().default(null),
 }).strict();
 
 export const SourcingCaseListResponseSchema = z.object({
@@ -327,10 +433,12 @@ export const SourcingTimelineResponseSchema = z.object({
   items: z.array(SourcingTimelineEntrySchema),
 }).strict();
 
+export type SourcingLinePriceInput = z.infer<typeof SourcingLinePriceInputSchema>;
+export type SourcingLinePriceReview = z.infer<typeof SourcingLinePriceReviewSchema>;
 export type SourcingCaseLineInput = z.infer<typeof SourcingCaseLineInputSchema>;
 export type SourcingCaseLine = z.infer<typeof SourcingCaseLineSchema>;
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
-export type CreateSourcingIeQuote = z.infer<typeof CreateSourcingIeQuoteSchema>;
+export type CreateSourcingIeQuote = z.input<typeof CreateSourcingIeQuoteSchema>;
 export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema>;
 export type RequestSourcingFactoryChange = z.infer<typeof RequestSourcingFactoryChangeSchema>;
 export type DecideSourcingFactoryChange = z.infer<typeof DecideSourcingFactoryChangeSchema>;
@@ -340,7 +448,7 @@ export type RecordSourcingFinanceReconciliation = z.infer<
   typeof RecordSourcingFinanceReconciliationSchema
 >;
 export type DecideSourcingException = z.infer<typeof DecideSourcingExceptionSchema>;
-export type RecordSourcingManagementDecision = z.infer<
+export type RecordSourcingManagementDecision = z.input<
   typeof RecordSourcingManagementDecisionSchema
 >;
 export type DecideSourcingOwner = z.infer<typeof DecideSourcingOwnerSchema>;
@@ -348,6 +456,7 @@ export type SourcingFactory = z.infer<typeof SourcingFactorySchema>;
 export type SourcingFactoryListResponse = z.infer<typeof SourcingFactoryListResponseSchema>;
 export type SourcingDecision = z.infer<typeof SourcingDecisionSchema>;
 export type SourcingOwnerDecision = z.infer<typeof SourcingOwnerDecisionSchema>;
+export type SourcingApprovalSnapshot = z.infer<typeof SourcingApprovalSnapshotSchema>;
 export type SourcingCaseStatus = z.infer<typeof SourcingCaseStatusSchema>;
 export type SourcingIeQuote = z.infer<typeof SourcingIeQuoteSchema>;
 export type SourcingCaseSummary = z.infer<typeof SourcingCaseSummarySchema>;

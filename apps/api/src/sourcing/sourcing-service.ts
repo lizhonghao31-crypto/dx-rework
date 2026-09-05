@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
+  calculateSourcingLinesTotalExact,
   calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   MAX_SOURCING_ATTACHMENTS,
@@ -82,6 +83,13 @@ const SOURCING_LIST_PAGE_SIZE = 15;
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type SqlError = Readonly<{ code?: string; constraint?: string }>;
 
+type SourcingPricedLineRow = Readonly<{
+  position: number;
+  quantity: number;
+  unitPrice: string;
+  totalAmount: string;
+}>;
+
 type SourcingCaseRow = Readonly<{
   sourcing_case_id: string;
   erp_order_id: string;
@@ -120,6 +128,7 @@ type SourcingCaseRow = Readonly<{
   unit_price: string | null;
   quote_quantity: number | string | null;
   total_amount: string | null;
+  quote_line_prices: readonly SourcingPricedLineRow[] | null;
   quote_reason: string | null;
   quoted_by: string | null;
   quoted_at: Date | string | null;
@@ -134,6 +143,7 @@ type SourcingCaseRow = Readonly<{
   decision_unit_price: string | null;
   decision_quantity: number | string | null;
   decision_total_amount: string | null;
+  decision_line_prices: readonly SourcingPricedLineRow[] | null;
   management_decision_reason: string | null;
   management_decided_by: string | null;
   management_decided_at: Date | string | null;
@@ -143,6 +153,25 @@ type SourcingCaseRow = Readonly<{
   owner_decision_reason: string | null;
   owner_decided_by: string | null;
   owner_decided_at: Date | string | null;
+  sourcing_approval_snapshot_id: string | null;
+  approval_decision_id: string | null;
+  approval_decision_version: number | string | null;
+  approval_supplier_id: string | null;
+  approval_supplier_code: string | null;
+  approval_supplier_name: string | null;
+  approval_quantity: number | string | null;
+  approval_total_amount: string | null;
+  approval_daxing_unit_price: string | null;
+  approval_estimated_cut_piece_send_date: string | null;
+  approval_delivery_date: string | null;
+  approval_processes: string[] | null;
+  approval_line_prices: readonly (SourcingPricedLineRow & {
+    styleNo: string;
+    alternateStyleNo: string | null;
+    color: string | null;
+  })[] | null;
+  approval_by: string | null;
+  approval_at: Date | string | null;
   total_count?: string;
 }>;
 
@@ -273,7 +302,12 @@ const mapCase = (
         quoteVersion: Number(row.quote_version),
         unitPrice: row.unit_price,
         quantity: Number(row.quote_quantity),
-        totalAmount: row.total_amount,
+        totalAmount: row.quote_line_prices?.length
+          ? calculateSourcingLinesTotalExact(row.quote_line_prices)
+          : row.total_amount,
+        linePrices: row.quote_line_prices?.length
+          ? row.quote_line_prices.map((line) => ({ ...line, quantity: Number(line.quantity) }))
+          : [{ position: 1, quantity: Number(row.quote_quantity), unitPrice: row.unit_price, totalAmount: row.total_amount }],
         quoteReason: row.quote_reason,
         quotedBy: row.quoted_by,
         quotedAt: toIso(row.quoted_at),
@@ -296,7 +330,12 @@ const mapCase = (
         supplierName: row.supplier_name_snapshot,
         unitPrice: row.decision_unit_price,
         quantity: Number(row.decision_quantity),
-        totalAmount: row.decision_total_amount,
+        totalAmount: row.decision_line_prices?.length
+          ? calculateSourcingLinesTotalExact(row.decision_line_prices)
+          : row.decision_total_amount,
+        linePrices: row.decision_line_prices?.length
+          ? row.decision_line_prices.map((line) => ({ ...line, quantity: Number(line.quantity) }))
+          : [{ position: 1, quantity: Number(row.decision_quantity), unitPrice: row.decision_unit_price, totalAmount: row.decision_total_amount }],
         decisionReason: row.management_decision_reason,
         decidedBy: row.management_decided_by,
         decidedAt: toIso(row.management_decided_at),
@@ -312,6 +351,31 @@ const mapCase = (
         decisionReason: row.owner_decision_reason,
         decidedBy: row.owner_decided_by,
         decidedAt: toIso(row.owner_decided_at),
+      }
+    : null,
+  approvalSnapshot: row.sourcing_approval_snapshot_id && row.approval_decision_id
+    && row.approval_decision_version !== null && row.approval_supplier_id
+    && row.approval_supplier_code && row.approval_supplier_name
+    && row.approval_quantity !== null && row.approval_total_amount
+    && row.approval_by && row.approval_at && row.approval_line_prices?.length
+    ? {
+        sourcingApprovalSnapshotId: row.sourcing_approval_snapshot_id,
+        sourcingDecisionId: row.approval_decision_id,
+        decisionVersion: Number(row.approval_decision_version),
+        supplierId: row.approval_supplier_id,
+        supplierCode: row.approval_supplier_code,
+        supplierName: row.approval_supplier_name,
+        quantity: Number(row.approval_quantity),
+        totalAmount: row.approval_total_amount,
+        ...(canViewSourcingDaxingPrice(actor, row.created_by) && row.approval_daxing_unit_price
+          ? { daxingUnitPrice: row.approval_daxing_unit_price }
+          : {}),
+        estimatedCutPieceSendDate: row.approval_estimated_cut_piece_send_date,
+        deliveryDate: row.approval_delivery_date,
+        processes: row.approval_processes ?? [],
+        linePrices: row.approval_line_prices.map((line) => ({ ...line, quantity: Number(line.quantity) })),
+        approvedBy: row.approval_by,
+        approvedAt: toIso(row.approval_at),
       }
     : null,
   };
@@ -395,6 +459,7 @@ export class SourcingService {
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
          quote_row.total_amount,quote_row.quote_reason,
+         quote_lines_row.line_prices AS quote_line_prices,
          quote_row.quoted_by,quote_row.quoted_at,
          decision_row.sourcing_decision_id,decision_row.decision_version,
          decision_row.source_type,decision_row.source_ie_quote_id,
@@ -403,6 +468,7 @@ export class SourcingService {
          decision_row.unit_price AS decision_unit_price,
          decision_row.quantity AS decision_quantity,
          decision_row.total_amount AS decision_total_amount,
+         decision_lines_row.line_prices AS decision_line_prices,
          decision_row.decision_reason AS management_decision_reason,
          decision_row.decided_by AS management_decided_by,
          decision_row.decided_at AS management_decided_at,
@@ -411,7 +477,21 @@ export class SourcingService {
          owner_row.decision AS owner_decision,
          owner_row.decision_reason AS owner_decision_reason,
          owner_row.decided_by AS owner_decided_by,
-         owner_row.decided_at AS owner_decided_at
+         owner_row.decided_at AS owner_decided_at,
+         snapshot.sourcing_approval_snapshot_id,
+         snapshot.sourcing_decision_id AS approval_decision_id,
+         snapshot.decision_version AS approval_decision_version,
+         snapshot.supplier_id AS approval_supplier_id,
+         snapshot.supplier_code_snapshot AS approval_supplier_code,
+         snapshot.supplier_name_snapshot AS approval_supplier_name,
+         snapshot.quantity AS approval_quantity,
+         snapshot.total_amount AS approval_total_amount,
+         snapshot.daxing_unit_price::text AS approval_daxing_unit_price,
+         to_char(snapshot.estimated_cut_piece_send_date,'YYYY-MM-DD') AS approval_estimated_cut_piece_send_date,
+         to_char(snapshot.delivery_date,'YYYY-MM-DD') AS approval_delivery_date,
+         snapshot.processes AS approval_processes,
+         snapshot_lines.line_prices AS approval_line_prices,
+         snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN sourcing_cases source_case
          ON source_case.sourcing_case_id=case_view.sourcing_case_id
@@ -454,14 +534,46 @@ export class SourcingService {
          LIMIT 1
        ) quote_row ON true
        LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'quantity',line.quantity,
+           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_ie_quote_lines line
+         WHERE line.sourcing_ie_quote_id=quote_row.sourcing_ie_quote_id
+       ) quote_lines_row ON true
+       LEFT JOIN LATERAL (
          SELECT decision_fact.*
          FROM sourcing_decisions decision_fact
          WHERE decision_fact.sourcing_case_id=case_view.sourcing_case_id
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
        ) decision_row ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'quantity',line.quantity,
+           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_decision_lines line
+         WHERE line.sourcing_decision_id=decision_row.sourcing_decision_id
+       ) decision_lines_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
+       LEFT JOIN LATERAL (
+         SELECT approval.*
+         FROM sourcing_approval_snapshots approval
+         WHERE approval.sourcing_case_id=case_view.sourcing_case_id
+         ORDER BY approval.decision_version DESC LIMIT 1
+       ) snapshot ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'styleNo',line.style_no,
+           'alternateStyleNo',line.alternate_style_no,'color',line.color,
+           'quantity',line.quantity,'unitPrice',line.unit_price::text,
+           'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_approval_snapshot_lines line
+         WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
+       ) snapshot_lines ON true
        WHERE case_view.sourcing_case_id=$1`,
       [sourcingCaseId],
     );
@@ -499,6 +611,7 @@ export class SourcingService {
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
          quote_row.total_amount,quote_row.quote_reason,
+         quote_lines_row.line_prices AS quote_line_prices,
          quote_row.quoted_by,quote_row.quoted_at,
          decision_row.sourcing_decision_id,decision_row.decision_version,
          decision_row.source_type,decision_row.source_ie_quote_id,
@@ -507,6 +620,7 @@ export class SourcingService {
          decision_row.unit_price AS decision_unit_price,
          decision_row.quantity AS decision_quantity,
          decision_row.total_amount AS decision_total_amount,
+         decision_lines_row.line_prices AS decision_line_prices,
          decision_row.decision_reason AS management_decision_reason,
          decision_row.decided_by AS management_decided_by,
          decision_row.decided_at AS management_decided_at,
@@ -515,7 +629,21 @@ export class SourcingService {
          owner_row.decision AS owner_decision,
          owner_row.decision_reason AS owner_decision_reason,
          owner_row.decided_by AS owner_decided_by,
-         owner_row.decided_at AS owner_decided_at
+         owner_row.decided_at AS owner_decided_at,
+         snapshot.sourcing_approval_snapshot_id,
+         snapshot.sourcing_decision_id AS approval_decision_id,
+         snapshot.decision_version AS approval_decision_version,
+         snapshot.supplier_id AS approval_supplier_id,
+         snapshot.supplier_code_snapshot AS approval_supplier_code,
+         snapshot.supplier_name_snapshot AS approval_supplier_name,
+         snapshot.quantity AS approval_quantity,
+         snapshot.total_amount AS approval_total_amount,
+         snapshot.daxing_unit_price::text AS approval_daxing_unit_price,
+         to_char(snapshot.estimated_cut_piece_send_date,'YYYY-MM-DD') AS approval_estimated_cut_piece_send_date,
+         to_char(snapshot.delivery_date,'YYYY-MM-DD') AS approval_delivery_date,
+         snapshot.processes AS approval_processes,
+         snapshot_lines.line_prices AS approval_line_prices,
+         snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN sourcing_cases source_case
          ON source_case.sourcing_case_id=case_view.sourcing_case_id
@@ -558,14 +686,46 @@ export class SourcingService {
          LIMIT 1
        ) quote_row ON true
        LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'quantity',line.quantity,
+           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_ie_quote_lines line
+         WHERE line.sourcing_ie_quote_id=quote_row.sourcing_ie_quote_id
+       ) quote_lines_row ON true
+       LEFT JOIN LATERAL (
          SELECT decision_fact.*
          FROM sourcing_decisions decision_fact
          WHERE decision_fact.sourcing_case_id=case_view.sourcing_case_id
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
        ) decision_row ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'quantity',line.quantity,
+           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_decision_lines line
+         WHERE line.sourcing_decision_id=decision_row.sourcing_decision_id
+       ) decision_lines_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
+       LEFT JOIN LATERAL (
+         SELECT approval.*
+         FROM sourcing_approval_snapshots approval
+         WHERE approval.sourcing_case_id=case_view.sourcing_case_id
+         ORDER BY approval.decision_version DESC LIMIT 1
+       ) snapshot ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'styleNo',line.style_no,
+           'alternateStyleNo',line.alternate_style_no,'color',line.color,
+           'quantity',line.quantity,'unitPrice',line.unit_price::text,
+           'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_approval_snapshot_lines line
+         WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
+       ) snapshot_lines ON true
        WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
           OR case_view.style_no ILIKE '%'||$1||'%'
           OR EXISTS (
@@ -998,8 +1158,20 @@ export class SourcingService {
       supplier_id: string;
       supplier_code: string;
       supplier_name: string;
+      supported_crafts: string[];
+      daily_capacity: number | null;
+      notes: string;
+      contract_data_missing: Array<"address" | "contractEntityName" | "partyBRepresentative" | "payeeName" | "bankAccount" | "bankName">;
     }>(
-      `SELECT supplier_id,supplier_code,supplier_name
+      `SELECT supplier_id,supplier_code,supplier_name,supported_crafts,daily_capacity,notes,
+              array_remove(ARRAY[
+                CASE WHEN address IS NULL THEN 'address' END,
+                CASE WHEN contract_entity_name IS NULL THEN 'contractEntityName' END,
+                CASE WHEN party_b_representative IS NULL THEN 'partyBRepresentative' END,
+                CASE WHEN payee_name IS NULL THEN 'payeeName' END,
+                CASE WHEN bank_account IS NULL THEN 'bankAccount' END,
+                CASE WHEN bank_name IS NULL THEN 'bankName' END
+              ],NULL)::text[] AS contract_data_missing
        FROM current_supplier_catalog
        WHERE supplier_type='factory' AND active=true
        ORDER BY supplier_name,supplier_code`,
@@ -1009,6 +1181,10 @@ export class SourcingService {
         supplierId: row.supplier_id,
         supplierCode: row.supplier_code,
         supplierName: row.supplier_name,
+        supportedCrafts: row.supported_crafts,
+        dailyCapacity: row.daily_capacity === null ? null : Number(row.daily_capacity),
+        notes: row.notes,
+        contractDataMissing: row.contract_data_missing,
       })),
     };
   }
@@ -1341,7 +1517,10 @@ export class SourcingService {
     this.assertActor(actor, IE_QUOTE_CAPABILITY, IE_QUOTE_ROLE);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     const normalized = {
-      unitPrice: normalizeSourcingUnitPrice(input.unitPrice),
+      linePrices: (input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }]).map((line) => ({
+        position: line.position,
+        unitPrice: normalizeSourcingUnitPrice(line.unitPrice),
+      })).sort((left, right) => left.position - right.position),
       quoteReason: input.quoteReason?.trim() || DEFAULT_QUOTE_REASON,
     };
     if (normalized.quoteReason.length > 500) fail("价格说明不能超过500个字符");
@@ -1387,10 +1566,26 @@ export class SourcingService {
         if (source.status !== "pending_ie_quote") {
           fail("该询价已完成 IE 报价，请刷新后查看", 409, "INVALID_STATE_TRANSITION");
         }
+        const caseLines = await client.query<{ position: number; quantity: number | string }>(
+          `SELECT position,quantity FROM sourcing_case_lines
+           WHERE sourcing_case_id=$1 ORDER BY position`,
+          [sourcingCaseId],
+        );
+        if (caseLines.rows.length !== normalized.linePrices.length
+          || caseLines.rows.some((line, index) => line.position !== normalized.linePrices[index]?.position)) {
+          fail("IE 必须逐款填写全部价格，不能缺行或增加行");
+        }
+        const pricedLines = caseLines.rows.map((line, index) => ({
+          position: line.position,
+          quantity: Number(line.quantity),
+          unitPrice: normalized.linePrices[index]!.unitPrice,
+          totalAmount: calculateSourcingTotal(normalized.linePrices[index]!.unitPrice, Number(line.quantity)),
+        }));
         const quantity = Number(source.order_quantity);
         const quoteVersion = Number(source.quote_version) + 1;
         const transitionSequence = Number(source.sequence) + 1;
-        const totalAmount = calculateSourcingTotal(normalized.unitPrice, quantity);
+        const totalAmount = calculateSourcingLinesTotalExact(pricedLines);
+        const compatibilityUnitPrice = pricedLines[0]!.unitPrice;
         const quoteId = randomUUID();
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.ie_price.quote",
@@ -1400,7 +1595,7 @@ export class SourcingService {
           after: {
             status: "pending_management_decision",
             quoteVersion,
-            unitPrice: normalized.unitPrice,
+            linePrices: pricedLines,
             quantity,
             totalAmount,
           },
@@ -1416,7 +1611,7 @@ export class SourcingService {
             quoteId,
             sourcingCaseId,
             quoteVersion,
-            normalized.unitPrice,
+            compatibilityUnitPrice,
             quantity,
             totalAmount,
             normalized.quoteReason,
@@ -1425,6 +1620,14 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        for (const line of pricedLines) {
+          await client.query(
+            `INSERT INTO sourcing_ie_quote_lines(
+               sourcing_ie_quote_id,sourcing_case_id,position,quantity,unit_price,total_amount
+             ) VALUES($1,$2,$3,$4,$5,$6)`,
+            [quoteId,sourcingCaseId,line.position,line.quantity,line.unitPrice,line.totalAmount],
+          );
+        }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
              sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
@@ -1485,7 +1688,10 @@ export class SourcingService {
       MANAGEMENT_DECISION_ROLE,
     );
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
-    const unitPrice = normalizeSourcingUnitPrice(input.unitPrice);
+    const requestedLinePrices = (input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }]).map((line) => ({
+      position: line.position,
+      unitPrice: normalizeSourcingUnitPrice(line.unitPrice),
+    })).sort((left, right) => left.position - right.position);
     const suppliedReason = input.decisionReason?.trim() ?? "";
     const scope = "sourcing.management-decision.record";
     const client = await this.database.connect();
@@ -1498,7 +1704,7 @@ export class SourcingService {
         requestHash: requestHash(scope, {
           sourcingCaseId,
           supplierId: input.supplierId,
-          unitPrice,
+          linePrices: requestedLinePrices,
           decisionReason: suppliedReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -1560,6 +1766,26 @@ export class SourcingService {
         if (source.sourcing_decision_id && source.owner_decision !== "rejected") {
           fail("只有老板驳回后才能提交新版本", 409, "INVALID_STATE_TRANSITION");
         }
+        const quoteLines = await client.query<{
+          position: number;
+          quantity: number | string;
+          unit_price: string;
+        }>(
+          `SELECT position,quantity,unit_price::text AS unit_price
+           FROM sourcing_ie_quote_lines
+           WHERE sourcing_ie_quote_id=$1 ORDER BY position`,
+          [sourceIeQuoteId],
+        );
+        if (quoteLines.rows.length !== requestedLinePrices.length
+          || quoteLines.rows.some((line, index) => line.position !== requestedLinePrices[index]?.position)) {
+          fail("生产管理必须逐款确认全部价格，不能缺行或增加行");
+        }
+        const pricedLines = quoteLines.rows.map((line, index) => ({
+          position: line.position,
+          quantity: Number(line.quantity),
+          unitPrice: requestedLinePrices[index]!.unitPrice,
+          totalAmount: calculateSourcingTotal(requestedLinePrices[index]!.unitPrice, Number(line.quantity)),
+        }));
         if (!UUID_PATTERN.test(input.supplierId)) fail("加工厂标识无效");
         const factory = await client.query<{
           supplier_id: string;
@@ -1573,14 +1799,17 @@ export class SourcingService {
         );
         const selected = factory.rows[0]
           ?? fail("请选择当前有效的加工厂", 400, "VALIDATION_ERROR");
-        const adjusted = unitPrice !== normalizeSourcingUnitPrice(quoteUnitPrice);
+        const adjusted = quoteLines.rows.some((line, index) => (
+          normalizeSourcingUnitPrice(line.unit_price) !== pricedLines[index]!.unitPrice
+        ));
         if (adjusted && !suppliedReason) {
           fail("调整 IE 价格时必须填写原因");
         }
         const decisionReason = suppliedReason || DEFAULT_MANAGEMENT_REASON;
         if (decisionReason.length > 500) fail("选厂说明不能超过500个字符");
         const quantity = Number(source.order_quantity);
-        const totalAmount = calculateSourcingTotal(unitPrice, quantity);
+        const totalAmount = calculateSourcingLinesTotalExact(pricedLines);
+        const compatibilityUnitPrice = pricedLines[0]!.unitPrice;
         const decisionId = randomUUID();
         const decisionVersion = Number(source.decision_version ?? 0) + 1;
         const sourceType = source.sourcing_decision_id ? "management_revision" : "initial";
@@ -1602,7 +1831,7 @@ export class SourcingService {
             supplierId: selected.supplier_id,
             supplierCode: selected.supplier_code,
             supplierName: selected.supplier_name,
-            unitPrice,
+            linePrices: pricedLines,
             quantity,
             totalAmount,
           },
@@ -1626,7 +1855,7 @@ export class SourcingService {
             selected.supplier_id,
             selected.supplier_code,
             selected.supplier_name,
-            unitPrice,
+            compatibilityUnitPrice,
             quantity,
             totalAmount,
             decisionReason,
@@ -1635,6 +1864,14 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        for (const line of pricedLines) {
+          await client.query(
+            `INSERT INTO sourcing_decision_lines(
+               sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount
+             ) VALUES($1,$2,$3,$4,$5,$6)`,
+            [decisionId,sourcingCaseId,line.position,line.quantity,line.unitPrice,line.totalAmount],
+          );
+        }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
              sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
@@ -1717,10 +1954,22 @@ export class SourcingService {
           sourcing_decision_id: string | null;
           decision_version: number | string | null;
           source_type: string | null;
+          supplier_id: string | null;
+          supplier_code_snapshot: string | null;
+          supplier_name_snapshot: string | null;
+          quantity: number | string | null;
+          daxing_unit_price: string | null;
+          estimated_cut_piece_send_date: string | null;
+          delivery_date: string | null;
+          process_items: string[] | null;
         }>(
           `SELECT current_transition.to_status AS status,current_transition.sequence,
                   decision_row.sourcing_decision_id,decision_row.decision_version,
-                  decision_row.source_type
+                  decision_row.source_type,decision_row.supplier_id,
+                  decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
+                  decision_row.quantity,source_case.daxing_unit_price::text AS daxing_unit_price,
+                  source_case.estimated_cut_piece_send_date::text AS estimated_cut_piece_send_date,
+                  source_case.delivery_date::text AS delivery_date,source_case.process_items
            FROM sourcing_cases source_case
            JOIN LATERAL (
              SELECT transition_row.to_status,transition_row.sequence
@@ -1765,13 +2014,14 @@ export class SourcingService {
           },
           reason: decisionReason,
         });
+        const ownerDecisionId = randomUUID();
         await client.query(
           `INSERT INTO sourcing_owner_decisions(
              sourcing_owner_decision_id,sourcing_case_id,sourcing_decision_id,
              decision,decision_reason,decided_by,operation_event_id,request_id
            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
           [
-            randomUUID(),
+            ownerDecisionId,
             sourcingCaseId,
             source.sourcing_decision_id,
             input.decision,
@@ -1781,6 +2031,54 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        if (approved) {
+          if (!source.supplier_id || !source.supplier_code_snapshot
+            || !source.supplier_name_snapshot || source.quantity === null) {
+            fail("批准快照缺少当前选厂事实", 409, "INVALID_STATE_TRANSITION");
+          }
+          const snapshotId = randomUUID();
+          const snapshotTotal = await client.query<{ total_amount: string }>(
+            `SELECT sum(total_amount)::text AS total_amount
+             FROM sourcing_decision_lines WHERE sourcing_decision_id=$1`,
+            [source.sourcing_decision_id],
+          );
+          const totalAmount = snapshotTotal.rows[0]?.total_amount;
+          if (!totalAmount) fail("批准快照缺少逐款价格", 409, "INVALID_STATE_TRANSITION");
+          await client.query(
+            `INSERT INTO sourcing_approval_snapshots(
+               sourcing_approval_snapshot_id,sourcing_case_id,sourcing_decision_id,
+               decision_version,supplier_id,supplier_code_snapshot,supplier_name_snapshot,
+               supplier_address,contract_entity_name,party_b_representative,
+               payee_name,bank_account,bank_name,
+               quantity,total_amount,daxing_unit_price,estimated_cut_piece_send_date,
+               delivery_date,processes,approved_by,operation_event_id,request_id
+             )
+             SELECT $1,$2,$3,$4,$5,$6,$7,
+                    supplier.address,supplier.contract_entity_name,supplier.party_b_representative,
+                    supplier.payee_name,supplier.bank_account,supplier.bank_name,
+                    $8,$9,$10,$11,$12,$13,$14,$15,$16
+             FROM current_supplier_catalog supplier
+             WHERE supplier.supplier_id=$5`,
+            [snapshotId,sourcingCaseId,source.sourcing_decision_id,Number(source.decision_version),
+              source.supplier_id,source.supplier_code_snapshot,source.supplier_name_snapshot,
+              Number(source.quantity),totalAmount,source.daxing_unit_price,
+              source.estimated_cut_piece_send_date,source.delivery_date,source.process_items ?? [],
+              actor.actorId,eventId,actor.requestId],
+          );
+          await client.query(
+            `INSERT INTO sourcing_approval_snapshot_lines(
+               sourcing_approval_snapshot_id,position,style_no,alternate_style_no,color,
+               quantity,unit_price,total_amount
+             )
+             SELECT $1,line.position,source_line.style_no,source_line.alternate_style_no,
+                    source_line.color,line.quantity,line.unit_price,line.total_amount
+             FROM sourcing_decision_lines line
+             JOIN sourcing_case_lines source_line
+               ON source_line.sourcing_case_id=$2 AND source_line.position=line.position
+             WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
+            [snapshotId,sourcingCaseId,source.sourcing_decision_id],
+          );
+        }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
              sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
@@ -2070,6 +2368,7 @@ export class SourcingService {
   ): Promise<void> {
     const nextDecisionVersion = Number(source.decision_version) + 1;
     const nextStatus = this.factoryChangeTargetStatus(source.status, actor);
+    const decisionId = randomUUID();
     await client.query(
       `INSERT INTO sourcing_decisions(
          sourcing_decision_id,sourcing_case_id,decision_version,source_type,
@@ -2077,15 +2376,26 @@ export class SourcingService {
          supplier_id,supplier_code_snapshot,supplier_name_snapshot,
          unit_price,quantity,total_amount,decision_reason,decided_by,
          operation_event_id,request_id
-       ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
-        randomUUID(), source.sourcing_case_id ?? fail("换厂订单标识缺失"),
+        decisionId, source.sourcing_case_id ?? fail("换厂订单标识缺失"),
         nextDecisionVersion, source.sourcing_decision_id, source.factory_change_request_id,
         source.proposed_supplier_id, source.proposed_supplier_code_snapshot,
         source.proposed_supplier_name_snapshot, source.proposed_unit_price,
         Number(source.proposed_quantity), source.proposed_total_amount,
         reason, actor.actorId, eventId, actor.requestId,
       ],
+    );
+    await client.query(
+      `INSERT INTO sourcing_decision_lines(
+         sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount
+       )
+       SELECT $1,line.sourcing_case_id,line.position,line.quantity,$2,
+              round($2::numeric*line.quantity,2)
+       FROM sourcing_case_lines line
+       WHERE line.sourcing_case_id=$3
+       ORDER BY line.position`,
+      [decisionId,source.proposed_unit_price,source.sourcing_case_id],
     );
     if (nextStatus !== source.status) {
       await client.query(
@@ -2256,7 +2566,16 @@ export class SourcingService {
         );
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
         const quantity = Number(source.order_quantity);
-        const totalAmount = calculateSourcingTotal(unitPrice, quantity);
+        const caseLines = await client.query<{ position: number; quantity: number | string }>(
+          `SELECT position,quantity FROM sourcing_case_lines
+           WHERE sourcing_case_id=$1 ORDER BY position`,
+          [sourcingCaseId],
+        );
+        const totalAmount = calculateSourcingLinesTotalExact(caseLines.rows.map((line) => ({
+          position: line.position,
+          quantity: Number(line.quantity),
+          unitPrice,
+        })));
         const requiresOwnerApproval = scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price!);
         const immediate = initiatorRole === "owner_group"
           || (initiatorRole === "production_management" && !requiresOwnerApproval);

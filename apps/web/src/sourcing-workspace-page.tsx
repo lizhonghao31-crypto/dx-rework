@@ -95,8 +95,9 @@ type LocalSourcingDraft = Readonly<{
   images: readonly UploadedImage[];
   savedAt: string;
 }>;
-type QuoteDraft = Readonly<{ unitPrice: string; quoteReason: string }>;
-type DecisionDraft = Readonly<{ supplierId: string; unitPrice: string; decisionReason: string }>;
+type LinePriceDraft = Readonly<{ position: number; unitPrice: string }>;
+type QuoteDraft = Readonly<{ linePrices: readonly LinePriceDraft[]; quoteReason: string }>;
+type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
 
@@ -139,6 +140,23 @@ const formatDateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN
 const totalPreview = (unitPrice: string, quantity: number): string => {
   try {
     return calculateSourcingTotalExact(unitPrice, quantity);
+  } catch {
+    return "—";
+  }
+};
+
+const linesTotalPreview = (
+  linePrices: readonly LinePriceDraft[],
+  lines: SourcingCaseSummary["lineItems"],
+): string => {
+  try {
+    const cents = linePrices.reduce((sum, price) => {
+      const quantity = lines.find((line) => line.position === price.position)?.quantity ?? 0;
+      const amount = calculateSourcingTotalExact(price.unitPrice, quantity);
+      const [whole, fraction] = amount.split(".");
+      return sum + BigInt(whole!) * 100n + BigInt(fraction!);
+    }, 0n);
+    return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
   } catch {
     return "—";
   }
@@ -950,8 +968,8 @@ function OrderDetailPage({
   const [attachments, setAttachments] = useState<readonly SourcingAttachment[]>([]);
   const [timeline, setTimeline] = useState<readonly SourcingTimelineEntry[]>([]);
   const [factories, setFactories] = useState<readonly SourcingFactory[]>([]);
-  const [quote, setQuote] = useState<QuoteDraft>({ unitPrice: "", quoteReason: "" });
-  const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", unitPrice: "", decisionReason: "" });
+  const [quote, setQuote] = useState<QuoteDraft>({ linePrices: [], quoteReason: "" });
+  const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "" });
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
@@ -961,7 +979,6 @@ function OrderDetailPage({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在加载订单…");
   const [activeBusinessInput, setActiveBusinessInput] = useState<string | null>(null);
-  const [decisionUnitPriceEdited, setDecisionUnitPriceEdited] = useState(false);
   const [factoryChangeUnitPriceEdited, setFactoryChangeUnitPriceEdited] = useState(false);
   const actionKey = useRef<string | null>(null);
   const canSupplementImages = user?.isRoot === true
@@ -986,12 +1003,25 @@ function OrderDetailPage({
         unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
         changeReason: current.changeReason,
       }));
+      setQuote((current) => ({
+        quoteReason: current.quoteReason,
+        linePrices: detail.lineItems.map((line) => ({
+          position: line.position,
+          unitPrice: current.linePrices.find((price) => price.position === line.position)?.unitPrice
+            || line.externalUnitPrice || "",
+        })),
+      }));
       setDecision((current) => ({
         supplierId: current.supplierId || detail.decision?.supplierId || "",
-        unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || "",
+        linePrices: detail.lineItems.map((line) => ({
+          position: line.position,
+          unitPrice: current.linePrices.find((price) => price.position === line.position)?.unitPrice
+            || detail.decision?.linePrices.find((price) => price.position === line.position)?.unitPrice
+            || detail.ieQuote?.linePrices.find((price) => price.position === line.position)?.unitPrice
+            || "",
+        })),
         decisionReason: current.decisionReason,
       }));
-      setDecisionUnitPriceEdited(false);
       setFactoryChangeUnitPriceEdited(false);
       setMessage("");
     } catch (error) {
@@ -1070,11 +1100,11 @@ function OrderDetailPage({
   const selectedTimeline = timeline.filter((entry) => timelineNode(entry) === selectedNode);
   const selectedWorkflow = WORKFLOW[selectedIndex] ?? WORKFLOW[WORKFLOW.length - 1]!;
   const priceAdjusted = item.ieQuote && item.decision
-    ? item.ieQuote.unitPrice !== item.decision.unitPrice
+    ? item.decision.linePrices.some((line) => (
+        item.ieQuote?.linePrices.find((quoteLine) => quoteLine.position === line.position)?.unitPrice
+          !== line.unitPrice
+      ))
     : false;
-  const ownerUnitPriceDelta = item.ieQuote && item.decision
-    ? subtractFixedPoint(item.decision.unitPrice, item.ieQuote.unitPrice, 4)
-    : null;
   const ownerTotalDelta = item.ieQuote && item.decision
     ? subtractFixedPoint(item.decision.totalAmount, item.ieQuote.totalAmount, 2)
     : null;
@@ -1097,6 +1127,15 @@ function OrderDetailPage({
   const transferPriceDelta = item.decision && factoryChangeDraft.unitPrice
     ? subtractFixedPoint(factoryChangeDraft.unitPrice, item.decision.unitPrice, 4)
     : null;
+  const selectedFactory = factories.find((factory) => factory.supplierId === decision.supplierId);
+  const contractMissingLabels: Readonly<Record<string, string>> = {
+    address: "地址",
+    contractEntityName: "合同主体",
+    partyBRepresentative: "乙方代表",
+    payeeName: "收款人",
+    bankAccount: "收款账号",
+    bankName: "开户行",
+  };
 
   return (
     <div className="sourcing-workspace sourcing-order-detail">
@@ -1211,36 +1250,59 @@ function OrderDetailPage({
           </Surface> : null}
           {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
             <h2>02 · IE 给价</h2>
-            <p>输入加工单价，系统按订单数量精确计算总额。</p>
+            <p>逐款核定加工单价；每行金额独立四舍五入到分后汇总。</p>
             {canQuote ? <div className="sourcing-form-grid">
-              <label><span>加工单价</span><input value={activeBusinessInput === "quote-unit-price" ? quote.unitPrice : businessInputValue(quote.unitPrice)} inputMode="decimal" onChange={(event) => { setQuote({ ...quote, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("quote-unit-price")} onBlur={() => setActiveBusinessInput(null)} /></label>
-              <label><span>系统总额</span><input value={businessInputValue(totalPreview(quote.unitPrice, item.orderQuantity))} readOnly /></label>
+              <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="IE逐款价格">
+                {item.lineItems.map((line) => {
+                  const price = quote.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
+                  return <label className="sourcing-line-price-row" key={line.position}>
+                    <span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</span>
+                    <input aria-label={`${line.styleNo} IE单价`} value={activeBusinessInput === `quote-${line.position}` ? price : businessInputValue(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setQuote({ ...quote, linePrices: quote.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`quote-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} />
+                    <strong>{formatBusinessCurrency(totalPreview(price, line.quantity))}</strong>
+                  </label>;
+                })}
+              </div>
+              <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(quote.linePrices, item.lineItems))} readOnly /></label>
               <label className="sourcing-form-wide"><span>价格说明</span><input value={quote.quoteReason} maxLength={500} onChange={(event) => { setQuote({ ...quote, quoteReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { unitPrice: quote.unitPrice, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 价格已提交")}>提交 IE 价格</button>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || quote.linePrices.some((line) => !line.unitPrice)} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
             </div> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
           </Surface> : null}
 
           {item.status === "pending_management_decision" && selectedNode === "management" ? <Surface className="rework-detail-node-preview">
             <h2>03 · 生产管理调价与选厂</h2>
-            <p>IE 原价：{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}。如调整价格，必须填写原因。</p>
+            <p>逐款确认 IE 价格并选择一个启用加工厂；任一行调价时必须填写原因。</p>
             {canManage ? <div className="sourcing-form-grid">
               <label><span>加工厂</span><select value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-              <label><span>生产单价</span><input value={activeBusinessInput === "decision-unit-price" && decisionUnitPriceEdited ? decision.unitPrice : businessInputValue(decision.unitPrice)} inputMode="decimal" onChange={(event) => { setDecisionUnitPriceEdited(true); setDecision({ ...decision, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput("decision-unit-price")} onBlur={() => setActiveBusinessInput(null)} /></label>
-              <label><span>系统总额</span><input value={businessInputValue(totalPreview(decision.unitPrice, item.orderQuantity))} readOnly /></label>
+              {selectedFactory ? <div className="sourcing-factory-facts sourcing-form-wide"><strong>{selectedFactory.supplierName} · {selectedFactory.supplierCode}</strong><span>工艺：{selectedFactory.supportedCrafts.join("、") || "未维护"}</span><span>日产能：{selectedFactory.dailyCapacity ? `${formatBusinessDecimal(selectedFactory.dailyCapacity)} 件` : "未维护"}</span><span>{selectedFactory.notes || "暂无协同备注"}</span><em>{selectedFactory.contractDataMissing.length ? `合同缺项：${selectedFactory.contractDataMissing.map((field) => contractMissingLabels[field] ?? field).join("、")}` : "合同资料完整"}</em></div> : null}
+              <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="生产管理逐款价格">
+                {item.lineItems.map((line) => {
+                  const price = decision.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
+                  const iePrice = item.ieQuote?.linePrices.find((entry) => entry.position === line.position)?.unitPrice;
+                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><input aria-label={`${line.styleNo} 生产单价`} value={activeBusinessInput === `decision-${line.position}` ? price : businessInputValue(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setDecision({ ...decision, linePrices: decision.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`decision-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} /><strong>{formatBusinessCurrency(totalPreview(price, line.quantity))}</strong></label>;
+                })}
+              </div>
+              <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(decision.linePrices, item.lineItems))} readOnly /></label>
               <label className="sourcing-form-wide"><span>选厂/调价说明</span><input value={decision.decisionReason} maxLength={500} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, { supplierId: decision.supplierId, unitPrice: decision.unitPrice, ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}) }, "选厂决定已提交老板审批")}>提交调价与选厂</button>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || decision.linePrices.some((line) => !line.unitPrice)} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, { supplierId: decision.supplierId, linePrices: decision.linePrices, ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}) }, "逐款调价与选厂已提交老板审批")}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
           {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview sourcing-owner-decision">
             <div className="sourcing-owner-mobile-summary">
               <h2>04 · 最终审批</h2>
-              <p>{item.decision?.supplierName ?? "—"} · {item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}/件 · {formatBusinessDecimal(item.orderQuantity)} 件</p>
+              <p>{item.decision?.supplierName ?? "—"} · {formatBusinessDecimal(item.orderQuantity)} 件 · {item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</p>
             </div>
             <div className="sourcing-owner-decision__desktop">
               <h2>04 · 最终审批</h2>
-              <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision?.supplierName ?? "—"}</strong> 以 <strong>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}/件</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，订单总额 <strong>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</strong>。</p>
-              <p>相对 IE 报价 {item.ieQuote ? `${formatBusinessCurrency(item.ieQuote.unitPrice)}/件` : "—"}，单价变化 <strong>{ownerUnitPriceDelta ?? "—"}/件</strong>，总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
+              <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision?.supplierName ?? "—"}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，逐款汇总 <strong>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+              <div className="sourcing-owner-line-review" role="table" aria-label="老板逐款审批摘要">
+                {item.lineItems.map((line) => {
+                  const ieLine = item.ieQuote?.linePrices.find((entry) => entry.position === line.position);
+                  const decisionLine = item.decision?.linePrices.find((entry) => entry.position === line.position);
+                  return <div className="sourcing-owner-line-review__row" key={line.position}><b>{String(line.position).padStart(2, "0")}</b><span>{line.styleNo}<small>{line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</small></span><span>IE <strong>{ieLine ? formatBusinessCurrency(ieLine.unitPrice) : "—"}</strong></span><span>生产 <strong>{decisionLine ? formatBusinessCurrency(decisionLine.unitPrice) : "—"}</strong></span><span>行金额 <strong>{decisionLine ? formatBusinessCurrency(decisionLine.totalAmount) : "—"}</strong></span></div>;
+                })}
+              </div>
+              <p>{"daxingUnitPrice" in item ? `大兴价：${formatBusinessCurrency(item.daxingUnitPrice ?? "")}。` : ""}{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
               <details className="sourcing-owner-decision__details">
                 <summary>查看完整订单资料</summary>
                 <p>平台订单：{item.erpOrderNo}；款色：{item.lineItems.length} 行；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>

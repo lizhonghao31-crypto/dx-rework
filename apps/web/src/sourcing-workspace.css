@@ -591,6 +591,11 @@
 }
 
 .sourcing-owner-decision__desktop {
+  display: grid;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-owner-mobile-summary {
   display: none;
 }
 
@@ -615,17 +620,6 @@
 .sourcing-owner-decision__details p {
   margin: var(--dx-v2-space-2) 0 0;
   line-height: 1.65;
-}
-
-@media (min-width: 761px) {
-  .sourcing-owner-mobile-summary {
-    display: none;
-  }
-
-  .sourcing-owner-decision__desktop {
-    display: grid;
-    gap: var(--dx-v2-space-2);
-  }
 }
 
 .sourcing-finance-confirmation {
@@ -814,6 +808,12 @@
   .sourcing-pagination span {
     font-size: 12px;
     text-align: center;
+  }
+}
+
+@media (max-width: 760px) {
+  .sourcing-owner-line-review__row {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1222,6 +1222,66 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sourcing-line-price-table,
+.sourcing-owner-line-review {
+  display: grid;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-line-price-row,
+.sourcing-owner-line-review__row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(140px, .45fr) minmax(120px, .35fr);
+  align-items: center;
+  gap: var(--dx-v2-space-3);
+  padding: var(--dx-v2-space-3);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-inset);
+}
+
+.sourcing-line-price-row > span,
+.sourcing-owner-line-review__row > span {
+  display: grid;
+  gap: 3px;
+}
+
+.sourcing-line-price-row input {
+  min-height: 40px;
+}
+
+.sourcing-line-price-row > strong {
+  text-align: right;
+}
+
+.sourcing-factory-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dx-v2-space-2) var(--dx-v2-space-4);
+  padding: var(--dx-v2-space-3);
+  border: 1px solid var(--dx-v2-color-border);
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-inset);
+}
+
+.sourcing-factory-facts strong,
+.sourcing-factory-facts em {
+  width: 100%;
+}
+
+.sourcing-factory-facts em {
+  color: var(--dx-v2-color-text-secondary);
+  font-style: normal;
+}
+
+.sourcing-owner-line-review__row {
+  grid-template-columns: 40px minmax(180px, 1fr) repeat(3, minmax(110px, .55fr));
+}
+
+.sourcing-owner-line-review__row small {
+  color: var(--dx-v2-color-text-secondary);
+}
+
 @media (max-width: 900px) {
   .sourcing-line-row {
     grid-template-columns: 32px repeat(2, minmax(0, 1fr));
@@ -1280,5 +1340,14 @@
     content: attr(data-label) " · ";
     color: var(--dx-v2-color-text-secondary);
     font-size: 12px;
+  }
+
+  .sourcing-line-price-row,
+  .sourcing-owner-line-review__row {
+    grid-template-columns: 1fr;
+  }
+
+  .sourcing-line-price-row > strong {
+    text-align: left;
   }
 }

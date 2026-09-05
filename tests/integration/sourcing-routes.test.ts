@@ -200,7 +200,7 @@ describe("sourcing PR03 routes", () => {
         "x-request-id": "sourcing-quote-1",
         "idempotency-key": "sourcing-quote-key-1",
       },
-      payload: { unitPrice: "12.3456" },
+      payload: { linePrices: [{ position: 1, unitPrice: "12.3456" }] },
     });
     expect(quoted.statusCode).toBe(201);
     expect(service.quoteIePrice).toHaveBeenCalledWith(
@@ -210,7 +210,7 @@ describe("sourcing PR03 routes", () => {
         requestId: "sourcing-quote-1",
       }),
       caseSummary.sourcingCaseId,
-      { unitPrice: "12.3456" },
+      { linePrices: [{ position: 1, unitPrice: "12.3456" }], quoteReason: undefined },
       "sourcing-quote-key-1",
     );
 
@@ -426,7 +426,7 @@ describe("sourcing PR03 routes", () => {
       },
       payload: {
         supplierId: "00000000-0000-4000-8000-000000000200",
-        unitPrice: "12.5000",
+        linePrices: [{ position: 1, unitPrice: "12.5000" }],
         decisionReason: "结合工厂产能调整",
       },
     });
@@ -439,7 +439,7 @@ describe("sourcing PR03 routes", () => {
       caseSummary.sourcingCaseId,
       {
         supplierId: "00000000-0000-4000-8000-000000000200",
-        unitPrice: "12.5000",
+        linePrices: [{ position: 1, unitPrice: "12.5000" }],
         decisionReason: "结合工厂产能调整",
       },
       "management-key-1",

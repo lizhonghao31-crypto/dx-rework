@@ -36,7 +36,8 @@ describe("sourcing PC form and owner approval finish", () => {
       "按实际生产顺序登记",
       "最终审批",
       "生产管理建议由",
-      "相对 IE 报价",
+      "相对 IE 总额变化",
+      "老板逐款审批摘要",
       "查看完整订单资料",
       "批准方案",
       "驳回并退回生产管理",
@@ -46,6 +47,8 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(page).toContain("subtractFixedPoint");
     expect(page).toContain("sourcing-owner-mobile-summary");
     expect(css).toContain(".sourcing-owner-decision__desktop");
+    expect(css).not.toMatch(/\.sourcing-owner-decision__desktop\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.sourcing-owner-line-review__row\s*\{\s*grid-template-columns: 1fr/);
     expect(css).toContain(".sourcing-process-editor__list");
   });
 

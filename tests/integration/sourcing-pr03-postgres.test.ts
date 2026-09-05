@@ -39,6 +39,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const financeId = randomUUID();
   const factoryId = randomUUID();
   const replacementFactoryId = randomUUID();
+  const disabledFactoryId = randomUUID();
   const evidenceId = randomUUID();
 
   const merchandiserActor = (requestId = randomUUID()): TrustedActorContext => ({
@@ -157,7 +158,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0133_sourcing_craft_catalog.sql",
       "0134_versioned_craft_catalog.sql",
       "0135_sourcing_case_craft_snapshots.sql",
+      "0143_sourcing_supplier_profile_foundation.sql",
       "0144_sourcing_multi_style_pricing.sql",
+      "0145_sourcing_line_review_approval_snapshot.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -199,16 +202,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     try {
       await database.query(
         `INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
-         VALUES($1,'FAC-01','factory'),($2,'FAC-02','factory')`,
-        [factoryId, replacementFactoryId],
+         VALUES($1,'FAC-01','factory'),($2,'FAC-02','factory'),($3,'FAC-OFF','factory')`,
+        [factoryId, replacementFactoryId, disabledFactoryId],
       );
       await database.query(
         `INSERT INTO supplier_catalog_versions(
            supplier_id,version,supplier_name,active,change_reason,changed_by
          ) VALUES
-           ($1,1,'一号加工厂',true,'测试夹具',$3),
-           ($2,1,'二号加工厂',true,'测试夹具',$3)`,
-        [factoryId, replacementFactoryId, managerId],
+           ($1,1,'一号加工厂',true,'测试夹具',$4),
+           ($2,1,'二号加工厂',true,'测试夹具',$4),
+           ($3,1,'停用加工厂',false,'测试夹具',$4)`,
+        [factoryId, replacementFactoryId, disabledFactoryId, managerId],
       );
     } finally {
       await database.query(`
@@ -368,11 +372,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supplierId: factoryId,
         supplierCode: "FAC-01",
         supplierName: "一号加工厂",
+        supportedCrafts: [],
+        dailyCapacity: null,
+        notes: "",
+        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
       },
       {
         supplierId: replacementFactoryId,
         supplierCode: "FAC-02",
         supplierName: "二号加工厂",
+        supportedCrafts: [],
+        dailyCapacity: null,
+        notes: "",
+        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
       },
     ]);
 
@@ -430,6 +442,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         decisionReason: "老板驳回选厂决定",
       },
     });
+    expect(rejected.value.approvalSnapshot).toBeNull();
 
     const revision = await service.recordManagementDecision(
       managerActor(),
@@ -466,7 +479,30 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         decision: "approved",
         sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
       },
+      approvalSnapshot: {
+        sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
+        decisionVersion: 2,
+        supplierId: factoryId,
+        supplierName: "一号加工厂",
+        quantity: 137,
+        totalAmount: "1481.46",
+        daxingUnitPrice: "10.0000",
+        estimatedCutPieceSendDate: "2026-09-10",
+        deliveryDate: "2026-09-15",
+        linePrices: [{
+          position: 1,
+          styleNo: "DX-260826",
+          color: "黑色",
+          quantity: 137,
+          unitPrice: "10.8136",
+          totalAmount: "1481.46",
+        }],
+      },
     });
+    await expect(database.query(
+      "UPDATE sourcing_approval_snapshots SET total_amount=1 WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rejects.toThrow();
     const changeRequest = await service.requestFactoryChange(
       factoryChangeActor(),
       created.value.sourcingCaseId,
@@ -1201,6 +1237,129 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
           decisionVersion: 2,
           supplierId: replacementFactoryId,
         },
+      },
+    });
+  });
+
+  it("carries different row prices through review and freezes one immutable approval snapshot", async () => {
+    const created = await service.createCase(merchandiserActor(), {
+      erpOrderNo: "ERP-SSP04-MULTI",
+      estimatedCutPieceSendDate: "2026-10-01",
+      deliveryDate: "2026-10-08",
+      craftIds: [craftId("净色车缝")],
+      lineItems: [
+        { styleNo: "SSP04-A", color: "黑色", quantity: 100, externalUnitPrice: "11.0000" },
+        { styleNo: "SSP04-B", alternateStyleNo: "SSP04-BX", color: "白色", quantity: 50, externalUnitPrice: "8.0000" },
+      ],
+      daxingUnitPrice: "7.5000",
+    }, randomUUID());
+
+    await expect(service.quoteIePrice(ieActor(), created.value.sourcingCaseId, {
+      linePrices: [{ position: 1, unitPrice: "12.3456" }],
+    }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const quoted = await service.quoteIePrice(ieActor(), created.value.sourcingCaseId, {
+      linePrices: [
+        { position: 1, unitPrice: "12.3456" },
+        { position: 2, unitPrice: "9.5000" },
+      ],
+    }, randomUUID());
+    expect(quoted.value.ieQuote).toMatchObject({
+      totalAmount: "1709.56",
+      linePrices: [
+        { position: 1, quantity: 100, unitPrice: "12.3456", totalAmount: "1234.56" },
+        { position: 2, quantity: 50, unitPrice: "9.5000", totalAmount: "475.00" },
+      ],
+    });
+
+    await expect(service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+      supplierId: disabledFactoryId,
+      linePrices: quoted.value.ieQuote!.linePrices.map(({ position, unitPrice }) => ({ position, unitPrice })),
+    }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const decided = await service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+      supplierId: factoryId,
+      linePrices: [
+        { position: 1, unitPrice: "12.0000" },
+        { position: 2, unitPrice: "10.0000" },
+      ],
+      decisionReason: "逐款复核标准工时",
+    }, randomUUID());
+    expect(decided.value.decision).toMatchObject({
+      totalAmount: "1700.00",
+      linePrices: [
+        { position: 1, totalAmount: "1200.00" },
+        { position: 2, totalAmount: "500.00" },
+      ],
+    });
+
+    const approvals = await Promise.allSettled([
+      service.decideOwner(ownerActor(), created.value.sourcingCaseId, { decision: "approved" }, randomUUID()),
+      service.decideOwner(ownerActor(), created.value.sourcingCaseId, { decision: "approved" }, randomUUID()),
+    ]);
+    expect(approvals.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(approvals.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const approved = await service.getCase({ ...ownerActor(), authorizationCapability: "sourcing:view" }, created.value.sourcingCaseId);
+    expect(approved.approvalSnapshot).toMatchObject({
+      supplierId: factoryId,
+      quantity: 150,
+      totalAmount: "1700.00",
+      daxingUnitPrice: "7.5000",
+      linePrices: [
+        { position: 1, styleNo: "SSP04-A", color: "黑色", quantity: 100, unitPrice: "12.0000" },
+        { position: 2, styleNo: "SSP04-B", alternateStyleNo: "SSP04-BX", color: "白色", quantity: 50, unitPrice: "10.0000" },
+      ],
+    });
+    expect((await service.getCase(unrelatedReaderActor(), created.value.sourcingCaseId)).approvalSnapshot)
+      .not.toHaveProperty("daxingUnitPrice");
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(1);
+    expect((await database.query<{ total_amount: string }>(
+      "SELECT total_amount::text FROM sourcing_decisions WHERE sourcing_decision_id=$1",
+      [decided.value.decision!.sourcingDecisionId],
+    )).rows[0]?.total_amount).toBe("1700.00");
+    expect((await database.query<{
+      supplier_address: string | null;
+      contract_entity_name: string | null;
+      party_b_representative: string | null;
+      payee_name: string | null;
+      bank_account: string | null;
+      bank_name: string | null;
+    }>(
+      `SELECT supplier_address,contract_entity_name,party_b_representative,
+              payee_name,bank_account,bank_name
+       FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1`,
+      [created.value.sourcingCaseId],
+    )).rows[0]).toEqual({
+      supplier_address: null,
+      contract_entity_name: null,
+      party_b_representative: null,
+      payee_name: null,
+      bank_account: null,
+      bank_name: null,
+    });
+
+    const changed = await service.requestFactoryChange(managerActor(), created.value.sourcingCaseId, {
+      supplierId: replacementFactoryId,
+      unitPrice: "9.0000",
+      changeReason: "逐款订单换厂并保留全部款色价格行",
+    }, randomUUID());
+    expect(changed.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      decision: {
+        sourceType: "factory_change",
+        supplierId: replacementFactoryId,
+        totalAmount: "1350.00",
+        linePrices: [
+          { position: 1, quantity: 100, unitPrice: "9.0000", totalAmount: "900.00" },
+          { position: 2, quantity: 50, unitPrice: "9.0000", totalAmount: "450.00" },
+        ],
+      },
+      approvalSnapshot: {
+        sourcingDecisionId: decided.value.decision!.sourcingDecisionId,
+        totalAmount: "1700.00",
       },
     });
   });
