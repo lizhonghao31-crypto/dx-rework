@@ -1047,6 +1047,8 @@ function OrderDetailPage({
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const canReadContractData = user?.isRoot === true
+    || user?.capabilities.includes("supplier_contract_data:read") === true;
   const hasPendingFactoryChange = factoryChange?.status === "pending_management"
     || factoryChange?.status === "pending_owner";
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
@@ -1356,7 +1358,7 @@ function OrderDetailPage({
                 <div><dt>合同版本</dt><dd>V{contract.contractVersion} · 模板 V{contract.templateVersion}</dd></div>
                 <div><dt>合同指纹</dt><dd>{contract.snapshotFingerprint ? `${contract.snapshotFingerprint.slice(0, 12)}…` : "生成后冻结"}</dd></div>
               </dl>
-              {contract.status === "ready" && contract.pdfAttachmentId ? <div className="sourcing-contract-bar__actions"><a className="dx-button dx-button--primary" href={attachmentUrl(contract.pdfAttachmentId, "preview")} target="_blank" rel="noreferrer">预览合同 PDF</a><a className="dx-button dx-button--secondary" href={attachmentUrl(contract.pdfAttachmentId, "download")} target="_blank" rel="noreferrer">下载合同</a></div> : null}
+              {contract.status === "ready" && contract.pdfAttachmentId && canReadContractData ? <div className="sourcing-contract-bar__actions"><a className="dx-button dx-button--primary" href={attachmentUrl(contract.pdfAttachmentId, "preview")} target="_blank" rel="noreferrer">预览合同 PDF</a><a className="dx-button dx-button--secondary" href={attachmentUrl(contract.pdfAttachmentId, "download")} target="_blank" rel="noreferrer">下载合同</a></div> : null}
               {contract.status === "pending_supplement" ? <div className="sourcing-form-grid">
                 <p className="sourcing-form-wide">缺少：{contract.missingFields.map((field) => contractMissingLabels[field] ?? field).join("、")}。补充值只进入本合同快照，不回写供应商主档。</p>
                 {contract.canSupplement ? contract.missingFields.map((field) => <label key={field}><span>{contractMissingLabels[field] ?? field}</span><input value={contractSupplement[field] ?? ""} maxLength={300} onChange={(event) => { setContractSupplement({ ...contractSupplement, [field]: event.target.value }); actionKey.current = null; }} /></label>) : null}

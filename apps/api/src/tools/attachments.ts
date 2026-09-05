@@ -190,10 +190,25 @@ export class AttachmentService {
            attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
            uploaded_by,entity_type,entity_id,status,ready_at
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'ready',CURRENT_TIMESTAMP)
+         ON CONFLICT DO NOTHING
          RETURNING *`,
         [attachmentId,objectKey,input.filename,input.mimeType,input.content.byteLength,
           sha256,actor.actorId,input.entityType,input.entityId],
       );
+      const stored = inserted.rows[0];
+      if (!stored) {
+        await client.query("ROLLBACK");
+        await this.storage.deleteObject(objectKey).catch(() => undefined);
+        const concurrent = await this.pool.query<AttachmentRow>(
+          `SELECT * FROM attachments
+           WHERE entity_type=$1 AND entity_id=$2 AND mime_type=$3
+             AND sha256=$4 AND status='ready'
+           ORDER BY created_at DESC LIMIT 1`,
+          [input.entityType,input.entityId,input.mimeType,sha256],
+        );
+        if (concurrent.rows[0]) return this.dto(concurrent.rows[0]);
+        throw new ApplicationError("CONFLICT", "Generated attachment changed concurrently", 409);
+      }
       await this.events.append(client, actor, {
         action: "attachment.generated",
         entityType: "attachment",
@@ -202,7 +217,7 @@ export class AttachmentService {
           mimeType: input.mimeType, sizeBytes: input.content.byteLength, sha256 },
       });
       await client.query("COMMIT");
-      return this.dto(inserted.rows[0]!);
+      return this.dto(stored);
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       await this.storage.deleteObject(objectKey).catch(() => undefined);

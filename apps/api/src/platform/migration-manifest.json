@@ -145,6 +145,6 @@
     { "version": "0143_sourcing_supplier_profile_foundation", "checksum": "cb980b93147a2f3837ae865e247b8c8e76552b33267e1e01be5a57117059eaf5" },
     { "version": "0144_sourcing_multi_style_pricing", "checksum": "887f52302b779c48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679" },
     { "version": "0145_sourcing_line_review_approval_snapshot", "checksum": "c098dd6dcd8f737d28ae34d01c01a1bedb04871b939404184672d3aa8da0123c" },
-    { "version": "0146_sourcing_contract_pdf_finance", "checksum": "d14e0d902da88b2bac4485a3c675a6c66cd69d5554014b3880d5e74a830661be" }
+    { "version": "0146_sourcing_contract_pdf_finance", "checksum": "4d7f7cd4d7a1846c62e4553dd66efbd9de919744709ded0d5081a98d0a7b684c" }
   ]
 }

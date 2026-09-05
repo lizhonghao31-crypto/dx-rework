@@ -66,6 +66,9 @@ CREATE TABLE sourcing_contract_documents (
 );
 CREATE INDEX sourcing_contract_documents_case_idx
   ON sourcing_contract_documents(sourcing_case_id,contract_version DESC);
+CREATE UNIQUE INDEX attachments_generated_contract_sha_unique
+  ON attachments(entity_type,entity_id,mime_type,sha256)
+  WHERE entity_type='sourcing_contract_document' AND status='ready';
 
 CREATE TABLE sourcing_contract_supplements (
   sourcing_contract_supplement_id uuid PRIMARY KEY,

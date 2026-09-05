@@ -9,6 +9,7 @@ import {
   sourcingContractFingerprint,
   type ContractPdfSnapshot,
 } from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
+import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 
 const snapshot: ContractPdfSnapshot = {
   contractNumber: "DX-WF-20260905-000001",
@@ -90,5 +91,21 @@ describe("SSP-05 contract PDF", () => {
     expect(SupplementSourcingContractSchema.safeParse({ address: " " }).success).toBe(false);
     expect(SupplementSourcingContractSchema.parse({ address: "广州市番禺区" })).toEqual({ address: "广州市番禺区" });
     expect(SupplementSourcingContractSchema.safeParse({ address: "地址", daxingUnitPrice: "88.8888" }).success).toBe(false);
+  });
+
+  it("requires contract-data permission before issuing a contract PDF download", () => {
+    const service = new SourcingService({} as never);
+    const binding = {
+      entityType:"sourcing_contract_document",entityId:"contract-1",mimeType:"application/pdf",
+    };
+    expect(service.canDownloadBoundAttachment({
+      actorId:"00000000-0000-4000-8000-000000000601",actorRoles:["ie_reviewer"],
+      authorizationCapabilities:["sourcing:view"],requestId:"ssp05-download-denied",
+    },binding)).toBe(false);
+    expect(service.canDownloadBoundAttachment({
+      actorId:"00000000-0000-4000-8000-000000000602",actorRoles:["factory_payables"],
+      authorizationCapabilities:["sourcing:view","supplier_contract_data:read"],
+      requestId:"ssp05-download-allowed",
+    },binding)).toBe(true);
   });
 });

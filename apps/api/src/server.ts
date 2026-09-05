@@ -109,6 +109,7 @@ const todoService = new TodoService(database);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const receivingService = new ReceivingService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
+await sourcingContractService.resumePendingContracts();
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
 );

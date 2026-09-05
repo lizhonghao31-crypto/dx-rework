@@ -1155,17 +1155,19 @@ export class SourcingService {
     actor: TrustedActorContext,
     binding: Readonly<{ entityType: string; entityId: string; mimeType: string }>,
   ): boolean {
-    const supportedBinding = (
-      binding.entityType === "sourcing_case" && binding.mimeType.startsWith("image/")
-    ) || (
-      binding.entityType === "sourcing_contract_document"
-      && binding.mimeType === "application/pdf"
-    );
-    return supportedBinding
-      && (
-        actor.actorRoles.includes(ROOT_ROLE)
-        || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
-      );
+    if (binding.entityType === "sourcing_case" && binding.mimeType.startsWith("image/")) {
+      return actor.actorRoles.includes(ROOT_ROLE)
+        || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY);
+    }
+    if (binding.entityType === "sourcing_contract_document"
+      && binding.mimeType === "application/pdf") {
+      return actor.actorRoles.includes(ROOT_ROLE)
+        || (
+          (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
+          && (actor.authorizationCapabilities ?? []).includes("supplier_contract_data:read")
+        );
+    }
+    return false;
   }
 
   async listFactories(

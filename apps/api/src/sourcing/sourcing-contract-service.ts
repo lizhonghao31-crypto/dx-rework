@@ -74,6 +74,36 @@ export class SourcingContractService {
     private readonly events = new OperationEventRepository(),
   ) {}
 
+  async resumePendingContracts(limit = 500): Promise<void> {
+    const pending = await this.database.query<{
+      sourcing_contract_document_id: string;
+      sourcing_case_id: string;
+      actor_id: string;
+      is_root: boolean;
+    }>(
+      `SELECT document.sourcing_contract_document_id,document.sourcing_case_id,
+              COALESCE(root_user.user_id,document.prepared_by) AS actor_id,
+              root_user.user_id IS NOT NULL AS is_root
+       FROM sourcing_contract_documents document
+       LEFT JOIN LATERAL (
+         SELECT consumption.user_id FROM owner_bootstrap_consumptions consumption
+         WHERE consumption.singleton=true LIMIT 1
+       ) root_user ON true
+       WHERE document.status='generation_pending'
+         AND cardinality(document.missing_fields)=0
+       ORDER BY document.prepared_at,document.sourcing_contract_document_id
+       LIMIT $1`,
+      [limit],
+    );
+    await Promise.allSettled(pending.rows.map((row) => this.generateIfReady({
+      actorId: row.actor_id,
+      actorRoles: row.is_root ? [ROOT_ROLE] : [],
+      authorizationCapability: CONTRACT_CAPABILITY,
+      authorizationCapabilities: [READ_CAPABILITY,CONTRACT_CAPABILITY],
+      requestId: `sourcing-contract-resume:${row.sourcing_contract_document_id}`,
+    }, row.sourcing_case_id)));
+  }
+
   async prepareForApproval(
     client: Pick<PoolClient, "query">,
     approvalSnapshotId: string,
