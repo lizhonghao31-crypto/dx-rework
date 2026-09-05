@@ -1,3 +1,5 @@
+import { registerProductionDashboardRoutes } from "./production-dashboard-routes.js";
+import type { ProductionDashboardService } from "./production-dashboard-service.js";
 import { registerProductionReportingRoutes } from "./production-reporting-routes.js";
 import type { ProductionReportingService } from "./production-reporting-service.js";
 import {
@@ -60,6 +62,7 @@ export type SourcingHttpDependencies = Readonly<{
   contracts?: SourcingContractService;
   production?: SourcingProductionService;
   reporting?: ProductionReportingService;
+  dashboard?: ProductionDashboardService;
   root?: RootAuthority;
 }>;
 
@@ -68,6 +71,7 @@ export function registerSourcingRoutes(
   dependencies: SourcingHttpDependencies,
 ): void {
   if (dependencies.reporting) registerProductionReportingRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.reporting });
+  if (dependencies.dashboard) registerProductionDashboardRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.dashboard });
   const readActor = async (request: FastifyRequest) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);

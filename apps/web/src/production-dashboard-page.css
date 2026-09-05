@@ -1,0 +1,26 @@
+/* Rework surfaces/forms/navigation retain all control parameters. Only business layout and motion are added. */
+.production-dashboard { min-width: 0; }
+.production-dashboard .sourcing-order-card { overflow-wrap: anywhere; }
+.production-dashboard__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--dx-v2-space-3); }
+.production-dashboard__toolbar > .dx-button { margin-inline-start: auto; }
+.production-dashboard__events { display: flex; gap: var(--dx-v2-space-3); overflow-x: auto; padding-block: var(--dx-v2-space-3); }
+.production-dashboard__event { display: grid; flex: 0 0 auto; max-width: 100%; gap: var(--dx-v2-space-2); padding: var(--dx-form-section-padding); border-inline-start: 1px solid var(--dx-form-control-border); overflow-wrap: anywhere; }
+.production-dashboard__progress { display: grid; gap: var(--dx-v2-space-2); min-width: 0; }
+.production-dashboard__progress-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--dx-v2-space-2); }
+.production-dashboard__progress progress { width: 100%; height: var(--dx-v2-space-3); accent-color: var(--dx-v2-color-primary); border: none; border-radius: var(--dx-v2-radius-sm); overflow: hidden; background: var(--dx-v2-color-inset); }
+.production-dashboard__progress progress::-webkit-progress-bar { background: var(--dx-v2-color-inset); }
+.production-dashboard__progress progress::-webkit-progress-value { background: var(--dx-v2-color-primary); transition: width 250ms ease; }
+.production-dashboard__progress progress::-moz-progress-bar { background: var(--dx-v2-color-primary); }
+.production-dashboard__progress[data-state="normal"] .production-dashboard__progress-state { color: var(--dx-status-success); }
+.production-dashboard__progress[data-state="behind"] .production-dashboard__progress-state { color: var(--dx-v2-color-warning); }
+.production-dashboard__progress[data-state="high_risk"] .production-dashboard__progress-state,
+.production-dashboard__progress[data-state="stale"] .production-dashboard__progress-state { color: var(--dx-status-danger); }
+.production-dashboard__line { display: grid; gap: var(--dx-v2-space-2); padding-block: var(--dx-v2-space-3); overflow-wrap: anywhere; }
+.production-dashboard__changed { animation: production-dashboard-highlight 1600ms ease-out 1; }
+.production-dashboard__refreshing { display: inline-block; animation: production-dashboard-refresh 900ms linear infinite; }
+@keyframes production-dashboard-highlight { from { outline: 2px solid var(--dx-v2-color-primary); } to { outline: 2px solid transparent; } }
+@keyframes production-dashboard-refresh { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+ .production-dashboard__changed, .production-dashboard__refreshing { animation: none; }
+ .production-dashboard__progress progress::-webkit-progress-value { transition: none; }
+}

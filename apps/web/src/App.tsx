@@ -1,3 +1,4 @@
+import { ProductionDashboardPage } from "./production-dashboard-page.js";
 import { ProductionReportingPage } from "./production-reporting-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
@@ -310,6 +311,7 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
+  else if (path === "/ui/production-dashboard" || /^\/ui\/production-dashboard\/[0-9a-f-]+$/i.test(path)) page = <ProductionDashboardPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/production-reporting" || /^\/ui\/production-reporting\/[0-9a-f-]+$/i.test(path)) page = <ProductionReportingPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/suppliers") page = <SupplierCenterPage mode="directory" />;
   else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage mode="manage" />;
@@ -380,7 +382,7 @@ export function App() {
   if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
   }
-  if (path.startsWith("/ui/production-reporting")) {
+  if (path.startsWith("/ui/production-reporting") || path.startsWith("/ui/production-dashboard")) {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },

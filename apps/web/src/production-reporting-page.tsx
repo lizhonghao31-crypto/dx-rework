@@ -67,6 +67,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   };
   return <Shell active="生产数据填报"><main className="sourcing-workspace production-reporting">
     <Header title="生产数据填报" subtitle="按实际生产情况上报，系统自动累计。" badge="实时生产看板" />
+    <a href={pageUrl("ui/production-dashboard")}>实时看板</a>
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {message?<p role="status">{message}</p>:null}
     {productionOrderId?<a href={pageUrl("ui/production-reporting")}>返回生产订单</a>:null}

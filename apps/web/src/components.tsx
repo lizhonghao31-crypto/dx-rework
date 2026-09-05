@@ -480,10 +480,10 @@ export function Shell({
       }]
     : [];
   const productionNavigation: NavigationEntry[] = currentUser && canAccessProduction(currentUser)
-    ? [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] : [];
+    ? [{ name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard" }, { name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] : [];
   const navigation: NavigationEntry[] = [
     ...globalNavigation,
-    ...productionNavigation.map(entry => ({ ...entry, name: "实时生产看板" })),
+    ...productionNavigation.slice(0, 1).map(entry => ({ ...entry, name: "实时生产看板" })),
     ...reworkNavigation,
     ...mobileSourcingNavigation,
     ...mobileSupplierNavigation,

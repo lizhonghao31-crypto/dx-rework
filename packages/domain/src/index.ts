@@ -231,3 +231,5 @@ export function sanitizeOperationalError(error: unknown): string {
   // classification and keep diagnostics in access-controlled server telemetry.
   return "Operation failed; inspect protected server logs";
 }
+
+export * from "./production-progress.js";
