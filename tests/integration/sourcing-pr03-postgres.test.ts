@@ -510,10 +510,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       version: 6,
       ownerDecision: {
         decision: "approved",
-        gender: "男装",styleName: "梭织短裤",processes: ["净色车缝", "整烫", "按样衣复核"],
         sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
       },
       approvalSnapshot: {
+        gender: "男装",styleName: "梭织短裤",processes: ["净色车缝", "整烫", "按样衣复核"],
         sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
         decisionVersion: 2,
         supplierId: factoryId,
@@ -620,6 +620,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       },
     });
     expect(changeApproved.value.ownerDecision).toBeNull();
+    expect(changeApproved.value.approvalSnapshot).toMatchObject({
+      gender: "男装",styleName: "梭织短裤",processes: ["净色车缝", "整烫", "按样衣复核"],
+    });
     const changedContract = (await contractService.getCurrent(
       readerActor(),created.value.sourcingCaseId,
     )).item;
