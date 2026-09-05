@@ -68,3 +68,9 @@ Full Gate 必需，当前 Head 全绿后由业务负责人手动触发一次 Cod
 - 一并核验供应商资料创建路径，发现它还需要真实的组织身份、有效角色授权和公司策略；原夹具只创建 app_users，不足以通过完整 schema 的受控主档写入。
 - 修复夹具：按既有 full-business-chain 的 bootstrap 顺序建立合成账号身份/角色，随后 ensureOrganizationPolicy；工艺和供应商创建使用 master_data:manage 的受信动作上下文。不修改 Root 身份、业务权限、生产代码或数据库守卫，不停用触发器。
 - 两条 SSP09 新数据库用例仍未取得实际运行通过证据。PR 默认两次 Full Gate 已用满，第三次需业务负责人按 AGENTS.md 第11节明确授权后执行。
+
+## Full Gate #988 角色夹具修复
+
+- 第三轮已证明身份、策略和主档守卫可以正常执行；唯一失败仍在新用例初始化：测试同时给跟单账号和老板账号分配了受数据库唯一索引约束的 `production_management` 直属角色，触发 `user_role_assignments_singleton_direct_role_idx`。
+- 老板在这条业务链只需要 `owner_group` 的数据库角色；生产管理职责由跟单测试账号承担。移除老板多余的 `production_management` 角色，不修改 TrustedActor 的老板审批上下文、生产权限模型或应用代码。
+- 业务负责人已明确授权继续运行门禁、触发一次 Codex Review、整改并 squash 合并；后续结果以 GitHub 远端当前 Head 为准。

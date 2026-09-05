@@ -53,7 +53,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   // are seeded before locking the corporation policy; production guards stay enabled.
   for(const [id,name,roles] of [
     [user,"SSP09跟单",["order_merchandiser","ie_reviewer","production_management","system_admin"]],
-    [owner,"SSP09老板",["owner_group","production_management"]],
+    [owner,"SSP09老板",["owner_group"]],
     [warehouse,"SSP09仓库",["warehouse_receiver"]],
   ] as const) {
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,name]);
