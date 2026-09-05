@@ -74,3 +74,8 @@ Full Gate 必需，当前 Head 全绿后由业务负责人手动触发一次 Cod
 - 第三轮已证明身份、策略和主档守卫可以正常执行；唯一失败仍在新用例初始化：测试同时给跟单账号和老板账号分配了受数据库唯一索引约束的 `production_management` 直属角色，触发 `user_role_assignments_singleton_direct_role_idx`。
 - 老板在这条业务链只需要 `owner_group` 的数据库角色；生产管理职责由跟单测试账号承担。移除老板多余的 `production_management` 角色，不修改 TrustedActor 的老板审批上下文、生产权限模型或应用代码。
 - 业务负责人已明确授权继续运行门禁、触发一次 Codex Review、整改并 squash 合并；后续结果以 GitHub 远端当前 Head 为准。
+
+## Full Gate #989 供应商资料能力修复
+
+- 角色唯一性冲突已解除；迁移回放、收货回归和 Root 控制边界均通过。新用例随后在创建带合同资料的供应商时被现行数据库守卫以 42501 拒绝，两条业务断言仍未开始。
+- 工艺目录继续使用 `master_data:manage`；供应商完整资料改用 0143 已定义并授予 `system_admin` 的专用 `supplier_profile:write` 能力。保持真实身份和角色校验，不扩大业务权限、不停用供应商触发器。
