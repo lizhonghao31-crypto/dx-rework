@@ -19,6 +19,7 @@ import {
 } from "./platform/database.js";
 import { ReceivingService } from "./receiving/receiving-service.js";
 import { SourcingService } from "./sourcing/sourcing-service.js";
+import { SourcingContractService } from "./sourcing/sourcing-contract-service.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
 import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-whole-order-review-service.js";
@@ -107,7 +108,11 @@ const attachments = new AttachmentService(database, storage, {
 const todoService = new TodoService(database);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const receivingService = new ReceivingService(database);
-const sourcingService = new SourcingService(database, undefined, undefined, todoProjection);
+const sourcingContractService = new SourcingContractService(database, attachments);
+await sourcingContractService.resumePendingContracts();
+const sourcingService = new SourcingService(
+  database,undefined,undefined,todoProjection,sourcingContractService,
+);
 const reworkService = new ReworkInitiationService(
   database,
   config.dingtalk.corpId,
@@ -202,6 +207,7 @@ const app = buildApp({
   sourcing: {
     authenticate: (token) => auth.authenticate(token),
     service: sourcingService,
+    contracts: sourcingContractService,
     root: rootAuthority,
   },
   tools: {
@@ -213,7 +219,7 @@ const app = buildApp({
         ["rework_order", "receiving_batch"].includes(binding.entityType)
         && binding.mimeType.startsWith("image/")
       ) return true;
-      if (binding.entityType === "sourcing_case" && sourcingService.canDownloadBoundAttachment({
+      if (sourcingService.canDownloadBoundAttachment({
         actorId: actor.actorId,
         actorRoles: actor.actorRoles,
         authorizationCapability: "sourcing:view",

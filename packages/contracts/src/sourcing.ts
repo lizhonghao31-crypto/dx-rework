@@ -175,6 +175,51 @@ export const DecideSourcingOwnerSchema = z.discriminatedUnion("decision", [
   }).strict(),
 ]);
 
+export const SourcingContractMissingFieldSchema = z.enum([
+  "address",
+  "contractEntityName",
+  "partyBRepresentative",
+  "payeeName",
+  "bankAccount",
+  "bankName",
+]);
+
+export const SupplementSourcingContractSchema = z.object({
+  address: z.string().trim().min(1).max(300).optional(),
+  contractEntityName: z.string().trim().min(1).max(300).optional(),
+  partyBRepresentative: z.string().trim().min(1).max(300).optional(),
+  payeeName: z.string().trim().min(1).max(300).optional(),
+  bankAccount: z.string().trim().min(1).max(300).optional(),
+  bankName: z.string().trim().min(1).max(300).optional(),
+}).strict().refine((input) => Object.keys(input).length > 0, "请填写至少一项合同补充资料");
+
+export const SourcingContractDocumentSchema = z.object({
+  sourcingContractDocumentId: IdSchema,
+  sourcingApprovalSnapshotId: IdSchema,
+  contractNumber: z.string(),
+  contractVersion: z.number().int().positive(),
+  templateVersion: z.number().int().positive(),
+  status: z.enum([
+    "pending_supplement",
+    "generation_pending",
+    "generating",
+    "ready",
+    "generation_failed",
+  ]),
+  missingFields: z.array(SourcingContractMissingFieldSchema),
+  snapshotFingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+  pdfAttachmentId: IdSchema.nullable(),
+  pdfSha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+  failureReason: z.string().nullable(),
+  preparedAt: z.string().datetime(),
+  generatedAt: z.string().datetime().nullable(),
+  canSupplement: z.boolean(),
+}).strict();
+
+export const SourcingContractStateResponseSchema = z.object({
+  item: SourcingContractDocumentSchema.nullable(),
+}).strict();
+
 export const RecordSourcingContractSchema = z.object({
   contractReference: z.string().trim().min(1).max(200),
   signedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "合同日期格式无效"),
@@ -452,6 +497,10 @@ export type RecordSourcingManagementDecision = z.input<
   typeof RecordSourcingManagementDecisionSchema
 >;
 export type DecideSourcingOwner = z.infer<typeof DecideSourcingOwnerSchema>;
+export type SourcingContractMissingField = z.infer<typeof SourcingContractMissingFieldSchema>;
+export type SupplementSourcingContract = z.infer<typeof SupplementSourcingContractSchema>;
+export type SourcingContractDocument = z.infer<typeof SourcingContractDocumentSchema>;
+export type SourcingContractStateResponse = z.infer<typeof SourcingContractStateResponseSchema>;
 export type SourcingFactory = z.infer<typeof SourcingFactorySchema>;
 export type SourcingFactoryListResponse = z.infer<typeof SourcingFactoryListResponseSchema>;
 export type SourcingDecision = z.infer<typeof SourcingDecisionSchema>;

@@ -36,6 +36,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import type { SourcingContractService } from "./sourcing-contract-service.js";
 
 const CASE_CREATE_CAPABILITY = "sourcing:inquiry:create";
 const IE_QUOTE_CAPABILITY = "sourcing:price:quote";
@@ -394,6 +395,7 @@ export class SourcingService {
       "actionableForAllAssignedRole" | "cancelOpenByDedupePrefix"
         | "completeOpenByDedupePrefix" | "information"
     >,
+    private readonly contractService?: SourcingContractService,
   ) {}
 
   private assertActor(
@@ -1057,6 +1059,17 @@ export class SourcingService {
                 NULL::integer,'{}'::text[],NULL::text,NULL::text
          FROM sourcing_contract_executions contract WHERE contract.sourcing_case_id=$1
          UNION ALL
+         SELECT contract.sourcing_contract_document_id,'contract',contract.contract_version,
+                contract.prepared_by,contract.prepared_at,
+                CASE contract.status WHEN 'ready' THEN '系统合同PDF已生成'
+                  WHEN 'pending_supplement' THEN '合同待补充资料'
+                  ELSE '合同PDF待生成' END,
+                NULL::numeric,NULL::numeric,NULL::text,NULL::text,
+                contract.contract_number,
+                (contract.prepared_at AT TIME ZONE 'Asia/Shanghai')::date,
+                NULL::integer,'{}'::text[],NULL::text,NULL::text
+         FROM sourcing_contract_documents contract WHERE contract.sourcing_case_id=$1
+         UNION ALL
          SELECT change.factory_change_request_id,'factory_change_request',
                 row_number() OVER (ORDER BY change.requested_at,change.factory_change_request_id),
                 change.requested_by,change.requested_at,change.change_reason,
@@ -1142,12 +1155,19 @@ export class SourcingService {
     actor: TrustedActorContext,
     binding: Readonly<{ entityType: string; entityId: string; mimeType: string }>,
   ): boolean {
-    return binding.entityType === "sourcing_case"
-      && binding.mimeType.startsWith("image/")
-      && (
-        actor.actorRoles.includes(ROOT_ROLE)
-        || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
-      );
+    if (binding.entityType === "sourcing_case" && binding.mimeType.startsWith("image/")) {
+      return actor.actorRoles.includes(ROOT_ROLE)
+        || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY);
+    }
+    if (binding.entityType === "sourcing_contract_document"
+      && binding.mimeType === "application/pdf") {
+      return actor.actorRoles.includes(ROOT_ROLE)
+        || (
+          (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
+          && (actor.authorizationCapabilities ?? []).includes("supplier_contract_data:read")
+        );
+    }
+    return false;
   }
 
   async listFactories(
@@ -2078,6 +2098,7 @@ export class SourcingService {
              WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
             [snapshotId,sourcingCaseId,source.sourcing_decision_id],
           );
+          await this.contractService?.prepareForApproval(client, snapshotId, actor);
         }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
@@ -2151,6 +2172,9 @@ export class SourcingService {
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
+      if (input.decision === "approved") {
+        await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
+      }
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -2397,6 +2421,47 @@ export class SourcingService {
        ORDER BY line.position`,
       [decisionId,source.proposed_unit_price,source.sourcing_case_id],
     );
+    if (nextStatus === "pending_finance_reconciliation") {
+      const snapshotId = randomUUID();
+      await client.query(
+        `INSERT INTO sourcing_approval_snapshots(
+           sourcing_approval_snapshot_id,sourcing_case_id,sourcing_decision_id,
+           decision_version,supplier_id,supplier_code_snapshot,supplier_name_snapshot,
+           supplier_address,contract_entity_name,party_b_representative,
+           payee_name,bank_account,bank_name,quantity,total_amount,daxing_unit_price,
+           estimated_cut_piece_send_date,delivery_date,processes,
+           approved_by,operation_event_id,request_id
+         )
+         SELECT $1,$2,$3,$4,$5,$6,$7,
+                supplier.address,supplier.contract_entity_name,supplier.party_b_representative,
+                supplier.payee_name,supplier.bank_account,supplier.bank_name,
+                $8,(SELECT sum(line.total_amount) FROM sourcing_decision_lines line
+                    WHERE line.sourcing_decision_id=$3),
+                source_case.daxing_unit_price,source_case.estimated_cut_piece_send_date,
+                source_case.delivery_date,source_case.process_items,$9,$10,$11
+         FROM sourcing_cases source_case
+         JOIN current_supplier_catalog supplier ON supplier.supplier_id=$5
+         WHERE source_case.sourcing_case_id=$2`,
+        [snapshotId,source.sourcing_case_id,decisionId,nextDecisionVersion,
+          source.proposed_supplier_id,source.proposed_supplier_code_snapshot,
+          source.proposed_supplier_name_snapshot,Number(source.proposed_quantity),
+          actor.actorId,eventId,actor.requestId],
+      );
+      await client.query(
+        `INSERT INTO sourcing_approval_snapshot_lines(
+           sourcing_approval_snapshot_id,position,style_no,alternate_style_no,color,
+           quantity,unit_price,total_amount
+         )
+         SELECT $1,line.position,source_line.style_no,source_line.alternate_style_no,
+                source_line.color,line.quantity,line.unit_price,line.total_amount
+         FROM sourcing_decision_lines line
+         JOIN sourcing_case_lines source_line
+           ON source_line.sourcing_case_id=$2 AND source_line.position=line.position
+         WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
+        [snapshotId,source.sourcing_case_id,decisionId],
+      );
+      await this.contractService?.prepareForApproval(client, snapshotId, actor);
+    }
     if (nextStatus !== source.status) {
       await client.query(
         `INSERT INTO sourcing_case_transitions(
@@ -2680,6 +2745,7 @@ export class SourcingService {
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
+      await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -2899,6 +2965,7 @@ export class SourcingService {
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
+      await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -2951,6 +3018,10 @@ export class SourcingService {
           expected_quantity: number | string;
           expected_total_amount: string;
           sourcing_contract_id: string | null;
+          sourcing_contract_document_id: string | null;
+          contract_version: number | string | null;
+          contract_fingerprint: string | null;
+          pdf_attachment_id: string | null;
           reconciliation_version: number | string;
         }>(
           `SELECT transition_row.to_status AS status,transition_row.sequence,
@@ -2958,7 +3029,11 @@ export class SourcingService {
                   decision_row.supplier_id,decision_row.unit_price AS expected_unit_price,
                   decision_row.quantity AS expected_quantity,
                   decision_row.total_amount AS expected_total_amount,
-                  contract_row.sourcing_contract_id,
+                  legacy_contract.sourcing_contract_id,
+                  contract_row.sourcing_contract_document_id,
+                  contract_row.contract_version,
+                  contract_row.snapshot_fingerprint AS contract_fingerprint,
+                  contract_row.pdf_attachment_id,
                   COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version
            FROM sourcing_cases source_case
            JOIN LATERAL (
@@ -2978,6 +3053,15 @@ export class SourcingService {
              WHERE contract.sourcing_case_id=source_case.sourcing_case_id
                AND contract.sourcing_decision_id=decision_row.sourcing_decision_id
              ORDER BY contract.recorded_at DESC,contract.sourcing_contract_id DESC LIMIT 1
+           ) legacy_contract ON true
+           LEFT JOIN LATERAL (
+             SELECT contract.sourcing_contract_document_id,contract.contract_version,
+                    contract.snapshot_fingerprint,contract.pdf_attachment_id
+             FROM sourcing_contract_documents contract
+             WHERE contract.sourcing_case_id=source_case.sourcing_case_id
+               AND contract.sourcing_decision_id=decision_row.sourcing_decision_id
+               AND contract.status='ready'
+             ORDER BY contract.contract_version DESC LIMIT 1
            ) contract_row ON true
            LEFT JOIN LATERAL (
              SELECT reconciliation.reconciliation_version
@@ -2994,6 +3078,10 @@ export class SourcingService {
         if (!source) return fail("报价选厂询价或当前选厂决定不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_finance_reconciliation") {
           fail("该订单当前不在财务核对阶段", 409, "INVALID_STATE_TRANSITION");
+        }
+        if (!source.sourcing_contract_document_id || source.contract_version === null
+          || !source.contract_fingerprint || !source.pdf_attachment_id) {
+          fail("当前批准版本尚无可核对的系统合同PDF", 409, "INVALID_STATE_TRANSITION");
         }
         const openFactoryChange = await client.query(
           `SELECT 1
@@ -3019,10 +3107,11 @@ export class SourcingService {
           supplier_code: string;
           supplier_name: string;
         }>(
-          `SELECT supplier_id,supplier_code,supplier_name
-           FROM current_supplier_catalog
-           WHERE supplier_id=$1 AND supplier_type='factory'`,
-          [source.supplier_id],
+          `SELECT supplier_id,supplier_code_snapshot AS supplier_code,
+                  supplier_name_snapshot AS supplier_name
+           FROM sourcing_approval_snapshots
+           WHERE sourcing_decision_id=$1`,
+          [source.sourcing_decision_id],
         );
         const expectedFactory = expectedFactoryResult.rows[0] ?? fail("当前批准加工厂不存在", 409, "INVALID_STATE_TRANSITION");
         const differenceReason = difference ? suppliedReason : undefined;
@@ -3044,14 +3133,18 @@ export class SourcingService {
         await client.query(
           `INSERT INTO sourcing_finance_reconciliations(
              sourcing_reconciliation_id,sourcing_case_id,reconciliation_version,
-             sourcing_decision_id,sourcing_contract_id,actual_supplier_id,
+             sourcing_decision_id,sourcing_contract_id,
+             sourcing_contract_document_id,contract_version,contract_fingerprint,
+             actual_supplier_id,
              actual_supplier_code_snapshot,actual_supplier_name_snapshot,
              actual_unit_price,actual_quantity,actual_total_amount,result,
              difference_fields,difference_reason,reconciled_by,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
           [
             reconciliationId,sourcingCaseId,reconciliationVersion,source.sourcing_decision_id,
-            source.sourcing_contract_id,expectedFactory.supplier_id,expectedFactory.supplier_code,
+            source.sourcing_contract_id,source.sourcing_contract_document_id,
+            Number(source.contract_version),source.contract_fingerprint,
+            expectedFactory.supplier_id,expectedFactory.supplier_code,
             expectedFactory.supplier_name,source.expected_unit_price,Number(source.expected_quantity),source.expected_total_amount,
             difference ? "difference" : "match",differenceFields,differenceReason ?? null,
             actor.actorId,eventId,actor.requestId,

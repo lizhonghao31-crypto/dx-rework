@@ -9,6 +9,7 @@ import {
   SourcingAttachmentListResponseSchema,
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
+  SourcingContractStateResponseSchema,
   SourcingFactoryListResponseSchema,
   SourcingFactoryChangeStateResponseSchema,
   SourcingTimelineResponseSchema,
@@ -19,6 +20,8 @@ import {
   type SourcingAttachment,
   type SourcingCaseStatus,
   type SourcingCaseSummary,
+  type SourcingContractDocument,
+  type SourcingContractMissingField,
   type SourcingFactory,
   type SourcingFactoryChangeState,
   type SourcingTimelineEntry,
@@ -100,6 +103,7 @@ type QuoteDraft = Readonly<{ linePrices: readonly LinePriceDraft[]; quoteReason:
 type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
+type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
 
 const request = async <T,>(
   path: string,
@@ -653,7 +657,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     }
     if (images.length === 0) { setMessage("请至少上传一张订单照片"); return; }
     setBusy(true);
-    createKey.current ??= createClientRequestId();
+    const requestKey = createKey.current ?? createClientRequestId();
+    createKey.current = requestKey;
     try {
       const ensuredCrafts = await request("master-data/crafts/ensure", CraftCatalogListResponseSchema, {
         method: "POST",
@@ -666,7 +671,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       });
       const created = await request("sourcing/cases", SourcingCaseSummarySchema, {
         method: "POST",
-        headers: { "idempotency-key": createKey.current },
+        headers: { "idempotency-key": requestKey },
         body: JSON.stringify({
           erpOrderNo: erpOrderNo.trim(),
           estimatedCutPieceSendDate,
@@ -972,6 +977,8 @@ function OrderDetailPage({
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "" });
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
+  const [contract, setContract] = useState<SourcingContractDocument | null>(null);
+  const [contractSupplement, setContractSupplement] = useState<ContractSupplementDraft>({});
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
   const [factoryChangeReviewReason, setFactoryChangeReviewReason] = useState("");
   const [exceptionReason, setExceptionReason] = useState("");
@@ -988,16 +995,18 @@ function OrderDetailPage({
 
   const load = async (): Promise<void> => {
     try {
-      const [detail, evidence, history, currentFactoryChange] = await Promise.all([
+      const [detail, evidence, history, currentFactoryChange, currentContract] = await Promise.all([
         request(`sourcing/cases/${sourcingCaseId}`, SourcingCaseSummarySchema),
         request(`sourcing/cases/${sourcingCaseId}/attachments`, SourcingAttachmentListResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/timeline`, SourcingTimelineResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/factory-changes/current`, SourcingFactoryChangeStateResponseSchema),
+        request(`sourcing/cases/${sourcingCaseId}/contract`, SourcingContractStateResponseSchema),
       ]);
       setItem(detail);
       setAttachments(evidence.items);
       setTimeline(history.items);
       setFactoryChange(currentFactoryChange.item);
+      setContract(currentContract.item);
       setFactoryChangeDraft((current) => ({
         supplierId: current.supplierId,
         unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
@@ -1038,6 +1047,8 @@ function OrderDetailPage({
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const canReadContractData = user?.isRoot === true
+    || user?.capabilities.includes("supplier_contract_data:read") === true;
   const hasPendingFactoryChange = factoryChange?.status === "pending_management"
     || factoryChange?.status === "pending_owner";
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");
@@ -1056,11 +1067,12 @@ function OrderDetailPage({
     resetFactoryChange = false,
   ): Promise<void> => {
     setBusy(true);
-    actionKey.current ??= createClientRequestId();
+    const requestKey = actionKey.current ?? createClientRequestId();
+    actionKey.current = requestKey;
     try {
       const updated = await request(path, SourcingCaseSummarySchema, {
         method: "POST",
-        headers: { "idempotency-key": actionKey.current },
+        headers: { "idempotency-key": requestKey },
         body: JSON.stringify(body),
       });
       actionKey.current = null;
@@ -1076,6 +1088,28 @@ function OrderDetailPage({
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提交失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitContract = async (path: string, body: unknown, success: string): Promise<void> => {
+    setBusy(true);
+    const requestKey = actionKey.current ?? createClientRequestId();
+    actionKey.current = requestKey;
+    try {
+      const updated = await request(path, SourcingContractStateResponseSchema, {
+        method: "POST",
+        headers: { "idempotency-key": requestKey },
+        body: JSON.stringify(body),
+      });
+      actionKey.current = null;
+      setContract(updated.item);
+      setContractSupplement({});
+      setMessage(success);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "合同操作失败");
     } finally {
       setBusy(false);
     }
@@ -1313,16 +1347,38 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
+          {item.approvalSnapshot && selectedNode === "finance" ? <Surface className="rework-detail-node-preview sourcing-contract-bar">
+            <div className="sourcing-contract-bar__heading">
+              <div><h2>系统合同</h2><p>合同仅使用老板批准快照；主档后续修改不会追改本版本。</p></div>
+              {contract ? <StatusBadge tone={contract.status === "ready" ? "success" : contract.status === "generation_failed" ? "danger" : "info"}>{contract.status === "ready" ? "PDF 已生成" : contract.status === "pending_supplement" ? "待补资料" : contract.status === "generation_failed" ? "生成失败" : "生成中"}</StatusBadge> : null}
+            </div>
+            {contract ? <>
+              <dl className="sourcing-finance-reference" aria-label="系统合同版本">
+                <div><dt>合同编号</dt><dd>{contract.contractNumber}</dd></div>
+                <div><dt>合同版本</dt><dd>V{contract.contractVersion} · 模板 V{contract.templateVersion}</dd></div>
+                <div><dt>合同指纹</dt><dd>{contract.snapshotFingerprint ? `${contract.snapshotFingerprint.slice(0, 12)}…` : "生成后冻结"}</dd></div>
+              </dl>
+              {contract.status === "ready" && contract.pdfAttachmentId && canReadContractData ? <div className="sourcing-contract-bar__actions"><a className="dx-button dx-button--primary" href={attachmentUrl(contract.pdfAttachmentId, "preview")} target="_blank" rel="noreferrer">预览合同 PDF</a><a className="dx-button dx-button--secondary" href={attachmentUrl(contract.pdfAttachmentId, "download")} target="_blank" rel="noreferrer">下载合同</a></div> : null}
+              {contract.status === "pending_supplement" ? <div className="sourcing-form-grid">
+                <p className="sourcing-form-wide">缺少：{contract.missingFields.map((field) => contractMissingLabels[field] ?? field).join("、")}。补充值只进入本合同快照，不回写供应商主档。</p>
+                {contract.canSupplement ? contract.missingFields.map((field) => <label key={field}><span>{contractMissingLabels[field] ?? field}</span><input value={contractSupplement[field] ?? ""} maxLength={300} onChange={(event) => { setContractSupplement({ ...contractSupplement, [field]: event.target.value }); actionKey.current = null; }} /></label>) : null}
+                {contract.canSupplement ? <button className="dx-button dx-button--primary" type="button" disabled={busy || contract.missingFields.some((field) => !(contractSupplement[field] ?? "").trim())} onClick={() => void submitContract(`sourcing/cases/${item.sourcingCaseId}/contract/supplements`, Object.fromEntries(contract.missingFields.map((field) => [field, contractSupplement[field]?.trim()])), "合同资料已补齐并生成 PDF")}>保存本合同补充资料</button> : <p>仅本订单跟单或 Root 可补充缺项。</p>}
+              </div> : null}
+              {contract.status === "generation_failed" && contract.canSupplement ? <div className="sourcing-contract-bar__actions"><span>{contract.failureReason ?? "合同生成失败"}</span><button className="dx-button dx-button--secondary" type="button" disabled={busy} onClick={() => void submitContract(`sourcing/cases/${item.sourcingCaseId}/contract/generate`, {}, "合同 PDF 已重新生成")}>重试生成</button></div> : null}
+            </> : <p>批准事实正在准备合同，请刷新后查看。</p>}
+          </Surface> : null}
+
           {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 财务核对</h2>
-            <p>财务仅核对已批准的选厂决定，不可修改加工厂、单价、数量或总额。</p>
+            <p>财务仅核对已批准的选厂决定，不可修改加工厂、单价、数量或总额；提交前必须对照当前系统合同 PDF。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
               <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
               <div><dt>批准单价</dt><dd>{formatBusinessCurrency(item.decision.unitPrice)}</dd></div>
               <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
+              <div><dt>对应合同</dt><dd>{contract?.status === "ready" ? `${contract.contractNumber} · V${contract.contractVersion}` : "合同 PDF 尚未就绪"}</dd></div>
             </dl> : null}
-            {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : canFinance ? <div className="sourcing-finance-confirmation">
+            {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : contract?.status !== "ready" ? <p className="sourcing-finance-waiting">系统合同 PDF 未就绪，暂不能提交财务核对。</p> : canFinance ? <div className="sourcing-finance-confirmation">
               <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
               <details>

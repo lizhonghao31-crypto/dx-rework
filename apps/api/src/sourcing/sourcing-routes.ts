@@ -9,6 +9,8 @@ import {
   RecordSourcingManagementDecisionSchema,
   RequestSourcingFactoryChangeSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
+  SourcingContractStateResponseSchema,
+  SupplementSourcingContractSchema,
   SupplementSourcingImagesSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -17,6 +19,7 @@ import { businessActor, isRootUser } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
+import type { SourcingContractService } from "./sourcing-contract-service.js";
 import type { SourcingService } from "./sourcing-service.js";
 
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie
@@ -47,6 +50,7 @@ const validationError = (message: string): never => {
 export type SourcingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: SourcingService;
+  contracts?: SourcingContractService;
   root?: RootAuthority;
 }>;
 
@@ -284,6 +288,46 @@ export function registerSourcingRoutes(
       return reply.code(201).send(result.value);
     },
   );
+
+  if (dependencies.contracts) {
+    app.get<{ Params: { sourcingCaseId: string } }>(
+      "/sourcing/cases/:sourcingCaseId/contract",
+      async (request) => SourcingContractStateResponseSchema.parse(
+        await dependencies.contracts!.getCurrent(
+          await readActor(request),
+          caseId(request.params.sourcingCaseId),
+        ),
+      ),
+    );
+
+    app.post<{ Params: { sourcingCaseId: string } }>(
+      "/sourcing/cases/:sourcingCaseId/contract/supplements",
+      async (request) => {
+        const parsed = SupplementSourcingContractSchema.safeParse(request.body);
+        const data = parsed.success
+          ? parsed.data
+          : validationError(parsed.error.issues[0]?.message ?? "合同补充资料不完整");
+        return SourcingContractStateResponseSchema.parse(
+          await dependencies.contracts!.supplement(
+            await actionActor(request, "order_merchandiser", "sourcing:contract:record"),
+            caseId(request.params.sourcingCaseId),
+            data,
+            idempotencyKey(request),
+          ),
+        );
+      },
+    );
+
+    app.post<{ Params: { sourcingCaseId: string } }>(
+      "/sourcing/cases/:sourcingCaseId/contract/generate",
+      async (request) => SourcingContractStateResponseSchema.parse(
+        await dependencies.contracts!.generateIfReady(
+          await actionActor(request, "order_merchandiser", "sourcing:contract:record"),
+          caseId(request.params.sourcingCaseId),
+        ),
+      ),
+    );
+  }
 
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/factory-changes/current",

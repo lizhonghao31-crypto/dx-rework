@@ -1,0 +1,418 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { Pool, PoolClient } from "pg";
+
+import type {
+  SourcingContractDocument,
+  SourcingContractMissingField,
+  SourcingContractStateResponse,
+  SupplementSourcingContract,
+} from "@dx-rework/contracts";
+import { ApplicationError } from "../platform/errors.js";
+import type { AttachmentService } from "../tools/attachments.js";
+import {
+  IdempotencyService,
+  OperationEventRepository,
+  type TrustedActorContext,
+} from "../tools/repositories.js";
+import {
+  renderSourcingContractPdf,
+  sourcingContractFingerprint,
+  type ContractPdfSnapshot,
+} from "./sourcing-contract-pdf.js";
+
+const ROOT_ROLE = "root_superuser";
+const MERCHANDISER_ROLE = "order_merchandiser";
+const READ_CAPABILITY = "sourcing:view";
+const CONTRACT_CAPABILITY = "sourcing:contract:record";
+const FIELD_NAMES = [
+  "address","contractEntityName","partyBRepresentative",
+  "payeeName","bankAccount","bankName",
+] as const satisfies readonly SourcingContractMissingField[];
+
+type ContractRow = Readonly<{
+  sourcing_contract_document_id: string;
+  sourcing_case_id: string;
+  sourcing_approval_snapshot_id: string;
+  sourcing_decision_id: string;
+  contract_version: number | string;
+  contract_number: string;
+  template_version: number | string;
+  approval_snapshot: Record<string, unknown>;
+  missing_fields: SourcingContractMissingField[];
+  status: SourcingContractDocument["status"];
+  snapshot_fingerprint: string | null;
+  pdf_attachment_id: string | null;
+  pdf_sha256: string | null;
+  failure_reason: string | null;
+  prepared_at: Date | string;
+  generated_at: Date | string | null;
+  created_by: string;
+  party_a_name?: string;
+  signing_place?: string;
+  terms?: Record<string, string>;
+}>;
+
+const iso = (value: Date | string): string => value instanceof Date
+  ? value.toISOString() : new Date(value).toISOString();
+
+const shanghaiDate = (value: string): string => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",year: "numeric",month: "2-digit",day: "2-digit",
+  }).formatToParts(new Date(value));
+  const pick = (name: string): string => parts.find((part) => part.type === name)?.value ?? "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+};
+
+const requestHash = (scope: string, payload: unknown): string =>
+  createHash("sha256").update(JSON.stringify({ scope,payload })).digest("hex");
+
+export class SourcingContractService {
+  constructor(
+    private readonly database: Pool,
+    private readonly attachments: AttachmentService,
+    private readonly idempotency = new IdempotencyService(),
+    private readonly events = new OperationEventRepository(),
+  ) {}
+
+  async resumePendingContracts(batchSize = 50): Promise<void> {
+    for (;;) {
+      const pending = await this.database.query<{
+        sourcing_contract_document_id: string;
+        sourcing_case_id: string;
+        actor_id: string;
+        is_root: boolean;
+      }>(
+        `SELECT document.sourcing_contract_document_id,document.sourcing_case_id,
+                COALESCE(root_user.user_id,document.prepared_by) AS actor_id,
+                root_user.user_id IS NOT NULL AS is_root
+         FROM sourcing_contract_documents document
+         LEFT JOIN LATERAL (
+           SELECT consumption.user_id FROM owner_bootstrap_consumptions consumption
+           WHERE consumption.singleton=true LIMIT 1
+         ) root_user ON true
+         WHERE document.status='generation_pending'
+           AND cardinality(document.missing_fields)=0
+         ORDER BY document.prepared_at,document.sourcing_contract_document_id
+         LIMIT $1`,
+        [batchSize],
+      );
+      if (!pending.rows.length) return;
+      await Promise.allSettled(pending.rows.map((row) => this.generateIfReady({
+        actorId: row.actor_id,
+        actorRoles: row.is_root ? [ROOT_ROLE] : [],
+        authorizationCapability: CONTRACT_CAPABILITY,
+        authorizationCapabilities: [READ_CAPABILITY,CONTRACT_CAPABILITY],
+        requestId: `sourcing-contract-resume:${row.sourcing_contract_document_id}`,
+      }, row.sourcing_case_id, row.sourcing_contract_document_id)));
+    }
+  }
+
+  async prepareForApproval(
+    client: Pick<PoolClient, "query">,
+    approvalSnapshotId: string,
+    actor: TrustedActorContext,
+  ): Promise<string> {
+    const documentId = randomUUID();
+    const inserted = await client.query<{ sourcing_contract_document_id: string }>(
+      `INSERT INTO sourcing_contract_documents(
+         sourcing_contract_document_id,sourcing_case_id,sourcing_approval_snapshot_id,
+         sourcing_decision_id,contract_version,contract_number,template_version,
+         approval_snapshot,missing_fields,status,prepared_by
+       )
+       SELECT $1,snapshot.sourcing_case_id,snapshot.sourcing_approval_snapshot_id,
+              snapshot.sourcing_decision_id,snapshot.decision_version,
+              'DX-WF-'||to_char(snapshot.approved_at AT TIME ZONE 'Asia/Shanghai','YYYYMMDD')||'-'||
+                lpad(nextval('sourcing_contract_number_seq')::text,6,'0'),
+              template.template_version,
+              jsonb_build_object(
+                'supplierId',snapshot.supplier_id,
+                'supplierCode',snapshot.supplier_code_snapshot,
+                'supplierName',snapshot.supplier_name_snapshot,
+                'address',snapshot.supplier_address,
+                'contractEntityName',snapshot.contract_entity_name,
+                'partyBRepresentative',snapshot.party_b_representative,
+                'payeeName',snapshot.payee_name,
+                'bankAccount',snapshot.bank_account,
+                'bankName',snapshot.bank_name,
+                'quantity',snapshot.quantity::text,
+                'totalAmount',snapshot.total_amount::text,
+                'estimatedCutPieceSendDate',snapshot.estimated_cut_piece_send_date,
+                'deliveryDate',snapshot.delivery_date,
+                'processes',snapshot.processes,
+                'approvedAt',snapshot.approved_at,
+                'lines',COALESCE((
+                  SELECT jsonb_agg(jsonb_build_object(
+                    'position',line.position,'styleNo',line.style_no,
+                    'alternateStyleNo',line.alternate_style_no,'color',line.color,
+                    'quantity',line.quantity,'unitPrice',line.unit_price::text,
+                    'totalAmount',line.total_amount::text
+                  ) ORDER BY line.position)
+                  FROM sourcing_approval_snapshot_lines line
+                  WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
+                ),'[]'::jsonb)
+              ),
+              missing.fields,
+              CASE WHEN cardinality(missing.fields)>0
+                THEN 'pending_supplement' ELSE 'generation_pending' END,
+              $2
+       FROM sourcing_approval_snapshots snapshot
+       CROSS JOIN LATERAL (
+         SELECT template_version
+         FROM sourcing_contract_template_versions
+         WHERE effective_from<=snapshot.approved_at
+         ORDER BY template_version DESC LIMIT 1
+       ) template
+       CROSS JOIN LATERAL (
+         SELECT array_remove(ARRAY[
+           CASE WHEN snapshot.supplier_address IS NULL THEN 'address' END,
+           CASE WHEN snapshot.contract_entity_name IS NULL THEN 'contractEntityName' END,
+           CASE WHEN snapshot.party_b_representative IS NULL THEN 'partyBRepresentative' END,
+           CASE WHEN snapshot.payee_name IS NULL THEN 'payeeName' END,
+           CASE WHEN snapshot.bank_account IS NULL THEN 'bankAccount' END,
+           CASE WHEN snapshot.bank_name IS NULL THEN 'bankName' END
+         ],NULL)::text[] AS fields
+       ) missing
+       WHERE snapshot.sourcing_approval_snapshot_id=$3
+       ON CONFLICT(sourcing_approval_snapshot_id) DO NOTHING
+       RETURNING sourcing_contract_document_id`,
+      [documentId,actor.actorId,approvalSnapshotId],
+    );
+    const existing = inserted.rows[0] ? null : await client.query<{ sourcing_contract_document_id: string }>(
+      `SELECT sourcing_contract_document_id FROM sourcing_contract_documents
+       WHERE sourcing_approval_snapshot_id=$1`,
+      [approvalSnapshotId],
+    );
+    const id = inserted.rows[0]?.sourcing_contract_document_id
+      ?? existing?.rows[0]?.sourcing_contract_document_id;
+    if (!id) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同批准快照不存在", 409);
+    return id;
+  }
+
+  async getCurrent(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+  ): Promise<SourcingContractStateResponse> {
+    this.assertReader(actor);
+    const result = await this.database.query<ContractRow>(
+      `SELECT document.*,source_case.created_by
+       FROM sourcing_contract_documents document
+       JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
+       WHERE document.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
+       ORDER BY document.contract_version DESC LIMIT 1`,
+      [sourcingCaseId],
+    );
+    return { item: result.rows[0] ? this.dto(result.rows[0], actor) : null };
+  }
+
+  async supplement(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+    input: SupplementSourcingContract,
+    idempotencyKey: string,
+  ): Promise<SourcingContractStateResponse> {
+    this.assertContractActor(actor);
+    const entries = Object.entries(input) as Array<[SourcingContractMissingField,string]>;
+    const scope = "sourcing.contract.supplement";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      await this.idempotency.execute(client, {
+        scope,actorKey: actor.actorId,key: idempotencyKey,
+        requestHash: requestHash(scope,{ sourcingCaseId,input }),
+        expiresAt: new Date(Date.now()+24*60*60*1000),
+      }, async () => {
+        const current = await client.query<ContractRow>(
+          `SELECT document.*,source_case.created_by
+           FROM sourcing_contract_documents document
+           JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
+           WHERE document.sourcing_case_id=$1
+           ORDER BY document.contract_version DESC LIMIT 1 FOR UPDATE OF document`,
+          [sourcingCaseId],
+        );
+        const row = current.rows[0];
+        if (!row) throw new ApplicationError("NOT_FOUND", "合同准备记录不存在", 404);
+        if (!actor.actorRoles.includes(ROOT_ROLE) && row.created_by !== actor.actorId) {
+          throw new ApplicationError("FORBIDDEN", "仅订单跟单或Root可补充合同缺项", 403);
+        }
+        if (row.status !== "pending_supplement") {
+          throw new ApplicationError("INVALID_STATE_TRANSITION", "合同已冻结，不能修改", 409);
+        }
+        for (const [field,value] of entries) {
+          if (!FIELD_NAMES.includes(field) || !row.missing_fields.includes(field)) {
+            throw new ApplicationError("INVALID_STATE_TRANSITION", "只能补充当前合同缺项", 409);
+          }
+          const eventId = await this.events.append(client, actor, {
+            action: "sourcing.contract.supplement",
+            entityType: "sourcing_contract_document",
+            entityId: row.sourcing_contract_document_id,
+            after: { fieldName: field, source: "本合同补充资料" },
+            reason: "补充合同生成所需资料",
+          });
+          await client.query(
+            `INSERT INTO sourcing_contract_supplements(
+               sourcing_contract_supplement_id,sourcing_contract_document_id,
+               field_name,field_value,supplemented_by,operation_event_id,request_id
+             ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+            [randomUUID(),row.sourcing_contract_document_id,field,value.trim(),
+              actor.actorId,eventId,actor.requestId],
+          );
+        }
+        const remaining = row.missing_fields.filter((field) => !entries.some(([name]) => name === field));
+        await client.query(
+          `UPDATE sourcing_contract_documents
+           SET missing_fields=$2,status=CASE WHEN cardinality($2::text[])=0
+             THEN 'generation_pending' ELSE 'pending_supplement' END,
+             failure_reason=NULL
+           WHERE sourcing_contract_document_id=$1`,
+          [row.sourcing_contract_document_id,remaining],
+        );
+        return { statusCode: 200,response: { documentId: row.sourcing_contract_document_id } };
+      });
+      await client.query("COMMIT");
+      await this.generateIfReady(actor, sourcingCaseId);
+      return this.getCurrent(actor, sourcingCaseId);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async generateIfReady(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+    sourcingContractDocumentId?: string,
+  ): Promise<SourcingContractStateResponse> {
+    const claimed = await this.database.query<ContractRow>(
+      `UPDATE sourcing_contract_documents document
+       SET status='generating',failure_reason=NULL
+       FROM sourcing_cases source_case
+       WHERE document.sourcing_case_id=$1
+         AND source_case.sourcing_case_id=document.sourcing_case_id
+         AND source_case.deleted_at IS NULL
+         AND (
+           ($2::uuid IS NULL AND document.contract_version=(
+             SELECT max(latest.contract_version) FROM sourcing_contract_documents latest
+             WHERE latest.sourcing_case_id=document.sourcing_case_id
+           ))
+           OR document.sourcing_contract_document_id=$2::uuid
+         )
+         AND (
+           document.status IN ('generation_pending','generation_failed')
+           OR (document.status='generating' AND document.updated_at<CURRENT_TIMESTAMP-INTERVAL '5 minutes')
+         )
+         AND cardinality(document.missing_fields)=0
+       RETURNING document.*,source_case.created_by`,
+      [sourcingCaseId,sourcingContractDocumentId ?? null],
+    );
+    const row = claimed.rows[0];
+    if (!row) return this.getCurrent(actor, sourcingCaseId);
+    try {
+      const hydrated = await this.database.query<ContractRow>(
+        `SELECT document.*,source_case.created_by,template.party_a_name,
+                template.signing_place,template.terms
+         FROM sourcing_contract_documents document
+         JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
+         JOIN sourcing_contract_template_versions template
+           ON template.template_version=document.template_version
+         WHERE document.sourcing_contract_document_id=$1`,
+        [row.sourcing_contract_document_id],
+      );
+      const source = hydrated.rows[0]!;
+      const supplementRows = await this.database.query<{ field_name: SourcingContractMissingField; field_value: string }>(
+        `SELECT field_name,field_value FROM sourcing_contract_supplements
+         WHERE sourcing_contract_document_id=$1 ORDER BY supplemented_at,field_name`,
+        [row.sourcing_contract_document_id],
+      );
+      const supplements = Object.fromEntries(supplementRows.rows.map((entry) => [entry.field_name,entry.field_value]));
+      const approval = source.approval_snapshot;
+      const value = (name: SourcingContractMissingField): string =>
+        supplements[name] ?? String(approval[name] ?? "");
+      const lines = Array.isArray(approval.lines) ? approval.lines as Array<Record<string, unknown>> : [];
+      const approvedAt = String(approval.approvedAt ?? source.prepared_at);
+      const snapshot: ContractPdfSnapshot = {
+        contractNumber: source.contract_number,
+        contractDate: shanghaiDate(approvedAt),
+        partyAName: source.party_a_name!,
+        partyBName: value("contractEntityName"),
+        partyBAddress: value("address"),
+        partyBRepresentative: value("partyBRepresentative"),
+        payeeName: value("payeeName"),
+        bankAccount: value("bankAccount"),
+        bankName: value("bankName"),
+        signingPlace: source.signing_place!,
+        estimatedCutPieceSendDate: String(approval.estimatedCutPieceSendDate ?? "未维护"),
+        deliveryDate: String(approval.deliveryDate ?? "未维护"),
+        processes: Array.isArray(approval.processes) ? approval.processes.map(String) : [],
+        lines: lines.map((line) => ({
+          position: Number(line.position),styleNo: String(line.styleNo ?? ""),
+          alternateStyleNo: line.alternateStyleNo ? String(line.alternateStyleNo) : null,
+          color: line.color ? String(line.color) : null,quantity: Number(line.quantity),
+          unitPrice: String(line.unitPrice),totalAmount: String(line.totalAmount),
+        })),
+        totalQuantity: Number(approval.quantity),
+        totalAmount: String(approval.totalAmount),
+        terms: source.terms!,
+      };
+      const fingerprint = sourcingContractFingerprint(snapshot);
+      const pdf = renderSourcingContractPdf(snapshot);
+      const attachment = await this.attachments.storeGenerated(actor, {
+        filename: `${source.contract_number}.pdf`,mimeType: "application/pdf",
+        content: pdf,entityType: "sourcing_contract_document",
+        entityId: source.sourcing_contract_document_id,
+      });
+      await this.database.query(
+        `UPDATE sourcing_contract_documents
+         SET status='ready',snapshot_fingerprint=$2,pdf_attachment_id=$3,
+             pdf_sha256=$4,generated_at=CURRENT_TIMESTAMP,failure_reason=NULL
+         WHERE sourcing_contract_document_id=$1 AND status='generating'`,
+        [source.sourcing_contract_document_id,fingerprint,attachment.attachmentId,attachment.sha256],
+      );
+      return this.getCurrent(actor, sourcingCaseId);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message.slice(0,500) : "合同PDF生成失败";
+      await this.database.query(
+        `UPDATE sourcing_contract_documents
+         SET status='generation_failed',failure_reason=$2
+         WHERE sourcing_contract_document_id=$1 AND status='generating'`,
+        [row.sourcing_contract_document_id,reason],
+      ).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private assertReader(actor: TrustedActorContext): void {
+    if (!actor.actorRoles.includes(ROOT_ROLE)
+      && !(actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)) {
+      throw new ApplicationError("FORBIDDEN", "无权查看合同数据", 403);
+    }
+  }
+
+  private assertContractActor(actor: TrustedActorContext): void {
+    if (actor.authorizationCapability !== CONTRACT_CAPABILITY
+      || (!actor.actorRoles.includes(ROOT_ROLE) && !actor.actorRoles.includes(MERCHANDISER_ROLE))) {
+      throw new ApplicationError("FORBIDDEN", "当前岗位无权补充合同资料", 403);
+    }
+  }
+
+  private dto(row: ContractRow, actor: TrustedActorContext): SourcingContractDocument {
+    return {
+      sourcingContractDocumentId: row.sourcing_contract_document_id,
+      sourcingApprovalSnapshotId: row.sourcing_approval_snapshot_id,
+      contractNumber: row.contract_number,
+      contractVersion: Number(row.contract_version),
+      templateVersion: Number(row.template_version),
+      status: row.status,
+      missingFields: row.missing_fields,
+      snapshotFingerprint: row.snapshot_fingerprint,
+      pdfAttachmentId: row.pdf_attachment_id,
+      pdfSha256: row.pdf_sha256,
+      failureReason: row.failure_reason,
+      preparedAt: iso(row.prepared_at),
+      generatedAt: row.generated_at ? iso(row.generated_at) : null,
+      canSupplement: actor.actorRoles.includes(ROOT_ROLE)
+        || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === row.created_by),
+    };
+  }
+}
