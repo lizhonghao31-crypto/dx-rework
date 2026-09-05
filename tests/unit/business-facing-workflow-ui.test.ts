@@ -23,16 +23,23 @@ describe("business-facing workflow UI", () => {
     }
   });
 
-  it("keeps wage detail labels in business Chinese after review and adjustment retirement", async () => {
-    const source = await read("apps/web/src/wages/wage-period-detail.tsx");
-    expect(source).toContain('item.pricingUnitSnapshot === "piece" ? "件" : "小时"');
-    expect(source).toContain('const statusLabel = period.status === "locked" ? "已月结" : "可月结";');
-    expect(source).toContain("<h2>月结状态</h2>");
-    expect(source).toContain("工资已经汇总，可在自然月结束后直接月结锁定。");
-    expect(source).not.toContain("adjustmentStatusLabel");
-    expect(source).not.toContain("工资调整");
-    expect(source).not.toContain("reviewStageLabel");
-    expect(source).not.toContain("reviewDecisionLabel");
+  it("keeps wage pages read-only for finance lookup and export", async () => {
+    const [list, detail] = await Promise.all([
+      read("apps/web/src/wages/wage-period-list.tsx"),
+      read("apps/web/src/wages/wage-period-detail.tsx"),
+    ]);
+    expect(list).toContain("<h1>工资管理</h1>");
+    expect(list).toContain("导出当前工资明细");
+    expect(detail).toContain("<h1>返工工资对数明细</h1>");
+    expect(detail).toContain('item.pricingUnitSnapshot === "piece" ? "件" : "小时"');
+    expect(detail).toContain("导出 Excel");
+    for (const source of [list, detail]) {
+      expect(source).not.toContain("WAGE_MONTH_CLOSE_ENABLED");
+      expect(source).not.toContain("月结锁定");
+      expect(source).not.toContain("<h2>月结状态</h2>");
+    }
+    expect(detail).not.toContain("lockPeriod");
+    expect(detail).not.toContain("工资调整");
   });
 
   it("shows N08 approval proportions as percentages and times in the business timezone", async () => {

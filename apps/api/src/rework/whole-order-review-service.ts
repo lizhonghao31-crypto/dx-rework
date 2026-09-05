@@ -551,7 +551,7 @@ export class WholeOrderReviewService {
             client,
             actor,
             `wage-month-lock:${wagePeriod.period_id}:`,
-            "工资月结已退出当前流程；报表继续用于财务对数",
+            "工资资料仅供财务查询与对数；不生成核对或锁定流程",
           );
         }
       }

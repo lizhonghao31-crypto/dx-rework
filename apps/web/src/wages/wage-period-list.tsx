@@ -1,11 +1,7 @@
-import { WagePeriodSchema, type WagePeriod } from "@dx-rework/contracts/wages";
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { z } from "zod";
-
-import { createWebUrls } from "../../url-contract.js";
+import { Button, InsetField, Surface } from "@dx-rework/ui";
+import { useEffect, useMemo, useState } from "react";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
 import { ListPagination, usePaginatedItems } from "../list-pagination.js";
@@ -16,21 +12,6 @@ import {
   reportingBusinessMonthStart,
 } from "../reporting/reporting-client.js";
 import "./wage-period-list.css";
-
-const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
-const PeriodListSchema = z.array(WagePeriodSchema);
-const WAGE_MONTH_CLOSE_ENABLED: boolean = false;
-
-const statusLabel: Record<WagePeriod["status"], string> = {
-  ready_to_lock: "可月结",
-  locked: "已月结",
-};
-
-const statusOptions = [
-  ["", "全部状态"],
-  ["ready_to_lock", "可月结"],
-  ["locked", "已月结"],
-] as const;
 
 type ReportState =
   | { kind: "loading" }
@@ -43,51 +24,17 @@ const monthEnd = (year: number, month: number): string =>
 
 export function WagePeriodList() {
   const today = reportingBusinessDate();
-  const [periods, setPeriods] = useState<WagePeriod[]>([]);
-  const [message, setMessage] = useState("");
   const [from, setFrom] = useState(reportingBusinessMonthStart());
   const [to, setTo] = useState(today);
   const [q, setQ] = useState("");
   const debouncedQ = useDebouncedValue(q, 200);
-  const [status, setStatus] = useState("");
   const [report, setReport] = useState<ReportState>({ kind: "loading" });
-  const busy = useRef(false);
-  const mounted = useRef(true);
-
-  const loadPeriods = useCallback(async () => {
-    if (busy.current) return;
-    busy.current = true;
-    try {
-      const response = await fetch(apiUrl("wage-periods"), {
-        credentials: "include",
-        headers: { accept: "application/json" },
-      });
-      if (!response.ok) throw new Error("工资月份加载失败");
-      const rows = PeriodListSchema.parse(await response.json());
-      if (mounted.current) {
-        setPeriods(rows);
-        setMessage("");
-      }
-    } catch (error: unknown) {
-      if (mounted.current) setMessage(error instanceof Error ? error.message : "工资月份加载失败");
-    } finally {
-      busy.current = false;
-    }
-  }, []);
-
   const filters = useMemo(() => ({
     from,
     to,
     q: debouncedQ.trim() || undefined,
-    status: status || undefined,
     limit: "500",
-  }), [from, to, debouncedQ, status]);
-
-  useEffect(() => {
-    mounted.current = true;
-    void loadPeriods();
-    return () => { mounted.current = false; };
-  }, [loadPeriods]);
+  }), [from, to, debouncedQ]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -134,10 +81,9 @@ export function WagePeriodList() {
     }
     return [...rows.values()].sort((left, right) => right.amount - left.amount);
   }, [value]);
-  const resetKey = `${from}:${to}:${debouncedQ}:${status}`;
+  const resetKey = `${from}:${to}:${debouncedQ}`;
   const personPage = usePaginatedItems(personSummary, resetKey);
   const detailPage = usePaginatedItems(value?.rows ?? [], resetKey);
-  const periodPage = usePaginatedItems(periods, status);
 
   return (
     <div className="wage-page wage-management">
@@ -163,7 +109,6 @@ export function WagePeriodList() {
           />
           <label>开始日期<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
           <label>结束日期<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
-          {WAGE_MONTH_CLOSE_ENABLED ? <label>月结状态<select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions.map(([item, label]) => <option key={item} value={item}>{label}</option>)}</select></label> : null}
           {value?.canExport ? <a href={reportExportUrl("wages", filters)}><Button variant="primary">导出当前工资明细</Button></a> : null}
         </div>
       </Surface>
@@ -215,28 +160,7 @@ export function WagePeriodList() {
         </>
       ) : null}
 
-      {WAGE_MONTH_CLOSE_ENABLED ? <section className="wage-period-section">
-        <div className="wage-section-heading">
-          <div><h2>月结批次</h2><p>系统自动汇总返工工资；月底直接月结锁定。</p></div>
-        </div>
-        {message ? <p role="alert" className="form-message">{message}</p> : null}
-        <div className="wage-grid">
-          {periodPage.items.map((period) => (
-            <Surface key={period.periodId} className="wage-period-card">
-              <div className="wage-period-card__heading">
-                <a href={pageUrl(`ui/wages/${period.periodId}`)}><strong>{period.periodMonth.slice(0, 7)}</strong></a>
-                <StatusBadge tone={period.status === "locked" ? "success" : "info"}>{statusLabel[period.status]}</StatusBadge>
-              </div>
-              <dl>
-                <dt>工人 / 明细</dt><dd>{formatBusinessDecimal(period.personCount)} / {formatBusinessDecimal(period.sourceItemCount)}</dd>
-                <dt>工资总额</dt><dd><strong>{formatBusinessCurrency(period.totalAmount)}</strong></dd>
-              </dl>
-            </Surface>
-          ))}
-        </div>
-        {periods.length === 0 && !message ? <Surface><p>暂无已生成的返工工资。</p></Surface> : null}
-        <ListPagination page={periodPage.page} totalPages={periodPage.totalPages} onPageChange={periodPage.setPage} ariaLabel="月结批次分页" />
-      </section> : null}
+
     </div>
   );
 }

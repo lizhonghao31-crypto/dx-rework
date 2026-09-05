@@ -100,8 +100,9 @@ describe("UAT interface closure", () => {
     expect(contract).toContain('deductionStatus: z.enum(["not_started", "not_deducted", "completed"])');
     expect(shared).toContain('deduction_status: ManagementReworkRow["deductionStatus"]');
     expect(query).toContain("bool_and(case_record.status='closed') all_closed");
-    expect(query).toContain("WHEN external.rework_order_id IS NULL THEN 'not_started'");
+    expect(query).toContain("WHEN order_record.status<>'completed' THEN 'not_started'");
     expect(query).toContain("WHEN external.all_closed THEN 'completed'");
+    expect(query).toContain("ELSE 'not_deducted'");
     expect(dto).toContain("deductionStatus: row.deduction_status");
     expect(card).toContain('<dt>扣款状态</dt>');
     expect(card).toContain('not_started: "未开始"');

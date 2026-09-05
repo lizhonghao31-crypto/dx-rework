@@ -146,22 +146,16 @@ describe("wage routes", () => {
     await app.close();
   });
 
-  it("passes the exact version and idempotency key only to month close", async () => {
+  it("does not expose the retired wage month-close endpoint", async () => {
     const { app, service } = buildTestApp();
-    const locked = await app.inject({
+    const response = await app.inject({
       method: "POST",
       url: `/wage-periods/${ids.period}/lock`,
       headers: { "idempotency-key": "month-close" },
       payload: { expectedVersion: 2, lockNote: "月结" },
     });
-    expect(locked.statusCode).toBe(200);
-    expect(service.lock).toHaveBeenCalledWith(
-      expect.objectContaining({ authorizationCapability: "wage:month_close" }),
-      ids.period,
-      2,
-      "月结",
-      "month-close",
-    );
+    expect(response.statusCode).toBe(404);
+    expect(service.lock).not.toHaveBeenCalled();
     await app.close();
   });
 
@@ -186,8 +180,8 @@ describe("wage routes", () => {
       app.inject({ method: "POST", url: `/wage-periods/${ids.period}/lock`, headers: { "idempotency-key": "widened" }, payload: { expectedVersion: 2, lockNote: null, bypass: true } }),
       app.inject({ method: "GET", url: "/wage-items/not-a-uuid" }),
     ]);
-    expect(missingKey.statusCode).toBe(400);
-    expect(widened.statusCode).toBe(400);
+    expect(missingKey.statusCode).toBe(404);
+    expect(widened.statusCode).toBe(404);
     expect(malformed.statusCode).toBe(400);
     expect(service.lock).not.toHaveBeenCalled();
     expect(service.item).not.toHaveBeenCalled();
