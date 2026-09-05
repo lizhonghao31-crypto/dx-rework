@@ -558,8 +558,12 @@ export class SourcingService {
        ) decision_lines_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
-       LEFT JOIN sourcing_approval_snapshots snapshot
-         ON snapshot.sourcing_decision_id=decision_row.sourcing_decision_id
+       LEFT JOIN LATERAL (
+         SELECT approval.*
+         FROM sourcing_approval_snapshots approval
+         WHERE approval.sourcing_case_id=case_view.sourcing_case_id
+         ORDER BY approval.decision_version DESC LIMIT 1
+       ) snapshot ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'styleNo',line.style_no,
@@ -706,8 +710,12 @@ export class SourcingService {
        ) decision_lines_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
-       LEFT JOIN sourcing_approval_snapshots snapshot
-         ON snapshot.sourcing_decision_id=decision_row.sourcing_decision_id
+       LEFT JOIN LATERAL (
+         SELECT approval.*
+         FROM sourcing_approval_snapshots approval
+         WHERE approval.sourcing_case_id=case_view.sourcing_case_id
+         ORDER BY approval.decision_version DESC LIMIT 1
+       ) snapshot ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'styleNo',line.style_no,
@@ -1153,10 +1161,11 @@ export class SourcingService {
       supported_crafts: string[];
       daily_capacity: number | null;
       notes: string;
-      contract_data_missing: Array<"contractEntityName" | "partyBRepresentative" | "payeeName" | "bankAccount" | "bankName">;
+      contract_data_missing: Array<"address" | "contractEntityName" | "partyBRepresentative" | "payeeName" | "bankAccount" | "bankName">;
     }>(
       `SELECT supplier_id,supplier_code,supplier_name,supported_crafts,daily_capacity,notes,
               array_remove(ARRAY[
+                CASE WHEN address IS NULL THEN 'address' END,
                 CASE WHEN contract_entity_name IS NULL THEN 'contractEntityName' END,
                 CASE WHEN party_b_representative IS NULL THEN 'partyBRepresentative' END,
                 CASE WHEN payee_name IS NULL THEN 'payeeName' END,
@@ -1577,7 +1586,6 @@ export class SourcingService {
         const transitionSequence = Number(source.sequence) + 1;
         const totalAmount = calculateSourcingLinesTotalExact(pricedLines);
         const compatibilityUnitPrice = pricedLines[0]!.unitPrice;
-        const compatibilityTotalAmount = calculateSourcingTotal(compatibilityUnitPrice, quantity);
         const quoteId = randomUUID();
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.ie_price.quote",
@@ -1605,7 +1613,7 @@ export class SourcingService {
             quoteVersion,
             compatibilityUnitPrice,
             quantity,
-            compatibilityTotalAmount,
+            totalAmount,
             normalized.quoteReason,
             actor.actorId,
             eventId,
@@ -1802,7 +1810,6 @@ export class SourcingService {
         const quantity = Number(source.order_quantity);
         const totalAmount = calculateSourcingLinesTotalExact(pricedLines);
         const compatibilityUnitPrice = pricedLines[0]!.unitPrice;
-        const compatibilityTotalAmount = calculateSourcingTotal(compatibilityUnitPrice, quantity);
         const decisionId = randomUUID();
         const decisionVersion = Number(source.decision_version ?? 0) + 1;
         const sourceType = source.sourcing_decision_id ? "management_revision" : "initial";
@@ -1850,7 +1857,7 @@ export class SourcingService {
             selected.supplier_name,
             compatibilityUnitPrice,
             quantity,
-            compatibilityTotalAmount,
+            totalAmount,
             decisionReason,
             actor.actorId,
             eventId,
@@ -2041,9 +2048,17 @@ export class SourcingService {
             `INSERT INTO sourcing_approval_snapshots(
                sourcing_approval_snapshot_id,sourcing_case_id,sourcing_decision_id,
                decision_version,supplier_id,supplier_code_snapshot,supplier_name_snapshot,
+               supplier_address,contract_entity_name,party_b_representative,
+               payee_name,bank_account,bank_name,
                quantity,total_amount,daxing_unit_price,estimated_cut_piece_send_date,
                delivery_date,processes,approved_by,operation_event_id,request_id
-             ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+             )
+             SELECT $1,$2,$3,$4,$5,$6,$7,
+                    supplier.address,supplier.contract_entity_name,supplier.party_b_representative,
+                    supplier.payee_name,supplier.bank_account,supplier.bank_name,
+                    $8,$9,$10,$11,$12,$13,$14,$15,$16
+             FROM current_supplier_catalog supplier
+             WHERE supplier.supplier_id=$5`,
             [snapshotId,sourcingCaseId,source.sourcing_decision_id,Number(source.decision_version),
               source.supplier_id,source.supplier_code_snapshot,source.supplier_name_snapshot,
               Number(source.quantity),totalAmount,source.daxing_unit_price,
@@ -2353,6 +2368,7 @@ export class SourcingService {
   ): Promise<void> {
     const nextDecisionVersion = Number(source.decision_version) + 1;
     const nextStatus = this.factoryChangeTargetStatus(source.status, actor);
+    const decisionId = randomUUID();
     await client.query(
       `INSERT INTO sourcing_decisions(
          sourcing_decision_id,sourcing_case_id,decision_version,source_type,
@@ -2360,15 +2376,26 @@ export class SourcingService {
          supplier_id,supplier_code_snapshot,supplier_name_snapshot,
          unit_price,quantity,total_amount,decision_reason,decided_by,
          operation_event_id,request_id
-       ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
-        randomUUID(), source.sourcing_case_id ?? fail("换厂订单标识缺失"),
+        decisionId, source.sourcing_case_id ?? fail("换厂订单标识缺失"),
         nextDecisionVersion, source.sourcing_decision_id, source.factory_change_request_id,
         source.proposed_supplier_id, source.proposed_supplier_code_snapshot,
         source.proposed_supplier_name_snapshot, source.proposed_unit_price,
         Number(source.proposed_quantity), source.proposed_total_amount,
         reason, actor.actorId, eventId, actor.requestId,
       ],
+    );
+    await client.query(
+      `INSERT INTO sourcing_decision_lines(
+         sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount
+       )
+       SELECT $1,line.sourcing_case_id,line.position,line.quantity,$2,
+              round($2::numeric*line.quantity,2)
+       FROM sourcing_case_lines line
+       WHERE line.sourcing_case_id=$3
+       ORDER BY line.position`,
+      [decisionId,source.proposed_unit_price,source.sourcing_case_id],
     );
     if (nextStatus !== source.status) {
       await client.query(
@@ -2539,7 +2566,16 @@ export class SourcingService {
         );
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
         const quantity = Number(source.order_quantity);
-        const totalAmount = calculateSourcingTotal(unitPrice, quantity);
+        const caseLines = await client.query<{ position: number; quantity: number | string }>(
+          `SELECT position,quantity FROM sourcing_case_lines
+           WHERE sourcing_case_id=$1 ORDER BY position`,
+          [sourcingCaseId],
+        );
+        const totalAmount = calculateSourcingLinesTotalExact(caseLines.rows.map((line) => ({
+          position: line.position,
+          quantity: Number(line.quantity),
+          unitPrice,
+        })));
         const requiresOwnerApproval = scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price!);
         const immediate = initiatorRole === "owner_group"
           || (initiatorRole === "production_management" && !requiresOwnerApproval);

@@ -375,7 +375,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supportedCrafts: [],
         dailyCapacity: null,
         notes: "",
-        contractDataMissing: ["contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
       },
       {
         supplierId: replacementFactoryId,
@@ -384,7 +384,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supportedCrafts: [],
         dailyCapacity: null,
         notes: "",
-        contractDataMissing: ["contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
       },
     ]);
 
@@ -1316,6 +1316,52 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "SELECT 1 FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
     )).rowCount).toBe(1);
+    expect((await database.query<{ total_amount: string }>(
+      "SELECT total_amount::text FROM sourcing_decisions WHERE sourcing_decision_id=$1",
+      [decided.value.decision!.sourcingDecisionId],
+    )).rows[0]?.total_amount).toBe("1700.00");
+    expect((await database.query<{
+      supplier_address: string | null;
+      contract_entity_name: string | null;
+      party_b_representative: string | null;
+      payee_name: string | null;
+      bank_account: string | null;
+      bank_name: string | null;
+    }>(
+      `SELECT supplier_address,contract_entity_name,party_b_representative,
+              payee_name,bank_account,bank_name
+       FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1`,
+      [created.value.sourcingCaseId],
+    )).rows[0]).toEqual({
+      supplier_address: null,
+      contract_entity_name: null,
+      party_b_representative: null,
+      payee_name: null,
+      bank_account: null,
+      bank_name: null,
+    });
+
+    const changed = await service.requestFactoryChange(managerActor(), created.value.sourcingCaseId, {
+      supplierId: replacementFactoryId,
+      unitPrice: "9.0000",
+      changeReason: "逐款订单换厂并保留全部款色价格行",
+    }, randomUUID());
+    expect(changed.value).toMatchObject({
+      status: "pending_finance_reconciliation",
+      decision: {
+        sourceType: "factory_change",
+        supplierId: replacementFactoryId,
+        totalAmount: "1350.00",
+        linePrices: [
+          { position: 1, quantity: 100, unitPrice: "9.0000", totalAmount: "900.00" },
+          { position: 2, quantity: 50, unitPrice: "9.0000", totalAmount: "450.00" },
+        ],
+      },
+      approvalSnapshot: {
+        sourcingDecisionId: decided.value.decision!.sourcingDecisionId,
+        totalAmount: "1700.00",
+      },
+    });
   });
 
   it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {

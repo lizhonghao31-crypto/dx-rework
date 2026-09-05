@@ -1129,6 +1129,7 @@ function OrderDetailPage({
     : null;
   const selectedFactory = factories.find((factory) => factory.supplierId === decision.supplierId);
   const contractMissingLabels: Readonly<Record<string, string>> = {
+    address: "地址",
     contractEntityName: "合同主体",
     partyBRepresentative: "乙方代表",
     payeeName: "收款人",

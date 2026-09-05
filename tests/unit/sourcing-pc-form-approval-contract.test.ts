@@ -47,6 +47,8 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(page).toContain("subtractFixedPoint");
     expect(page).toContain("sourcing-owner-mobile-summary");
     expect(css).toContain(".sourcing-owner-decision__desktop");
+    expect(css).not.toMatch(/\.sourcing-owner-decision__desktop\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.sourcing-owner-line-review__row\s*\{\s*grid-template-columns: 1fr/);
     expect(css).toContain(".sourcing-process-editor__list");
   });
 

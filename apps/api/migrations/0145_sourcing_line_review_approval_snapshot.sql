@@ -1,6 +1,6 @@
 -- SSP-04: carry every style/color price through IE, production management and owner approval.
--- Parent quote/decision amounts remain as the legacy compatibility projection; these immutable
--- line ledgers and approval snapshots are the authoritative multi-style contract facts.
+-- Parent quote/decision totals become the sum of immutable line facts. The legacy unit_price
+-- remains the first-line compatibility projection for older readers.
 
 CREATE TABLE sourcing_ie_quote_lines (
   sourcing_ie_quote_id uuid NOT NULL REFERENCES sourcing_ie_quotes(sourcing_ie_quote_id),
@@ -40,6 +40,60 @@ SELECT decision.sourcing_decision_id,decision.sourcing_case_id,line.position,lin
 FROM sourcing_decisions decision
 JOIN sourcing_case_lines line ON line.sourcing_case_id=decision.sourcing_case_id;
 
+-- Multi-style totals no longer equal one compatibility unit price times the whole order.
+-- Remove only the four legacy arithmetic checks, retaining every other state invariant.
+DO $$
+DECLARE constraint_row record;
+BEGIN
+  FOR constraint_row IN
+    SELECT constraint_fact.conrelid::regclass AS relation_name,constraint_fact.conname
+    FROM pg_constraint constraint_fact
+    WHERE constraint_fact.contype='c'
+      AND constraint_fact.conrelid IN (
+        'sourcing_ie_quotes'::regclass,
+        'sourcing_decisions'::regclass,
+        'sourcing_factory_change_requests'::regclass,
+        'sourcing_finance_reconciliations'::regclass
+      )
+      AND pg_get_constraintdef(constraint_fact.oid) ~ '(total_amount|proposed_total_amount|actual_total_amount).*(unit_price|proposed_unit_price|actual_unit_price).*(quantity|proposed_quantity|actual_quantity)'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I',constraint_row.relation_name,constraint_row.conname);
+  END LOOP;
+END;
+$$;
+
+UPDATE sourcing_ie_quotes quote
+SET total_amount=totals.total_amount
+FROM (
+  SELECT sourcing_ie_quote_id,sum(total_amount) AS total_amount
+  FROM sourcing_ie_quote_lines GROUP BY sourcing_ie_quote_id
+) totals
+WHERE totals.sourcing_ie_quote_id=quote.sourcing_ie_quote_id;
+
+UPDATE sourcing_decisions decision
+SET total_amount=totals.total_amount
+FROM (
+  SELECT sourcing_decision_id,sum(total_amount) AS total_amount
+  FROM sourcing_decision_lines GROUP BY sourcing_decision_id
+) totals
+WHERE totals.sourcing_decision_id=decision.sourcing_decision_id;
+
+UPDATE sourcing_factory_change_requests request_row
+SET proposed_total_amount=totals.total_amount
+FROM (
+  SELECT request_fact.factory_change_request_id,
+         sum(round(request_fact.proposed_unit_price*line.quantity,2)) AS total_amount
+  FROM sourcing_factory_change_requests request_fact
+  JOIN sourcing_case_lines line ON line.sourcing_case_id=request_fact.sourcing_case_id
+  GROUP BY request_fact.factory_change_request_id
+) totals
+WHERE totals.factory_change_request_id=request_row.factory_change_request_id;
+
+UPDATE sourcing_finance_reconciliations reconciliation
+SET actual_total_amount=decision.total_amount
+FROM sourcing_decisions decision
+WHERE decision.sourcing_decision_id=reconciliation.sourcing_decision_id;
+
 CREATE TABLE sourcing_approval_snapshots (
   sourcing_approval_snapshot_id uuid PRIMARY KEY,
   sourcing_case_id uuid NOT NULL REFERENCES sourcing_cases(sourcing_case_id),
@@ -48,6 +102,12 @@ CREATE TABLE sourcing_approval_snapshots (
   supplier_id uuid NOT NULL REFERENCES supplier_catalog_items(supplier_id),
   supplier_code_snapshot text NOT NULL,
   supplier_name_snapshot text NOT NULL,
+  supplier_address text,
+  contract_entity_name text,
+  party_b_representative text,
+  payee_name text,
+  bank_account text,
+  bank_name text,
   quantity integer NOT NULL CHECK(quantity BETWEEN 1 AND 10000000),
   total_amount numeric(18,2) NOT NULL CHECK(total_amount > 0),
   daxing_unit_price numeric(18,4) CHECK(daxing_unit_price IS NULL OR daxing_unit_price > 0),
@@ -77,13 +137,17 @@ CREATE TABLE sourcing_approval_snapshot_lines (
 -- Preserve already-approved history as immutable snapshots without inventing missing SSP-03 facts.
 INSERT INTO sourcing_approval_snapshots(
   sourcing_approval_snapshot_id,sourcing_case_id,sourcing_decision_id,decision_version,
-  supplier_id,supplier_code_snapshot,supplier_name_snapshot,quantity,total_amount,
+  supplier_id,supplier_code_snapshot,supplier_name_snapshot,supplier_address,
+  contract_entity_name,party_b_representative,payee_name,bank_account,bank_name,
+  quantity,total_amount,
   daxing_unit_price,estimated_cut_piece_send_date,delivery_date,processes,
   approved_by,operation_event_id,request_id,approved_at
 )
 SELECT owner.sourcing_owner_decision_id,decision.sourcing_case_id,decision.sourcing_decision_id,
        decision.decision_version,decision.supplier_id,decision.supplier_code_snapshot,
-       decision.supplier_name_snapshot,decision.quantity,
+       decision.supplier_name_snapshot,supplier.address,supplier.contract_entity_name,
+       supplier.party_b_representative,supplier.payee_name,supplier.bank_account,
+       supplier.bank_name,decision.quantity,
        (SELECT sum(line.total_amount) FROM sourcing_decision_lines line
         WHERE line.sourcing_decision_id=decision.sourcing_decision_id),
        source_case.daxing_unit_price,source_case.estimated_cut_piece_send_date,
@@ -92,6 +156,7 @@ SELECT owner.sourcing_owner_decision_id,decision.sourcing_case_id,decision.sourc
 FROM sourcing_owner_decisions owner
 JOIN sourcing_decisions decision ON decision.sourcing_decision_id=owner.sourcing_decision_id
 JOIN sourcing_cases source_case ON source_case.sourcing_case_id=decision.sourcing_case_id
+LEFT JOIN current_supplier_catalog supplier ON supplier.supplier_id=decision.supplier_id
 WHERE owner.decision='approved';
 
 INSERT INTO sourcing_approval_snapshot_lines(

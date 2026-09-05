@@ -591,6 +591,11 @@
 }
 
 .sourcing-owner-decision__desktop {
+  display: grid;
+  gap: var(--dx-v2-space-2);
+}
+
+.sourcing-owner-mobile-summary {
   display: none;
 }
 
@@ -615,17 +620,6 @@
 .sourcing-owner-decision__details p {
   margin: var(--dx-v2-space-2) 0 0;
   line-height: 1.65;
-}
-
-@media (min-width: 761px) {
-  .sourcing-owner-mobile-summary {
-    display: none;
-  }
-
-  .sourcing-owner-decision__desktop {
-    display: grid;
-    gap: var(--dx-v2-space-2);
-  }
 }
 
 .sourcing-finance-confirmation {
@@ -814,6 +808,12 @@
   .sourcing-pagination span {
     font-size: 12px;
     text-align: center;
+  }
+}
+
+@media (max-width: 760px) {
+  .sourcing-owner-line-review__row {
+    grid-template-columns: 1fr;
   }
 }
 

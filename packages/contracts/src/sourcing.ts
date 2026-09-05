@@ -258,6 +258,7 @@ export const SourcingFactorySchema = z.object({
   dailyCapacity: z.number().int().positive().nullable().default(null),
   notes: z.string().default(""),
   contractDataMissing: z.array(z.enum([
+    "address",
     "contractEntityName",
     "partyBRepresentative",
     "payeeName",
