@@ -6,9 +6,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
+import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
-import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -36,6 +37,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const service = new SourcingService(
     database,undefined,undefined,todoProjection,contractService,
   );
+  const production = new SourcingProductionService(database);
   const craftService = new AccessMasterDataService(database, "corp");
   const craftIdsByName = new Map<string, string>();
   const craftId = (craftName: string): string => {
@@ -179,6 +181,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0145_sourcing_line_review_approval_snapshot.sql",
       "0146_sourcing_contract_pdf_finance.sql",
       "0147_sourcing_contract_input_correction.sql",
+      "0148_sourcing_formal_dispatch.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -1609,6 +1612,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       status: "pending_supplement",
       missingFields: ["address","contractEntityName","partyBRepresentative","payeeName","bankAccount","bankName"],
     });
+    expect((await production.state(contractActor(), created.value.sourcingCaseId)).canDispatch).toBe(false);
+    await expect(production.dispatch(contractActor(), created.value.sourcingCaseId, {
+      sourcingContractDocumentId: pending.sourcingContractDocumentId, confirmed: true,
+    }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     const ready = (await contractService.supplement(contractActor(), created.value.sourcingCaseId, {
       address: "广州补充地址",
       contractEntityName: "合同缺项加工厂有限公司",
@@ -1619,6 +1626,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }, randomUUID())).item!;
     expect(ready).toMatchObject({ status: "ready",missingFields: [] });
     expect(ready.pdfAttachmentId).toMatch(/^[0-9a-f-]{36}$/);
+    const frozenProduction = await production.dispatch(contractActor(), created.value.sourcingCaseId, {
+      sourcingContractDocumentId: ready.sourcingContractDocumentId, confirmed: true,
+    }, randomUUID());
 
     await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation");
     try {
@@ -1636,8 +1646,98 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const frozen = (await contractService.getCurrent(readerActor(), created.value.sourcingCaseId)).item!;
     expect(frozen.snapshotFingerprint).toBe(ready.snapshotFingerprint);
     expect(frozen.pdfSha256).toBe(ready.pdfSha256);
+    expect((await production.get(readerActor(), frozenProduction.value.productionOrderId)).supplierName).toBe("合同缺项加工厂");
     await expect(contractService.supplement(contractActor(), created.value.sourcingCaseId, {
       address: "试图追改",
     }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
   });
+  it("dispatches before finance, freezes all lines, and handles concurrent clicks without duplication", async () => {
+    const created = await service.createCase(merchandiserActor(), {
+      gender: "女装", styleName: "SSP06连衣裙", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-20",
+      lineItems: [
+        { styleNo: "DISPATCH-A", color: "蓝色", quantity: 5000, externalUnitPrice: "11.0000" },
+        { styleNo: "DISPATCH-B", alternateStyleNo: "ALT-B", color: "白色", quantity: 200, externalUnitPrice: "12.0000" },
+      ], daxingUnitPrice: "888.1234",
+    }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    expect((await production.list(readerActor())).items.some((item) => item.sourcingCaseId === id)).toBe(false);
+    await expect(production.dispatch(contractActor(), id, { sourcingContractDocumentId: randomUUID(), confirmed: true }, randomUUID()))
+      .rejects.toMatchObject({ statusCode: 409 });
+    const prices = [{ position: 1, unitPrice: "11.0000" }, { position: 2, unitPrice: "12.0000" }];
+    await service.quoteIePrice(ieActor(), id, { linePrices: prices }, randomUUID());
+    await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId,
+      craftIds: [craftId("净色车缝"), craftId("整烫")], linePrices: prices }, randomUUID());
+    await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    const contract = (await contractService.getCurrent(readerActor(), id)).item!;
+    expect(contract.status).toBe("ready");
+    expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect((await production.state(contractActor(), id)).canDispatch).toBe(true);
+    const input = { sourcingContractDocumentId: contract.sourcingContractDocumentId, confirmed: true as const };
+    await expect(production.dispatch({ ...contractActor(), actorId: managerId }, id, input, randomUUID()))
+      .rejects.toMatchObject({ statusCode: 403 });
+    await expect(production.dispatch(financeActor(), id, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(production.dispatch(contractActor(), id, { ...input, sourcingContractDocumentId: randomUUID() }, randomUUID()))
+      .rejects.toMatchObject({ statusCode: 409 });
+    const key = randomUUID();
+    const [first, second, third] = await Promise.all([
+      production.dispatch(contractActor(), id, input, key),
+      production.dispatch(contractActor(), id, input, key),
+      production.dispatch(contractActor(), id, input, randomUUID()),
+    ]);
+    expect(new Set([first.value.productionOrderId, second.value.productionOrderId, third.value.productionOrderId]).size).toBe(1);
+    await expect(production.dispatch(contractActor(), id, { ...input, sourcingContractDocumentId: randomUUID() }, key))
+      .rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    const order = first.value;
+    expect(order).toMatchObject({
+      supplierId: factoryId, supplierName: "一号加工厂", gender: "女装", styleName: "SSP06连衣裙",
+      contractNumber: contract.contractNumber, contractVersion: contract.contractVersion, decisionVersion: 1,
+      quantity: 5200, firstStyleNo: "DISPATCH-A", processes: ["净色车缝", "整烫"], deliveryDate: "2026-10-20",
+      dispatchedBy: merchandiserId, status: "in_production", firstReportedOn: null, timeProgress: null, progressAlert: null,
+      lines: [
+        { position: 1, styleNo: "DISPATCH-A", color: "蓝色", quantity: 5000 },
+        { position: 2, styleNo: "DISPATCH-B", alternateStyleNo: "ALT-B", color: "白色", quantity: 200 },
+      ],
+    });
+    expect((await production.state(contractActor(), id)).canDispatch).toBe(false);
+    expect((await database.query("SELECT 1 FROM sourcing_production_orders WHERE sourcing_case_id=$1", [id])).rowCount).toBe(1);
+    expect((await database.query("SELECT 1 FROM operation_events WHERE action='sourcing.production.dispatch' AND entity_id=$1", [order.productionOrderId])).rowCount).toBe(1);
+    const publicData = JSON.stringify([order, await production.get(readerActor(), order.productionOrderId), await production.list(readerActor())]);
+    expect(publicData).not.toMatch(/daxing|888\.1234|bankAccount|unitPrice|totalAmount/);
+    await expect(production.get(unrelatedReaderActor(), order.productionOrderId)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(production.get(anotherMerchandiserReader(), order.productionOrderId)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(database.query("UPDATE sourcing_production_orders SET supplier_name_snapshot='追改' WHERE production_order_id=$1", [order.productionOrderId])).rejects.toBeDefined();
+    await expect(database.query("DELETE FROM sourcing_production_lines WHERE production_order_id=$1", [order.productionOrderId])).rejects.toBeDefined();
+    await expect(database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
+      SELECT $1,production_order_id,2,'shipped',CURRENT_DATE,dispatched_by,operation_event_id FROM sourcing_production_orders WHERE production_order_id=$2`,
+      [randomUUID(), order.productionOrderId])).rejects.toMatchObject({ code: "55000", message: "illegal production transition" });
+    // Finance may reconcile after production has already begun, without changing production.
+    await service.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
+    expect((await production.get(readerActor(), order.productionOrderId)).status).toBe("in_production");
+    for (const [sequence, status, action] of [[2, "production_completed", "sourcing.production.complete"], [3, "shipped", "sourcing.production.ship"]] as const) {
+      const eventId = await new OperationEventRepository().append(database, rootActor(), {
+        action, entityType: "sourcing_production_order", entityId: order.productionOrderId, after: { status }, reason: "验证合法状态顺序",
+      });
+      await database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
+        VALUES($1,$2,$3,$4,(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,$5,$6)`,
+        [randomUUID(), order.productionOrderId, sequence, status, merchandiserId, eventId]);
+      expect((await production.get(readerActor(), order.productionOrderId)).status).toBe(status);
+    }
+  });
+
+  it("allows Root fallback and does not let a recorded finance difference block dispatch", async () => {
+    const created = await service.createCase(merchandiserActor(), {
+      gender: "男装", styleName: "SSP06外套", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-20",
+      lineItems: [{ styleNo: "DISPATCH-DIFF", color: "黑色", quantity: 30, externalUnitPrice: "8.0000" }], daxingUnitPrice: "6.0000",
+    }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(), id, { unitPrice: "8.0000" }, randomUUID());
+    await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, unitPrice: "8.0000", craftIds: [craftId("净色车缝")] }, randomUUID());
+    await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    const contract = (await contractService.getCurrent(readerActor(), id)).item!;
+    await service.recordFinanceReconciliation(financeActor(), id, { result: "difference", differenceFields: ["quantity"], differenceReason: "对账时记录差异，不是派单审批" }, randomUUID());
+    await expect(production.dispatch({ ...rootActor(), actorRoles: ["root_superuser"] }, id, {
+      sourcingContractDocumentId: contract.sourcingContractDocumentId, confirmed: true,
+    }, randomUUID())).resolves.toMatchObject({ value: { status: "in_production" } });
+  });
+
 });

@@ -146,6 +146,7 @@
     { "version": "0144_sourcing_multi_style_pricing", "checksum": "887f52302b779c48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679" },
     { "version": "0145_sourcing_line_review_approval_snapshot", "checksum": "c098dd6dcd8f737d28ae34d01c01a1bedb04871b939404184672d3aa8da0123c" },
     { "version": "0146_sourcing_contract_pdf_finance", "checksum": "4d7f7cd4d7a1846c62e4553dd66efbd9de919744709ded0d5081a98d0a7b684c" },
-    { "version": "0147_sourcing_contract_input_correction", "checksum": "258112ffc7ca331654d67384a15145e23b6d41746554618d981f5425f61b12ae" }
+    { "version": "0147_sourcing_contract_input_correction", "checksum": "258112ffc7ca331654d67384a15145e23b6d41746554618d981f5425f61b12ae" },
+    { "version": "0148_sourcing_formal_dispatch", "checksum": "c5cb985a2224e0012daa8157075293dab5270532f8cc563d210623d03500e9a8" }
   ]
 }

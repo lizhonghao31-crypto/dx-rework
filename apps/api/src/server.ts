@@ -1,3 +1,4 @@
+import { SourcingProductionService } from "./sourcing/sourcing-production-service.js";
 import { loadConfig } from "@dx-rework/config";
 import { DisabledErpAdapter } from "@dx-rework/domain";
 import pg from "pg";
@@ -108,6 +109,7 @@ const attachments = new AttachmentService(database, storage, {
 const todoService = new TodoService(database);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const receivingService = new ReceivingService(database);
+const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
 await sourcingContractService.resumePendingContracts();
 const sourcingService = new SourcingService(
@@ -208,6 +210,7 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: sourcingService,
     contracts: sourcingContractService,
+    production: sourcingProductionService,
     root: rootAuthority,
   },
   tools: {
