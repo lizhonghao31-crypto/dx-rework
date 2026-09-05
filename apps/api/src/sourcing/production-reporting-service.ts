@@ -1,3 +1,4 @@
+import type { ProductionClosureService } from "./production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -30,7 +31,7 @@ const visible = `($1::boolean OR ($2::boolean AND sourcing_production_reporter_a
 const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
 
 export class ProductionReportingService {
-  constructor(private readonly database: Pool, private readonly idempotency = new IdempotencyService(), private readonly events = new OperationEventRepository()) {}
+  constructor(private readonly database: Pool, private readonly idempotency = new IdempotencyService(), private readonly events = new OperationEventRepository(), private readonly closure?: Pick<ProductionClosureService,"refreshOrder">) {}
   private async order(client: Query, actor: TrustedActorContext, id: string) {
     if (!canRead(actor)) fail("无权查看生产数据",403);
     const result = await client.query<ProductionRow>(`${selectProduction} WHERE ${visible} AND production.production_order_id=$5`, [...visibility(actor),id]);
@@ -91,6 +92,7 @@ export class ProductionReportingService {
       const result=await this.idempotency.execute(client,{scope:action,actorKey:actor.actorId,key,
         requestHash:createHash("sha256").update(JSON.stringify({id,input})).digest("hex"),expiresAt:new Date(Date.now()+86400000)},
         async()=>({statusCode:200,response:await execute(client)}));
+      if(this.closure)await this.closure.refreshOrder(client,id);
       await client.query("COMMIT");return {value:result.response,reused:result.reused};
     } catch(error) {await client.query("ROLLBACK").catch(()=>undefined);throw error;} finally {client.release();}
   }

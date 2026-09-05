@@ -35,6 +35,7 @@ type LoadState =
 const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
   { id: "sourcing", label: "外发定价&选厂" },
   { id: "rework", label: "订单返工" },
+  { id: "production", label: "实时生产" },
 ];
 
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
@@ -46,6 +47,7 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   external_responsibility_detail: "记录供应商实际扣款",
   wage_period_detail: "核对返工工资",
   sourcing_detail: "处理外发定价选厂订单",
+  production_detail: "查看生产风险",
 };
 
 const taskTitle = (todo: TodoResponse): string =>
@@ -59,6 +61,9 @@ const taskTitle = (todo: TodoResponse): string =>
 
 const categoryLabel = (todo: TodoResponse): string => {
   const labels: Record<string, string> = {
+    production_behind: "进度落后",
+    production_high_risk: "进度高风险",
+    production_stale: `已 ${todo.daysWithoutUpdate ?? 0} 天未更新`,
     process_configuration: "配置返工工序",
     process_configuration_return: "退回重新配置工序",
     process_configuration_rejection_notice: "工序审核退回通知",
@@ -87,6 +92,9 @@ const todoHref = (todo: TodoResponse): string => {
   const query = new URLSearchParams({ todo: todo.todoId });
   let target: string;
   switch (route.routeName) {
+    case "production_detail":
+      target = `ui/production-dashboard/${route.entityId}`;
+      break;
     case "process_configuration":
       target = "ui/process-configuration";
       query.set("rework", route.entityId);
@@ -223,7 +231,7 @@ export function MyTodosPage() {
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const renderedTotalPages = Math.max(totalPages, 1);
-  const totalActionable = moduleCounts.rework + moduleCounts.sourcing;
+  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + (moduleCounts.production ?? 0);
   const visiblePages = todoPageWindow(page, renderedTotalPages);
   const pageWindowStart = visiblePages[0] ?? 1;
   const pageWindowEnd = visiblePages.at(-1) ?? 1;
@@ -264,7 +272,7 @@ export function MyTodosPage() {
               disabled={busy}
               onClick={() => openModule(module.id)}
               key={module.id}
-            ><span>{module.label}</span><strong>{formatBusinessDecimal(moduleCounts[module.id])}件</strong></button>)}
+            ><span>{module.label}</span><strong>{formatBusinessDecimal(moduleCounts[module.id] ?? 0)}件</strong></button>)}
           </div>
           <label className="my-todos-search" htmlFor="my-todos-search">
             <input
@@ -296,7 +304,7 @@ export function MyTodosPage() {
           {todos.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
-            const orderSummary = todo.entityType === "sourcing_case"
+            const orderSummary = (todo.entityType === "sourcing_case" || todo.entityType === "production_order")
               ? `款号：${order?.styleNo ?? "未填写"} · 供应商：${order?.supplierName ?? "待选厂"}`
               : order
                 ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
@@ -320,14 +328,14 @@ export function MyTodosPage() {
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
                         <h2>{taskTitle(todo)}</h2>
-                        <StatusBadge tone="warning">待处理</StatusBadge>
+                        <StatusBadge tone="warning">{todo.unread === undefined ? "待处理" : todo.unread ? "未读" : "已读 · 风险仍在"}</StatusBadge>
                       </div>
                       <p>{orderSummary}</p>
                     </div>
                     <div className="my-todo-metrics" aria-label="待办业务信息">
                       <span><small>当前节点</small>{categoryLabel(todo)}</span>
-                      <span><small>节点停留</small>{formatNodeDuration(todo.createdAt)}</span>
-                      <span><small>相关金额</small>待核定</span>
+                      <span><small>{todo.entityType === "production_order" ? "风险持续" : "节点停留"}</small>{formatNodeDuration(todo.createdAt)}</span>
+                      {todo.entityType === "production_order" ? <span><small>生产进度</small>{formatBusinessDecimal(todo.productionProgress ?? 0)}%</span> : <span><small>相关金额</small>待核定</span>}
                       <span><small>截止</small>{formatDueAt(todo.dueAt)}</span>
                     </div>
                   </a>

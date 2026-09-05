@@ -1,3 +1,4 @@
+import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import type { Pool, PoolClient } from "pg";
@@ -42,6 +43,7 @@ type DifferenceResolution = Readonly<{
 }>;
 
 type CreateRepeatedReceivingInput = Readonly<{
+  productionOrderId?: string;
   receivingBatchId: string;
   source: RepeatedReceivingSource;
   documentQuantity?: number;
@@ -50,6 +52,7 @@ type CreateRepeatedReceivingInput = Readonly<{
 }>;
 
 type CreateReceivingInput = Readonly<{
+  productionOrderId?: string;
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -59,6 +62,7 @@ type CreateReceivingInput = Readonly<{
 }>;
 
 type NormalizedCreateReceivingInput = Readonly<{
+  productionOrderId?: string;
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -540,6 +544,7 @@ export class ReceivingService {
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
+    private readonly production?: Pick<ProductionClosureService,"linkReceipt">,
   ) {}
 
   async create(
@@ -552,6 +557,7 @@ export class ReceivingService {
     if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     const receivingSource: "initial" | "backfill" = input.receivedDate === undefined ? "initial" : "backfill";
     const normalized = {
+      ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
       styleNo: normalizeStyleNo(input.styleNo),
       documentQuantity: validateQuantity(input.documentQuantity, "送货单数量", false),
       actualQuantity,
@@ -569,6 +575,7 @@ export class ReceivingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: hash(scope, {
+          ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
           styleNo: normalized.styleNo,
           documentQuantity: normalized.documentQuantity,
           actualQuantity: normalized.actualQuantity,
@@ -611,6 +618,7 @@ export class ReceivingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: hash(scope, {
+          ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
           receivingBatchId: input.receivingBatchId,
           source,
           ...(documentQuantity === undefined ? {} : { documentQuantity }),
@@ -623,6 +631,7 @@ export class ReceivingService {
         return {
           statusCode: 201,
           response: await this.createInTransaction(client, actor, {
+            ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
             styleNo: target.styleNo,
             documentQuantity: documentQuantity ?? target.documentQuantity,
             actualQuantity,
@@ -1384,6 +1393,7 @@ export class ReceivingService {
       entityType: "receiving_receipt",
       entityId: receiptId,
       after: {
+        ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
         receiptId,
         receivingBatchId,
         styleNo: input.styleNo,
@@ -1450,6 +1460,11 @@ export class ReceivingService {
       if (updated.rowCount !== 1) fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
     }
     const row = inserted.rows[0]!;
+    if (input.productionOrderId) {
+      if (!this.production) fail("生产回货关联服务不可用",409,"INVALID_STATE_TRANSITION");
+      await this.production!.linkReceipt(client,actor,{productionOrderId:input.productionOrderId,receiptId,
+        styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString()});
+    }
     return {
       receiptId: row.receipt_id,
       receivingBatchId: row.receiving_batch_id,

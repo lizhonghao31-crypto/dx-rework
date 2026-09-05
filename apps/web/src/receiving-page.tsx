@@ -1,3 +1,4 @@
+import { ProductionExpectedPicker } from "./production-closure-ui.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -138,6 +139,7 @@ export function ReceivingPage() {
   const [defectiveQuantity, setDefectiveQuantity] = useState("0");
   const [images, setImages] = useState<readonly SelectedImage[]>([]);
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const [productionOrderId,setProductionOrderId]=useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const pendingKey = useRef<string | null>(null);
@@ -270,11 +272,12 @@ export function ReceivingPage() {
           receivingBatchId: selectedRepeatOrder.receivingBatchId,
           source: repeatSource,
           ...(repeatSource === "other_factory" ? { documentQuantity: addedDocumentCount } : {}),
+          ...(productionOrderId ? {productionOrderId} : {}),
           actualQuantity: actualCount,
           defectiveQuantity: defectiveCount,
         }),
       });
-      pendingKey.current = null;
+      pendingKey.current = null;setProductionOrderId("");
       setMessage(`多次收货成功 · ${receipt.styleNo} · 实收 ${formatBusinessDecimal(receipt.actualQuantity)} 件 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件`);
       setRepeatQuery("");
       setRepeatOrders([]);
@@ -283,7 +286,7 @@ export function ReceivingPage() {
       clearNormalDraft();
       setRepeatSource(null);
       setRepeat(false);
-      setOpen(false);
+      setOpen(false);setProductionOrderId("");
     } catch (cause) {
       const nextMessage = cause instanceof Error ? cause.message : "提交失败，请稍后重试";
       if (nextMessage.includes("重新搜索")) setSelectedRepeatOrder(null);
@@ -354,6 +357,7 @@ export function ReceivingPage() {
         body: JSON.stringify({
           styleNo: trimmedStyle,
           documentQuantity: documentCount,
+          ...(productionOrderId ? {productionOrderId} : {}),
           actualQuantity: actualCount,
           defectiveQuantity: defectiveCount,
           attachmentIds,
@@ -362,6 +366,7 @@ export function ReceivingPage() {
       });
       if (!response.ok) throw new Error(await errorMessage(response));
       const receipt = await response.json() as Receipt;
+      setProductionOrderId("");
       pendingKey.current = null;
       const sign = receipt.differenceQuantity > 0 ? "+" : "";
       setMessage(`${backfill ? "补录" : "收货"}成功 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件 · 差异 ${sign}${formatBusinessDecimal(receipt.differenceQuantity)} 件`);
@@ -371,7 +376,7 @@ export function ReceivingPage() {
       setDefectiveQuantity("0");
       clearImages();
       setStyleMenuOpen(false);
-      setOpen(false);
+      setOpen(false);setProductionOrderId("");
       setBackfill(false);
       void loadStyles();
     } catch (cause) {
@@ -394,6 +399,13 @@ export function ReceivingPage() {
   return <main className="receiving-shell">
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
+      {open ? <>
+        <ProductionExpectedPicker disabled={busy} value={productionOrderId} onSelect={shipment=>{
+          setProductionOrderId(shipment?.productionOrderId??"");pendingKey.current=null;
+          if(shipment){if(repeat){setRepeatQuery(shipment.firstStyleNo);setSelectedRepeatOrder(null);}
+            else setStyleNo(shipment.firstStyleNo);}
+        }}/>
+      </> : null}
       {!open ? (
         <div className="receiving-entry-actions">
           <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(false); setOpen(true); setMessage(""); }}>
@@ -428,7 +440,7 @@ export function ReceivingPage() {
           <button className="receiving-source-choice receiving-source-choice-other" type="button" onClick={() => { setRepeatSource("other_factory"); setDocumentQuantity(""); setMessage(""); }}>
             其他工厂收货
           </button>
-          <button className="receiving-cancel" type="button" onClick={() => { setRepeat(false); setOpen(false); }}>返回</button>
+          <button className="receiving-cancel" type="button" onClick={() => { setRepeat(false); setOpen(false);setProductionOrderId(""); }}>返回</button>
         </Surface>
       ) : repeat ? (
         <Surface className="receiving-form-card">
@@ -492,7 +504,7 @@ export function ReceivingPage() {
             setRepeatQuery("");
             setRepeatOrders([]);
             setSelectedRepeatOrder(null);
-            setOpen(false);
+            setOpen(false);setProductionOrderId("");
           }}>返回</button>
         </Surface>
       ) : (
@@ -568,7 +580,7 @@ export function ReceivingPage() {
             </div> : null}
           </div>
           <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : backfill ? "提交补录" : "提交收货"}</Button>
-          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setBackfill(false); setOpen(false); }}>返回</button>
+          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setBackfill(false); setOpen(false);setProductionOrderId(""); }}>返回</button>
         </Surface>
       )}
       {message ? <p className="receiving-message" role="status">{message}</p> : null}

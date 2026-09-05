@@ -45,6 +45,9 @@ export function buildTodoDeepLink(
     case "wage_period_detail":
       path = `/ui/wages/${route.entityId}`;
       break;
+    case "production_detail":
+      path = `/ui/production-dashboard/${route.entityId}`;
+      break;
     case "sourcing_detail":
       path = `/ui/sourcing/orders/${route.entityId}`;
       break;

@@ -39,7 +39,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(todoModuleIdsForUser({
       businessRoles: ["order_merchandiser"],
       capabilities: ["quantity:confirm", "sourcing:view", "todo:view"],
-    })).toEqual(["rework", "sourcing"]);
+    })).toEqual(["rework", "sourcing", "production"]);
   });
 
   it("renders standalone global entries and permission-gated grouped desktop navigation", async () => {

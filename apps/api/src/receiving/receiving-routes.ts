@@ -21,7 +21,15 @@ const idempotencyKey = (request: FastifyRequest): string => {
   return value;
 };
 
+const productionReference = (body:Record<string,unknown>):{productionOrderId?:string} => {
+  if (body.productionOrderId === undefined) return {};
+  if (typeof body.productionOrderId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.productionOrderId))
+    throw new ApplicationError("VALIDATION_ERROR","生产订单编号无效",400);
+  return {productionOrderId:body.productionOrderId};
+};
+
 const createBody = (input: unknown): {
+  productionOrderId?: string;
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -46,6 +54,7 @@ const createBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "补录日期无效", 400);
   }
   return {
+    ...productionReference(body),
     styleNo: body.styleNo,
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
@@ -176,6 +185,7 @@ const batchId = (input: string): string => {
 };
 
 const repeatBody = (input: unknown): {
+  productionOrderId?: string;
   receivingBatchId: string;
   source: "jiashun" | "other_factory";
   documentQuantity?: number;
@@ -196,6 +206,7 @@ const repeatBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "请填写本次送货单数量", 400);
   }
   return {
+    ...productionReference(body),
     receivingBatchId: batchId(body.receivingBatchId),
     source: body.source,
     ...(body.source === "other_factory" ? { documentQuantity: Number(body.documentQuantity) } : {}),

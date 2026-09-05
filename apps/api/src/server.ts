@@ -1,3 +1,4 @@
+import { ProductionClosureService } from "./sourcing/production-closure-service.js";
 import { ProductionDashboardService } from "./sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "./sourcing/production-reporting-service.js";
 import { SourcingProductionService } from "./sourcing/sourcing-production-service.js";
@@ -108,9 +109,10 @@ const attachments = new AttachmentService(database, storage, {
   ttlSeconds: config.objectStorage.signedUrlTtlSeconds,
   maxUploadBytes: config.objectStorage.maxUploadBytes,
 });
-const todoService = new TodoService(database);
+const productionClosure = new ProductionClosureService(database,rootAuthority);
+const todoService = new TodoService(database,undefined,undefined,productionClosure);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
-const receivingService = new ReceivingService(database);
+const receivingService = new ReceivingService(database,undefined,undefined,productionClosure);
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
 await sourcingContractService.resumePendingContracts();
@@ -213,7 +215,8 @@ const app = buildApp({
     service: sourcingService,
     contracts: sourcingContractService,
     production: sourcingProductionService,
-    reporting: new ProductionReportingService(database),
+    reporting: new ProductionReportingService(database,undefined,undefined,productionClosure),
+    closure: productionClosure,
     dashboard: new ProductionDashboardService(database, new ProductionReportingService(database)),
     root: rootAuthority,
   },

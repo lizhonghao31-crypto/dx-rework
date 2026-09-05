@@ -1,3 +1,5 @@
+import { registerProductionClosureRoutes } from "./production-closure-routes.js";
+import type { ProductionClosureService } from "./production-closure-service.js";
 import { registerProductionDashboardRoutes } from "./production-dashboard-routes.js";
 import type { ProductionDashboardService } from "./production-dashboard-service.js";
 import { registerProductionReportingRoutes } from "./production-reporting-routes.js";
@@ -63,6 +65,7 @@ export type SourcingHttpDependencies = Readonly<{
   production?: SourcingProductionService;
   reporting?: ProductionReportingService;
   dashboard?: ProductionDashboardService;
+  closure?: ProductionClosureService;
   root?: RootAuthority;
 }>;
 
@@ -70,6 +73,7 @@ export function registerSourcingRoutes(
   app: FastifyInstance,
   dependencies: SourcingHttpDependencies,
 ): void {
+  if (dependencies.closure) registerProductionClosureRoutes(app, {authenticate:dependencies.authenticate,root:dependencies.root,service:dependencies.closure});
   if (dependencies.reporting) registerProductionReportingRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.reporting });
   if (dependencies.dashboard) registerProductionDashboardRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.dashboard });
   const readActor = async (request: FastifyRequest) => {

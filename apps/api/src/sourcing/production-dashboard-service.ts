@@ -24,20 +24,7 @@ export function selectDashboardPage(items:ProductionDashboardItem[],input:Produc
     counts:{inProduction:filtered.filter(i=>i.order.status==="in_production").length,completed:filtered.filter(i=>i.order.status==="production_completed").length,
       shipped:filtered.filter(i=>i.order.status==="shipped").length,attention:filtered.filter(i=>i.progress.attention).length}};
 }
-export class ProductionDashboardService {
-  constructor(private readonly database:Pool,private readonly reporting:ProductionReportingService,private readonly clock?:()=>Date) {}
-  private authorize(actor:TrustedActorContext) {
-    if(!canReadProductionReporting(actor))throw new ApplicationError("FORBIDDEN","无权查看实时生产看板",403);
-  }
-  private async read<T>(actor:TrustedActorContext,work:(client:PoolClient,asOf:string)=>Promise<T>) {
-    this.authorize(actor);const client=await this.database.connect();
-    try{await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of");
-      const result=await work(client,(this.clock?.()??timestamp.rows[0]!.as_of).toISOString());
-      await client.query("COMMIT");return result;
-    }catch(error){await client.query("ROLLBACK").catch(()=>undefined);throw error;}finally{client.release();}
-  }
-  private async facts(client:PoolClient,ids:string[],asOf:string) {
+export async function readProductionProgressFacts(client:PoolClient,ids:string[],asOf:string) {
     const result=await client.query<FactsRow>(`SELECT production.production_order_id AS id,production.quantity,production.delivery_date::text AS due,transition.status,
       CASE WHEN transition.status='in_production' THEN COALESCE(reports.quantity,0) ELSE snapshot.completed_quantity END AS completed_quantity,
       CASE WHEN transition.status='in_production' THEN reports.first_on ELSE snapshot.first_reported_on END::text AS first_on,
@@ -54,6 +41,20 @@ export class ProductionDashboardService {
       WHERE production.production_order_id=ANY($1::uuid[])`,[ids,asOf]);
     return new Map(result.rows.map(row=>[row.id,progress(row,asOf)]));
   }
+
+export class ProductionDashboardService {
+  constructor(private readonly database:Pool,private readonly reporting:ProductionReportingService,private readonly clock?:()=>Date) {}
+  private authorize(actor:TrustedActorContext) {
+    if(!canReadProductionReporting(actor))throw new ApplicationError("FORBIDDEN","无权查看实时生产看板",403);
+  }
+  private async read<T>(actor:TrustedActorContext,work:(client:PoolClient,asOf:string)=>Promise<T>) {
+    this.authorize(actor);const client=await this.database.connect();
+    try{await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of");
+      const result=await work(client,(this.clock?.()??timestamp.rows[0]!.as_of).toISOString());
+      await client.query("COMMIT");return result;
+    }catch(error){await client.query("ROLLBACK").catch(()=>undefined);throw error;}finally{client.release();}
+  }
   async list(actor:TrustedActorContext,input:ProductionDashboardQuery={}) {
     const parsed=ProductionDashboardQuerySchema.safeParse(input);
     if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","看板筛选信息无效",400);
@@ -62,14 +63,14 @@ export class ProductionDashboardService {
       if(input.previousAsOf&&input.previousAsOf>asOf)throw new ApplicationError("VALIDATION_ERROR","上次刷新时间不能晚于当前时间",400);
       const result=await client.query<ProductionRow>(`${selectProduction} WHERE ${productionVisibility}`,productionVisibilityArgs(actor));
       const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
-      const current=await this.facts(client,ids,asOf);
+      const current=await readProductionProgressFacts(client,ids,asOf);
       const items=orders.filter(o=>current.has(o.productionOrderId)).map(order=>({order,progress:current.get(order.productionOrderId)!}));
       const selected=selectDashboardPage(items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
       const suppliers=[...new Map(orders.map(o=>[o.supplierId,{supplierId:o.supplierId,supplierName:o.supplierName}])).values()]
         .sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
       const events=await this.events(client,selectedIds);
       if(input.previousAsOf){
-        const previous=await this.facts(client,selectedIds,input.previousAsOf);
+        const previous=await readProductionProgressFacts(client,selectedIds,input.previousAsOf);
         for(const item of selected.filtered){const before=previous.get(item.order.productionOrderId),after=item.progress;
           // This is an observed refresh change, not a fabricated historical event time.
           if(before&&item.order.status==="in_production"&&before.progressState!==after.progressState&&(before.attention||after.attention))events.push({
@@ -86,7 +87,7 @@ export class ProductionDashboardService {
   async detail(actor:TrustedActorContext,id:string) {
     return this.read(actor,async(client,asOf)=>{
       const detail=await this.reporting.detail(actor,id,client);
-      const facts=await this.facts(client,[id],asOf);
+      const facts=await readProductionProgressFacts(client,[id],asOf);
       return ProductionDashboardDetailSchema.parse({asOf,detail,progress:facts.get(id)});
     });
   }
