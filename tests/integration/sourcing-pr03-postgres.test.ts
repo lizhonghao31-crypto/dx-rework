@@ -209,7 +209,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         `INSERT INTO supplier_catalog_versions(
            supplier_id,version,supplier_name,active,change_reason,changed_by
          ) VALUES
-           ($1,1,'一号加工厂',true,'测试夹具',$3),
+           ($1,1,'一号加工厂',true,'测试夹具',$4),
            ($2,1,'二号加工厂',true,'测试夹具',$4),
            ($3,1,'停用加工厂',false,'测试夹具',$4)`,
         [factoryId, replacementFactoryId, disabledFactoryId, managerId],
