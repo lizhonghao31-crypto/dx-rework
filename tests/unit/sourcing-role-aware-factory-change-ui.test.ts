@@ -42,8 +42,9 @@ describe("sourcing role-aware transfer UI", () => {
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
     ]);
-    expect(page).toContain('unitPrice: current.unitPrice || detail.decision?.unitPrice || detail.ieQuote?.unitPrice || ""');
-    expect(page).toContain("decisionUnitPriceEdited");
+    expect(page).toContain("detail.decision?.linePrices.find");
+    expect(page).toContain("detail.ieQuote?.linePrices.find");
+    expect(page).toContain("linesTotalPreview(decision.linePrices, item.lineItems)");
     expect(page).toContain("factoryChangeUnitPriceEdited");
     expect(page).toContain("supplierId: current.supplierId");
     expect(page).toContain("changeReason: current.changeReason");

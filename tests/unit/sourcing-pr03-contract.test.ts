@@ -85,7 +85,7 @@ describe("sourcing PR03 contracts", () => {
 
   it("keeps IE price at four decimals and calculates the two-decimal total exactly", () => {
     expect(CreateSourcingIeQuoteSchema.parse({ unitPrice: "12.3456" }))
-      .toEqual({ unitPrice: "12.3456" });
+      .toEqual({ linePrices: [{ position: 1, unitPrice: "12.3456" }], quoteReason: undefined });
     expect(normalizeSourcingUnitPrice("12.3")).toBe("12.3000");
     expect(calculateSourcingTotal("12.3456", 120)).toBe("1481.47");
     expect(calculateSourcingTotalExact("176.1933", 54_550)).toBe("9611344.52");
@@ -99,7 +99,7 @@ describe("sourcing PR03 contracts", () => {
       supplierId: "00000000-0000-4000-8000-000000000200",
       unitPrice: "12.5000",
       decisionReason: "结合产能调整",
-    })).toMatchObject({ unitPrice: "12.5000" });
+    })).toMatchObject({ linePrices: [{ position: 1, unitPrice: "12.5000" }] });
     expect(DecideSourcingOwnerSchema.parse({ decision: "approved" }))
       .toEqual({ decision: "approved" });
     expect(DecideSourcingOwnerSchema.parse({ decision: "rejected" }))
@@ -169,7 +169,7 @@ describe("sourcing PR03 contracts", () => {
   it("keeps the five-stage sourcing flow visible through finance closure", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain("提交并进入审批");
-    expect(page).toContain("提交 IE 价格");
+    expect(page).toContain("提交 IE 逐款价格");
     expect(page).toContain("请选择加工厂");
     expect(page).toContain("提交调价与选厂");
     expect(page).not.toContain("审批说明 / 驳回原因");

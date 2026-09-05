@@ -17,11 +17,10 @@ describe("sourcing number presentation", () => {
     expect(page).toContain("const businessInputValue");
     expect(page).toContain("const businessInputChange");
     expect(page).toContain("const [activeBusinessInput, setActiveBusinessInput]");
-    for (const draft of [
-      "quote.unitPrice",
-      "decision.unitPrice",
-    ]) expect(page).toContain(`businessInputValue(${draft})`);
-    expect(page).toContain('onFocus={() => setActiveBusinessInput("quote-unit-price")}');
+    expect(page).toContain("businessInputValue(price)");
+    expect(page).toContain("linesTotalPreview(quote.linePrices, item.lineItems)");
+    expect(page).toContain("linesTotalPreview(decision.linePrices, item.lineItems)");
+    expect(page).toContain('onFocus={() => setActiveBusinessInput(`quote-${line.position}`)}');
     expect(page).toContain('onBlur={() => setActiveBusinessInput(null)}');
     expect(page).not.toContain("value={decision.unitPrice} inputMode=\"decimal\"");
     expect(page).not.toContain("value={finance.totalAmount} inputMode=\"decimal\"");
