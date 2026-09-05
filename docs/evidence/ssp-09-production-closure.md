@@ -85,3 +85,9 @@ Full Gate 必需，当前 Head 全绿后由业务负责人手动触发一次 Cod
 - 新用例初始化已全部通过，第一条实时风险、按人已读、修正解除、重新开启和完成关闭的 PostgreSQL 全链通过。
 - 第二条在验证“未发货订单拒绝收货”前，被既有“送货单图片必传”校验以 400 提前拒绝，未命中预期的 409 发货状态边界。
 - 按既有 receiving-postgres 夹具建立一张由仓管本人上传的 ready JPEG，并在同一收货 payload 中复用；保留图片必传规则、原业务校验顺序以及后续并发幂等/绑定断言。
+
+## Codex Review 收口
+
+- 精确 Head `8f2fdf1db09743481cb8c8d94dcb0c150c1840b7` 的 Full Gate #991 全绿；唯一一次 Codex Review 返回 1 条 P2。
+- 原待办的 `sourceEventId` 指向正式派单事件，却把 `sourceAction` 标为不存在的风险观察事件，审计来源不一致。
+- 待办改为如实标记 `sourcing.production.dispatch`，并在 PostgreSQL 全链中读取对应 operation event，断言事件 ID 与 action 一致；不新增伪造事件，也不改变风险业务口径。

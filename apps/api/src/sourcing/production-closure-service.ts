@@ -82,7 +82,7 @@ export class ProductionClosureService {
    const result=alerts.rows.flatMap(a=>{const o=byId.get(a.production_order_id);if(!o||!isProductionRiskRecipient(actor,o.created_by,root))return [];
     const p=facts.get(o.production_order_id)!;
     return [TodoResponseSchema.parse({todoId:a.alert_id,todoType:"business_action",category:`production_${a.kind}`,sourceEventId:o.operation_event_id,
-     sourceAction:"production.risk.observed",entityType:"production_order",entityId:o.production_order_id,recipientUserId:actor.actorId,
+     sourceAction:"sourcing.production.dispatch",entityType:"production_order",entityId:o.production_order_id,recipientUserId:actor.actorId,
      requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id},policyKey:null,dueAt:null,reminderCount:0,
      status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,status:a.kind,updatedAt:asOf},
      unread:a.read_at===null,productionProgress:p.productionProgress,daysWithoutUpdate:p.daysWithoutUpdate,

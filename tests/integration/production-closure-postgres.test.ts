@@ -98,6 +98,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const [a,b]=await Promise.all([closure.todos(merch()),closure.todos(boss())]);
   expect(a).toHaveLength(1);expect(b).toHaveLength(1);expect(a[0]!.todoId).toBe(b[0]!.todoId);
   expect(a[0]).toMatchObject({category:"production_high_risk",unread:true});
+  const source=await database.query<{action:string}>("SELECT action FROM operation_events WHERE event_id=$1",[a[0]!.sourceEventId]);
+  expect(source.rows[0]?.action).toBe(a[0]!.sourceAction);
   expect(await closure.todos(actor(warehouse,["order_merchandiser"],["sourcing:view","todo:view"]))).toEqual([]);
   expect(await closure.todos(actor(warehouse,["factory_payables"],["sourcing:view","todo:view"]))).toEqual([]);
   await expect(closure.markRead(receiver(),a[0]!.todoId)).rejects.toMatchObject({statusCode:404});
