@@ -1,3 +1,4 @@
+import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -71,7 +72,7 @@ export type TodoListOptions = Readonly<{
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing"];
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
@@ -247,6 +248,7 @@ export class TodoService {
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
+    private readonly production?: Pick<ProductionClosureService,"todos">,
   ) {}
 
   async listForActor(
@@ -282,9 +284,17 @@ export class TodoService {
     for (const row of countResult.rows) {
       moduleCounts[row.todo_module] = Number(row.todo_count);
     }
+    const productionTodos = this.production ? await this.production.todos(actor) : [];
+    if (this.production) moduleCounts.production = productionTodos.length;
     const activeModule = options.module
-      ?? TODO_MODULES.find((module) => moduleCounts[module] > 0)
+      ?? TODO_MODULES.find((module) => (moduleCounts[module] ?? 0) > 0)
       ?? "rework";
+    if (activeModule === "production") {
+      const filtered = productionTodos.filter(todo => !normalizedQuery ||
+        [todo.orderContext?.styleNo, todo.orderContext?.supplierName].some(value => value?.toUpperCase().includes(normalizedQuery.toUpperCase())));
+      const totalCount = filtered.length, totalPages = Math.ceil(totalCount / 15), page = totalPages ? Math.min(requestedPage,totalPages) : 1;
+      return {todos:filtered.slice((page-1)*15,page*15),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
+    }
     const totalResult = await this.database.query<{ total_count: number | string }>(
       `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
        SELECT COUNT(*) total_count
@@ -357,6 +367,7 @@ export class TodoService {
       [actor.actorId, todoId],
     );
     const row = result.rows[0];
+    if (!row && this.production) { const todo = (await this.production.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
     if (!row) throw new ApplicationError("NOT_FOUND", "待办不存在或已不再分配给你", 404);
     return todoResponse(row);
   }
@@ -379,7 +390,7 @@ export class TodoService {
       [actor.actorId],
     );
     return {
-      pendingCount: Number(result.rows[0]?.pending_count ?? 0),
+      pendingCount: Number(result.rows[0]?.pending_count ?? 0) + (this.production ? (await this.production.todos(actor)).filter(todo=>todo.unread).length : 0),
     };
   }
 

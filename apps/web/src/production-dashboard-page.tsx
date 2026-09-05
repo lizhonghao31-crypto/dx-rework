@@ -1,3 +1,4 @@
+import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import { ProductionDashboardSchema, ProductionDashboardDetailSchema, type ProductionDashboard, type ProductionDashboardItem } from "@dx-rework/contracts";
@@ -35,7 +36,12 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const load=async(manual=false)=>{
     const version=++sequence.current;setLoading(true);setError("");
     try{
-      if(productionOrderId){const result=await request(`/${productionOrderId}`,ProductionDashboardDetailSchema);if(version===sequence.current)setDetail(result);}
+      if(productionOrderId){const result=await request(`/${productionOrderId}`,ProductionDashboardDetailSchema);if(version===sequence.current){setDetail(result);
+        const todo=new URLSearchParams(window.location.search).get("todo");
+        if(todo){const response=await fetch(apiUrl(`production-closure/alerts/${encodeURIComponent(todo)}/read`),{method:"POST",credentials:"include"});
+          if(!response.ok&&response.status!==404)throw new Error("生产待办已读状态保存失败，请刷新重试");
+          window.dispatchEvent(new Event("dx-rework:todo-read"));}
+      }}
       else{const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);if(progressState)params.set("progressState",progressState);
         if(manual&&last.current)params.set("previousAsOf",last.current.asOf);
         const result=await request(`?${params}`,ProductionDashboardSchema);
@@ -62,9 +68,11 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
       <span>{asOf?`数据截至 ${new Date(asOf).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit"})}`:"正在读取数据"}</span>
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
     </div>
+    {productionOrderId?<ProductionReceiptSummary productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}
     {!productionOrderId?<>
+      <ProductionPilotControls/>
       {data?<Surface className="sourcing-list-card"><div className="production-dashboard__toolbar" aria-label="生产运行状态">
         <strong>{data.counts.attention?`${number(data.counts.attention)} 单需关注`:"当前筛选无进度预警"}</strong><span>生产中 {number(data.counts.inProduction)}</span><span>生产完成 {number(data.counts.completed)}</span><span>已发货 {number(data.counts.shipped)}</span>
       </div></Surface>:null}

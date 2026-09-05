@@ -1,5 +1,5 @@
 export type PlatformAccessModuleId = "rework" | "sourcing" | "production" | "platform";
-export type TodoAccessModuleId = Extract<PlatformAccessModuleId, "rework" | "sourcing">;
+export type TodoAccessModuleId = Extract<PlatformAccessModuleId, "rework" | "sourcing" | "production">;
 
 export type PlatformRoleAccess = Readonly<{
   roleCode: string;
@@ -109,12 +109,14 @@ export function todoModuleIdsForUser(user: Readonly<{
   capabilities: readonly string[];
   isRoot?: boolean;
 }>): TodoAccessModuleId[] {
-  if (user.isRoot) return ["rework", "sourcing"];
+  if (user.isRoot) return ["rework", "sourcing", "production"];
 
   const roles = user.businessRoles ?? [];
   const classified = roles.length > 0
     ? roles.flatMap((roleCode) => accessModuleIdsForRole(roleCode, user.capabilities))
     : accessModuleIdsForCapabilities(user.capabilities);
   const modules = new Set(classified);
-  return (["rework", "sourcing"] as const).filter((moduleId) => modules.has(moduleId));
+  if (user.capabilities.includes("todo:view") && user.capabilities.includes("sourcing:view") && roles.some(role=>["order_merchandiser","production_management","owner_group"].includes(role))) modules.add("production");
+  else modules.delete("production");
+  return (["rework", "sourcing", "production"] as const).filter((moduleId) => modules.has(moduleId));
 }

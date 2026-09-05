@@ -11,8 +11,10 @@ export const installTodoIndicatorRefresh = (
   run();
   const interval = window.setInterval(run, TODO_INDICATOR_POLL_INTERVAL_MS);
   document.addEventListener("visibilitychange", handleVisibility);
+  window.addEventListener("dx-rework:todo-read", run);
   return () => {
     window.clearInterval(interval);
     document.removeEventListener("visibilitychange", handleVisibility);
+    window.removeEventListener("dx-rework:todo-read", run);
   };
 };
