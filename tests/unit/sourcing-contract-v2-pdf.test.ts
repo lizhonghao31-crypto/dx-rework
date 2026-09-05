@@ -34,7 +34,7 @@ describe("corrected source contract PDF", () => {
       }
     }
     const normalized = text.replace(/\s/g, "");
-    for (const expected of [base.partyAName,base.partyAAddress!,base.partyBName,"男装梭织短裤","不含税","工厂发出","到工厂","乙方负责车缝+线+包装，回厂装箱+一程运费，甲方提供样板及面/辅料。","甲方代表：","乙方代表：","签署日期：",`SE20550014-${count}`,"SEKH260608",...Object.values(terms) as string[]]) {
+    for (const expected of [base.partyAName,base.partyAAddress!,base.partyBName,"男装梭织短裤","生成日期：2026-09-05","不含税","工厂发出","到工厂","乙方负责车缝+线+包装，回厂装箱+一程运费，甲方提供样板及面/辅料。","甲方代表：","乙方代表：","签署日期：",`SE20550014-${count}`,"SEKH260608",...Object.values(terms) as string[]]) {
       expect(normalized).toContain(expected.replace(/\s/g, ""));
     }
     expect(normalized).not.toMatch(/大兴价|达兴价格|daxing|88\.8888|平台订单/);

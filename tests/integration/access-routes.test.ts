@@ -342,6 +342,32 @@ describe("access routes", () => {
     expect(wrongRole.service.updateTemporaryWorkerProfile).not.toHaveBeenCalled();
   });
 
+  it.each([{ roles: [] }, { roles: ["order_merchandiser"] }])("keeps Root craft mutation authorized with roles $roles", async ({ roles }) => {
+    const { app, service } = create(["sourcing:inquiry:create"], roles, true);
+    const result = await app.inject({
+      method: "POST", url: "/master-data/crafts/ensure",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { craftNames: ["车缝+线+包装，回厂装箱+一程运费"] },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(service.ensureCrafts).toHaveBeenCalledWith(expect.objectContaining({
+      actorRoles: expect.arrayContaining(["root_superuser"]),
+      authorizationCapability: "master_data:manage",
+      authorizationCapabilities: expect.arrayContaining(["master_data:manage"]),
+    }), { craftNames: ["车缝+线+包装，回厂装箱+一程运费"] });
+  });
+
+  it("rejects node 1 craft mutations for a non-root merchandiser", async () => {
+    const { app, service } = create(["sourcing:inquiry:create"], ["order_merchandiser"]);
+    const result = await app.inject({
+      method: "POST", url: "/master-data/crafts/ensure",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { craftNames: ["车缝"] },
+    });
+    expect(result.statusCode).toBe(403);
+    expect(service.ensureCrafts).not.toHaveBeenCalled();
+  });
+
   it("lets production managers read and create reusable sourcing crafts", async () => {
     const { app, service } = create(["sourcing:decision:record"], ["production_management"]);
     const read = await app.inject({

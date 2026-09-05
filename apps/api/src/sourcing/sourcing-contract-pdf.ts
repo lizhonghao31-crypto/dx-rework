@@ -206,7 +206,7 @@ export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): 
     if (y > bottom) { document.addPage(); y = 32; }
   };
   text("服装加工合同", 17);
-  text(`合同编号：${snapshot.contractNumber}    签订地点：${snapshot.signingPlace}`);
+  text(`合同编号：${snapshot.contractNumber}    生成日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`);
   text(`甲方：${snapshot.partyAName}`);
   text(`乙方：${snapshot.partyBName}`);
   text("一、加工明细", 10);
