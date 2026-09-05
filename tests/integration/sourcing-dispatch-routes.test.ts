@@ -9,7 +9,7 @@ const caseId = randomUUID();
 const documentId = randomUUID();
 const userId = randomUUID();
 const order = {
-  productionOrderId: randomUUID(), sourcingCaseId: caseId, decisionVersion: 1,
+  productionOrderId: randomUUID(), sourcingCaseId: caseId, decisionVersion: 1, sourceCaseArchived: false,
   sourcingContractDocumentId: documentId, contractNumber: "DX-WF-20260905-000001", contractVersion: 1,
   supplierId: randomUUID(), supplierName: "测试加工厂", gender: "男装", styleName: "长裤", quantity: 100,
   processes: ["车缝"], deliveryDate: "2026-10-20", firstStyleNo: "DX-01", dispatchedBy: userId,

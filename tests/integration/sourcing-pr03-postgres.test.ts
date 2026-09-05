@@ -1713,6 +1713,41 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     // Finance may reconcile after production has already begun, without changing production.
     await service.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
     expect((await production.get(readerActor(), order.productionOrderId)).status).toBe("in_production");
+    // A later approved factory change must not create a second live execution.
+    await service.requestFactoryChange(managerActor(), id, {
+      supplierId: replacementFactoryId, unitPrice: "9.0000", changeReason: "验证已派单后的新合同不能重复派单",
+    }, randomUUID());
+    const changedContract = (await contractService.getCurrent(readerActor(), id)).item!;
+    expect(changedContract.status).toBe("ready");
+    expect(changedContract.sourcingContractDocumentId).not.toBe(input.sourcingContractDocumentId);
+    expect(await production.state(contractActor(), id)).toMatchObject({
+      canDispatch: false, item: { productionOrderId: order.productionOrderId, status: "in_production" },
+    });
+    for (const dispatchActor of [contractActor(), rootActor()]) {
+      await expect(production.dispatch(dispatchActor, id, {
+        sourcingContractDocumentId: changedContract.sourcingContractDocumentId, confirmed: true,
+      }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    }
+    expect((await production.dispatch(contractActor(), id, input, randomUUID())).value.productionOrderId)
+      .toBe(order.productionOrderId);
+    expect((await database.query("SELECT 1 FROM sourcing_production_orders WHERE sourcing_case_id=$1", [id])).rowCount).toBe(1);
+    expect((await production.get(readerActor(), order.productionOrderId)).supplierId).toBe(factoryId);
+
+    // Root deletion archives the source only: the active production queue survives.
+    expect(order.sourceCaseArchived).toBe(false);
+    const beforeDeletion = await production.list(readerActor());
+    await service.deleteByRoot(rootActor(), id, randomUUID());
+    await expect(service.getCase(readerActor(), id)).rejects.toMatchObject({ statusCode: 404 });
+    expect(await production.get(readerActor(), order.productionOrderId)).toMatchObject({
+      sourceCaseArchived: true, status: "in_production", supplierId: factoryId,
+    });
+    const afterDeletion = await production.list(readerActor());
+    expect(afterDeletion.totalCount).toBe(beforeDeletion.totalCount);
+    expect(afterDeletion.items.find((item) => item.productionOrderId === order.productionOrderId))
+      .toMatchObject({ sourceCaseArchived: true, status: "in_production" });
+    await expect(production.get(unrelatedReaderActor(), order.productionOrderId)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(production.get(anotherMerchandiserReader(), order.productionOrderId)).rejects.toMatchObject({ statusCode: 404 });
+    expect((await production.list(anotherMerchandiserReader())).items.some((item) => item.productionOrderId === order.productionOrderId)).toBe(false);
     for (const [sequence, status, action] of [[2, "production_completed", "sourcing.production.complete"], [3, "shipped", "sourcing.production.ship"]] as const) {
       const eventId = await new OperationEventRepository().append(database, rootActor(), {
         action, entityType: "sourcing_production_order", entityId: order.productionOrderId, after: { status }, reason: "验证合法状态顺序",

@@ -16,6 +16,7 @@ export const SourcingDispatchStateSchema = z.object({
 }).strict();
 export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.extend({
   sourcingCaseId: z.string().uuid(),
+  sourceCaseArchived: z.boolean(),
   decisionVersion: z.number().int().positive(),
   sourcingContractDocumentId: z.string().uuid(),
   contractNumber: z.string(),

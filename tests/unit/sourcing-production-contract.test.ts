@@ -39,7 +39,7 @@ describe("SSP-06 production contract and authorization", () => {
   );
   it("keeps missing first report distinct from elapsed production time", () => {
     const data = {
-      productionOrderId: randomUUID(), sourcingCaseId: randomUUID(), decisionVersion: 1,
+      productionOrderId: randomUUID(), sourcingCaseId: randomUUID(), decisionVersion: 1, sourceCaseArchived: false,
       sourcingContractDocumentId: randomUUID(), contractNumber: "DX-WF-20260905-000001", contractVersion: 1,
       supplierId: randomUUID(), supplierName: "长名称加工厂", gender: "男装", styleName: "梭织短裤",
       quantity: 5000, processes: ["车缝", "包装"], deliveryDate: "2026-10-20", firstStyleNo: "DX-A",

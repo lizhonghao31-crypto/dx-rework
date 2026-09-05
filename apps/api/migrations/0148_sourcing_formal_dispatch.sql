@@ -2,7 +2,7 @@
 -- These immutable execution facts deliberately contain no prices or bank details.
 CREATE TABLE sourcing_production_orders (
   production_order_id uuid PRIMARY KEY,
-  sourcing_case_id uuid NOT NULL REFERENCES sourcing_cases(sourcing_case_id),
+  sourcing_case_id uuid NOT NULL UNIQUE REFERENCES sourcing_cases(sourcing_case_id),
   sourcing_approval_snapshot_id uuid NOT NULL UNIQUE REFERENCES sourcing_approval_snapshots(sourcing_approval_snapshot_id),
   sourcing_decision_id uuid NOT NULL UNIQUE REFERENCES sourcing_decisions(sourcing_decision_id),
   decision_version integer NOT NULL CHECK(decision_version>0),

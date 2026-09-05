@@ -37,7 +37,7 @@ const selectProduction = `SELECT production.production_order_id,production.sourc
   production.contract_version,production.supplier_id,production.supplier_name_snapshot,
   production.gender,production.style_name_snapshot,production.quantity,production.processes,
   production.delivery_date::text,production.first_style_no,production.dispatched_by,production.dispatched_at,
-  transition.status,
+  transition.status,source_case.deleted_at IS NOT NULL AS source_case_archived,
   (SELECT jsonb_agg(jsonb_build_object('position',line.position,'styleNo',line.style_no,
     'alternateStyleNo',line.alternate_style_no,'color',line.color,'quantity',line.quantity) ORDER BY line.position)
    FROM sourcing_production_lines line WHERE line.production_order_id=production.production_order_id) AS lines
@@ -46,7 +46,7 @@ const selectProduction = `SELECT production.production_order_id,production.sourc
   JOIN LATERAL (SELECT status FROM sourcing_production_transitions
     WHERE production_order_id=production.production_order_id ORDER BY sequence DESC LIMIT 1) transition ON true`;
 const toOrder = (row: ProductionRow): SourcingProductionOrder => SourcingProductionOrderSchema.parse({
-  productionOrderId: row.production_order_id, sourcingCaseId: row.sourcing_case_id,
+  productionOrderId: row.production_order_id, sourcingCaseId: row.sourcing_case_id, sourceCaseArchived: row.source_case_archived,
   decisionVersion: Number(row.decision_version), sourcingContractDocumentId: row.sourcing_contract_document_id,
   contractNumber: row.contract_number, contractVersion: Number(row.contract_version),
   supplierId: row.supplier_id, supplierName: row.supplier_name_snapshot,
@@ -84,7 +84,7 @@ export class SourcingProductionService {
     if (!has(actor, READ)) fail("无权查看派单状态", 403);
     const source = await this.source(this.database, sourcingCaseId);
     const result = await this.database.query<ProductionRow>(`${selectProduction}
-      WHERE production.sourcing_approval_snapshot_id=$1`, [source.sourcing_approval_snapshot_id]);
+      WHERE production.sourcing_case_id=$1`, [sourcingCaseId]);
     const row = result.rows[0];
     return {
       item: row ? { productionOrderId: row.production_order_id, status: row.status, dispatchedAt: iso(row.dispatched_at) } : null,
@@ -111,12 +111,17 @@ export class SourcingProductionService {
         requestHash: createHash("sha256").update(JSON.stringify({ sourcingCaseId, input: parsed.data })).digest("hex"),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        // The exact confirmed contract may already have been dispatched. Return that
-        // immutable receipt even if a later factory-change decision now exists.
+        // A changed contract cannot start a second execution of the same case.
+        // Replays of the dispatched contract still return its immutable receipt.
         const existing = await client.query<ProductionRow>(`${selectProduction}
-          WHERE production.sourcing_case_id=$1 AND production.sourcing_contract_document_id=$2`,
-        [sourcingCaseId, parsed.data.sourcingContractDocumentId]);
-        if (existing.rows[0]) return { statusCode: 200, response: toOrder(existing.rows[0]) };
+          WHERE production.sourcing_case_id=$1`, [sourcingCaseId]);
+        const dispatched = existing.rows[0];
+        if (dispatched) {
+          if (dispatched.sourcing_contract_document_id !== parsed.data.sourcingContractDocumentId) {
+            fail("本订单已正式派单，不能按新合同重复派单；生产转厂功能尚未开放");
+          }
+          return { statusCode: 200, response: toOrder(dispatched) };
+        }
         if (!source.sourcing_approval_snapshot_id || source.contract_status !== "ready"
           || source.sourcing_contract_document_id !== parsed.data.sourcingContractDocumentId) {
           fail("请确认老板已批准、当前合同已生成，并刷新后重新确认派单");
@@ -160,7 +165,7 @@ export class SourcingProductionService {
   async get(actor: TrustedActorContext, productionOrderId: string): Promise<SourcingProductionOrder> {
     if (!canReadOrders(actor)) fail("无权查看生产订单", 403);
     const result = await this.database.query<ProductionRow>(`${selectProduction}
-      WHERE production.production_order_id=$1 AND source_case.deleted_at IS NULL
+      WHERE production.production_order_id=$1
         AND ($2::boolean OR source_case.created_by=$3)`, [productionOrderId, readAll(actor), actor.actorId]);
     return result.rows[0] ? toOrder(result.rows[0]) : fail("生产订单不存在或不在负责范围内", 404);
   }
@@ -171,12 +176,12 @@ export class SourcingProductionService {
       throw new ApplicationError("VALIDATION_ERROR", "分页页码无效", 400);
     }
     const result = await this.database.query<ProductionRow>(`${selectProduction}
-      WHERE source_case.deleted_at IS NULL AND ($1::boolean OR source_case.created_by=$2)
+      WHERE ($1::boolean OR source_case.created_by=$2)
       ORDER BY production.dispatched_at DESC,production.production_order_id LIMIT 15 OFFSET $3`,
     [readAll(actor), actor.actorId, (page - 1) * 15]);
     const count = await this.database.query<{ total: string }>(`SELECT count(*)::text AS total
       FROM sourcing_production_orders JOIN sourcing_cases source_case USING(sourcing_case_id)
-      WHERE source_case.deleted_at IS NULL AND ($1::boolean OR source_case.created_by=$2)`, [readAll(actor), actor.actorId]);
+      WHERE ($1::boolean OR source_case.created_by=$2)`, [readAll(actor), actor.actorId]);
     return { items: result.rows.map(toOrder), page, pageSize: 15 as const, totalCount: Number(count.rows[0]?.total ?? 0) };
   }
 }
