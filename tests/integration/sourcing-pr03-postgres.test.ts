@@ -1410,8 +1410,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         ],
       },
       approvalSnapshot: {
-        sourcingDecisionId: decided.value.decision!.sourcingDecisionId,
-        totalAmount: "1700.00",
+        sourcingDecisionId: changed.value.decision!.sourcingDecisionId,
+        totalAmount: "1350.00",
       },
     });
   });
