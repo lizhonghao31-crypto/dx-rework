@@ -217,6 +217,12 @@ export function registerSourcingRoutes(
     ),
   );
 
+  app.get<{ Querystring: { q?: string } }>("/sourcing/styles", async (request) =>
+    dependencies.service.listStyles(
+      await actionActor(request, "order_merchandiser", "sourcing:inquiry:create"),
+      typeof request.query.q === "string" ? request.query.q : "",
+    ));
+
   app.post("/sourcing/cases", async (request, reply) => {
     const parsed = CreateSourcingCaseSchema.safeParse(request.body);
     const data = parsed.success

@@ -15,9 +15,9 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(contract).toContain("craftIds: z.array(IdSchema)");
     expect(service).toContain("process_items");
     expect(service).not.toContain("input.processDescription");
-    expect(service).toContain("const persistedProcessDescription");
-    expect(service).toContain("const persistedProcessItems");
-    expect(service).toContain("INSERT INTO sourcing_case_crafts");
+    expect(service).toContain("const selectedCrafts");
+    expect(service).toContain("JSON.stringify(selectedCrafts)");
+    expect(service).toContain("COALESCE(decision_row.crafts,crafts_row.crafts)");
     expect(migration).toContain("ADD COLUMN process_items text[]");
     expect(migration).toContain("sourcing_case.process_description");
     expect(migration).toContain("WHERE sourcing_case.deleted_at IS NULL");
@@ -31,9 +31,9 @@ describe("sourcing PC form and owner approval finish", () => {
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
     ]);
     for (const text of [
-      "工艺清单",
+      "工艺及承包范围",
       "＋ 新增工艺",
-      "按实际生产顺序登记",
+      "按合同乙方负责的内容顺序登记",
       "最终审批",
       "生产管理建议由",
       "相对 IE 总额变化",
@@ -42,7 +42,7 @@ describe("sourcing PC form and owner approval finish", () => {
       "批准方案",
       "驳回并退回生产管理",
     ]) expect(page).toContain(text);
-    expect(page).toContain("craftIds: ensuredCrafts.map");
+    expect(page).toContain("craftIds: crafts.map");
     expect(css).toContain("@media (min-width: 761px)");
     expect(page).toContain("subtractFixedPoint");
     expect(page).toContain("sourcing-owner-mobile-summary");

@@ -44,8 +44,8 @@ const snapshot: ContractPdfSnapshot = {
 };
 
 describe("SSP-05 contract PDF", () => {
-  it("renders multi-style exact amounts with an extractable Unicode map", () => {
-    const binary = renderSourcingContractPdf(snapshot).toString("binary");
+  it("renders multi-style exact amounts with an extractable Unicode map", async () => {
+    const binary = (await renderSourcingContractPdf(snapshot)).toString("binary");
     const encoded = (value: string): string => Buffer.from(
       [...value].flatMap((character) => {
         const code = character.codePointAt(0) ?? 0x3f;

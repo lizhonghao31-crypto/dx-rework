@@ -28,10 +28,9 @@ describe("sourcing PR03 contracts", () => {
       externalUnitPrice: index % 2 ? "12.3456" : "13.5000",
     });
     const parse = (count: number) => CreateSourcingCaseSchema.parse({
-      erpOrderNo: `PLATFORM-2026-00${count}`,
+      gender: "男装", styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-09-10",
       deliveryDate: "2026-09-15",
-      craftIds: ["00000000-0000-4000-8000-000000000401"],
       lineItems: Array.from({ length: count }, (_value, index) => line(index + 1)),
       daxingUnitPrice: "10.2500",
     });
@@ -45,10 +44,9 @@ describe("sourcing PR03 contracts", () => {
 
   it("rejects illegal row quantities, excessive precision, and caller totals", () => {
     const valid = {
-      erpOrderNo: "PLATFORM-2026-001",
+      gender: "男装", styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-09-10",
       deliveryDate: "2026-09-15",
-      craftIds: ["00000000-0000-4000-8000-000000000401"],
       lineItems: [{
         styleNo: "DX-100",
         color: "黑色",
@@ -96,6 +94,7 @@ describe("sourcing PR03 contracts", () => {
 
   it("validates management adjustments and accepts direct owner decisions", () => {
     expect(RecordSourcingManagementDecisionSchema.parse({
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
       supplierId: "00000000-0000-4000-8000-000000000200",
       unitPrice: "12.5000",
       decisionReason: "结合产能调整",

@@ -9,6 +9,7 @@ import {
   SourcingAttachmentListResponseSchema,
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
+  SourcingStyleCatalogSchema,
   SourcingContractStateResponseSchema,
   SourcingFactoryListResponseSchema,
   SourcingFactoryChangeStateResponseSchema,
@@ -89,10 +90,10 @@ type SourcingLineDraft = Readonly<{
   externalUnitPrice: string;
 }>;
 type LocalSourcingDraft = Readonly<{
-  erpOrderNo: string;
+  gender: "" | "男装" | "女装";
+  styleName: string;
   estimatedCutPieceSendDate: string;
   deliveryDate: string;
-  processes: readonly string[];
   lineItems: readonly SourcingLineDraft[];
   daxingUnitPrice: string;
   images: readonly UploadedImage[];
@@ -201,10 +202,7 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(localSourcingDraftKey(userId)) ?? "null") as
       (Partial<LocalSourcingDraft> & { styleNo?: unknown; orderQuantity?: unknown }) | null;
-    if (!parsed || typeof parsed.erpOrderNo !== "string"
-      || typeof parsed.deliveryDate !== "string"
-      || !Array.isArray(parsed.processes) || parsed.processes.length < 1
-      || !parsed.processes.every((process) => typeof process === "string")
+    if (!parsed || typeof parsed.deliveryDate !== "string"
       || !Array.isArray(parsed.images)) return null;
     const lineItems = Array.isArray(parsed.lineItems)
       ? parsed.lineItems.filter((line): line is SourcingLineDraft => (
@@ -235,12 +233,12 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
       previewUrl: attachmentUrl(image.attachmentId, "preview"),
     }));
     return {
-      erpOrderNo: parsed.erpOrderNo,
+      gender: parsed.gender === "男装" || parsed.gender === "女装" ? parsed.gender : "",
+      styleName: typeof parsed.styleName === "string" ? parsed.styleName : "",
       estimatedCutPieceSendDate: typeof parsed.estimatedCutPieceSendDate === "string"
         ? parsed.estimatedCutPieceSendDate
         : "",
       deliveryDate: parsed.deliveryDate,
-      processes: parsed.processes.slice(0, MAX_SOURCING_PROCESSES),
       lineItems,
       daxingUnitPrice: typeof parsed.daxingUnitPrice === "string" ? parsed.daxingUnitPrice : "",
       images,
@@ -274,7 +272,7 @@ function SourcingOrderCard({
       <div className="sourcing-order-card__heading">
         <div>
           <strong>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? ` 等 ${item.lineItems.length} 行` : ""}</strong>
-          <small>{item.erpOrderNo}</small>
+          <small>{item.gender ?? "历史未维护"} · {item.styleName ?? "历史未维护"}</small>
         </div>
         <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
           {STATUS_LABELS[item.status]}
@@ -361,12 +359,11 @@ export function SourcingWorkspacePage({
 }
 
 function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
-  const [erpOrderNo, setErpOrderNo] = useState("");
+  const [gender, setGender] = useState<"" | "男装" | "女装">("");
+  const [styleName, setStyleName] = useState("");
+  const [styleCatalog, setStyleCatalog] = useState<readonly { styleId: string; styleName: string }[]>([]);
   const [estimatedCutPieceSendDate, setEstimatedCutPieceSendDate] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
-  const [processes, setProcesses] = useState<string[]>([""]);
-  const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
-  const [activeCraftQuery, setActiveCraftQuery] = useState("");
   const [lineItems, setLineItems] = useState<SourcingLineDraft[]>([{
     styleNo: "",
     alternateStyleNo: "",
@@ -388,27 +385,27 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     if (!canCreate) return;
     let mounted = true;
     const timer = window.setTimeout(() => {
-      const query = activeCraftQuery.trim();
-      const path = query ? `master-data/crafts?q=${encodeURIComponent(query)}` : "master-data/crafts";
-      void request(path, CraftCatalogListResponseSchema)
-        .then((items) => { if (mounted) setCraftCatalog(items); })
-        .catch(() => { if (mounted) setMessage("工艺数据库加载失败，请刷新后重试。"); });
+      const query = styleName.trim();
+      const path = query ? `sourcing/styles?q=${encodeURIComponent(query)}` : "sourcing/styles";
+      void request(path, SourcingStyleCatalogSchema)
+        .then((items) => { if (mounted) setStyleCatalog(items); })
+        .catch(() => { if (mounted) setMessage("款式数据库加载失败，请刷新后重试。"); });
     }, 150);
     return () => {
       mounted = false;
       window.clearTimeout(timer);
     };
-  }, [activeCraftQuery, canCreate]);
+  }, [styleName, canCreate]);
 
   useEffect(() => {
     if (!user?.id || restoredDraftUserId.current === user.id) return;
     restoredDraftUserId.current = user.id;
     const localDraft = readLocalSourcingDraft(user.id);
     if (!localDraft) return;
-    setErpOrderNo(localDraft.erpOrderNo);
+    setGender(localDraft.gender);
+    setStyleName(localDraft.styleName);
     setEstimatedCutPieceSendDate(localDraft.estimatedCutPieceSendDate);
     setDeliveryDate(localDraft.deliveryDate);
-    setProcesses([...localDraft.processes]);
     setLineItems([...localDraft.lineItems]);
     setDaxingUnitPrice(localDraft.daxingUnitPrice);
     setImages([...localDraft.images]);
@@ -419,30 +416,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrls.current = [];
   }, []);
-
-  const updateProcess = (index: number, value: string): void => {
-    setProcesses((current) => current.map((process, currentIndex) => (
-      currentIndex === index ? value : process
-    )));
-    setActiveCraftQuery(value);
-    createKey.current = null;
-  };
-
-  const addProcess = (): void => {
-    if (processes.length >= MAX_SOURCING_PROCESSES) {
-      setMessage(`每张订单最多登记 ${MAX_SOURCING_PROCESSES} 项工艺`);
-      return;
-    }
-    setProcesses((current) => [...current, ""]);
-    createKey.current = null;
-  };
-
-  const removeProcess = (index: number): void => {
-    setProcesses((current) => current.length === 1
-      ? [""]
-      : current.filter((_process, currentIndex) => currentIndex !== index));
-    createKey.current = null;
-  };
 
   const updateLineItem = (
     index: number,
@@ -597,10 +570,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       return;
     }
     const draft: LocalSourcingDraft = {
-      erpOrderNo,
+      gender,
+      styleName,
       estimatedCutPieceSendDate,
       deliveryDate,
-      processes,
       lineItems,
       daxingUnitPrice,
       images,
@@ -611,7 +584,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   };
 
   const createOrder = async (): Promise<void> => {
-    const normalizedProcesses = processes.map((process) => process.trim());
     const normalizedLines = lineItems.map((line) => ({
       styleNo: line.styleNo.trim(),
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
@@ -621,14 +593,9 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     }));
     const pricePattern = /^\d{1,10}(?:\.\d{1,4})?$/;
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
-    if (!erpOrderNo.trim()) { setMessage("请填写平台订单号"); return; }
-    if (!estimatedCutPieceSendDate || !deliveryDate || normalizedProcesses.some((process) => !process)) {
-      setMessage("请填写预计裁片发出日期、交货日期和所有工艺");
-      return;
-    }
-    if (new Set(normalizedProcesses).size !== normalizedProcesses.length) {
-      setMessage("工艺不能重复，请合并或修改重复项");
-      return;
+    if (!gender || !styleName.trim()) { setMessage("请选择性别并填写款式"); return; }
+    if (!estimatedCutPieceSendDate || !deliveryDate) {
+      setMessage("请填写裁片发出日期和到工厂的交货日期"); return;
     }
     if (normalizedLines.some((line) => !line.styleNo || !line.color)) {
       setMessage("每行都必须填写款号和颜色");
@@ -660,23 +627,14 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const requestKey = createKey.current ?? createClientRequestId();
     createKey.current = requestKey;
     try {
-      const ensuredCrafts = await request("master-data/crafts/ensure", CraftCatalogListResponseSchema, {
-        method: "POST",
-        body: JSON.stringify({ craftNames: normalizedProcesses }),
-      });
-      setCraftCatalog((current) => {
-        const byId = new Map(current.map((item) => [item.craftId, item]));
-        ensuredCrafts.forEach((item) => byId.set(item.craftId, item));
-        return [...byId.values()].sort((left, right) => left.craftName.localeCompare(right.craftName, "zh-CN"));
-      });
       const created = await request("sourcing/cases", SourcingCaseSummarySchema, {
         method: "POST",
         headers: { "idempotency-key": requestKey },
         body: JSON.stringify({
-          erpOrderNo: erpOrderNo.trim(),
+          gender,
+          styleName: styleName.trim(),
           estimatedCutPieceSendDate,
           deliveryDate,
-          craftIds: ensuredCrafts.map((craft) => craft.craftId),
           lineItems: normalizedLines,
           daxingUnitPrice: normalizedDaxingPrice,
           attachmentIds: images.map((image) => image.attachmentId),
@@ -694,18 +652,22 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     <div className="sourcing-workspace sourcing-workspace--create">
       <Header
         title="创建订单"
-        subtitle="跟单登记平台订单、款色价格和照片，提交后自动进入待审批订单。"
+        subtitle="跟单登记订单资料、款色价格和照片，提交后自动进入待审批订单。"
         badge="外发定价&选厂"
       />
       <Surface className="sourcing-create-card">
         <div className="section-title">
-          <div><h2>订单资料</h2><p>请以平台订单事实为准；大兴价仅供内部核价。</p></div>
+          <div><h2>订单资料</h2><p>请按实际订单填写；大兴价仅供内部核价。</p></div>
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
-          <label><span>平台订单号</span><input value={erpOrderNo} maxLength={100} onChange={(event) => { setErpOrderNo(event.target.value); createKey.current = null; }} placeholder="请输入平台订单号" /></label>
-          <label><span>预计裁片发出日期</span><input type="date" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>要求交货日期</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <div className="sourcing-order-classification">
+            <label><span>性别（必填）</span><select required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
+            <label><span>款式（必填）</span><input required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
+            <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
+          </div>
+          <label><span>预计裁片发出日期（工厂发出）</span><input type="date" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>要求交货日期（到工厂）</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>大兴价（内部）</span><input value={daxingUnitPrice} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="仅内部授权岗位可见" /></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
@@ -730,23 +692,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
               </article>)}
             </div>
           </section>
-          <label className="sourcing-process-mobile"><span>工艺</span><input list="sourcing-craft-options" value={processes[0]} maxLength={100} onChange={(event) => updateProcess(0, event.target.value)} placeholder="请输入订单工艺要求" /></label>
-          <section className="sourcing-process-editor sourcing-form-wide" aria-label="订单工艺清单">
-            <div className="sourcing-process-editor__heading">
-              <div><strong>工艺清单</strong><small>每项工艺单独一行，按实际生产顺序登记；可搜索已有工艺，也可直接输入新工艺，提交订单时自动写入工艺数据库</small></div>
-              <button type="button" disabled={processes.length >= MAX_SOURCING_PROCESSES} onClick={addProcess}>＋ 新增工艺</button>
-            </div>
-            <div className="sourcing-process-editor__list">
-              {processes.map((process, index) => <div className="sourcing-process-row" key={index}>
-                <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span className="visually-hidden">第 {index + 1} 项工艺</span><input list="sourcing-craft-options" value={process} maxLength={100} onChange={(event) => updateProcess(index, event.target.value)} placeholder="例如：车缝、整烫、水洗" /></label>
-                <button type="button" aria-label={`删除第 ${index + 1} 项工艺`} disabled={processes.length === 1} onClick={() => removeProcess(index)}>删除</button>
-              </div>)}
-            </div>
-            <datalist id="sourcing-craft-options">
-              {craftCatalog.map((craft) => <option key={craft.craftId} value={craft.craftName}>{craft.craftCode}</option>)}
-            </datalist>
-          </section>
+
         </div>
         <section className="sourcing-photo-field" aria-label="订单照片">
           <div className="section-title">
@@ -974,6 +920,9 @@ function OrderDetailPage({
   const [timeline, setTimeline] = useState<readonly SourcingTimelineEntry[]>([]);
   const [factories, setFactories] = useState<readonly SourcingFactory[]>([]);
   const [quote, setQuote] = useState<QuoteDraft>({ linePrices: [], quoteReason: "" });
+  const [processes, setProcesses] = useState<string[]>([""]);
+  const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
+  const [activeCraftQuery, setActiveCraftQuery] = useState("");
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "" });
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
@@ -1003,6 +952,7 @@ function OrderDetailPage({
         request(`sourcing/cases/${sourcingCaseId}/contract`, SourcingContractStateResponseSchema),
       ]);
       setItem(detail);
+      setProcesses((current) => current.some((value) => value.trim()) ? current : detail.processes.length ? [...detail.processes] : [""]);
       setAttachments(evidence.items);
       setTimeline(history.items);
       setFactoryChange(currentFactoryChange.item);
@@ -1041,6 +991,46 @@ function OrderDetailPage({
   useEffect(() => { void load(); }, [sourcingCaseId]);
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
+  useEffect(() => {
+    if (!canManage) return;
+    let mounted = true;
+    const timer = window.setTimeout(() => {
+      const query = activeCraftQuery.trim();
+      const path = query ? `master-data/crafts?q=${encodeURIComponent(query)}` : "master-data/crafts";
+      void request(path, CraftCatalogListResponseSchema)
+        .then((items) => { if (mounted) setCraftCatalog(items); })
+        .catch(() => { if (mounted) setMessage("工艺数据库加载失败，请刷新后重试。"); });
+    }, 150);
+    return () => {
+      mounted = false;
+      window.clearTimeout(timer);
+    };
+  }, [activeCraftQuery, canManage]);
+
+  const updateProcess = (index: number, value: string): void => {
+    setProcesses((current) => current.map((process, currentIndex) => (
+      currentIndex === index ? value : process
+    )));
+    setActiveCraftQuery(value);
+    actionKey.current = null;
+  };
+
+  const addProcess = (): void => {
+    if (processes.length >= MAX_SOURCING_PROCESSES) {
+      setMessage(`每张订单最多登记 ${MAX_SOURCING_PROCESSES} 项工艺`);
+      return;
+    }
+    setProcesses((current) => [...current, ""]);
+    actionKey.current = null;
+  };
+
+  const removeProcess = (index: number): void => {
+    setProcesses((current) => current.length === 1
+      ? [""]
+      : current.filter((_process, currentIndex) => currentIndex !== index));
+    actionKey.current = null;
+  };
+
   const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
   const canMerchandiserTransfer = canAct(user, "order_merchandiser", "sourcing:factory_change:request");
   const canManagementTransfer = canManage;
@@ -1119,6 +1109,25 @@ function OrderDetailPage({
     return <div className="sourcing-workspace"><Header title="订单详情" subtitle={message} badge="外发定价&选厂" /></div>;
   }
 
+  const submitManagement = async (): Promise<void> => {
+    const names = processes.map((value) => value.trim());
+    if (names.some((value) => !value) || new Set(names).size !== names.length) {
+      setMessage("请完整填写工艺及承包范围，不能重复"); return;
+    }
+    setBusy(true);
+    try {
+      const crafts = await request("master-data/crafts/ensure", CraftCatalogListResponseSchema, {
+        method: "POST", body: JSON.stringify({ craftNames: names }),
+      });
+      await submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, {
+        supplierId: decision.supplierId, linePrices: decision.linePrices,
+        craftIds: crafts.map((craft) => craft.craftId),
+        ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}),
+      }, "逐款调价、选厂与工艺及承包范围已提交老板审批");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "工艺确认失败"); }
+    finally { setBusy(false); }
+  };
+
   const mainStep = statusStep(item.status);
   const step = factoryChange?.status === "pending_owner" ? Math.max(mainStep, 3) : mainStep;
   const activeNode = WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.key ?? "finance";
@@ -1175,7 +1184,7 @@ function OrderDetailPage({
     <div className="sourcing-workspace sourcing-order-detail">
       <Header
         title={item.styleNo}
-        subtitle={item.erpOrderNo}
+        subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
         action="返回订单列表"
@@ -1192,7 +1201,8 @@ function OrderDetailPage({
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
-          <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>性别 / 款式</dt><dd>{item.gender ?? "历史未维护"} / {item.styleName ?? "历史未维护"}</dd></div>
+          <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺及承包范围</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
         </dl>
 
         <section className="sourcing-line-facts" aria-label="订单款色价格事实">
@@ -1316,8 +1326,24 @@ function OrderDetailPage({
                 })}
               </div>
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(decision.linePrices, item.lineItems))} readOnly /></label>
+          <section className="sourcing-process-editor sourcing-form-wide" aria-label="工艺及承包范围">
+            <div className="sourcing-process-editor__heading">
+              <div><strong>工艺及承包范围（必填）</strong><small>按合同乙方负责的内容顺序登记，可搜索或输入新内容；确认后进入合同第二条，包含用线、包装、装箱和运费责任。</small></div>
+              <button type="button" disabled={processes.length >= MAX_SOURCING_PROCESSES} onClick={addProcess}>＋ 新增工艺</button>
+            </div>
+            <div className="sourcing-process-editor__list">
+              {processes.map((process, index) => <div className="sourcing-process-row" key={index}>
+                <b>{String(index + 1).padStart(2, "0")}</b>
+                <label><span className="visually-hidden">第 {index + 1} 项工艺</span><input list="sourcing-craft-options" value={process} maxLength={100} onChange={(event) => updateProcess(index, event.target.value)} placeholder="例如：车缝+线+包装，回厂装箱+一程运费" /></label>
+                <button type="button" aria-label={`删除第 ${index + 1} 项工艺`} disabled={processes.length === 1} onClick={() => removeProcess(index)}>删除</button>
+              </div>)}
+            </div>
+            <datalist id="sourcing-craft-options">
+              {craftCatalog.map((craft) => <option key={craft.craftId} value={craft.craftName}>{craft.craftCode}</option>)}
+            </datalist>
+          </section>
               <label className="sourcing-form-wide"><span>选厂/调价说明</span><input value={decision.decisionReason} maxLength={500} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || decision.linePrices.some((line) => !line.unitPrice)} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, { supplierId: decision.supplierId, linePrices: decision.linePrices, ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}) }, "逐款调价与选厂已提交老板审批")}>提交调价与选厂</button>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || decision.linePrices.some((line) => !line.unitPrice)} onClick={() => void submitManagement()}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
@@ -1339,7 +1365,7 @@ function OrderDetailPage({
               <p>{"daxingUnitPrice" in item ? `大兴价：${formatBusinessCurrency(item.daxingUnitPrice ?? "")}。` : ""}{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
               <details className="sourcing-owner-decision__details">
                 <summary>查看完整订单资料</summary>
-                <p>平台订单：{item.erpOrderNo}；款色：{item.lineItems.length} 行；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
+                <p>性别：{item.gender ?? "历史未维护"}；款式：{item.styleName ?? "历史未维护"}；款色：{item.lineItems.length} 行；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
               </details>
             </div>
             {canOwner ? <div className="sourcing-owner-actions" aria-label="老板审批操作">

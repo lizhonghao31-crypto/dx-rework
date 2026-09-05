@@ -92,11 +92,10 @@ export const calculateSourcingOrderQuantity = (
 };
 
 export const CreateSourcingCaseSchema = z.object({
-  erpOrderNo: ShortTextSchema,
+  gender: z.enum(["男装", "女装"]),
+  styleName: ShortTextSchema,
   estimatedCutPieceSendDate: BusinessDateSchema,
   deliveryDate: BusinessDateSchema,
-  craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
-    .refine((ids) => new Set(ids).size === ids.length, "工艺不能重复"),
   lineItems: z.array(SourcingCaseLineInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .superRefine((lines, context) => {
       try {
@@ -146,6 +145,8 @@ export const CreateSourcingIeQuoteSchema = z.object({
 }));
 
 export const RecordSourcingManagementDecisionSchema = z.object({
+  craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
+    .refine((ids) => new Set(ids).size === ids.length, "工艺及承包范围不能重复"),
   supplierId: IdSchema,
   linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .refine(
@@ -160,6 +161,7 @@ export const RecordSourcingManagementDecisionSchema = z.object({
   }
 }).transform((input) => ({
   supplierId: input.supplierId,
+  craftIds: input.craftIds,
   linePrices: input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }],
   decisionReason: input.decisionReason,
 }));
@@ -349,6 +351,8 @@ export const SourcingOwnerDecisionSchema = z.object({
 }).strict();
 
 export const SourcingApprovalSnapshotSchema = z.object({
+  gender: z.enum(["男装", "女装"]).nullable().default(null),
+  styleName: z.string().nullable().default(null),
   sourcingApprovalSnapshotId: IdSchema,
   sourcingDecisionId: IdSchema,
   decisionVersion: z.number().int().positive(),
@@ -393,6 +397,8 @@ export const SourcingCaseLineSchema = z.object({
 }).strict();
 
 export const SourcingCaseSummarySchema = z.object({
+  gender: z.enum(["男装", "女装"]).nullable().default(null),
+  styleName: z.string().nullable().default(null),
   sourcingCaseId: IdSchema,
   erpOrderId: z.string(),
   erpOrderNo: z.string(),
@@ -416,6 +422,10 @@ export const SourcingCaseSummarySchema = z.object({
   ownerDecision: SourcingOwnerDecisionSchema.nullable(),
   approvalSnapshot: SourcingApprovalSnapshotSchema.nullable().default(null),
 }).strict();
+
+export const SourcingStyleCatalogSchema = z.array(z.object({
+  styleId: IdSchema, styleName: ShortTextSchema,
+}).strict()).max(50);
 
 export const SourcingCaseListResponseSchema = z.object({
   items: z.array(SourcingCaseSummarySchema).max(15),

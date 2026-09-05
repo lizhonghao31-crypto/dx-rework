@@ -342,8 +342,34 @@ describe("access routes", () => {
     expect(wrongRole.service.updateTemporaryWorkerProfile).not.toHaveBeenCalled();
   });
 
-  it("lets order merchandisers read and create reusable sourcing crafts", async () => {
+  it.each([{ roles: [] }, { roles: ["order_merchandiser"] }])("keeps Root craft mutation authorized with roles $roles", async ({ roles }) => {
+    const { app, service } = create(["sourcing:inquiry:create"], roles, true);
+    const result = await app.inject({
+      method: "POST", url: "/master-data/crafts/ensure",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { craftNames: ["车缝+线+包装，回厂装箱+一程运费"] },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(service.ensureCrafts).toHaveBeenCalledWith(expect.objectContaining({
+      actorRoles: expect.arrayContaining(["root_superuser"]),
+      authorizationCapability: "master_data:manage",
+      authorizationCapabilities: expect.arrayContaining(["master_data:manage"]),
+    }), { craftNames: ["车缝+线+包装，回厂装箱+一程运费"] });
+  });
+
+  it("rejects node 1 craft mutations for a non-root merchandiser", async () => {
     const { app, service } = create(["sourcing:inquiry:create"], ["order_merchandiser"]);
+    const result = await app.inject({
+      method: "POST", url: "/master-data/crafts/ensure",
+      headers: { cookie: "dx_rework_session=trusted" },
+      payload: { craftNames: ["车缝"] },
+    });
+    expect(result.statusCode).toBe(403);
+    expect(service.ensureCrafts).not.toHaveBeenCalled();
+  });
+
+  it("lets production managers read and create reusable sourcing crafts", async () => {
+    const { app, service } = create(["sourcing:decision:record"], ["production_management"]);
     const read = await app.inject({
       method: "GET",
       url: "/master-data/crafts?q=水洗",
@@ -362,14 +388,14 @@ describe("access routes", () => {
     expect(service.ensureCrafts).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: "00000000-0000-4000-8000-000000000001",
-        actorRoles: ["order_merchandiser"],
-        authorizationCapability: "sourcing:inquiry:create",
+        actorRoles: ["production_management"],
+        authorizationCapability: "sourcing:decision:record",
         requestId: "craft-request-1",
       }),
       { craftNames: ["水洗", "整烫"] },
     );
 
-    const wrongRole = create(["sourcing:inquiry:create"], ["quality_control"]);
+    const wrongRole = create(["sourcing:decision:record"], ["quality_control"]);
     expect((await wrongRole.app.inject({
       method: "POST",
       url: "/master-data/crafts/ensure",

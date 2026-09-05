@@ -165,10 +165,9 @@ describe("sourcing PR03 routes", () => {
         "idempotency-key": "sourcing-create-key-1",
       },
       payload: {
-        erpOrderNo: "ERP-100",
+        gender: "男装", styleName: "梭织短裤",
         estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
-        craftIds: ["00000000-0000-4000-8000-000000000401"],
         lineItems: [{
           styleNo: "DX-100",
           color: "黑色",
@@ -188,10 +187,9 @@ describe("sourcing PR03 routes", () => {
         requestId: "sourcing-create-1",
       }),
       {
-        erpOrderNo: "ERP-100",
+        gender: "男装", styleName: "梭织短裤",
         estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
-        craftIds: ["00000000-0000-4000-8000-000000000401"],
         lineItems: [{
           styleNo: "DX-100",
           color: "黑色",
@@ -239,10 +237,9 @@ describe("sourcing PR03 routes", () => {
         "idempotency-key": "forbidden-create",
       },
       payload: {
-        erpOrderNo: "ERP-101",
+        gender: "男装", styleName: "梭织短裤",
         estimatedCutPieceSendDate: "2026-09-11",
         deliveryDate: "2026-09-16",
-        craftIds: ["00000000-0000-4000-8000-000000000402"],
         lineItems: [{
           styleNo: "DX-101",
           color: "黑色",
@@ -294,10 +291,9 @@ describe("sourcing PR03 routes", () => {
         "idempotency-key": "root-create",
       },
       payload: {
-        erpOrderNo: "ERP-ROOT",
+        gender: "男装", styleName: "梭织短裤",
         estimatedCutPieceSendDate: "2026-09-12",
         deliveryDate: "2026-09-17",
-        craftIds: ["00000000-0000-4000-8000-000000000403"],
         lineItems: [{
           styleNo: "DX-ROOT",
           color: "黑色",
@@ -334,6 +330,7 @@ describe("sourcing PR03 routes", () => {
         "idempotency-key": "root-management",
       },
       payload: {
+        craftIds: ["00000000-0000-4000-8000-000000000401"],
         supplierId: "00000000-0000-4000-8000-000000000200",
         unitPrice: "8.5",
       },
@@ -442,6 +439,7 @@ describe("sourcing PR03 routes", () => {
         "idempotency-key": "management-key-1",
       },
       payload: {
+        craftIds: ["00000000-0000-4000-8000-000000000401"],
         supplierId: "00000000-0000-4000-8000-000000000200",
         linePrices: [{ position: 1, unitPrice: "12.5000" }],
         decisionReason: "结合工厂产能调整",
@@ -455,6 +453,7 @@ describe("sourcing PR03 routes", () => {
       }),
       caseSummary.sourcingCaseId,
       {
+        craftIds: ["00000000-0000-4000-8000-000000000401"],
         supplierId: "00000000-0000-4000-8000-000000000200",
         linePrices: [{ position: 1, unitPrice: "12.5000" }],
         decisionReason: "结合工厂产能调整",
