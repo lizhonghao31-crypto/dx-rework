@@ -1380,3 +1380,5 @@
     text-align: left;
   }
 }
+
+.sourcing-order-classification { display: grid; gap: var(--dx-form-section-padding); min-width: 0; }

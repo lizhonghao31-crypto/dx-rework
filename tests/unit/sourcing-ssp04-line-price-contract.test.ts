@@ -49,6 +49,7 @@ describe("SSP-04 per-line price contracts", () => {
     expect(CreateSourcingIeQuoteSchema.parse({ unitPrice: "8.5" }).linePrices)
       .toEqual([{ position: 1, unitPrice: "8.5" }]);
     expect(RecordSourcingManagementDecisionSchema.parse({
+      craftIds: ["00000000-0000-4000-8000-000000000401"],
       supplierId: "11111111-1111-4111-8111-111111111111",
       linePrices: [
         { position: 1, unitPrice: "12.0000" },

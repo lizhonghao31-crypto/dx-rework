@@ -61,89 +61,22 @@ runWithPostgres("versioned sourcing craft catalog", () => {
     await adminDatabase.end();
   });
 
-  it("binds only enabled crafts to new orders and preserves ordered snapshots", async () => {
-    const [cutting, buttoning] = await service.ensureCrafts(actor("order-crafts"), {
-      craftNames: ["裁片定位", "钉扣"],
-    });
-
-    const created = await sourcingService.createCase(sourcingActor("order-create"), {
-      erpOrderNo: "ERP-CRAFT-001",
-      estimatedCutPieceSendDate: "2026-09-25",
-      deliveryDate: "2026-09-30",
-      lineItems: [{
-        styleNo: "CRAFT-001",
-        color: "黑色",
-        quantity: 80,
-        externalUnitPrice: "12.0000",
-      }],
-      daxingUnitPrice: "10.0000",
-      craftIds: [buttoning!.craftId, cutting!.craftId],
-
-    }, "order-craft-create-key");
-
-    expect(created.value).toMatchObject({
-      processes: ["钉扣", "裁片定位"],
-      crafts: [
-        {
-          position: 1,
-          craftId: buttoning!.craftId,
-          craftName: "钉扣",
-          craftVersion: 1,
-        },
-        {
-          position: 2,
-          craftId: cutting!.craftId,
-          craftName: "裁片定位",
-          craftVersion: 1,
-        },
-      ],
-    });
-
-    await service.reviseCraft(actor("disable-bound-craft"), buttoning!.craftId, {
-      craftName: "钉扣（暂停）",
-      active: false,
-      changeReason: "暂不允许新订单选择",
-    });
-
-    expect((await database.query(
-      `SELECT position,craft_id,craft_version,craft_name_snapshot
-       FROM sourcing_case_crafts
-       WHERE sourcing_case_id=$1
-       ORDER BY position`,
-      [created.value.sourcingCaseId],
-    )).rows).toEqual([
-      {
-        position: 1,
-        craft_id: buttoning!.craftId,
-        craft_version: 1,
-        craft_name_snapshot: "钉扣",
-      },
-      {
-        position: 2,
-        craft_id: cutting!.craftId,
-        craft_version: 1,
-        craft_name_snapshot: "裁片定位",
-      },
+  it("creates node 1 without crafts and deduplicates its style catalog", async () => {
+    const input = {
+      gender: "男装" as const,styleName: "梭织短裤",estimatedCutPieceSendDate: "2026-09-25",deliveryDate: "2026-09-30",
+      lineItems: [{styleNo: "CRAFT-001",color: "黑色",quantity: 80,externalUnitPrice: "12.0000"}],daxingUnitPrice: "10.0000",
+    };
+    const [first, second] = await Promise.all([
+      sourcingService.createCase(sourcingActor("order-create-1"), input, "order-1"),
+      sourcingService.createCase(sourcingActor("order-create-2"), { ...input,styleName: "  梭织短裤  " }, "order-2"),
     ]);
-    expect((await database.query(
-      "SELECT process_items FROM sourcing_cases WHERE sourcing_case_id=$1",
-      [created.value.sourcingCaseId],
-    )).rows[0]).toEqual({ process_items: ["钉扣", "裁片定位"] });
-
-    await expect(sourcingService.createCase(sourcingActor("inactive-order"), {
-      erpOrderNo: "ERP-CRAFT-002",
-      estimatedCutPieceSendDate: "2026-09-26",
-      deliveryDate: "2026-10-01",
-      lineItems: [{
-        styleNo: "CRAFT-002",
-        color: "黑色",
-        quantity: 20,
-        externalUnitPrice: "12.0000",
-      }],
-      daxingUnitPrice: "10.0000",
-      craftIds: [buttoning!.craftId],
-
-    }, "inactive-order-key")).rejects.toThrow("所选工艺已停用或不存在");
+    expect(first.value).toMatchObject({ gender: "男装",styleName: "梭织短裤",processes: [],crafts: [] });
+    expect(second.value).toMatchObject({ gender: "男装",styleName: "梭织短裤",processes: [],crafts: [] });
+    expect(first.value.sourcingCaseId).not.toBe(second.value.sourcingCaseId);
+    expect((await database.query("SELECT * FROM sourcing_style_catalog")).rowCount).toBe(1);
+    expect((await database.query("SELECT * FROM sourcing_case_crafts")).rowCount).toBe(0);
+    await expect(database.query("UPDATE sourcing_style_catalog SET style_name='改名'"))
+      .rejects.toMatchObject({ code: "55000" });
   });
 
   it("creates, revises, disables and reads immutable audit history", async () => {

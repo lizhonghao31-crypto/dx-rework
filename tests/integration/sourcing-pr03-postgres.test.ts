@@ -178,6 +178,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0144_sourcing_multi_style_pricing.sql",
       "0145_sourcing_line_review_approval_snapshot.sql",
       "0146_sourcing_contract_pdf_finance.sql",
+      "0147_sourcing_contract_input_correction.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -190,7 +191,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
        ($3,'生产管理',true),($4,'老板',true),($5,'应付财务',true)`,
       [merchandiserId, ieId, managerId, ownerId, financeId],
     );
-    const craftFixtures = await craftService.ensureCrafts(merchandiserActor("sourcing-craft-fixtures"), {
+    const craftFixtures = await craftService.ensureCrafts(managerActor("sourcing-craft-fixtures"), {
       craftNames: [
         "净色车缝",
         "整烫",
@@ -254,10 +255,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("creates once, records an exact IE quote and advances the audited state", async () => {
     const createKey = randomUUID();
     const input = {
-      erpOrderNo: "ERP-20260826-001",
+      gender: "男装" as const, styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-09-10",
       deliveryDate: "2026-09-15",
-      craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
       lineItems: [{
         styleNo: "DX-260826",
         color: "黑色",
@@ -271,8 +271,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const created = await service.createCase(merchandiserActor(), input, createKey);
     expect(created.reused).toBe(false);
     expect(created.value).toMatchObject({
-      erpOrderId: input.erpOrderNo,
-      erpOrderNo: input.erpOrderNo,
+      erpOrderId: created.value.sourcingCaseId,
+      gender: "男装", styleName: "梭织短裤",
+      erpOrderNo: created.value.sourcingCaseId,
       styleNo: input.lineItems[0]!.styleNo,
       laneKey: "garment_processing",
       orderQuantity: 137,
@@ -288,8 +289,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       daxingUnitPrice: "10.0000",
       estimatedCutPieceSendDate: "2026-09-10",
       deliveryDate: "2026-09-15",
-      processDescription: "净色车缝、整烫、按样衣复核",
-      processes: ["净色车缝", "整烫", "按样衣复核"],
+      processDescription: null,
+      processes: [],
       status: "pending_ie_quote",
       version: 1,
       ieQuote: null,
@@ -298,6 +299,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const replay = await service.createCase(merchandiserActor(), input, createKey);
     expect(replay.reused).toBe(true);
     expect(replay.value.sourcingCaseId).toBe(created.value.sourcingCaseId);
+    expect((await service.listStyles(merchandiserActor(), "梭织")).map((style) => style.styleName)).toEqual(["梭织短裤"]);
+    await expect(service.listStyles(ieActor(), "")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.createCase(merchandiserActor(), { ...input, gender: undefined } as never, randomUUID()))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+      supplierId: factoryId,unitPrice: "12.0000",craftIds: [],
+    }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     expect((await database.query("SELECT 1 FROM sourcing_cases")).rowCount).toBe(1);
     expect(await service.getCase(unrelatedReaderActor(), created.value.sourcingCaseId))
       .not.toHaveProperty("daxingUnitPrice");
@@ -411,6 +419,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       managerActor(),
       created.value.sourcingCaseId,
       {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
         supplierId: factoryId,
         unitPrice: "11.0000",
       },
@@ -424,6 +433,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       managerActor(),
       created.value.sourcingCaseId,
       {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
         supplierId: factoryId,
         unitPrice: "11.0000",
         decisionReason: "结合产能与交期调整",
@@ -467,6 +477,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       managerActor(),
       created.value.sourcingCaseId,
       {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
         supplierId: factoryId,
         unitPrice: "10.8136",
         decisionReason: "按老板意见恢复 IE 核价",
@@ -496,6 +507,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       version: 6,
       ownerDecision: {
         decision: "approved",
+        gender: "男装",styleName: "梭织短裤",processes: ["净色车缝", "整烫", "按样衣复核"],
         sourcingDecisionId: revision.value.decision?.sourcingDecisionId,
       },
       approvalSnapshot: {
@@ -522,8 +534,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       readerActor(),created.value.sourcingCaseId,
     )).item;
     expect(firstContract).toMatchObject({
-      contractVersion: 2,templateVersion: 1,status: "ready",missingFields: [],
+      contractVersion: 2,templateVersion: 2,status: "ready",missingFields: [],
     });
+    const frozenContract = (await database.query<{ approval_snapshot: Record<string, unknown> }>(
+      "SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",
+      [firstContract!.sourcingContractDocumentId],
+    )).rows[0]!.approval_snapshot;
+    expect(frozenContract).toMatchObject({ gender: "男装",styleName: "梭织短裤",processes: ["净色车缝", "整烫", "按样衣复核"] });
+    expect(frozenContract).not.toHaveProperty("daxingUnitPrice");
     expect(firstContract?.contractNumber).toMatch(/^DX-WF-\d{8}-\d{6}$/);
     expect(firstContract?.snapshotFingerprint).toMatch(/^[0-9a-f]{64}$/);
     expect(firstContract?.pdfAttachmentId).toMatch(/^[0-9a-f-]{36}$/);
@@ -791,11 +809,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const openAtFirstDecision = async (label: string) => {
       serial += 1;
       const created = await service.createCase(merchandiserActor(), {
-        erpOrderNo: "ERP-TRANSFER-" + label + "-" + serial,
+        gender: "男装" as const, styleName: "梭织短裤",
         estimatedCutPieceSendDate: "2026-10-15",
       deliveryDate: "2026-10-20",
-        craftIds: [craftId("车缝"), craftId("整烫")],
-        lineItems: [{
+          lineItems: [{
           styleNo: "TRANSFER-" + label + "-" + serial,
           color: "黑色",
           quantity: 100,
@@ -813,6 +830,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         managerActor(),
         created.value.sourcingCaseId,
         {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
           supplierId: factoryId,
           unitPrice: "10.0000",
           decisionReason: "首次确认加工厂和生产单价",
@@ -823,10 +841,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     };
 
     const locked = await service.createCase(merchandiserActor(), {
-      erpOrderNo: "ERP-TRANSFER-LOCKED",
+      gender: "男装" as const, styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-10-15",
       deliveryDate: "2026-10-20",
-      craftIds: [craftId("车缝")],
       lineItems: [{
         styleNo: "TRANSFER-LOCKED",
         color: "黑色",
@@ -1295,10 +1312,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("carries different row prices through review and freezes one immutable approval snapshot", async () => {
     const created = await service.createCase(merchandiserActor(), {
-      erpOrderNo: "ERP-SSP04-MULTI",
+      gender: "男装" as const, styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-10-01",
       deliveryDate: "2026-10-08",
-      craftIds: [craftId("净色车缝")],
       lineItems: [
         { styleNo: "SSP04-A", color: "黑色", quantity: 100, externalUnitPrice: "11.0000" },
         { styleNo: "SSP04-B", alternateStyleNo: "SSP04-BX", color: "白色", quantity: 50, externalUnitPrice: "8.0000" },
@@ -1325,11 +1341,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
 
     await expect(service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
       supplierId: disabledFactoryId,
       linePrices: quoted.value.ieQuote!.linePrices.map(({ position, unitPrice }) => ({ position, unitPrice })),
     }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
 
     const decided = await service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
       supplierId: factoryId,
       linePrices: [
         { position: 1, unitPrice: "12.0000" },
@@ -1417,7 +1435,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("lets only Root logically delete without losing evidence or blocking ERP reuse", async () => {
-    const deletionCraftName = "删除测试工艺";
     const attachmentId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -1427,10 +1444,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       [attachmentId, `sourcing-test/${attachmentId}.jpg`, "b".repeat(64), merchandiserId],
     );
     const created = await service.createCase(merchandiserActor(), {
-      erpOrderNo: "ERP-DELETE-1",
+      gender: "男装" as const, styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-09-26",
       deliveryDate: "2026-10-01",
-      craftIds: [craftId(deletionCraftName)],
       lineItems: [{
         styleNo: "DELETE-STYLE-1",
         color: "黑色",
@@ -1441,8 +1457,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       attachmentIds: [attachmentId],
     }, randomUUID());
     expect(created.value).toMatchObject({
-      processDescription: deletionCraftName,
-      processes: [deletionCraftName],
+      processDescription: null,
+      processes: [],
     });
 
     await expect(service.deleteByRoot(
@@ -1463,7 +1479,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       reused: true,
     });
 
-    expect((await service.listCases(readerActor(), "ERP-DELETE-1")).items).toHaveLength(0);
+    expect((await service.listCases(readerActor(), "DELETE-STYLE-1")).items).toHaveLength(0);
     await expect(service.getCase(readerActor(), created.value.sourcingCaseId))
       .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
     await expect(service.listAttachments(readerActor(), created.value.sourcingCaseId))
@@ -1520,12 +1536,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
 
     const replacement = await service.createCase(merchandiserActor(), {
-      erpOrderNo: "ERP-DELETE-1",
+      gender: "男装" as const, styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-09-27",
       deliveryDate: "2026-10-02",
-      craftIds: [craftId("重建订单工艺")],
       lineItems: [{
-        styleNo: "DELETE-STYLE-2",
+        styleNo: "DELETE-STYLE-1",
         color: "黑色",
         quantity: 99,
         externalUnitPrice: "12.0000",
@@ -1533,10 +1548,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       daxingUnitPrice: "10.0000",
     }, randomUUID());
     expect(replacement.value.sourcingCaseId).not.toBe(created.value.sourcingCaseId);
-    expect((await service.listCases(readerActor(), "ERP-DELETE-1")).items)
+    expect((await service.listCases(readerActor(), "DELETE-STYLE-1")).items)
       .toEqual([expect.objectContaining({ sourcingCaseId: replacement.value.sourcingCaseId })]);
     expect((await database.query(
-      "SELECT 1 FROM sourcing_cases WHERE erp_order_id='ERP-DELETE-1'",
+      "SELECT 1 FROM sourcing_cases WHERE style_no='DELETE-STYLE-1'",
     )).rowCount).toBe(2);
   });
 
@@ -1562,10 +1577,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }
 
     const created = await service.createCase(merchandiserActor(), {
-      erpOrderNo: `ERP-CONTRACT-MISSING-${randomUUID()}`,
+      gender: "男装" as const, styleName: "梭织短裤",
       estimatedCutPieceSendDate: "2026-10-01",
       deliveryDate: "2026-10-15",
-      craftIds: [craftId("净色车缝")],
       lineItems: [{
         styleNo: "CONTRACT-MISSING",color: "蓝色",quantity: 10,externalUnitPrice: "8.0000",
       }],
@@ -1575,6 +1589,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       unitPrice: "8.0000",
     }, randomUUID());
     await service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+        craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
       supplierId: missingSupplierId,unitPrice: "8.0000",
     }, randomUUID());
     await expect(service.decideOwner(ownerActor(), created.value.sourcingCaseId, {

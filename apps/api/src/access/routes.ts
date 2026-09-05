@@ -194,17 +194,21 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     const managesMasterData = user.capabilities.includes("master_data:manage");
     const createsSourcingOrders = user.businessRoles?.includes("order_merchandiser") === true
       && user.capabilities.includes("sourcing:inquiry:create");
-    const readsSourcing = user.capabilities.includes("sourcing:view") || createsSourcingOrders;
-    if (!isRoot && !managesMasterData && (mutation ? !createsSourcingOrders : !readsSourcing)) {
-      throw new ApplicationError("FORBIDDEN", mutation ? "仅外发跟单可新增工艺" : "无权查看工艺数据库", 403);
+    const managesSourcing = user.businessRoles?.includes("production_management") === true
+      && user.capabilities.includes("sourcing:decision:record");
+    const readsSourcing = user.capabilities.includes("sourcing:view") || createsSourcingOrders || managesSourcing;
+    if (!isRoot && !managesMasterData && (mutation ? !managesSourcing : !readsSourcing)) {
+      throw new ApplicationError("FORBIDDEN", mutation ? "仅生产管理可新增工艺及承包范围" : "无权查看工艺数据库", 403);
     }
     if (!user.businessRoles?.length && !isRoot) {
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
     }
     const authorizationCapability = managesMasterData
       ? "master_data:manage"
-      : createsSourcingOrders
-        ? "sourcing:inquiry:create"
+      : managesSourcing
+        ? "sourcing:decision:record"
+        : createsSourcingOrders
+          ? "sourcing:inquiry:create"
         : mutation
           ? "master_data:manage"
           : "sourcing:view";

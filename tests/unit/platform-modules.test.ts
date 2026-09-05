@@ -100,6 +100,6 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
     expect(sourcingCss).toContain("grid-column: 1 / -1");
     expect(sourcingPage.indexOf("<dt>调价情况</dt>"))
-      .toBeLessThan(sourcingPage.indexOf("<dt>工艺</dt>"));
+      .toBeLessThan(sourcingPage.indexOf("<dt>工艺及承包范围</dt>"));
   });
 });

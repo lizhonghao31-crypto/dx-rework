@@ -342,8 +342,8 @@ describe("access routes", () => {
     expect(wrongRole.service.updateTemporaryWorkerProfile).not.toHaveBeenCalled();
   });
 
-  it("lets order merchandisers read and create reusable sourcing crafts", async () => {
-    const { app, service } = create(["sourcing:inquiry:create"], ["order_merchandiser"]);
+  it("lets production managers read and create reusable sourcing crafts", async () => {
+    const { app, service } = create(["sourcing:decision:record"], ["production_management"]);
     const read = await app.inject({
       method: "GET",
       url: "/master-data/crafts?q=水洗",
@@ -362,14 +362,14 @@ describe("access routes", () => {
     expect(service.ensureCrafts).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: "00000000-0000-4000-8000-000000000001",
-        actorRoles: ["order_merchandiser"],
-        authorizationCapability: "sourcing:inquiry:create",
+        actorRoles: ["production_management"],
+        authorizationCapability: "sourcing:decision:record",
         requestId: "craft-request-1",
       }),
       { craftNames: ["水洗", "整烫"] },
     );
 
-    const wrongRole = create(["sourcing:inquiry:create"], ["quality_control"]);
+    const wrongRole = create(["sourcing:decision:record"], ["quality_control"]);
     expect((await wrongRole.app.inject({
       method: "POST",
       url: "/master-data/crafts/ensure",

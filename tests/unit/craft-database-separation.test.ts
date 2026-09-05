@@ -35,7 +35,7 @@ describe("sourcing craft database separation", () => {
     expect(orderCraftMigration).toContain("CREATE TABLE sourcing_case_crafts");
     expect(orderCraftMigration).toContain("sourcing_case_crafts_guard_creation");
     expect(orderCraftMigration).not.toContain("INSERT INTO sourcing_case_crafts");
-    expect(sourcingService).toContain("INSERT INTO sourcing_case_crafts");
+    expect(sourcingService).toContain("JSON.stringify(selectedCrafts)");
     expect(sourcingService).toContain("所选工艺已停用或不存在");
     expect(sourcingService).toContain("ORDER BY binding.position");
 
@@ -55,13 +55,13 @@ describe("sourcing craft database separation", () => {
     expect(routes).toContain('"sourcing:inquiry:create"');
 
     expect(sourcingPage).toContain('request("master-data/crafts/ensure"');
-    expect(sourcingPage).toContain("craftNames: normalizedProcesses");
-    expect(sourcingPage).toContain("craftIds: ensuredCrafts.map");
+    expect(sourcingPage).toContain("craftNames: names");
+    expect(sourcingPage).toContain("craftIds: crafts.map");
     expect(sourcingPage).not.toContain("processes: normalizedProcesses");
     expect(sourcingPage).toContain('list="sourcing-craft-options"');
     expect(sourcingPage).toContain('master-data/crafts?q=');
     expect(sourcingPage).toContain("activeCraftQuery");
-    expect(sourcingPage).toContain("提交订单时自动写入工艺数据库");
+    expect(sourcingPage).toContain("确认后进入合同第二条");
 
     expect(masterDataPage).toContain('view === "crafts" ? "工艺数据库"');
     expect(masterDataPage).toContain('view === "processes" ? "工序数据库"');

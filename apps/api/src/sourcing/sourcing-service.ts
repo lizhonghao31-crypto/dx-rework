@@ -69,7 +69,7 @@ const DAXING_PRICE_ROLES = new Set([
   FINANCE_RECONCILE_ROLE,
 ]);
 const LANE_KEY = "garment_processing" as const;
-const DEFAULT_CREATION_REASON = "基于平台订单创建外发定价选厂询价";
+const DEFAULT_CREATION_REASON = "创建外发定价选厂询价";
 const DEFAULT_QUOTE_REASON = "IE核定加工价格";
 const DEFAULT_MANAGEMENT_REASON = "生产管理确认加工厂与价格";
 const DEFAULT_OWNER_APPROVAL_REASON = "老板批准选厂决定";
@@ -93,6 +93,8 @@ type SourcingPricedLineRow = Readonly<{
 
 type SourcingCaseRow = Readonly<{
   sourcing_case_id: string;
+  gender: "男装" | "女装" | null;
+  style_name_snapshot: string | null;
   erp_order_id: string;
   erp_order_no: string;
   style_no: string;
@@ -165,6 +167,8 @@ type SourcingCaseRow = Readonly<{
   approval_daxing_unit_price: string | null;
   approval_estimated_cut_piece_send_date: string | null;
   approval_delivery_date: string | null;
+  approval_gender: "男装" | "女装" | null;
+  approval_style_name: string | null;
   approval_processes: string[] | null;
   approval_line_prices: readonly (SourcingPricedLineRow & {
     styleNo: string;
@@ -271,6 +275,8 @@ const mapCase = (
       }];
   return {
   sourcingCaseId: row.sourcing_case_id,
+  gender: row.gender ?? null,
+  styleName: row.style_name_snapshot ?? null,
   erpOrderId: row.erp_order_id,
   erpOrderNo: row.erp_order_no,
   styleNo: row.style_no,
@@ -373,6 +379,8 @@ const mapCase = (
           : {}),
         estimatedCutPieceSendDate: row.approval_estimated_cut_piece_send_date,
         deliveryDate: row.approval_delivery_date,
+        gender: row.approval_gender ?? null,
+        styleName: row.approval_style_name ?? null,
         processes: row.approval_processes ?? [],
         linePrices: row.approval_line_prices.map((line) => ({ ...line, quantity: Number(line.quantity) })),
         approvedBy: row.approval_by,
@@ -449,13 +457,14 @@ export class SourcingService {
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         source_case.gender,source_case.style_name_snapshot,
          source_case.daxing_unit_price::text AS daxing_unit_price,
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
-         crafts_row.crafts,
+         COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -491,6 +500,7 @@ export class SourcingService {
          snapshot.daxing_unit_price::text AS approval_daxing_unit_price,
          to_char(snapshot.estimated_cut_piece_send_date,'YYYY-MM-DD') AS approval_estimated_cut_piece_send_date,
          to_char(snapshot.delivery_date,'YYYY-MM-DD') AS approval_delivery_date,
+         snapshot.gender AS approval_gender,snapshot.style_name_snapshot AS approval_style_name,
          snapshot.processes AS approval_processes,
          snapshot_lines.line_prices AS approval_line_prices,
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
@@ -601,13 +611,14 @@ export class SourcingService {
          count(*) OVER()::text AS total_count,
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         source_case.gender,source_case.style_name_snapshot,
          source_case.daxing_unit_price::text AS daxing_unit_price,
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
          to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
-         crafts_row.crafts,
+         COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
@@ -643,6 +654,7 @@ export class SourcingService {
          snapshot.daxing_unit_price::text AS approval_daxing_unit_price,
          to_char(snapshot.estimated_cut_piece_send_date,'YYYY-MM-DD') AS approval_estimated_cut_piece_send_date,
          to_char(snapshot.delivery_date,'YYYY-MM-DD') AS approval_delivery_date,
+         snapshot.gender AS approval_gender,snapshot.style_name_snapshot AS approval_style_name,
          snapshot.processes AS approval_processes,
          snapshot_lines.line_prices AS approval_line_prices,
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
@@ -1284,19 +1296,24 @@ export class SourcingService {
     };
   }
 
+  async listStyles(actor: TrustedActorContext, query = ""): Promise<{ styleId: string; styleName: string }[]> {
+    this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
+    const result = await this.database.query<{ styleId: string; styleName: string }>(
+      `SELECT style_id AS "styleId",style_name AS "styleName" FROM sourcing_style_catalog
+       WHERE strpos(normalized_name,lower(btrim($1)))>0 ORDER BY style_name LIMIT 50`,
+      [query.slice(0,100)],
+    );
+    return result.rows;
+  }
+
   async createCase(
     actor: TrustedActorContext,
     input: CreateSourcingCase,
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
-    const erpOrderNo = normalizeText(input.erpOrderNo, "平台订单号", 100);
-    const craftIds = [...input.craftIds];
-    if (
-      craftIds.length < 1 || craftIds.length > 20
-      || new Set(craftIds).size !== craftIds.length
-      || craftIds.some((craftId) => !UUID_PATTERN.test(craftId))
-    ) fail("工艺标识无效或重复");
+    if (input.gender !== "男装" && input.gender !== "女装") fail("请选择男装或女装");
+    const styleName = normalizeText(input.styleName, "款式", 100);
     const lineItems = input.lineItems.map((line, index) => ({
       position: index + 1,
       styleNo: normalizeText(line.styleNo, "款号", 100),
@@ -1314,11 +1331,10 @@ export class SourcingService {
       return fail("订单总数量必须是1至10000000之间的整数");
     }
     const normalized = {
-      erpOrderNo,
-      erpOrderId: erpOrderNo,
+      gender: input.gender,
+      styleName,
       estimatedCutPieceSendDate: input.estimatedCutPieceSendDate,
       deliveryDate: input.deliveryDate,
-      craftIds,
       lineItems,
       orderQuantity,
       daxingUnitPrice: normalizeSourcingUnitPrice(input.daxingUnitPrice),
@@ -1335,46 +1351,24 @@ export class SourcingService {
         requestHash: requestHash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const selectedCrafts = (await client.query<{
-              position: number;
-              craft_id: string;
-              craft_code: string;
-              craft_version: number;
-              craft_name: string;
-            }>(
-              `SELECT requested.position::integer AS position,
-                      item.craft_id,item.craft_code,
-                      version.version AS craft_version,version.craft_name
-               FROM unnest($1::uuid[]) WITH ORDINALITY requested(craft_id,position)
-               JOIN craft_catalog_items item ON item.craft_id=requested.craft_id
-               JOIN LATERAL (
-                 SELECT history.version,history.craft_name,history.active
-                 FROM craft_catalog_versions history
-                 WHERE history.craft_id=item.craft_id
-                 ORDER BY history.version DESC
-                 LIMIT 1
-               ) version ON version.active
-               ORDER BY requested.position`,
-              [normalized.craftIds],
-            )).rows.map((craft) => ({
-              position: craft.position,
-              craftId: craft.craft_id,
-              craftCode: craft.craft_code,
-              craftVersion: craft.craft_version,
-              craftName: craft.craft_name,
-            }));
-        if (selectedCrafts.length !== normalized.craftIds.length) {
-          fail("所选工艺已停用或不存在，请重新选择", 409, "CONFLICT");
-        }
-        const persistedProcessItems = selectedCrafts.map((craft) => craft.craftName);
-        const persistedProcessDescription = persistedProcessItems.join("、");
+        await client.query(
+          `INSERT INTO sourcing_style_catalog(style_id,style_name,created_by)
+           VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING`,
+          [randomUUID(), normalized.styleName, actor.actorId],
+        );
+        const style = (await client.query<{ style_id: string; style_name: string }>(
+          `SELECT style_id,style_name FROM sourcing_style_catalog WHERE normalized_name=lower(btrim($1))`,
+          [normalized.styleName],
+        )).rows[0]!;
         const sourcingCaseId = randomUUID();
         const auditedCreationFacts = {
-          erpOrderNo: normalized.erpOrderNo,
-          erpOrderId: normalized.erpOrderId,
+          erpOrderNo: sourcingCaseId,
+          erpOrderId: sourcingCaseId,
+          gender: normalized.gender,
+          styleId: style.style_id,
+          styleName: style.style_name,
           estimatedCutPieceSendDate: normalized.estimatedCutPieceSendDate,
           deliveryDate: normalized.deliveryDate,
-          craftIds: normalized.craftIds,
           lineItems: normalized.lineItems,
           orderQuantity: normalized.orderQuantity,
           attachmentIds: normalized.attachmentIds,
@@ -1386,10 +1380,10 @@ export class SourcingService {
           entityId: sourcingCaseId,
           after: {
             ...auditedCreationFacts,
-            processes: persistedProcessItems,
-            processItems: persistedProcessItems,
-            processDescription: persistedProcessDescription,
-            crafts: selectedCrafts,
+            processes: [],
+            processItems: null,
+            processDescription: null,
+            crafts: [],
             laneKey: LANE_KEY,
             status: "pending_ie_quote",
             attachmentCount: normalized.attachmentIds.length,
@@ -1402,24 +1396,25 @@ export class SourcingService {
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
              order_quantity,delivery_date,process_description,process_items,
              created_by,operation_event_id,request_id,creation_reason,daxing_unit_price,
-             estimated_cut_piece_send_date
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
           [
             sourcingCaseId,
-            normalized.erpOrderId,
-            normalized.erpOrderNo,
+            sourcingCaseId,
+            sourcingCaseId,
             normalized.lineItems[0]!.styleNo,
             LANE_KEY,
             normalized.orderQuantity,
             normalized.deliveryDate,
-            persistedProcessDescription,
-            persistedProcessItems,
+            null,
+            null,
             actor.actorId,
             eventId,
             actor.requestId,
             DEFAULT_CREATION_REASON,
             normalized.daxingUnitPrice,
             normalized.estimatedCutPieceSendDate,
+            normalized.gender,style.style_id,style.style_name,
           ],
         );
         for (const line of normalized.lineItems) {
@@ -1436,26 +1431,6 @@ export class SourcingService {
               line.color,
               line.quantity,
               line.externalUnitPrice,
-              actor.actorId,
-              eventId,
-              actor.requestId,
-            ],
-          );
-        }
-        for (const craft of selectedCrafts) {
-          await client.query(
-            `INSERT INTO sourcing_case_crafts(
-               sourcing_case_id,position,craft_id,craft_version,
-               craft_code_snapshot,craft_name_snapshot,created_by,
-               operation_event_id,request_id
-             ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [
-              sourcingCaseId,
-              craft.position,
-              craft.craftId,
-              craft.craftVersion,
-              craft.craftCode,
-              craft.craftName,
               actor.actorId,
               eventId,
               actor.requestId,
@@ -1708,6 +1683,9 @@ export class SourcingService {
       MANAGEMENT_DECISION_ROLE,
     );
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const craftIds = [...(input.craftIds ?? [])];
+    if (craftIds.length < 1 || craftIds.length > 20 || new Set(craftIds).size !== craftIds.length
+      || craftIds.some((id) => !UUID_PATTERN.test(id))) fail("请选择工艺及承包范围，最多20项且不能重复");
     const requestedLinePrices = (input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }]).map((line) => ({
       position: line.position,
       unitPrice: normalizeSourcingUnitPrice(line.unitPrice),
@@ -1724,6 +1702,7 @@ export class SourcingService {
         requestHash: requestHash(scope, {
           sourcingCaseId,
           supplierId: input.supplierId,
+          craftIds,
           linePrices: requestedLinePrices,
           decisionReason: suppliedReason,
         }),
@@ -1825,6 +1804,37 @@ export class SourcingService {
         if (adjusted && !suppliedReason) {
           fail("调整 IE 价格时必须填写原因");
         }
+        const selectedCrafts = (await client.query<{
+              position: number;
+              craft_id: string;
+              craft_code: string;
+              craft_version: number;
+              craft_name: string;
+            }>(
+              `SELECT requested.position::integer AS position,
+                      item.craft_id,item.craft_code,
+                      version.version AS craft_version,version.craft_name
+               FROM unnest($1::uuid[]) WITH ORDINALITY requested(craft_id,position)
+               JOIN craft_catalog_items item ON item.craft_id=requested.craft_id
+               JOIN LATERAL (
+                 SELECT history.version,history.craft_name,history.active
+                 FROM craft_catalog_versions history
+                 WHERE history.craft_id=item.craft_id
+                 ORDER BY history.version DESC
+                 LIMIT 1
+               ) version ON version.active
+               ORDER BY requested.position`,
+              [craftIds],
+            )).rows.map((craft) => ({
+              position: craft.position,
+              craftId: craft.craft_id,
+              craftCode: craft.craft_code,
+              craftVersion: craft.craft_version,
+              craftName: craft.craft_name,
+            }));
+        if (selectedCrafts.length !== craftIds.length) {
+          fail("所选工艺已停用或不存在，请重新选择", 409, "CONFLICT");
+        }
         const decisionReason = suppliedReason || DEFAULT_MANAGEMENT_REASON;
         if (decisionReason.length > 500) fail("选厂说明不能超过500个字符");
         const quantity = Number(source.order_quantity);
@@ -1851,6 +1861,7 @@ export class SourcingService {
             supplierId: selected.supplier_id,
             supplierCode: selected.supplier_code,
             supplierName: selected.supplier_name,
+            crafts: selectedCrafts,
             linePrices: pricedLines,
             quantity,
             totalAmount,
@@ -1863,8 +1874,8 @@ export class SourcingService {
              source_ie_quote_id,supersedes_decision_id,source_change_request_id,
              supplier_id,supplier_code_snapshot,supplier_name_snapshot,
              unit_price,quantity,total_amount,decision_reason,decided_by,
-             operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+             operation_event_id,request_id,crafts
+           ) VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`,
           [
             decisionId,
             sourcingCaseId,
@@ -1882,6 +1893,7 @@ export class SourcingService {
             actor.actorId,
             eventId,
             actor.requestId,
+            JSON.stringify(selectedCrafts),
           ],
         );
         for (const line of pricedLines) {
@@ -1982,6 +1994,8 @@ export class SourcingService {
           estimated_cut_piece_send_date: string | null;
           delivery_date: string | null;
           process_items: string[] | null;
+          gender: "男装" | "女装" | null;
+          style_name_snapshot: string | null;
         }>(
           `SELECT current_transition.to_status AS status,current_transition.sequence,
                   decision_row.sourcing_decision_id,decision_row.decision_version,
@@ -1989,7 +2003,9 @@ export class SourcingService {
                   decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
                   decision_row.quantity,source_case.daxing_unit_price::text AS daxing_unit_price,
                   source_case.estimated_cut_piece_send_date::text AS estimated_cut_piece_send_date,
-                  source_case.delivery_date::text AS delivery_date,source_case.process_items
+                  source_case.delivery_date::text AS delivery_date,source_case.gender,source_case.style_name_snapshot,
+                  CASE WHEN decision_row.crafts IS NULL THEN source_case.process_items
+                    ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision_row.crafts) craft) END AS process_items
            FROM sourcing_cases source_case
            JOIN LATERAL (
              SELECT transition_row.to_status,transition_row.sequence
@@ -2071,19 +2087,19 @@ export class SourcingService {
                supplier_address,contract_entity_name,party_b_representative,
                payee_name,bank_account,bank_name,
                quantity,total_amount,daxing_unit_price,estimated_cut_piece_send_date,
-               delivery_date,processes,approved_by,operation_event_id,request_id
+               delivery_date,processes,approved_by,operation_event_id,request_id,gender,style_name_snapshot
              )
              SELECT $1,$2,$3,$4,$5,$6,$7,
                     supplier.address,supplier.contract_entity_name,supplier.party_b_representative,
                     supplier.payee_name,supplier.bank_account,supplier.bank_name,
-                    $8,$9,$10,$11,$12,$13,$14,$15,$16
+                    $8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
              FROM current_supplier_catalog supplier
              WHERE supplier.supplier_id=$5`,
             [snapshotId,sourcingCaseId,source.sourcing_decision_id,Number(source.decision_version),
               source.supplier_id,source.supplier_code_snapshot,source.supplier_name_snapshot,
               Number(source.quantity),totalAmount,source.daxing_unit_price,
               source.estimated_cut_piece_send_date,source.delivery_date,source.process_items ?? [],
-              actor.actorId,eventId,actor.requestId],
+              actor.actorId,eventId,actor.requestId,source.gender,source.style_name_snapshot],
           );
           await client.query(
             `INSERT INTO sourcing_approval_snapshot_lines(
@@ -2399,8 +2415,9 @@ export class SourcingService {
          source_ie_quote_id,supersedes_decision_id,source_change_request_id,
          supplier_id,supplier_code_snapshot,supplier_name_snapshot,
          unit_price,quantity,total_amount,decision_reason,decided_by,
-         operation_event_id,request_id
-      ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         operation_event_id,request_id,crafts
+      ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+        (SELECT crafts FROM sourcing_decisions WHERE sourcing_decision_id=$4))`,
       [
         decisionId, source.sourcing_case_id ?? fail("换厂订单标识缺失"),
         nextDecisionVersion, source.sourcing_decision_id, source.factory_change_request_id,
@@ -2430,7 +2447,7 @@ export class SourcingService {
            supplier_address,contract_entity_name,party_b_representative,
            payee_name,bank_account,bank_name,quantity,total_amount,daxing_unit_price,
            estimated_cut_piece_send_date,delivery_date,processes,
-           approved_by,operation_event_id,request_id
+           approved_by,operation_event_id,request_id,gender,style_name_snapshot
          )
          SELECT $1,$2,$3,$4,$5,$6,$7,
                 supplier.address,supplier.contract_entity_name,supplier.party_b_representative,
@@ -2438,9 +2455,13 @@ export class SourcingService {
                 $8,(SELECT sum(line.total_amount) FROM sourcing_decision_lines line
                     WHERE line.sourcing_decision_id=$3),
                 source_case.daxing_unit_price,source_case.estimated_cut_piece_send_date,
-                source_case.delivery_date,source_case.process_items,$9,$10,$11
+                source_case.delivery_date,
+                CASE WHEN decision.crafts IS NULL THEN COALESCE(source_case.process_items,'{}'::text[])
+                  ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision.crafts) craft) END,
+                $9,$10,$11,source_case.gender,source_case.style_name_snapshot
          FROM sourcing_cases source_case
          JOIN current_supplier_catalog supplier ON supplier.supplier_id=$5
+         JOIN sourcing_decisions decision ON decision.sourcing_decision_id=$3
          WHERE source_case.sourcing_case_id=$2`,
         [snapshotId,source.sourcing_case_id,decisionId,nextDecisionVersion,
           source.proposed_supplier_id,source.proposed_supplier_code_snapshot,

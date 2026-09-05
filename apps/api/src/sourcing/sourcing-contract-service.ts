@@ -48,6 +48,7 @@ type ContractRow = Readonly<{
   generated_at: Date | string | null;
   created_by: string;
   party_a_name?: string;
+  party_a_address?: string;
   signing_place?: string;
   terms?: Record<string, string>;
 }>;
@@ -125,6 +126,7 @@ export class SourcingContractService {
                 lpad(nextval('sourcing_contract_number_seq')::text,6,'0'),
               template.template_version,
               jsonb_build_object(
+                'gender',snapshot.gender,'styleName',snapshot.style_name_snapshot,
                 'supplierId',snapshot.supplier_id,
                 'supplierCode',snapshot.supplier_code_snapshot,
                 'supplierName',snapshot.supplier_name_snapshot,
@@ -310,7 +312,7 @@ export class SourcingContractService {
     if (!row) return this.getCurrent(actor, sourcingCaseId);
     try {
       const hydrated = await this.database.query<ContractRow>(
-        `SELECT document.*,source_case.created_by,template.party_a_name,
+        `SELECT document.*,source_case.created_by,template.party_a_name,template.party_a_address,
                 template.signing_place,template.terms
          FROM sourcing_contract_documents document
          JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
@@ -335,6 +337,10 @@ export class SourcingContractService {
         contractNumber: source.contract_number,
         contractDate: shanghaiDate(approvedAt),
         partyAName: source.party_a_name!,
+        partyAAddress: source.party_a_address ?? "历史未维护",
+        templateVersion: Number(source.template_version),
+        gender: typeof approval.gender === "string" ? approval.gender : "历史未维护",
+        styleName: typeof approval.styleName === "string" ? approval.styleName : "历史未维护",
         partyBName: value("contractEntityName"),
         partyBAddress: value("address"),
         partyBRepresentative: value("partyBRepresentative"),
@@ -356,7 +362,7 @@ export class SourcingContractService {
         terms: source.terms!,
       };
       const fingerprint = sourcingContractFingerprint(snapshot);
-      const pdf = renderSourcingContractPdf(snapshot);
+      const pdf = await renderSourcingContractPdf(snapshot);
       const attachment = await this.attachments.storeGenerated(actor, {
         filename: `${source.contract_number}.pdf`,mimeType: "application/pdf",
         content: pdf,entityType: "sourcing_contract_document",

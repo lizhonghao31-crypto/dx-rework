@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import PDFDocument from "pdfkit";
 
 export type ContractPdfLine = Readonly<{
   position: number;
@@ -11,6 +12,10 @@ export type ContractPdfLine = Readonly<{
 }>;
 
 export type ContractPdfSnapshot = Readonly<{
+  templateVersion?: number;
+  gender?: string;
+  styleName?: string;
+  partyAAddress?: string;
   contractNumber: string;
   contractDate: string;
   partyAName: string;
@@ -117,7 +122,7 @@ const toUnicodeCMap = (lines: readonly string[]): string => {
 const streamObject = (content: string): string =>
   `<< /Length ${Buffer.byteLength(content, "binary")} >>\nstream\n${content}\nendstream`;
 
-export const renderSourcingContractPdf = (snapshot: ContractPdfSnapshot): Buffer => {
+const renderLegacyContractPdf = (snapshot: ContractPdfSnapshot): Buffer => {
   const lines = contractTextLines(snapshot);
   const chunks: string[][] = [];
   for (let index = 0; index < lines.length; index += 34) chunks.push(lines.slice(index, index + 34));
@@ -171,3 +176,96 @@ export const renderSourcingContractPdf = (snapshot: ContractPdfSnapshot): Buffer
 
 export const sourcingContractFingerprint = (snapshot: ContractPdfSnapshot): string =>
   createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+
+
+// Version 1 documents retain their original rendering. Only new template versions
+// use the corrected source contract; generated documents are never regenerated.
+export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): Promise<Buffer> => {
+  if (snapshot.templateVersion !== 2) return renderLegacyContractPdf(snapshot);
+  const document = new PDFDocument({
+    size: "A4", margin: 32, bufferPages: true,
+    info: { Title: "服装加工合同", CreationDate: new Date(`${snapshot.contractDate}T00:00:00Z`),
+      ModDate: new Date(`${snapshot.contractDate}T00:00:00Z`) },
+  });
+  const chunks: Buffer[] = [];
+  const completed = new Promise<Buffer>((resolve, reject) => {
+    document.on("data", (chunk: Buffer) => chunks.push(chunk));
+    document.on("end", () => resolve(Buffer.concat(chunks)));
+    document.on("error", reject);
+  });
+
+  document.font(new URL("../assets/contract-chinese.ttf", import.meta.url).pathname);
+  const width = document.page.width - 64;
+  const bottom = document.page.height - 40;
+  let y = 32;
+  const text = (value: string, size = 9, color = "#111111"): void => {
+    document.fontSize(size).fillColor(color);
+    // PDFKit wraps CJK text and automatically continues paragraphs across pages.
+    document.text(value, 32, y, { width, lineGap: 2 });
+    y = document.y + 5;
+    if (y > bottom) { document.addPage(); y = 32; }
+  };
+  text("服装加工合同", 17);
+  text(`合同编号：${snapshot.contractNumber}    签订地点：${snapshot.signingPlace}`);
+  text(`甲方：${snapshot.partyAName}`);
+  text(`乙方：${snapshot.partyBName}`);
+  text("一、加工明细", 10);
+  const widths = [86, 82, 85, 42, 54, 58, width - 407];
+  const row = (cells: readonly string[], header = false): void => {
+    document.fontSize(8);
+    const height = Math.max(32, ...cells.map((cell, index) =>
+      document.heightOfString(cell, { width: widths[index]! - 8, lineGap: 2 }) + 12));
+    if (y + height > bottom) { document.addPage(); y = 32; tableHeader(); }
+    let x = 32;
+    cells.forEach((cell, index) => {
+      document.lineWidth(0.5).strokeColor("#333333");
+      if (header) document.rect(x, y, widths[index]!, height).fillAndStroke("#eeeeee", "#333333");
+      else document.rect(x, y, widths[index]!, height).stroke();
+      document.fillColor("#111111").text(cell, x + 4, y + 6, { width: widths[index]! - 8, lineGap: 2 });
+      x += widths[index]!;
+    });
+    y += height;
+  };
+  const tableHeader = (): void => row(["款号 / 代用款号", "颜色 / 性别款式", "发裁片时间\n（工厂发出）", "数量", "单价\n（不含税）", "金额", "货期\n（到工厂）"], true);
+  tableHeader();
+  for (const line of snapshot.lines) row([
+    `${line.styleNo}${line.alternateStyleNo ? ` / ${line.alternateStyleNo}` : ""}`,
+    `${line.color ?? "历史未维护"}\n${snapshot.gender ?? "历史未维护"}${snapshot.styleName ?? "历史未维护"}`,
+    snapshot.estimatedCutPieceSendDate, String(line.quantity), line.unitPrice,
+    line.totalAmount, snapshot.deliveryDate,
+  ]);
+  y += 5;
+  text(`合计：${snapshot.totalQuantity} 件    金额：${snapshot.totalAmount} 元`);
+  // Keep the responsibility clause intact; the full dynamic responsibility is red.
+  document.fontSize(9);
+  const responsibility = `二、乙方负责${snapshot.processes.join("、")}，甲方提供样板及面/辅料。`;
+  const responsibilityHeight = document.heightOfString(responsibility, { width, lineGap: 2 });
+  if (y + responsibilityHeight > bottom && responsibilityHeight < bottom - 32) { document.addPage(); y = 32; }
+  document.fillColor("#111111").text("二、乙方负责", 32, y, { width, lineGap: 2, continued: true });
+  document.fillColor("#c00000").text(snapshot.processes.join("、"), { continued: true });
+  document.fillColor("#111111").text("，甲方提供样板及面/辅料。");
+  y = document.y + 6;
+  const clauses = [
+    ["三、质量要求", "qualityRequirements"], ["四、交货时间", "delayPenalty"],
+    ["五、交货地点及运输方式", "logistics"], ["六、物料合理损耗及计算方法", "reasonableLoss"],
+    ["七、次品率", "defectRate"], ["八、付款方式", "payment"],
+    ["九、生效与补充协议", "effectiveness"], ["十、有效期", "validity"],
+  ] as const;
+  for (const [title, key] of clauses) text(`${title}：${snapshot.terms[key] ?? ""}`);
+  if (y + 130 > bottom) { document.addPage(); y = 32; }
+  text(`甲方（盖章）：${snapshot.partyAName}`);
+  text(`地址：${snapshot.partyAAddress ?? "历史未维护"}`);
+  text("甲方代表：________________    签署日期：____年____月____日");
+  text(`乙方（盖章）：${snapshot.partyBName}`);
+  text(`地址：${snapshot.partyBAddress}    乙方代表：${snapshot.partyBRepresentative}`);
+  text(`收款人：${snapshot.payeeName}    开户行：${snapshot.bankName}`);
+  text(`银行账号：${snapshot.bankAccount}    签署日期：____年____月____日`);
+  const pages = document.bufferedPageRange();
+  for (let index = 0; index < pages.count; index += 1) {
+    document.switchToPage(index);
+    document.page.margins.bottom = 0;
+    document.fontSize(7).fillColor("#555555").text(`${snapshot.contractNumber}    ${index + 1} / ${pages.count}`, 32, document.page.height - 26, { width, lineBreak: false });
+  }
+  document.end();
+  return completed;
+};
