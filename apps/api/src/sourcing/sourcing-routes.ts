@@ -1,5 +1,9 @@
 import {
   CreateSourcingCaseSchema,
+  DispatchSourcingOrderSchema,
+  SourcingDispatchStateSchema,
+  SourcingProductionOrderSchema,
+  SourcingProductionOrderListSchema,
   CreateSourcingIeQuoteSchema,
   DeleteSourcingCaseResponseSchema,
   DecideSourcingExceptionSchema,
@@ -20,6 +24,7 @@ import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
+import type { SourcingProductionService } from "./sourcing-production-service.js";
 import type { SourcingService } from "./sourcing-service.js";
 
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie
@@ -51,6 +56,7 @@ export type SourcingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: SourcingService;
   contracts?: SourcingContractService;
+  production?: SourcingProductionService;
   root?: RootAuthority;
 }>;
 
@@ -138,6 +144,24 @@ export function registerSourcingRoutes(
       requestId: request.id,
     };
   };
+
+  if (dependencies.production) {
+    const production = dependencies.production;
+    app.get<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/dispatch", async (request) =>
+      SourcingDispatchStateSchema.parse(await production.state(await readActor(request), caseId(request.params.sourcingCaseId))));
+    app.post<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/dispatch", async (request, reply) => {
+      const actor = await actionActor(request, "order_merchandiser", "sourcing:contract:record");
+      const parsed = DispatchSourcingOrderSchema.safeParse(request.body);
+      if (!parsed.success) validationError("请确认派单信息后提交");
+      const result = await production.dispatch(actor, caseId(request.params.sourcingCaseId), parsed.data!, idempotencyKey(request));
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(result.statusCode).send(SourcingProductionOrderSchema.parse(result.value));
+    });
+    app.get<{ Querystring: { page?: string } }>("/sourcing/production-orders", async (request) =>
+      SourcingProductionOrderListSchema.parse(await production.list(await readActor(request), Number(request.query.page ?? "1"))));
+    app.get<{ Params: { productionOrderId: string } }>("/sourcing/production-orders/:productionOrderId", async (request) =>
+      SourcingProductionOrderSchema.parse(await production.get(await readActor(request), caseId(request.params.productionOrderId))));
+  }
 
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));

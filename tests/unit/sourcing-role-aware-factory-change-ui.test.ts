@@ -28,7 +28,9 @@ describe("sourcing role-aware transfer UI", () => {
 
   it("keeps finance read-only, owner decisions concise and future nodes unavailable", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
-    expect(page).toContain("财务仅核对已批准的选厂决定，不可修改加工厂、单价、数量或总额");
+    expect(page).toContain("财务在付款、对账时核对系统信息");
+    expect(page).toContain("核对不影响跟单派单和生产");
+    expect(page).toContain("加工厂、单价、数量及总额只读");
     expect(page).toContain("财务不能在此页改写业务数据");
     expect(page).toContain("sourcing-owner-decision__lead");
     expect(page).not.toContain('className="sourcing-owner-summary"');

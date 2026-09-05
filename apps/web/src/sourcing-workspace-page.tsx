@@ -11,6 +11,9 @@ import {
   SourcingCaseSummarySchema,
   SourcingStyleCatalogSchema,
   SourcingContractStateResponseSchema,
+  SourcingDispatchStateSchema,
+  SourcingProductionOrderSchema,
+  type SourcingDispatchState,
   SourcingFactoryListResponseSchema,
   SourcingFactoryChangeStateResponseSchema,
   SourcingTimelineResponseSchema,
@@ -927,6 +930,7 @@ function OrderDetailPage({
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
+  const [dispatchState, setDispatchState] = useState<SourcingDispatchState>({ item: null, canDispatch: false });
   const [contractSupplement, setContractSupplement] = useState<ContractSupplementDraft>({});
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
   const [factoryChangeReviewReason, setFactoryChangeReviewReason] = useState("");
@@ -944,12 +948,13 @@ function OrderDetailPage({
 
   const load = async (): Promise<void> => {
     try {
-      const [detail, evidence, history, currentFactoryChange, currentContract] = await Promise.all([
+      const [detail, evidence, history, currentFactoryChange, currentContract, currentDispatch] = await Promise.all([
         request(`sourcing/cases/${sourcingCaseId}`, SourcingCaseSummarySchema),
         request(`sourcing/cases/${sourcingCaseId}/attachments`, SourcingAttachmentListResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/timeline`, SourcingTimelineResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/factory-changes/current`, SourcingFactoryChangeStateResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/contract`, SourcingContractStateResponseSchema),
+        request(`sourcing/cases/${sourcingCaseId}/dispatch`, SourcingDispatchStateSchema),
       ]);
       setItem(detail);
       setProcesses((current) => current.some((value) => value.trim()) ? current : detail.processes.length ? [...detail.processes] : [""]);
@@ -957,6 +962,7 @@ function OrderDetailPage({
       setTimeline(history.items);
       setFactoryChange(currentFactoryChange.item);
       setContract(currentContract.item);
+      setDispatchState(currentDispatch);
       setFactoryChangeDraft((current) => ({
         supplierId: current.supplierId,
         unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
@@ -1081,6 +1087,31 @@ function OrderDetailPage({
     } finally {
       setBusy(false);
     }
+  };
+
+  const dispatchOrder = async (): Promise<void> => {
+    const snapshot = item?.approvalSnapshot;
+    if (busy || !item || !snapshot || !contract || !dispatchState.canDispatch) return;
+    if (contract.sourcingApprovalSnapshotId !== snapshot.sourcingApprovalSnapshotId) {
+      setMessage("订单已更新，请刷新后确认派单信息。");
+      return;
+    }
+    setBusy(true);
+    try {
+      const confirmed = await confirmInApp(
+        `供应商：${snapshot.supplierName}\n总数量：${formatBusinessDecimal(snapshot.quantity)} 件\n交期：${snapshot.deliveryDate ?? "历史未维护"}\n合同编号：${contract.contractNumber}`,
+        { title: "确认正式派单", confirmLabel: "确认派单", cancelLabel: "取消" },
+      );
+      if (!confirmed) return;
+      await request(`sourcing/cases/${item.sourcingCaseId}/dispatch`, SourcingProductionOrderSchema, {
+        method: "POST", headers: { "idempotency-key": createClientRequestId() },
+        body: JSON.stringify({ sourcingContractDocumentId: contract.sourcingContractDocumentId, confirmed: true }),
+      });
+      await load();
+      setMessage("已正式派单，待首次生产上报。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "派单失败，请重试");
+    } finally { setBusy(false); }
   };
 
   const submitContract = async (path: string, body: unknown, success: string): Promise<void> => {
@@ -1373,7 +1404,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
-          {item.approvalSnapshot && selectedNode === "finance" ? <Surface className="rework-detail-node-preview sourcing-contract-bar">
+          {item.approvalSnapshot ? <Surface className="rework-detail-node-preview sourcing-contract-bar">
             <div className="sourcing-contract-bar__heading">
               <div><h2>系统合同</h2><p>合同仅使用老板批准快照；主档后续修改不会追改本版本。</p></div>
               {contract ? <StatusBadge tone={contract.status === "ready" ? "success" : contract.status === "generation_failed" ? "danger" : "info"}>{contract.status === "ready" ? "PDF 已生成" : contract.status === "pending_supplement" ? "待补资料" : contract.status === "generation_failed" ? "生成失败" : "生成中"}</StatusBadge> : null}
@@ -1382,9 +1413,13 @@ function OrderDetailPage({
               <dl className="sourcing-finance-reference" aria-label="系统合同版本">
                 <div><dt>合同编号</dt><dd>{contract.contractNumber}</dd></div>
                 <div><dt>合同版本</dt><dd>V{contract.contractVersion} · 模板 V{contract.templateVersion}</dd></div>
-                <div><dt>合同指纹</dt><dd>{contract.snapshotFingerprint ? `${contract.snapshotFingerprint.slice(0, 12)}…` : "生成后冻结"}</dd></div>
               </dl>
               {contract.status === "ready" && contract.pdfAttachmentId && canReadContractData ? <div className="sourcing-contract-bar__actions"><a className="dx-button dx-button--primary" href={attachmentUrl(contract.pdfAttachmentId, "preview")} target="_blank" rel="noreferrer">预览合同 PDF</a><a className="dx-button dx-button--secondary" href={attachmentUrl(contract.pdfAttachmentId, "download")} target="_blank" rel="noreferrer">下载合同</a></div> : null}
+              <div className="sourcing-contract-bar__actions" aria-label="正式派单">
+                {dispatchState.item ? <StatusBadge tone="success">{dispatchState.item.status === "shipped" ? "已发货" : dispatchState.item.status === "production_completed" ? "生产完成" : "已派单 · 生产中"}</StatusBadge>
+                  : dispatchState.canDispatch ? <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void dispatchOrder()}>正式派单</button>
+                    : <span>{contract.status === "ready" ? "待本订单跟单派单" : "合同生成后可派单"}</span>}
+              </div>
               {contract.status === "pending_supplement" ? <div className="sourcing-form-grid">
                 <p className="sourcing-form-wide">缺少：{contract.missingFields.map((field) => contractMissingLabels[field] ?? field).join("、")}。补充值只进入本合同快照，不回写供应商主档。</p>
                 {contract.canSupplement ? contract.missingFields.map((field) => <label key={field}><span>{contractMissingLabels[field] ?? field}</span><input value={contractSupplement[field] ?? ""} maxLength={300} onChange={(event) => { setContractSupplement({ ...contractSupplement, [field]: event.target.value }); actionKey.current = null; }} /></label>) : null}
@@ -1396,7 +1431,7 @@ function OrderDetailPage({
 
           {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 财务核对</h2>
-            <p>财务仅核对已批准的选厂决定，不可修改加工厂、单价、数量或总额；提交前必须对照当前系统合同 PDF。</p>
+            <p>财务在付款、对账时核对系统信息；核对不影响跟单派单和生产。加工厂、单价、数量及总额只读。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
               <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
               <div><dt>批准单价</dt><dd>{formatBusinessCurrency(item.decision.unitPrice)}</dd></div>
