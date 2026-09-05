@@ -83,6 +83,8 @@ BEGIN
  SELECT status,business_date INTO current_status,finished_on FROM sourcing_production_transitions
  WHERE production_order_id=NEW.production_order_id ORDER BY sequence DESC LIMIT 1;
  IF NEW.business_date>(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date
+ OR NOT EXISTS(SELECT 1 FROM sourcing_production_transitions dispatch WHERE dispatch.production_order_id=NEW.production_order_id
+   AND dispatch.sequence=1 AND dispatch.business_date<=NEW.business_date)
  OR audit.actor_id IS DISTINCT FROM NEW.actor_id OR audit.entity_id IS DISTINCT FROM NEW.report_id::text
  OR audit.entity_type IS DISTINCT FROM 'sourcing_production_report'
  OR audit.after_state->>'productionOrderId' IS DISTINCT FROM NEW.production_order_id::text

@@ -1818,13 +1818,43 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await reporting.scopeDirectory(rootActor())).scopes).toContainEqual(expect.objectContaining(grant));
     expect((await reporting.list(reporter())).items.map(item=>item.productionOrderId)).toEqual([order.productionOrderId]);
     await expect(reporting.detail(reporter(),other.productionOrderId)).rejects.toMatchObject({statusCode:404});
-    const key=randomUUID(),input={position:1,businessDate,quantity:10};
+    const dispatchDates=(await database.query<{dispatched_on:string;before_dispatch:string}>(
+      "SELECT business_date::text AS dispatched_on,(business_date-1)::text AS before_dispatch FROM sourcing_production_transitions WHERE production_order_id=$1 AND sequence=1",
+      [order.productionOrderId])).rows[0]!;
+    const beforeRejectedReports=await reporting.detail(reporter(),order.productionOrderId);
+    for(const user of [reporter(),rootActor()]) {
+      await expect(reporting.report(user,order.productionOrderId,{position:1,businessDate:dispatchDates.before_dispatch,quantity:1},randomUUID()))
+        .rejects.toMatchObject({statusCode:400,message:"上报业务日期不能早于正式派单日期"});
+    }
+    expect(await reporting.detail(reporter(),order.productionOrderId)).toEqual(beforeRejectedReports);
+    const key=randomUUID(),input={position:1,businessDate:dispatchDates.dispatched_on,quantity:10};
     const [first,duplicate]=await Promise.all([reporting.report(reporter(),order.productionOrderId,input,key),reporting.report(reporter(),order.productionOrderId,input,key)]);
     expect(first.value.order.completedQuantity).toBe(10);expect(duplicate.value.order.completedQuantity).toBe(10);
     await expect(reporting.report(reporter(),order.productionOrderId,{...input,quantity:11},key)).rejects.toMatchObject({code:"IDEMPOTENCY_CONFLICT"});
     const concurrent=await Promise.allSettled([reporting.report(reporter(),order.productionOrderId,{...input,quantity:6},randomUUID()),reporting.report(reporter(),order.productionOrderId,{...input,quantity:6},randomUUID())]);
     expect(concurrent.filter(result=>result.status==="fulfilled")).toHaveLength(1);
     const firstReport=first.value.history[0]!;
+    const beforeRejectedCorrections=await reporting.detail(reporter(),order.productionOrderId);
+    for(const quantity of [0,1]) {
+      await expect(reporting.correct(rootActor(),order.productionOrderId,firstReport.rootReportId,
+        {expectedReportId:firstReport.reportId,businessDate:dispatchDates.before_dispatch,quantity,reason:"验证修正日期下限"},randomUUID()))
+        .rejects.toMatchObject({statusCode:400,message:"上报业务日期不能早于正式派单日期"});
+    }
+    // Direct SQL must obey the same lower bound with otherwise matching Root audits.
+    for(const revision of [1,2]) {
+      const reportId=randomUUID(),rootReportId=revision===1?reportId:firstReport.rootReportId;
+      const reason=revision===1?null:"验证数据库修正日期下限";
+      const eventId=await new OperationEventRepository().append(database,{...rootActor(),authorizationCapability:"production-reporting"},{
+        action:revision===1?"sourcing.production.report":"sourcing.production.correct",entityType:"sourcing_production_report",entityId:reportId,
+        after:{productionOrderId:order.productionOrderId,rootReportId,revision,position:1,businessDate:dispatchDates.before_dispatch,quantity:1},
+        reason:reason??"验证数据库上报日期下限",
+      });
+      await expect(database.query(`INSERT INTO sourcing_production_reports(report_id,root_report_id,revision,production_order_id,position,business_date,quantity,actor_id,actor_name,reason,operation_event_id)
+        SELECT $1,$2,$3,$4,1,$5,1,id,display_name,$7,$8 FROM app_users WHERE id=$6`,
+        [reportId,rootReportId,revision,order.productionOrderId,dispatchDates.before_dispatch,merchandiserId,reason,eventId]))
+        .rejects.toMatchObject({code:"55000",message:"invalid production report authorization or date/state"});
+    }
+    expect(await reporting.detail(reporter(),order.productionOrderId)).toEqual(beforeRejectedCorrections);
     await reporting.correct(rootActor(),order.productionOrderId,firstReport.rootReportId,{expectedReportId:firstReport.reportId,businessDate,quantity:0,reason:"误报撤销，原值仍保留"},randomUUID());
     const corrected=await reporting.detail(reporter(),order.productionOrderId);
     expect(corrected.order.completedQuantity).toBe(6);

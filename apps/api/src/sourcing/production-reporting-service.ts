@@ -124,6 +124,10 @@ export class ProductionReportingService {
   }
   private async insertReport(client:PoolClient,actor:TrustedActorContext,id:string,reportId:string,rootReportId:string,revision:number,
     input:{position:number;businessDate:string;quantity:number},reason:string|null,before?:unknown) {
+    const dispatch=await client.query<{business_date:string}>(
+      "SELECT business_date::text FROM sourcing_production_transitions WHERE production_order_id=$1 AND sequence=1",[id]);
+    if(!dispatch.rows[0])fail("生产订单缺少正式派单记录");
+    if(input.businessDate<dispatch.rows[0].business_date)fail("上报业务日期不能早于正式派单日期",400);
     const eventId=await this.events.append(client,{...actor,authorizationCapability:CAP},{
       action:revision===1?"sourcing.production.report":"sourcing.production.correct",entityType:"sourcing_production_report",entityId:reportId,
       ...(before?{before}:{}),after:{productionOrderId:id,rootReportId,revision,position:input.position,businessDate:input.businessDate,quantity:input.quantity},reason:reason??"驻厂人员上报本次新增生产数量"});
