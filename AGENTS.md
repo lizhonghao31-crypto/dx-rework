@@ -9,8 +9,8 @@
 3. 样衣模块以 `docs/requirements/sample-system-migration-v1.0.md` 为一期业务、权限、数据、UI、迁移与验收 Golden Source。
 4. 外发定价、供应商中心、合同、正式派单、生产填报与实时看板以 `docs/requirements/sourcing-supplier-production-v1.0.md` 为一期 Golden Source。
 5. 当前平台化路线、规则隔离和新窗口读取入口以 `docs/roadmap/platform-2.0-rules-index-v1.0.md` 为准。
-6. Figma「达兴企业 UI 基础库 · Pilot」是 UI 变量与通用组件的设计 Golden Source。
-7. Figma「内部计件返工系统 · Product」是页面布局与交互验收载体。
+6. 返工模块已运行的完整 UI 是全平台现有页面与未来开发的唯一 UI Golden Source，详见 `docs/requirements/rework-ui-golden-source-v1.0.md`；覆盖所有 UI 参数及同类交互，不限导航。
+7. Figma 基础库和 Product 是基于返工基线同步的设计与验收载体，旧数值不能覆盖返工实际实现。
 8. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
 
 ## 2. 每次施工前的强制预检
@@ -85,8 +85,8 @@ forbidden files: <本次不得修改的路径>
 - 手机端表单正文默认保证清晰可读；不得为“信息密度”大量使用超小字号。
 - 管理座舱中李总、伍云峰、张文豪使用同一套完整信息界面；李总与伍总同级同权，张文豪按执行职责获得操作能力，本厂承担最终审批仍由李总或伍总完成；所有操作通过审计日志追踪。
 - 李同生使用中层工作台；基础员工只显示与其职责和待办有关的内容。
-- 页面实现不得先于已验收的设计系统基础变量与组件。
-- 为保证新模块与已部署系统像素对齐，最新 `main` 的 `packages/ui` token 和共享组件是现有页面计算尺寸的实施基线；Figma 负责设计意图和验收。若二者数值不一致，必须通过独立设计系统 PR 统一，任何业务模块 PR 不得静默修改全局 token 或自选其中一套。
+- 页面实现必须继承已验收返工模块的同类组件；新增布局按规则提供预览，同值参数对齐使用返工原页面作为基准。
+- 任何 UI 工作先读取 `docs/requirements/rework-ui-golden-source-v1.0.md`。返工实际参数优先于共享 token 中的冲突值及旧文档；通过独立共享 UI PR 同步规则、token、组件与现有页面。不得为迁就旧 token 反改已验收返工，未来模块也不得另造参数。
 
 ## 7. 数据与集成原则
 

@@ -15,7 +15,8 @@
 2. `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；
 3. 本索引；
 4. 本次任务对应的唯一业务规则；
-5. GitHub 最新 `main`、开放 PR、当前 Head、CI 和 Review 状态。
+5. 任何 UI 工作补读 `docs/requirements/rework-ui-golden-source-v1.0.md`；合同工作补读 `docs/requirements/sourcing-contract-field-audit-v1.1.md`。
+6. GitHub 最新 `main`、开放 PR、当前 Head、CI 和 Review 状态。
 
 不得用旧聊天中的 SHA、PR 状态和口头摘要代替 GitHub 当前事实。
 
@@ -23,7 +24,7 @@
 
 | 路线 | 唯一详细规则 | 当前状态 | 下一步 |
 |---|---|---|---|
-| 外发定价、供应商中心、合同与实时生产 | `docs/requirements/sourcing-supplier-production-v1.0.md` | 规则已定稿；功能 PR 尚未按新规则开工 | 完成 UI 高保真门禁后，从 SSP-01 开始 |
+| 外发定价、供应商中心、合同与实时生产 | `docs/requirements/sourcing-supplier-production-v1.0.md` | SSP-01—05已合并；UI及合同纠偏进行中 | 按2026-09-05纠偏规则收口；SSP-06保持暂停 |
 | 样衣系统平台化迁移 | `docs/requirements/sample-system-migration-v1.0.md` | 规则已定稿；尚未开工 | 业务负责人明确启动后，从样衣 PR-1 开始 |
 | 现有返工、订单回货和已交付平台能力 | `docs/requirements/startup-requirements-v1.2.md` 与最新 `main` | 已运行并持续维护 | 仅按单独明确需求维护，不夹入上述新路线 |
 

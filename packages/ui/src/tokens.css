@@ -21,5 +21,41 @@
   --dx-v2-space-5: 16px;
   --dx-v2-space-6: 20px;
   --dx-v2-shadow-raised: 6px 6px 12px rgba(75, 90, 105, 0.2), -5px -5px 10px rgba(255, 255, 255, 0.95);
+  /* Ordinary form controls: the existing rework V2 form is authoritative. */
+  --dx-sidebar-width: 280px;
+  --dx-content-padding: 32px;
+  --dx-body-font-size: 13px;
+  --dx-body-line-height: 20px;
+  --dx-form-control-height: 42px;
+  --dx-form-control-font-size: 12px;
+  --dx-form-control-border: #c9ced6;
+  --dx-form-control-background: #fff;
+  --dx-form-label-gap: 5px;
+  --dx-form-label-size: 12px;
+  --dx-form-label-weight: 700;
+  --dx-form-section-padding: 16px;
+  --dx-button-height: 40px;
+  --dx-navigation-height: 50px;
+  --dx-navigation-icon-size: 28px;
+  --dx-status-success: #087f61;
+  --dx-status-success-bg: #dcf7ed;
+  --dx-status-danger: #c52e3d;
+  --dx-status-warning-bg: #fff0cc;
   --dx-v2-font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+
+@media (max-width: 600px) {
+  :root {
+    --dx-form-control-height: 48px;
+    --dx-form-control-font-size: 16px;
+    --dx-form-section-padding: 12px;
+  }
+}
+
+@media (max-width: 800px) {
+  :root { --dx-content-padding: 16px; }
+}
+@media (max-width: 520px) {
+  :root { --dx-content-padding: 12px; }
 }

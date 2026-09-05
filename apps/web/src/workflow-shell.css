@@ -1,5 +1,5 @@
 .app-shell {
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: var(--dx-sidebar-width) minmax(0, 1fr);
 }
 
 .app-shell > aside {
@@ -320,7 +320,7 @@
 
   .app-shell > main {
     max-width: none;
-    padding: 16px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+    padding: var(--dx-content-padding) var(--dx-content-padding) calc(96px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-shell > main .mobile-page,
@@ -355,7 +355,7 @@
 
 @media (max-width: 520px) {
   .app-shell > main {
-    padding: 12px 12px calc(92px + env(safe-area-inset-bottom, 0px));
+    padding: var(--dx-content-padding) var(--dx-content-padding) calc(92px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-shell > main .mobile-page {

@@ -103,7 +103,7 @@ function PrimaryNavigation({
             <NavigationItem icon="•" active={active === entry.name}>
               <span className="primary-navigation__copy">
                 <strong>{entry.name}</strong>
-                <small>{entry.description}</small>
+                <small title={entry.description}>{entry.description}</small>
                 {entry.name === "我的待办"
                   ? <TodoCountBadge count={pendingTodoCount} />
                   : null}
