@@ -29,6 +29,15 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const closure=new ProductionClosureService(database),receiving=new ReceivingService(database,undefined,undefined,closure);
  const factories:string[]=[];let craftId="";
  const today=()=>shanghaiDay(new Date());
+ const readyImage=async()=>{
+  const attachmentId=randomUUID(),sha256=`${randomUUID().replaceAll("-","")}${randomUUID().replaceAll("-","")}`;
+  await database.query(`INSERT INTO attachments(
+    attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+    uploaded_by,status,ready_at
+  ) VALUES($1,$2,$3,'image/jpeg',100,$4,$5,'ready',CURRENT_TIMESTAMP)`,
+  [attachmentId,`ssp09-receiving/${attachmentId}`,`${attachmentId}.jpg`,sha256,warehouse]);
+  return attachmentId;
+ };
  beforeAll(async()=>{
   await admin.query(`CREATE SCHEMA ${schema}`);
   const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
@@ -109,7 +118,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  it("keeps shipped distinct from received and atomically links only the selected shipment",async()=>{
   const order=await create(factories[1]!,"RECEIPT"),off=await create(factories[2]!,"OFF");
   await closure.setPilot(root(),{supplierId:factories[1],enabled:true});
-  const payload={styleNo:order.firstStyleNo,documentQuantity:25,actualQuantity:24,productionOrderId:order.productionOrderId};
+  const payload={styleNo:order.firstStyleNo,documentQuantity:25,actualQuantity:24,
+   attachmentIds:[await readyImage()],productionOrderId:order.productionOrderId};
   await expect(receiving.create(receiver(),payload,randomUUID())).rejects.toMatchObject({statusCode:409});
   for(const item of [order,off]){await reporting.report(root(),item.productionOrderId,{position:1,businessDate:today(),quantity:20},randomUUID());
    await reporting.report(root(),item.productionOrderId,{position:2,businessDate:today(),quantity:5},randomUUID());
