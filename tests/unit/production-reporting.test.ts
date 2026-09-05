@@ -5,7 +5,7 @@ import Fastify from "fastify";
 import { ProductionReportInputSchema, ProductionCorrectionInputSchema, ProductionExecutionInputSchema } from "@dx-rework/contracts";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { registerProductionReportingRoutes } from "../../apps/api/src/sourcing/production-reporting-routes.js";
-import { canAccessProduction, platformLandingTarget } from "../../apps/web/src/platform-modules.js";
+import { accessiblePlatformModules, canAccessProduction, platformLandingTarget, platformModuleHref } from "../../apps/web/src/platform-modules.js";
 const actor=(role:string,cap="production-reporting")=>({actorId:randomUUID(),actorRoles:[role],authorizationCapability:cap,authorizationCapabilities:[cap],requestId:randomUUID()});
 const date=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 const input={position:1,businessDate:date,quantity:1};
@@ -25,9 +25,11 @@ describe("SSP-07 reporting boundaries",()=>{
     await expect(service.correct(user,id,randomUUID(),{expectedReportId:randomUUID(),businessDate:date,quantity:0,reason:"修正"},randomUUID())).rejects.toMatchObject({statusCode:403});
     expect(connect).not.toHaveBeenCalled();
   });
-  it("requires dedicated role and capability for navigation and keeps reporter landing direct",()=>{
+  it("requires dedicated role and capability and enters the production dashboard",()=>{
     const user={id:randomUUID(),displayName:"驻厂",businessRoles:["production_reporter"],capabilities:["production-reporting"]};
-    expect(canAccessProduction(user)).toBe(true);expect(platformLandingTarget(user)).toBe("ui/production-reporting");
+    expect(canAccessProduction(user)).toBe(true);expect(platformLandingTarget(user)).toBe("ui/production-dashboard");
+    const module=accessiblePlatformModules(user).find(item=>item.id==="production")!;
+    expect(platformModuleHref(module)).toBe("ui/production-dashboard");
     expect(canAccessProduction({...user,capabilities:[]})).toBe(false);
     expect(canAccessProduction({...user,businessRoles:["worker"]})).toBe(false);
   });

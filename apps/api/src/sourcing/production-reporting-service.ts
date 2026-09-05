@@ -193,3 +193,5 @@ export class ProductionReportingService {
     }catch(error){await client.query("ROLLBACK").catch(()=>undefined);throw error;}finally{client.release();}
   }
 }
+
+export { canRead as canReadProductionReporting, visible as productionVisibility, visibility as productionVisibilityArgs };

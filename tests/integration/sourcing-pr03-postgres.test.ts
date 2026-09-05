@@ -1,3 +1,4 @@
+import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -184,11 +185,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0147_sourcing_contract_input_correction.sql",
       "0148_sourcing_formal_dispatch.sql",
       "0149_sourcing_production_reporting.sql",
+      "0150_sourcing_production_progress_snapshot.sql",
     ]) {
-      await database.query(await readFile(
-        new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
-        "utf8",
-      ));
+      const sql=await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url),"utf8");
+      if(migration==="0150_sourcing_production_progress_snapshot.sql") {
+        // Match the deploy migrator's explicit transaction for the upgrade lock.
+        await database.query("BEGIN");
+        try { await database.query(sql); await database.query("COMMIT"); }
+        catch(error) { await database.query("ROLLBACK"); throw error; }
+      } else await database.query(sql);
     }
     await database.query(
       `INSERT INTO app_users(id,display_name,enabled) VALUES
@@ -1811,6 +1816,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       return (await production.dispatch(rootActor(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
     };
     const order=await createProduction("ONE"),other=await createProduction("TWO");
+    const dashboard=new ProductionDashboardService(database,reporting);
+    expect((await dashboard.list(reporter())).items).toHaveLength(0);
     expect((await reporting.list(reporter())).items).toHaveLength(0);
     await expect(reporting.report(reporter(),order.productionOrderId,{position:1,businessDate,quantity:10},randomUUID())).rejects.toMatchObject({statusCode:403});
     const grant={userId:reporterId,scopeType:"order" as const,scopeId:order.productionOrderId,active:true};
@@ -1818,6 +1825,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await reporting.scopeDirectory(rootActor())).scopes).toContainEqual(expect.objectContaining(grant));
     expect((await reporting.list(reporter())).items.map(item=>item.productionOrderId)).toEqual([order.productionOrderId]);
     await expect(reporting.detail(reporter(),other.productionOrderId)).rejects.toMatchObject({statusCode:404});
+    await expect(dashboard.detail(reporter(),other.productionOrderId)).rejects.toMatchObject({statusCode:404});
+    await expect(dashboard.list(financeActor())).rejects.toMatchObject({statusCode:403});
+    const pending=await dashboard.list(reporter());
+    expect(pending.items.map(i=>i.order.productionOrderId)).toEqual([order.productionOrderId]);
+    expect(pending.items[0]!.progress).toMatchObject({progressState:"pending_first_report",timeProgress:null,attention:false});
     const dispatchDates=(await database.query<{dispatched_on:string;before_dispatch:string}>(
       "SELECT business_date::text AS dispatched_on,(business_date-1)::text AS before_dispatch FROM sourcing_production_transitions WHERE production_order_id=$1 AND sequence=1",
       [order.productionOrderId])).rows[0]!;
@@ -1871,6 +1883,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await reporting.setScope(rootActor(),{userId:reporterId,scopeType:"supplier",scopeId:factoryId,active:true},randomUUID());
     expect((await reporting.list(reporter(),{supplierId:factoryId,q:"REPORT-"})).totalCount).toBe(2);
     await expect(reporting.execute(reporter(),order.productionOrderId,"ship",{businessDate,confirmed:true},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const running=await dashboard.list(reporter(),{q:"REPORT-ONE"});
+    expect((await dashboard.detail(reporter(),order.productionOrderId)).progress).toEqual(running.items[0]!.progress);
+    const laterClock=new Date(Date.now()+3*86400000);
+    const laterDashboard=new ProductionDashboardService(database,reporting,()=>laterClock);
+    const stale=await laterDashboard.list(reporter(),{q:"REPORT-ONE",previousAsOf:running.asOf,progressState:"stale"});
+    expect(stale).toMatchObject({totalCount:1,counts:{attention:1}});
+    expect(stale.items[0]!.progress).toMatchObject({progressState:"stale",daysWithoutUpdate:3});
+    expect(stale.events.some(e=>e.kind==="progress_changed"&&e.progressState==="stale")).toBe(true);
     const finish=await reporting.execute(reporter(),order.productionOrderId,"complete",{businessDate,confirmed:true},randomUUID());
     expect(finish.value.order).toMatchObject({status:"production_completed",completedQuantity:16,quantity:30,firstReportedOn:businessDate});
     await expect(reporting.report(reporter(),order.productionOrderId,{...input,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -1880,9 +1900,41 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await reporting.execute(reporter(),order.productionOrderId,"ship",{businessDate,confirmed:true},shipKey)).value.shipment).toEqual(shipped.value.shipment);
     expect(JSON.stringify(shipped.value)).not.toMatch(/daxing|777\.1234|unitPrice|bankAccount|totalAmount/);
     expect(shipped.value.order.status).toBe("shipped");
+    const frozen=await dashboard.detail(reporter(),order.productionOrderId);
+    expect(frozen.progress).toMatchObject({frozen:true,completedQuantity:16,progressState:"completed",attention:false});
+    expect((await laterDashboard.detail(reporter(),order.productionOrderId)).progress).toEqual(frozen.progress);
+    const remaining=shipped.value.history.find(h=>h.effective&&h.quantity===6)!;
+    await reporting.correct(rootActor(),order.productionOrderId,remaining.rootReportId,
+      {expectedReportId:remaining.reportId,businessDate,quantity:3,reason:"完工后修正保留完成时看板"},randomUUID());
+    const afterCorrection=await dashboard.detail(reporter(),order.productionOrderId);
+    expect(afterCorrection.detail.order.completedQuantity).toBe(13);
+    expect(afterCorrection.progress).toEqual(frozen.progress);
+    await expect(database.query("UPDATE sourcing_production_progress_snapshots SET completed_quantity=99 WHERE production_order_id=$1",[order.productionOrderId])).rejects.toBeDefined();
+    const completedBoard=await dashboard.list(reporter(),{q:"REPORT-ONE"});
+    expect(completedBoard.items[0]!.progress).toEqual(frozen.progress);
+    expect(completedBoard.events.some(e=>e.kind==="correct")).toBe(true);
+    expect(JSON.stringify([completedBoard,afterCorrection])).not.toMatch(/daxing|777\.1234|unitPrice|bankAccount|totalAmount/);
     expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[order.sourcingCaseId])).rowCount).toBe(0);
     await service.deleteByRoot(rootActor(),order.sourcingCaseId,randomUUID());
     expect((await reporting.detail(reporter(),order.productionOrderId)).order.sourceCaseArchived).toBe(true);
+    // Upgrade path: an older completion has no SSP-08 snapshot, then receives a later correction.
+    const legacy=await createProduction("LEGACY");
+    const legacyReport=await reporting.report(rootActor(),legacy.productionOrderId,{position:1,businessDate,quantity:10},randomUUID());
+    await database.query("ALTER TABLE sourcing_production_transitions DISABLE TRIGGER sourcing_production_progress_capture");
+    try { await reporting.execute(rootActor(),legacy.productionOrderId,"complete",{businessDate,confirmed:true},randomUUID()); }
+    finally { await database.query("ALTER TABLE sourcing_production_transitions ENABLE TRIGGER sourcing_production_progress_capture"); }
+    const legacyOriginal=legacyReport.value.history[0]!;
+    await reporting.correct(rootActor(),legacy.productionOrderId,legacyOriginal.rootReportId,
+      {expectedReportId:legacyOriginal.reportId,businessDate,quantity:0,reason:"历史完工之后的修正"},randomUUID());
+    const migrationSql=await readFile(new URL("../../apps/api/migrations/0150_sourcing_production_progress_snapshot.sql",import.meta.url),"utf8");
+    const backfillSql=migrationSql.slice(migrationSql.indexOf("INSERT INTO sourcing_production_progress_snapshots"),migrationSql.indexOf("CREATE FUNCTION capture_sourcing_production_progress"))
+      .replace("WHERE transition.status='production_completed';","WHERE transition.status='production_completed' AND transition.production_order_id=$1;");
+    await database.query("ALTER TABLE sourcing_production_progress_snapshots DISABLE TRIGGER sourcing_production_progress_snapshot_guard");
+    try { await database.query(backfillSql,[legacy.productionOrderId]); }
+    finally { await database.query("ALTER TABLE sourcing_production_progress_snapshots ENABLE TRIGGER sourcing_production_progress_snapshot_guard"); }
+    const legacyFrozen=await dashboard.detail(rootActor(),legacy.productionOrderId);
+    expect(legacyFrozen.detail.order.completedQuantity).toBe(0);
+    expect(legacyFrozen.progress).toMatchObject({completedQuantity:10,firstReportedOn:businessDate,frozen:true,attention:false});
   });
 
 });

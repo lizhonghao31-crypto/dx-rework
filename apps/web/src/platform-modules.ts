@@ -29,7 +29,7 @@ export function accessiblePlatformModules(user: AuthorizedUser): readonly Platfo
   const reworkHref = landingTarget(user);
   if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing/pending" });
   if (canAccessSupplierCenter(user)) modules.push({ id: "suppliers", href: "ui/suppliers" });
-  if (canAccessProduction(user)) modules.push({ id: "production", href: "ui/production-reporting" });
+  if (canAccessProduction(user)) modules.push({ id: "production", href: "ui/production-dashboard" });
   if (reworkHref) modules.push({ id: "rework", href: reworkHref });
   return modules;
 }
