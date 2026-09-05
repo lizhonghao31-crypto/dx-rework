@@ -16,7 +16,7 @@ describe("wage web and xlsx delivery", () => {
     expect(first.includes(Buffer.from("xl/worksheets/sheet2.xml"))).toBe(true);
   });
 
-  it("wires wage viewing, direct month close and exports without review or adjustment", async () => {
+  it("wires read-only wage viewing and exports without review, adjustment or month close", async () => {
     const [app, list, detail, routes, exportService] = await Promise.all([
       readFile(new URL("../../apps/web/src/App.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/wages/wage-period-list.tsx", import.meta.url), "utf8"),
@@ -28,8 +28,8 @@ describe("wage web and xlsx delivery", () => {
     expect(app).toContain('{ requiredCapability: "wage:view" }');
     expect(list).not.toContain("window.setInterval");
     expect(list).not.toContain('window.addEventListener("focus"');
-    expect(detail).toContain("wage-periods/${period.periodId}/lock");
-    expect(detail).toContain(">月结锁定</Button>");
+    expect(detail).not.toContain("wage-periods/${period.periodId}/lock");
+    expect(detail).not.toContain(">月结锁定</Button>");
     expect(detail).toContain("export.xlsx");
     expect(detail).toContain("supplierNameSnapshot");
     expect(detail).toContain("temporaryWageMultiplier");
@@ -39,7 +39,7 @@ describe("wage web and xlsx delivery", () => {
     expect(routes).not.toContain("administrative-approve");
     expect(routes).not.toContain("administrative-return");
     expect(routes).not.toContain("/wage-adjustments");
-    expect(routes).toContain('app.post("/wage-periods/:periodId/lock"');
+    expect(routes).not.toContain('app.post("/wage-periods/:periodId/lock"');
     expect(exportService).not.toContain("adjustment_amount");
     expect(exportService).not.toContain("rework_wage_adjustments");
     expect(exportService).toContain('"工资月份","供应商"');
