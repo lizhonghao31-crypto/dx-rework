@@ -1711,7 +1711,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(database.query("DELETE FROM sourcing_production_lines WHERE production_order_id=$1", [order.productionOrderId])).rejects.toBeDefined();
     await expect(database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
       SELECT $1,production_order_id,2,'shipped',CURRENT_DATE,dispatched_by,operation_event_id FROM sourcing_production_orders WHERE production_order_id=$2`,
-      [randomUUID(), order.productionOrderId])).rejects.toMatchObject({ code: "55000", message: "illegal production transition" });
+      [randomUUID(), order.productionOrderId])).rejects.toMatchObject({
+        code: "55000", message: "production execution requires reporter scope and valid business date",
+      });
+    // A valid Root audit passes the execution permission guard, so this probes the state guard independently.
+    const prematureShipmentEventId = await new OperationEventRepository().append(database, rootActor(), {
+      action: "sourcing.production.ship", entityType: "sourcing_production_order", entityId: order.productionOrderId,
+      after: { status: "shipped" }, reason: "验证有权操作也不能跳过生产完成",
+    });
+    await expect(database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
+      VALUES($1,$2,2,'shipped',(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,$3,$4)`,
+      [randomUUID(), order.productionOrderId, merchandiserId, prematureShipmentEventId]))
+      .rejects.toMatchObject({ code: "55000", message: "illegal production transition" });
+    expect((await database.query("SELECT count(*)::int AS count FROM sourcing_production_transitions WHERE production_order_id=$1", [order.productionOrderId])).rows[0].count).toBe(1);
     // Finance may reconcile after production has already begun, without changing production.
     await service.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
     expect((await production.get(readerActor(), order.productionOrderId)).status).toBe("in_production");
