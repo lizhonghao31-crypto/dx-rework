@@ -1,3 +1,4 @@
+import { ProductionReportingService } from "./sourcing/production-reporting-service.js";
 import { SourcingProductionService } from "./sourcing/sourcing-production-service.js";
 import { loadConfig } from "@dx-rework/config";
 import { DisabledErpAdapter } from "@dx-rework/domain";
@@ -211,6 +212,7 @@ const app = buildApp({
     service: sourcingService,
     contracts: sourcingContractService,
     production: sourcingProductionService,
+    reporting: new ProductionReportingService(database),
     root: rootAuthority,
   },
   tools: {

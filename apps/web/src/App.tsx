@@ -1,3 +1,4 @@
+import { ProductionReportingPage } from "./production-reporting-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -309,6 +310,7 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
+  else if (path === "/ui/production-reporting" || /^\/ui\/production-reporting\/[0-9a-f-]+$/i.test(path)) page = <ProductionReportingPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/suppliers") page = <SupplierCenterPage mode="directory" />;
   else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage mode="manage" />;
   else if (path === "/ui/master-data") {
@@ -377,6 +379,14 @@ export function App() {
   }
   if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
+  }
+  if (path.startsWith("/ui/production-reporting")) {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
+      { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
+      { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
+    ]}>{page}</AuthGate>;
   }
   if (path.startsWith("/ui/suppliers")) {
     return <AuthGate requiredCapability="supplier_profile:read">{page}</AuthGate>;

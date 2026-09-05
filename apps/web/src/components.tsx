@@ -12,7 +12,7 @@ import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
-import { canAccessSourcing, canAccessSupplierCenter } from "./platform-modules.js";
+import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
@@ -33,6 +33,7 @@ type NavigationGroup = Readonly<{
 }>;
 
 const ROLE_LABELS: Record<string, string> = {
+  production_reporter: "驻厂生产填报",
   owner_group: "老板",
   system_admin: "系统管理员",
   production_management: "生产管理",
@@ -478,14 +479,18 @@ export function Shell({
         href: "/ui/suppliers",
       }]
     : [];
+  const productionNavigation: NavigationEntry[] = currentUser && canAccessProduction(currentUser)
+    ? [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] : [];
   const navigation: NavigationEntry[] = [
     ...globalNavigation,
+    ...productionNavigation.map(entry => ({ ...entry, name: "实时生产看板" })),
     ...reworkNavigation,
     ...mobileSourcingNavigation,
     ...mobileSupplierNavigation,
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
+    { name: "实时生产看板", description: "生产订单与填报", entries: productionNavigation },
     {
       name: "订单返工",
       description: "订单返工业务",
@@ -511,7 +516,7 @@ export function Shell({
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
-  const mobileActive = sourcingNavigation.some((entry) => entry.name === active)
+  const mobileActive = productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : sourcingNavigation.some((entry) => entry.name === active)
     ? "外发定价&选厂"
     : supplierNavigation.some((entry) => entry.name === active)
       ? "供应商中心"

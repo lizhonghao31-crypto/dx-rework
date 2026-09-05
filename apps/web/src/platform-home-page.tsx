@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const moduleCopy = {
+  production: { title: "实时生产看板", description: "查看生产订单，按负责范围上报生产、完成和发货" },
   sourcing: {
     title: "外发定价&选厂",
     description: "创建询价、主管决定工厂和单价、合同执行与财务核对",

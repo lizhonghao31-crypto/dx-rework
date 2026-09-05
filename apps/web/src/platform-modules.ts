@@ -4,7 +4,7 @@ import { landingTarget } from "./landing-target.js";
 export const PLATFORM_MODULE_QUERY = "platform_module";
 
 export type PlatformModule = Readonly<{
-  id: "rework" | "sourcing" | "suppliers";
+  id: "rework" | "sourcing" | "suppliers" | "production";
   href: string;
 }>;
 
@@ -18,11 +18,18 @@ export function canAccessSupplierCenter(user: AuthorizedUser): boolean {
   return user.isRoot === true || user.capabilities.includes("supplier_profile:read");
 }
 
+export function canAccessProduction(user: AuthorizedUser): boolean {
+  return user.isRoot === true
+    || (user.businessRoles?.includes("production_reporter") === true && user.capabilities.includes("production-reporting"))
+    || (user.businessRoles?.some(role => ["owner_group", "production_management", "order_merchandiser"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
+}
+
 export function accessiblePlatformModules(user: AuthorizedUser): readonly PlatformModule[] {
   const modules: PlatformModule[] = [];
   const reworkHref = landingTarget(user);
   if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing/pending" });
   if (canAccessSupplierCenter(user)) modules.push({ id: "suppliers", href: "ui/suppliers" });
+  if (canAccessProduction(user)) modules.push({ id: "production", href: "ui/production-reporting" });
   if (reworkHref) modules.push({ id: "rework", href: reworkHref });
   return modules;
 }

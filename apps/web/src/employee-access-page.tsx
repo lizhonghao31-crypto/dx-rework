@@ -257,6 +257,7 @@ export function EmployeeAccessPage() {
               <option value="all">全部模块</option>
               <option value="rework">返工</option>
               <option value="sourcing">报价&amp;选厂</option>
+              <option value="production">实时生产看板</option>
               <option value="platform">平台管理</option>
             </select>
             <input

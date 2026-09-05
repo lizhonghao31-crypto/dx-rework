@@ -29,31 +29,38 @@ type Source = {
   sourcing_approval_snapshot_id: string | null;
   sourcing_contract_document_id: string | null; contract_status: string | null;
 };
-type ProductionRow = { production_order_id: string; dispatched_at: Date | string; status: SourcingProductionOrder["status"]; [key: string]: unknown };
+export type ProductionRow = { production_order_id: string; dispatched_at: Date | string; status: SourcingProductionOrder["status"]; [key: string]: unknown };
 const iso = (date: Date | string): string => new Date(date).toISOString();
 // Only explicit production fields are projected. Never serialize an approval row.
-const selectProduction = `SELECT production.production_order_id,production.sourcing_case_id,
+export const selectProduction = `SELECT production.production_order_id,production.sourcing_case_id,
   production.decision_version,production.sourcing_contract_document_id,production.contract_number,
   production.contract_version,production.supplier_id,production.supplier_name_snapshot,
   production.gender,production.style_name_snapshot,production.quantity,production.processes,
   production.delivery_date::text,production.first_style_no,production.dispatched_by,production.dispatched_at,
   transition.status,source_case.deleted_at IS NOT NULL AS source_case_archived,
+  (SELECT COALESCE(sum(quantity),0)::integer FROM effective_sourcing_production_reports
+    WHERE production_order_id=production.production_order_id) AS completed_quantity,
+  (SELECT min(business_date)::text FROM effective_sourcing_production_reports
+    WHERE production_order_id=production.production_order_id AND quantity>0) AS first_reported_on,
   (SELECT jsonb_agg(jsonb_build_object('position',line.position,'styleNo',line.style_no,
-    'alternateStyleNo',line.alternate_style_no,'color',line.color,'quantity',line.quantity) ORDER BY line.position)
+    'alternateStyleNo',line.alternate_style_no,'color',line.color,'quantity',line.quantity,
+    'completedQuantity',(SELECT COALESCE(sum(quantity),0)::integer FROM effective_sourcing_production_reports
+      WHERE production_order_id=line.production_order_id AND position=line.position)) ORDER BY line.position)
    FROM sourcing_production_lines line WHERE line.production_order_id=production.production_order_id) AS lines
   FROM sourcing_production_orders production
   JOIN sourcing_cases source_case USING(sourcing_case_id)
   JOIN LATERAL (SELECT status FROM sourcing_production_transitions
     WHERE production_order_id=production.production_order_id ORDER BY sequence DESC LIMIT 1) transition ON true`;
-const toOrder = (row: ProductionRow): SourcingProductionOrder => SourcingProductionOrderSchema.parse({
+export const toOrder = (row: ProductionRow): SourcingProductionOrder => SourcingProductionOrderSchema.parse({
   productionOrderId: row.production_order_id, sourcingCaseId: row.sourcing_case_id, sourceCaseArchived: row.source_case_archived,
   decisionVersion: Number(row.decision_version), sourcingContractDocumentId: row.sourcing_contract_document_id,
   contractNumber: row.contract_number, contractVersion: Number(row.contract_version),
   supplierId: row.supplier_id, supplierName: row.supplier_name_snapshot,
   gender: row.gender, styleName: row.style_name_snapshot, quantity: Number(row.quantity),
+  completedQuantity: Number(row.completed_quantity ?? 0),
   processes: row.processes, deliveryDate: row.delivery_date, firstStyleNo: row.first_style_no,
   dispatchedBy: row.dispatched_by, dispatchedAt: iso(row.dispatched_at), status: row.status,
-  firstReportedOn: null, reportingState: row.status === "in_production" ? "pending_first_report" : null, timeProgress: null, progressAlert: null,
+  firstReportedOn: row.first_reported_on ?? null, reportingState: row.status === "in_production" && !row.first_reported_on ? "pending_first_report" : null, timeProgress: null, progressAlert: null,
   lines: row.lines,
 });
 
