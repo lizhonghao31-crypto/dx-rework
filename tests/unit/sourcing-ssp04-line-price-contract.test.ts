@@ -1,4 +1,6 @@
 import {
+  CreateSourcingIeQuoteSchema,
+  RecordSourcingManagementDecisionSchema,
   SourcingLinePriceReviewSchema,
   calculateSourcingLinesTotalExact,
 } from "@dx-rework/contracts";
@@ -38,5 +40,24 @@ describe("SSP-04 per-line price contracts", () => {
     expect(() => SourcingLinePriceReviewSchema.parse({
       linePrices: [{ position: 1, unitPrice: "12.34567" }],
     })).toThrow();
+  });
+
+  it("uses per-line prices for new calls and keeps single-line API compatibility", () => {
+    expect(CreateSourcingIeQuoteSchema.parse({
+      linePrices: [{ position: 1, unitPrice: "12.3000" }],
+    }).linePrices).toEqual([{ position: 1, unitPrice: "12.3000" }]);
+    expect(CreateSourcingIeQuoteSchema.parse({ unitPrice: "8.5" }).linePrices)
+      .toEqual([{ position: 1, unitPrice: "8.5" }]);
+    expect(RecordSourcingManagementDecisionSchema.parse({
+      supplierId: "11111111-1111-4111-8111-111111111111",
+      linePrices: [
+        { position: 1, unitPrice: "12.0000" },
+        { position: 2, unitPrice: "13.0000" },
+      ],
+    }).linePrices).toHaveLength(2);
+    expect(() => CreateSourcingIeQuoteSchema.parse({
+      unitPrice: "8.5",
+      linePrices: [{ position: 1, unitPrice: "8.5" }],
+    })).toThrow(/逐款价格/);
   });
 });

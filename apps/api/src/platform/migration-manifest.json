@@ -143,6 +143,7 @@
     { "version": "0141_rework_receiving_quantity_ceiling", "checksum": "939d22fa93017263987df72411fe5595db9b4bf1a3bee33e43e9088dd5d8a234" },
     { "version": "0142_merchandiser_responsibility_deduction_access", "checksum": "9ac93460c82727ed6723d2adbf30d8e37390e5885ca5b7794afb30fd041fca0b" },
     { "version": "0143_sourcing_supplier_profile_foundation", "checksum": "cb980b93147a2f3837ae865e247b8c8e76552b33267e1e01be5a57117059eaf5" },
-    { "version": "0144_sourcing_multi_style_pricing", "checksum": "887f52302b779c48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679" }
+    { "version": "0144_sourcing_multi_style_pricing", "checksum": "887f52302b779c48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679" },
+    { "version": "0145_sourcing_line_review_approval_snapshot", "checksum": "cd9bae15e038f33c5a43ea3c7c6f4c4eb638362563ea10e69079b51dd09b7797" }
   ]
 }
