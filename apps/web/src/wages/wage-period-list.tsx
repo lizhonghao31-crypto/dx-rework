@@ -1,6 +1,6 @@
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { Button, InsetField, Surface } from "@dx-rework/ui";
+import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
