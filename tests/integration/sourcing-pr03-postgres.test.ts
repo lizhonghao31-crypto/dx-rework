@@ -365,7 +365,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(listed.items).toHaveLength(1);
     expect(listed.items[0]?.sourcingCaseId).toBe(created.value.sourcingCaseId);
     expect((await service.listCases(readerActor(), "订单跟单")).items).toHaveLength(1);
-    expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(1);
+    expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(0);
+    expect((await service.listCases(readerActor(), "梭织短裤")).items).toHaveLength(1);
 
     expect((await database.query(
       "SELECT 1 FROM sourcing_ie_quotes WHERE sourcing_case_id=$1",
@@ -456,6 +457,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
     expect((await service.listCases(readerActor(), "一号加工厂")).items).toHaveLength(1);
     expect((await service.listCases(readerActor(), "FAC-01")).items).toHaveLength(1);
+    expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(1);
+    expect(firstDecision.value.processes).toEqual(["净色车缝", "整烫", "按样衣复核"]);
 
     const rejected = await service.decideOwner(
       ownerActor(),

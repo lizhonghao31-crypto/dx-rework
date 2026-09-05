@@ -756,6 +756,12 @@ export class SourcingService {
           OR decision_row.supplier_name_snapshot ILIKE '%'||$1||'%'
           OR decision_row.supplier_code_snapshot ILIKE '%'||$1||'%'
           OR case_view.process_description ILIKE '%'||$1||'%'
+          OR source_case.gender ILIKE '%'||$1||'%'
+          OR source_case.style_name_snapshot ILIKE '%'||$1||'%'
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(decision_row.crafts) craft
+            WHERE craft->>'craftName' ILIKE '%'||$1||'%'
+          )
           OR EXISTS (
             SELECT 1
             FROM sourcing_contract_executions contract_row
