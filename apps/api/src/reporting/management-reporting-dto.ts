@@ -22,6 +22,7 @@ export function factDto(row: FactRow): ManagementReworkRow {
     externalProposedAmount: money(row.external_proposed_amount),
     externalDeductedAmount: money(row.external_deducted_amount),
     externalRemainingAmount: money(row.external_remaining_amount),
+    deductionStatus: row.deduction_status,
     overdue: row.overdue,
     exceptionCount: row.exception_count,
     attachmentCount: row.attachment_count,

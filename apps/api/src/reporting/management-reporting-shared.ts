@@ -29,6 +29,7 @@ export type FactRow = {
   external_proposed_amount: string;
   external_deducted_amount: string;
   external_remaining_amount: string;
+  deduction_status: ManagementReworkRow["deductionStatus"];
   overdue: boolean;
   exception_count: number;
   attachment_count: number;

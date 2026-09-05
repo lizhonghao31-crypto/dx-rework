@@ -47,6 +47,7 @@ const order = {
   externalProposedAmount: "0.00",
   externalDeductedAmount: "0.00",
   externalRemainingAmount: "0.00",
+  deductionStatus: "not_started" as const,
   overdue: false,
   exceptionCount: 0,
   attachmentCount: 0,

@@ -126,7 +126,8 @@ export async function fetchFacts(source: Queryable, options: {
        SELECT case_record.rework_order_id,
          COALESCE(sum(case_record.proposed_deduction_amount),0)::text proposed,
          COALESCE(sum(COALESCE(closure.actual_deducted_amount,entry.actual,0)),0)::text deducted,
-         COALESCE(sum(COALESCE(closure.remaining_amount,case_record.proposed_deduction_amount-COALESCE(entry.actual,0))),0)::text remaining
+         COALESCE(sum(COALESCE(closure.remaining_amount,case_record.proposed_deduction_amount-COALESCE(entry.actual,0))),0)::text remaining,
+         bool_and(case_record.status='closed') all_closed
        FROM active_cases case_record LEFT JOIN entry_totals entry USING(case_id)
        LEFT JOIN rework_external_deduction_closures closure USING(case_id)
        GROUP BY case_record.rework_order_id
@@ -211,6 +212,11 @@ export async function fetchFacts(source: Queryable, options: {
        COALESCE(wages.wage_amount,'0') wage_amount,COALESCE(responsibility.responsibility_amount,'0') responsibility_amount,
        COALESCE(responsibility.own_factory_amount,'0') own_factory_amount,COALESCE(external.proposed,'0') external_proposed_amount,
        COALESCE(external.deducted,'0') external_deducted_amount,COALESCE(external.remaining,'0') external_remaining_amount,
+       CASE
+         WHEN external.rework_order_id IS NULL THEN 'not_started'
+         WHEN external.all_closed THEN 'completed'
+         ELSE 'not_deducted'
+       END deduction_status,
        CASE WHEN order_record.status='cancelled' THEN false
          ELSE COALESCE(todo_stats.overdue,false) OR COALESCE(followup_stats.overdue,false) END overdue,
        CASE WHEN order_record.status='cancelled' THEN 0

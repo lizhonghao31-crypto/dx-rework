@@ -89,7 +89,7 @@ describe("UAT interface closure", () => {
     });
   });
 
-  it("shows ready attachment counts on every order card", async () => {
+  it("collapses external deduction progress into the three management-card states", async () => {
     const [contract, shared, query, dto, card] = await Promise.all([
       read("packages/contracts/src/reporting.ts"),
       read("apps/api/src/reporting/management-reporting-shared.ts"),
@@ -97,11 +97,17 @@ describe("UAT interface closure", () => {
       read("apps/api/src/reporting/management-reporting-dto.ts"),
       read("apps/web/src/reporting/management-order-card.tsx"),
     ]);
-    expect(contract).toContain("attachmentCount: z.number().int().nonnegative()");
-    expect(shared).toContain("attachment_count: number");
-    expect(query).toContain("attachment_count");
-    expect(dto).toContain("attachmentCount: row.attachment_count");
-    expect(card).toContain("点击订单查阅");
+    expect(contract).toContain('deductionStatus: z.enum(["not_started", "not_deducted", "completed"])');
+    expect(shared).toContain('deduction_status: ManagementReworkRow["deductionStatus"]');
+    expect(query).toContain("bool_and(case_record.status='closed') all_closed");
+    expect(query).toContain("WHEN external.rework_order_id IS NULL THEN 'not_started'");
+    expect(query).toContain("WHEN external.all_closed THEN 'completed'");
+    expect(dto).toContain("deductionStatus: row.deduction_status");
+    expect(card).toContain('<dt>扣款状态</dt>');
+    expect(card).toContain('not_started: "未开始"');
+    expect(card).toContain('not_deducted: "未扣款"');
+    expect(card).toContain('completed: "扣款完成"');
+    expect(card).not.toContain("<dt>附件</dt>");
   });
 
   it("pins sidebar identity in the final loaded CSS layer", async () => {
