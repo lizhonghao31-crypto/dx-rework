@@ -74,34 +74,37 @@ export class SourcingContractService {
     private readonly events = new OperationEventRepository(),
   ) {}
 
-  async resumePendingContracts(limit = 500): Promise<void> {
-    const pending = await this.database.query<{
-      sourcing_contract_document_id: string;
-      sourcing_case_id: string;
-      actor_id: string;
-      is_root: boolean;
-    }>(
-      `SELECT document.sourcing_contract_document_id,document.sourcing_case_id,
-              COALESCE(root_user.user_id,document.prepared_by) AS actor_id,
-              root_user.user_id IS NOT NULL AS is_root
-       FROM sourcing_contract_documents document
-       LEFT JOIN LATERAL (
-         SELECT consumption.user_id FROM owner_bootstrap_consumptions consumption
-         WHERE consumption.singleton=true LIMIT 1
-       ) root_user ON true
-       WHERE document.status='generation_pending'
-         AND cardinality(document.missing_fields)=0
-       ORDER BY document.prepared_at,document.sourcing_contract_document_id
-       LIMIT $1`,
-      [limit],
-    );
-    await Promise.allSettled(pending.rows.map((row) => this.generateIfReady({
-      actorId: row.actor_id,
-      actorRoles: row.is_root ? [ROOT_ROLE] : [],
-      authorizationCapability: CONTRACT_CAPABILITY,
-      authorizationCapabilities: [READ_CAPABILITY,CONTRACT_CAPABILITY],
-      requestId: `sourcing-contract-resume:${row.sourcing_contract_document_id}`,
-    }, row.sourcing_case_id)));
+  async resumePendingContracts(batchSize = 50): Promise<void> {
+    for (;;) {
+      const pending = await this.database.query<{
+        sourcing_contract_document_id: string;
+        sourcing_case_id: string;
+        actor_id: string;
+        is_root: boolean;
+      }>(
+        `SELECT document.sourcing_contract_document_id,document.sourcing_case_id,
+                COALESCE(root_user.user_id,document.prepared_by) AS actor_id,
+                root_user.user_id IS NOT NULL AS is_root
+         FROM sourcing_contract_documents document
+         LEFT JOIN LATERAL (
+           SELECT consumption.user_id FROM owner_bootstrap_consumptions consumption
+           WHERE consumption.singleton=true LIMIT 1
+         ) root_user ON true
+         WHERE document.status='generation_pending'
+           AND cardinality(document.missing_fields)=0
+         ORDER BY document.prepared_at,document.sourcing_contract_document_id
+         LIMIT $1`,
+        [batchSize],
+      );
+      if (!pending.rows.length) return;
+      await Promise.allSettled(pending.rows.map((row) => this.generateIfReady({
+        actorId: row.actor_id,
+        actorRoles: row.is_root ? [ROOT_ROLE] : [],
+        authorizationCapability: CONTRACT_CAPABILITY,
+        authorizationCapabilities: [READ_CAPABILITY,CONTRACT_CAPABILITY],
+        requestId: `sourcing-contract-resume:${row.sourcing_contract_document_id}`,
+      }, row.sourcing_case_id, row.sourcing_contract_document_id)));
+    }
   }
 
   async prepareForApproval(
@@ -279,6 +282,7 @@ export class SourcingContractService {
   async generateIfReady(
     actor: TrustedActorContext,
     sourcingCaseId: string,
+    sourcingContractDocumentId?: string,
   ): Promise<SourcingContractStateResponse> {
     const claimed = await this.database.query<ContractRow>(
       `UPDATE sourcing_contract_documents document
@@ -287,9 +291,12 @@ export class SourcingContractService {
        WHERE document.sourcing_case_id=$1
          AND source_case.sourcing_case_id=document.sourcing_case_id
          AND source_case.deleted_at IS NULL
-         AND document.contract_version=(
-           SELECT max(latest.contract_version) FROM sourcing_contract_documents latest
-           WHERE latest.sourcing_case_id=document.sourcing_case_id
+         AND (
+           ($2::uuid IS NULL AND document.contract_version=(
+             SELECT max(latest.contract_version) FROM sourcing_contract_documents latest
+             WHERE latest.sourcing_case_id=document.sourcing_case_id
+           ))
+           OR document.sourcing_contract_document_id=$2::uuid
          )
          AND (
            document.status IN ('generation_pending','generation_failed')
@@ -297,7 +304,7 @@ export class SourcingContractService {
          )
          AND cardinality(document.missing_fields)=0
        RETURNING document.*,source_case.created_by`,
-      [sourcingCaseId],
+      [sourcingCaseId,sourcingContractDocumentId ?? null],
     );
     const row = claimed.rows[0];
     if (!row) return this.getCurrent(actor, sourcingCaseId);
