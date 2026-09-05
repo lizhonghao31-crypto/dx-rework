@@ -1,8 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import {
   SourcingContractStateResponseSchema,
   SupplementSourcingContractSchema,
@@ -48,26 +43,23 @@ const snapshot: ContractPdfSnapshot = {
 };
 
 describe("SSP-05 contract PDF", () => {
-  it("renders multi-style exact amounts as extractable Chinese PDF text", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "dx-contract-"));
-    try {
-      const pdfPath = join(directory, "contract.pdf");
-      const textPath = join(directory, "contract.txt");
-      const pdf = renderSourcingContractPdf(snapshot);
-      await writeFile(pdfPath, pdf);
-      execFileSync("pdftotext", [pdfPath, textPath]);
-      const text = await readFile(textPath, "utf8");
-      expect(text).toContain("外发服装加工合同");
-      expect(text).toContain("DX-A01");
-      expect(text).toContain("DX-A02");
-      expect(text).toContain("30.38");
-      expect(text).toContain("40.67");
-      expect(text).toContain("71.05");
-      expect(text).not.toContain("达兴价格");
-      expect(text).not.toContain("88.8888");
-    } finally {
-      await rm(directory, { recursive: true,force: true });
-    }
+  it("renders multi-style exact amounts with an extractable Unicode map", () => {
+    const binary = renderSourcingContractPdf(snapshot).toString("binary");
+    const encoded = (value: string): string => Buffer.from(
+      [...value].flatMap((character) => {
+        const code = character.codePointAt(0) ?? 0x3f;
+        return code > 0xffff ? [0,0x3f] : [code >> 8,code & 0xff];
+      }),
+    ).toString("hex").toUpperCase();
+    expect(binary).toContain("/ToUnicode");
+    expect(binary).toContain(encoded("外发服装加工合同"));
+    expect(binary).toContain(encoded("01  款号 DX-A01 / 备用款号 A01-B / 颜色 黑色"));
+    expect(binary).toContain(encoded("02  款号 DX-A02 / 颜色 白色"));
+    expect(binary).toContain(encoded("数量 3 件 / 单价 ¥10.1250 / 金额 ¥30.38"));
+    expect(binary).toContain(encoded("数量 2 件 / 单价 ¥20.3350 / 金额 ¥40.67"));
+    expect(binary).toContain(encoded("合计：5 件    合同总额：¥71.05"));
+    expect(binary).not.toContain(encoded("达兴价格"));
+    expect(binary).not.toContain(encoded("88.8888"));
   });
 
   it("keeps the fingerprint stable and contract DTO free of internal Daxing price", () => {
@@ -100,4 +92,3 @@ describe("SSP-05 contract PDF", () => {
     expect(SupplementSourcingContractSchema.safeParse({ address: "地址", daxingUnitPrice: "88.8888" }).success).toBe(false);
   });
 });
-
