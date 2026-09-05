@@ -27,6 +27,7 @@ export interface ObjectStorage {
   head(objectKey: string): Promise<StoredObjectMetadata>;
   readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array>;
   computeSha256(objectKey: string): Promise<string>;
+  writeImmutable(objectKey: string, content: Uint8Array, options: { mimeType: string; sha256: string }): Promise<void>;
   deleteObject(objectKey: string): Promise<void>;
 }
 
@@ -49,6 +50,7 @@ export interface AliyunOssSdkClient {
   signatureUrl(name: string, options: Record<string, unknown>): string;
   head(name: string): Promise<{ res: { headers: Record<string, string | number | undefined> } }>;
   createReadStream(name: string): Promise<AsyncIterable<Uint8Array>>;
+  putGeneratedObject(name: string, content: Uint8Array, options: { mimeType: string; sha256: string }): Promise<void>;
   delete(name: string): Promise<void>;
 }
 
@@ -128,6 +130,14 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     }
   }
 
+  async writeImmutable(
+    objectKey: string,
+    content: Uint8Array,
+    options: { mimeType: string; sha256: string },
+  ): Promise<void> {
+    await this.client.putGeneratedObject(objectKey, content, options);
+  }
+
   async readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array> {
     try {
       const stream = await this.client.createReadStream(objectKey);
@@ -203,6 +213,7 @@ export class DisabledObjectStorage implements ObjectStorage {
   async head(): Promise<StoredObjectMetadata> { return this.unavailable(); }
   async readBytes(): Promise<Uint8Array> { return this.unavailable(); }
   async computeSha256(): Promise<string> { return this.unavailable(); }
+  async writeImmutable(): Promise<void> { return this.unavailable(); }
   async deleteObject(): Promise<void> { return this.unavailable(); }
 }
 
@@ -250,6 +261,22 @@ export class FakeObjectStorage implements ObjectStorage {
     const digest = this.contentSha256.get(objectKey) ?? value.sha256;
     if (!digest) throw new Error("Object content digest is unavailable");
     return digest.toLowerCase();
+  }
+
+  async writeImmutable(
+    objectKey: string,
+    content: Uint8Array,
+    options: { mimeType: string; sha256: string },
+  ): Promise<void> {
+    if (this.objects.has(objectKey)) throw new Error("Object already exists");
+    const bytes = Uint8Array.from(content);
+    this.objects.set(objectKey, {
+      sizeBytes: bytes.byteLength,
+      mimeType: options.mimeType,
+      sha256: options.sha256,
+    });
+    this.objectBytes.set(objectKey, bytes);
+    this.contentSha256.set(objectKey, options.sha256);
   }
 
   async readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array> {

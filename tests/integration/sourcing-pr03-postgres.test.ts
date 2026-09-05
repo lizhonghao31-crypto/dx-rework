@@ -5,8 +5,11 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
+import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
+import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
@@ -24,7 +27,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     completeOpenByDedupePrefix: vi.fn(async () => 0),
     information: vi.fn(async () => undefined),
   };
-  const service = new SourcingService(database, undefined, undefined, todoProjection);
+  const contractService = new SourcingContractService(
+    database,
+    new AttachmentService(database, new FakeObjectStorage(), {
+      prefix: "tests",ttlSeconds: 60,maxUploadBytes: 5_000_000,
+    }),
+  );
+  const service = new SourcingService(
+    database,undefined,undefined,todoProjection,contractService,
+  );
   const craftService = new AccessMasterDataService(database, "corp");
   const craftIdsByName = new Map<string, string>();
   const craftId = (craftName: string): string => {
@@ -74,6 +85,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     ...merchandiserActor(requestId),
     authorizationCapability: "sourcing:factory_change:request",
     authorizationCapabilities: ["sourcing:view", "sourcing:factory_change:request"],
+  });
+  const contractActor = (requestId = randomUUID()): TrustedActorContext => ({
+    ...merchandiserActor(requestId),
+    authorizationCapability: "sourcing:contract:record",
+    authorizationCapabilities: ["sourcing:view", "sourcing:contract:record"],
   });
   const factoryChangeVerifier = (requestId = randomUUID()): TrustedActorContext => ({
     ...managerActor(requestId),
@@ -161,6 +177,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0143_sourcing_supplier_profile_foundation.sql",
       "0144_sourcing_multi_style_pricing.sql",
       "0145_sourcing_line_review_approval_snapshot.sql",
+      "0146_sourcing_contract_pdf_finance.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -207,11 +224,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       );
       await database.query(
         `INSERT INTO supplier_catalog_versions(
-           supplier_id,version,supplier_name,active,change_reason,changed_by
+           supplier_id,version,supplier_name,active,change_reason,changed_by,
+           address,contract_entity_name,party_b_representative,
+           payee_name,bank_account,bank_name
          ) VALUES
-           ($1,1,'一号加工厂',true,'测试夹具',$4),
-           ($2,1,'二号加工厂',true,'测试夹具',$4),
-           ($3,1,'停用加工厂',false,'测试夹具',$4)`,
+           ($1,1,'一号加工厂',true,'测试夹具',$4,'广州一号路','一号加工厂有限公司','陈一','陈一','622201','测试银行一支行'),
+           ($2,1,'二号加工厂',true,'测试夹具',$4,'广州二号路','二号加工厂有限公司','陈二','陈二','622202','测试银行二支行'),
+           ($3,1,'停用加工厂',false,'测试夹具',$4,NULL,NULL,NULL,NULL,NULL,NULL)`,
         [factoryId, replacementFactoryId, disabledFactoryId, managerId],
       );
     } finally {
@@ -375,7 +394,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supportedCrafts: [],
         dailyCapacity: null,
         notes: "",
-        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+        contractDataMissing: [],
       },
       {
         supplierId: replacementFactoryId,
@@ -384,7 +403,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supportedCrafts: [],
         dailyCapacity: null,
         notes: "",
-        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+        contractDataMissing: [],
       },
     ]);
 
@@ -499,6 +518,21 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         }],
       },
     });
+    const firstContract = (await contractService.getCurrent(
+      readerActor(),created.value.sourcingCaseId,
+    )).item;
+    expect(firstContract).toMatchObject({
+      contractVersion: 2,templateVersion: 1,status: "ready",missingFields: [],
+    });
+    expect(firstContract?.contractNumber).toMatch(/^DX-WF-\d{8}-\d{6}$/);
+    expect(firstContract?.snapshotFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(firstContract?.pdfAttachmentId).toMatch(/^[0-9a-f-]{36}$/);
+    await contractService.generateIfReady(contractActor(), created.value.sourcingCaseId);
+    expect((await database.query(
+      `SELECT 1 FROM attachments
+       WHERE entity_type='sourcing_contract_document' AND entity_id=$1`,
+      [firstContract!.sourcingContractDocumentId],
+    )).rowCount).toBe(1);
     await expect(database.query(
       "UPDATE sourcing_approval_snapshots SET total_amount=1 WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
@@ -565,6 +599,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       },
     });
     expect(changeApproved.value.ownerDecision).toBeNull();
+    const changedContract = (await contractService.getCurrent(
+      readerActor(),created.value.sourcingCaseId,
+    )).item;
+    expect(changedContract).toMatchObject({
+      contractVersion: 3,status: "ready",missingFields: [],
+    });
+    expect(changedContract?.sourcingContractDocumentId)
+      .not.toBe(firstContract?.sourcingContractDocumentId);
+    expect((await database.query<{ total: string; distinct_total: string }>(
+      `SELECT count(*)::text AS total,count(DISTINCT contract_number)::text AS distinct_total
+       FROM sourcing_contract_documents WHERE sourcing_case_id=$1`,
+      [created.value.sourcingCaseId],
+    )).rows[0]).toEqual({ total: "2",distinct_total: "2" });
 
     await service.requestFactoryChange(
       factoryChangeActor(),
@@ -615,8 +662,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       result: string;
       difference_fields: string[];
       actual_supplier_name_snapshot: string;
+      contract_version: number;
+      contract_fingerprint: string;
     }>(
-      `SELECT result,difference_fields,actual_supplier_name_snapshot
+      `SELECT result,difference_fields,actual_supplier_name_snapshot,
+              contract_version,contract_fingerprint
        FROM sourcing_finance_reconciliations
        WHERE sourcing_case_id=$1 AND reconciliation_version=1`,
       [created.value.sourcingCaseId],
@@ -624,6 +674,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       result: "difference",
       difference_fields: ["total_amount"],
       actual_supplier_name_snapshot: "二号加工厂",
+      contract_version: 3,
+      contract_fingerprint: changedContract?.snapshotFingerprint,
     });
 
     const reopened = await service.decideException(
@@ -654,7 +706,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       [created.value.sourcingCaseId],
     )).rowCount).toBe(2);
     const timeline = await service.listTimeline(readerActor(), created.value.sourcingCaseId);
-    expect(timeline.items.filter((entry) => entry.kind === "contract")).toHaveLength(0);
+    expect(timeline.items.filter((entry) => entry.kind === "contract")).toHaveLength(2);
     expect(timeline.items.filter((entry) => entry.kind === "factory_change_request")).toHaveLength(2);
     expect(timeline.items.filter((entry) => entry.kind === "factory_change_verification"))
       .toEqual(expect.arrayContaining([
@@ -1333,12 +1385,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
        FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1`,
       [created.value.sourcingCaseId],
     )).rows[0]).toEqual({
-      supplier_address: null,
-      contract_entity_name: null,
-      party_b_representative: null,
-      payee_name: null,
-      bank_account: null,
-      bank_name: null,
+      supplier_address: "广州一号路",
+      contract_entity_name: "一号加工厂有限公司",
+      party_b_representative: "陈一",
+      payee_name: "陈一",
+      bank_account: "622201",
+      bank_name: "测试银行一支行",
     });
 
     const changed = await service.requestFactoryChange(managerActor(), created.value.sourcingCaseId, {
@@ -1486,5 +1538,85 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query(
       "SELECT 1 FROM sourcing_cases WHERE erp_order_id='ERP-DELETE-1'",
     )).rowCount).toBe(2);
+  });
+
+  it("keeps approval successful when contract data is missing and freezes supplements", async () => {
+    const missingSupplierId = randomUUID();
+    await database.query("ALTER TABLE supplier_catalog_items DISABLE TRIGGER supplier_catalog_items_require_initial_version");
+    await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation");
+    try {
+      await database.query(
+        `INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
+         VALUES($1,'FAC-MISSING','factory')`,
+        [missingSupplierId],
+      );
+      await database.query(
+        `INSERT INTO supplier_catalog_versions(
+           supplier_id,version,supplier_name,active,change_reason,changed_by
+         ) VALUES($1,1,'合同缺项加工厂',true,'测试合同缺项',$2)`,
+        [missingSupplierId,managerId],
+      );
+    } finally {
+      await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation");
+      await database.query("ALTER TABLE supplier_catalog_items ENABLE TRIGGER supplier_catalog_items_require_initial_version");
+    }
+
+    const created = await service.createCase(merchandiserActor(), {
+      erpOrderNo: `ERP-CONTRACT-MISSING-${randomUUID()}`,
+      estimatedCutPieceSendDate: "2026-10-01",
+      deliveryDate: "2026-10-15",
+      craftIds: [craftId("净色车缝")],
+      lineItems: [{
+        styleNo: "CONTRACT-MISSING",color: "蓝色",quantity: 10,externalUnitPrice: "8.0000",
+      }],
+      daxingUnitPrice: "6.5000",
+    }, randomUUID());
+    await service.quoteIePrice(ieActor(), created.value.sourcingCaseId, {
+      unitPrice: "8.0000",
+    }, randomUUID());
+    await service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
+      supplierId: missingSupplierId,unitPrice: "8.0000",
+    }, randomUUID());
+    await expect(service.decideOwner(ownerActor(), created.value.sourcingCaseId, {
+      decision: "approved",
+    }, randomUUID())).resolves.toMatchObject({
+      value: { status: "pending_finance_reconciliation" },
+    });
+
+    const pending = (await contractService.getCurrent(readerActor(), created.value.sourcingCaseId)).item!;
+    expect(pending).toMatchObject({
+      status: "pending_supplement",
+      missingFields: ["address","contractEntityName","partyBRepresentative","payeeName","bankAccount","bankName"],
+    });
+    const ready = (await contractService.supplement(contractActor(), created.value.sourcingCaseId, {
+      address: "广州补充地址",
+      contractEntityName: "合同缺项加工厂有限公司",
+      partyBRepresentative: "陈补充",
+      payeeName: "陈补充",
+      bankAccount: "622299",
+      bankName: "测试银行补充分行",
+    }, randomUUID())).item!;
+    expect(ready).toMatchObject({ status: "ready",missingFields: [] });
+    expect(ready.pdfAttachmentId).toMatch(/^[0-9a-f-]{36}$/);
+
+    await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation");
+    try {
+      await database.query(
+        `INSERT INTO supplier_catalog_versions(
+           supplier_id,version,supplier_name,active,change_reason,changed_by,
+           address,contract_entity_name,party_b_representative,payee_name,bank_account,bank_name
+         ) VALUES($1,2,'合同缺项加工厂已改名',true,'主档后续修改',$2,
+           '新地址','新主体','新代表','新收款人','999999','新银行')`,
+        [missingSupplierId,managerId],
+      );
+    } finally {
+      await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation");
+    }
+    const frozen = (await contractService.getCurrent(readerActor(), created.value.sourcingCaseId)).item!;
+    expect(frozen.snapshotFingerprint).toBe(ready.snapshotFingerprint);
+    expect(frozen.pdfSha256).toBe(ready.pdfSha256);
+    await expect(contractService.supplement(contractActor(), created.value.sourcingCaseId, {
+      address: "试图追改",
+    }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
   });
 });

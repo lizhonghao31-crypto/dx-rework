@@ -641,6 +641,30 @@
   gap: var(--dx-v2-space-3);
 }
 
+.sourcing-contract-bar__heading,
+.sourcing-contract-bar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sourcing-contract-bar__heading h2,
+.sourcing-contract-bar__heading p {
+  margin: 0;
+}
+
+.sourcing-contract-bar__heading p {
+  margin-top: 4px;
+  color: var(--dx-v2-color-text-secondary);
+}
+
+.sourcing-contract-bar__actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
 .sourcing-finance-confirmation summary {
   cursor: pointer;
   color: var(--dx-v2-color-text);

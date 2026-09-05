@@ -153,6 +153,65 @@ export class AttachmentService {
     }
   }
 
+  async storeGenerated(
+    actor: TrustedActorContext,
+    input: Readonly<{
+      filename: string;
+      mimeType: "application/pdf";
+      content: Uint8Array;
+      entityType: string;
+      entityId: string;
+    }>,
+  ): Promise<AttachmentResponse> {
+    const sha256 = createHash("sha256").update(input.content).digest("hex");
+    const existing = await this.pool.query<AttachmentRow>(
+      `SELECT * FROM attachments
+       WHERE entity_type=$1 AND entity_id=$2 AND mime_type=$3
+         AND sha256=$4 AND status='ready'
+       ORDER BY created_at DESC LIMIT 1`,
+      [input.entityType,input.entityId,input.mimeType,sha256],
+    );
+    if (existing.rows[0]) return this.dto(existing.rows[0]);
+    if (input.content.byteLength < 1 || input.content.byteLength > this.options.maxUploadBytes) {
+      throw new ApplicationError("VALIDATION_ERROR", "Generated file exceeds the configured size limit", 413);
+    }
+    this.validate({ filename: input.filename, mimeType: input.mimeType,
+      sizeBytes: input.content.byteLength, sha256 });
+    const attachmentId = randomUUID();
+    const objectKey = createPrivateObjectKey(this.options.prefix, input.filename);
+    await this.storageCall(() => this.storage.writeImmutable(objectKey, input.content, {
+      mimeType: input.mimeType,sha256,
+    }));
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const inserted = await client.query<AttachmentRow>(
+        `INSERT INTO attachments(
+           attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+           uploaded_by,entity_type,entity_id,status,ready_at
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'ready',CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [attachmentId,objectKey,input.filename,input.mimeType,input.content.byteLength,
+          sha256,actor.actorId,input.entityType,input.entityId],
+      );
+      await this.events.append(client, actor, {
+        action: "attachment.generated",
+        entityType: "attachment",
+        entityId: attachmentId,
+        after: { boundEntityType: input.entityType, boundEntityId: input.entityId,
+          mimeType: input.mimeType, sizeBytes: input.content.byteLength, sha256 },
+      });
+      await client.query("COMMIT");
+      return this.dto(inserted.rows[0]!);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      await this.storage.deleteObject(objectKey).catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async createDownloadIntent(
     actor: TrustedActorContext,
     attachmentId: string,

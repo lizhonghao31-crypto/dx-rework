@@ -109,6 +109,22 @@ const create = (
     })),
   };
   const root = { isRootUser: vi.fn(async () => isRoot) };
+  const contractState = {
+    item: {
+      sourcingContractDocumentId: "00000000-0000-4000-8000-000000000501",
+      sourcingApprovalSnapshotId: "00000000-0000-4000-8000-000000000502",
+      contractNumber: "DX-WF-20260905-000001",
+      contractVersion: 1,templateVersion: 1,status: "pending_supplement" as const,
+      missingFields: ["address" as const],snapshotFingerprint: null,pdfAttachmentId: null,
+      pdfSha256: null,failureReason: null,preparedAt: "2026-09-05T00:00:00.000Z",
+      generatedAt: null,canSupplement: true,
+    },
+  };
+  const contracts = {
+    getCurrent: vi.fn(async () => contractState),
+    supplement: vi.fn(async () => contractState),
+    generateIfReady: vi.fn(async () => contractState),
+  };
   const app = buildApp({
     config,
     checkDatabase: async () => undefined,
@@ -126,11 +142,12 @@ const create = (
         };
       },
       service: service as never,
+      contracts: contracts as never,
       root: root as never,
     },
   });
   apps.push(app);
-  return { app, service };
+  return { app, service, contracts };
 };
 
 describe("sourcing PR03 routes", () => {
@@ -543,6 +560,40 @@ describe("sourcing PR03 routes", () => {
       { attachmentIds: ["00000000-0000-4000-8000-000000000301"] },
       "sourcing-images-root",
     );
+  });
+
+  it("exposes contract state and restricts supplement actions to the order merchandiser", async () => {
+    const merchandiser = create(
+      ["sourcing:view", "sourcing:contract:record"],
+      ["order_merchandiser"],
+    );
+    expect((await merchandiser.app.inject({
+      method: "GET",url: `/sourcing/cases/${caseSummary.sourcingCaseId}/contract`,
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(200);
+    const supplemented = await merchandiser.app.inject({
+      method: "POST",url: `/sourcing/cases/${caseSummary.sourcingCaseId}/contract/supplements`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "contract-supplement-1" },
+      payload: { address: "广州市番禺区" },
+    });
+    expect(supplemented.statusCode).toBe(200);
+    expect(merchandiser.contracts.supplement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["order_merchandiser"],
+        authorizationCapability: "sourcing:contract:record",
+      }),
+      caseSummary.sourcingCaseId,
+      { address: "广州市番禺区" },
+      "contract-supplement-1",
+    );
+
+    const finance = create(["sourcing:view", "sourcing:finance:reconcile"], ["factory_payables"]);
+    expect((await finance.app.inject({
+      method: "POST",url: `/sourcing/cases/${caseSummary.sourcingCaseId}/contract/supplements`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "contract-forbidden" },
+      payload: { address: "越权地址" },
+    })).statusCode).toBe(403);
+    expect(finance.contracts.supplement).not.toHaveBeenCalled();
   });
 
 });
