@@ -1,6 +1,4 @@
-import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import {
-  LockWagePeriodSchema,
   WageItemParamsSchema,
   WagePeriodParamsSchema,
 } from "@dx-rework/contracts/wages";
@@ -34,11 +32,7 @@ export type WageHttpDependencies = Readonly<{
 
 export function registerWageRoutes(app: FastifyInstance, dependencies: WageHttpDependencies): void {
   const actingRole = (capability: string): string | undefined =>
-    capability === "wage:month_close"
-      ? "wage_month_close_accountant"
-      : capability === "wage:export"
-        ? "finance_read"
-        : undefined;
+    capability === "wage:export" ? "finance_read" : undefined;
 
   const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
@@ -53,11 +47,6 @@ export function registerWageRoutes(app: FastifyInstance, dependencies: WageHttpD
       };
     }
     return trusted;
-  };
-
-  const key = (request: FastifyRequest) => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
-  const replay = (reply: { header(name: string, value: string): unknown }, reused: boolean) => {
-    if (reused) reply.header("idempotency-replayed", "true");
   };
 
   app.get("/wage-periods", async (request) =>
@@ -80,20 +69,6 @@ export function registerWageRoutes(app: FastifyInstance, dependencies: WageHttpD
       await actor(request, "wage:view"),
       parse(WageItemParamsSchema, request.params).wageItemId,
     ));
-
-  app.post("/wage-periods/:periodId/lock", async (request, reply) => {
-    const params = parse(WagePeriodParamsSchema, request.params);
-    const body = parse(LockWagePeriodSchema, request.body);
-    const result = await dependencies.service.lock(
-      await actor(request, "wage:month_close"),
-      params.periodId,
-      body.expectedVersion,
-      body.lockNote,
-      key(request),
-    );
-    replay(reply, result.reused);
-    return result.value;
-  });
 
   app.get("/wage-periods/:periodId/export.xlsx", async (request, reply) => {
     const params = parse(WagePeriodParamsSchema, request.params);

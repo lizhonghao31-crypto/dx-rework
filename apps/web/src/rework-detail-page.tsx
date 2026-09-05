@@ -165,7 +165,7 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
   pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任结算" },
-  completed: { label: "已完成", next: "返工生产链已归档；工资与扣款按各自独立周期继续核对" },
+  completed: { label: "已完成", next: "订单完成即进入扣款；工资金额仅供财务查询与对数" },
   cancelled: { label: "已取消", next: "返工单已取消，历史资料和操作记录继续保留" },
 };
 
@@ -270,10 +270,7 @@ const workflowState = (detail: ReworkBusinessDetail, key: WorkflowNodeKey): Work
   if (key === "settlement_ledger" && detail.status === "pending_responsibility_action") return "completed";
   if (detail.status === "completed") {
     if (key !== "settlement_followup") return "completed";
-    return ["in_progress", "revision_in_progress"].includes(detail.settlementStatus)
-      || detail.wageSettlementStatus === "in_progress"
-      ? "followup"
-      : "completed";
+    return detail.settlementStatus === "closed" ? "completed" : "followup";
   }
   if (currentNodeByStatus[detail.status] === key) return "current";
   return statusRank[detail.status] > nodeRank[key] ? "completed" : "future";
@@ -335,7 +332,7 @@ const buildWorkflow = (
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
-        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "供应商计划扣款不在本阶段生成，待业务确认规则。"),
+        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "订单完成即进入供应商扣款；工资金额仅供财务查询与对数。"),
       ],
     },
   ];
@@ -347,19 +344,12 @@ const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.ever
     ? "current"
     : stage.nodes.some((node) => node.state === "followup") ? "followup" : "future";
 
-const wageStatusLabel = (status: ReworkBusinessDetail["unsettledWagePeriods"][number]["status"]): string =>
-  status === "pending_tail_review" ? "待尾部主管初核" : status === "pending_admin_review" ? "待行政复核" : "待工资月结会计锁定";
-
-const followUpStatusLabel = (detail: ReworkBusinessDetail): string => {
-  const labels: string[] = [];
-  if (detail.settlementStatus === "revision_in_progress") labels.push("责任调整中");
-  else if (detail.settlementStatus === "in_progress") labels.push("供应商扣款跟进");
-  if (detail.wageSettlementStatus === "in_progress") {
-    const wageStatuses = [...new Set(detail.unsettledWagePeriods.map((period) => wageStatusLabel(period.status)))];
-    labels.push(wageStatuses.length === 1 ? wageStatuses[0]! : "工资待结算");
-  }
-  return labels.join(" / ") || "已结清";
-};
+const followUpStatusLabel = (detail: ReworkBusinessDetail): string =>
+  detail.settlementStatus === "revision_in_progress"
+    ? "责任调整中"
+    : detail.settlementStatus === "closed"
+      ? "扣款完成"
+      : "未扣款";
 
 const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): string =>
   node.key === "settlement_followup" && node.state !== "future"
@@ -591,7 +581,6 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:owner_sign")
     || hasCapability(currentUser, "rework:related_orders:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
-  const canSeeWages = elevated(currentUser) || hasCapability(currentUser, "wage:view");
   const canSeeWholeOrderReview = elevated(currentUser) || [
     "submission:audit", "quantity:adjust", "quantity:confirm", "process:review",
   ].some((capability) => hasCapability(currentUser, capability));
@@ -684,13 +673,9 @@ export function ReworkDetailPage({
       return <SettlementLedgerNotice detail={detail} />;
     }
     if (selected.state !== "future" && selected.key === "settlement_followup") {
-      const hasWageFollowUp = canSeeWages && detail.unsettledWagePeriods.length > 0;
       return <>
         <OrderCompletionAndSettlementSummary detail={detail} />
-        {canSeeExternal || hasWageFollowUp ? <>
-          {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
-          {hasWageFollowUp ? <WageSettlementFollowUp periods={detail.unsettledWagePeriods} /> : null}
-        </> : null}
+        {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
       </>;
     }
     return renderNodePreview();
@@ -1016,23 +1001,10 @@ function OrderCompletionAndSettlementSummary({ detail }: { detail: ReworkBusines
   const orderCompleted = detail.status === "completed";
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone={orderCompleted ? "success" : "info"}>{orderCompleted ? "订单已完成" : "责任结算中"}</StatusBadge>
-    <h2>09 · 订单完成与后续结算</h2>
+    <h2>09 · 订单完成与扣款</h2>
     <p>{orderCompleted
-      ? "返工生产和责任判定已经结束；工资月结与供应商实际扣款继续独立跟进，不会重新打开订单。"
+      ? "返工生产和责任判定已经结束；订单完成即进入扣款。工资金额只保留给财务查询与对数。"
       : "责任结算台账已生成，正在完成后续责任结算。"}</p>
-    <p>后续结算状态：{followUpStatusLabel(detail)}</p>
-  </Surface>;
-}
-
-function WageSettlementFollowUp({ periods }: { periods: ReworkBusinessDetail["unsettledWagePeriods"] }) {
-  return <Surface className="rework-detail-node-preview">
-    <StatusBadge tone="info">已计入工资批次</StatusBadge>
-    <h2>工资结算进度</h2>
-    <p>订单已经完成；工资在 N08 完成后的独立周期按月份核对，不会重新打开订单主流程。</p>
-    <div className="rework-detail-wage-links">
-      {periods.map((period) => <a key={period.periodId} href={pageUrl(`ui/wages/${period.periodId}`)}>
-        {period.periodMonth.slice(0, 7)} · {wageStatusLabel(period.status)} · 进入处理
-      </a>)}
-    </div>
+    <p>扣款状态：{followUpStatusLabel(detail)}</p>
   </Surface>;
 }

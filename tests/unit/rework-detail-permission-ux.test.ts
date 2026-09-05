@@ -11,10 +11,11 @@ describe("rework detail permission UX", () => {
     expect(source).toContain("selected.key === \"owner_signature\"");
     expect(source).toContain("selected.key === \"settlement_ledger\"");
     expect(source).toContain("selected.key === \"settlement_followup\"");
-    expect(source).toContain("const hasWageFollowUp = canSeeWages");
-    expect(source).toContain("canSeeExternal || hasWageFollowUp");
+    expect(source).toContain("{canSeeExternal ? <ExternalResponsibilityPanel");
     expect(source).toContain("<ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId}");
-    expect(source).toContain("<WageSettlementFollowUp periods={detail.unsettledWagePeriods}");
+    expect(source).not.toContain("WageSettlementFollowUp");
+    expect(source).not.toContain("wageStatusLabel");
+    expect(source).toContain("订单完成即进入扣款");
     expect(source).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId}");
     expect(source).toContain("<ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly");
     expect(source).not.toContain("<OwnFactoryApprovalPanel");

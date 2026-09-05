@@ -65,18 +65,24 @@ describe("tail inspection cost bearer", () => {
     expect(panel).toContain('response.tailInspectionCostBearerSource === "legacy_default"');
   });
 
-  it("keeps wage month-close dormant while finance uses the report for reconciliation", async () => {
-    const [review, list, detail, todos, reporting] = await Promise.all([
+  it("retires wage month-close while finance uses read-only lookup and export", async () => {
+    const [review, list, detail, routes, reworkDetail, todos, reporting] = await Promise.all([
       read("apps/api/src/rework/whole-order-review-service.ts"),
       read("apps/web/src/wages/wage-period-list.tsx"),
       read("apps/web/src/wages/wage-period-detail.tsx"),
+      read("apps/api/src/wages/wage-routes.ts"),
+      read("apps/web/src/rework-detail-page.tsx"),
       read("apps/api/src/todos/service.ts"),
       read("apps/api/src/reporting/management-reporting-orders.ts"),
     ]);
     expect(review).not.toContain('category: "wage_month_close"');
-    expect(review).toContain("工资月结已退出当前流程；报表继续用于财务对数");
-    expect(list).toContain("const WAGE_MONTH_CLOSE_ENABLED: boolean = false");
+    expect(review).toContain("工资资料仅供财务查询与对数；不生成核对或锁定流程");
+    expect(list).not.toContain("WAGE_MONTH_CLOSE_ENABLED");
     expect(detail).toContain("返工工资对数明细");
+    expect(detail).not.toContain("lockPeriod");
+    expect(routes).not.toContain('app.post("/wage-periods/:periodId/lock"');
+    expect(reworkDetail).not.toContain("WageSettlementFollowUp");
+    expect(reworkDetail).not.toContain("wageStatusLabel");
     expect(todos).toContain("todos.category<>'wage_month_close'");
     expect(reporting).toContain("todo.category<>'wage_month_close'");
   });

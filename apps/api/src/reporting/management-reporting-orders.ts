@@ -213,7 +213,7 @@ export async function fetchFacts(source: Queryable, options: {
        COALESCE(responsibility.own_factory_amount,'0') own_factory_amount,COALESCE(external.proposed,'0') external_proposed_amount,
        COALESCE(external.deducted,'0') external_deducted_amount,COALESCE(external.remaining,'0') external_remaining_amount,
        CASE
-         WHEN external.rework_order_id IS NULL THEN 'not_started'
+         WHEN order_record.status<>'completed' THEN 'not_started'
          WHEN external.all_closed THEN 'completed'
          ELSE 'not_deducted'
        END deduction_status,

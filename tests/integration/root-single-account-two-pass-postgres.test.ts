@@ -623,7 +623,6 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     const periods = await http<WagePeriod[]>(fixture.app, "GET", "/wage-periods");
     expect(periods).toHaveLength(1);
     const period = periods[0]!;
-    expect(period.status).toBe("ready_to_lock");
     const detail = await http<WagePeriodDetail>(
       fixture.app,
       "GET",
@@ -634,29 +633,26 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
       detail.items.reduce((sum, item) => sum + Number(item.payableAmount), 0).toFixed(2),
     );
 
-    // This is a real accounting rule, not an identity restriction. Root must
-    // still be blocked from locking the current natural month early.
-    const earlyLock = await fixture.app.inject({
+    // Wage data is read-only reference material for finance reconciliation.
+    // Month-close and accountant-lock actions are intentionally unavailable.
+    const disabledLock = await fixture.app.inject({
       method: "POST",
       url: `/wage-periods/${period.periodId}/lock`,
       headers: { cookie: sessionCookie, "idempotency-key": randomUUID() },
       payload: {
         expectedVersion: period.periodVersion,
-        lockNote: "Root 双跑：验证自然月硬规则仍有效",
+        lockNote: "该操作不应对外提供",
       },
     });
-    expect(earlyLock.statusCode).toBe(409);
-    expect(earlyLock.json()).toMatchObject({
-      error: { code: "INVALID_STATE_TRANSITION" },
-    });
+    expect(disabledLock.statusCode).toBe(404);
 
-    const detailAfterEarlyLock = await http<WagePeriodDetail>(
+    const detailAfterDisabledLock = await http<WagePeriodDetail>(
       fixture.app,
       "GET",
       `/wage-periods/${period.periodId}`,
     );
-    expect(detailAfterEarlyLock.period.status).toBe("ready_to_lock");
-    expect(detailAfterEarlyLock.period.totalAmount).toBe(detail.period.totalAmount);
+    expect(detailAfterDisabledLock.period.totalAmount).toBe(detail.period.totalAmount);
+    expect(detailAfterDisabledLock.items).toEqual(detail.items);
   }
 
   async function assertReconciliation(
