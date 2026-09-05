@@ -43,7 +43,7 @@ describe("thin platform module routing", () => {
   it("derives the rework card href from the established landing function", () => {
     const dual = user(["order_merchandiser"], ["todo:view", "sourcing:view"]);
     const modules = accessiblePlatformModules(dual);
-    expect(modules.map((module) => module.id)).toEqual(["sourcing", "rework"]);
+    expect(modules.map((module) => module.id)).toEqual(["sourcing", "production", "rework"]);
     expect(modules.find((module) => module.id === "rework")?.href)
       .toBe(landingTarget(dual));
   });

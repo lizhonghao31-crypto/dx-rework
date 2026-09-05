@@ -1,12 +1,12 @@
-export type PlatformAccessModuleId = "rework" | "sourcing" | "platform";
-export type TodoAccessModuleId = Exclude<PlatformAccessModuleId, "platform">;
+export type PlatformAccessModuleId = "rework" | "sourcing" | "production" | "platform";
+export type TodoAccessModuleId = Extract<PlatformAccessModuleId, "rework" | "sourcing">;
 
 export type PlatformRoleAccess = Readonly<{
   roleCode: string;
   capabilities: readonly string[];
 }>;
 
-const MODULE_ORDER: readonly PlatformAccessModuleId[] = ["rework", "sourcing", "platform"];
+const MODULE_ORDER: readonly PlatformAccessModuleId[] = ["rework", "sourcing", "production", "platform"];
 
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
   owner_group: MODULE_ORDER,
@@ -17,6 +17,7 @@ const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessMod
 export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, string> = {
   rework: "订单返工",
   sourcing: "外发定价&选厂",
+  production: "实时生产看板",
   platform: "平台管理",
 };
 
@@ -55,7 +56,9 @@ export function accessModuleIdsForCapabilities(
 ): PlatformAccessModuleId[] {
   const modules = new Set<PlatformAccessModuleId>();
   for (const capability of capabilities) {
-    if (capability.startsWith("sourcing:")) {
+    if (capability === "production-reporting") {
+      modules.add("production");
+    } else if (capability.startsWith("sourcing:")) {
       modules.add("sourcing");
     } else if (isPlatformCapability(capability)) {
       modules.add("platform");

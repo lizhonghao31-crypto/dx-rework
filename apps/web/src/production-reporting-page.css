@@ -1,0 +1,7 @@
+/* Layout only. Controls, surfaces, typography and colours inherit the rework baseline. */
+.production-reporting { min-width: 0; }
+.production-reporting .sourcing-order-card { overflow-wrap: anywhere; }
+.production-reporting__line { padding: var(--dx-form-section-padding); min-width: 0; }
+.production-reporting__report { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.production-reporting__actions { display: flex; flex-wrap: wrap; gap: var(--dx-v2-space-3); align-items: end; }
+.production-reporting__history { padding-block: var(--dx-v2-space-3); overflow-wrap: anywhere; }

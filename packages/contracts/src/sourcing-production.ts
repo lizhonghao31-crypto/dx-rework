@@ -26,6 +26,7 @@ export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.exten
   gender: z.enum(["男装", "女装"]).nullable(),
   styleName: z.string().nullable(),
   quantity: z.number().int().positive(),
+  completedQuantity: z.number().int().nonnegative().default(0),
   processes: z.array(z.string()),
   deliveryDate: z.string().nullable(),
   firstStyleNo: z.string(),
@@ -40,6 +41,7 @@ export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.exten
     alternateStyleNo: z.string().nullable(),
     color: z.string().nullable(),
     quantity: z.number().int().positive(),
+    completedQuantity: z.number().int().nonnegative().default(0),
   }).strict()).min(1).max(20),
 }).strict();
 export const SourcingProductionOrderListSchema = z.object({

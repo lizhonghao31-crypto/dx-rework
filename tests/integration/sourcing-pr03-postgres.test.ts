@@ -1,3 +1,4 @@
+import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -182,6 +183,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "0146_sourcing_contract_pdf_finance.sql",
       "0147_sourcing_contract_input_correction.sql",
       "0148_sourcing_formal_dispatch.sql",
+      "0149_sourcing_production_reporting.sql",
     ]) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
@@ -1709,7 +1711,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(database.query("DELETE FROM sourcing_production_lines WHERE production_order_id=$1", [order.productionOrderId])).rejects.toBeDefined();
     await expect(database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
       SELECT $1,production_order_id,2,'shipped',CURRENT_DATE,dispatched_by,operation_event_id FROM sourcing_production_orders WHERE production_order_id=$2`,
-      [randomUUID(), order.productionOrderId])).rejects.toMatchObject({ code: "55000", message: "illegal production transition" });
+      [randomUUID(), order.productionOrderId])).rejects.toMatchObject({
+        code: "55000", message: "production execution requires reporter scope and valid business date",
+      });
+    // A valid Root audit passes the execution permission guard, so this probes the state guard independently.
+    const prematureShipmentEventId = await new OperationEventRepository().append(database, rootActor(), {
+      action: "sourcing.production.ship", entityType: "sourcing_production_order", entityId: order.productionOrderId,
+      after: { status: "shipped" }, reason: "验证有权操作也不能跳过生产完成",
+    });
+    await expect(database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
+      VALUES($1,$2,2,'shipped',(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,$3,$4)`,
+      [randomUUID(), order.productionOrderId, merchandiserId, prematureShipmentEventId]))
+      .rejects.toMatchObject({ code: "55000", message: "illegal production transition" });
+    expect((await database.query("SELECT count(*)::int AS count FROM sourcing_production_transitions WHERE production_order_id=$1", [order.productionOrderId])).rows[0].count).toBe(1);
     // Finance may reconcile after production has already begun, without changing production.
     await service.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
     expect((await production.get(readerActor(), order.productionOrderId)).status).toBe("in_production");
@@ -1773,6 +1787,102 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(production.dispatch({ ...rootActor(), actorRoles: ["root_superuser"] }, id, {
       sourcingContractDocumentId: contract.sourcingContractDocumentId, confirmed: true,
     }, randomUUID())).resolves.toMatchObject({ value: { status: "in_production" } });
+  });
+
+  it("reports within assigned scope, corrects append-only, and completes then ships without finance", async () => {
+    const reporting = new ProductionReportingService(database);
+    const reporterId = randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'驻厂测试人员',true)",[reporterId]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try { await database.query(`INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+      VALUES($1,$2,'production_reporter',$3,'驻厂测试夹具')`,[randomUUID(),reporterId,merchandiserId]); }
+    finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+    const reporter = (): TrustedActorContext => ({ actorId: reporterId, actorRoles: ["production_reporter"],
+      authorizationCapability: "production-reporting", authorizationCapabilities: ["production-reporting"], requestId: randomUUID() });
+    const businessDate = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+    const createProduction = async (suffix: string) => {
+      const created = await service.createCase(merchandiserActor(), { gender:"女装",styleName:"驻厂填报验证",estimatedCutPieceSendDate:businessDate,deliveryDate:businessDate,
+        lineItems:[{styleNo:`REPORT-${suffix}-A`,color:"蓝",quantity:20,externalUnitPrice:"8.0000"},{styleNo:`REPORT-${suffix}-B`,color:"白",quantity:10,externalUnitPrice:"9.0000"}],daxingUnitPrice:"777.1234" },randomUUID());
+      const id=created.value.sourcingCaseId,prices=[{position:1,unitPrice:"8.0000"},{position:2,unitPrice:"9.0000"}];
+      await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
+      await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,linePrices:prices,craftIds:[craftId("净色车缝")]},randomUUID());
+      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      const contract=(await contractService.getCurrent(readerActor(),id)).item!;
+      return (await production.dispatch(rootActor(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
+    };
+    const order=await createProduction("ONE"),other=await createProduction("TWO");
+    expect((await reporting.list(reporter())).items).toHaveLength(0);
+    await expect(reporting.report(reporter(),order.productionOrderId,{position:1,businessDate,quantity:10},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const grant={userId:reporterId,scopeType:"order" as const,scopeId:order.productionOrderId,active:true};
+    await reporting.setScope(rootActor(),grant,randomUUID());
+    expect((await reporting.scopeDirectory(rootActor())).scopes).toContainEqual(expect.objectContaining(grant));
+    expect((await reporting.list(reporter())).items.map(item=>item.productionOrderId)).toEqual([order.productionOrderId]);
+    await expect(reporting.detail(reporter(),other.productionOrderId)).rejects.toMatchObject({statusCode:404});
+    const dispatchDates=(await database.query<{dispatched_on:string;before_dispatch:string}>(
+      "SELECT business_date::text AS dispatched_on,(business_date-1)::text AS before_dispatch FROM sourcing_production_transitions WHERE production_order_id=$1 AND sequence=1",
+      [order.productionOrderId])).rows[0]!;
+    const beforeRejectedReports=await reporting.detail(reporter(),order.productionOrderId);
+    for(const user of [reporter(),rootActor()]) {
+      await expect(reporting.report(user,order.productionOrderId,{position:1,businessDate:dispatchDates.before_dispatch,quantity:1},randomUUID()))
+        .rejects.toMatchObject({statusCode:400,message:"上报业务日期不能早于正式派单日期"});
+    }
+    expect(await reporting.detail(reporter(),order.productionOrderId)).toEqual(beforeRejectedReports);
+    const key=randomUUID(),input={position:1,businessDate:dispatchDates.dispatched_on,quantity:10};
+    const [first,duplicate]=await Promise.all([reporting.report(reporter(),order.productionOrderId,input,key),reporting.report(reporter(),order.productionOrderId,input,key)]);
+    expect(first.value.order.completedQuantity).toBe(10);expect(duplicate.value.order.completedQuantity).toBe(10);
+    await expect(reporting.report(reporter(),order.productionOrderId,{...input,quantity:11},key)).rejects.toMatchObject({code:"IDEMPOTENCY_CONFLICT"});
+    const concurrent=await Promise.allSettled([reporting.report(reporter(),order.productionOrderId,{...input,quantity:6},randomUUID()),reporting.report(reporter(),order.productionOrderId,{...input,quantity:6},randomUUID())]);
+    expect(concurrent.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    const firstReport=first.value.history[0]!;
+    const beforeRejectedCorrections=await reporting.detail(reporter(),order.productionOrderId);
+    for(const quantity of [0,1]) {
+      await expect(reporting.correct(rootActor(),order.productionOrderId,firstReport.rootReportId,
+        {expectedReportId:firstReport.reportId,businessDate:dispatchDates.before_dispatch,quantity,reason:"验证修正日期下限"},randomUUID()))
+        .rejects.toMatchObject({statusCode:400,message:"上报业务日期不能早于正式派单日期"});
+    }
+    // Direct SQL must obey the same lower bound with otherwise matching Root audits.
+    for(const revision of [1,2]) {
+      const reportId=randomUUID(),rootReportId=revision===1?reportId:firstReport.rootReportId;
+      const reason=revision===1?null:"验证数据库修正日期下限";
+      const eventId=await new OperationEventRepository().append(database,{...rootActor(),authorizationCapability:"production-reporting"},{
+        action:revision===1?"sourcing.production.report":"sourcing.production.correct",entityType:"sourcing_production_report",entityId:reportId,
+        after:{productionOrderId:order.productionOrderId,rootReportId,revision,position:1,businessDate:dispatchDates.before_dispatch,quantity:1},
+        reason:reason??"验证数据库上报日期下限",
+      });
+      await expect(database.query(`INSERT INTO sourcing_production_reports(report_id,root_report_id,revision,production_order_id,position,business_date,quantity,actor_id,actor_name,reason,operation_event_id)
+        SELECT $1,$2,$3,$4,1,$5,1,id,display_name,$7,$8 FROM app_users WHERE id=$6`,
+        [reportId,rootReportId,revision,order.productionOrderId,dispatchDates.before_dispatch,merchandiserId,reason,eventId]))
+        .rejects.toMatchObject({code:"55000",message:"invalid production report authorization or date/state"});
+    }
+    expect(await reporting.detail(reporter(),order.productionOrderId)).toEqual(beforeRejectedCorrections);
+    await reporting.correct(rootActor(),order.productionOrderId,firstReport.rootReportId,{expectedReportId:firstReport.reportId,businessDate,quantity:0,reason:"误报撤销，原值仍保留"},randomUUID());
+    const corrected=await reporting.detail(reporter(),order.productionOrderId);
+    expect(corrected.order.completedQuantity).toBe(6);
+    expect(corrected.history.find(h=>h.reportId===firstReport.reportId)).toMatchObject({quantity:10,effective:false});
+    expect(corrected.history.find(h=>h.rootReportId===firstReport.rootReportId&&h.effective)).toMatchObject({quantity:0,revision:2});
+    await expect(reporting.correct(rootActor(),order.productionOrderId,firstReport.rootReportId,{expectedReportId:firstReport.reportId,businessDate,quantity:1,reason:"过期页面"},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(database.query("UPDATE sourcing_production_reports SET quantity=1 WHERE report_id=$1",[firstReport.reportId])).rejects.toBeDefined();
+    await reporting.report(reporter(),order.productionOrderId,{position:2,businessDate,quantity:10},randomUUID());
+    await expect(reporting.report(reporter(),order.productionOrderId,{position:2,businessDate,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await reporting.detail(readerActor(),order.productionOrderId)).canReport).toBe(false);
+    await expect(reporting.detail(financeActor(),order.productionOrderId)).rejects.toMatchObject({statusCode:403});
+    await reporting.setScope(rootActor(),{...grant,active:false},randomUUID());
+    await expect(reporting.report(reporter(),order.productionOrderId,{...input,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await reporting.setScope(rootActor(),{userId:reporterId,scopeType:"supplier",scopeId:factoryId,active:true},randomUUID());
+    expect((await reporting.list(reporter(),{supplierId:factoryId,q:"REPORT-"})).totalCount).toBe(2);
+    await expect(reporting.execute(reporter(),order.productionOrderId,"ship",{businessDate,confirmed:true},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const finish=await reporting.execute(reporter(),order.productionOrderId,"complete",{businessDate,confirmed:true},randomUUID());
+    expect(finish.value.order).toMatchObject({status:"production_completed",completedQuantity:16,quantity:30,firstReportedOn:businessDate});
+    await expect(reporting.report(reporter(),order.productionOrderId,{...input,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const shipKey=randomUUID();
+    const shipped=await reporting.execute(reporter(),order.productionOrderId,"ship",{businessDate,confirmed:true},shipKey);
+    expect(shipped.value.shipment).toEqual({firstStyleNo:"REPORT-ONE-A",shippedOn:businessDate,recordedQuantity:16});
+    expect((await reporting.execute(reporter(),order.productionOrderId,"ship",{businessDate,confirmed:true},shipKey)).value.shipment).toEqual(shipped.value.shipment);
+    expect(JSON.stringify(shipped.value)).not.toMatch(/daxing|777\.1234|unitPrice|bankAccount|totalAmount/);
+    expect(shipped.value.order.status).toBe("shipped");
+    expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[order.sourcingCaseId])).rowCount).toBe(0);
+    await service.deleteByRoot(rootActor(),order.sourcingCaseId,randomUUID());
+    expect((await reporting.detail(reporter(),order.productionOrderId)).order.sourceCaseArchived).toBe(true);
   });
 
 });

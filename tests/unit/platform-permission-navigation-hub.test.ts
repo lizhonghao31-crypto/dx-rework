@@ -24,7 +24,7 @@ describe("platform permission and desktop navigation hub", () => {
       [{ roleCode: "ie_reviewer", capabilities: ["sourcing:view", "sourcing:quote:write"] }],
       "sourcing",
     )).toBe(true);
-    expect(accessModuleIdsForRole("owner_group")).toEqual(["rework", "sourcing", "platform"]);
+    expect(accessModuleIdsForRole("owner_group")).toEqual(["rework", "sourcing", "production", "platform"]);
     expect(employeeHasAccessModule(["owner_group"], [], "sourcing")).toBe(true);
     expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
     expect(employeeHasAccessModule(["tail_inspector"], [], "rework")).toBe(true);
