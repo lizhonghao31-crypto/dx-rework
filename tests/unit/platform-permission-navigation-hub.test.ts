@@ -50,7 +50,12 @@ describe("platform permission and desktop navigation hub", () => {
       readFile("apps/web/src/shell-navigation.css", "utf8"),
     ]);
 
-    expect(components.indexOf('name: "我的待办"')).toBeLessThan(components.indexOf('name: "订单回货"'));
+    const todoIndex = components.indexOf('name: "我的待办"');
+    const productionIndex = components.indexOf('name: "实时生产看板"');
+    const receivingIndex = components.indexOf('name: "订单回货"');
+    expect(todoIndex).toBeLessThan(productionIndex);
+    expect(productionIndex).toBeLessThan(receivingIndex);
+    expect(components).not.toContain('{ name: "实时生产看板", description: "生产订单与填报", entries: productionNavigation }');
     expect(components).toContain('name: "订单返工"');
     expect(components).toContain('name: "外发定价&选厂"');
     expect(components).toContain('name: "平台管理"');

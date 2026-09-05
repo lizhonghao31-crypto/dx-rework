@@ -388,6 +388,13 @@ export function Shell({
       href: "/ui/my-tasks",
     });
   }
+  if (currentUser && canAccessProduction(currentUser)) {
+    globalNavigation.push({
+      name: "实时生产看板",
+      description: "生产订单与填报",
+      href: "/ui/production-dashboard",
+    });
+  }
   globalNavigation.push({
     name: "订单回货",
     description: "查看每日收货与数量差异",
@@ -483,14 +490,12 @@ export function Shell({
     ? [{ name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard" }, { name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] : [];
   const navigation: NavigationEntry[] = [
     ...globalNavigation,
-    ...productionNavigation.slice(0, 1).map(entry => ({ ...entry, name: "实时生产看板" })),
     ...reworkNavigation,
     ...mobileSourcingNavigation,
     ...mobileSupplierNavigation,
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
-    { name: "实时生产看板", description: "生产订单与填报", entries: productionNavigation },
     {
       name: "订单返工",
       description: "订单返工业务",

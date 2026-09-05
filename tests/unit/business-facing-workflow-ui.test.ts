@@ -185,14 +185,17 @@ describe("business-facing workflow UI", () => {
     expect(detail).not.toContain("const nextAction =");
   });
 
-  it("stops cancelled orders from aging without hiding post-completion external follow-up", async () => {
+  it("keeps completed orders visually final while deduction progress remains independent", async () => {
     const [card, query] = await Promise.all([
       read("apps/web/src/reporting/management-order-card.tsx"),
       read("apps/api/src/reporting/management-reporting-orders.ts"),
     ]);
-    expect(card).toContain("已取消 · 停止计时");
-    expect(card).toContain("已退出在途、逾期和当前异常统计");
-    expect(card).toContain("独立的外部扣款后续仍按实际状态统计");
+    expect(card).toContain('order.status === "completed"');
+    expect(card).toContain('? "success"');
+    expect(card).toContain('<dt>扣款状态</dt>');
+    expect(card).toContain('order.status === "completed" ? null');
+    expect(card).not.toContain("生产返工已结束");
+    expect(card).not.toContain("独立的外部扣款后续仍按实际状态统计");
     expect(query).toContain("order_record.status IN ('completed','cancelled') THEN 0");
     expect(query).toContain("order_record.status='cancelled' THEN false");
     expect(query).toContain("order_record.status='cancelled' THEN 0");

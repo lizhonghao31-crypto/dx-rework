@@ -115,6 +115,7 @@ export const ManagementReworkRowSchema = z.object({
   externalProposedAmount: MoneySchema,
   externalDeductedAmount: MoneySchema,
   externalRemainingAmount: MoneySchema,
+  deductionStatus: z.enum(["not_started", "not_deducted", "completed"]),
   overdue: z.boolean(),
   exceptionCount: z.number().int().nonnegative(),
   attachmentCount: z.number().int().nonnegative(),
