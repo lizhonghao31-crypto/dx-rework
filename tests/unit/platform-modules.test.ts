@@ -75,12 +75,13 @@ describe("thin platform module routing", () => {
   });
 
   it("protects sourcing with AuthGate and keeps the unified desktop CSS token-based", async () => {
-    const [app, components, shellCss, sourcingCss, sourcingPage] = await Promise.all([
+    const [app, components, shellCss, sourcingCss, sourcingPage, tokens] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
       readFile("apps/web/src/shell-navigation.css", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
+      readFile("packages/ui/src/tokens.css", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/sourcing"');
     expect(app).toContain('{ requiredCapability: "sourcing:view" }');
@@ -92,7 +93,8 @@ describe("thin platform module routing", () => {
     expect(components).toContain('"外发定价&选厂": { label: "外发", glyph: "发" }');
     expect(shellCss).toContain(".dx-nav-item.is-active .primary-navigation__copy small");
     expect(shellCss).toContain("color: #fff");
-    expect(sourcingCss).toContain("border: 1px solid #c9ced6");
+    expect(sourcingCss).toContain("border: 1px solid var(--dx-form-control-border)");
+    expect(tokens).toContain("--dx-form-control-border: #c9ced6;");
     expect(sourcingCss).toContain("@media (min-width: 761px)");
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
