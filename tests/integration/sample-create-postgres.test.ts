@@ -23,7 +23,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   const count = async () => Number((await db.query("SELECT count(*) FROM sample_items")).rows[0].count);
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const name of ["0001_platform_foundation.sql","0002_dingtalk_identity_access.sql","0003_identity_union_continuity.sql","0004_public_tools_foundation.sql","0005_access_master_data.sql","0152_sample_domain_foundation.sql","0153_sample_read_indexes_snapshots.sql","0154_sample_write_control.sql","0155_sample_financial_audit.sql"]) {
+    for (const name of ["0001_platform_foundation.sql","0002_dingtalk_identity_access.sql","0003_identity_union_continuity.sql","0004_public_tools_foundation.sql","0005_access_master_data.sql","0152_sample_domain_foundation.sql","0153_sample_read_indexes_snapshots.sql","0154_sample_write_control.sql","0155_sample_financial_audit.sql", "0157_sample_disposal_import.sql"]) {
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),"utf8"));
     }
     // Only the directory table is relevant; unrelated access-policy triggers are covered by their own suite.

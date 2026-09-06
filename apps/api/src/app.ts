@@ -1,3 +1,5 @@
+import {registerSampleImportRoutes,type SampleImportDependencies} from "./samples/sample-import-routes.js";
+import {registerSampleDisposalRoutes,type SampleDisposalDependencies} from "./samples/sample-disposal-routes.js";
 import { randomUUID } from "node:crypto";
 import { registerSampleWorkflowRoutes, type SampleWorkflowDependencies } from "./samples/sample-workflow-routes.js";
 import { registerSampleReadRoutes, type SampleReadHttpDependencies } from "./samples/sample-read-routes.js";
@@ -55,6 +57,8 @@ export type AppDependencies = Readonly<{
   sourcing?: SourcingHttpDependencies;
   samples?: SampleReadHttpDependencies;
   sampleCreation?: SampleCreateHttpDependencies;
+  sampleImport?: SampleImportDependencies;
+  sampleDisposal?: SampleDisposalDependencies;
   sampleWorkflow?: SampleWorkflowDependencies;
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
@@ -140,6 +144,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.receiving) registerReceivingRoutes(app, dependencies.receiving);
   if (dependencies.sourcing) registerSourcingRoutes(app, dependencies.sourcing);
   if (dependencies.samples) registerSampleReadRoutes(app, dependencies.samples);
+  if (dependencies.sampleImport) registerSampleImportRoutes(app, dependencies.sampleImport);
+  if (dependencies.sampleDisposal) registerSampleDisposalRoutes(app, dependencies.sampleDisposal);
   if (dependencies.sampleWorkflow) registerSampleWorkflowRoutes(app, dependencies.sampleWorkflow);
   if (dependencies.sampleCreation) registerSampleCreateRoutes(app, dependencies.sampleCreation);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);

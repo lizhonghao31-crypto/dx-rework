@@ -46,8 +46,7 @@ export function registerSampleCreateRoutes(app: FastifyInstance, deps: SampleCre
   });
   app.get<{ Params: { id: string; attachmentId: string } }>("/samples/:id/attachments/:attachmentId/download", async (request, reply) => {
     const user = await actor(request), sampleId = id(request.params.id), attachmentId = id(request.params.attachmentId);
-    const files = await deps.files.list(user, sampleId);
-    if (!files.attachments.some(file => file.attachmentId === attachmentId)) throw new ApplicationError("FORBIDDEN", "当前身份无权查看此样衣附件", 403);
+    if (!await deps.files.canDownloadForSample(user, sampleId, attachmentId)) throw new ApplicationError("FORBIDDEN", "当前身份无权查看此样衣附件", 403);
     const grant = await deps.attachments.createDownloadIntent(user, attachmentId, binding => deps.files.canDownload(user, binding), "inline");
     reply.header("Cache-Control", "no-store"); return reply.redirect(grant.downloadUrl);
   });
