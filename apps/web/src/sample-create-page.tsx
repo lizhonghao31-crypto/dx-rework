@@ -5,6 +5,7 @@ import { Button, Surface } from "@dx-rework/ui";
 import { Shell, Header } from "./components.js";
 import { createWebUrls } from "../url-contract.js";
 import { prepareImageUploadCandidate, sha256Hex } from "./attachment-upload.js";
+import { createClientRequestId } from "./client-request-id.js";
 import "./rework-v2-form.css";
 import "./search-select.css";
 
@@ -64,7 +65,7 @@ function SamplePersonPicker({ label, value, onChange, disabled }: { label: strin
 }
 
 type Draft = { key: string; brand: string; styleName: string; styleNo: string; color: string; size: string; category: string; department: string; purchaseDate: string; purchasePrice: string; purchaserUserId: string; holderUserId: string; differentHolder: boolean; remark: string; images: FileReference[] };
-const empty = (): Draft => ({ key: crypto.randomUUID(), brand: "", styleName: "", styleNo: "", color: "", size: "", category: "", department: "", purchaseDate: "", purchasePrice: "", purchaserUserId: "", holderUserId: "", differentHolder: false, remark: "", images: [] });
+const empty = (): Draft => ({ key: createClientRequestId(), brand: "", styleName: "", styleNo: "", color: "", size: "", category: "", department: "", purchaseDate: "", purchasePrice: "", purchaserUserId: "", holderUserId: "", differentHolder: false, remark: "", images: [] });
 export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
   const [items, setItems] = useState<Draft[]>([empty()]), [receipts, setReceipts] = useState<FileReference[]>([]);
   const [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [error, setError] = useState("");
@@ -86,7 +87,7 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
           receiptAttachmentIds:receipts.map(file=>file.attachmentId),imageAttachmentIds:item.images.map(file=>file.attachmentId) };
       });
       const body = JSON.stringify(batch ? { items: payload } : payload[0]);
-      if (attempt.current?.hash !== body) attempt.current = { hash: body, key: crypto.randomUUID() };
+      if (attempt.current?.hash !== body) attempt.current = { hash: body, key: createClientRequestId() };
       setBusy(true);
       setResult(await request(batch ? "samples/batch" : "samples", SampleCreateResultSchema, { method:"POST",headers:{"idempotency-key":attempt.current.key},body }));
     } catch (e) { setError(e instanceof Error ? e.message : "提交失败"); }
