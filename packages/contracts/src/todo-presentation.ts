@@ -17,6 +17,8 @@ export type TodoPresentation = Readonly<{
 }>;
 
 const catalog: Readonly<Record<string, TodoPresentation>> = {
+  sample_borrow_confirm: { title: "确认样衣借出", action: "请实际交付样衣后，扫描申请人的交接码确认。" },
+  sample_return_confirm: { title: "确认样衣归还", action: "请实际收到样衣后，扫描申请人的交接码并填写在库位置。" },
   process_configuration: { title: "配置返工工序", action: "请配置工序、计划数量和单价。" },
   process_configuration_return: { title: "返工方案已退回", action: "请修改返工方案后重新提交。" },
   process_configuration_rejection_notice: { title: "返工方案退回通知", action: "请查看退回结果和处理记录。" },
