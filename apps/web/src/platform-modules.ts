@@ -4,7 +4,7 @@ import { landingTarget } from "./landing-target.js";
 export const PLATFORM_MODULE_QUERY = "platform_module";
 
 export type PlatformModule = Readonly<{
-  id: "rework" | "sourcing" | "suppliers" | "production";
+  id: "rework" | "sourcing" | "suppliers" | "production" | "samples";
   href: string;
 }>;
 
@@ -16,6 +16,11 @@ export function canAccessSourcing(user: AuthorizedUser): boolean {
 
 export function canAccessSupplierCenter(user: AuthorizedUser): boolean {
   return user.isRoot === true || user.capabilities.includes("supplier_profile:read");
+}
+
+export function canAccessSamples(user: AuthorizedUser): boolean {
+  return user.isRoot === true || (user.capabilities.includes("sample:view_basic")
+    && user.businessRoles?.some(role => ["sample_designer", "sample_administrative", "sample_finance", "owner_group"].includes(role)) === true);
 }
 
 export function canAccessProduction(user: AuthorizedUser): boolean {
@@ -30,6 +35,7 @@ export function accessiblePlatformModules(user: AuthorizedUser): readonly Platfo
   if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing/pending" });
   if (canAccessSupplierCenter(user)) modules.push({ id: "suppliers", href: "ui/suppliers" });
   if (canAccessProduction(user)) modules.push({ id: "production", href: "ui/production-dashboard" });
+  if (canAccessSamples(user)) modules.push({ id: "samples", href: "ui/samples" });
   if (reworkHref) modules.push({ id: "rework", href: reworkHref });
   return modules;
 }
