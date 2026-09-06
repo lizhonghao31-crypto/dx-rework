@@ -7,7 +7,7 @@ import { canUseSampleCapability, requireSampleCapability } from "./sample-author
 
 export type SampleAttachmentPurpose = "sample_image" | "purchase_receipt" | "return_photo" | "disposal_proof" | "payment_proof";
 export async function bindSampleAttachments(client: PoolClient, actor: TrustedActorContext, sampleId: string,
-  ids: readonly string[], purpose: SampleAttachmentPurpose): Promise<void> {
+  ids: readonly string[], purpose: SampleAttachmentPurpose, currentBatchSampleIds: ReadonlySet<string> = new Set()): Promise<void> {
   for (const attachmentId of [...new Set(ids)].sort()) {
     const result = await client.query<{ status: string; uploaded_by: string; entity_type: string | null; entity_id: string | null; mime_type: string }>(
       "SELECT status,uploaded_by,entity_type,entity_id,mime_type FROM attachments WHERE attachment_id=$1 FOR UPDATE", [attachmentId]);
@@ -15,9 +15,12 @@ export async function bindSampleAttachments(client: PoolClient, actor: TrustedAc
     if (!file || file.status !== "ready" || !file.mime_type.startsWith("image/")) throw new ApplicationError("VALIDATION_ERROR", "附件必须是已上传完成的样衣图片", 400);
     if (file.uploaded_by !== actor.actorId && !isRootActor(actor)) throw new ApplicationError("FORBIDDEN", "不能绑定其他人上传的附件", 403);
     if (file.entity_type && (file.entity_type !== "sample_attachment" || file.entity_id !== attachmentId)) throw new ApplicationError("CONFLICT", "附件已用于其他业务", 409);
-    const prior = await client.query<{ purpose: string }>("SELECT purpose FROM sample_attachment_bindings WHERE attachment_id=$1", [attachmentId]);
+    const prior = await client.query<{ purpose: string; sample_id: string }>("SELECT purpose,sample_id FROM sample_attachment_bindings WHERE attachment_id=$1", [attachmentId]);
     if (prior.rows.some(row => (row.purpose === "purchase_receipt") !== (purpose === "purchase_receipt"))) {
       throw new ApplicationError("FORBIDDEN", "采购小票不能转作普通图片", 403);
+    }
+    if (purpose === "purchase_receipt" && prior.rows.some(row => row.sample_id !== sampleId && !currentBatchSampleIds.has(row.sample_id))) {
+      throw new ApplicationError("CONFLICT", "采购小票只能在本次录入的同一批样衣内共用", 409);
     }
     await client.query("UPDATE attachments SET entity_type='sample_attachment',entity_id=attachment_id::text,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1", [attachmentId]);
     await client.query(`INSERT INTO sample_attachment_bindings(sample_id,attachment_id,purpose,bound_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, [sampleId, attachmentId, purpose, actor.actorId]);

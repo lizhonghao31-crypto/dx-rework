@@ -60,6 +60,7 @@ export class SampleCreateService {
         let number = current.rows[0]!.maximum;
         if (number + parsed.data.items.length > 9999) throw new ApplicationError("CONFLICT", "本月样衣编号已用完，请联系负责人", 409);
         const items: { sampleId: string; sampleCode: string; version: 1 }[] = [];
+        const currentBatchSampleIds = new Set<string>();
         // One global lock order for all batch attachments avoids cross-batch deadlocks.
         const ids = [...new Set(parsed.data.items.flatMap(item => [...item.receiptAttachmentIds, ...item.imageAttachmentIds]))].sort();
         await client.query("SELECT attachment_id FROM attachments WHERE attachment_id=ANY($1::uuid[]) ORDER BY attachment_id FOR UPDATE", [ids]);
@@ -73,15 +74,18 @@ export class SampleCreateService {
           [sampleId,sampleCode,item.brand,item.styleName,item.styleNo,item.category,item.color,item.size,item.department,item.purchaseDate,
             purchaser.id,purchaser.display_name,holder.id,holder.display_name,clock.now,item.remark,actor.actorId]);
           await client.query("INSERT INTO sample_financial_facts(sample_id,purchase_price) VALUES($1,$2)", [sampleId,item.purchasePrice]);
-          await bindSampleAttachments(client, actor, sampleId, item.receiptAttachmentIds, "purchase_receipt");
+          await bindSampleAttachments(client, actor, sampleId, item.receiptAttachmentIds, "purchase_receipt", currentBatchSampleIds);
           await bindSampleAttachments(client, actor, sampleId, item.imageAttachmentIds, "sample_image");
           await client.query(`INSERT INTO sample_custody_records(custody_id,sample_id,holder_user_id,holder_name,department,purpose,borrowed_at,requested_by,initial_custody)
             VALUES($1,$2,$3,$4,$5,'采购后直接开发/打板',$6,$7,true)`, [randomUUID(),sampleId,holder.id,holder.display_name,item.department,clock.now,actor.actorId]);
-          await this.events.append(client, { ...actor, authorizationCapability: batch ? "sample:batch_create" : "sample:create" }, {
+          const eventId = await this.events.append(client, { ...actor, authorizationCapability: batch ? "sample:batch_create" : "sample:create" }, {
             action: "sample.created", entityType: "sample", entityId: sampleId,
-            after: { sampleCode,status:"borrowed",version:1,purchaserUserId:purchaser.id,holderUserId:holder.id,purchasePrice:item.purchasePrice,
-              receiptAttachmentIds:item.receiptAttachmentIds,imageAttachmentIds:item.imageAttachmentIds },
+            after: { sampleCode,status:"borrowed",version:1,purchaserUserId:purchaser.id,holderUserId:holder.id,
+              receiptCount:item.receiptAttachmentIds.length,imageAttachmentIds:item.imageAttachmentIds },
           });
+          await client.query("INSERT INTO sample_financial_audit(event_id,sample_id,after_state) VALUES($1,$2,$3)",
+            [eventId,sampleId,{purchasePrice:item.purchasePrice,receiptAttachmentIds:item.receiptAttachmentIds}]);
+          currentBatchSampleIds.add(sampleId);
           items.push({ sampleId, sampleCode, version: 1 });
         }
         return { statusCode: 201, response: SampleCreateResultSchema.parse({ items }) };

@@ -15,9 +15,9 @@ export type SampleCreateHttpDependencies = {
   files: SampleAttachmentService; attachments: AttachmentService;
 };
 export function registerSampleCreateRoutes(app: FastifyInstance, deps: SampleCreateHttpDependencies) {
-  const actor = async (request: FastifyRequest) => {
+  const actor = async (request: FastifyRequest, capability = "sample:view_basic") => {
     const token = request.headers.cookie?.split(";").map(part => part.trim()).find(part => part.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
-    return businessActor(deps.root, await deps.authenticate(token), request.id, "sample:create");
+    return businessActor(deps.root, await deps.authenticate(token), request.id, capability);
   };
   const id = (input: unknown) => {
     const value = z.string().uuid().safeParse(input);
@@ -28,13 +28,13 @@ export function registerSampleCreateRoutes(app: FastifyInstance, deps: SampleCre
     reply.header("Cache-Control", "no-store"); return deps.service.availability(await actor(request));
   });
   app.get("/samples/people", async (request, reply) => {
-    const user = await actor(request), query = SamplePeopleQuerySchema.safeParse(request.query);
+    const user = await actor(request, "sample:create"), query = SamplePeopleQuerySchema.safeParse(request.query);
     if (!query.success) throw new ApplicationError("VALIDATION_ERROR", "请输入员工姓名搜索", 400);
     reply.header("Cache-Control", "no-store"); return deps.service.people(user, query.data.search);
   });
   for (const [path, batch] of [["/samples", false], ["/samples/batch", true]] as const) {
     app.post(path, async (request, reply) => {
-      const user = await actor(request), key = request.headers["idempotency-key"];
+      const user = await actor(request, batch ? "sample:batch_create" : "sample:create"), key = request.headers["idempotency-key"];
       if (typeof key !== "string") throw new ApplicationError("VALIDATION_ERROR", "缺少提交编号，请重试", 400);
       reply.header("Cache-Control", "no-store");
       return reply.code(201).send(await deps.service.create(user, batch ? request.body : { items: [request.body] }, key, batch));

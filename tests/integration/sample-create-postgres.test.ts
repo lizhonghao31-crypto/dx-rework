@@ -23,7 +23,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   const count = async () => Number((await db.query("SELECT count(*) FROM sample_items")).rows[0].count);
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const name of ["0001_platform_foundation.sql","0002_dingtalk_identity_access.sql","0003_identity_union_continuity.sql","0004_public_tools_foundation.sql","0005_access_master_data.sql","0152_sample_domain_foundation.sql","0153_sample_read_indexes_snapshots.sql","0154_sample_write_control.sql"]) {
+    for (const name of ["0001_platform_foundation.sql","0002_dingtalk_identity_access.sql","0003_identity_union_continuity.sql","0004_public_tools_foundation.sql","0005_access_master_data.sql","0152_sample_domain_foundation.sql","0153_sample_read_indexes_snapshots.sql","0154_sample_write_control.sql","0155_sample_financial_audit.sql"]) {
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),"utf8"));
     }
     // Only the directory table is relevant; unrelated access-policy triggers are covered by their own suite.
@@ -54,6 +54,10 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect(await service.create(actor(),{items:[item]},key,false)).toEqual(result);
     await expect(service.create(actor(),{items:[{...item,color:"红"}]},key,false)).rejects.toMatchObject({code:"IDEMPOTENCY_CONFLICT"});
     expect(Number((await db.query("SELECT count(*) FROM operation_events WHERE entity_type='sample' AND entity_id=$1",[id])).rows[0].count)).toBe(1);
+    const audit = JSON.stringify((await db.query("SELECT after_state FROM operation_events WHERE entity_type='sample' AND entity_id=$1",[id])).rows);
+    expect(audit).not.toContain("123.45"); expect(audit).not.toContain(item.receiptAttachmentIds[0]);
+    expect((await db.query("SELECT after_state FROM sample_financial_audit WHERE sample_id=$1",[id])).rows[0].after_state).toEqual({purchasePrice:"123.45",receiptAttachmentIds:item.receiptAttachmentIds});
+    await expect(db.query("UPDATE sample_financial_audit SET after_state='{}' WHERE sample_id=$1",[id])).rejects.toMatchObject({code:"55000"});
   });
   it("allows shared batch receipts and distinct initial holders without exposing receipts", async () => {
     const item = await input(), image = await attachment();
@@ -67,6 +71,8 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     for (const role of ["sample_finance","owner_group","root_superuser"]) expect(await files.canDownload(actor(role),{entityType:"sample_attachment",entityId:item.receiptAttachmentIds[0]!})).toBe(true);
     expect(await files.canDownload(actor("sample_designer"),{entityType:"sample_attachment",entityId:image})).toBe(true);
     await expect(service.create(actor(),{items:[{...await input(),imageAttachmentIds:item.receiptAttachmentIds}]},randomUUID(),false)).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(service.create(actor(),{items:[item]},randomUUID(),false)).rejects.toMatchObject({code:"CONFLICT"});
+    await expect(service.create(actor(),{items:[item,item]},randomUUID(),true)).rejects.toMatchObject({code:"CONFLICT"});
   });
   it("rolls back every row, first custody and attachment binding if a later batch item fails", async () => {
     const first = await input(), second = await input(), before = await count(), key = randomUUID();
@@ -86,8 +92,8 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect(people.people.map(person=>person.userId).sort()).toEqual([userId,holderId].sort());
   });
   it("serializes concurrent numbering and duplicate submissions in PostgreSQL", async () => {
-    const item = await input(), key = randomUUID(), before = await count();
-    const results = await Promise.all([service.create(actor(),{items:[item]},key,false),service.create(actor(),{items:[item]},key,false),service.create(actor(),{items:[item]},randomUUID(),false)]);
+    const item = await input(), another = await input(), key = randomUUID(), before = await count();
+    const results = await Promise.all([service.create(actor(),{items:[item]},key,false),service.create(actor(),{items:[item]},key,false),service.create(actor(),{items:[another]},randomUUID(),false)]);
     expect(results[0]).toEqual(results[1]); expect(results[2]!.items[0]!.sampleCode).not.toBe(results[0]!.items[0]!.sampleCode);
     expect(await count()).toBe(before+2);
   });
