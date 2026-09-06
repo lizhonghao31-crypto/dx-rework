@@ -1,4 +1,5 @@
 import { ProductionClosureService } from "./sourcing/production-closure-service.js";
+import { SampleWorkflowService } from "./samples/sample-workflow-service.js";
 import { SampleReadService } from "./samples/sample-read-service.js";
 import { SampleCreateService } from "./samples/sample-create-service.js";
 import { SampleAttachmentService } from "./samples/sample-attachments.js";
@@ -219,6 +220,10 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: new SampleReadService(database),
     root: rootAuthority,
+  },
+  sampleWorkflow: {
+    authenticate: token => auth.authenticate(token), root: rootAuthority,
+    service: new SampleWorkflowService(database, config.dingtalk.corpId, config.todoRuntime.publicBaseUrl ?? "", todoProjection),
   },
   sampleCreation: {
     authenticate: token => auth.authenticate(token), root: rootAuthority,

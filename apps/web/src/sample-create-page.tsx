@@ -48,17 +48,17 @@ export function SampleImageUpload({ label, value, onChange, disabled, onBusy }: 
     {error ? <p role="alert">{error}</p> : null}</div>;
 }
 
-function SamplePersonPicker({ label, value, onChange, disabled }: { label: string; value: string; onChange(value: string): void; disabled: boolean }) {
+export function SamplePersonPicker({ label, value, onChange, disabled, endpoint = "samples/people" }: { label: string; value: string; onChange(value: string): void; disabled: boolean; endpoint?: string }) {
   const [text, setText] = useState(""), [people, setPeople] = useState<z.infer<typeof SamplePeopleResponseSchema>["people"]>([]), [error, setError] = useState("");
   useEffect(() => {
     if (value || !text.trim()) { setPeople([]); return; }
     const abort = new AbortController(), timer = setTimeout(() => {
-      void request(`samples/people?search=${encodeURIComponent(text.trim())}`, SamplePeopleResponseSchema, { signal: abort.signal })
+      void request(`${endpoint}?search=${encodeURIComponent(text.trim())}`, SamplePeopleResponseSchema, { signal: abort.signal })
         .then(result => { if (!abort.signal.aborted) { setPeople(result.people); setError(result.people.length ? "" : "未找到有效员工"); } })
         .catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "员工搜索失败"); });
     }, 200);
     return () => { clearTimeout(timer); abort.abort(); };
-  }, [text, value]);
+  }, [text, value, endpoint]);
   return <div><label>{label}<span className="rework-v2-control search-select"><input aria-label={label} type="search" value={text} disabled={disabled} autoComplete="off" placeholder="输入姓名后选择员工" onChange={e => { setText(e.target.value); onChange(""); setError(""); }} />
     {people.length ? <span className="search-select__results" role="listbox" aria-label={`${label}搜索结果`}>{people.map(person => <button type="button" role="option" aria-selected={false} key={person.userId} onClick={() => { onChange(person.userId); setText(`${person.name}${person.department ? ` · ${person.department}` : ""}`); setPeople([]); }}>{person.name} · {person.department || "未记录部门"}{people.filter(other => other.name === person.name && other.department === person.department).length > 1 ? ` · ${person.userId.slice(-6)}` : ""}</button>)}</span> : null}
   </span></label>{error ? <p role="status">{error}</p> : null}</div>;

@@ -13,6 +13,7 @@ import "./rework-v2-form.css";
 import "./sample-workspace.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+import { SampleWorkflowActions, SampleBatchReturn } from "./sample-workflow-page.js";
 import { SampleCreationLinks, SampleAttachments } from "./sample-create-page.js";
 
 export const sampleStatusLabels: Record<SampleStatus, string> = {
@@ -104,6 +105,7 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
         {item.finance ? <div><dt>采购价</dt><dd>¥{item.finance.purchasePrice}</dd></div> : null}
       </dl>
     </Surface>
+    <SampleWorkflowActions sampleId={item.sampleId} />
     <SampleAttachments sampleId={item.sampleId} />
     <Surface className="rework-v2-core"><details open><summary>借还记录</summary><SampleHistory sampleId={item.sampleId} kind="custody" /></details></Surface>
     <Surface className="rework-v2-core"><details><summary>处置记录</summary><SampleHistory sampleId={item.sampleId} kind="disposal" /></details></Surface>
@@ -116,6 +118,7 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
   const [detail, setDetail] = useState<SampleDetailResponse | null>(null), [amounts, setAmounts] = useState<SampleAmounts | null>(null);
   const [view, setView] = useState("borrowed"), [filters, setFilters] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1), [busy, setBusy] = useState(true), [error, setError] = useState(""), [retry, setRetry] = useState(0);
+  useEffect(() => { const refresh = () => setRetry(value => value + 1); window.addEventListener("sample-updated", refresh); return () => window.removeEventListener("sample-updated", refresh); }, []);
   const filter = (key: string, value: string) => { setFilters(old => ({ ...old, [key]: value })); setPage(1); };
   useEffect(() => {
     if (mode === "detail" || mode === "amounts") return;
@@ -151,6 +154,7 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
     {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
     {busy ? <p role="status">正在加载样衣资料…</p> : null}
     {mode === "managed" ? <SampleCreationLinks /> : null}
+    {mode === "managed" && data ? <SampleBatchReturn items={data.items} /> : null}
     {mode === "detail" && detail ? <SampleDetail detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">
       {Object.entries({ 累计采购金额: amounts.purchaseTotal, 当前在管原值: amounts.managedOriginalValue,

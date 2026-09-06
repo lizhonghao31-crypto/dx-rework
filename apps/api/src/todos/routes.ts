@@ -71,7 +71,7 @@ export function registerTodoRoutes(
     const module = request.query.module;
     const query = request.query.q;
     const pageInput = request.query.page;
-    if (module !== undefined && module !== "rework" && module !== "sourcing" && module !== "production") {
+    if (module !== undefined && module !== "rework" && module !== "sourcing" && module !== "production" && module !== "samples") {
       throw new ApplicationError("VALIDATION_ERROR", "待办模块无效", 400);
     }
     if (query !== undefined && typeof query !== "string") {

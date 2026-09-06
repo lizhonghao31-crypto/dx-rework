@@ -8,6 +8,7 @@ export * from "./sourcing.js";
 export * from "./samples.js";
 export * from "./sample-read.js";
 export * from "./sample-create.js";
+export * from "./sample-workflow.js";
 
 export const LiveHealthResponseSchema = z.object({
   status: z.literal("ok"),

@@ -48,6 +48,9 @@ export function buildTodoDeepLink(
     case "production_detail":
       path = `/ui/production-dashboard/${route.entityId}`;
       break;
+    case "sample_detail":
+      path = `/ui/samples/${route.entityId}`;
+      break;
     case "sourcing_detail":
       path = `/ui/sourcing/orders/${route.entityId}`;
       break;

@@ -44,6 +44,10 @@ type TodoRow = Readonly<{
   style_no?: string | null;
   rework_status?: string | null;
   rework_updated_at?: Date | null;
+  sample_code?: string | null;
+  sample_style_no?: string | null;
+  sample_status?: string | null;
+  sample_updated_at?: Date | null;
   sourcing_order_no?: string | null;
   sourcing_style_no?: string | null;
   sourcing_status?: string | null;
@@ -72,7 +76,7 @@ export type TodoListOptions = Readonly<{
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production"];
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
@@ -82,6 +86,8 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.created_at,todos.updated_at,
   orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
   orders.updated_at rework_updated_at,
+  sample.sample_code,COALESCE(NULLIF(sample.style_no,''),sample.style_name) sample_style_no,
+  sample.status sample_status,sample.updated_at sample_updated_at,
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
   sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
   COALESCE(
@@ -92,12 +98,14 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
     END
   ) supplier_name_snapshot,
   CASE
+    WHEN todos.entity_type='sample' THEN 'samples'
     WHEN todos.route_descriptor->>'routeName'='sourcing_detail'
       OR todos.entity_type='sourcing_case' THEN 'sourcing'
     ELSE 'rework'
   END todo_module,
   CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END status_rank
 FROM rework_todos todos
+LEFT JOIN sample_items sample ON sample.sample_id=CASE WHEN todos.entity_type='sample' THEN todos.entity_id::uuid END
 LEFT JOIN rework_orders orders
   ON orders.rework_order_id=COALESCE(
     NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
@@ -187,8 +195,8 @@ const TODO_DELIVERY_TOPIC = "todo.delivery";
 const emptyModuleCounts = (): TodoModuleCounts => ({ rework: 0, sourcing: 0 });
 
 const todoResponse = (row: TodoRow): TodoResponse => {
-  const contextStatus = row.rework_status ?? row.sourcing_status;
-  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at;
+  const contextStatus = row.rework_status ?? row.sourcing_status ?? row.sample_status;
+  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at ?? row.sample_updated_at;
   return ({
   todoId: row.todo_id,
   todoType: row.todo_type,
@@ -209,8 +217,8 @@ const todoResponse = (row: TodoRow): TodoResponse => {
   orderContext: contextStatus && contextUpdatedAt
     ? {
         reworkNo: row.rework_no ?? null,
-        orderNo: row.order_no ?? row.sourcing_order_no ?? null,
-        styleNo: row.style_no ?? row.sourcing_style_no ?? null,
+        orderNo: row.order_no ?? row.sourcing_order_no ?? row.sample_code ?? null,
+        styleNo: row.style_no ?? row.sourcing_style_no ?? row.sample_style_no ?? null,
         supplierName: row.supplier_name_snapshot ?? null,
         status: contextStatus,
         updatedAt: contextUpdatedAt.toISOString(),
@@ -307,8 +315,9 @@ export class TodoService {
          AND todo_module=$2
          AND (
            $3=''
-           OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(style_no,sourcing_style_no,sample_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
          )`,
       [actor.actorId, activeModule, normalizedQuery],
     );
@@ -328,8 +337,9 @@ export class TodoService {
          AND todo_module=$2
          AND (
            $3=''
-           OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(style_no,sourcing_style_no,sample_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
          )
        ORDER BY status_rank ASC,due_at ASC NULLS LAST,created_at DESC,todo_id DESC
        LIMIT $4 OFFSET $5`,

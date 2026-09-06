@@ -1,5 +1,6 @@
 import { ProductionDashboardPage } from "./production-dashboard-page.js";
 import { SampleWorkspacePage } from "./sample-workspace-page.js";
+import { SampleHandoffPage } from "./sample-workflow-page.js";
 import { SampleCreatePage } from "./sample-create-page.js";
 import { ProductionReportingPage } from "./production-reporting-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
@@ -304,6 +305,7 @@ export function App() {
   let page;
   if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
+  else if (path === "/ui/samples/handoff") page = <SampleHandoffPage />;
   else if (path === "/ui/samples") page = <SampleWorkspacePage />;
   else if (path === "/ui/samples/create") page = <SampleCreatePage />;
   else if (path === "/ui/samples/batch-create") page = <SampleCreatePage batch />;
@@ -366,6 +368,7 @@ export function App() {
 
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
+    if (path === "/ui/samples/handoff") return <AuthGate requiredRole="sample_administrative" requiredCapability="sample:view_basic">{page}</AuthGate>;
     if (path === "/ui/samples/create" || path === "/ui/samples/batch-create") {
       return <AuthGate requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}>{page}</AuthGate>;
     }
