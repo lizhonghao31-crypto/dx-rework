@@ -69,7 +69,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await db.query('SELECT paid_by FROM sample_disposals WHERE sample_id=$1',[id])).rows[0].paid_by).toBe(administrative);
  });
  it('keeps corrected receipts and amounts private while preserving old receipt audit',async()=>{
-  const id=await sample(),receipt=await attachment(root);const old=(await files.list(owner(),id)).attachments.find(f=>f.purpose==='purchase_receipt')!.attachmentId;
+  const id=await sample(),receipt=await attachment(root);expect(await disposal.actions(owner(),id)).toMatchObject({canCorrectFinance:true,canReplaceReceipts:true});const old=(await files.list(owner(),id)).attachments.find(f=>f.purpose==='purchase_receipt')!.attachmentId;
   await expect(disposal.correctFinance(clerk(),id,{version:1,purchasePrice:'90.35',receiptAttachmentIds:[receipt],receiptMode:'replace',reason:'核对原始票据'},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
   await disposal.correctFinance(owner(),id,{version:1,purchasePrice:'90.35',receiptAttachmentIds:[receipt],receiptMode:'replace',reason:'核对原始票据'},randomUUID());
   expect((await files.list(owner(),id)).attachments.map(f=>f.attachmentId)).toContain(receipt);expect((await files.list(owner(),id)).attachments.map(f=>f.attachmentId)).not.toContain(old);
@@ -80,7 +80,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  it('finance edits basic data and appends receipts with private immutable audit, idempotency and boundaries',async()=>{
   const id=await sample(),f=actor('sample_finance',finance),receipt=await attachment(finance);
   const original=(await files.list(f,id)).attachments.find(a=>a.purpose==='purchase_receipt')!.attachmentId;
-  expect(await disposal.actions(f,id)).toMatchObject({canUpdateBasic:true,canCorrectFinance:true,canApprove:false,canArchive:false});
+  expect(await disposal.actions(f,id)).toMatchObject({canUpdateBasic:true,canCorrectFinance:true,canReplaceReceipts:false,canApprove:false,canArchive:false});
   const basic={version:1,brand:'修改品牌',styleName:'新名称',color:'黑',department:'设计',styleNo:'S1',category:'上衣',size:'M',remark:'核对资料',reason:'核对样衣'};
   await disposal.updateBasic(f,id,basic,randomUUID());
   const key=randomUUID(),input={version:2,purchasePrice:'91.25',receiptAttachmentIds:[receipt],reason:'补充采购小票'};
@@ -107,7 +107,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const id=await sample();await disposal.request(clerk(),id,{version:1,type:'scrap',reason:'破损',proofAttachmentIds:[await attachment(administrative)]},randomUUID());
   const tasks=(await db.query("SELECT recipient_user_id,status FROM rework_todos WHERE entity_id=$1 AND category='sample_disposal_approval'",[id])).rows;
   expect(tasks).toHaveLength(2);expect(tasks.map(t=>t.recipient_user_id).sort()).toEqual([other,approver].sort());
-  expect(await disposal.actions(actor('sample_approver',approver),id)).toMatchObject({canApprove:true,canCorrectFinance:false,canUpdateBasic:false,canArchive:false});
+  expect(await disposal.actions(actor('sample_approver',approver),id)).toMatchObject({canApprove:true,canCorrectFinance:false,canReplaceReceipts:false,canUpdateBasic:false,canArchive:false});
   await disposal.decide(actor('sample_approver',approver),id,{version:2,decision:'approve'},randomUUID());
   expect((await row(id)).status).toBe('scrapped');
   expect((await db.query("SELECT status FROM rework_todos WHERE entity_id=$1",[id])).rows.every(t=>t.status==='completed')).toBe(true);
