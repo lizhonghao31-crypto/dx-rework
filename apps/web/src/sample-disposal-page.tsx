@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {normalizeSampleMoneyFields} from './sample-money-input.js';
 import {z} from 'zod';
 import {SampleDisposalActionsSchema,SampleMaintenanceResultSchema,SampleFinancialAuditResponseSchema,type SampleView} from '@dx-rework/contracts';
 import {Button,Surface} from '@dx-rework/ui';
@@ -14,10 +15,16 @@ export function SampleDisposalActions({item}:{item:SampleView}){
  const [financeAmount,setFinanceAmount]=useState(item.finance?.purchasePrice??''),[financeFiles,setFinanceFiles]=useState<{attachmentId:string;filename:string}[]>([]);
  const [files,setFiles]=useState<{attachmentId:string;filename:string}[]>([]),[uploading,setUploading]=useState(false),[basic,setBasic]=useState({brand:item.brand,styleName:item.styleName,color:item.color,department:item.department,styleNo:item.styleNo,category:item.category,size:item.size,remark:item.remark}),action=useSampleSubmit();
  useEffect(()=>{const abort=new AbortController();void readSampleAction(`samples/${item.sampleId}/disposal-actions`,SampleDisposalActionsSchema,{signal:abort.signal}).then(v=>{if(!abort.signal.aborted)setData(v);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'操作加载失败');});return()=>abort.abort();},[item.sampleId,item.version]);
- const send=async(path:string,fields:Record<string,unknown>)=>{if(await action.send(`samples/${item.sampleId}/${path}`,{version:item.version,...fields},SampleMaintenanceResultSchema))window.dispatchEvent(new Event('sample-updated'));};
+ const send=async(path:string,fields:Record<string,unknown>)=>{
+  setError('');
+  try{
+   const input=normalizeSampleMoneyFields(fields);
+   if(await action.send(`samples/${item.sampleId}/${path}`,{version:item.version,...input},SampleMaintenanceResultSchema))window.dispatchEvent(new Event('sample-updated'));
+  }catch(e){setError(e instanceof Error?e.message:'请检查输入资料');}
+ };
  if(!data)return error?<p role="alert">{error}</p>:null;if(!data.enabled)return null;
  const disabled=action.busy||uploading,proofAttachmentIds=files.map(f=>f.attachmentId),moneyRequired=['sale','loss'].includes(data.pending?.type??'');
- return <Surface className="rework-v2-core"><h2>处置与资料维护</h2>{action.error?<p role="alert">{action.error}</p>:null}
+ return <Surface className="rework-v2-core"><h2>处置与资料维护</h2>{error||action.error?<p role="alert">{error||action.error}</p>:null}
   {data.pending?<p>待处理处置：{({sale:'出售',gift:'赠送',scrap:'报废',loss:'遗失'})[data.pending.type]}{data.pending.recipient?` · 接收对象：${data.pending.recipient}`:''}{data.pending.responsibleName?` · 责任人：${data.pending.responsibleName}`:''}{data.pending.reason?` · ${data.pending.reason}`:''}</p>:null}
   {data.canRequest?<details><summary>发起处置</summary><div className="rework-v2-grid"><label>处置类型<select value={type} disabled={disabled} onChange={e=>{setType(e.target.value);setFiles([]);}}>{item.status==='in_stock'?<><option value="sale">出售</option><option value="gift">赠送</option></>:null}<option value="scrap">报废</option>{item.status==='borrowed'?<option value="loss">遗失</option>:null}</select></label>
    {['sale','gift'].includes(type)?<label>接收对象<input value={recipient} disabled={disabled} onChange={e=>setRecipient(e.target.value)}/></label>:<label>原因说明<input value={reason} disabled={disabled} onChange={e=>setReason(e.target.value)}/></label>}
