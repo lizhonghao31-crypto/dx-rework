@@ -120,6 +120,9 @@ CREATE TABLE sample_workflow_requests (
  purpose text, reason text NOT NULL DEFAULT '', version integer NOT NULL DEFAULT 1 CHECK (version>0),
  resolved_by uuid REFERENCES app_users(id), resolution_reason text, resolved_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(request_id,sample_id,request_type),
+ CHECK ((request_type IN ('borrow','sale','gift') AND from_status='in_stock')
+   OR (request_type IN ('return','loss') AND from_status='borrowed') OR request_type='scrap'),
  CHECK ((status IN ('completed','rejected','cancelled'))=(resolved_at IS NOT NULL AND resolved_by IS NOT NULL))
 );
 CREATE UNIQUE INDEX sample_request_one_active_idx ON sample_workflow_requests(sample_id)
@@ -135,10 +138,13 @@ CREATE TABLE sample_disposals (
  final_amount numeric(14,2) CHECK (final_amount>=0),
  approved_by uuid REFERENCES app_users(id), approved_at timestamptz,
  paid_by uuid REFERENCES app_users(id), paid_at timestamptz,
+ FOREIGN KEY(request_id,sample_id,disposal_type) REFERENCES sample_workflow_requests(request_id,sample_id,request_type),
  CHECK ((approved_by IS NULL)=(approved_at IS NULL)),
  CHECK ((paid_by IS NULL)=(paid_at IS NULL)),
  CHECK (paid_at IS NULL OR approved_at IS NOT NULL),
  CHECK (disposal_type<>'loss' OR responsible_user_id IS NOT NULL),
+ CHECK (disposal_type<>'sale' OR (proposed_amount IS NOT NULL AND proposed_amount>0)),
+ CHECK (disposal_type<>'sale' OR approved_at IS NULL OR (final_amount IS NOT NULL AND final_amount>0)),
  CHECK (disposal_type<>'loss' OR approved_at IS NULL OR (final_amount IS NOT NULL AND final_amount>0))
 );
 CREATE INDEX sample_disposal_date_idx ON sample_disposals(disposal_type,approved_at,sample_id);
@@ -198,4 +204,12 @@ CREATE TRIGGER sample_imports_no_truncate BEFORE TRUNCATE ON sample_migration_im
 CREATE TRIGGER sample_items_no_truncate BEFORE TRUNCATE ON sample_items
  FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
 CREATE TRIGGER sample_custody_no_truncate BEFORE TRUNCATE ON sample_custody_records
+ FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sample_requests_no_delete BEFORE DELETE ON sample_workflow_requests
+ FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sample_requests_no_truncate BEFORE TRUNCATE ON sample_workflow_requests
+ FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sample_disposals_no_delete BEFORE DELETE ON sample_disposals
+ FOR EACH ROW EXECUTE FUNCTION reject_operation_event_mutation();
+CREATE TRIGGER sample_disposals_no_truncate BEFORE TRUNCATE ON sample_disposals
  FOR EACH STATEMENT EXECUTE FUNCTION reject_operation_event_mutation();

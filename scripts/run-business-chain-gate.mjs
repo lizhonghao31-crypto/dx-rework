@@ -9,7 +9,7 @@ const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
 const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
 const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32}|sourcing_[0-9a-f]{32})$/;
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32}|sourcing_[0-9a-f]{32}|sample_[0-9a-f]{32})$/;
 const RUNTIME_ENV_KEYS = new Set([
   "TEST_DATABASE_URL",
   "DATABASE_URL",
@@ -161,7 +161,8 @@ async function cleanupIsolatedGateSchemas() {
           OR nspname LIKE 'root_http_%'
           OR nspname LIKE 'receiving_%'
           OR nspname LIKE 'rework_v2_%'
-          OR nspname LIKE 'sourcing_%'`,
+          OR nspname LIKE 'sourcing_%'
+          OR nspname LIKE 'sample_%'`,
     );
     for (const row of result.rows) {
       const schema = String(row.nspname);

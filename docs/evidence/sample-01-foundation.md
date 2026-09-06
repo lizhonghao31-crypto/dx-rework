@@ -14,7 +14,7 @@ forbidden files: 已有返工/外发/工资业务实现、已有迁移 SQL、认
 
 业务基线：`docs/requirements/sample-system-migration-v1.0.md`。本次任务获业务负责人授权逐个 PR 验证、最多一次 Codex Review、合并及继续后续 PR；生产数据对账与上线门槛保持有效。
 
-必要的门禁接入：`scripts/run-business-chain-gate.mjs` 仅在现有数据库测试清单中增加样衣 PostgreSQL 用例，不更改其他测试、触发条件或 runner 拓扑。
+必要的门禁接入：`scripts/run-business-chain-gate.mjs` 在现有数据库测试清单中增加样衣 PostgreSQL 用例，并将严格限定为 `sample_` 加 32 位十六进制的隔离测试 schema 纳入原有清理机制；同步 `tests/unit/business-chain-schema-cleanup.test.ts`。不更改触发条件或 runner 拓扑。
 
 ## 本 PR 的交付边界
 
@@ -49,6 +49,19 @@ forbidden files: 已有返工/外发/工资业务实现、已有迁移 SQL、认
 - PostgreSQL 测试覆盖库存/持有人约束、唯一活跃请求、唯一当前借用、不可覆盖历史、并发幂等暂存与审计。
 - 当前 Head 的 Full Gate 和一次 Codex Review 为合并门槛；具体结果以 GitHub 当前 Head 为准。
 - 本 PR 没有 UI，真实五尺寸页面验收从 PR-2 开始。
+
+## 唯一一次 Review 后的修正
+
+Review 对 `ce576476d727a0d884b0ccb4080faad3f1ae5f6a` 提出的六项意见均落实：
+
+- 递归收集样衣历史、日志、借用申请中的附件，每个对象保留来源实体及字段路径。重新盘点原快照仍为 563 个对象、540 件样衣、784 条日志；没有变更源数据。
+- 处置的申请 ID、样衣 ID、处置类型通过复合外键保持一致。
+- 出售申请及批准阶段分别要求有效正金额；遗失批准继续要求正金额。
+- 请求类型与来源状态建立组合约束，借出、归还、出售、赠送、遗失不接受非法来源状态。
+- 请求和处置记录禁止删除与 truncate，补足永久历史保护。
+- 隔离测试 schema 清理同时更新查询、严格白名单及回归测试。
+
+本地定向测试 15 项通过，PGlite 执行迁移及 12 个约束拒绝检查通过；真实 PostgreSQL 验证以修正 Head 的第二次 Full Gate 为准。依授权不触发第二次 Review。
 
 ## 运行与回退
 

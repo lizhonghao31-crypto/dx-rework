@@ -16,7 +16,8 @@ export type SampleInventory = {
   sourceHash: string; sourceUpdatedAt: string; sampleCount: number; logCount: number; requestCount: number;
   states: Record<string, number>; purchaseTotal: string; amountComplete: boolean;
   borrowHistoryCount: number; disposalHistoryCount: number;
-  attachments: { objectKey: string; purposes: string[]; sampleIds: string[] }[];
+  attachments: { objectKey: string; purposes: string[]; sampleIds: string[];
+    references: { entityType: string; legacyId: string; field: string }[] }[];
   issues: MigrationIssue[];
   // Inventory is not an import approval. Object checks, identity mapping and reconciliation come next.
   readyForImport: false;
@@ -90,7 +91,40 @@ export function inventorySampleSource(input: unknown): { source: SampleSourceSna
   const issues: MigrationIssue[] = [];
   const states: Record<string, number> = Object.create(null) as Record<string, number>;
   const codes = new Set<string>();
-  const attachments = new Map<string, { objectKey: string; purposes: Set<string>; sampleIds: Set<string> }>();
+  const attachments = new Map<string, { objectKey: string; purposes: Set<string>; sampleIds: Set<string>;
+    references: { entityType: string; legacyId: string; field: string }[] }>();
+  const collect = (value: unknown, entityType: string, legacyId: string, sampleId: string | undefined,
+    path: string, candidate = false): void => {
+    const purpose = /receipt/i.test(path) ? "purchase_receipt" : /payment|compensation/i.test(path) ? "payment_proof"
+      : /disposal|sale|gift|scrap|loss/i.test(path) ? "disposal_proof" : /return/i.test(path) ? "return_photo"
+        : /image|photo/i.test(path) ? "sample_image" : "legacy_evidence";
+    const record = (reference: unknown) => {
+      const key = attachmentKey(reference);
+      if (!key) { issues.push({ entityType, legacyId, code: "INVALID_ATTACHMENT_REFERENCE", field: path }); return; }
+      const entry = attachments.get(key) ?? { objectKey: key, purposes: new Set<string>(), sampleIds: new Set<string>(), references: [] };
+      entry.purposes.add(purpose);
+      if (sampleId) entry.sampleIds.add(sampleId);
+      entry.references.push({ entityType, legacyId, field: path });
+      attachments.set(key, entry);
+    };
+    if (typeof value === "string") {
+      if (value && (candidate || value.startsWith("daxing-sample/") || value.includes("daxing-sample-media.oss-cn-hangzhou.aliyuncs.com"))) record(value);
+    } else if (Array.isArray(value)) value.forEach((entry, index) => collect(entry, entityType, legacyId, sampleId, `${path}[${index}]`, candidate));
+    else if (value && typeof value === "object") {
+      const object = value as Record<string, unknown>;
+      const referenceKeys = ["objectKey", "url", "previewUrl"];
+      const reference = referenceKeys.some(key => typeof object[key] === "string" && object[key] !== "");
+      if (reference) record(value);
+      for (const [key, entry] of Object.entries(object)) {
+        if (reference && referenceKeys.includes(key)) continue;
+        collect(entry, entityType, legacyId, sampleId, path ? `${path}.${key}` : key,
+          /^(?:.*(?:images?|photos?|receipts?|proofs?|attachments?|screenshots?))$/i.test(key));
+      }
+    }
+  };
+  for (const [kind, entries] of [["sample", source.samples], ["log", source.logs], ["borrow_request", source.borrowRequests]] as const) {
+    for (const entry of entries) collect(entry, kind, entry.id, kind === "sample" ? entry.id : typeof entry.sampleId === "string" ? entry.sampleId : undefined, "");
+  }
   let cents = 0n;
   let amountComplete = true;
   let borrowHistoryCount = 0;
@@ -127,10 +161,8 @@ export function inventorySampleSource(input: unknown): { source: SampleSourceSna
     ] as const) {
       for (const reference of refs.filter((value) => value !== null && value !== undefined && value !== "")) {
         const key = attachmentKey(reference);
-        if (!key) { issue("INVALID_ATTACHMENT_REFERENCE", purpose); continue; }
+        if (!key) continue;
         if (purpose === "purchase_receipt") receiptCount++;
-        const entry = attachments.get(key) ?? { objectKey: key, purposes: new Set<string>(), sampleIds: new Set<string>() };
-        entry.purposes.add(purpose); entry.sampleIds.add(sample.id); attachments.set(key, entry);
       }
     }
     if (!receiptCount) issue("MISSING_RECEIPT", "receiptImages");
@@ -144,7 +176,7 @@ export function inventorySampleSource(input: unknown): { source: SampleSourceSna
     sourceHash: sampleSourceHash(source), sourceUpdatedAt: source.updatedAt,
     sampleCount: source.samples.length, logCount: source.logs.length, requestCount: source.borrowRequests.length,
     states, purchaseTotal: sampleMoneyText(cents), amountComplete, borrowHistoryCount, disposalHistoryCount,
-    attachments: [...attachments.values()].map((entry) => ({ objectKey: entry.objectKey, purposes: [...entry.purposes].sort(), sampleIds: [...entry.sampleIds].sort() })),
+    attachments: [...attachments.values()].map((entry) => ({ objectKey: entry.objectKey, purposes: [...entry.purposes].sort(), sampleIds: [...entry.sampleIds].sort(), references: entry.references })),
     issues, readyForImport: false,
   } };
 }

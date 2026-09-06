@@ -78,4 +78,33 @@ run("sample domain database boundaries", () => {
     expect(grants.rows.some((row) => row.capability === "sample:archive" || row.capability === "sample:correct_finance")).toBe(false);
     expect(grants.rows.filter((row) => row.capability === "sample:dispose_approve").map((row) => row.role_code)).toEqual(["owner_group"]);
   });
+  it("ties disposal identity, type and valid source state to its request and protects history", async () => {
+    const first = await createItem("in_stock", null, "rack"), second = await createItem("in_stock", null, "rack");
+    const request = async (kind: string, from: string) => {
+      const key = randomUUID();
+      await database.query(`INSERT INTO sample_workflow_requests(request_id,sample_id,request_type,status,from_status,requested_by)
+        VALUES($1,$2,$3,'pending',$4,$5)`, [key, first, kind, from, userId]);
+      return key;
+    };
+    // Active records exercise source-state constraints without terminal resolution fields.
+    for (const [kind, from] of [["borrow", "borrowed"], ["return", "in_stock"], ["sale", "borrowed"], ["gift", "borrowed"], ["loss", "in_stock"]]) {
+      await expect(request(kind!, from!)).rejects.toMatchObject({ code: "23514" });
+    }
+    const requestId = randomUUID();
+    await database.query(`INSERT INTO sample_workflow_requests(request_id,sample_id,request_type,status,from_status,requested_by)
+      VALUES($1,$2,'sale','pending','in_stock',$3)`, [requestId, first, userId]);
+    const disposal = (sampleId: string, kind: string, proposed: string | null, final: string | null, approved: boolean) => database.query(
+      `INSERT INTO sample_disposals(disposal_id,request_id,sample_id,disposal_type,proposed_amount,final_amount,approved_by,approved_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [randomUUID(), requestId, sampleId, kind, proposed, final, approved ? userId : null, approved ? new Date() : null]);
+    await expect(disposal(second, "sale", "10.00", null, false)).rejects.toMatchObject({ code: "23503" });
+    await expect(disposal(first, "gift", null, null, false)).rejects.toMatchObject({ code: "23503" });
+    await expect(disposal(first, "sale", null, null, false)).rejects.toMatchObject({ code: "23514" });
+    await expect(disposal(first, "sale", "10.00", null, true)).rejects.toMatchObject({ code: "23514" });
+    await expect(disposal(first, "sale", "10.00", "0.00", true)).rejects.toMatchObject({ code: "23514" });
+    await disposal(first, "sale", "10.00", "10.00", true);
+    await expect(database.query("DELETE FROM sample_disposals WHERE request_id=$1", [requestId])).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query("DELETE FROM sample_workflow_requests WHERE request_id=$1", [requestId])).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query("TRUNCATE sample_disposals")).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query("TRUNCATE sample_workflow_requests CASCADE")).rejects.toMatchObject({ code: "55000" });
+  });
 });

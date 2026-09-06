@@ -87,6 +87,20 @@ describe("sample migration inventory", () => {
     expect(() => parseSampleSource(source([sample(), sample()]))).toThrow("Duplicate legacy sample ID");
     expect(() => parseSampleSource({ samples: [] })).toThrow();
   });
+  it("collects nested workflow evidence from every accepted collection with traceable references", () => {
+    const input = { ...source([sample({
+      borrowHistory: [{ returnPhotos: ["daxing-sample/return.png"] }],
+      disposalHistory: [{ proof: { objectKey: "daxing-sample/disposal.png" }, paymentProof: "daxing-sample/payment.png" }],
+    })]), logs: [{ id: "orphan-log", sampleId: "absent", attachments: ["daxing-sample/log.png"] }],
+    borrowRequests: [{ id: "request-1", sampleId: "legacy-1", evidence: { objectKey: "daxing-sample/request.png" } }] };
+    const report = inventorySampleSource(input).report;
+    expect(report.attachments).toHaveLength(6);
+    expect(report.attachments.find(a => a.objectKey === "daxing-sample/return.png")?.purposes).toContain("return_photo");
+    expect(report.attachments.find(a => a.objectKey === "daxing-sample/disposal.png")?.purposes).toContain("disposal_proof");
+    expect(report.attachments.find(a => a.objectKey === "daxing-sample/payment.png")?.purposes).toContain("payment_proof");
+    expect(report.attachments.find(a => a.objectKey === "daxing-sample/log.png")?.references).toContainEqual({ entityType: "log", legacyId: "orphan-log", field: "attachments[0]" });
+    expect(report.attachments.find(a => a.objectKey === "daxing-sample/request.png")?.references[0]?.entityType).toBe("borrow_request");
+  });
   it("rejects staging before any database connection for every non-root role", async () => {
     for (const role of ["owner_group", "sample_finance", "sample_administrative", "sample_designer", "system_admin"]) {
       await expect(stageSampleSource({} as Pool, actor(role, SampleCapabilitySchema.options), source())).rejects.toMatchObject({ code: "FORBIDDEN" });
