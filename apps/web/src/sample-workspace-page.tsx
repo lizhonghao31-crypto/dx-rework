@@ -159,7 +159,7 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
     {busy ? <p role="status">正在加载样衣资料…</p> : null}
     {mode === "managed" ? <><SampleCreationLinks /><SampleArchiveList /></> : null}
     {mode === "managed" && data ? <SampleBatchReturn items={data.items} /> : null}
-    {mode === "detail" && detail && detail.item.sampleId === sampleId ? <SampleDetail key={detail.item.sampleId} detail={detail} /> : null}
+    {mode === "detail" && detail && detail.item.sampleId.toLowerCase() === sampleId?.toLowerCase() ? <SampleDetail key={detail.item.sampleId} detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">
       {Object.entries({ 累计采购金额: amounts.purchaseTotal, 当前在管原值: amounts.managedOriginalValue,
         处置原值: amounts.disposedOriginalValue, 出售回款: amounts.saleReceipts, 遗失赔偿: amounts.lossCompensation,
