@@ -156,7 +156,7 @@ export class SampleWorkflowService {
     await client.query(`UPDATE sample_items SET status='borrowed',holder_user_id=$2,holder_name=$3,purpose=$4,borrowed_at=CURRENT_TIMESTAMP,storage_location=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1`,[sampleId,request.requested_for,request.requested_for_name,request.purpose]);
    }else{
     if(!input.storageLocation)throw new ApplicationError('VALIDATION_ERROR','收到实物后必须填写在库位置',400);
-    const closed=await client.query("UPDATE sample_custody_records SET returned_at=CURRENT_TIMESTAMP WHERE sample_id=$1 AND holder_user_id=$2 AND returned_at IS NULL",[sampleId,item.holder_user_id]);
+    const closed=await client.query("UPDATE sample_custody_records SET returned_at=CURRENT_TIMESTAMP WHERE sample_id=$1 AND holder_user_id=$2 AND returned_at IS NULL AND disposed_at IS NULL",[sampleId,item.holder_user_id]);
     if(closed.rowCount!==1)throw fail('当前持有记录不一致，请联系管理员核对');
     await client.query(`UPDATE sample_items SET status='in_stock',holder_user_id=NULL,holder_name=NULL,purpose=NULL,borrowed_at=NULL,storage_location=$2,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1`,[sampleId,input.storageLocation]);
    }

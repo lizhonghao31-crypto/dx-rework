@@ -1,3 +1,4 @@
+import {SampleDisposalActions,SampleArchiveList,SampleFinancialHistory} from "./sample-disposal-page.js";
 import { useEffect, useState } from "react";
 import type { z } from "zod";
 import {
@@ -82,6 +83,7 @@ export function SampleHistory({ sampleId, kind }: { sampleId: string; kind: "cus
       <p>{time(entry.occurredAt)}{entry.status ? ` · ${requestStatusLabels[entry.status] ?? entry.status}` : ""}</p>
       {entry.purpose ? <p>用途：{entry.purpose}</p> : null}
       {entry.returnedAt ? <p>归还：{time(entry.returnedAt)}</p> : null}
+      {entry.disposedAt ? <p>处置结束：{time(entry.disposedAt)}</p> : null}
       {entry.recipient ? <p>接收对象：{entry.recipient}</p> : null}
       {entry.amount != null ? <p>金额：¥{entry.amount}</p> : null}
     </article>)}
@@ -105,11 +107,13 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
         {item.finance ? <div><dt>采购价</dt><dd>¥{item.finance.purchasePrice}</dd></div> : null}
       </dl>
     </Surface>
-    <SampleWorkflowActions sampleId={item.sampleId} />
-    <SampleAttachments sampleId={item.sampleId} />
-    <Surface className="rework-v2-core"><details open><summary>借还记录</summary><SampleHistory sampleId={item.sampleId} kind="custody" /></details></Surface>
-    <Surface className="rework-v2-core"><details><summary>处置记录</summary><SampleHistory sampleId={item.sampleId} kind="disposal" /></details></Surface>
-    {detail.canViewAudit ? <Surface className="rework-v2-core"><details><summary>操作日志</summary><SampleHistory sampleId={item.sampleId} kind="audit" /></details></Surface> : null}
+    <SampleWorkflowActions key={`workflow-${item.version}`} sampleId={item.sampleId} />
+    <SampleDisposalActions key={`disposal-${item.version}`} item={item} />
+    {item.finance?<SampleFinancialHistory key={`finance-${item.version}`} sampleId={item.sampleId}/>:null}
+    <SampleAttachments key={`attachments-${item.version}`} sampleId={item.sampleId} />
+    <Surface className="rework-v2-core"><details open><summary>借还记录</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="custody" /></details></Surface>
+    <Surface className="rework-v2-core"><details><summary>处置记录</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="disposal" /></details></Surface>
+    {detail.canViewAudit ? <Surface className="rework-v2-core"><details><summary>操作日志</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="audit" /></details></Surface> : null}
   </>;
 }
 
@@ -153,7 +157,7 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
     <Header title={titles[mode]} subtitle={mode === "pending" ? "查看轮到你处理或与你相关的样衣事项。" : "查看样衣资料、实际保管状态与历史记录。"} badge="样衣管理" />
     {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
     {busy ? <p role="status">正在加载样衣资料…</p> : null}
-    {mode === "managed" ? <SampleCreationLinks /> : null}
+    {mode === "managed" ? <><SampleCreationLinks /><SampleArchiveList /></> : null}
     {mode === "managed" && data ? <SampleBatchReturn items={data.items} /> : null}
     {mode === "detail" && detail ? <SampleDetail detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">

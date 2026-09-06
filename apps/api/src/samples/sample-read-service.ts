@@ -19,7 +19,7 @@ const fields = `s.sample_id AS "sampleId", s.sample_code AS "sampleCode", s.stat
  s.created_at::text AS "createdAt", s.updated_at::text AS "updatedAt"`;
 const financialFields = `, jsonb_build_object('purchasePrice',f.purchase_price::text,'receiptAttachmentIds',
  ARRAY(SELECT b.attachment_id FROM sample_attachment_bindings b
- WHERE b.sample_id=s.sample_id AND b.purpose='purchase_receipt' ORDER BY b.attachment_id)) AS finance`;
+ WHERE b.sample_id=s.sample_id AND b.purpose='purchase_receipt' AND b.active ORDER BY b.attachment_id)) AS finance`;
 
 export function sampleReadFilter(actor: TrustedActorContext, q: SampleReadQuery) {
   const values: unknown[] = [];
@@ -118,7 +118,7 @@ export class SampleReadService {
     // Never return raw legacy payloads or arbitrary before/after JSON to basic readers.
     const sources = {
       custody: { from: "sample_custody_records h", where: "h.sample_id=$1", time: "h.borrowed_at", id: "h.custody_id",
-        fields: "h.holder_name AS \"actorName\", CASE WHEN h.initial_custody THEN 'initial_custody' ELSE 'borrow' END AS kind, h.purpose, h.returned_at::text AS \"returnedAt\"" },
+        fields: "h.holder_name AS \"actorName\", CASE WHEN h.initial_custody THEN 'initial_custody' ELSE 'borrow' END AS kind, h.purpose, h.returned_at::text AS \"returnedAt\", h.disposed_at::text AS \"disposedAt\"" },
       disposal: { from: "sample_disposals h JOIN sample_workflow_requests r ON r.request_id=h.request_id", where: "h.sample_id=$1", time: "r.created_at", id: "h.disposal_id",
         fields: `r.requested_by_name AS "actorName", h.disposal_type AS kind, r.status, h.recipient${finance ? ", h.final_amount::text AS amount" : ""}` },
       audit: { from: "operation_events h LEFT JOIN sample_event_actor_snapshots snapshot ON snapshot.event_id=h.event_id", where: "h.entity_type='sample' AND h.entity_id=$1", time: "h.created_at", id: "h.event_id",

@@ -28,7 +28,7 @@ export const SampleDetailResponseSchema = z.object({
 export type SampleDetailResponse = z.infer<typeof SampleDetailResponseSchema>;
 export const SampleHistoryEntrySchema = z.object({
   id: z.string().uuid(), occurredAt: z.string(), actorName: z.string(),
-  kind: z.string(), purpose: z.string().optional(), returnedAt: z.string().nullable().optional(),
+  kind: z.string(), purpose: z.string().optional(), returnedAt: z.string().nullable().optional(), disposedAt: z.string().nullable().optional(),
   recipient: z.string().nullable().optional(), status: z.string().optional(),
   amount: z.string().regex(/^(0|[1-9]\d*)\.\d{2}$/).nullable().optional(),
 }).strict();

@@ -9,15 +9,15 @@ import {createWebUrls} from '../url-contract.js';
 import {verifySession} from './auth.js';
 import './rework-v2-form.css';
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
-async function read<T>(path:string,schema:z.ZodType<T>,init:RequestInit={}):Promise<T>{
+export async function readSampleAction<T>(path:string,schema:z.ZodType<T>,init:RequestInit={}):Promise<T>{
  const response=await fetch(apiUrl(path),{...init,credentials:'include',cache:'no-store',headers:{'content-type':'application/json',...init.headers}}),body=await response.json();
  if(!response.ok)throw new Error(body?.error?.message??'操作失败，请重试');return schema.parse(body);
 }
-function useSampleSubmit(){
+export function useSampleSubmit(){
  const attempt=useRef<{body:string;path:string;key:string}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const send=async<T,>(path:string,data:unknown,schema:z.ZodType<T>):Promise<T|undefined>=>{
   const body=JSON.stringify(data);if(attempt.current?.body!==body||attempt.current.path!==path)attempt.current={body,path,key:createClientRequestId()};
-  setBusy(true);setError('');try{return await read(path,schema,{method:'POST',body,headers:{'idempotency-key':attempt.current.key}});}
+  setBusy(true);setError('');try{return await readSampleAction(path,schema,{method:'POST',body,headers:{'idempotency-key':attempt.current.key}});}
   catch(e){setError(e instanceof Error?e.message:'操作失败');return undefined;}finally{setBusy(false);}
  };return {busy,error,send,reset:()=>{attempt.current=null;}};
 }
@@ -26,7 +26,7 @@ export function SampleWorkflowActions({sampleId}:{sampleId:string}){
  const [purpose,setPurpose]=useState(''),[borrower,setBorrower]=useState(''),[delegated,setDelegated]=useState(false),[reason,setReason]=useState('');
  const [photos,setPhotos]=useState<{attachmentId:string;filename:string}[]>([]),[uploading,setUploading]=useState(false),[qr,setQr]=useState<z.infer<typeof SampleHandoffQrSchema>|null>(null);
  const action=useSampleSubmit();
- useEffect(()=>{const abort=new AbortController();void read(`samples/${sampleId}/workflow`,SampleWorkflowViewSchema,{signal:abort.signal}).then(value=>{if(!abort.signal.aborted){setData(value);setError('');}}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'无法读取可用操作');});return()=>abort.abort();},[sampleId,refresh]);
+ useEffect(()=>{const abort=new AbortController();void readSampleAction(`samples/${sampleId}/workflow`,SampleWorkflowViewSchema,{signal:abort.signal}).then(value=>{if(!abort.signal.aborted){setData(value);setError('');}}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'无法读取可用操作');});return()=>abort.abort();},[sampleId,refresh]);
  const submit=async(name:string,fields:Record<string,unknown>)=>{if(!data)return;const result=await action.send(`samples/${sampleId}/${name}`,{version:data.version,...fields},SampleWorkflowResultSchema);if(result){setQr(null);setPhotos([]);setRefresh(value=>value+1);window.dispatchEvent(new Event('sample-updated'));}};
  if(!data)return error?<p role="alert">{error}</p>:null;
  if(!data.enabled)return null;
@@ -49,7 +49,7 @@ export function SampleWorkflowActions({sampleId}:{sampleId:string}){
 export function SampleHandoffPage(){
  const token=useRef(window.location.hash.slice(1)),[data,setData]=useState<z.infer<typeof SampleHandoffLookupSchema>|null>(null),[error,setError]=useState(''),[location,setLocation]=useState(''),[confirmed,setConfirmed]=useState(false),action=useSampleSubmit();
  useEffect(()=>{const abort=new AbortController();window.history.replaceState(null,'',window.location.pathname+window.location.search);
-  void read('samples/handoff/lookup',SampleHandoffLookupSchema,{method:'POST',body:JSON.stringify({token:token.current}),signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setData(value);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'交接码无效');});return()=>abort.abort();},[]);
+  void readSampleAction('samples/handoff/lookup',SampleHandoffLookupSchema,{method:'POST',body:JSON.stringify({token:token.current}),signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setData(value);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'交接码无效');});return()=>abort.abort();},[]);
  return <Shell active="待确认中心" mobileNavigation="transaction"><main className="rework-v2-page"><Header title="样衣实物交接" subtitle="核对申请人和实物后确认。" badge="样衣管理"/>
   {error||action.error?<p role="alert">{error||action.error}</p>:null}{data?<Surface className="rework-v2-core"><p>申请人：{data.requesterName}</p><p>{data.type==='return'?'归还收货':'借出交付'}</p><a href={pageUrl(`ui/samples/${data.sampleId}`)}>查看样衣资料</a>
    {confirmed?<p role="status">交接已完成，同一事项的其他行政待办已结束。</p>:<><p>请确认实物已{data.type==='return'?'收到':'交付'}。</p>{data.type==='return'?<label>在库位置<input value={location} disabled={action.busy} onChange={e=>setLocation(e.target.value)}/></label>:null}
@@ -60,7 +60,7 @@ export function SampleBatchReturn({items}:{items:SampleView[]}){
  const [enabled,setEnabled]=useState(false);
  const [user,setUser]=useState<{id:string;isRoot:boolean}|null>(null),[selected,setSelected]=useState<string[]>([]),[photos,setPhotos]=useState<{attachmentId:string;filename:string}[]>([]),[uploading,setUploading]=useState(false),[result,setResult]=useState<z.infer<typeof SampleBatchReturnResultSchema>|null>(null),action=useSampleSubmit();
  useEffect(()=>{let active=true;void verifySession().then(state=>{if(active&&typeof state==='object'&&state.status==='authorized'&&(state.user.isRoot||(state.user.capabilities.includes('sample:return_request')&&state.user.businessRoles?.some(role=>['sample_designer','owner_group'].includes(role)))))setUser({id:state.user.id,isRoot:!!state.user.isRoot});});return()=>{active=false;};},[]);
- useEffect(()=>{const abort=new AbortController();void read('samples/creation-availability',z.object({enabled:z.boolean()}),{signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setEnabled(value.enabled);}).catch(()=>{});return()=>abort.abort();},[]);
+ useEffect(()=>{const abort=new AbortController();void readSampleAction('samples/creation-availability',z.object({enabled:z.boolean()}),{signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setEnabled(value.enabled);}).catch(()=>{});return()=>abort.abort();},[]);
  const eligible=items.filter(item=>item.status==='borrowed'&&(user?.isRoot||item.holderUserId===user?.id));
  useEffect(()=>{setSelected([]);setResult(null);},[items]);
  if(!enabled||!user||!eligible.length)return null;

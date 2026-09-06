@@ -29,6 +29,12 @@ export async function bindSampleAttachments(client: PoolClient, actor: TrustedAc
 
 export class SampleAttachmentService {
   constructor(private readonly database: Pool) {}
+  async canDownloadForSample(actor: TrustedActorContext, sampleId: string, attachmentId: string): Promise<boolean> {
+    requireSampleCapability(actor, "sample:view_basic");
+    const bound = await this.database.query(`SELECT 1 FROM sample_attachment_bindings b JOIN sample_items s USING(sample_id)
+      WHERE b.sample_id=$1 AND b.attachment_id=$2 AND (s.status<>'archived' OR $3)`, [sampleId, attachmentId, isRootActor(actor)]);
+    return bound.rows.length > 0 && this.canDownload(actor, { entityType: "sample_attachment", entityId: attachmentId });
+  }
   async canDownload(actor: TrustedActorContext, binding: { entityType: string; entityId: string }): Promise<boolean> {
     if (binding.entityType !== "sample_attachment" || !canUseSampleCapability(actor, "sample:view_basic")) return false;
     const result = await this.database.query<{ purpose: string; status: string }>(`SELECT b.purpose,s.status FROM sample_attachment_bindings b
@@ -44,7 +50,7 @@ export class SampleAttachmentService {
     if (!exists.rows.length) throw new ApplicationError("NOT_FOUND", "样衣不存在或已归档", 404);
     const result = await this.database.query(`SELECT a.attachment_id AS "attachmentId",b.purpose,a.original_filename AS filename,a.mime_type AS "mimeType",a.size_bytes::int AS "sizeBytes"
       FROM sample_attachment_bindings b JOIN attachments a ON a.attachment_id=b.attachment_id
-      WHERE b.sample_id=$1 AND a.status='ready' AND (b.purpose<>'purchase_receipt' OR $2)
+      WHERE b.sample_id=$1 AND b.active AND a.status='ready' AND (b.purpose<>'purchase_receipt' OR $2)
       ORDER BY b.bound_at,b.attachment_id`, [sampleId, canUseSampleCapability(actor, "sample:view_finance")]);
     return SampleAttachmentListSchema.parse({ attachments: result.rows });
   }
