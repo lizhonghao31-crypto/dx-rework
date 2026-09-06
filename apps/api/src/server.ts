@@ -1,5 +1,8 @@
 import { ProductionClosureService } from "./sourcing/production-closure-service.js";
 import { SampleReadService } from "./samples/sample-read-service.js";
+import { SampleCreateService } from "./samples/sample-create-service.js";
+import { SampleAttachmentService } from "./samples/sample-attachments.js";
+import { ROOT_ACTOR_ROLE } from "./access/business-authority.js";
 import { ProductionDashboardService } from "./sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "./sourcing/production-reporting-service.js";
 import { SourcingProductionService } from "./sourcing/sourcing-production-service.js";
@@ -111,6 +114,7 @@ const attachments = new AttachmentService(database, storage, {
   maxUploadBytes: config.objectStorage.maxUploadBytes,
 });
 const productionClosure = new ProductionClosureService(database,rootAuthority);
+const sampleFiles = new SampleAttachmentService(database);
 const todoService = new TodoService(database,undefined,undefined,productionClosure);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure);
@@ -216,6 +220,10 @@ const app = buildApp({
     service: new SampleReadService(database),
     root: rootAuthority,
   },
+  sampleCreation: {
+    authenticate: token => auth.authenticate(token), root: rootAuthority,
+    service: new SampleCreateService(database, config.dingtalk.corpId), files: sampleFiles, attachments,
+  },
   sourcing: {
     authenticate: (token) => auth.authenticate(token),
     service: sourcingService,
@@ -231,6 +239,10 @@ const app = buildApp({
     attachments,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {
+      if (binding.entityType === "sample_attachment") return sampleFiles.canDownload({
+        actorId: actor.actorId, actorRoles: [...actor.actorRoles, ...(await rootAuthority.isRootUser(actor.actorId) ? [ROOT_ACTOR_ROLE] : [])],
+        authorizationCapability: "sample:view_basic", authorizationCapabilities: actor.capabilities, requestId: "sample-attachment-download",
+      }, binding);
       if (
         ["rework_order", "receiving_batch"].includes(binding.entityType)
         && binding.mimeType.startsWith("image/")

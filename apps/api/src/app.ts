@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { registerSampleReadRoutes, type SampleReadHttpDependencies } from "./samples/sample-read-routes.js";
+import { registerSampleCreateRoutes, type SampleCreateHttpDependencies } from "./samples/sample-create-routes.js";
 
 import type { AppConfig } from "@dx-rework/config";
 import type {
@@ -52,6 +53,7 @@ export type AppDependencies = Readonly<{
   receiving?: ReceivingHttpDependencies;
   sourcing?: SourcingHttpDependencies;
   samples?: SampleReadHttpDependencies;
+  sampleCreation?: SampleCreateHttpDependencies;
   rework?: ReworkHttpDependencies;
   processConfiguration?: ProcessConfigurationHttpDependencies;
   workReporting?: WorkReportingHttpDependencies;
@@ -136,6 +138,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.receiving) registerReceivingRoutes(app, dependencies.receiving);
   if (dependencies.sourcing) registerSourcingRoutes(app, dependencies.sourcing);
   if (dependencies.samples) registerSampleReadRoutes(app, dependencies.samples);
+  if (dependencies.sampleCreation) registerSampleCreateRoutes(app, dependencies.sampleCreation);
   if (dependencies.rework) registerReworkRoutes(app, dependencies.rework);
   if (dependencies.processConfiguration) {
     registerProcessConfigurationRoutes(app, dependencies.processConfiguration);

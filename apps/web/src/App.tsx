@@ -1,5 +1,6 @@
 import { ProductionDashboardPage } from "./production-dashboard-page.js";
 import { SampleWorkspacePage } from "./sample-workspace-page.js";
+import { SampleCreatePage } from "./sample-create-page.js";
 import { ProductionReportingPage } from "./production-reporting-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
@@ -304,6 +305,8 @@ export function App() {
   if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
   else if (path === "/ui/samples") page = <SampleWorkspacePage />;
+  else if (path === "/ui/samples/create") page = <SampleCreatePage />;
+  else if (path === "/ui/samples/batch-create") page = <SampleCreatePage batch />;
   else if (path === "/ui/samples/pending") page = <SampleWorkspacePage mode="pending" />;
   else if (path === "/ui/samples/disposed") page = <SampleWorkspacePage mode="disposed" />;
   else if (path === "/ui/samples/amounts") page = <SampleWorkspacePage mode="amounts" />;
@@ -363,6 +366,9 @@ export function App() {
 
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
+    if (path === "/ui/samples/create" || path === "/ui/samples/batch-create") {
+      return <AuthGate requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}>{page}</AuthGate>;
+    }
     const roles = path === "/ui/samples/amounts" ? ["sample_finance", "owner_group"]
       : ["sample_designer", "sample_administrative", "sample_finance", "owner_group"];
     return <AuthGate requiredAnyOf={roles.map(requiredRole => ({ requiredRole,
