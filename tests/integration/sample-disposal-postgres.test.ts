@@ -14,7 +14,7 @@ import {SampleCapabilitySchema} from '../../packages/contracts/src/samples.js';
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)('sample disposal, private corrections and archive lifecycle',()=>{
  const schema=`sample_${randomUUID().replaceAll('-','')}`,admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
- const root=randomUUID(),designer=randomUUID(),other=randomUUID(),administrative=randomUUID(),peer=randomUUID(),finance=randomUUID();
+ const root=randomUUID(),designer=randomUUID(),other=randomUUID(),administrative=randomUUID(),peer=randomUUID(),finance=randomUUID(),approver=randomUUID();
  const actor=(role:string,id:string)=>({actorId:id,actorRoles:[role],authorizationCapability:'sample:view_basic',authorizationCapabilities:[...SampleCapabilitySchema.options,'todo:view'],requestId:`sample-test-${randomUUID()}`});
  const owner=()=>actor('root_superuser',root),user=()=>actor('sample_designer',designer),clerk=()=>actor('sample_administrative',administrative);
  const todos=new TodoService(db),projection=new RootAwareTodoProjectionService(todos),creation=new SampleCreateService(db,'sample-handoff-corp');
@@ -36,13 +36,13 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
    const sql=await readFile(new URL(name,folder),'utf8');await db.query('BEGIN');await db.query(sql);
    await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[name.slice(0,-4),createHash('sha256').update(sql).digest('hex')]);await db.query('COMMIT');
   }
-  for(const id of [root,designer,other,administrative,peer,finance]){
+  for(const id of [root,designer,other,administrative,peer,finance,approver]){
    await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'同名测试员工',true)",[id]);
    await db.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
     VALUES($1,$2,'dingtalk','sample-handoff-corp',$3,$3,true,true,CURRENT_TIMESTAMP)`,[randomUUID(),id,`sample-${id}`]);
   }
   // Controlled fixture assignments before organization policy activation, as in platform access tests.
-  for(const [id,role] of [[designer,'sample_designer'],[other,'sample_designer'],[administrative,'sample_administrative'],[peer,'sample_administrative'],[finance,'sample_finance'],[other,'owner_group']] as const){
+  for(const [id,role] of [[designer,'sample_designer'],[other,'sample_designer'],[administrative,'sample_administrative'],[peer,'sample_administrative'],[finance,'sample_finance'],[other,'owner_group'],[other,'sample_approver'],[approver,'sample_approver']] as const){
    await db.query('INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,\'fixture\')',[randomUUID(),id,role,root]);
   }
   await db.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','sample-handoff-corp')");
@@ -69,13 +69,48 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await db.query('SELECT paid_by FROM sample_disposals WHERE sample_id=$1',[id])).rows[0].paid_by).toBe(administrative);
  });
  it('keeps corrected receipts and amounts private while preserving old receipt audit',async()=>{
-  const id=await sample(),receipt=await attachment(root);const old=(await files.list(owner(),id)).attachments.find(f=>f.purpose==='purchase_receipt')!.attachmentId;
-  await expect(disposal.correctFinance(actor('sample_finance',finance),id,{version:1,purchasePrice:'90.35',receiptAttachmentIds:[receipt],reason:'核对原始票据'},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
-  await disposal.correctFinance(owner(),id,{version:1,purchasePrice:'90.35',receiptAttachmentIds:[receipt],reason:'核对原始票据'},randomUUID());
+  const id=await sample(),receipt=await attachment(root);expect(await disposal.actions(owner(),id)).toMatchObject({canCorrectFinance:true,canReplaceReceipts:true});const old=(await files.list(owner(),id)).attachments.find(f=>f.purpose==='purchase_receipt')!.attachmentId;
+  await expect(disposal.correctFinance(clerk(),id,{version:1,purchasePrice:'90.35',receiptAttachmentIds:[receipt],receiptMode:'replace',reason:'核对原始票据'},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
+  await disposal.correctFinance(owner(),id,{version:1,purchasePrice:'90.35',receiptAttachmentIds:[receipt],receiptMode:'replace',reason:'核对原始票据'},randomUUID());
   expect((await files.list(owner(),id)).attachments.map(f=>f.attachmentId)).toContain(receipt);expect((await files.list(owner(),id)).attachments.map(f=>f.attachmentId)).not.toContain(old);
   expect((await files.list(clerk(),id)).attachments).toEqual([]);expect(await files.canDownloadForSample(clerk(),id,old)).toBe(false);expect(await files.canDownloadForSample(actor('sample_finance',finance),id,old)).toBe(true);await expect(disposal.financialHistory(clerk(),id,1)).rejects.toMatchObject({code:'FORBIDDEN'});
   expect((await disposal.financialHistory(owner(),id,1)).items.some(e=>e.after.purchasePrice==='90.35')).toBe(true);
   const publicAudit=(await db.query("SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='sample.finance_corrected'",[id])).rows;expect(JSON.stringify(publicAudit)).not.toContain('90.35');expect(JSON.stringify(publicAudit)).not.toContain(receipt);
+ });
+ it('finance edits basic data and appends receipts with private immutable audit, idempotency and boundaries',async()=>{
+  const id=await sample(),f=actor('sample_finance',finance),receipt=await attachment(finance);
+  const original=(await files.list(f,id)).attachments.find(a=>a.purpose==='purchase_receipt')!.attachmentId;
+  expect(await disposal.actions(f,id)).toMatchObject({canUpdateBasic:true,canCorrectFinance:true,canReplaceReceipts:false,canApprove:false,canArchive:false});
+  const basic={version:1,brand:'修改品牌',styleName:'新名称',color:'黑',department:'设计',styleNo:'S1',category:'上衣',size:'M',remark:'核对资料',reason:'核对样衣'};
+  await disposal.updateBasic(f,id,basic,randomUUID());
+  const key=randomUUID(),input={version:2,purchasePrice:'91.25',receiptAttachmentIds:[receipt],reason:'补充采购小票'};
+  await disposal.correctFinance(f,id,input,key);await disposal.correctFinance(f,id,input,key);
+  expect((await files.list(f,id)).attachments.map(a=>a.attachmentId).sort()).toEqual([original,receipt].sort());
+  expect(await row(id)).toMatchObject({version:3,brand:'修改品牌',holder_user_id:designer,status:'borrowed'});
+  const audit=await disposal.financialHistory(f,id,1),change=audit.items.filter(a=>a.action==='sample.finance_corrected');
+  expect(change).toHaveLength(1);expect(change[0]).toMatchObject({reason:input.reason,before:{purchasePrice:'80.00',receiptAttachmentIds:[original]},after:{purchasePrice:'91.25'}});
+  expect(change[0]!.after.receiptAttachmentIds).toEqual(expect.arrayContaining([original,receipt]));
+  const binding=(await db.query('SELECT bound_by,bound_at FROM sample_attachment_bindings WHERE sample_id=$1 AND attachment_id=$2',[id,receipt])).rows[0];expect(binding.bound_by).toBe(finance);expect(binding.bound_at).toBeTruthy();
+  const summary=(await db.query("SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='sample.finance_corrected'",[id])).rows;
+  expect(JSON.stringify(summary)).not.toContain(receipt);expect(JSON.stringify(summary)).not.toContain('91.25');
+  await expect(disposal.correctFinance(f,id,{...input,version:3,receiptMode:'replace'},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
+  await expect(disposal.correctFinance(f,id,{...input,version:3,receiptAttachmentIds:[await attachment(other)]},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
+  await expect(disposal.correctFinance(f,id,{...input,version:3,reason:''},randomUUID())).rejects.toMatchObject({code:'VALIDATION_ERROR'});
+  await expect(disposal.correctFinance(f,id,input,randomUUID())).rejects.toMatchObject({code:'VERSION_CONFLICT'});
+  for(const role of ['sample_designer','sample_administrative','sample_approver','owner_group','system_admin'])await expect(disposal.correctFinance(actor(role,other),id,{...input,version:3},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
+  await disposal.correctFinance(f,id,{version:3,purchasePrice:'92.00',receiptAttachmentIds:[],reason:'仅更正采购价'},randomUUID());
+  expect((await files.list(f,id)).attachments).toHaveLength(2);
+  await disposal.archive(owner(),id,{version:4,reason:'暂存'},randomUUID());
+  await expect(disposal.correctFinance(f,id,{...input,version:5},randomUUID())).rejects.toMatchObject({code:'INVALID_STATE_TRANSITION'});
+ });
+ it('deduplicates owner/approver assignments and closes every approval peer after an independent approver acts',async()=>{
+  const id=await sample();await disposal.request(clerk(),id,{version:1,type:'scrap',reason:'破损',proofAttachmentIds:[await attachment(administrative)]},randomUUID());
+  const tasks=(await db.query("SELECT recipient_user_id,status FROM rework_todos WHERE entity_id=$1 AND category='sample_disposal_approval'",[id])).rows;
+  expect(tasks).toHaveLength(2);expect(tasks.map(t=>t.recipient_user_id).sort()).toEqual([other,approver].sort());
+  expect(await disposal.actions(actor('sample_approver',approver),id)).toMatchObject({canApprove:true,canCorrectFinance:false,canReplaceReceipts:false,canUpdateBasic:false,canArchive:false});
+  await disposal.decide(actor('sample_approver',approver),id,{version:2,decision:'approve'},randomUUID());
+  expect((await row(id)).status).toBe('scrapped');
+  expect((await db.query("SELECT status FROM rework_todos WHERE entity_id=$1",[id])).rows.every(t=>t.status==='completed')).toBe(true);
  });
  it('archive cancels tasks and QR; restore reopens exact pending work with a new task generation',async()=>{
   const id=await sample();await service.returnRequest(user(),id,{version:1,photoAttachmentIds:[await photo()]},randomUUID());const qr=await issue(id,2);

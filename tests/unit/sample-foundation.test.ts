@@ -107,7 +107,7 @@ describe("sample migration inventory", () => {
     }
   });
   it("matches SQL grants to the server allowlist, without granting root-only capabilities", async () => {
-    const sql = await readFile("apps/api/migrations/0152_sample_domain_foundation.sql", "utf8");
+    const sql = await readFile("apps/api/migrations/0152_sample_domain_foundation.sql", "utf8") + await readFile("apps/api/migrations/0158_sample_role_finance_maintenance.sql", "utf8");
     for (const [role, allowed] of Object.entries(SAMPLE_ROLE_CAPABILITIES)) {
       for (const capability of SampleCapabilitySchema.options) expect(sql.includes(`('${role}','${capability}')`)).toBe(allowed.includes(capability));
     }
