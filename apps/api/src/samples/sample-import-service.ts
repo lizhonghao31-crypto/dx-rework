@@ -141,7 +141,7 @@ export class SampleImportService{
   const errors:string[]=[];if(targets.length!==source.samples.length)errors.push('sample_count');
   const expected={purchaseTotal:0n,managedOriginalValue:0n,disposedOriginalValue:0n,saleReceipts:0n,lossCompensation:0n},expectedStates:Record<string,number>={},actualStates:Record<string,number>={};
   for(const target of targets)actualStates[target.status]=(actualStates[target.status]??0)+1;
-  const sameDate=(actual:unknown,expected:string|null)=>actual==null?expected===null:expected!==null&&new Date(String(actual)).getTime()===Date.parse(expected);
+  const sameDate=(actual:unknown,expected:string|null)=>actual==null?expected===null:expected!==null&&(actual instanceof Date?actual.getTime():new Date(String(actual)).getTime())===Date.parse(expected);
   for(const item of plan.items){const row=targets.find(r=>r.legacy_id===item.legacyId),original=source.samples.find(s=>s.id===item.legacyId)!;expectedStates[item.status]=(expectedStates[item.status]??0)+1;
    if(!row||row.status!==item.status||row.holder_user_id!==item.holderUserId||sampleMoneyCents(row.price)!==sampleMoneyCents(original.purchasePrice)){errors.push(`sample:${item.legacyId}`);continue;}
    if(item.status!=='archived'){const amount=sampleMoneyCents(original.purchasePrice);expected.purchaseTotal+=amount;expected[['sold','gifted','scrapped','lost'].includes(item.status)?'disposedOriginalValue':'managedOriginalValue']+=amount;
