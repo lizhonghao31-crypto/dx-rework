@@ -13,6 +13,8 @@ import "./rework-v2-form.css";
 import "./sample-workspace.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+import { SampleCreationLinks, SampleAttachments } from "./sample-create-page.js";
+
 export const sampleStatusLabels: Record<SampleStatus, string> = {
   borrowed: "借出中", return_pending: "归还待确认", in_stock: "在库", borrow_pending: "借出待确认",
   disposal_pending: "处置待审批", loss_payment_pending: "遗失待赔付", sold: "已出售", gifted: "已赠送",
@@ -102,6 +104,7 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
         {item.finance ? <div><dt>采购价</dt><dd>¥{item.finance.purchasePrice}</dd></div> : null}
       </dl>
     </Surface>
+    <SampleAttachments sampleId={item.sampleId} />
     <Surface className="rework-v2-core"><details open><summary>借还记录</summary><SampleHistory sampleId={item.sampleId} kind="custody" /></details></Surface>
     <Surface className="rework-v2-core"><details><summary>处置记录</summary><SampleHistory sampleId={item.sampleId} kind="disposal" /></details></Surface>
     {detail.canViewAudit ? <Surface className="rework-v2-core"><details><summary>操作日志</summary><SampleHistory sampleId={item.sampleId} kind="audit" /></details></Surface> : null}
@@ -147,6 +150,7 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
     <Header title={titles[mode]} subtitle={mode === "pending" ? "查看轮到你处理或与你相关的样衣事项。" : "查看样衣资料、实际保管状态与历史记录。"} badge="样衣管理" />
     {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
     {busy ? <p role="status">正在加载样衣资料…</p> : null}
+    {mode === "managed" ? <SampleCreationLinks /> : null}
     {mode === "detail" && detail ? <SampleDetail detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">
       {Object.entries({ 累计采购金额: amounts.purchaseTotal, 当前在管原值: amounts.managedOriginalValue,

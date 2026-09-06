@@ -152,6 +152,7 @@
     { "version": "0150_sourcing_production_progress_snapshot", "checksum": "7cb7d39f991bc9a63234d4c200f40fb43500407aa1715ddfd424eba9419b9f48" },
     {"version": "0151_sourcing_production_closure", "checksum": "c1560d856d4d76184e3c195c21b8182ee83eb7899d8aa6daca9856e2942e781e"},
     {"version": "0152_sample_domain_foundation", "checksum": "41315323d135fa0851d46fa04c13d47b2344df10bba99eed49bcd78ecd8aa6ef"},
-    {"version": "0153_sample_read_indexes_snapshots", "checksum": "80f539ba6017d3042a9670e208c55b60e8363d24eb8045138ded34a45c4dece0"}
+    {"version": "0153_sample_read_indexes_snapshots", "checksum": "80f539ba6017d3042a9670e208c55b60e8363d24eb8045138ded34a45c4dece0"},
+    {"version": "0154_sample_write_control", "checksum": "d640118b136a2258ee521e7402c0940cac35bbcc2f3c7f26e4ed13c9d9cf27df"}
   ]
 }
