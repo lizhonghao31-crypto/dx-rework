@@ -12,7 +12,7 @@ import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
-import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction } from "./platform-modules.js";
+import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
@@ -33,6 +33,9 @@ type NavigationGroup = Readonly<{
 }>;
 
 const ROLE_LABELS: Record<string, string> = {
+  sample_designer: "样衣设计师",
+  sample_administrative: "样衣行政",
+  sample_finance: "样衣财务",
   production_reporter: "驻厂生产填报",
   owner_group: "老板",
   system_admin: "系统管理员",
@@ -456,6 +459,15 @@ export function Shell({
     });
   }
 
+  const sampleNavigation: NavigationEntry[] = currentUser && canAccessSamples(currentUser) ? [
+    { name: "在管样衣", description: "借出、在库与保管资料", href: "/ui/samples" },
+    { name: "待确认中心", description: "与你相关的借还和处置事项", href: "/ui/samples/pending" },
+    { name: "已处置样衣", description: "出售、赠送、报废与遗失记录", href: "/ui/samples/disposed" },
+  ] : [];
+  if (sampleNavigation.length && (isRoot || ((hasRole("sample_finance") || isOwner) && hasCapability("sample:view_finance")))) {
+    sampleNavigation.push({ name: "库存金额管理", description: "采购原值与处置回款", href: "/ui/samples/amounts" });
+  }
+
   const platformNavigation: NavigationEntry[] = [];
   if (canManageEmployeeAccess) {
     platformNavigation.push({
@@ -493,9 +505,11 @@ export function Shell({
     ...reworkNavigation,
     ...mobileSourcingNavigation,
     ...mobileSupplierNavigation,
+    ...sampleNavigation,
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
+    { name: "样衣管理", description: "样衣资料与实物保管", entries: sampleNavigation },
     {
       name: "订单返工",
       description: "订单返工业务",

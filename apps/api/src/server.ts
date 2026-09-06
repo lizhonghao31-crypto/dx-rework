@@ -1,4 +1,5 @@
 import { ProductionClosureService } from "./sourcing/production-closure-service.js";
+import { SampleReadService } from "./samples/sample-read-service.js";
 import { ProductionDashboardService } from "./sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "./sourcing/production-reporting-service.js";
 import { SourcingProductionService } from "./sourcing/sourcing-production-service.js";
@@ -208,6 +209,11 @@ const app = buildApp({
   receiving: {
     authenticate: (token) => auth.authenticate(token),
     service: receivingService,
+    root: rootAuthority,
+  },
+  samples: {
+    authenticate: (token) => auth.authenticate(token),
+    service: new SampleReadService(database),
     root: rootAuthority,
   },
   sourcing: {

@@ -1,4 +1,5 @@
 import { ProductionDashboardPage } from "./production-dashboard-page.js";
+import { SampleWorkspacePage } from "./sample-workspace-page.js";
 import { ProductionReportingPage } from "./production-reporting-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
@@ -158,6 +159,7 @@ function skipsInitialPlatformEntryCheck(path: string): boolean {
   return path === "/"
     || path === "/ui/home"
     || path.startsWith("/ui/sourcing")
+    || path.startsWith("/ui/samples")
     || path.startsWith("/auth/");
 }
 
@@ -296,10 +298,16 @@ export function App() {
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
+  const sampleMatch = path.match(/^\/ui\/samples\/([0-9a-f-]{36})$/i);
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
+  else if (path === "/ui/samples") page = <SampleWorkspacePage />;
+  else if (path === "/ui/samples/pending") page = <SampleWorkspacePage mode="pending" />;
+  else if (path === "/ui/samples/disposed") page = <SampleWorkspacePage mode="disposed" />;
+  else if (path === "/ui/samples/amounts") page = <SampleWorkspacePage mode="amounts" />;
+  else if (sampleMatch?.[1]) page = <SampleWorkspacePage mode="detail" sampleId={sampleMatch[1]} />;
   else if (path === "/ui/sourcing/create") page = <SourcingWorkspacePage view="create" />;
   else if (path === "/ui/sourcing/history") page = <SourcingWorkspacePage view="history" />;
   else if (sourcingOrderMatch?.[1]) page = <SourcingWorkspacePage view="detail" sourcingCaseId={sourcingOrderMatch[1]} />;
@@ -354,6 +362,13 @@ export function App() {
   const owner = { requiredRole: "owner_group" } as const;
 
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
+  if (path.startsWith("/ui/samples")) {
+    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "owner_group"]
+      : ["sample_designer", "sample_administrative", "sample_finance", "owner_group"];
+    return <AuthGate requiredAnyOf={roles.map(requiredRole => ({ requiredRole,
+      requiredCapability: path === "/ui/samples/amounts" ? "sample:view_finance" : "sample:view_basic",
+    }))}>{page}</AuthGate>;
+  }
   if (path.startsWith("/ui/sourcing")) {
     return <AuthGate requiredAnyOf={[
       owner,
