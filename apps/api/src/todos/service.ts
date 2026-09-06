@@ -315,7 +315,8 @@ export class TodoService {
          AND todo_module=$2
          AND (
            $3=''
-           OR strpos(upper(COALESCE(style_no,sourcing_style_no,sample_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
            OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
          )`,
@@ -337,7 +338,8 @@ export class TodoService {
          AND todo_module=$2
          AND (
            $3=''
-           OR strpos(upper(COALESCE(style_no,sourcing_style_no,sample_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
            OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
          )

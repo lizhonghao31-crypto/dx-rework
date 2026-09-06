@@ -51,6 +51,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await row(id)).holder_user_id).toBe(designer);expect((await row(id)).status).toBe('return_pending');
   expect(await indicator(administrative)).toBe(1);expect(await indicator(peer)).toBe(1);expect(await indicator(root)).toBe(0);
   const pending=await todos.listForActor({...clerk(),authorizationCapability:'todo:view'},{module:'samples'});expect(pending.moduleCounts.samples).toBe(1);expect(pending.todos[0]!.route.routeName).toBe('sample_detail');
+  expect((await todos.listForActor({...clerk(),authorizationCapability:'todo:view'},{module:'samples',query:'样衣'})).totalCount).toBe(1);
+  expect((await todos.listForActor({...clerk(),authorizationCapability:'todo:view'},{module:'samples',query:(await row(id)).sample_code})).totalCount).toBe(1);
   const qr=await issue(id,req.version);
   expect((await service.lookupQr(clerk(),qr)).requestId).toBe(req.requestId);
   await expect(service.confirm(clerk(),id,{version:2,token:qr},randomUUID())).rejects.toMatchObject({code:'VALIDATION_ERROR'});
