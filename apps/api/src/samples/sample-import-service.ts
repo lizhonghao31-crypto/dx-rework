@@ -4,7 +4,7 @@ import {SampleImportPlanSchema,SampleCutoverSchema,type SampleImportPlan,type Sa
 import {ApplicationError} from '../platform/errors.js';
 import {isRootActor} from '../access/business-authority.js';
 import {OperationEventRepository,type TrustedActorContext} from '../tools/repositories.js';
-import {inventorySampleSource,sampleSourceHash,sampleMoneyCents,sampleMoneyText,stageSampleSource,type SampleSourceSnapshot} from './sample-migration.js';
+import {inventorySampleSource,sampleSourceHash,sampleMoneyCents,sampleMoneyText,stageSampleSource,type SampleSourceSnapshot,type SampleInventory} from './sample-migration.js';
 import {sampleInput} from './sample-workflow-service.js';
 import {bindSampleAttachments,type SampleAttachmentPurpose} from './sample-attachments.js';
 import type {SampleDisposalService} from './sample-disposal-service.js';
@@ -12,6 +12,14 @@ const invalid=(message:string)=>new ApplicationError('VALIDATION_ERROR',message,
 const conflict=(message:string)=>new ApplicationError('CONFLICT',message,409);
 const issueKey=(issue:{entityType:string;legacyId:string;code:string;field?:string|undefined})=>JSON.stringify([issue.entityType,issue.legacyId,issue.code,issue.field??'']);
 const states:Record<string,string>={BORROWED:'borrowed',IN_STOCK:'in_stock',PENDING_BORROW:'borrow_pending',PENDING_RETURN:'return_pending',PENDING_DISPOSAL:'disposal_pending',SOLD:'sold',GIFTED:'gifted',SCRAPPED:'scrapped',LOST:'lost',LOSS_PAYMENT_PENDING:'loss_payment_pending',ARCHIVED:'archived'};
+function sourceRequestProofKeys(source:SampleSourceSnapshot,report:SampleInventory,original:SampleSourceSnapshot['samples'][number],request:SampleImportItem['requests'][number]){
+ const origins:{entityType:string;legacyId:string;prefix:string}[]=[];
+ const add=(entityType:string,legacyId:string,prefix:string,value:unknown)=>{if(value&&typeof value==='object'&&sampleSourceHash(value)===request.sourceHash)origins.push({entityType,legacyId,prefix});};
+ add('sample',original.id,'pendingTask',original.pendingTask);add('sample',original.id,'disposalRequest',original.disposalRequest);
+ if(Array.isArray(original.disposalHistory))original.disposalHistory.forEach((r,n)=>add('sample',original.id,`disposalHistory[${n}]`,r));
+ for(const r of source.borrowRequests)if(r.sampleId===original.id)add('borrow_request',r.id,'',r);
+ return report.attachments.filter(object=>object.references.some(ref=>origins.some(origin=>ref.entityType===origin.entityType&&ref.legacyId===origin.legacyId&&(!origin.prefix||ref.field===origin.prefix||ref.field.startsWith(`${origin.prefix}.`)||ref.field.startsWith(`${origin.prefix}[`))))).map(object=>object.objectKey).sort();
+}
 export function validateSampleImport(sourceInput:unknown,rawPlan:unknown){
  const {source,report}=inventorySampleSource(sourceInput),plan=sampleInput(SampleImportPlanSchema,rawPlan);
  if(plan.sourceHash!==report.sourceHash)throw conflict('源快照已改变，请重新盘点并生成映射');
@@ -31,11 +39,14 @@ export function validateSampleImport(sourceInput:unknown,rawPlan:unknown){
   if(new Set(item.custody.map(h=>h.legacyId)).size!==item.custody.length||new Set(item.requests.map(r=>r.legacyId)).size!==item.requests.length)throw invalid('历史标识不能重复');
   for(let n=0;n<history.length;n++){const h=history[n] as Record<string,unknown>,mapped=item.custody[n]!;if(sampleSourceHash(h)!==mapped.sourceHash||String(h.id??`history-${n}`)!==mapped.legacyId)throw invalid('历史映射哈希或标识不符');if(h.borrower!==mapped.holderName)throw invalid('历史姓名快照必须保留源值');
    if(mapped.requestedBy===null&&!decisions.has(issueKey({entityType:'sample',legacyId:item.legacyId,code:'HISTORICAL_ACTOR_UNVERIFIABLE',field:`borrowHistory[${n}].requestedBy`})))throw invalid('历史申请人不明必须保留未知并填写异常结论，不能冒认操作者');
+   if(['PURCHASE','INITIAL_BORROW'].includes(String(h.type).toUpperCase())&&!mapped.initialCustody)throw invalid('原首次领用记录不能改作后续借出');
    const originalBorrowed=h.borrowedAt??h.confirmedAt??h.requestedAt;
    if(typeof originalBorrowed!=='string'||Date.parse(originalBorrowed)!==Date.parse(mapped.borrowedAt))throw invalid('借用时间必须保留原始事实');
    if((h.returnedAt?Date.parse(String(h.returnedAt)):null)!==(mapped.returnedAt?Date.parse(mapped.returnedAt):null))throw invalid('不得伪造或清除原归还时间');
   }
   const open=item.custody.filter(h=>h.returnedAt===null&&h.disposedAt===null);
+  const effectiveStatus=item.status==='archived'?item.archivedFromStatus:item.status;
+  if(['sold','gifted','scrapped','lost'].includes(effectiveStatus??'')&&(item.holderUserId!==null||item.holderName!==null||item.borrowedAt!==null||item.purpose!==null||item.storageLocation!==null||open.length))throw invalid('已处置样衣必须结束持有历史并清空当前持有人及位置');
   if(item.holderUserId){if(open.length!==1||open[0]!.holderUserId!==item.holderUserId||open[0]!.borrowedAt!==item.borrowedAt||original.currentHolder!==item.holderName)throw invalid('当前持有人必须与唯一未结束的历史一致');}
   else if(open.length)throw invalid('没有持有人的样衣不能有未结束持有历史');
   const active=item.requests.filter(r=>['pending','payment_pending'].includes(r.status));
@@ -47,9 +58,12 @@ export function validateSampleImport(sourceInput:unknown,rawPlan:unknown){
   const requestSources=[...oldDisposals,original.pendingTask,original.disposalRequest,...source.borrowRequests.filter(r=>r.sampleId===item.legacyId)].filter((r):r is Record<string,unknown>=>!!r&&typeof r==='object');
   for(const raw of requestSources)if(!item.requests.some(r=>r.sourceHash===sampleSourceHash(raw)))throw invalid('原在途或历史申请未完整映射');
   for(const r of item.requests){const raw=requestSources.find(v=>sampleSourceHash(v)===r.sourceHash);if(!raw)throw invalid('迁移申请缺少原始记录哈希');
+   if(raw.id!==undefined&&String(raw.id)!==r.legacyId)throw invalid('迁移申请标识与原记录不符');
    if(['sale','gift','scrap','loss'].includes(r.type)!==!!r.disposal)throw invalid('处置记录必须与申请类型对应');
    const originalType=({SOLD:'sale',SALE:'sale',GIFTED:'gift',GIFT:'gift',SCRAPPED:'scrap',SCRAP:'scrap',LOST:'loss',LOSS:'loss',BORROW:'borrow',RETURN:'return'} as Record<string,string>)[String(raw.type).toUpperCase()];if(originalType!==r.type)throw invalid('处置或交接类型与原记录不符');
    if(r.disposal&&['sale','loss'].includes(r.type)){const proposed=raw.proposedAmount??raw.amount,final=raw.finalAmount??raw.amount;if(r.disposal.proposedAmount!==null&&(proposed==null||sampleMoneyCents(proposed)!==sampleMoneyCents(r.disposal.proposedAmount)))throw invalid('处置参考金额与原记录不符');if(r.disposal.finalAmount!==null&&(final==null||sampleMoneyCents(final)!==sampleMoneyCents(r.disposal.finalAmount)))throw invalid('处置最终金额与原记录不符');}
+   const originalProofKeys=sourceRequestProofKeys(source,report,original,r);
+   if(sampleSourceHash([...r.proofObjectKeys].sort())!==sampleSourceHash(originalProofKeys))throw invalid('凭证必须完整对应本件样衣的这条原始申请，不能串用其他样衣或其他申请附件');
    for(const key of r.proofObjectKeys)if(!objects.has(key))throw invalid('处置或交接凭证缺少附件映射');}
   if(['sold','gifted','scrapped','lost'].includes(item.status)){const type=({sold:'sale',gifted:'gift',scrapped:'scrap',lost:'loss'} as Record<string,string>)[item.status];if(!item.requests.some(r=>r.type===type&&r.status==='completed'&&r.disposal?.approvedAt&&(type!=='loss'||r.disposal.paidAt)))throw invalid('终态必须有对应的真实审批或赔付历史');}
  }
@@ -139,6 +153,11 @@ export class SampleImportService{
    const requests=(await client.query('SELECT * FROM sample_workflow_requests WHERE sample_id=$1',[row.sample_id])).rows;
    if(requests.length!==item.requests.length)errors.push(`requests_count:${item.legacyId}`);
    for(const r of item.requests){const t=requests.find(x=>x.legacy_id===r.legacyId),archived=item.status==='archived'&&['pending','payment_pending'].includes(r.status);if(!t||t.request_type!==r.type||t.status!==(archived?'cancelled':r.status)||t.requested_by!==r.requestedBy||t.requested_for!==r.requestedFor||t.from_status!==r.fromStatus)errors.push(`request:${item.legacyId}:${r.legacyId}`);
+    if(t){const purpose=r.type==='return'?'return_photo':r.type==='loss'&&r.disposal?.paidAt?'payment_proof':'disposal_proof';
+     const expectedProofs=[...new Set(r.proofObjectKeys.map(key=>`${plan.objects.find(o=>o.objectKey===key)!.attachmentId}:${purpose}`))].sort();
+     const actualProofs=(await client.query<{attachment_id:string;purpose:string}>('SELECT attachment_id,purpose FROM sample_request_attachments WHERE request_id=$1',[t.request_id])).rows.map(p=>`${p.attachment_id}:${p.purpose}`).sort();
+     if(sampleSourceHash(expectedProofs)!==sampleSourceHash(actualProofs))errors.push(`request_proofs:${item.legacyId}:${r.legacyId}`);
+    }
     if(t&&r.disposal){const d=(await client.query('SELECT * FROM sample_disposals WHERE request_id=$1',[t.request_id])).rows[0],e=r.disposal;if(!d||d.disposal_type!==r.type||d.responsible_user_id!==e.responsibleUserId||d.approved_by!==e.approvedBy||d.paid_by!==e.paidBy||(d.final_amount===null?e.finalAmount!==null:e.finalAmount===null||sampleMoneyCents(d.final_amount)!==sampleMoneyCents(e.finalAmount))||!sameDate(d.approved_at,e.approvedAt)||!sameDate(d.paid_at,e.paidAt))errors.push(`disposal:${item.legacyId}:${r.legacyId}`);}
     if(t&&!archived&&['pending','payment_pending'].includes(r.status)){const task=(await client.query("SELECT count(*)::int n FROM rework_todos WHERE entity_id=$1 AND dedupe_key LIKE $2 AND status IN ('pending','blocked_recipient')",[row.sample_id,`sample:${t.request_id}:%`])).rows[0];if(!task.n)errors.push(`todo:${item.legacyId}`);}
    }

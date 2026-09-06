@@ -4,7 +4,7 @@ const id=z.string().uuid(),text=z.string().trim().min(1).max(2000),hash=z.string
 export const SampleImportCustodySchema=z.object({legacyId:text,sourceHash:hash,holderUserId:id,holderName:text,department:text,purpose:text,borrowedAt:date,returnedAt:date.nullable(),disposedAt:date.nullable(),initialCustody:z.boolean(),requestedBy:id.nullable(),confirmedBy:id.nullable()}).strict();
 export const SampleImportRequestSchema=z.object({legacyId:text,sourceHash:hash,type:z.enum(['borrow','return','sale','gift','scrap','loss']),status:z.enum(['pending','payment_pending','completed','rejected','cancelled']),fromStatus:z.enum(['in_stock','borrowed']),requestedBy:id,requestedFor:id.nullable(),purpose:text.nullable(),reason:z.string().max(2000),createdAt:date,resolvedBy:id.nullable(),resolvedAt:date.nullable(),resolutionReason:z.string().max(2000).nullable(),
  disposal:z.object({recipient:text.nullable(),responsibleUserId:id.nullable(),proposedAmount:SampleMoneySchema.nullable(),finalAmount:SampleMoneySchema.nullable(),approvedBy:id.nullable(),approvedAt:date.nullable(),paidBy:id.nullable(),paidAt:date.nullable()}).strict().nullable(),
- proofObjectKeys:z.array(text).max(100),
+ proofObjectKeys:z.array(text).max(100).refine(keys=>new Set(keys).size===keys.length),
 }).strict();
 export const SampleImportItemSchema=z.object({legacyId:text,sourceHash:hash,status:SampleStatusSchema,purchaserUserId:id,holderUserId:id.nullable(),holderName:text.nullable(),borrowedAt:date.nullable(),purpose:text.nullable(),storageLocation:text.nullable(),archivedFromStatus:SampleStatusSchema.nullable(),archiveReason:text.nullable(),normalizationReason:text,
  custody:z.array(SampleImportCustodySchema),requests:z.array(SampleImportRequestSchema),
