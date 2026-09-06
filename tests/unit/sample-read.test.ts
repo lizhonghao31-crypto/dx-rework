@@ -18,7 +18,7 @@ describe("sample read HTTP and query boundaries", () => {
     const query = SampleReadQuerySchema.parse({ search: "x%' OR true --", brand: "brand'", department: "dept'" });
     const result = sampleReadFilter(actor, query);
     expect(result.where).not.toContain(query.search); expect(result.where).not.toContain(query.brand);
-    expect(result.values).toContain("%x\\%' OR true --%");
+    expect(result.values).toContain("x\\%' OR true --%");
     expect(result.values).toContain("brand'");
   });
   it.each(["sample_designer", "sample_administrative", "sample_finance", "owner_group"])("requires both role and capability for navigation %s", role => {

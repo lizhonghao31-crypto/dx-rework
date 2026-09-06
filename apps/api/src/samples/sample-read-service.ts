@@ -44,8 +44,8 @@ export function sampleReadFilter(actor: TrustedActorContext, q: SampleReadQuery)
     }
   }
   if (q.search) {
-    const pattern = bind(`%${q.search.replace(/[\\%_]/g, "\\$&")}%`);
-    conditions.push(`(s.sample_code ILIKE ${pattern} OR s.style_no ILIKE ${pattern})`);
+    const pattern = bind(`${q.search.replace(/[\\%_]/g, "\\$&")}%`);
+    conditions.push(`(upper(s.sample_code) LIKE upper(${pattern}) OR upper(s.style_no) LIKE upper(${pattern}))`);
   }
   if (q.purchaseYear) conditions.push(`s.purchase_date>=make_date(${bind(q.purchaseYear)}::int,1,1) AND s.purchase_date<make_date(${bind(q.purchaseYear + 1)}::int,1,1)`);
   if (q.holderUserId) conditions.push(`s.holder_user_id=${bind(q.holderUserId)}::uuid`);
@@ -59,7 +59,8 @@ export function sampleReadFilter(actor: TrustedActorContext, q: SampleReadQuery)
     if (q.disposedTo) disposalConditions.push(`COALESCE(d.paid_at,d.approved_at)<((${bind(q.disposedTo)}::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`);
     if (q.personUserId) {
       const person = bind(q.personUserId);
-      disposalConditions.push(`(d.responsible_user_id=${person}::uuid OR d.approved_by=${person}::uuid OR s.purchaser_user_id=${person}::uuid)`);
+      disposalConditions.push(`(d.responsible_user_id=${person}::uuid OR d.approved_by=${person}::uuid OR s.purchaser_user_id=${person}::uuid
+        OR EXISTS(SELECT 1 FROM sample_workflow_requests initiator WHERE initiator.request_id=d.request_id AND initiator.requested_by=${person}::uuid))`);
     }
     conditions.push(`EXISTS(SELECT 1 FROM sample_disposals d WHERE ${disposalConditions.join(" AND ")})`);
   }
@@ -118,10 +119,10 @@ export class SampleReadService {
     const sources = {
       custody: { from: "sample_custody_records h", where: "h.sample_id=$1", time: "h.borrowed_at", id: "h.custody_id",
         fields: "h.holder_name AS \"actorName\", CASE WHEN h.initial_custody THEN 'initial_custody' ELSE 'borrow' END AS kind, h.purpose, h.returned_at::text AS \"returnedAt\"" },
-      disposal: { from: "sample_disposals h JOIN sample_workflow_requests r ON r.request_id=h.request_id JOIN app_users u ON u.id=r.requested_by", where: "h.sample_id=$1", time: "r.created_at", id: "h.disposal_id",
-        fields: `u.display_name AS "actorName", h.disposal_type AS kind, r.status, h.recipient${finance ? ", h.final_amount::text AS amount" : ""}` },
-      audit: { from: "operation_events h JOIN app_users u ON u.id=h.actor_id", where: "h.entity_type='sample' AND h.entity_id=$1", time: "h.created_at", id: "h.event_id",
-        fields: "u.display_name AS \"actorName\", h.action AS kind" },
+      disposal: { from: "sample_disposals h JOIN sample_workflow_requests r ON r.request_id=h.request_id", where: "h.sample_id=$1", time: "r.created_at", id: "h.disposal_id",
+        fields: `r.requested_by_name AS "actorName", h.disposal_type AS kind, r.status, h.recipient${finance ? ", h.final_amount::text AS amount" : ""}` },
+      audit: { from: "operation_events h LEFT JOIN sample_event_actor_snapshots snapshot ON snapshot.event_id=h.event_id", where: "h.entity_type='sample' AND h.entity_id=$1", time: "h.created_at", id: "h.event_id",
+        fields: "COALESCE(snapshot.actor_name,'历史操作人（未留存当时姓名）') AS \"actorName\", h.action AS kind" },
     };
     const source = sources[q.kind];
     return this.snapshot(async client => {
@@ -143,7 +144,8 @@ export class SampleReadService {
       const people = await client.query(`SELECT DISTINCT u.id AS "userId",u.display_name AS name FROM app_users u
         WHERE EXISTS(SELECT 1 FROM sample_items s WHERE s.status<>'archived' AND (s.holder_user_id=u.id OR s.purchaser_user_id=u.id))
         OR EXISTS(SELECT 1 FROM sample_disposals d JOIN sample_items s ON s.sample_id=d.sample_id
-        WHERE s.status<>'archived' AND (d.responsible_user_id=u.id OR d.approved_by=u.id)) ORDER BY name,"userId"`);
+        JOIN sample_workflow_requests r ON r.request_id=d.request_id
+        WHERE s.status<>'archived' AND (d.responsible_user_id=u.id OR d.approved_by=u.id OR r.requested_by=u.id)) ORDER BY name,"userId"`);
       return SampleOptionsSchema.parse({ ...values.rows[0], people: people.rows });
     });
   }

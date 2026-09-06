@@ -12,7 +12,7 @@ run("sample read projections, paging and exact amounts", () => {
   const schema = `sample_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Pool({ connectionString: url! });
   const db = new pg.Pool({ connectionString: url!, options: `-c search_path=${schema}` });
-  const service = new SampleReadService(db), userId = randomUUID(), otherId = randomUUID();
+  const service = new SampleReadService(db), userId = randomUUID(), otherId = randomUUID(), initiatorId = randomUUID();
   const actor = (role: string, id = userId) => ({ actorId: id, actorRoles: [role], authorizationCapability: "sample:view_basic",
     authorizationCapabilities: SampleCapabilitySchema.options, requestId: "sample-read-fixture" });
   const borrowed: string[] = [];
@@ -29,10 +29,10 @@ run("sample read projections, paging and exact amounts", () => {
   };
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql", "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0152_sample_domain_foundation.sql"]) {
+    for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql", "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0152_sample_domain_foundation.sql", "0153_sample_read_indexes_snapshots.sql"]) {
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     }
-    for (const id of [userId, otherId]) await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'样衣测试用户',true)", [id]);
+    for (const id of [userId, otherId, initiatorId]) await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'样衣测试用户',true)", [id]);
     for (let i = 0; i < 31; i++) borrowed.push(await create("borrowed", `YI-fixture-${i}`));
     await create("in_stock", "YI-stock", null);
     pendingId = await create("borrow_pending", "YI-pending", null);
@@ -42,7 +42,7 @@ run("sample read projections, paging and exact amounts", () => {
     sold = await create("sold", "YI-sold", null);
     const sale = randomUUID();
     await db.query(`INSERT INTO sample_workflow_requests(request_id,sample_id,request_type,status,from_status,requested_by,resolved_by,resolved_at)
-      VALUES($1,$2,'sale','completed','in_stock',$3,$3,'2026-09-02T02:00:00Z')`, [sale, sold, userId]);
+      VALUES($1,$2,'sale','completed','in_stock',$3,$4,'2026-09-02T02:00:00Z')`, [sale, sold, initiatorId, userId]);
     await db.query(`INSERT INTO sample_disposals(disposal_id,request_id,sample_id,disposal_type,proposed_amount,final_amount,approved_by,approved_at,recipient)
       VALUES($1,$2,$3,'sale','50.01','50.01',$4,'2026-09-02T02:00:00Z','测试买方')`, [randomUUID(), sale, sold, userId]);
     for (let i = 0; i < 17; i++) await db.query(`INSERT INTO sample_custody_records(custody_id,sample_id,holder_user_id,holder_name,department,purpose,borrowed_at,returned_at,requested_by,initial_custody)
@@ -101,5 +101,30 @@ run("sample read projections, paging and exact amounts", () => {
   });
   it("computes exact separate recovery totals and excludes archived original value", async () => {
     expect(await service.amounts(actor("sample_finance"))).toEqual({ purchaseTotal: "3400.34", managedOriginalValue: "3300.33", disposedOriginalValue: "100.01", saleReceipts: "50.01", lossCompensation: "0.00" });
+  });
+  it("includes an independent disposal initiator in personnel options and filtering", async () => {
+    expect((await service.options(actor("sample_designer"))).people.map(person => person.userId)).toContain(initiatorId);
+    expect((await service.list(actor("sample_designer"), { view: "disposed", personUserId: initiatorId })).items.map(item => item.sampleId)).toEqual([sold]);
+  });
+  it("keeps event-time names after directory renames and guards immutable snapshots", async () => {
+    await db.query("UPDATE app_users SET display_name='变更后姓名' WHERE id=ANY($1::uuid[])", [[userId, initiatorId]]);
+    expect((await service.history(actor("sample_finance"), sold, { kind: "disposal" })).items[0]?.actorName).toBe("样衣测试用户");
+    expect((await service.history(actor("sample_finance"), borrowed[0]!, { kind: "audit" })).items[0]?.actorName).toBe("样衣测试用户");
+    await expect(db.query("UPDATE sample_event_actor_snapshots SET actor_name='rewrite'")).rejects.toMatchObject({ code: "55000" });
+    await expect(db.query("UPDATE sample_workflow_requests SET requested_by_name='rewrite' WHERE sample_id=$1", [sold])).rejects.toMatchObject({ code: "55000" });
+  });
+  it("uses indexes matching prefix search and effective disposal date", async () => {
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN"); await client.query("SET LOCAL enable_seqscan=off");
+      const prefix = await client.query("EXPLAIN (COSTS OFF) SELECT sample_id FROM sample_items WHERE upper(sample_code) LIKE upper($1)", ["YI-fixture-1%"]);
+      expect(JSON.stringify(prefix.rows)).toContain("sample_code_prefix_idx");
+      const style = await client.query("EXPLAIN (COSTS OFF) SELECT sample_id FROM sample_items WHERE upper(style_no) LIKE upper($1)", ["STYLE%"]);
+      expect(JSON.stringify(style.rows)).toContain("sample_style_prefix_idx");
+      const date = await client.query(`EXPLAIN (COSTS OFF) SELECT sample_id FROM sample_disposals WHERE approved_at IS NOT NULL
+        AND COALESCE(paid_at,approved_at)>='2026-09-01T00:00:00Z' ORDER BY COALESCE(paid_at,approved_at) LIMIT 15`);
+      expect(JSON.stringify(date.rows)).toContain("sample_disposal_effective_date_idx");
+      await client.query("ROLLBACK");
+    } finally { client.release(); }
   });
 });

@@ -34,7 +34,7 @@ globalThis.fetch = async input => {
   else if (path.endsWith("/samples")) {
     const page = Number(url.searchParams.get("page") ?? 1), view = url.searchParams.get("view") ?? "borrowed", search = url.searchParams.get("search");
     const matching = rows.filter(row => (view === "managed" ? row.status !== "sold" : view === "pending" ? row.status.endsWith("pending") : view === "disposed" ? row.status === "sold" : row.status === view)
-      && (!search || row.sampleCode.includes(search) || row.styleNo.includes(search)));
+      && (!search || row.sampleCode.toUpperCase().startsWith(search.toUpperCase()) || row.styleNo.toUpperCase().startsWith(search.toUpperCase())));
     body = { items: matching.slice((page - 1) * 15, page * 15), totalCount: matching.length, page, counts: { borrowed: 31, inStock: 9, pending: 4 } };
   } else if (/\/samples\/[0-9a-f-]{36}$/.test(path)) body = { item: rows[0], canViewAudit: capabilities.includes("sample:view_audit") };
   else return new Response(JSON.stringify({ error: { message: "该路径不在离线验收范围" } }), { status: 404 });

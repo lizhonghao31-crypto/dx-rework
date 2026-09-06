@@ -160,7 +160,7 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
           {[["borrowed", "借出中"], ["in_stock", "在库"], ["managed", "全部在管"]].map(([value, label]) => <Button key={value} aria-pressed={view === value} variant={view === value ? "primary" : "secondary"} onClick={() => { setView(value!); setPage(1); filter("status", ""); }}>{label}</Button>)}
         </div> : null}
         <div className="rework-v2-grid">
-          <label>样衣编号 / 款号<input aria-label="样衣编号或款号" maxLength={100} value={filters.search ?? ""} onChange={e => filter("search", e.target.value)} /></label>
+          <label>样衣编号 / 款号<input aria-label="样衣编号或款号" placeholder="输入编号或款号的开头" maxLength={100} value={filters.search ?? ""} onChange={e => filter("search", e.target.value)} /></label>
           <label>采购年份<select className="rework-v2-control" value={filters.purchaseYear ?? ""} onChange={e => filter("purchaseYear", e.target.value)}><option value="">全部年份</option>{options?.purchaseYears.map(year => <option key={year}>{year}</option>)}</select></label>
           <label>{mode === "disposed" ? "相关人员" : "当前持有人"}<select className="rework-v2-control" value={filters[mode === "disposed" ? "personUserId" : "holderUserId"] ?? ""} onChange={e => filter(mode === "disposed" ? "personUserId" : "holderUserId", e.target.value)}><option value="">全部人员</option>{options?.people.map(person => <option value={person.userId} key={person.userId}>{person.name}</option>)}</select></label>
           <label>品牌<select className="rework-v2-control" value={filters.brand ?? ""} onChange={e => filter("brand", e.target.value)}><option value="">全部品牌</option>{options?.brands.map(brand => <option key={brand}>{brand}</option>)}</select></label>
