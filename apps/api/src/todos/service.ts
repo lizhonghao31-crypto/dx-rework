@@ -1107,9 +1107,7 @@ export class TodoService {
         await this.cancelPendingRoutingExceptionForTodo(client, actor, todo.todo_id, reason);
       }
     }
-    if (status === "cancelled") {
-      await this.enqueueDelivery(client, todo, eventId, actor.requestId, "complete");
-    }
+    await this.enqueueDelivery(client, todo, eventId, actor.requestId, "complete");
     return true;
   }
 

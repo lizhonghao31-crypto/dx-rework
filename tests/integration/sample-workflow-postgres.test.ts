@@ -60,6 +60,11 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const key=randomUUID(),done=await service.confirm(clerk(),id,{version:2,token:qr,storageLocation:'A01'},key);
   expect(done.status).toBe('in_stock');expect(await service.confirm(clerk(),id,{version:2,token:qr,storageLocation:'A01'},key)).toEqual(done);
   expect(await row(id)).toMatchObject({holder_user_id:null,storage_location:'A01'});expect(await indicator(administrative)).toBe(0);expect(await indicator(peer)).toBe(0);
+  const terminalDeliveries=await db.query(`SELECT t.recipient_user_id,count(*) AS total FROM rework_todos t
+   JOIN todo_delivery_attempts d ON d.todo_id=t.todo_id AND d.delivery_kind='complete'
+   WHERE t.dedupe_key LIKE $1 GROUP BY t.recipient_user_id`,[`sample:${req.requestId}:%`]);
+  expect(terminalDeliveries.rows.map(r=>r.recipient_user_id).sort()).toEqual([administrative,peer].sort());
+  expect(terminalDeliveries.rows.every(r=>Number(r.total)===1)).toBe(true);
   await expect(service.lookupQr(clerk(),qr)).rejects.toMatchObject({code:'INVALID_STATE_TRANSITION'});
   expect(Number((await db.query('SELECT count(*) FROM sample_custody_records WHERE sample_id=$1 AND returned_at IS NULL',[id])).rows[0].count)).toBe(0);
   const borrowed=await service.borrow(user(),id,{version:3,purpose:'开发试版',borrowerUserId:other},randomUUID());
