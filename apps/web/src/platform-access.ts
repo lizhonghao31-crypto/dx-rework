@@ -116,7 +116,7 @@ export function todoModuleIdsForUser(user: Readonly<{
     ? roles.flatMap((roleCode) => accessModuleIdsForRole(roleCode, user.capabilities))
     : accessModuleIdsForCapabilities(user.capabilities);
   const modules = new Set<TodoAccessModuleId | PlatformAccessModuleId>(classified);
-  if (user.capabilities.includes("todo:view") && user.capabilities.includes("sample:view_basic") && roles.some(role => ["sample_designer", "sample_administrative", "sample_finance", "owner_group"].includes(role))) modules.add("samples");
+  if (user.capabilities.includes("todo:view") && user.capabilities.includes("sample:view_basic") && roles.some(role => ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"].includes(role))) modules.add("samples");
   if (user.capabilities.includes("todo:view") && user.capabilities.includes("sourcing:view") && roles.some(role=>["order_merchandiser","production_management","owner_group"].includes(role))) modules.add("production");
   else modules.delete("production");
   return (["rework", "sourcing", "production", "samples"] as const).filter((moduleId) => modules.has(moduleId));

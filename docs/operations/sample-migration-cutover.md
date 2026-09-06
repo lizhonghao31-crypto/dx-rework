@@ -1,5 +1,7 @@
 # 样衣迁移 PR-5 施工与切换记录
 
+2026-09-06 后续角色及财务维护、部署分工见 [样衣角色与财务维护交接](sample-role-release-handoff.md)。PR-1–5（#405–#409）代码已合并；563个对象已下载校验，尚未转存至目标。正式导入与切换尚未执行。
+
 基线 main：`10deeddf5034366e90257c249603aeb9a3e3e51e`（PR-4 #408 已合并）。
 允许范围：样衣 contracts/API/必要操作入口、增量 migration 0157、样衣测试、迁移脚本和本运行记录。禁止修改返工、外发、供应商与生产看板业务规则；不覆盖既有 migration。
 业务依据：`docs/requirements/sample-system-migration-v1.0.md`。负责人已授权连续施工、Gate、每 PR 至多一次 Review 和合并；明确将 UI 验收后置。浏览器五宽度截图尚未验收，构建通过不代替浏览器验收。

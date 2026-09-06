@@ -372,8 +372,8 @@ export function App() {
     if (path === "/ui/samples/create" || path === "/ui/samples/batch-create") {
       return <AuthGate requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}>{page}</AuthGate>;
     }
-    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "owner_group"]
-      : ["sample_designer", "sample_administrative", "sample_finance", "owner_group"];
+    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "sample_approver", "owner_group"]
+      : ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"];
     return <AuthGate requiredAnyOf={roles.map(requiredRole => ({ requiredRole,
       requiredCapability: path === "/ui/samples/amounts" ? "sample:view_finance" : "sample:view_basic",
     }))}>{page}</AuthGate>;

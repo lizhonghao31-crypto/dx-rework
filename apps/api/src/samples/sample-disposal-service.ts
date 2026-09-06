@@ -44,8 +44,18 @@ export class SampleDisposalService{
   const handoff=['borrow','return'].includes(request.request_type),payment=request.status==='payment_pending';
   const capability=handoff?`sample:${request.request_type}_confirm`:payment?'sample:loss_close':'sample:dispose_approve';
   const category=handoff?`sample_${request.request_type}_confirm`:payment?'sample_loss_payment':'sample_disposal_approval';
-  await this.todos.actionableForAllAssignedRole(client,actor,{category,sourceEventId:eventId,sourceAction,entityType:'sample',entityId:request.sample_id,
-   requiredRole:handoff||payment?'sample_administrative':'owner_group',requiredCapability:capability,route:{routeName:'sample_detail',entityId:request.sample_id},policyKey:'general',dedupeKey:`sample:${request.request_id}:${category}:${generation}`});
+  if(handoff||payment){
+   await this.todos.actionableForAllAssignedRole(client,actor,{category,sourceEventId:eventId,sourceAction,entityType:'sample',entityId:request.sample_id,
+    requiredRole:'sample_administrative',requiredCapability:capability,route:{routeName:'sample_detail',entityId:request.sample_id},policyKey:'general',dedupeKey:`sample:${request.request_id}:${category}:${generation}`});return;
+  }
+  const roles=['owner_group','sample_approver'];
+  const recipients=await client.query<{user_id:string;role_code:string}>(`SELECT DISTINCT ON (a.user_id) a.user_id,a.role_code
+   FROM user_role_assignments a WHERE a.role_code=ANY($1::text[]) AND a.revoked_at IS NULL
+    AND todo_user_has_direct_role(a.user_id,a.role_code,$2) ORDER BY a.user_id,a.role_code`,[roles,capability]);
+  if(!recipients.rows.length&&isRootActor(actor))return;
+  if(!recipients.rows.length)throw new ApplicationError('CONFLICT','未配置有效的样衣事项处理人，请先分配角色',409);
+  for(const recipient of recipients.rows)await this.todos.actionableForRecipient(client,actor,{category,sourceEventId:eventId,sourceAction,entityType:'sample',entityId:request.sample_id,
+   requiredRole:recipient.role_code,requiredCapability:capability,recipientUserId:recipient.user_id,route:{routeName:'sample_detail',entityId:request.sample_id},policyKey:'general',dedupeKey:`sample:${request.request_id}:${category}:${generation}:${recipient.user_id}`});
  }
  async cancelImportedTasks(client:PoolClient,actor:TrustedActorContext,requestId:string){
   await this.todos.cancelOpenByDedupePrefix(client,actor,`sample:${requestId}:`,'迁移按最终源快照重建待办');
@@ -63,7 +73,7 @@ export class SampleDisposalService{
   const can=(cap:SampleCapability)=>canUseSampleCapability(actor,cap),canClose=!!pending&&item.status==='loss_payment_pending'&&can('sample:loss_close'),finance=can('sample:view_finance');
   return SampleDisposalActionsSchema.parse({enabled:(await this.db.query<{enabled:boolean}>('SELECT enabled FROM sample_write_control WHERE singleton=true')).rows[0]?.enabled===true,sampleId,version:item.version,status:item.status,
    canRequest:['in_stock','borrowed'].includes(item.status)&&can('sample:dispose_request'),canApprove:item.status==='disposal_pending'&&can('sample:dispose_approve'),canCloseLoss:canClose,
-   canUpdateBasic:item.status!=='archived'&&can('sample:update_basic'),canUpdateLocation:item.status==='in_stock'&&can('sample:update_location'),canCorrectFinance:isRootActor(actor),canArchive:item.status!=='archived'&&isRootActor(actor),canRestore:item.status==='archived'&&isRootActor(actor),
+   canUpdateBasic:item.status!=='archived'&&can('sample:update_basic'),canUpdateLocation:item.status==='in_stock'&&can('sample:update_location'),canCorrectFinance:(item.status!=='archived'||isRootActor(actor))&&can('sample:correct_finance'),canArchive:item.status!=='archived'&&isRootActor(actor),canRestore:item.status==='archived'&&isRootActor(actor),
    pending:pending?{requestId:pending.request_id,type:pending.request_type,status:pending.status,reason:pending.reason,recipient:pending.recipient,responsibleName:pending.responsible_name,
     ...(finance&&pending.proposed_amount!=null?{proposedAmount:pending.proposed_amount}:{}),...((finance||canClose)&&pending.final_amount!=null?{finalAmount:pending.final_amount}:{})}:null});
  }
@@ -140,18 +150,22 @@ export class SampleDisposalService{
    await this.events.append(client,actor,{action:'sample.location_updated',entityType:'sample',entityId:id,before:{storageLocation:item.storage_location},after:{storageLocation:input.storageLocation},reason:input.reason});return {sampleId:id,status:item.status,version:item.version+1};});
  }
  async correctFinance(actor:TrustedActorContext,id:string,raw:unknown,key:string){
-  this.root(actor);actor={...actor,authorizationCapability:'sample:correct_finance'};const input=sampleInput(SampleFinanceCorrectionSchema,raw);
+  requireSampleCapability(actor,'sample:correct_finance');actor={...actor,authorizationCapability:'sample:correct_finance'};const input=sampleInput(SampleFinanceCorrectionSchema,raw);
+  if(input.receiptMode==='replace'&&!isRootActor(actor))throw new ApplicationError('FORBIDDEN','财务只能追加小票，不能撤下原小票',403);
   return this.transaction(actor,id,input.version,key,'finance-correct',input,async(client,item)=>{
+   if(item.status==='archived'&&!isRootActor(actor))throw fail('请先由管理员恢复样衣再修改资料');
    const before=(await client.query<{purchasePrice:string}>('SELECT purchase_price::text AS "purchasePrice" FROM sample_financial_facts WHERE sample_id=$1 FOR UPDATE',[id])).rows[0];if(!before)throw fail('采购资料不存在');
    const old=(await client.query<{attachment_id:string}>('SELECT attachment_id FROM sample_attachment_bindings WHERE sample_id=$1 AND purpose=\'purchase_receipt\' AND active',[id])).rows.map(row=>row.attachment_id);
    const existing=(await client.query<{attachment_id:string}>('SELECT attachment_id FROM sample_attachment_bindings WHERE sample_id=$1 AND purpose=\'purchase_receipt\'',[id])).rows.map(row=>row.attachment_id);
    const valid=await client.query("SELECT attachment_id FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND status='ready' AND mime_type LIKE 'image/%' ORDER BY attachment_id FOR UPDATE",[input.receiptAttachmentIds]);
    if(valid.rows.length!==input.receiptAttachmentIds.length)throw new ApplicationError('VALIDATION_ERROR','小票必须是有效的已完成上传图片',400);
    await bindSampleAttachments(client,actor,id,input.receiptAttachmentIds.filter(file=>!existing.includes(file)),'purchase_receipt');
-   await client.query("UPDATE sample_attachment_bindings SET active=(attachment_id=ANY($2::uuid[])) WHERE sample_id=$1 AND purpose='purchase_receipt'",[id,input.receiptAttachmentIds]);
+   const receiptIds=input.receiptMode==='append'?[...new Set([...old,...input.receiptAttachmentIds])]:input.receiptAttachmentIds;
+   if(input.receiptMode==='replace'&&!receiptIds.length)throw new ApplicationError('VALIDATION_ERROR','更正后至少保留一张有效小票',400);
+   await client.query("UPDATE sample_attachment_bindings SET active=(attachment_id=ANY($2::uuid[])) WHERE sample_id=$1 AND purpose='purchase_receipt'",[id,receiptIds]);
    await client.query('UPDATE sample_financial_facts SET purchase_price=$2,version=version+1 WHERE sample_id=$1',[id,input.purchasePrice]);
    await client.query('UPDATE sample_items SET version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1',[id]);
-   await this.financeAudit(client,actor,id,'sample.finance_corrected',{version:item.version+1,receiptCount:input.receiptAttachmentIds.length},{...before,receiptAttachmentIds:old},{purchasePrice:input.purchasePrice,receiptAttachmentIds:input.receiptAttachmentIds},input.reason);
+   await this.financeAudit(client,actor,id,'sample.finance_corrected',{version:item.version+1,receiptCount:receiptIds.length},{...before,receiptAttachmentIds:old},{purchasePrice:input.purchasePrice,receiptAttachmentIds:receiptIds},input.reason);
    return {sampleId:id,status:item.status,version:item.version+1};
   });
  }

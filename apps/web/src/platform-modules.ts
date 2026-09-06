@@ -20,7 +20,7 @@ export function canAccessSupplierCenter(user: AuthorizedUser): boolean {
 
 export function canAccessSamples(user: AuthorizedUser): boolean {
   return user.isRoot === true || (user.capabilities.includes("sample:view_basic")
-    && user.businessRoles?.some(role => ["sample_designer", "sample_administrative", "sample_finance", "owner_group"].includes(role)) === true);
+    && user.businessRoles?.some(role => ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"].includes(role)) === true);
 }
 
 export function canAccessProduction(user: AuthorizedUser): boolean {
