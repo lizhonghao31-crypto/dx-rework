@@ -33,6 +33,10 @@ export function registerSampleReadRoutes(app: FastifyInstance, dependencies: Sam
     reply.header("Cache-Control", "no-store");
     return dependencies.service.options(await actor(request));
   });
+  app.get("/samples/analysis", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return dependencies.service.analysis(await actor(request), request.query);
+  });
   app.get("/samples/amounts", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     return dependencies.service.amounts(await actor(request));
@@ -49,3 +53,4 @@ export function registerSampleReadRoutes(app: FastifyInstance, dependencies: Sam
     return dependencies.service.history(user, id(request.params.id), query.data);
   });
 }
+

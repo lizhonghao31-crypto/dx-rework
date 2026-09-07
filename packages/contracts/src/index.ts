@@ -1545,3 +1545,5 @@ export * from "./production-closure.js";
 export * from "./sample-disposal.js";
 
 export * from "./sample-import.js";
+
+export * from './sample-analysis.js';

@@ -158,6 +158,8 @@
     {"version": "0156_sample_handoff_todos", "checksum": "6cc5b46518107c43ac45c98e858e72b0c6ca0e613c9fa9d7c37a7ef63fc4d159"},
     { "version": "0157_sample_disposal_import", "checksum": "aa1f002c0ed3b007d3622c6860394a7203e881c7269cf94fe6b7971a56a77ebe" } ,
     { "version": "0158_sample_role_finance_maintenance", "checksum": "d66049d5b0151ad52271930043e11c697818850d65f4038b20f5103fd4f5918c" } ,
-    { "version": "0159_sourcing_production_exclusions", "checksum": "8423176da9aa6a3af57b9555b0abb5b1f48e0f307e11eba946301d69114bc2e2" }
+    { "version": "0159_sourcing_production_exclusions", "checksum": "8423176da9aa6a3af57b9555b0abb5b1f48e0f307e11eba946301d69114bc2e2" },
+    { "version": "0160_sample_analysis", "checksum": "f574da58dda54300223a37c3d1b825087d661b0d19b6e711874b37a53e7d6593" }
   ]
 }
+
