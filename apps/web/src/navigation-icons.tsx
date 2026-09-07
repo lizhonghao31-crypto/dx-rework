@@ -22,11 +22,13 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
   "/ui/samples/amounts": "ChartColumn",
   "/ui/employee-access": "Users",
   "/ui/admin": "Settings",
+  "/ui/master-data": "Factory",
+  "/ui/people": "Users",
 };
 
 export const NAVIGATION_GROUP_ICONS: Readonly<Record<string, IconName>> = {
   "样衣管理": "Shirt", "订单返工": "Wrench", "外发定价&选厂": "FileText",
-  "供应商中心": "Factory", "平台管理": "Settings", "更多": "Ellipsis",
+  "供应商中心": "Factory", "平台管理": "Settings", "更多": "Ellipsis", "实时生产看板": "Activity",
 };
 
 // Exact route matches only: an unknown page must not acquire another page's icon.
@@ -38,7 +40,7 @@ export function navigationIconForRoute(route: string): IconName | undefined {
 export function NavigationIcon({ route, group, size = "secondary" }: {
   route?: string; group?: string; size?: "primary" | "secondary" | "title";
 }) {
-  const name = route ? navigationIconForRoute(route) : group ? NAVIGATION_GROUP_ICONS[group] : undefined;
+  const name = (route ? navigationIconForRoute(route) : undefined) ?? (group ? NAVIGATION_GROUP_ICONS[group] : undefined);
   if (!name) return null;
   return <svg className={`dx-navigation-icon dx-navigation-icon--${size}`} viewBox="0 0 24 24"
     fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"

@@ -26,6 +26,7 @@ const labels: Record<string, string> = {
   "/ui/suppliers": "供应商目录", "/ui/suppliers/manage": "资料维护", "/ui/samples": "在管样衣",
   "/ui/samples/pending": "待确认中心", "/ui/samples/disposed": "已处置样衣", "/ui/samples/amounts": "库存金额管理",
   "/ui/employee-access": "人员与权限", "/ui/admin": "系统管理",
+  "/ui/master-data": "工厂、供应商、工艺与工序数据库", "/ui/people": "作业人员与临时工",
 };
 
 function Preview() {
@@ -33,7 +34,6 @@ function Preview() {
   const [state, setState] = useState("正常");
   const [detail, setDetail] = useState(false);
   const [query, setQuery] = useState("");
-  document.body.dataset.previewRoute = route;
   const title = labels[route] ?? "我的待办";
   const original = document.body.dataset.design === "original";
   const choose = (next: string) => { setRoute(next); setDetail(false); };
@@ -45,7 +45,7 @@ function Preview() {
     if (next && labels[next]) choose(next);
   }}>
     <Shell active={title}>
-      <Header title={title} subtitle="导航与标题图标样板 · 所有内容均为合成示例" badge={original ? "原样对照" : "图标初稿"} />
+      <Header iconRoute={route} title={title} subtitle="导航与标题图标样板 · 所有内容均为合成示例" badge={original ? "原样对照" : "图标初稿"} />
       <Surface>
         <div className="section-title"><h2>选择页面，查看图标效果</h2></div>
         <p>点击左侧菜单或下面的页面名称。手机端可点击底部“更多”。</p>

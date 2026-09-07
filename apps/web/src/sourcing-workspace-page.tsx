@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
   CraftCatalogListResponseSchema,
@@ -339,17 +340,17 @@ export function SourcingWorkspacePage({
           className={mobileActiveView === "create" ? "is-active" : ""}
           aria-current={mobileActiveView === "create" ? "page" : undefined}
           href={pageUrl("ui/sourcing/create")}
-        >创建</a> : null}
+        ><NavigationIcon route="/ui/sourcing/create" />创建</a> : null}
         <a
           className={mobileActiveView === "pending" ? "is-active" : ""}
           aria-current={mobileActiveView === "pending" ? "page" : undefined}
           href={pageUrl("ui/sourcing/pending")}
-        >待审批</a>
+        ><NavigationIcon route="/ui/sourcing/pending" />待审批</a>
         <a
           className={mobileActiveView === "history" ? "is-active" : ""}
           aria-current={mobileActiveView === "history" ? "page" : undefined}
           href={pageUrl("ui/sourcing/history")}
-        >历史</a>
+        ><NavigationIcon route="/ui/sourcing/history" />历史</a>
       </nav>
       {view === "create" ? <CreateOrderPage user={user} /> : null}
       {view === "pending" ? <OrderListPage mode="pending" user={user} /> : null}

@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
@@ -230,7 +231,7 @@ export function EmployeeAccessPage() {
       <div className="employee-access-shell">
         <header className="page-heading employee-access-heading">
           <div>
-            <h1>人员与权限</h1>
+            <h1><NavigationIcon route="/ui/employee-access" size="title" />人员与权限</h1>
             <p>在同一个平台入口维护员工、业务角色及其模块权限。</p>
           </div>
           <div className="employee-access-sync">

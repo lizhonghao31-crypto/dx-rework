@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
@@ -623,7 +624,7 @@ export function OrderBoardPage() {
   return <div className="order-board-page">
     <div className="order-board-heading">
       <div className="order-board-heading__title">
-        <h1>订单回货</h1>
+        <h1><NavigationIcon route="/ui/orders" size="title" />订单回货</h1>
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
       <div className="order-board-filters">

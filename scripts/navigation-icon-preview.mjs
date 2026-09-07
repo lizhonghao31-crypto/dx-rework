@@ -17,7 +17,7 @@ for (const design of ["icons", "original"]) {
     plugins: [react(), { name: "isolated-navigation-preview", enforce: "pre",
       resolveId(id) { if (["@dx-rework/contracts", "@dx-rework/contracts/business-display"].includes(id)) return "\0preview-contracts"; if (id === "./auth.js") return "\0preview-auth"; if(id === "./todo-indicator-refresh.js") return "\0preview-refresh"; },
       load(id) { if (id === "\0preview-auth") return previewAuth; if(id === "\0preview-contracts") return previewContracts; if(id === "\0preview-refresh") return previewRefresh; },
-      transform(source,id) { if(design === "icons" && id.endsWith("/apps/web/src/components.tsx")) return navigationIconPreviewTransform(source); },
+      transform(source,id) { if(design === "original" && id.endsWith("/apps/web/src/components.tsx")) return navigationIconPreviewTransform(source); },
     }],
     build: { outDir, lib: { entry: join(root,"tests/fixtures/navigation-icon-preview.tsx"), name: "NavigationPreview", formats: ["iife"], fileName: "preview" }, minify: true },
   });

@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -45,13 +46,13 @@ export function SystemManagementNavigation({
   if (access === null) return <p className="admin-navigation-loading">正在加载管理权限…</p>;
   const visibleTabs = access.technical ? technicalTabs : [];
   return <nav className="admin-navigation" aria-label="系统管理模块">
-    {access.employee ? <a className={active === "employee-access" ? "active" : ""} href={pageUrl("ui/employee-access")}>人员与权限</a> : null}
-    {access.masterData ? <a className={active === "master-data" ? "active" : ""} href={pageUrl("ui/master-data")}>工厂、供应商、工艺与工序数据库</a> : null}
-    {access.masterData ? <a className={active === "workforce" ? "active" : ""} href={pageUrl("ui/people")}>作业人员与临时工</a> : null}
+    {access.employee ? <a className={active === "employee-access" ? "active" : ""} href={pageUrl("ui/employee-access")}><NavigationIcon route="/ui/employee-access" />人员与权限</a> : null}
+    {access.masterData ? <a className={active === "master-data" ? "active" : ""} href={pageUrl("ui/master-data")}><NavigationIcon route="/ui/master-data" />工厂、供应商、工艺与工序数据库</a> : null}
+    {access.masterData ? <a className={active === "workforce" ? "active" : ""} href={pageUrl("ui/people")}><NavigationIcon route="/ui/people" />作业人员与临时工</a> : null}
     {visibleTabs.map(([tab, label]) => onTechnicalTabChange ? (
-      <button key={tab} className={active === tab ? "active" : ""} onClick={() => onTechnicalTabChange(tab)}>{label}</button>
+      <button key={tab} className={active === tab ? "active" : ""} onClick={() => onTechnicalTabChange(tab)}><NavigationIcon route="/ui/admin" />{label}</button>
     ) : (
-      <a key={tab} className={active === tab ? "active" : ""} href={`${pageUrl("ui/admin")}?tab=${tab}`}>{label}</a>
+      <a key={tab} className={active === tab ? "active" : ""} href={`${pageUrl("ui/admin")}?tab=${tab}`}><NavigationIcon route="/ui/admin" />{label}</a>
     ))}
   </nav>;
 }

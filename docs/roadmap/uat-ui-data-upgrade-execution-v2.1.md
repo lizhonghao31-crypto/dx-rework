@@ -8,8 +8,8 @@
 - base SHA: e0f1681dfa8d6007b3a682bc4b80b660e5914ebf（本次远端实际读取，与附件历史快照恰好相同）
 - working branch: feat/uat-v21-pr01-rules-icons
 - task scope: 版本化已批准变化，提供复用现有Shell及图标组件/CSS的可点击样板，确认后才接壳。
-- UI sample status: 待业务负责人确认；不得提前接入生产App。
-- required gate: 最终共享壳接入后Full Gate；当前仅规则、未接入图标组件和隔离样板。确认前不把样板提交当最终intended Head，不提前触发Review。
+- UI sample status: 2026-09-07 业务负责人回复“确认 开始”，已批准图标样板；在原 PR01 接入。
+- required gate: 共享壳已接入，创建普通 PR 后立即加 full-gate；最终 Head 全绿后进行必要 Review，最多一次。
 - review/merge authorization: 本轮Work自行判断并触发必要Review（所需Gate全绿后、每PR最多一次），修复、合并和继续；覆盖手动Review/合并和PR创建后结束的流程默认。样板确认、部署与生产数据边界不变。
 
 ### 远端进度
@@ -22,7 +22,7 @@ GitHub读文件、读取提交、PR和CI元数据以及Git对象写入通道已�
 
 ### PR01精确文件边界
 
-本次样板阶段允许修改：
+本次 PR01 允许修改：
 
 - AGENTS.md
 - docs/requirements/startup-requirements-v1.2.md
@@ -42,7 +42,7 @@ GitHub读文件、读取提交、PR和CI元数据以及Git对象写入通道已�
 - tests/fixtures/navigation-icon-preview.css
 - docs/evidence/uat-v21-pr01-icons.md
 
-确认后在同一PR01另行冻结接壳精确路径（预计components.tsx、共享NavigationItem类型及实际二级入口/标题文件），不以此预计路径作为提前写入授权。样板阶段仅对构建时虚拟模块添加图标，磁盘上的原Shell、原UI组件和生产导入不修改。样板选择器与示例详情不会进入生产。
+2026-09-07 样板确认后追加冻结：apps/web/src/components.tsx、packages/ui/src/index.tsx、apps/web/src/sourcing-workspace-page.tsx、apps/web/src/supplier-center-page.tsx、tests/unit/navigation-icons.test.ts。补充实际自有标题路径：apps/web/src/admin-console-page.tsx、apps/web/src/my-todos-page.tsx、apps/web/src/order-board-page.tsx、apps/web/src/employee-access-page.tsx。补充二级入口与工资标题：apps/web/src/wages/wage-period-list.tsx、apps/web/src/system-management-navigation.tsx、apps/web/src/production-dashboard-page.tsx、apps/web/src/production-reporting-page.tsx、apps/web/src/master-data-page.tsx、apps/web/src/workforce-master-data-page.tsx。接入证据路径：docs/evidence/pr01-icons/integrated-mobile.jpg、docs/evidence/pr01-icons/integrated-desktop.jpg、docs/evidence/pr01-icons/integrated-geometry.json。仅接入图标与兼容 ReactNode 的类型，路由、导航顺序和权限不变。样板构建改为直接使用真实 Shell；原样对照以显式逆转换保留。样板选择器与示例详情不会进入生产。
 
 禁止修改：apps/api/**、任何数据库迁移/生产数据、既有返工业务页面及状态/数量/金额逻辑、钉钉及Root权限、.github/workflows/**与CI治理脚本、部署配置、依赖及锁文件、PR02—13业务实现。许可文本仅随SVG图标保存，不引入运行时图标库。
 
@@ -53,12 +53,12 @@ GitHub读文件、读取提交、PR和CI元数据以及Git对象写入通道已�
 - 可点击样板：https://dx-pr01-icons-20260907.lizhonghao31.chatgpt.site
 - 样板实现提交：51305d36fd8effb1c1c63ef660a295105f8d87f3；本次后续证据提交只登记链接，不改变组件。
 - 图标初稿及原样入口已构建；五尺寸初稿截图、页面宽度检查及定向lint/typecheck通过，限制见docs/evidence/uat-v21-pr01-icons.md。
-- GitHub PR尚未创建：当前停在计划规定的实际样板确认门槛，避免未接壳先跑一次非最终Head Full Gate。确认后继续同一分支完成PR01，不另拆路线。
-- 样板为独立私有演示；ECS未部署、生产业务未操作。唯一下一步为业务负责人确认图标样式。
+- 图标样板已由业务负责人确认。共享 Shell、实际自有标题和二级入口已接入；提交后创建普通 PR 并立即添加 full-gate。
+- 样板为独立私有演示；ECS未部署、生产业务未操作。下一步为当前 Head Full Gate、必要 Review 与授权合并。
 
 | 路线 | 状态 | 下一步 |
 |---|---|---|
-| PR01 规则收口与导航图标 | 施工中；样板待确认 | 样板确认后在同一PR接壳并跑Full Gate |
+| PR01 规则收口与导航图标 | 施工中；样板已确认、接壳完成 | 当前 Head Full Gate 与必要 Review 后合并 |
 | PR02 样衣上传阻断 | 未开始 | 按计划核验申请/上传/finalize |
 | PR03 供应商操作安全 | 未开始 | 按原范围施工 |
 | PR04 数字规范与非转厂外发收口 | 未开始 | 按原范围施工 |

@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
@@ -172,7 +173,7 @@ export function WorkforceMasterDataPage() {
         <SystemManagementNavigation active="workforce" />
         <header className="page-heading workforce-heading">
           <div>
-            <h1>作业人员与临时工</h1>
+            <h1><NavigationIcon route="/ui/people" size="title" />作业人员与临时工</h1>
             <p>内部工人来自权限管理的“工人”角色；临时工在这里单独建档，不提供登录账号。</p>
           </div>
           <StatusBadge tone="info">N02 / 执行人员来源</StatusBadge>

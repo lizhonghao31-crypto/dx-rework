@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
@@ -105,8 +106,8 @@ const nullable = (value: string): string | null => value.trim() || null;
 export function SupplierCenterNavigation({ active }: { active: "directory" | "manage" }) {
   return (
     <nav className="supplier-center-tabs" aria-label="供应商中心">
-      <a className={active === "directory" ? "active" : ""} href={pageUrl("ui/suppliers")}>供应商目录</a>
-      <a className={active === "manage" ? "active" : ""} href={pageUrl("ui/suppliers/manage")}>资料维护</a>
+      <a className={active === "directory" ? "active" : ""} href={pageUrl("ui/suppliers")}><NavigationIcon route="/ui/suppliers" />供应商目录</a>
+      <a className={active === "manage" ? "active" : ""} href={pageUrl("ui/suppliers/manage")}><NavigationIcon route="/ui/suppliers/manage" />资料维护</a>
     </nav>
   );
 }
@@ -244,7 +245,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     <Shell active={mode === "manage" ? "资料维护" : "供应商目录"}>
       <header className="page-heading supplier-center-heading">
         <div>
-          <h1>供应商中心</h1>
+          <h1><NavigationIcon route={mode === "manage" ? "/ui/suppliers/manage" : "/ui/suppliers"} size="title" />供应商中心</h1>
           <p>统一查看供应商资料、合同缺项、工艺产能和变更历史。</p>
         </div>
         <div className="supplier-center-heading__actions">

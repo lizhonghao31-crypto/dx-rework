@@ -1,3 +1,4 @@
+import { NavigationIcon } from "../navigation-icons.js";
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
@@ -89,7 +90,7 @@ export function WagePeriodList() {
     <div className="wage-page wage-management">
       <header className="page-heading">
         <div>
-          <h1>工资管理</h1>
+          <h1><NavigationIcon route="/ui/wages" size="title" />工资管理</h1>
           <p>按工人、返工单、款号和期间交叉查询。</p>
         </div>
       </header>
