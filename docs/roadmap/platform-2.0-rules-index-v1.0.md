@@ -1,5 +1,7 @@
 # 平台建设 2.0 规则索引 V1.0
 
+**2026-09-07 当前路线：** 先完整阅读 `uat-ui-data-upgrade-v2.0.md`（正文 V2.1），接手和授权记录见 `uat-ui-data-upgrade-execution-v2.1.md`。固定13个PR，当前PR01规则与图标样板施工中，PR02—13尚未开始。样板确认后接业务；不是新一轮 SSP 或样衣迁移。
+
 **文件编号：** PLATFORM-2-RULES-INDEX-V1.0  
 **状态：** 当前跨窗口启动索引  
 **生效日期：** 2026-09-04  
@@ -24,8 +26,8 @@
 
 | 路线 | 唯一详细规则 | 当前状态 | 下一步 |
 |---|---|---|---|
-| 外发定价、供应商中心、合同与实时生产 | `docs/requirements/sourcing-supplier-production-v1.0.md` | SSP-01—07及纠偏PR #397/#398已合并 | SSP-08已获启动授权；建设实时看板、双进度、预警与手动刷新 |
-| 样衣系统平台化迁移 | `docs/requirements/sample-system-migration-v1.0.md` | 规则已定稿；尚未开工 | 业务负责人明确启动后，从样衣 PR-1 开始 |
+| 外发定价、供应商中心、合同与实时生产 | `docs/requirements/sourcing-supplier-production-v1.0.md` | SSP-01—09已合并；当前代码已包含基础看板和动效 | 按本轮V2.1路线修复与增强，不重做SSP |
+| 样衣系统平台化迁移 | `docs/requirements/sample-system-migration-v1.0.md` | PR #405—#413已合并；本次远端main为e0f1681；部署与实际验收另核对 | 本轮PR02修上传，PR07/09/10实施UI及分析；不重新迁移 |
 | 现有返工、订单回货和已交付平台能力 | `docs/requirements/startup-requirements-v1.2.md` 与最新 `main` | 已运行并持续维护 | 仅按单独明确需求维护，不夹入上述新路线 |
 
 ## 3. 路线隔离规则
@@ -117,3 +119,4 @@
 - 用户说“停”后立即停止，不得切换到另一条路线继续施工。
 
 — 文件结束 —
+

@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## 2026-09-07 本轮已批准增量规则
+
+当前 UAT/UI/数据升级路线以 `docs/roadmap/uat-ui-data-upgrade-v2.0.md`（正文 V2.1）及 `docs/roadmap/uat-ui-data-upgrade-execution-v2.1.md` 为入口，固定 PR01—PR13。该计划是业务负责人明确批准的版本化变更：节点一订单图片和样衣采购小票必填；跨模块统一基础 UI 参数，不强制统一业务布局；图标及业务布局先交可点击样板确认。已验收返工不重排，仅添加获批导航/标题图标。
+
+本轮 Work 获授权自主判断并触发必要 Codex Review（最终 intended Head 所需 Gate 全绿后，每 PR 最多一次）、修复和合并并继续路线；覆盖下文手动触发、合并及创建 PR 后结束本轮的流程性默认。样板确认、部署与生产数据保护仍按本轮计划及当时明确授权执行；不是永久授权。
+
 本文件约束所有在 `dx-rework` 仓库内施工的网页版 ChatGPT Work、Codex Review、其他 Agent 和开发人员。除非 PR 明确获得业务负责人批准，不得绕过。
 
 ## 1. Golden Source
@@ -9,7 +15,7 @@
 3. 样衣模块以 `docs/requirements/sample-system-migration-v1.0.md` 为一期业务、权限、数据、UI、迁移与验收 Golden Source。
 4. 外发定价、供应商中心、合同、正式派单、生产填报与实时看板以 `docs/requirements/sourcing-supplier-production-v1.0.md` 为一期 Golden Source。
 5. 当前平台化路线、规则隔离和新窗口读取入口以 `docs/roadmap/platform-2.0-rules-index-v1.0.md` 为准。
-6. 返工模块已运行的完整 UI 是全平台现有页面与未来开发的唯一 UI Golden Source，详见 `docs/requirements/rework-ui-golden-source-v1.0.md`；覆盖所有 UI 参数及同类交互，不限导航。
+6. 返工模块已运行的 UI 基础参数是全平台现有页面与未来开发的唯一 UI 参数 Golden Source，详见 `docs/requirements/rework-ui-golden-source-v1.0.md`；覆盖所有 UI 参数及同类交互，不限导航。
 7. Figma 基础库和 Product 是基于返工基线同步的设计与验收载体，旧数值不能覆盖返工实际实现。
 8. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
 
@@ -180,3 +186,4 @@ PR 描述必须包含：
 - 完整门禁分类、Review 条件和全绿后交接步骤以 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md` 第 6–8 节为准。
 - 用户说“停”后立即停止一切检查、写入、PR 操作和等待。
 - 业务负责人的明确授权可以覆盖本节的流程性默认规则；临时授权仅限所述范围和当前任务，长期例外必须通过版本化文件和 PR 固化。任何授权均不得绕过平台安全策略、密钥和生产数据保护或法律合规要求。
+
