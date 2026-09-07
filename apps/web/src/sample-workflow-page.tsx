@@ -1,4 +1,7 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {sampleBatchSelection} from './sample-catalog-model.js';
+import type {SampleSelection} from './sample-catalog.js';
+import './sample-operations.css';
 import {z} from 'zod';
 import {SampleWorkflowViewSchema,SampleWorkflowResultSchema,SampleHandoffQrSchema,SampleHandoffLookupSchema,SampleBatchReturnResultSchema,type SampleView} from '@dx-rework/contracts';
 import {Button,Surface} from '@dx-rework/ui';
@@ -31,7 +34,7 @@ export function SampleWorkflowActions({sampleId}:{sampleId:string}){
  if(!data)return error?<p role="alert">{error}</p>:null;
  if(!data.enabled)return null;
  const disabled=action.busy||uploading||pendingUploads>0;
- return <Surface className="rework-v2-core"><h2>借还与交接</h2>{error||action.error?<p role="alert">{error||action.error}</p>:null}
+ return <Surface className="rework-v2-core sample-action-section"><h2>借还与交接</h2>{error||action.error?<p role="alert">{error||action.error}</p>:null}
   {data.request?<p>{data.request.requesterName} 发起{data.request.type==='borrow'?'借用':data.request.type==='return'?'归还':'处置'}{data.request.borrowerName?` · 持有人：${data.request.borrowerName}`:''}{data.request.purpose?` · 用途：${data.request.purpose}`:''}</p>:null}
   {data.canBorrow?<div className="rework-v2-grid"><label>借用用途<input value={purpose} disabled={disabled} onChange={e=>setPurpose(e.target.value)} /></label>
    <label><input type="checkbox" checked={delegated} disabled={disabled} onChange={e=>setDelegated(e.target.checked)} />代其他员工申请</label>
@@ -50,24 +53,27 @@ export function SampleHandoffPage(){
  const token=useRef(window.location.hash.slice(1)),[data,setData]=useState<z.infer<typeof SampleHandoffLookupSchema>|null>(null),[error,setError]=useState(''),[location,setLocation]=useState(''),[confirmed,setConfirmed]=useState(false),action=useSampleSubmit();
  useEffect(()=>{const abort=new AbortController();window.history.replaceState(null,'',window.location.pathname+window.location.search);
   void readSampleAction('samples/handoff/lookup',SampleHandoffLookupSchema,{method:'POST',body:JSON.stringify({token:token.current}),signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setData(value);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'交接码无效');});return()=>abort.abort();},[]);
- return <Shell active="待确认中心" mobileNavigation="transaction"><main className="rework-v2-page"><Header title="样衣实物交接" subtitle="核对申请人和实物后确认。" badge="样衣管理"/>
+ return <Shell active="待确认中心" mobileNavigation="transaction"><main className="rework-v2-page sample-ops sample-form-page"><Header title="样衣实物交接" subtitle="核对申请人和实物后确认。" badge="样衣管理"/>
   {error||action.error?<p role="alert">{error||action.error}</p>:null}{data?<Surface className="rework-v2-core"><p>申请人：{data.requesterName}</p><p>{data.type==='return'?'归还收货':'借出交付'}</p><a href={pageUrl(`ui/samples/${data.sampleId}`)}>查看样衣资料</a>
    {confirmed?<p role="status">交接已完成，同一事项的其他行政待办已结束。</p>:<><p>请确认实物已{data.type==='return'?'收到':'交付'}。</p>{data.type==='return'?<label>在库位置<input value={location} disabled={action.busy} onChange={e=>setLocation(e.target.value)}/></label>:null}
    <Button disabled={action.busy||(data.type==='return'&&!location.trim())} onClick={()=>{void action.send(`samples/${data.sampleId}/confirm`,{version:data.version,token:token.current,...(data.type==='return'?{storageLocation:location}:{})},SampleWorkflowResultSchema).then(value=>{if(value)setConfirmed(true);});}}>确认{data.type==='return'?'收到实物':'交付实物'}</Button></>}
   </Surface>:null}</main></Shell>;
 }
-export function SampleBatchReturn({items}:{items:SampleView[]}){
- const [enabled,setEnabled]=useState(false);
+export function SampleBatchReturn({items,loading=false,selectionScope="",renderRows}:{items:SampleView[];loading?:boolean;selectionScope?:string;renderRows?:(selection:SampleSelection)=>ReactNode}){
+ const [enabled,setEnabled]=useState(false),[formOpen,setFormOpen]=useState(false);
  const [user,setUser]=useState<{id:string;isRoot:boolean}|null>(null),[selected,setSelected]=useState<string[]>([]),[photos,setPhotos]=useState<{attachmentId:string;filename:string}[]>([]),[uploading,setUploading]=useState(false),[pendingUploads,setPendingUploads]=useState(0),[result,setResult]=useState<z.infer<typeof SampleBatchReturnResultSchema>|null>(null),action=useSampleSubmit();
  useEffect(()=>{let active=true;void verifySession().then(state=>{if(active&&typeof state==='object'&&state.status==='authorized'&&(state.user.isRoot||(state.user.capabilities.includes('sample:return_request')&&state.user.businessRoles?.some(role=>['sample_designer','owner_group'].includes(role)))))setUser({id:state.user.id,isRoot:!!state.user.isRoot});});return()=>{active=false;};},[]);
  useEffect(()=>{const abort=new AbortController();void readSampleAction('samples/creation-availability',z.object({enabled:z.boolean()}),{signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setEnabled(value.enabled);}).catch(()=>{});return()=>abort.abort();},[]);
  const eligible=items.filter(item=>item.status==='borrowed'&&(user?.isRoot||item.holderUserId===user?.id));
- useEffect(()=>{setSelected([]);setResult(null);},[items]);
- if(!enabled||!user||!eligible.length)return null;
- return <Surface className="rework-v2-core"><details><summary>批量归还</summary><p>选择本页需要归还的样衣，并上传能反映这些样衣当前状态的照片。</p>
-  {eligible.map(item=><p key={item.sampleId}><label><input type="checkbox" disabled={action.busy||uploading} checked={selected.includes(item.sampleId)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.sampleId]:ids.filter(id=>id!==item.sampleId))}/>{item.sampleCode} · {item.styleName}</label></p>)}
+ useEffect(()=>{setSelected([]);setResult(null);setFormOpen(false);},[items,selectionScope]);
+ const selection:SampleSelection={selected,eligibleIds:enabled&&user?eligible.map(item=>item.sampleId):[],disabled:loading||action.busy||uploading||!!result,onSelect:setSelected};
+ if(!enabled||!user||!eligible.length)return renderRows?.(selection)??null;
+ return <>{renderRows?.(selection)}{renderRows&&selected.length>0?<aside className="sample-batchbar" aria-label="所选样衣操作"><span>已选 <b>{selected.length}</b> 件（当前页）</span><Button disabled={action.busy||uploading} onClick={()=>{setSelected([]);setFormOpen(false);setResult(null);}}>取消选择</Button><Button variant="primary" disabled={loading||action.busy||uploading} onClick={()=>setFormOpen(true)}>申请批量归还</Button></aside>:null}
+ <Surface className={`rework-v2-core sample-batch-form${renderRows&&!formOpen?" sample-batch-form--hidden":""}`}><details open={renderRows?formOpen:undefined}><summary>批量归还</summary><p>选择本页需要归还的样衣，并上传能反映这些样衣当前状态的照片。</p>
+  {renderRows?<ul className="sample-selected-list">{eligible.filter(item=>selected.includes(item.sampleId)).map(item=><li key={item.sampleId}><strong>{item.sampleCode}</strong><span>{item.styleName}</span></li>)}</ul>:eligible.map(item=><p key={item.sampleId}><label><input type="checkbox" disabled={action.busy||uploading} checked={selected.includes(item.sampleId)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,item.sampleId]:ids.filter(id=>id!==item.sampleId))}/>{item.sampleCode} · {item.styleName}</label></p>)}
   <SampleImageUpload label="上传归还照片" value={photos} onChange={setPhotos} disabled={action.busy||uploading} onBusy={setUploading} onPending={setPendingUploads}/>
-  {action.error?<p role="alert">{action.error}</p>:null}<Button disabled={action.busy||uploading||pendingUploads>0||!selected.length||!photos.length} onClick={()=>{if(action.busy||uploading||pendingUploads>0)return;void action.send('samples/returns/batch',{items:eligible.filter(item=>selected.includes(item.sampleId)).map(item=>({sampleId:item.sampleId,version:item.version,photoAttachmentIds:photos.map(file=>file.attachmentId)}))},SampleBatchReturnResultSchema).then(value=>{if(value)setResult(value);});}}>提交所选样衣归还</Button>
+  {action.error?<p role="alert">{action.error}</p>:null}<Button disabled={loading||!!result||action.busy||uploading||pendingUploads>0||!selected.length||!photos.length} onClick={()=>{if(action.busy||uploading||pendingUploads>0)return;if(loading||result)return;void action.send('samples/returns/batch',{items:sampleBatchSelection(items,selected,user).map(item=>({sampleId:item.sampleId,version:item.version,photoAttachmentIds:photos.map(file=>file.attachmentId)}))},SampleBatchReturnResultSchema).then(value=>{if(value)setResult(value);});}}>提交所选样衣归还</Button>
   {result?.items.map(entry=><p key={entry.sampleId}>{eligible.find(item=>item.sampleId===entry.sampleId)?.sampleCode}：{entry.success?'已申请归还，待行政确认':entry.message}</p>)}
- </details></Surface>;
+ {result?<Button onClick={()=>window.dispatchEvent(new Event('sample-updated'))}>刷新样衣目录</Button>:null}
+ </details></Surface></>;
 }
