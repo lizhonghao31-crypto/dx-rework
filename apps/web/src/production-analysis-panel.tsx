@@ -25,7 +25,7 @@ export function ProductionAnalysisPanel({supplierId,view="concentration"}:{suppl
     const params=new URLSearchParams();for(const[key,value]of Object.entries(query))if(value!==undefined)params.set(key,String(value));
     void fetch(apiUrl(`production-dashboard/analysis?${params}`),{credentials:"include",cache:"no-store",signal:abort.signal}).then(async response=>{
       if(response.status===401||response.status===403){if(!abort.signal.aborted){setData(null);setAccess("denied");}throw new Error("当前身份无权查看此分析。");}
-      if(!response.ok)throw new Error("分析读取失败，保留上次结果，请重试。");
+      if(!response.ok)throw new Error("分析读取失败，请重试。");
       const next=ProductionAnalysisResponseSchema.parse(await response.json());if(!abort.signal.aborted)setData(next);
     }).catch(reason=>{if(!abort.signal.aborted)setError(reason instanceof Error?reason.message:"读取失败。");}).finally(()=>{if(!abort.signal.aborted)setBusy(false);});
     return()=>abort.abort();
@@ -36,7 +36,7 @@ export function ProductionAnalysisPanel({supplierId,view="concentration"}:{suppl
     <Button variant="secondary" aria-expanded={open} onClick={()=>setOpen(value=>!value)}>{view==="supplier"?"供应商履约事实":"在外订单与预警复盘"}{open?" · 收起":" · 展开"}</Button>
     {open&&<>
       <div className="production-analysis-toolbar"><h2>{view==="supplier"?"本公司与该供应商的履约记录":"本公司在外订单分析"}</h2><Button disabled={busy} onClick={()=>setRetry(value=>value+1)}>{busy?"正在读取…":"刷新分析"}</Button></div>
-      <div className="production-analysis-tabs" aria-label="生产分析主题">{([['delivery','交付与回货'],['concentration','在外集中'],['alerts','预警记录']] as const).map(([key,label])=><Button key={key} variant={theme===key?'primary':'secondary'} disabled={busy} onClick={()=>{setTheme(key);change({status:key==='concentration'?'in_production':undefined,dueBucket:'all'});}}>{label}</Button>)}</div>
+      <div className="production-analysis-tabs" aria-label="生产分析主题">{([['delivery','交付与回货'],['concentration','在外集中'],['alerts','预警记录']] as const).map(([key,label])=><Button key={key} variant={theme===key?'primary':'secondary'} disabled={busy} onClick={()=>{if(key!==theme)setData(null);setTheme(key);change({status:key==='concentration'?'in_production':undefined,dueBucket:'all'});}}>{label}</Button>)}</div>
       <details className="production-analysis-filters"><summary>筛选款号与批准交期</summary><form onSubmit={event=>{event.preventDefault();const parsed=ProductionAnalysisQuerySchema.safeParse({...query,q:draft.q,dueFrom:draft.dueFrom||undefined,dueTo:draft.dueTo||undefined,page:1,groupPage:1});if(parsed.success)setQuery(parsed.data);else setError('请检查交期范围。');}}><label>款号 / 供应商<input className="rework-v2-control" value={draft.q} maxLength={120} onChange={event=>setDraft(value=>({...value,q:event.target.value}))}/></label><label>批准交期从<input className="rework-v2-control" type="date" value={draft.dueFrom} onChange={event=>setDraft(value=>({...value,dueFrom:event.target.value}))}/></label><label>至<input className="rework-v2-control" type="date" value={draft.dueTo} onChange={event=>setDraft(value=>({...value,dueTo:event.target.value}))}/></label><Button type="submit" disabled={busy}>应用筛选</Button></form></details>
       {error&&<p role="alert">{error}</p>}
       {data&&<>

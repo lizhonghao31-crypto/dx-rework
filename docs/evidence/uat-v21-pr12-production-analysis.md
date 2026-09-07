@@ -37,3 +37,9 @@ GET /production-dashboard/analysis 通过既有 businessActor、ProductionDashbo
 ## 回滚
 
 回滚本 PR 移除两处分析入口和新只读接口；无迁移/生产状态/数据回滚。缺少明确历史关联的部分保留核查提示，不补造事实。没有 ECS 或生产环境 UAT。
+
+## 唯一 Review 后修复
+
+Review 5133918843 / 线程 PRRT_kwDOTpHFhc6f-gsw 指出跨主题请求失败会把旧筛选集渲染到新主题。已在主题实际变化时同步清除旧响应；同主题刷新失败仍保留原主题结果，跨主题失败没有旧数据可误读。错误文案不再无条件声称保留上次结果。真实浏览器核验交付→集中及集中→交付 503 时原单链接均为 0；恢复集中后15条，同主题503仍15条。最终截图 theme-503.jpg。定向 ESLint、严格 TypeScript、实际组件 Vite124模块通过。使用第2轮 Full Gate，不重复触发 Review。
+
+修复后样板源 721703ba814c594023922d7617ae3e4881da268a，保存为同一私有样板第2版。
