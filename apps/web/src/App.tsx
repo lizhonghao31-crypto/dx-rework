@@ -1,3 +1,4 @@
+import { installInternalNavigation } from "./internal-navigation.js";
 import { ProductionDashboardPage } from "./production-dashboard-page.js";
 import { SampleWorkspacePage } from "./sample-workspace-page.js";
 import { SampleHandoffPage } from "./sample-workflow-page.js";
@@ -87,54 +88,7 @@ function readInternalLocation(basePath: string): InternalLocation {
 function useInternalLocation(basePath: string): InternalLocation {
   const [location, setLocation] = useState(() => readInternalLocation(basePath));
 
-  useEffect(() => {
-    const sync = () => setLocation(readInternalLocation(basePath));
-    const navigate = (event: MouseEvent) => {
-      if (
-        event.defaultPrevented
-        || event.button !== 0
-        || event.metaKey
-        || event.ctrlKey
-        || event.shiftKey
-        || event.altKey
-      ) return;
-
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const anchor = target.closest("a");
-      if (!(anchor instanceof HTMLAnchorElement)) return;
-      if (anchor.target || anchor.hasAttribute("download")) return;
-
-      const url = new URL(anchor.href, window.location.href);
-      if (url.origin !== window.location.origin) return;
-      const relativePath = basePath !== "" && url.pathname.startsWith(basePath)
-        ? url.pathname.slice(basePath.length) || "/"
-        : url.pathname;
-      const isPageRoute = relativePath === "/"
-        || relativePath.startsWith("/ui/")
-        || relativePath.startsWith("/system/")
-        || relativePath.startsWith("/auth/");
-      if (!isPageRoute) return;
-
-      event.preventDefault();
-      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
-      sync();
-      if (url.hash) {
-        window.requestAnimationFrame(() => {
-          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
-        });
-      } else {
-        window.scrollTo({ top: 0, left: 0 });
-      }
-    };
-
-    window.addEventListener("popstate", sync);
-    document.addEventListener("click", navigate);
-    return () => {
-      window.removeEventListener("popstate", sync);
-      document.removeEventListener("click", navigate);
-    };
-  }, [basePath]);
+  useEffect(() => installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath))), [basePath]);
 
   return location;
 }

@@ -40,18 +40,20 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
   });
 
   it("selects and scrolls to N03 while keeping a distinct historical IE pricing view", async () => {
-    const [app, detail, configuration, assignment] = await Promise.all([
+    const [app, detail, configuration, assignment, navigation] = await Promise.all([
       read("apps/web/src/App.tsx"),
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/process-configuration-form.tsx"),
       read("apps/web/src/process-worker-assignment-form.tsx"),
+      read("apps/web/src/internal-navigation.ts"),
     ]);
 
     expect(detail).toContain("?node=${key}#node-workspace");
     expect(detail).toContain('id="node-workspace"');
     expect(detail).toContain("workspaceNode={selected.key}");
-    expect(app).toContain("scrollIntoView({ block: \"start\" })");
-    expect(app).toContain("window.requestAnimationFrame");
+    expect(navigation).toContain("scrollIntoView({ block: \"start\" })");
+    expect(navigation).toContain("window.requestAnimationFrame");
+    expect(app).toContain("installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath)))");
     expect(configuration).toContain('workspaceNode?: "process_configuration" | "ie_review"');
     expect(assignment).toContain('workspaceNode === "ie_review"');
     expect(assignment).toContain("IE 核价已完成");
