@@ -82,3 +82,10 @@ UAT-03多款价转厂P1延期，未修复、不关闭入口。本轮不能声称
 
 - 当前第一次 Head：344e3c7ccd846a1f2066cf3d5c6a8a8045a8e240；Quick Gate 通过。Full Gate 34102797390 的 lint/typecheck/build 通过，测试仅两项旧纯文本标题断言失败，其余1161项通过；未将条件跳过的数据库测试计为通过。
 - 追加精确允许路径 tests/unit/business-facing-workflow-ui.test.ts、tests/unit/platform-permission-navigation-hub.test.ts，仅使标题断言包含已批准图标，所有业务只读、菜单顺序、Root和权限断言保留。将集中提交后运行第二次 Full Gate，不 rerun 旧失败 Head。
+
+### PR01 独立 Review 与待授权门禁
+
+- 最终已验证 Head 0fb847cb2257f023689df95c6cd18e6c018b545e，第二次 Full Gate 34103213343 通过。ci.yml 在 full-gate 标签存在时主动跳过重复 Quick Gate；未将 skipped 计为成功。
+- 已触发唯一一次 Codex Review，review 5130083650、comment 3948177416 指出 P2：外发别名与详情未使用规范标题图标。
+- 本地修复：外发创建、列表（含 /ui/sourcing 别名）、详情明确传入 iconRoute；不放宽未知路由匹配，不改路由或状态。增加定向回归。
+- 第三次 Full Gate 需按 AGENTS.md 第11节单独授权。修复先保存为可审阅 Git 提交对象，未移动 PR Head、未自动启动第三次 Gate；不再次触发 Review。
