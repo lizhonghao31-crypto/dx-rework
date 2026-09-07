@@ -1,3 +1,4 @@
+import { readReceivingAnalysis } from "./receiving-analysis.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -1915,6 +1916,10 @@ export class ReceivingService {
     } finally {
       client.release();
     }
+  }
+
+  async analysis(actor: TrustedActorContext, input: unknown) {
+    return readReceivingAnalysis(this.database, RECEIVING_BOARD_BASE_SQL, actor, input);
   }
 
   async exportBoard(
