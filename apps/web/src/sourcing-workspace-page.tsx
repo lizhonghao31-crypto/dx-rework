@@ -1,5 +1,5 @@
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
-import { isNewSourcingPrice, newSourcingPriceDisplay, sourcingPriceSummary, sourcingDeleteConfirmation } from "./sourcing-price-presentation.js";
+import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation } from "./sourcing-price-presentation.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
@@ -1461,7 +1461,7 @@ function OrderDetailPage({
             {item.decision && item.decision.sourceType !== "factory_change" && item.decision.linePrices.length > 1 ? <div className="sourcing-owner-line-review" aria-label="财务逐款核对明细">
               {item.decision.linePrices.map((price) => {
                 const line = item.lineItems.find((entry) => entry.position === price.position);
-                return <div className="sourcing-owner-line-review__row" key={price.position}><b>{String(price.position).padStart(2, "0")}</b><span>{line?.styleNo ?? "历史款号缺失"}<small>{line?.color ?? "历史颜色缺失"} · {formatBusinessDecimal(price.quantity)} 件</small></span><span>批准价 <strong>{formatBusinessCurrency(price.unitPrice)}</strong></span><span>批准行金额 <strong>{formatBusinessCurrency(price.totalAmount)}</strong></span></div>;
+                return <div className="sourcing-owner-line-review__row" key={price.position}><b>{String(price.position).padStart(2, "0")}</b><span>{line?.styleNo ?? "历史款号缺失"}<small>{line?.color ?? "历史颜色缺失"} · {formatBusinessDecimal(price.quantity)} 件</small></span><span>批准价 <strong>{historicalSourcingPrice(price.unitPrice)}</strong></span><span>批准行金额 <strong>{formatBusinessCurrency(price.totalAmount)}</strong></span></div>;
               })}
             </div> : null}
             {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : contract?.status !== "ready" ? <p className="sourcing-finance-waiting">系统合同 PDF 未就绪，暂不能提交财务核对。</p> : canFinance ? <div className="sourcing-finance-confirmation">
