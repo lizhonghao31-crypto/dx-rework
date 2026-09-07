@@ -33,3 +33,13 @@
 
 当前PR需Full Gate（对象/版本一致性与写入重试安全）。最终intended Head门禁全绿后按用户授权触发最多一次Codex Review；默认Full Gate最多两次。没有部署与生产数据写入。回滚本PR squash提交即可，无数据库回滚或权限变更。
 
+
+## 唯一一次 Review 后集中修复
+
+- Head 9cd5002df31059539429a2a6c7443fa0c21e566a 的 Full Gate34107530777通过；Review5130550291指出两个P2：SPA导航不触发beforeunload、明确4xx拒绝仍标为可重试。
+- 必要回归修复增加apps/web/src/App.tsx、apps/web/src/internal-navigation.ts、tests/unit/internal-navigation-guard.test.ts。App的现有站内链接/popstate处理统一委托导航模块，只有注册供应商脏草稿/保存保护时才拦截；管理过的历史条目带位置标记，取消Back/Forward恢复原条目，未知外部条目保留原URL而不猜测跳转距离。既有route识别、hash滚动和普通页面导航保留。
+- 供应商页注册站内离开确认，保存中拒绝离开；beforeunload继续保护跨文档离页。预览fixture使用同一导航模块与实际供应商组件验证。
+- 导入HTTP错误保留status，明确4xx（含校验、冲突、未授权）禁用该行重试，要求重新预检；5xx/运输结果不明仍按冻结编码核对后重试。
+- 补充后15项定向测试、strict导航/导入模块TypeScript、ESLint和Vite构建通过。第二次Full Gate验证最终修复Head，不再次触发Review。
+
+- 浏览器实际导航回归：从测试路由进入供应商，编辑名称后执行浏览器Back，选择“继续编辑”后URL恢复供应商路径，草稿“返回保护测试”保留；随后点击站内离开链接，再选择“放弃并离开”，实际切换到目标路由。此验证使用同一installInternalNavigation和实际页面，未产生供应商写入。

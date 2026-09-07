@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  canApplySupplierImport, executeSupplierImport,
+  SupplierImportRequestError, canApplySupplierImport, executeSupplierImport,
   type SupplierImportRecord, type SupplierImportRow,
 } from "../../apps/web/src/supplier-import-safety.js";
 
@@ -71,4 +71,17 @@ describe("supplier import partial execution", () => {
     await executeSupplierImport(rows, "导入", service, vi.fn());
     expect(service.update).toHaveBeenCalledTimes(1);
   });
+  it("requires re-preflight after definitive create rejection instead of repeating invalid writes", async () => {
+    for (const status of [400, 401, 403, 409, 422]) {
+      const service = api();
+      service.create.mockRejectedValue(new SupplierImportRequestError("当前请求被拒绝", status));
+      let rows = [row(2)];
+      await executeSupplierImport(rows, "导入", service, (n, result) => { rows = rows.map((item) => item.rowNumber === n ? { ...item, result } : item); });
+      expect(rows[0]?.result).toEqual(expect.objectContaining({ status: "failed", retryable: false }));
+      expect(canApplySupplierImport(rows, "导入")).toBe(false);
+      await executeSupplierImport(rows, "导入", service, vi.fn());
+      expect(service.create).toHaveBeenCalledTimes(1);
+    }
+  });
+
 });

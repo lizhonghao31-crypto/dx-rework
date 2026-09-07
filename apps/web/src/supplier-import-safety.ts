@@ -1,3 +1,7 @@
+export class SupplierImportRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 export type SupplierImportRecord = Readonly<{
   supplierId: string;
   supplierCode: string;
@@ -79,6 +83,7 @@ export async function executeSupplierImport(
       }
       onResult(row.rowNumber, { status: "succeeded", message: "已成功", retryable: false });
     } catch (error) {
+      if (error instanceof SupplierImportRequestError && error.status >= 400 && error.status < 500) retryable = false;
       const message = error instanceof Error && /[\u3400-\u9fff]/.test(error.message) ? error.message : "请求未完成或结果未确认";
       onResult(row.rowNumber, {
         status: "failed",

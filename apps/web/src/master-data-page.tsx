@@ -10,7 +10,7 @@ import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { verifySession } from "./auth.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
-import { canApplySupplierImport, executeSupplierImport, type SupplierImportData, type SupplierImportResult } from "./supplier-import-safety.js";
+import { SupplierImportRequestError, canApplySupplierImport, executeSupplierImport, type SupplierImportData, type SupplierImportResult } from "./supplier-import-safety.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
@@ -113,7 +113,7 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? `请求失败：${response.status}`);
+    throw new SupplierImportRequestError(body?.error?.message ?? `请求失败：${response.status}`, response.status);
   }
   if (response.status === 204) return undefined as T;
   return await response.json() as T;

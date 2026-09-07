@@ -4,6 +4,7 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
 import { createWebUrls } from "../url-contract.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
+import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
 import { Shell } from "./components.js";
 import { ListPagination, usePaginatedItems } from "./list-pagination.js";
@@ -153,6 +154,16 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       });
     } finally { discardLock.current = false; }
   };
+
+  useEffect(() => {
+    if (!dirty && !busy) return;
+    return registerInternalNavigationGuard(async () => {
+      if (writeLock.current || refreshLock.current) return false;
+      return confirmInApp("当前供应商有未保存修改，确定离开并放弃？", {
+        title: "未保存修改", confirmLabel: "放弃并离开", cancelLabel: "继续编辑",
+      });
+    });
+  }, [dirty, busy]);
 
   const selectSupplier = async (id: string) => {
     if (id === selectedRef.current || !await discardChanges()) return;

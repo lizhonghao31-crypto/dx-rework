@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { installInternalNavigation } from "../../apps/web/src/internal-navigation.js";
 import { SupplierCenterPage } from "../../apps/web/src/supplier-center-page.js";
 import { MasterDataPage } from "../../apps/web/src/master-data-page.js";
 import "../../packages/ui/src/tokens.css";
 import "../../packages/ui/src/components.css";
 import "../../apps/web/src/styles.css";
+
+window.history.replaceState({}, "", "/ui/suppliers/manage");
 
 // Explicit offline fixture; all records and writes are synthetic.
 const profiles = ["甲测试厂", "乙测试厂"].map((supplierName, index) => ({
@@ -45,6 +48,8 @@ globalThis.fetch = async (input, init) => {
   return reply(value);
 };
 function Fixture() {
+  const [route, setRoute] = useState(window.location.pathname);
+  useEffect(() => installInternalNavigation("", () => setRoute(window.location.pathname)), []);
   const [mode, setMode] = useState("center");
   const [, render] = useState(0);
   notify = () => render((value) => value + 1);
@@ -58,7 +63,7 @@ function Fixture() {
   };
   return <main style={{ padding: 16 }}>
     <section style={{ padding: 12, background: "white", marginBottom: 16 }} aria-label="离线测试控制">
-      <b>合成数据回归 · 写请求 {writes} 次</b>
+      <b>合成数据回归 · 写请求 {writes} 次</b><p>当前路径：{route}</p><a href="/ui/fixture-other">离开供应商测试</a> · <a href="/ui/suppliers/manage">进入供应商测试</a>
       <div><button onClick={() => { holdDetails = !holdDetails; render((n) => n + 1); }}>详情延迟：{holdDetails ? "开" : "关"}</button>
       <button onClick={() => { holdSave = !holdSave; render((n) => n + 1); }}>保存延迟：{holdSave ? "开" : "关"}</button>
       <button onClick={() => { holdDetails = false; holdSave = false; pending.splice(0).forEach((resolve) => resolve()); render((n) => n + 1); }}>完成挂起请求</button>
@@ -66,7 +71,7 @@ function Fixture() {
       <button onClick={() => chooseCsv(false)}>选择有效测试文件</button><button onClick={() => chooseCsv(true)}>选择错误测试文件</button>
       <button onClick={() => { failCreate = false; }}>恢复导入服务</button></div>
     </section>
-    {mode === "center" ? <SupplierCenterPage mode="manage" /> : <MasterDataPage view="suppliers" />}
+    {route === "/ui/fixture-other" ? <p>已离开供应商页面</p> : mode === "center" ? <SupplierCenterPage mode="manage" /> : <MasterDataPage view="suppliers" />}
   </main>;
 }
 createRoot(document.getElementById("root")!).render(<Fixture />);
