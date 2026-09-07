@@ -1,3 +1,4 @@
+import {SampleAnalysisPage} from './sample-analysis-page.js';
 import {SampleDisposalActions,SampleArchiveList,SampleFinancialHistory} from "./sample-disposal-page.js";
 import { useEffect, useState } from "react";
 import type { z } from "zod";
@@ -109,7 +110,7 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
   </>;
 }
 
-export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: SamplePageMode; sampleId?: string | undefined }) {
+function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: SamplePageMode; sampleId?: string | undefined }) {
   const [data, setData] = useState<SampleListResponse | null>(null), [options, setOptions] = useState<SampleOptions | null>(null);
   const [detail, setDetail] = useState<SampleDetailResponse | null>(null), [amounts, setAmounts] = useState<SampleAmounts | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -188,3 +189,5 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
     </> : null}
   </main></Shell>;
 }
+
+export function SampleWorkspacePage(props:{mode?:SamplePageMode;sampleId?:string|undefined}){return props.mode==="amounts"?<SampleAnalysisPage/>:<SampleWorkspaceContents {...props}/>;}

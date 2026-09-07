@@ -1,0 +1,11 @@
+import{describe,expect,it}from'vitest';
+import{analysisDraftQuery,analysisGroupFilter,canReadSampleAnalysis}from'../../apps/web/src/sample-analysis-model.js';
+const first='00000000-0000-4000-8000-000000000100',second='00000000-0000-4000-8000-000000000101';
+describe('sample analysis UI scope and permission',()=>{
+ it.each(['sample_finance','sample_approver','owner_group'])('allows financially granted %s',role=>{expect(canReadSampleAnalysis({businessRoles:[role],capabilities:['sample:view_finance']})).toBe(true);expect(canReadSampleAnalysis({businessRoles:[role],capabilities:[]})).toBe(false);});
+ it.each(['sample_designer','sample_administrative','system_admin'])('does not expose finance to %s with an overbroad capability',role=>{expect(canReadSampleAnalysis({businessRoles:[role],capabilities:['sample:view_finance']})).toBe(false);});
+ it('retains Root access without deriving it from a role name',()=>{expect(canReadSampleAnalysis({isRoot:true,capabilities:[]})).toBe(true);expect(canReadSampleAnalysis({businessRoles:['root_superuser'],capabilities:[]})).toBe(false);});
+ it('maps explicit IDs and original text filters while preserving decimal input',()=>{const q=analysisDraftQuery({brandChoice:'raw:原文品牌',departmentChoice:first,minPrice:'0.10',maxPrice:'123456.78',purchaserUserId:second});expect(q.success).toBe(true);if(q.success)expect(q.data).toMatchObject({brand:'原文品牌',departmentId:first,minPrice:'0.10',maxPrice:'123456.78',purchaserUserId:second,page:1,groupPage:1});});
+ it('rejects inverted dates and excessive decimal precision before any request',()=>{expect(analysisDraftQuery({purchaseFrom:'2026-09-02',purchaseTo:'2026-09-01'}).success).toBe(false);expect(analysisDraftQuery({minPrice:'1.001'}).success).toBe(false);});
+ it('drills cross groups using stable person IDs and distinguishes an empty category',()=>{const row={key:'fixture',person:{id:first,name:'同名'},dimension:{id:'raw:品牌A',name:'品牌A'},count:1,amount:'0.10'};expect(analysisGroupFilter('purchaser_brand',row)).toEqual({purchaserUserId:first,brand:'品牌A'});expect(analysisGroupFilter('holder',{...row,person:{id:second,name:'同名'},dimension:null})).toEqual({holderUserId:second});expect(analysisGroupFilter('category',{...row,person:null,dimension:{id:'',name:'未记录类别'}})).toEqual({category:''});});
+});
