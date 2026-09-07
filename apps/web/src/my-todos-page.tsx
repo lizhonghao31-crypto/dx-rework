@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   TodoListResponseSchema,
@@ -256,7 +257,7 @@ export function MyTodosPage() {
       <div className="my-todos-page" aria-busy={busy}>
         <header className="page-heading my-todos-hero">
           <div className="my-todos-hero__title">
-            <h1>我的待办</h1>
+            <h1><NavigationIcon route="/ui/my-tasks" size="title" />我的待办</h1>
             <p>这里只显示现在轮到你处理的事项。</p>
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>

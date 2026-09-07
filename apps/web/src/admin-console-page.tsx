@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { AdminAuditEventsPage, AdminAuditExportsPage } from "@dx-rework/contracts";
@@ -98,7 +99,7 @@ export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab })
     <div className="admin-shell">
       <header className="page-heading">
         <div>
-          <h1>系统管理</h1>
+          <h1><NavigationIcon route="/ui/admin" size="title" />系统管理</h1>
           <p>维护人员访问、系统资料与可追溯的运行记录。</p>
         </div>
       </header>

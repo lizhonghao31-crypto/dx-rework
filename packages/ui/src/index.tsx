@@ -13,7 +13,7 @@ export function StatusBadge({ tone = "neutral", children }: { tone?: Tone; child
   return <span className={`dx-badge dx-badge--${tone}`}>{children}</span>;
 }
 
-export function NavigationItem({ active = false, icon, children }: { active?: boolean; icon: string; children: ReactNode }) {
+export function NavigationItem({ active = false, icon, children }: { active?: boolean; icon: ReactNode; children: ReactNode }) {
   return <span className={`dx-nav-item${active ? " is-active" : ""}`}><b aria-hidden="true">{icon}</b>{children}</span>;
 }
 

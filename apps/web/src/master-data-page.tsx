@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
@@ -655,7 +656,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     <Shell active="基础资料">
       <header className="page-heading">
         <div>
-          <h1>{view === "crafts" ? "工艺数据库" : view === "processes" ? "工序数据库" : "工厂与供应商"}</h1>
+          <h1><NavigationIcon route="/ui/master-data" size="title" />{view === "crafts" ? "工艺数据库" : view === "processes" ? "工序数据库" : "工厂与供应商"}</h1>
           <p>{view === "crafts" ? "沉淀外发定价与选厂使用的工艺；业务页直接录入后自动同步。" : view === "processes" ? "维护返工使用的公共工序、计价单位和默认候选人。" : "维护加工厂及其他供应商资料。"}</p>
         </div>
       </header>

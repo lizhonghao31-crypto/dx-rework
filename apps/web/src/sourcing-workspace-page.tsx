@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
   CraftCatalogListResponseSchema,
@@ -339,17 +340,17 @@ export function SourcingWorkspacePage({
           className={mobileActiveView === "create" ? "is-active" : ""}
           aria-current={mobileActiveView === "create" ? "page" : undefined}
           href={pageUrl("ui/sourcing/create")}
-        >创建</a> : null}
+        ><NavigationIcon route="/ui/sourcing/create" />创建</a> : null}
         <a
           className={mobileActiveView === "pending" ? "is-active" : ""}
           aria-current={mobileActiveView === "pending" ? "page" : undefined}
           href={pageUrl("ui/sourcing/pending")}
-        >待审批</a>
+        ><NavigationIcon route="/ui/sourcing/pending" />待审批</a>
         <a
           className={mobileActiveView === "history" ? "is-active" : ""}
           aria-current={mobileActiveView === "history" ? "page" : undefined}
           href={pageUrl("ui/sourcing/history")}
-        >历史</a>
+        ><NavigationIcon route="/ui/sourcing/history" />历史</a>
       </nav>
       {view === "create" ? <CreateOrderPage user={user} /> : null}
       {view === "pending" ? <OrderListPage mode="pending" user={user} /> : null}
@@ -654,6 +655,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   return (
     <div className="sourcing-workspace sourcing-workspace--create">
       <Header
+        iconRoute="/ui/sourcing/create"
         title="创建订单"
         subtitle="跟单登记订单资料、款色价格和照片，提交后自动进入待审批订单。"
         badge="外发定价&选厂"
@@ -808,6 +810,7 @@ function OrderListPage({
   return (
     <div className="sourcing-workspace">
       <Header
+        iconRoute={mode === "pending" ? "/ui/sourcing/pending" : "/ui/sourcing/history"}
         title={mode === "pending" ? "待审批订单" : "历史订单"}
         subtitle={mode === "pending" ? "所有未完成订单集中在这里，点击订单查看完整流程和当前办理区。" : "所有已完成订单集中归档，保留报价、调价、选厂和审批证据。"}
         badge={`${formatBusinessDecimal(visible.length)} 条当前页`}
@@ -1137,7 +1140,7 @@ function OrderDetailPage({
   };
 
   if (!item) {
-    return <div className="sourcing-workspace"><Header title="订单详情" subtitle={message} badge="外发定价&选厂" /></div>;
+    return <div className="sourcing-workspace"><Header iconRoute="/ui/sourcing/pending" title="订单详情" subtitle={message} badge="外发定价&选厂" /></div>;
   }
 
   const submitManagement = async (): Promise<void> => {
@@ -1214,6 +1217,7 @@ function OrderDetailPage({
   return (
     <div className="sourcing-workspace sourcing-order-detail">
       <Header
+        iconRoute="/ui/sourcing/pending"
         title={item.styleNo}
         subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}

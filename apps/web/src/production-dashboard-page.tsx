@@ -1,3 +1,4 @@
+import { NavigationIcon } from "./navigation-icons.js";
 import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
@@ -63,8 +64,8 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   },[moving,data?.asOf]);
   const asOf=data?.asOf??detail?.asOf;
   return <Shell active="实时看板"><main className="sourcing-workspace production-dashboard">
-    <Header title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
-    <div className="production-dashboard__toolbar"><a href={pageUrl("ui/production-reporting")}>生产数据填报</a>{productionOrderId?<a href={pageUrl("ui/production-dashboard")}>返回实时看板</a>:null}
+    <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
+    <div className="production-dashboard__toolbar"><a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>{productionOrderId?<a href={pageUrl("ui/production-dashboard")}>返回实时看板</a>:null}
       <span>{asOf?`数据截至 ${new Date(asOf).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit"})}`:"正在读取数据"}</span>
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
     </div>

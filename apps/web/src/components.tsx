@@ -16,6 +16,8 @@ import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAcc
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
+import { NavigationIcon } from "./navigation-icons.js";
+
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
@@ -92,11 +94,13 @@ function PrimaryNavigation({
   active,
   basePath,
   pendingTodoCount = 0,
+  iconSize = "secondary",
 }: {
   navigation: readonly NavigationEntry[];
   active: string;
   basePath: string;
   pendingTodoCount?: number;
+  iconSize?: "primary" | "secondary";
 }) {
   return (
     <nav className="primary-navigation" aria-label="主导航">
@@ -105,7 +109,7 @@ function PrimaryNavigation({
           <a
             href={`${basePath}${entry.href}`}
           >
-            <NavigationItem icon="•" active={active === entry.name}>
+            <NavigationItem icon={<NavigationIcon route={entry.href} size={iconSize} />} active={active === entry.name}>
               <span className="primary-navigation__copy">
                 <strong>{entry.name}</strong>
                 <small title={entry.description}>{entry.description}</small>
@@ -138,6 +142,7 @@ function DesktopNavigation({
     <nav className="desktop-navigation" aria-label="桌面端主导航">
       <div className="desktop-navigation__global">
         <PrimaryNavigation
+          iconSize="primary"
           navigation={globalNavigation}
           active={active}
           basePath={basePath}
@@ -154,7 +159,7 @@ function DesktopNavigation({
           >
             <summary>
               <span>
-                <strong>{group.name}</strong>
+                <strong className="dx-navigation-group-label"><NavigationIcon group={group.name} size="primary" />{group.name}</strong>
                 <small>{group.description}</small>
               </span>
               <b aria-hidden="true">⌄</b>
@@ -201,7 +206,7 @@ function MobileNavigationLink({
       href={basePath + entry.href}
       aria-current={isActive ? "page" : undefined}
     >
-      <NavigationItem icon={meta.glyph} active={isActive}>
+      <NavigationItem icon={<NavigationIcon route={entry.href} size="primary" />} active={isActive}>
         <span className="mobile-primary-navigation__label">{meta.label}</span>
         {entry.name === "我的待办"
           ? <TodoCountBadge count={pendingTodoCount} />
@@ -246,7 +251,7 @@ function MobilePrimaryNavigation({
         <details className="mobile-primary-navigation__more">
           <summary aria-label="更多导航">
             <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
-              <b aria-hidden="true">更</b>
+              <b aria-hidden="true"><NavigationIcon group="更多" size="primary" /></b>
               <strong>更多</strong>
             </span>
           </summary>
@@ -589,6 +594,7 @@ export function Shell({
 
 export function Header({
   title,
+  iconRoute,
   subtitle,
   badge,
   badgePlacement = "actions",
@@ -596,6 +602,7 @@ export function Header({
   actionHref,
 }: {
   title: string;
+  iconRoute?: string;
   subtitle?: string;
   badge: string;
   badgePlacement?: "actions" | "subtitle";
@@ -603,11 +610,13 @@ export function Header({
   actionHref?: string;
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const pathname = typeof window === "undefined" ? "" : window.location.pathname;
+  const headingRoute = iconRoute ?? (basePath && pathname.startsWith(`${basePath}/`) ? pathname.slice(basePath.length) : pathname);
   const resolvedActionHref = actionHref?.startsWith("/") ? `${basePath}${actionHref}` : actionHref;
   return (
     <header className="page-heading">
       <div className="page-heading__copy">
-        <h1>{title}</h1>
+        <h1><NavigationIcon route={headingRoute} group={badge} size="title" />{title}</h1>
         {subtitle ? <div className="page-heading__subtitle-row">
           <p className="page-heading__subtitle">{subtitle}</p>
           {badgePlacement === "subtitle" ? <StatusBadge tone="info">{badge}</StatusBadge> : null}
