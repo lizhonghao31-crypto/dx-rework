@@ -1,3 +1,4 @@
+import {WorkAnalysisPanel} from "../work-analysis-panel.js";
 import type { ManagementDashboardResponse, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
@@ -97,6 +98,7 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
         action={ready?.availableActions.includes("export_reports") ? "报表中心" : "统一查询"}
         actionHref={ready?.availableActions.includes("export_reports") ? "/ui/reports" : "/ui/tasks"}
       />
+      {mode === "management" && <WorkAnalysisPanel kind="workflow" />}
       {state.kind === "loading" && <Surface className="reporting-state">加载中…</Surface>}
       {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
       {management && (
@@ -156,3 +158,4 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
     </Shell>
   );
 }
+

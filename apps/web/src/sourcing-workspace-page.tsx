@@ -1,3 +1,4 @@
+import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { isNewSourcingPrice, newSourcingPriceDisplay, sourcingPriceSummary, sourcingDeleteConfirmation } from "./sourcing-price-presentation.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
@@ -822,6 +823,7 @@ function OrderListPage({
         subtitle={mode === "pending" ? "所有未完成订单集中在这里，点击订单查看完整流程和当前办理区。" : "所有已完成订单集中归档，保留报价、调价、选厂和审批证据。"}
         badge={`${formatBusinessDecimal(visible.length)} 条当前页`}
       />
+      <WorkAnalysisPanel kind="quote" />
       <Surface className="sourcing-list-card">
         <form className="sourcing-search" onSubmit={(event) => { event.preventDefault(); searchFromFirstPage(); }}>
           <input value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} placeholder="搜索 ERP、款号、跟单、供应商、工艺或合同编号" />
@@ -1538,3 +1540,4 @@ function OrderDetailPage({
     </div>
   );
 }
+

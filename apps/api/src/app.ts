@@ -1,3 +1,4 @@
+import {registerOperationDiagnostics,type DiagnosticRecord} from "./platform/operation-diagnostics.js";
 import {registerSampleImportRoutes,type SampleImportDependencies} from "./samples/sample-import-routes.js";
 import {registerSampleDisposalRoutes,type SampleDisposalDependencies} from "./samples/sample-disposal-routes.js";
 import { randomUUID } from "node:crypto";
@@ -72,6 +73,7 @@ export type AppDependencies = Readonly<{
   todos?: TodoHttpDependencies;
   reporting?: ManagementReportingHttpDependencies;
   adminAudit?: AdminAuditHttpDependencies;
+  operationDiagnostics?: (row: DiagnosticRecord) => Promise<void>;
   adminConsole?: AdminConsoleHttpDependencies;
 }>;
 
@@ -113,6 +115,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       return typeof incoming === "string" && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
     },
   });
+
+  if (dependencies.operationDiagnostics) registerOperationDiagnostics(app,dependencies.operationDiagnostics);
 
   app.addHook("onRequest", async (request, reply) => {
     void reply.header("x-request-id", request.id);
@@ -245,3 +249,4 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   return app;
 }
+

@@ -1,3 +1,4 @@
+import {readOperationDiagnostics} from "./platform/operation-diagnostics.js";
 import type { AdminAuditEvent, AdminAuditEventsPage, AdminAuditEventsQuery, AdminAuditExport, AdminAuditExportsPage, AdminAuditExportsQuery } from "@dx-rework/contracts";
 import type { Pool } from "pg";
 
@@ -56,6 +57,8 @@ const eventDto = (row: Row): AdminAuditEvent => ({
 export class AdminAuditService {
   constructor(private readonly db: Pool) {}
 
+  async diagnostics(input: unknown) { return readOperationDiagnostics(this.db,input); }
+
   async events(query: AdminAuditEventsQuery): Promise<AdminAuditEventsPage> {
     const params: unknown[] = [];
     const where = this.commonWhere(query, params, null);
@@ -106,3 +109,4 @@ export class AdminAuditService {
     return { items: pageRows.map(map), nextCursor: rows.length > limit ? encodeCursor(pageRows.at(-1)!) : null };
   }
 }
+

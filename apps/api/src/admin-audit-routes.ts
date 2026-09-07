@@ -33,6 +33,12 @@ export function registerAdminAuditRoutes(app: FastifyInstance, dependencies: Adm
     }
   };
 
+  app.get("/admin/audit/diagnostics", async (request,reply) => {
+    await authorize(request);
+    reply.header("cache-control","no-store");
+    return dependencies.service.diagnostics(request.query);
+  });
+
   app.get("/admin/audit/events", async (request) => {
     await authorize(request);
     return AdminAuditEventsPageSchema.parse(await dependencies.service.events(parse(AdminAuditEventsQuerySchema, request.query)));

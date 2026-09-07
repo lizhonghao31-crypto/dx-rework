@@ -1551,4 +1551,7 @@ export * from './sample-analysis.js';
 
 export * from "./receiving-analysis.js";
 
+
 export * from "./production-analysis.js";
+
+export * from "./work-analysis.js";
