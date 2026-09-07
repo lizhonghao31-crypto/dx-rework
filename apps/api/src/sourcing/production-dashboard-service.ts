@@ -1,3 +1,4 @@
+import { productionNotExcluded } from "./production-visibility.js";
 import type { Pool, PoolClient } from "pg";
 import { calculateProductionProgress, productionProgressRank, shanghaiDay, type ProductionProgressFacts } from "@dx-rework/domain";
 import { ProductionDashboardQuerySchema, ProductionDashboardSchema, ProductionDashboardDetailSchema,
@@ -38,7 +39,7 @@ export async function readProductionProgressFacts(client:PoolClient,ids:string[]
       LEFT JOIN LATERAL (SELECT COALESCE(sum(quantity),0)::integer AS quantity,min(business_date) FILTER(WHERE quantity>0) AS first_on,max(created_at) AS last_at
         FROM (SELECT DISTINCT ON(root_report_id) quantity,business_date,created_at FROM sourcing_production_reports
           WHERE production_order_id=production.production_order_id AND created_at<=$2 ORDER BY root_report_id,revision DESC) effective) reports ON true
-      WHERE production.production_order_id=ANY($1::uuid[])`,[ids,asOf]);
+      WHERE production.production_order_id=ANY($1::uuid[]) AND ${productionNotExcluded}`,[ids,asOf]);
     return new Map(result.rows.map(row=>[row.id,progress(row,asOf)]));
   }
 

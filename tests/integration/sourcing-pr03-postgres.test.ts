@@ -140,61 +140,24 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const migration of [
-      "0001_platform_foundation.sql",
-      "0002_dingtalk_identity_access.sql",
-      "0003_identity_union_continuity.sql",
-      "0004_public_tools_foundation.sql",
-      "0005_access_master_data.sql",
-    ]) {
-      await database.query(await readFile(
-        new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
-        "utf8",
-      ));
-    }
-    await database.query(`
-      DROP TRIGGER business_roles_no_insert ON business_roles;
-      INSERT INTO business_roles(role_code,display_name,description)
-      VALUES('finance_director','财务总监','报价选厂测试所需既有角色')
-      ON CONFLICT DO NOTHING;
-      CREATE TRIGGER business_roles_no_insert
-        BEFORE INSERT ON business_roles FOR EACH ROW
-        EXECUTE FUNCTION reject_operation_event_mutation();
-    `);
-    for (const migration of [
-      "0096_sourcing_view_capability.sql",
-      "0097_sourcing_foundation.sql",
-      "0102_sourcing_ie_view_grant.sql",
-      "0108_sourcing_finance_closure.sql",
-      "0120_sourcing_order_facts.sql",
-      "0121_sourcing_remove_contract_stage.sql",
-      "0122_sourcing_case_logical_deletion.sql",
-      "0123_sourcing_explicit_role_todos.sql",
-      "0124_sourcing_ordered_processes.sql",
-      "0125_sourcing_image_supplement.sql",
-      "0126_sourcing_finance_readonly_reconciliation.sql",
-      "0127_sourcing_factory_change_role_metadata.sql",
-      "0128_sourcing_factory_change_workflow.sql",
-      "0133_sourcing_craft_catalog.sql",
-      "0134_versioned_craft_catalog.sql",
-      "0135_sourcing_case_craft_snapshots.sql",
-      "0143_sourcing_supplier_profile_foundation.sql",
-      "0144_sourcing_multi_style_pricing.sql",
-      "0145_sourcing_line_review_approval_snapshot.sql",
-      "0146_sourcing_contract_pdf_finance.sql",
-      "0147_sourcing_contract_input_correction.sql",
-      "0148_sourcing_formal_dispatch.sql",
-      "0149_sourcing_production_reporting.sql",
-      "0150_sourcing_production_progress_snapshot.sql",
-    ]) {
-      const sql=await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url),"utf8");
-      if(migration==="0150_sourcing_production_progress_snapshot.sql") {
-        // Match the deploy migrator's explicit transaction for the upgrade lock.
-        await database.query("BEGIN");
-        try { await database.query(sql); await database.query("COMMIT"); }
-        catch(error) { await database.query("ROLLBACK"); throw error; }
-      } else await database.query(sql);
-    }
+    // Exercise the current production read contract against the complete schema.
+    // The previous hand-picked schema stopped at 0150 and omitted exclusion dependencies.
+    const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: { version: string; checksum: string }[] };
+    await database.query(`CREATE TABLE schema_migrations (
+      version text PRIMARY KEY, checksum char(64) NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    const migrationClient = await database.connect();
+    try {
+      for (const migration of manifest.migrations) {
+        await migrationClient.query("BEGIN");
+        try {
+          await migrationClient.query(await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url), "utf8"));
+          await migrationClient.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", [migration.version, migration.checksum]);
+          await migrationClient.query("COMMIT");
+        } catch (error) { await migrationClient.query("ROLLBACK"); throw error; }
+      }
+    } finally { migrationClient.release(); }
     await database.query(
       `INSERT INTO app_users(id,display_name,enabled) VALUES
        ($1,'订单跟单',true),($2,'IE报价员',true),

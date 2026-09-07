@@ -1,3 +1,4 @@
+import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
 import { useEffect, useRef, useState } from "react";
@@ -69,6 +70,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
       <span>{asOf?`数据截至 ${new Date(asOf).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit"})}`:"正在读取数据"}</span>
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
     </div>
+    <ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>
     {productionOrderId?<ProductionReceiptSummary productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}

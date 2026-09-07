@@ -1,3 +1,4 @@
+import { productionNotExcluded } from "./production-visibility.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -172,7 +173,7 @@ export class SourcingProductionService {
   async get(actor: TrustedActorContext, productionOrderId: string): Promise<SourcingProductionOrder> {
     if (!canReadOrders(actor)) fail("无权查看生产订单", 403);
     const result = await this.database.query<ProductionRow>(`${selectProduction}
-      WHERE production.production_order_id=$1
+      WHERE production.production_order_id=$1 AND ${productionNotExcluded}
         AND ($2::boolean OR source_case.created_by=$3)`, [productionOrderId, readAll(actor), actor.actorId]);
     return result.rows[0] ? toOrder(result.rows[0]) : fail("生产订单不存在或不在负责范围内", 404);
   }
@@ -183,12 +184,12 @@ export class SourcingProductionService {
       throw new ApplicationError("VALIDATION_ERROR", "分页页码无效", 400);
     }
     const result = await this.database.query<ProductionRow>(`${selectProduction}
-      WHERE ($1::boolean OR source_case.created_by=$2)
+      WHERE ${productionNotExcluded} AND ($1::boolean OR source_case.created_by=$2)
       ORDER BY production.dispatched_at DESC,production.production_order_id LIMIT 15 OFFSET $3`,
     [readAll(actor), actor.actorId, (page - 1) * 15]);
     const count = await this.database.query<{ total: string }>(`SELECT count(*)::text AS total
-      FROM sourcing_production_orders JOIN sourcing_cases source_case USING(sourcing_case_id)
-      WHERE ($1::boolean OR source_case.created_by=$2)`, [readAll(actor), actor.actorId]);
+      FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
+      WHERE ${productionNotExcluded} AND ($1::boolean OR source_case.created_by=$2)`, [readAll(actor), actor.actorId]);
     return { items: result.rows.map(toOrder), page, pageSize: 15 as const, totalCount: Number(count.rows[0]?.total ?? 0) };
   }
 }

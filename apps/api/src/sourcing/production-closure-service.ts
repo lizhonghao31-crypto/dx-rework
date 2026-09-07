@@ -1,3 +1,4 @@
+import { productionNotExcluded } from "./production-visibility.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
@@ -26,7 +27,7 @@ export class ProductionClosureService {
   if(!await this.rootActor(actor))fail("仅超级用户可设置生产试点");
   const result=await this.database.query<{supplier_id:string;supplier_name:string;enabled:boolean}>(`SELECT DISTINCT ON(production.supplier_id) production.supplier_id,
    production.supplier_name_snapshot AS supplier_name,COALESCE(pilot.enabled,false) AS enabled FROM sourcing_production_orders production
-   LEFT JOIN sourcing_production_pilots pilot USING(supplier_id) ORDER BY production.supplier_id,production.dispatched_at DESC,production.production_order_id`);
+   LEFT JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE ${productionNotExcluded} ORDER BY production.supplier_id,production.dispatched_at DESC,production.production_order_id`);
   return ProductionPilotListSchema.parse({suppliers:result.rows.map(r=>({supplierId:r.supplier_id,supplierName:r.supplier_name,enabled:r.enabled}))});
  }
  async setPilot(actor:TrustedActorContext,input:unknown){
@@ -57,7 +58,7 @@ export class ProductionClosureService {
  async refreshOrder(client:PoolClient,id:string) {
   await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
   const pilot=await client.query(`SELECT 1 FROM sourcing_production_orders production JOIN sourcing_production_pilots pilot USING(supplier_id)
-   WHERE production_order_id=$1 AND pilot.enabled=true`,[id]);
+   WHERE production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true`,[id]);
   const at=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of");
   const facts=await readProductionProgressFacts(client,pilot.rows[0]?[id]:[],at.rows[0]!.as_of.toISOString());
   await this.project(client,[id],facts);
@@ -72,7 +73,7 @@ export class ProductionClosureService {
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();
    const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string}>(`SELECT production.production_order_id,source_case.created_by,production.operation_event_id,production.first_style_no,production.supplier_name_snapshot
     FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
-    JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true`);
+    JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true WHERE ${productionNotExcluded}`);
    const facts=await readProductionProgressFacts(client,orders.rows.map(r=>r.production_order_id),asOf);
    await this.project(client,orders.rows.map(o=>o.production_order_id),facts);
    const alerts=await client.query<{alert_id:string;production_order_id:string;kind:string;opened_at:Date;read_at:Date|null}>(`SELECT alert.*,reading.read_at FROM sourcing_production_alerts alert
@@ -102,7 +103,7 @@ export class ProductionClosureService {
   if(!z.string().uuid().safeParse(input.productionOrderId).success)fail("生产订单编号无效",400);
   const result=await client.query<{first_style_no:string;shipped_on:string}>(`SELECT shipment.first_style_no,shipment.shipped_on::text FROM sourcing_production_shipments shipment
    JOIN sourcing_production_orders production USING(production_order_id) JOIN sourcing_production_pilots pilot USING(supplier_id)
-   WHERE shipment.production_order_id=$1 AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId]);
+   WHERE shipment.production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId]);
   const shipment=result.rows[0];
   if(!shipment)fail("该订单未发货或未启用试点",409);
   const day=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.receivedAt));
@@ -124,7 +125,7 @@ export class ProductionClosureService {
   if(!this.warehouse(actor))fail("仅仓管可查看预期回货");
   const q=input.q?.trim()??"",page=input.page??1;if(q.length>100||!Number.isInteger(page)||page<1||page>100000)fail("回货筛选无效",400);
   const where=`FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id)
-   JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE pilot.enabled=true
+   JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE pilot.enabled=true AND ${productionNotExcluded}
    AND ($1='' OR strpos(upper(shipment.first_style_no),upper($1))>0 OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)`;
   const count=await this.database.query<{count:string}>(`SELECT count(*) ${where}`,[q]);
   const rows=await this.database.query<{production_order_id:string}>(`SELECT shipment.production_order_id ${where} ORDER BY shipment.shipped_on DESC,shipment.production_order_id LIMIT 15 OFFSET $2`,[q,(page-1)*15]);
