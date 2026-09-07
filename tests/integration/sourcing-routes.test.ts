@@ -151,6 +151,26 @@ const create = (
 };
 
 describe("sourcing PR03 routes", () => {
+  it("rejects missing images and excessive new quote precision before any service write", async () => {
+    const { app, service } = create([], [], true);
+    const valid = { gender: "男装", styleName: "测试短裤", estimatedCutPieceSendDate: "2026-09-10", deliveryDate: "2026-09-15",
+      lineItems: [{ styleNo: "TEST", color: "黑", quantity: 120, externalUnitPrice: "12.34" }], daxingUnitPrice: "10.25",
+      attachmentIds: ["00000000-0000-4000-8000-000000000301"] };
+    for (const override of [{ attachmentIds: [] }, { attachmentIds: undefined }, { daxingUnitPrice: "10.251" },
+      { lineItems: [{ ...valid.lineItems[0], externalUnitPrice: "12.3456" }] }]) {
+      expect((await app.inject({ method: "POST", url: "/sourcing/cases", headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "invalid-new-case" }, payload: { ...valid, ...override } })).statusCode).toBe(400);
+    }
+    expect(service.createCase).not.toHaveBeenCalled();
+    for (const path of ["ie-quotes", "management-decisions"]) {
+      expect((await app.inject({ method: "POST", url: `/sourcing/cases/${caseSummary.sourcingCaseId}/${path}`,
+        headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "invalid-new-price" },
+        payload: { linePrices: [{ position: 1, unitPrice: "12.3456" }], ...(path === "management-decisions" ? { supplierId: "00000000-0000-4000-8000-000000000200", craftIds: ["00000000-0000-4000-8000-000000000401"] } : {}) },
+      })).statusCode).toBe(400);
+    }
+    expect(service.quoteIePrice).not.toHaveBeenCalled();
+    expect(service.recordManagementDecision).not.toHaveBeenCalled();
+  });
+
   it("lets an authorized merchandiser create one inquiry from session identity", async () => {
     const { app, service } = create(
       ["sourcing:view", "sourcing:inquiry:create"],
@@ -175,6 +195,7 @@ describe("sourcing PR03 routes", () => {
           externalUnitPrice: "12.0000",
         }],
         daxingUnitPrice: "10.0000",
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
       },
     });
 
@@ -197,6 +218,7 @@ describe("sourcing PR03 routes", () => {
           externalUnitPrice: "12.0000",
         }],
         daxingUnitPrice: "10.0000",
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
       },
       "sourcing-create-key-1",
     );
@@ -215,7 +237,7 @@ describe("sourcing PR03 routes", () => {
         "x-request-id": "sourcing-quote-1",
         "idempotency-key": "sourcing-quote-key-1",
       },
-      payload: { linePrices: [{ position: 1, unitPrice: "12.3456" }] },
+      payload: { linePrices: [{ position: 1, unitPrice: "12.34" }] },
     });
     expect(quoted.statusCode).toBe(201);
     expect(service.quoteIePrice).toHaveBeenCalledWith(
@@ -225,7 +247,7 @@ describe("sourcing PR03 routes", () => {
         requestId: "sourcing-quote-1",
       }),
       caseSummary.sourcingCaseId,
-      { linePrices: [{ position: 1, unitPrice: "12.3456" }], quoteReason: undefined },
+      { linePrices: [{ position: 1, unitPrice: "12.34" }], quoteReason: undefined },
       "sourcing-quote-key-1",
     );
 
@@ -247,6 +269,7 @@ describe("sourcing PR03 routes", () => {
           externalUnitPrice: "12.0000",
         }],
         daxingUnitPrice: "10.0000",
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
       },
     });
     expect(forbidden.statusCode).toBe(403);
@@ -301,6 +324,7 @@ describe("sourcing PR03 routes", () => {
           externalUnitPrice: "12.0000",
         }],
         daxingUnitPrice: "10.0000",
+        attachmentIds: ["00000000-0000-4000-8000-000000000301"],
       },
     })).statusCode).toBe(201);
     expect(service.createCase.mock.calls[0]?.[0]).toEqual(expect.objectContaining({

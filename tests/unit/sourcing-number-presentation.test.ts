@@ -17,7 +17,7 @@ describe("sourcing number presentation", () => {
     expect(page).toContain("const businessInputValue");
     expect(page).toContain("const businessInputChange");
     expect(page).toContain("const [activeBusinessInput, setActiveBusinessInput]");
-    expect(page).toContain("businessInputValue(price)");
+    expect(page).toContain("newSourcingPriceDisplay(price)");
     expect(page).toContain("linesTotalPreview(quote.linePrices, item.lineItems)");
     expect(page).toContain("linesTotalPreview(decision.linePrices, item.lineItems)");
     expect(page).toContain('onFocus={() => setActiveBusinessInput(`quote-${line.position}`)}');
@@ -26,3 +26,4 @@ describe("sourcing number presentation", () => {
     expect(page).not.toContain("value={finance.totalAmount} inputMode=\"decimal\"");
   });
 });
+

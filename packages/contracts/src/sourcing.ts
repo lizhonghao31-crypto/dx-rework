@@ -6,6 +6,15 @@ const MoneyInputSchema = z.string().trim().regex(
   /^\d{1,10}(?:\.\d{1,4})?$/,
   "加工单价必须是大于0且最多4位小数的数字",
 ).refine((value) => Number(value) > 0, "加工单价必须大于0");
+// New ordinary quotations use at most two effective decimal places. Keep the
+// legacy four-place schema/calculators for history and deferred factory changes.
+export const SourcingNewUnitPriceSchema = z.string().trim().regex(
+  /^\d{1,10}(?:\.\d{1,4})?$/,
+  "新报价必须大于0且最多2位有效小数",
+).refine((value) => Number(value) > 0, "新报价必须大于0").refine(
+  (value) => !/[1-9]/.test((value.split(".")[1] ?? "").slice(2)),
+  "新报价最多2位有效小数，请核对后重新填写",
+);
 const BusinessDateSchema = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式无效")
   .refine((value) => {
@@ -78,7 +87,7 @@ export const SourcingCaseLineInputSchema = z.object({
   alternateStyleNo: ShortTextSchema.optional(),
   color: ShortTextSchema,
   quantity: z.number().int().positive().max(10_000_000),
-  externalUnitPrice: MoneyInputSchema,
+  externalUnitPrice: SourcingNewUnitPriceSchema,
 }).strict();
 
 export const calculateSourcingOrderQuantity = (
@@ -107,10 +116,9 @@ export const CreateSourcingCaseSchema = z.object({
         });
       }
     }),
-  daxingUnitPrice: MoneyInputSchema,
-  attachmentIds: z.array(IdSchema).max(MAX_SOURCING_ATTACHMENTS)
-    .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复")
-    .optional(),
+  daxingUnitPrice: SourcingNewUnitPriceSchema,
+  attachmentIds: z.array(IdSchema).min(1, "请至少上传一张订单图片").max(MAX_SOURCING_ATTACHMENTS)
+    .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
 }).strict();
 
 export const SourcingLinePriceInputSchema = z.object({
@@ -127,13 +135,17 @@ export const SourcingLinePriceReviewSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 }).strict();
 
+const NewSourcingLinePriceInputSchema = SourcingLinePriceInputSchema.extend({
+  unitPrice: SourcingNewUnitPriceSchema,
+});
+
 export const CreateSourcingIeQuoteSchema = z.object({
-  linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+  linePrices: z.array(NewSourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .refine(
       (items) => new Set(items.map((item) => item.position)).size === items.length,
       "逐款价格行不能重复",
     ).optional(),
-  unitPrice: MoneyInputSchema.optional(),
+  unitPrice: SourcingNewUnitPriceSchema.optional(),
   quoteReason: z.string().trim().max(500).optional(),
 }).strict().superRefine((input, context) => {
   if ((input.linePrices ? 1 : 0) + (input.unitPrice ? 1 : 0) !== 1) {
@@ -148,12 +160,12 @@ export const RecordSourcingManagementDecisionSchema = z.object({
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
     .refine((ids) => new Set(ids).size === ids.length, "工艺及承包范围不能重复"),
   supplierId: IdSchema,
-  linePrices: z.array(SourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
+  linePrices: z.array(NewSourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .refine(
       (items) => new Set(items.map((item) => item.position)).size === items.length,
       "逐款价格行不能重复",
     ).optional(),
-  unitPrice: MoneyInputSchema.optional(),
+  unitPrice: SourcingNewUnitPriceSchema.optional(),
   decisionReason: z.string().trim().max(500).optional(),
 }).strict().superRefine((input, context) => {
   if ((input.linePrices ? 1 : 0) + (input.unitPrice ? 1 : 0) !== 1) {
