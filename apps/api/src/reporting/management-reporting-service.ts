@@ -1,3 +1,4 @@
+import {readWorkflowAnalysis} from "./workflow-analysis.js";
 import type { DashboardQuery, ManagementDashboardResponse, ManagementReworkPage, ManagementReworkQuery, ReportPreviewResponse, ReportQuery, ReportType, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
 import type { Pool } from "pg";
 
@@ -25,6 +26,13 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
 
 export class ManagementReportingService {
   constructor(private readonly db: Pool) {}
+
+  async workflowAnalysis(actor: TrustedActorContext, input: unknown) {
+    await this.require(actor, "dashboard:management:read");
+    const sourcing = actor.actorRoles.includes("root_superuser") || (actor.authorizationCapabilities ?? []).includes("sourcing:view");
+    if (sourcing && !actor.actorRoles.includes("root_superuser")) await this.require(actor,"sourcing:view");
+    return readWorkflowAnalysis(this.db,input,sourcing);
+  }
 
   async managementDashboard(actor: TrustedActorContext, query: DashboardQuery): Promise<ManagementDashboardResponse> {
     await this.require(actor, "dashboard:management:read");
@@ -293,3 +301,4 @@ export class ManagementReportingService {
   }
 
 }
+

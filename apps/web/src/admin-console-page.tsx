@@ -1,3 +1,4 @@
+import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Surface } from "@dx-rework/ui";
@@ -136,6 +137,7 @@ function AuditTab() {
   };
   return (
     <section className="admin-panel">
+      <WorkAnalysisPanel kind="diagnostics" />
       <FilterGrid filters={filters} setFilters={setFilters} onSearch={submitSearch} />
       <State state={state} render={({ events, exports }) => (
         <>
@@ -233,3 +235,4 @@ function ExceptionList({ data }: { data: AdminExceptionsPage }) {
   const page = usePaginatedItems(data.items, "exceptions");
   return <><div className="admin-list">{data.items.length === 0 ? <p>暂无系统异常。</p> : page.items.map((item) => <article key={`${item.exceptionType}:${item.sourceEntityId}`}><h3>{businessExceptionLabel(item.exceptionType)}</h3><p>{businessEntityLabel(item.sourceEntityType)} / {item.sourceEntityId}</p><p>关联订单：{item.reworkOrderId && item.deepLink ? <a href={pageUrl(item.deepLink)}>{item.reworkOrderId} · 进入返工单</a> : "未关联返工单"}</p><p>业务动作：{item.businessAction} · 失败阶段：{item.failureStage}</p><p>处理状态：{businessValue("status", item.status)} · 最近更新：{formatBusinessTime(item.lastUpdatedAt)}</p><p>最近错误：{item.safeError ?? "无安全错误摘要"}</p>{item.requestId ? <p><CopyableRequestId value={item.requestId} /></p> : <p>请求 ID：未记录</p>}<p>{item.retryable ? "可安全重试" : "不可由管理员重试"}</p><JsonDetails value={item.details} /></article>)}</div><ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="系统异常分页" /></>;
 }
+

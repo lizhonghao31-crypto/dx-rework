@@ -46,6 +46,12 @@ export function registerManagementReportingRoutes(
     return businessActor(dependencies.root, user, request.id, capability);
   };
 
+  app.get("/management/workflow-analysis", async (request,reply) => {
+    const reader = await actor(request,"dashboard:management:read");
+    reply.header("cache-control","no-store");
+    return dependencies.service.workflowAnalysis(reader,request.query);
+  });
+
   app.get("/management/dashboard", async (request) => ManagementDashboardResponseSchema.parse(
     await dependencies.service.managementDashboard(
       await actor(request, "dashboard:management:read"),
@@ -89,3 +95,4 @@ export function registerManagementReportingRoutes(
       .send(result.content);
   });
 }
+

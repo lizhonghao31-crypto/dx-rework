@@ -1,3 +1,4 @@
+import {recordOperationDiagnostic} from "./platform/operation-diagnostics.js";
 import {SampleImportService} from "./samples/sample-import-service.js";
 import {SampleDisposalService} from "./samples/sample-disposal-service.js";
 import { ProductionClosureService } from "./sourcing/production-closure-service.js";
@@ -199,6 +200,7 @@ const externalResponsibilityService = new ExternalResponsibilityApplicationServi
 const wageService = new WageService(database, undefined, undefined, todoProjection);
 const reportingService = new ManagementReportingService(database);
 const app = buildApp({
+  operationDiagnostics: (row) => recordOperationDiagnostic(database,row),
   config,
   checkDatabase: () => checkDatabase(database),
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
@@ -434,3 +436,4 @@ try {
   await database.end();
   process.exitCode = 1;
 }
+

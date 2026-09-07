@@ -1,3 +1,4 @@
+import {readQuoteAnalysis} from "./sourcing-analysis.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import {
@@ -592,6 +593,11 @@ export class SourcingService {
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
     return mapCase(row, actor);
+  }
+
+  async analysis(actor: TrustedActorContext, input: unknown) {
+    this.assertReader(actor);
+    return readQuoteAnalysis(this.database,input);
   }
 
   async listCases(
@@ -3355,3 +3361,4 @@ export class SourcingService {
   }
 
 }
+

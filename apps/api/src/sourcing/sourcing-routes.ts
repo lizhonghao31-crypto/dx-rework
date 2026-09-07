@@ -175,6 +175,12 @@ export function registerSourcingRoutes(
       SourcingProductionOrderSchema.parse(await production.get(await readActor(request), caseId(request.params.productionOrderId))));
   }
 
+  app.get("/sourcing/analysis", async (request,reply) => {
+    const actor = await readActor(request);
+    reply.header("cache-control","no-store");
+    return dependencies.service.analysis(actor,request.query);
+  });
+
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));
 
@@ -508,3 +514,4 @@ export function registerSourcingRoutes(
   );
 
 }
+
