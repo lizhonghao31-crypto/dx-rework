@@ -1,6 +1,6 @@
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
 import { createWebUrls } from "../url-contract.js";
@@ -10,6 +10,7 @@ import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import { verifySession } from "./auth.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
+import { canApplySupplierImport, executeSupplierImport, type SupplierImportData, type SupplierImportResult } from "./supplier-import-safety.js";
 import { downloadCsv, parseCsv } from "./csv.js";
 import "./master-data-page.css";
 
@@ -59,12 +60,6 @@ type ProcessDefaultWorkerCandidate = Readonly<{
 }>;
 
 type ImportAction = "create" | "update" | "skip" | "error";
-type SupplierImportData = Readonly<{
-  systemCode: string;
-  supplierName: string;
-  supplierType: Supplier["supplierType"];
-  active: boolean;
-}>;
 type ProcessImportData = Readonly<{
   systemCode: string;
   processId?: string;
@@ -77,6 +72,7 @@ type ImportPreviewRow = Readonly<{
   action: ImportAction;
   message: string;
   supplier?: SupplierImportData;
+  result?: SupplierImportResult;
   process?: ProcessImportData;
 }>;
 type ImportPreview = Readonly<{
@@ -170,6 +166,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const importLock = useRef(false);
   const [importReason, setImportReason] = useState("批量初始化基础资料");
   const [editingProcessRosterId, setEditingProcessRosterId] = useState("");
   const [processRosterDraft, setProcessRosterDraft] = useState<string[]>([]);
@@ -446,7 +443,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     }
   };
 
-  const previewSupplierImport = (filename: string, rows: string[][]): ImportPreview => {
+  const previewSupplierImport = (filename: string, rows: string[][], catalog: readonly Supplier[]): ImportPreview => {
     const headers = rows[0] ?? [];
     const codeIndex = columnIndex(headers, "系统编码");
     const nameIndex = columnIndex(headers, "供应商名称");
@@ -471,21 +468,22 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       seen.add(key);
       const data: SupplierImportData = { systemCode, supplierName: supplierNameValue, supplierType: supplierTypeValue, active: activeValue };
       if (systemCode) {
-        const existing = suppliers.find((supplier) => supplier.supplierCode === systemCode);
+        const existing = catalog.find((supplier) => supplier.supplierCode === systemCode);
         if (!existing) return { rowNumber, action: "error", message: "系统编码不存在；新增记录请把系统编码留空。", supplier: data };
         if (existing.supplierType !== supplierTypeValue) return { rowNumber, action: "error", message: "既有供应商类型不能通过批量导入修改。", supplier: data };
         if (existing.supplierName === supplierNameValue && existing.active === activeValue) {
           return { rowNumber, action: "skip", message: "与当前资料一致。", supplier: data };
         }
-        return { rowNumber, action: "update", message: "将生成新的资料版本。", supplier: data };
+        return { rowNumber, action: "update", message: `将更新版本 ${existing.version}。`, supplier: { ...data, supplierId: existing.supplierId, expectedVersion: existing.version } };
       }
-      const sameName = suppliers.find((supplier) =>
+      const sameName = catalog.find((supplier) =>
         supplier.supplierType === supplierTypeValue && normalized(supplier.supplierName) === normalized(supplierNameValue));
       if (sameName) {
         if (sameName.active === activeValue) return { rowNumber, action: "skip", message: `已存在：${sameName.supplierCode}`, supplier: data };
         return { rowNumber, action: "error", message: `名称已存在（${sameName.supplierCode}）；请导出当前资料后用系统编码修改。`, supplier: data };
       }
-      return { rowNumber, action: "create", message: "将自动生成系统编码。", supplier: data };
+      const frozenCode = generatedCode(supplierPrefix(supplierTypeValue));
+      return { rowNumber, action: "create", message: `新增编码：${frozenCode}`, supplier: { ...data, systemCode: frozenCode } };
     });
     return { kind: "supplier", filename, rows: previewRows };
   };
@@ -538,22 +536,27 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   };
 
   const readImportFile = async (kind: "supplier" | "process", file: File | null) => {
-    if (!file) return;
+    if (!file || busy || importLock.current) return;
+    importLock.current = true;
+    setBusy("import-preflight");
     setError("");
     try {
       const rows = parseCsv(await file.text());
       if (rows.length < 1) throw new Error("导入文件为空。");
       setPreview(kind === "supplier"
-        ? previewSupplierImport(file.name, rows)
+        ? previewSupplierImport(file.name, rows, await json<Supplier[]>("master-data/suppliers?includeInactive=true"))
         : previewProcessImport(file.name, rows, await loadAllProcesses()));
     } catch (importError) {
       setPreview(null);
       setError(importError instanceof Error ? importError.message : "导入文件读取失败");
+    } finally {
+      importLock.current = false;
+      setBusy("");
     }
   };
 
   const applyImport = async () => {
-    if (!preview || busy) return;
+    if (!preview || busy || importLock.current) return;
     if (preview.kind === "supplier" && !canWriteSuppliers) return;
     const reason = importReason.trim();
     if (!reason) {
@@ -575,36 +578,31 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       await alertInApp(issue, { title: "批量资料暂不能导入", confirmLabel: "知道了" });
       return;
     }
+    if (preview.kind === "supplier" && !canApplySupplierImport(preview.rows, reason)) return;
+    importLock.current = true;
     setBusy("batch-import");
     setError("");
     try {
+      if (preview.kind === "supplier") {
+        await executeSupplierImport(preview.rows, reason, {
+          list: () => json<Supplier[]>("master-data/suppliers?includeInactive=true"),
+          create: (data, changeReason) => json("master-data/suppliers", {
+            method: "POST",
+            body: JSON.stringify({ supplierCode: data.systemCode, supplierType: data.supplierType,
+              supplierName: data.supplierName, active: data.active, changeReason }),
+          }),
+          update: (data, changeReason) => json(`master-data/suppliers/${data.supplierId}/versions`, {
+            method: "POST",
+            body: JSON.stringify({ supplierName: data.supplierName, active: data.active,
+              expectedVersion: data.expectedVersion, changeReason }),
+          }),
+        }, (rowNumber, result) => setPreview((current) => current && current.kind === "supplier"
+          ? { ...current, rows: current.rows.map((row) => row.rowNumber === rowNumber ? { ...row, result } : row) }
+          : current));
+        await load();
+        return;
+      }
       for (const row of actionable) {
-        if (preview.kind === "supplier" && row.supplier) {
-          if (row.action === "create") {
-            await json("master-data/suppliers", {
-              method: "POST",
-              body: JSON.stringify({
-                supplierCode: generatedCode(supplierPrefix(row.supplier.supplierType)),
-                supplierType: row.supplier.supplierType,
-                supplierName: row.supplier.supplierName,
-                active: row.supplier.active,
-                changeReason: reason,
-              }),
-            });
-          } else {
-            const existing = suppliers.find((supplier) => supplier.supplierCode === row.supplier?.systemCode);
-            if (!existing) throw new Error(`第 ${row.rowNumber} 行对应的供应商已不存在，请重新预检。`);
-            await json(`master-data/suppliers/${existing.supplierId}/versions`, {
-              method: "POST",
-              body: JSON.stringify({
-                supplierName: row.supplier.supplierName,
-                active: row.supplier.active,
-                expectedVersion: existing.version,
-                changeReason: reason,
-              }),
-            });
-          }
-        }
         if (preview.kind === "process" && row.process) {
           if (row.action === "create") {
             await json("master-data/processes", {
@@ -636,6 +634,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "批量导入失败");
     } finally {
+      importLock.current = false;
       setBusy("");
     }
   };
@@ -873,23 +872,23 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 <div className={`master-data-import-row master-data-import-row--${row.action}`} key={row.rowNumber}>
                   <b>第 {row.rowNumber} 行</b>
                   <span>{row.supplier?.supplierName ?? row.process?.processName ?? "—"}</span>
-                  <span>{row.message}</span>
+                  <span>{row.message}{preview.kind === "supplier" ? ` · ${row.result?.message ?? (row.action === "skip" ? "无需执行" : row.action === "error" ? "预检错误" : "尚未执行")}` : ""}</span>
                 </div>
               ))}
             </div>
             <label className="master-data-import-reason">
               操作原因
-              <input value={importReason} maxLength={500} onChange={(event) => setImportReason(event.target.value)} />
+              <input disabled={Boolean(busy)} value={importReason} maxLength={500} onChange={(event) => setImportReason(event.target.value)} />
             </label>
             {!importReason.trim() && <p role="status">确认导入前请填写操作原因。</p>}
             {previewSummary.create + previewSummary.update === 0 && <p role="status">当前预检没有需要新增或更新的记录。</p>}
             <Button
               variant="primary"
               data-ready={previewSummary.error === 0 && Boolean(importReason.trim()) && previewSummary.create + previewSummary.update > 0 ? "true" : "false"}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || (preview.kind === "supplier" && !canApplySupplierImport(preview.rows, importReason))}
               onClick={() => void applyImport()}
             >
-              {busy === "batch-import" ? "导入中…" : "确认导入"}
+              {busy === "batch-import" ? "导入中…" : preview.kind === "supplier" && preview.rows.some((row) => row.result) ? "继续未完成行" : "确认导入"}
             </Button>
           </Surface>
         ) : null}
