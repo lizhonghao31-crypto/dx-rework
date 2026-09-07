@@ -1,0 +1,50 @@
+import { describe, expect, it } from "vitest";
+import {
+  calculateSourcingTotalExact, calculateSourcingLinesTotalExact, CreateSourcingCaseSchema,
+  CreateSourcingIeQuoteSchema, RecordSourcingManagementDecisionSchema,
+  RequestSourcingFactoryChangeSchema, type SourcingCaseSummary,
+} from "@dx-rework/contracts";
+import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { isNewSourcingPrice, newSourcingPriceDisplay, sourcingPriceSummary, sourcingDeleteConfirmation } from "../../apps/web/src/sourcing-price-presentation.js";
+
+describe("ordinary sourcing price precision and readable facts", () => {
+  it("accepts two effective decimals including storage zeroes, without silently rounding", () => {
+    for (const price of ["12", "12.3", "12.34", "12.3400"]) expect(isNewSourcingPrice(price)).toBe(true);
+    for (const price of ["12.3456", "12.301", "0.001", "0", "1,200.34", "-1", ""]) expect(isNewSourcingPrice(price)).toBe(false);
+    expect(newSourcingPriceDisplay("12.3456")).toBe("12.3456");
+    expect(newSourcingPriceDisplay("1234.5000")).toBe("1,234.5");
+    expect(CreateSourcingIeQuoteSchema.safeParse({ unitPrice: "12.3456" }).success).toBe(false);
+    expect(RecordSourcingManagementDecisionSchema.safeParse({ supplierId: "00000000-0000-4000-8000-000000000200", craftIds: ["00000000-0000-4000-8000-000000000401"], linePrices: [{ position: 1, unitPrice: "12.3456" }] }).success).toBe(false);
+  });
+
+  it("requires at least one creation image and rejects hidden four-place initial prices", () => {
+    const input = { gender: "男装", styleName: "短裤", estimatedCutPieceSendDate: "2026-09-10", deliveryDate: "2026-09-15",
+      lineItems: [{ styleNo: "TEST", color: "黑", quantity: 120, externalUnitPrice: "12.34" }], daxingUnitPrice: "10.25",
+      attachmentIds: ["00000000-0000-4000-8000-000000000301"] };
+    expect(CreateSourcingCaseSchema.safeParse(input).success).toBe(true);
+    for (const fields of [{ attachmentIds: [] }, { attachmentIds: undefined }, { daxingUnitPrice: "10.251" }]) {
+      expect(CreateSourcingCaseSchema.safeParse({ ...input, ...fields }).success).toBe(false);
+    }
+  });
+
+  it("keeps legacy and deferred transfer precision while new visible prices explain totals", () => {
+    expect(calculateSourcingTotalExact("176.1933", 54550)).toBe("9611344.52");
+    expect(RequestSourcingFactoryChangeSchema.safeParse({ supplierId: "00000000-0000-4000-8000-000000000200", unitPrice: "12.3456", changeReason: "既有转厂契约回归" }).success).toBe(true);
+    expect(calculateSourcingLinesTotalExact([{ unitPrice: "12.34", quantity: 120 }, { unitPrice: "9.5", quantity: 3 }])).toBe("1509.30");
+    expect(formatBusinessCurrency("1509.30")).toBe("¥1,509.3");
+    expect(formatBusinessDecimal(54550)).toBe("54,550");
+  });
+
+  it("never presents the first line as the price of a multi-line order", () => {
+    expect(sourcingPriceSummary({ unitPrice: "99", linePrices: [{ unitPrice: "12.34" }, { unitPrice: "9.50" }] })).toContain("多款价");
+    expect(sourcingPriceSummary({ unitPrice: "99", linePrices: [{ unitPrice: "12.34" }] })).toBe("¥12.34");
+    expect(sourcingPriceSummary(null)).toBe("—");
+    expect(sourcingPriceSummary({ sourceType: "factory_change", unitPrice: "99", linePrices: [{ unitPrice: "12.34" }, { unitPrice: "9.50" }] })).toBe("¥99");
+  });
+
+  it("identifies deletion by readable styles, supplier, quantity and downstream impact", () => {
+    const message = sourcingDeleteConfirmation({ sourcingCaseId: "stable-case-id", erpOrderNo: "DX-TEST", orderQuantity: 1200,
+      lineItems: [{ styleNo: "K001", color: "蓝" }], decision: { supplierName: "合成加工厂" } } as SourcingCaseSummary);
+    for (const fact of ["K001 / 蓝", "合成加工厂", "1,200", "历史证据保留", "关联生产单不会自动", "stable-case-id"]) expect(message).toContain(fact);
+  });
+});

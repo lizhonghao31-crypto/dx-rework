@@ -25,7 +25,7 @@ describe("sourcing PR03 contracts", () => {
       ...(index === 2 ? { alternateStyleNo: "DX-ALT-2" } : {}),
       color: index % 2 ? "黑色" : "白色",
       quantity: index * 10,
-      externalUnitPrice: index % 2 ? "12.3456" : "13.5000",
+      externalUnitPrice: index % 2 ? "12.34" : "13.5000",
     });
     const parse = (count: number) => CreateSourcingCaseSchema.parse({
       gender: "男装", styleName: "梭织短裤",
@@ -33,11 +33,12 @@ describe("sourcing PR03 contracts", () => {
       deliveryDate: "2026-09-15",
       lineItems: Array.from({ length: count }, (_value, index) => line(index + 1)),
       daxingUnitPrice: "10.2500",
+      attachmentIds: ["00000000-0000-4000-8000-000000000301"],
     });
 
     expect(parse(1).lineItems).toHaveLength(1);
     expect(parse(2).lineItems.map((item) => item.externalUnitPrice))
-      .toEqual(["12.3456", "13.5000"]);
+      .toEqual(["12.34", "13.5000"]);
     expect(parse(5).lineItems).toHaveLength(5);
     expect(calculateSourcingOrderQuantity(parse(5).lineItems)).toBe(150);
   });
@@ -51,9 +52,10 @@ describe("sourcing PR03 contracts", () => {
         styleNo: "DX-100",
         color: "黑色",
         quantity: 120,
-        externalUnitPrice: "12.3456",
+        externalUnitPrice: "12.34",
       }],
       daxingUnitPrice: "10.0000",
+      attachmentIds: ["00000000-0000-4000-8000-000000000301"],
     };
     expect(() => CreateSourcingCaseSchema.parse({
       ...valid,
@@ -81,9 +83,9 @@ describe("sourcing PR03 contracts", () => {
     })).toThrow();
   });
 
-  it("keeps IE price at four decimals and calculates the two-decimal total exactly", () => {
-    expect(CreateSourcingIeQuoteSchema.parse({ unitPrice: "12.3456" }))
-      .toEqual({ linePrices: [{ position: 1, unitPrice: "12.3456" }], quoteReason: undefined });
+  it("validates new IE prices at two effective decimals while preserving historic calculations", () => {
+    expect(CreateSourcingIeQuoteSchema.parse({ unitPrice: "12.34" }))
+      .toEqual({ linePrices: [{ position: 1, unitPrice: "12.34" }], quoteReason: undefined });
     expect(normalizeSourcingUnitPrice("12.3")).toBe("12.3000");
     expect(calculateSourcingTotal("12.3456", 120)).toBe("1481.47");
     expect(calculateSourcingTotalExact("176.1933", 54_550)).toBe("9611344.52");
