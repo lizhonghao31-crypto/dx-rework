@@ -5,7 +5,7 @@ base branch: main
 base SHA: 53682a0c9b8486f707a248b66f2432a3ec3de1e6
 working branch: feat/uat-v21-pr13-work-analysis
 task scope: 固定 PR13，普通报价事实对照、管理工作台流程等待与往返、原审计入口聚合操作诊断。
-allowed files: packages/contracts/src/work-analysis.ts; packages/contracts/src/index.ts; apps/api/src/sourcing/sourcing-analysis.ts; apps/api/src/sourcing/sourcing-service.ts; apps/api/src/sourcing/sourcing-routes.ts; apps/api/src/reporting/workflow-analysis.ts; apps/api/src/reporting/management-reporting-service.ts; apps/api/src/reporting/management-reporting-routes.ts; apps/api/src/platform/operation-diagnostics.ts; apps/api/src/admin-audit-service.ts; apps/api/src/admin-audit-routes.ts; apps/api/src/app.ts; apps/api/src/server.ts; apps/api/migrations/0161_work_operation_diagnostics.sql; apps/api/src/platform/migration-manifest.json; apps/web/src/work-analysis-panel.tsx; apps/web/src/work-analysis-model.ts; apps/web/src/work-analysis.css; apps/web/src/sourcing-workspace-page.tsx; apps/web/src/reporting/management-dashboard-page.tsx; apps/web/src/admin-console-page.tsx; tests/unit/work-analysis.test.ts; tests/integration/work-analysis-postgres.cases.ts; tests/integration/sourcing-pr03-postgres.test.ts; docs/evidence/uat-v21-pr13-work-analysis.md; docs/roadmap/uat-ui-data-upgrade-execution-v2.1.md; docs/evidence/pr13-work-analysis/*
+allowed files: packages/contracts/src/work-analysis.ts; packages/contracts/src/index.ts; apps/api/src/sourcing/sourcing-analysis.ts; apps/api/src/sourcing/sourcing-service.ts; apps/api/src/sourcing/sourcing-routes.ts; apps/api/src/reporting/workflow-analysis.ts; apps/api/src/reporting/management-reporting-service.ts; apps/api/src/reporting/management-reporting-routes.ts; apps/api/src/platform/operation-diagnostics.ts; apps/api/src/admin-audit-service.ts; apps/api/src/admin-audit-routes.ts; apps/api/src/app.ts; apps/api/src/server.ts; apps/api/migrations/0161_work_operation_diagnostics.sql; apps/api/src/platform/migration-manifest.json; apps/web/src/work-analysis-panel.tsx; apps/web/src/work-analysis-model.ts; apps/web/src/work-analysis.css; apps/web/src/sourcing-workspace-page.tsx; apps/web/src/reporting/management-dashboard-page.tsx; apps/web/src/admin-console-page.tsx; tests/unit/work-analysis.test.ts; tests/integration/work-analysis-postgres.cases.ts; tests/integration/sourcing-pr03-postgres.test.ts; docs/evidence/uat-v21-pr13-work-analysis.md; docs/roadmap/uat-ui-data-upgrade-execution-v2.1.md; docs/evidence/pr13-work-analysis/*; apps/web/src/reporting/rework-query-page.tsx
 forbidden files: 其他业务写入、状态机、历史迁移、CI/门禁策略、部署策略、ERP、转厂、生产数据。
 
 开工已核验远端 main。PR12 #425 最终 Head 0610e1d93edd3c7f428428251c6d0de629272132 首轮 Full 34141420827、Quick 34141419857 成功，唯一 Review 5573229094 待回；合并后只按相关变化更新 PR13 基线。以上允许文件在实现前冻结。
@@ -37,3 +37,13 @@ PR12 已合并，最终 Head 5e144f43851e27d5b67d266151a5c3d67a1faa08，第2轮 
 ## 回滚与未覆盖
 
 回滚代码可移除三处读取入口与诊断钩子；0161 表保留历史记录，不能倒改旧迁移或清空审计，后续变更用新迁移。历史缺失失败/重试、没有前后字段快照以及缺少节点事件均明确保留缺失。没有 ECS 部署、线上日志采集验证或生产数据操作。
+
+## 唯一 Review 修复开工边界补充
+
+Review PRR_kwDOTpHFhc8AAAABMgWs7Q 的线程 PRRT_kwDOTpHFhc6f_LY0/LY1/LY2 分别指出入口不可达、转厂混入计时、分页前构建全部报价明细。核验现行 App：/ui/tasks 实际路由至 reporting/rework-query-page.tsx，原 AuthGate 明确允许 dashboard:management:read；/ui/supervisor 为 site 模式，原新增 management-only 入口不可达。为在原可达管理查询入口闭环，本次在修改前追加允许文件 apps/web/src/reporting/rework-query-page.tsx，撤回 management-dashboard-page.tsx 的新增入口。App、路由、菜单和权限不改，新增面板仍单独验证管理读权限，不重排返工业务流程。其余修复限原允许的两个SQL服务、既有测试、Root前端判定与证据。全部集中使用第2轮Full，不重复Review。
+
+修复验证：实际 /ui/tasks 所用 ReworkQueryPage 已在样板直接挂载（外围 Auth/报表读取为空夹具），展开流程、财务独立、原有筛选保留，五尺寸截图已更新；静态核对原 App 的真实路由及 dashboard:management:read 父级允许，未声称整份 App/真实登录联调。报价同一重复读事务分别计全量总数/缺初价数，MATERIALIZED selected CTE 在构建任意款色/IE/批准 JSON 之前 LIMIT/OFFSET；页99仍正确返回全量17及缺失1而明细空，EXPLAIN ANALYZE 验证 selected CTE仅15行。新增转厂进入/驳回回到财务的真实SQL夹具，普通finance enteredAt与先前普通节点leftAt不被转厂改变，历史不返回转厂。
+
+另自行补齐 Root 无业务角色时原普通报价/管理分析可见规则；审计仍严格沿用原角色规则。现为9项单元和9项PGlite通过，修复服务/真实组件严格类型、变更文件ESLint通过；修复后样板构建134模块。集中推送第2轮Full，不再次请求Review。前述首轮125模块与8+8项为历史证据。
+
+修复后同一私有样板第2版源 d2ab8b1ba6b32994d69d06df066e4d516e23c14c；actual query page入口额外截图1440-workflow-entry.jpg。未新增一级页面或修改路由。

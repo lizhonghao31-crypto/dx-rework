@@ -14,7 +14,7 @@ export const REWORK_FLOW_SQL=`WITH changes AS (
  AND ($3::date IS NULL OR r.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`;
 export const SOURCING_FLOW_SQL=`WITH changes AS (
  SELECT t.*,lead(transitioned_at) OVER(PARTITION BY sourcing_case_id ORDER BY sequence) left_at
- FROM sourcing_case_transitions t WHERE t.from_status IS DISTINCT FROM t.to_status
+ FROM sourcing_case_transitions t WHERE t.from_status IS DISTINCT FROM t.to_status AND t.business_action NOT LIKE 'factory_change_%' AND COALESCE(t.from_status,'') NOT LIKE '%factory_change%' AND t.to_status NOT LIKE '%factory_change%'
 ) SELECT c.sourcing_case_id::text id,'sourcing' kind,c.erp_order_no label,c.status,c.status='pending_finance_reconciliation' AS "independentFinance",
  (SELECT transitioned_at FROM changes t WHERE t.sourcing_case_id=c.sourcing_case_id AND t.to_status=c.status AND t.left_at IS NULL ORDER BY sequence DESC LIMIT 1) AS "enteredAt",
  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',t.sourcing_transition_id::text,'from',t.from_status,'to',t.to_status,'action',t.business_action,'changesNode',t.from_status IS DISTINCT FROM t.to_status,'enteredAt',t.transitioned_at,'leftAt',change.left_at) ORDER BY t.sequence)

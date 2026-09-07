@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
-import {readQuoteAnalysis} from '../../apps/api/src/sourcing/sourcing-analysis.js';
+import {readQuoteAnalysis,QUOTE_ANALYSIS_SQL} from '../../apps/api/src/sourcing/sourcing-analysis.js';
 import {readWorkflowAnalysis} from '../../apps/api/src/reporting/workflow-analysis.js';
 import {readOperationDiagnostics,recordOperationDiagnostic} from '../../apps/api/src/platform/operation-diagnostics.js';
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
@@ -50,9 +50,17 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  it('aggregates before 15-row pages and preserves archived missing initial facts',async()=>{
   const one=await readQuoteAnalysis(db,{}),two=await readQuoteAnalysis(db,{page:2});expect(one.total).toBe(17);expect(two.total).toBe(17);expect(one.items).toHaveLength(15);expect(two.items).toHaveLength(2);expect(one.missingInitialCount).toBe(1);expect([...one.items,...two.items].find(i=>i.archived)?.initial.lines[0]?.unitPrice).toBeNull();
  });
+ it('limits detailed quote work in PostgreSQL while retaining full-set counts on empty pages',async()=>{
+  const result=await readQuoteAnalysis(db,{page:99});expect(result.total).toBe(17);expect(result.missingInitialCount).toBe(1);expect(result.items).toHaveLength(0);
+  const plan=await db.query(`EXPLAIN (ANALYZE,FORMAT JSON) ${QUOTE_ANALYSIS_SQL}`,['',null,null,15,0]);
+  const root=plan.rows[0]!['QUERY PLAN'][0].Plan;const nodes:Record<string,unknown>[]=[];const visit=(node:Record<string,unknown>)=>{nodes.push(node);for(const child of (node.Plans??[]) as Record<string,unknown>[])visit(child);};visit(root);
+  expect(nodes.find(n=>n['Node Type']==='CTE Scan'&&n['CTE Name']==='selected')?.['Actual Rows']).toBe(15);
+ });
  it('keeps finance independent and owner return history with exact entry/exit records',async()=>{
   const result=await readWorkflowAnalysis(db,{group:'finance'},true);expect(result.total).toBe(1);const item=result.items[0]!;expect(item.independentFinance).toBe(true);expect(item.history.find(h=>h.action==='sourcing.attachments.supplement')).toMatchObject({changesNode:false,to:null,leftAt:null});expect(item.enteredAt).toBe('2026-09-06T00:00:00.000Z');expect(item.history.find(h=>h.action==='owner_rejected')).toMatchObject({enteredAt:'2026-09-04T00:00:00.000Z',leftAt:'2026-09-05T00:00:00.000Z'});
   expect((await readWorkflowAnalysis(db,{group:'waiting'},true)).items.every(i=>!i.independentFinance)).toBe(true);
+  await db.query("INSERT INTO sourcing_case_transitions VALUES($1,$2,8,'pending_finance_reconciliation','pending_factory_change_verification','factory_change_requested','2026-09-07T10:00:00Z'),($3,$2,9,'pending_factory_change_verification','pending_finance_reconciliation','factory_change_rejected','2026-09-08T10:00:00Z')",[randomUUID(),ids[0],randomUUID()]);
+  const after=(await readWorkflowAnalysis(db,{group:'finance'},true)).items[0]!;expect(after.enteredAt).toBe(item.enteredAt);expect(after.history.find(h=>h.action==='owner_approved')?.leftAt).toBeNull();expect(after.history.some(h=>h.action.startsWith('factory_change'))).toBe(false);
  });
  it('does not expose sourcing without its separate permission and does not fabricate missing entry',async()=>{
   const result=await readWorkflowAnalysis(db,{},false);expect(result.total).toBe(2);expect(result.items.every(i=>i.kind==='rework')).toBe(true);expect(result.missingEntryCount).toBe(1);expect(result.items.find(i=>i.id===missing)?.enteredAt).toBeNull();expect(result.items.find(i=>i.id===rw)?.enteredAt).toBe('2026-09-03T00:00:00.000Z');expect(result.items.find(i=>i.id===rw)?.history).toHaveLength(3);

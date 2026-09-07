@@ -1,7 +1,7 @@
 import {formatBusinessDecimal} from '@dx-rework/contracts/business-display';
 export type WorkAnalysisKind='quote'|'workflow'|'diagnostics';
 export function canReadWorkAnalysis(kind:WorkAnalysisKind,user:{isRoot?:boolean;businessRoles?:readonly string[];capabilities:readonly string[]}){
- const roles=user.businessRoles??[];if(!roles.length)return false;
+ const roles=user.businessRoles??[];if(kind!=='diagnostics'&&user.isRoot===true)return true;if(!roles.length)return false;
  if(kind==='diagnostics')return roles.includes('owner_group')||roles.includes('system_admin')&&user.capabilities.includes('audit:read');
  return user.isRoot===true||user.capabilities.includes(kind==='quote'?'sourcing:view':'dashboard:management:read');
 }
