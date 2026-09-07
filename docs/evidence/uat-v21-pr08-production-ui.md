@@ -25,3 +25,7 @@
 - 填报只调整既有CSS布局，未改提交/修正/完工/发货处理、权限及幂等键。
 - Review判断：本PR只读UI动效与局部布局，业务写处理、权限和契约不变；采用diff自查、边界单测、浏览器证据与Full Gate，不请求Codex Review（0/1）。
 - 回滚：revert本PR；无数据库迁移、无生产数据操作、无ECS部署。
+
+## 首轮 Full Gate 修复
+
+Head 160f0b827859708eff392c59f47b82c5c088c3d6：Quick34133042345通过；Full34133060679的lint/type/build通过，1198项测试通过，唯一失败为 responsibility-queue-refresh.test.ts 将展示用visibility监听一概认成自动业务刷新。追加该测试文件到允许范围。仅对已审查、无fetch/load/request/dispatch的精确本地计时effect豁免；其他可见性触发读取规则保留。不是修改CI或Actions用量策略。修复后使用第二轮Full Gate，不盲目重跑。
