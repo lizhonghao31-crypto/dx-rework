@@ -195,7 +195,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       if (!mounted || session === "denied") return;
       setUser(session.user);
       setSuppliers(items);
-      const id = nextSupplierSelection("", items, window.matchMedia("(max-width: 800px)").matches);
+      const id = "";
       selectedRef.current = id;
       setSelectedId(id);
     }).catch((loadError: unknown) => {
@@ -338,7 +338,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       <header className="page-heading supplier-center-heading">
         <div>
           <h1><NavigationIcon route={mode === "manage" ? "/ui/suppliers/manage" : "/ui/suppliers"} size="title" />供应商中心</h1>
-          <p>统一查看供应商资料、合同缺项、工艺产能和变更历史。</p>
+          <p></p>
         </div>
         <div className="supplier-center-heading__actions">
           <StatusBadge tone={canMaintain ? "info" : "neutral"}>{canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
@@ -348,7 +348,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       <SupplierCenterNavigation active={mode} />
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
       {mode === "manage" && !canWrite ? (
-        <div className="supplier-center-notice" role="status">当前账号可查看供应商资料，但 SSP-02 首期仅 Root 可维护。</div>
+        <div className="supplier-center-notice" role="status">当前账号为只读，可查看资料与变更历史。</div>
       ) : null}
       <div className={`supplier-center-workspace${selectedId ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
@@ -366,10 +366,12 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
               <option value="active">仅启用</option><option value="inactive">仅停用</option><option value="all">全部状态</option>
             </select>
           </div>
+          <div className="supplier-table-labels" aria-hidden="true"><span>供应商 / 编码</span><span>工艺与日产能</span><span>状态 / 合同资料</span></div>
           <div className="supplier-directory__list">
             {page.items.length ? page.items.map((supplier) => (
               <button className={selectedId === supplier.supplierId ? "is-selected" : ""} disabled={busy || refreshing} onClick={() => void selectSupplier(supplier.supplierId)} key={supplier.supplierId}>
                 <span><strong>{supplier.supplierName}</strong><small>{supplier.supplierCode} · {SUPPLIER_TYPE_LABELS[supplier.supplierType]}</small></span>
+                <span className="supplier-directory__craft"><span>{supplier.supportedCrafts.join("、") || "工艺尚未维护"}</span><small>{supplier.dailyCapacity === null ? "产能尚未维护" : `${supplier.dailyCapacity.toLocaleString("zh-CN")} 件 / 日`}</small></span>
                 <span className="supplier-directory__meta">
                   <StatusBadge tone={supplier.active ? "success" : "warning"}>{supplier.active ? "启用" : "停用"}</StatusBadge>
                   {supplier.contractDataMissing.length
