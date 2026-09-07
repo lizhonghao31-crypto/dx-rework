@@ -4,15 +4,15 @@ import { AttachmentResponseSchema, UploadIntentResponseSchema, SampleCreateResul
 import { Button, Surface } from "@dx-rework/ui";
 import { Shell, Header } from "./components.js";
 import { createWebUrls } from "../url-contract.js";
-import { prepareImageUploadCandidate, sha256Hex } from "./attachment-upload.js";
+import { sampleRequest, sampleErrorMessage } from "./sample-request.js";
+import { uploadSampleImage } from "./sample-image-upload.js";
 import { createClientRequestId } from "./client-request-id.js";
 import "./rework-v2-form.css";
 import "./search-select.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 async function request<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(apiUrl(path), { ...init, credentials: "include", cache: "no-store", headers: { "content-type": "application/json", ...init.headers } });
-  const body = await response.json(); if (!response.ok) throw new Error(body?.error?.message ?? "操作失败，请重试"); return schema.parse(body);
+  return sampleRequest(apiUrl(path), schema, init);
 }
 const availabilitySchema = z.object({ enabled: z.boolean(), canCreate: z.boolean(), canBatchCreate: z.boolean() });
 export function SampleCreationLinks() {
@@ -23,29 +23,38 @@ export function SampleCreationLinks() {
 }
 
 type FileReference = { attachmentId: string; filename: string };
-export function SampleImageUpload({ label, value, onChange, disabled, onBusy }: {
-  label: string; value: FileReference[]; onChange(value: FileReference[]): void; disabled: boolean; onBusy(busy: boolean): void;
+export function SampleImageUpload({ label, value, onChange, disabled, onBusy, onPending }: {
+  label: string; value: FileReference[]; onChange(value: FileReference[]): void; disabled: boolean; onBusy(busy: boolean): void; onPending(count: number): void;
 }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const inFlight = useRef(false);
+  const changePending = (files: File[]) => { setPendingFiles(files); onPending(files.length); };
   const upload = async (files: File[]) => {
-    if (!files.length) return;
+    if (!files.length || disabled || inFlight.current) return;
     if (value.length + files.length > 20) { setError("最多上传 20 张图片"); return; }
-    setBusy(true); onBusy(true); setError(""); let current = value;
+    inFlight.current = true;
+    setBusy(true); onBusy(true); setError(""); changePending(files);
+    let current = value;
     try {
-      for (const original of files) {
-        const file = await prepareImageUploadCandidate(original), sha256 = await sha256Hex(file);
-        const intent = await request("tools/attachments/upload-intents", UploadIntentResponseSchema, { method: "POST", body: JSON.stringify({ filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256 }) });
-        const form = new FormData(); for (const [key, entry] of Object.entries(intent.uploadFields)) form.append(key, entry); form.append("file", file);
-        const response = await fetch(intent.uploadUrl, { method: "POST", body: form }); if (!response.ok) throw new Error(`${original.name} 上传失败`);
-        const finalized = await request(`tools/attachments/${intent.attachmentId}/finalize`, AttachmentResponseSchema, { method: "POST" });
-        current = [...current, { attachmentId: finalized.attachmentId, filename: finalized.filename }]; onChange(current);
+      for (let index = 0; index < files.length; index += 1) {
+        const original = files[index]!;
+        const finalized = await uploadSampleImage(original, {
+          createIntent: input => request("tools/attachments/upload-intents", UploadIntentResponseSchema, { method: "POST", body: JSON.stringify(input) }),
+          finalize: attachmentId => request(`tools/attachments/${attachmentId}/finalize`, AttachmentResponseSchema, { method: "POST" }),
+        });
+        current = [...current, { attachmentId: finalized.attachmentId, filename: finalized.filename }];
+        onChange(current);
+        changePending(files.slice(index + 1));
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "上传失败"); }
-    finally { setBusy(false); onBusy(false); }
+    } catch (e) { setError(sampleErrorMessage(e, "图片上传失败，请重试")); }
+    finally { inFlight.current = false; setBusy(false); onBusy(false); }
   };
-  return <div><label className="rework-v2-upload">{busy ? "上传中…" : label}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={disabled || busy} onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void upload(files); }} /></label>
+  return <div><label className="rework-v2-upload">{busy ? "上传中…" : label}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={disabled || busy || pendingFiles.length > 0} onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void upload(files); }} /></label>
     {value.map(file => <p key={file.attachmentId}>{file.filename} <Button type="button" disabled={disabled || busy} onClick={() => onChange(value.filter(item => item.attachmentId !== file.attachmentId))}>移除</Button></p>)}
-    {error ? <p role="alert">{error}</p> : null}</div>;
+    {pendingFiles.map((file, index) => <p key={`${file.name}:${index}`}>{file.name} · 未完成 <Button type="button" disabled={disabled || busy} onClick={() => { changePending(pendingFiles.filter((_, at) => at !== index)); setError(""); }}>移除</Button></p>)}
+    {error ? <p role="alert">{error}</p> : null}
+    {!busy && pendingFiles.length > 0 ? <Button type="button" disabled={disabled} onClick={() => { void upload(pendingFiles); }}>重试未完成的图片</Button> : null}</div>;
 }
 
 export function SamplePersonPicker({ label, value, onChange, disabled, endpoint = "samples/people" }: { label: string; value: string; onChange(value: string): void; disabled: boolean; endpoint?: string }) {
@@ -55,7 +64,7 @@ export function SamplePersonPicker({ label, value, onChange, disabled, endpoint 
     const abort = new AbortController(), timer = setTimeout(() => {
       void request(`${endpoint}?search=${encodeURIComponent(text.trim())}`, SamplePeopleResponseSchema, { signal: abort.signal })
         .then(result => { if (!abort.signal.aborted) { setPeople(result.people); setError(result.people.length ? "" : "未找到有效员工"); } })
-        .catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "员工搜索失败"); });
+        .catch(e => { if (!abort.signal.aborted) setError(sampleErrorMessage(e, "员工搜索失败")); });
     }, 200);
     return () => { clearTimeout(timer); abort.abort(); };
   }, [text, value, endpoint]);
@@ -71,10 +80,16 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
   const [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [error, setError] = useState("");
   const [result, setResult] = useState<z.infer<typeof SampleCreateResultSchema> | null>(null), [availability, setAvailability] = useState<z.infer<typeof availabilitySchema> | null>(null);
   const attempt = useRef<{ hash: string; key: string } | null>(null);
-  useEffect(() => { const abort = new AbortController(); void request("samples/creation-availability", availabilitySchema, { signal: abort.signal }).then(setAvailability).catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "无法读取登记状态"); }); return () => abort.abort(); }, []);
+  const uploaders = useRef(0);
+  const [pendingUploads, setPendingUploads] = useState<Record<string, number>>({});
+  const hasPendingUploads = Object.values(pendingUploads).some(count => count > 0);
+  const onPendingUpload = (key: string, count: number) => setPendingUploads(current => ({ ...current, [key]: count }));
+  const onUploadBusy = (active: boolean) => { uploaders.current = Math.max(0, uploaders.current + (active ? 1 : -1)); setUploading(uploaders.current > 0); };
+  useEffect(() => { const abort = new AbortController(); void request("samples/creation-availability", availabilitySchema, { signal: abort.signal }).then(setAvailability).catch(e => { if (!abort.signal.aborted) setError(sampleErrorMessage(e, "无法读取登记状态")); }); return () => abort.abort(); }, []);
   const disabled = busy || uploading || !!result || !availability?.enabled;
   const update = (key: string, patch: Partial<Draft>) => setItems(current => current.map(item => item.key === key ? { ...item, ...patch } : item));
   const submit = async () => {
+    if (disabled || uploaders.current > 0 || hasPendingUploads) return;
     setError("");
     try {
       const payload: SampleCreate[] = items.map(item => {
@@ -90,7 +105,7 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
       if (attempt.current?.hash !== body) attempt.current = { hash: body, key: createClientRequestId() };
       setBusy(true);
       setResult(await request(batch ? "samples/batch" : "samples", SampleCreateResultSchema, { method:"POST",headers:{"idempotency-key":attempt.current.key},body }));
-    } catch (e) { setError(e instanceof Error ? e.message : "提交失败"); }
+    } catch (e) { setError(sampleErrorMessage(e, "提交失败")); }
     finally { setBusy(false); }
   };
   return <Shell active="在管样衣" mobileNavigation="transaction"><main className="rework-v2-page">
@@ -99,9 +114,9 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
     {availability && !availability.enabled ? <p role="status">样衣登记尚未开放</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {result ? <Surface className="rework-v2-core"><h2>登记成功</h2>{result.items.map(item => <p key={item.sampleId}><a href={pageUrl(`ui/samples/${item.sampleId}`)}>{item.sampleCode}</a> · 借出中</p>)}</Surface> : null}
-    <Surface className="rework-v2-core"><h2>采购小票（必填）</h2>{batch ? <p>本批样衣共用以下小票。</p> : null}<SampleImageUpload label="上传采购小票" value={receipts} onChange={setReceipts} disabled={disabled} onBusy={setUploading} /></Surface>
+    <Surface className="rework-v2-core"><h2>采购小票（必填）</h2>{batch ? <p>本批样衣共用以下小票。</p> : null}<SampleImageUpload label="上传采购小票" value={receipts} onChange={setReceipts} disabled={disabled} onBusy={onUploadBusy} onPending={count => onPendingUpload("receipts", count)} /></Surface>
     {items.map((item, index) => <Surface className="rework-v2-core" key={item.key}>
-      <div className="rework-v2-section-heading"><h2>样衣 {index + 1}</h2>{batch && items.length > 1 ? <Button disabled={disabled} onClick={() => setItems(current => current.filter(row => row.key !== item.key))}>移除本件</Button> : null}</div>
+      <div className="rework-v2-section-heading"><h2>样衣 {index + 1}</h2>{batch && items.length > 1 ? <Button disabled={disabled} onClick={() => { setItems(current => current.filter(row => row.key !== item.key)); onPendingUpload(item.key, 0); }}>移除本件</Button> : null}</div>
       <div className="rework-v2-grid">
         {([['brand','品牌'],['styleName','样衣名称'],['color','颜色'],['department','部门'],['purchaseDate','采购日期'],['purchasePrice','采购价']] as const).map(([field,label]) => <label key={field}>{label}<input required value={item[field]} disabled={disabled} type={field === 'purchaseDate' ? 'date' : 'text'} inputMode={field === 'purchasePrice' ? 'decimal' : undefined} onChange={e => update(item.key,{[field]:e.target.value})} /></label>)}
         <SamplePersonPicker label="采购人" value={item.purchaserUserId} disabled={disabled} onChange={purchaserUserId => update(item.key,{purchaserUserId})} />
@@ -110,15 +125,16 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
       {item.differentHolder ? <div className="rework-v2-grid"><SamplePersonPicker label="初始持有人" value={item.holderUserId} disabled={disabled} onChange={holderUserId => update(item.key,{holderUserId})} /></div> : null}
       <details className="rework-v2-more"><summary>补充资料与样衣图片</summary><div className="rework-v2-grid">
         {([['styleNo','款号'],['category','类别'],['size','尺码'],['remark','备注']] as const).map(([field,label]) => <label key={field}>{label}<input value={item[field]} disabled={disabled} onChange={e => update(item.key,{[field]:e.target.value})} /></label>)}
-      </div><SampleImageUpload label="上传样衣图片" value={item.images} onChange={images => update(item.key,{images})} disabled={disabled} onBusy={setUploading} /></details>
+      </div><SampleImageUpload label="上传样衣图片" value={item.images} onChange={images => update(item.key,{images})} disabled={disabled} onBusy={onUploadBusy} onPending={count => onPendingUpload(item.key, count)} /></details>
     </Surface>)}
     {batch ? <Button disabled={disabled || items.length >= 50} onClick={() => setItems(current => [...current,empty()])}>增加一件样衣</Button> : null}
-    <div className="rework-v2-actions"><Button variant="primary" disabled={disabled || !receipts.length || !(batch ? availability?.canBatchCreate : availability?.canCreate)} onClick={() => { void submit(); }}>{busy ? "提交中…" : "提交建档并首次领用"}</Button></div>
+    <div className="rework-v2-actions"><Button variant="primary" disabled={disabled || hasPendingUploads || !receipts.length || !(batch ? availability?.canBatchCreate : availability?.canCreate)} onClick={() => { void submit(); }}>{busy ? "提交中…" : "提交建档并首次领用"}</Button></div>
   </main></Shell>;
 }
 
 export function SampleAttachments({ sampleId }: { sampleId: string }) {
   const [files, setFiles] = useState<z.infer<typeof SampleAttachmentListSchema>["attachments"]>([]), [error,setError] = useState("");
-  useEffect(() => { const abort = new AbortController(); void request(`samples/${sampleId}/attachments`,SampleAttachmentListSchema,{signal:abort.signal}).then(data => { if (!abort.signal.aborted) setFiles(data.attachments); }).catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "附件读取失败"); }); return () => abort.abort(); },[sampleId]);
+  useEffect(() => { const abort = new AbortController(); void request(`samples/${sampleId}/attachments`,SampleAttachmentListSchema,{signal:abort.signal}).then(data => { if (!abort.signal.aborted) setFiles(data.attachments); }).catch(e => { if (!abort.signal.aborted) setError(sampleErrorMessage(e, "附件读取失败")); }); return () => abort.abort(); },[sampleId]);
   return <Surface className="rework-v2-core"><details><summary>样衣图片与凭证</summary>{error ? <p role="alert">{error}</p> : null}{!files.length && !error ? <p>暂无可查看的附件</p> : null}<div className="rework-v2-image-grid">{files.map(file => <article key={`${file.attachmentId}:${file.purpose}`}><a href={apiUrl(`samples/${sampleId}/attachments/${file.attachmentId}/download`)} target="_blank" rel="noreferrer"><img loading="lazy" src={apiUrl(`samples/${sampleId}/attachments/${file.attachmentId}/download`)} alt={`${file.purpose === "purchase_receipt" ? "采购小票" : "样衣图片"}：${file.filename}`} /></a></article>)}</div></details></Surface>;
 }
+
