@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
 import PDFDocument from "pdfkit";
+import { SourcingNewUnitPriceSchema } from "@dx-rework/contracts";
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+
+// Never round a historic four-place price when re-rendering its saved facts.
+export const formatSourcingContractPrice = (value: string): string =>
+  SourcingNewUnitPriceSchema.safeParse(value).success ? formatBusinessDecimal(value) : value;
+
 
 export type ContractPdfLine = Readonly<{
   position: number;
@@ -231,11 +238,11 @@ export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): 
   for (const line of snapshot.lines) row([
     `${line.styleNo}${line.alternateStyleNo ? ` / ${line.alternateStyleNo}` : ""}`,
     `${line.color ?? "历史未维护"}\n${snapshot.gender ?? "历史未维护"}${snapshot.styleName ?? "历史未维护"}`,
-    snapshot.estimatedCutPieceSendDate, String(line.quantity), line.unitPrice,
-    line.totalAmount, snapshot.deliveryDate,
+    snapshot.estimatedCutPieceSendDate, formatBusinessDecimal(line.quantity), formatSourcingContractPrice(line.unitPrice),
+    formatBusinessDecimal(line.totalAmount), snapshot.deliveryDate,
   ]);
   y += 5;
-  text(`合计：${snapshot.totalQuantity} 件    金额：${snapshot.totalAmount} 元`);
+  text(`合计：${formatBusinessDecimal(snapshot.totalQuantity)} 件    金额：${formatBusinessDecimal(snapshot.totalAmount)} 元`);
   // Keep the responsibility clause intact; the full dynamic responsibility is red.
   document.fontSize(9);
   const responsibility = `二、乙方负责${snapshot.processes.join("、")}，甲方提供样板及面/辅料。`;

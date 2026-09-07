@@ -34,6 +34,7 @@ describe("node 3 craft responsibility contract", () => {
     const order = {
       gender: "男装", styleName: "梭织短裤", estimatedCutPieceSendDate: "2026-09-25", deliveryDate: "2026-09-30",
       lineItems: [{ styleNo: "S001", color: "黑色", quantity: 80, externalUnitPrice: "12.0000" }], daxingUnitPrice: "9.0000",
+      attachmentIds: ["00000000-0000-4000-8000-000000000301"],
     };
     expect(CreateSourcingCaseSchema.parse(order).styleName).toBe("梭织短裤");
     for (const invalid of [{ gender: undefined }, { gender: "" }, { gender: "其他" }, { styleName: undefined }, { styleName: " " }, { erpOrderNo: "ERP-1" }, { craftIds: [] }]) {

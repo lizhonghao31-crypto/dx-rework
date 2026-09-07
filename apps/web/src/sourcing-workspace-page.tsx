@@ -1,3 +1,4 @@
+import { isNewSourcingPrice, newSourcingPriceDisplay, sourcingPriceSummary, sourcingDeleteConfirmation } from "./sourcing-price-presentation.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
@@ -159,6 +160,7 @@ const linesTotalPreview = (
   lines: SourcingCaseSummary["lineItems"],
 ): string => {
   try {
+    if (linePrices.some((price) => !isNewSourcingPrice(price.unitPrice))) return "—";
     const cents = linePrices.reduce((sum, price) => {
       const quantity = lines.find((line) => line.position === price.position)?.quantity ?? 0;
       const amount = calculateSourcingTotalExact(price.unitPrice, quantity);
@@ -294,8 +296,8 @@ function SourcingOrderCard({
       <dl>
         <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
         {"daxingUnitPrice" in item ? <div><dt>大兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
-        <div><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
-        <div><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
+        <div><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
+        <div><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
         <div><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
         <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
       </dl>
@@ -378,6 +380,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [daxingUnitPrice, setDaxingUnitPrice] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadFailed, setUploadFailed] = useState(false);
+  const [activeCreateInput, setActiveCreateInput] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
   const createKey = useRef<string | null>(null);
@@ -534,6 +538,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
                 { method: "POST" },
               ),
             );
+            if (finalized.status !== "ready") throw new Error("订单图片尚未确认成功，请重新上传");
             const previewUrl = URL.createObjectURL(candidate);
             previewUrls.current.push(previewUrl);
             return {
@@ -546,9 +551,11 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         },
       );
       setImages((current) => [...current, ...uploaded]);
+      setUploadFailed(false);
       setMessage(`已上传 ${formatBusinessDecimal(uploaded.length)} 张图片；请核对订单资料后提交`);
       createKey.current = null;
     } catch (error) {
+      setUploadFailed(true);
       setMessage(error instanceof Error ? error.message : "订单图片上传失败");
     } finally {
       setUploading(false);
@@ -588,6 +595,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   };
 
   const createOrder = async (): Promise<void> => {
+    if (busy || uploading || uploadFailed) { setMessage("请等待图片上传成功，失败时重新选择图片上传。"); return; }
     const normalizedLines = lineItems.map((line) => ({
       styleNo: line.styleNo.trim(),
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
@@ -595,7 +603,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       quantity: Number(line.quantity),
       externalUnitPrice: businessInputChange(line.externalUnitPrice).trim(),
     }));
-    const pricePattern = /^\d{1,10}(?:\.\d{1,4})?$/;
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
     if (!gender || !styleName.trim()) { setMessage("请选择性别并填写款式"); return; }
     if (!estimatedCutPieceSendDate || !deliveryDate) {
@@ -610,14 +617,13 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       setMessage("每行数量必须是1至10000000之间的整数");
       return;
     }
-    if (normalizedLines.some((line) => !pricePattern.test(line.externalUnitPrice)
-      || Number(line.externalUnitPrice) <= 0)) {
-      setMessage("每行对外加工价格必须大于0且最多4位小数");
+    if (normalizedLines.some((line) => !isNewSourcingPrice(line.externalUnitPrice))) {
+      setMessage("每行对外加工价格必须大于0且最多2位有效小数");
       return;
     }
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
-    if (!pricePattern.test(normalizedDaxingPrice) || Number(normalizedDaxingPrice) <= 0) {
-      setMessage("请填写大兴价，最多4位小数且必须大于0");
+    if (!isNewSourcingPrice(normalizedDaxingPrice)) {
+      setMessage("请填写大兴价，最多2位有效小数且必须大于0");
       return;
     }
     try {
@@ -673,7 +679,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           </div>
           <label><span>预计裁片发出日期（工厂发出）</span><input type="date" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>要求交货日期（到工厂）</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>大兴价（内部）</span><input value={daxingUnitPrice} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="仅内部授权岗位可见" /></label>
+          <label><span>大兴价（内部，必填）</span><input value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的大兴价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
@@ -691,8 +697,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
                 <label><span>款号</span><input value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="必填" /></label>
                 <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="选填" /></label>
                 <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
-                <label><span>数量</span><input value={line.quantity} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", event.target.value)} placeholder="整数" /></label>
-                <label><span>对外加工价格</span><input value={line.externalUnitPrice} inputMode="decimal" onChange={(event) => updateLineItem(index, "externalUnitPrice", businessInputChange(event.target.value))} placeholder="最多4位小数" /></label>
+                <label><span>数量</span><input value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
+                <label><span>对外加工价格</span><input value={activeCreateInput === `external-${index}` ? line.externalUnitPrice : newSourcingPriceDisplay(line.externalUnitPrice)} onFocus={() => setActiveCreateInput(`external-${index}`)} onBlur={() => setActiveCreateInput(null)} aria-invalid={!isNewSourcingPrice(line.externalUnitPrice)} inputMode="decimal" onChange={(event) => updateLineItem(index, "externalUnitPrice", businessInputChange(event.target.value))} placeholder="必填，最多2位有效小数" /></label>
                 <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
               </article>)}
             </div>
@@ -701,7 +707,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         </div>
         <section className="sourcing-photo-field" aria-label="订单照片">
           <div className="section-title">
-            <div><h2>订单照片</h2><p>复用返工系统图片规范，支持 JPG、PNG、WebP。</p></div>
+            <div><h2>订单照片（必填）</h2><p>至少上传1张；上传成功后才能提交。支持 JPG、PNG、WebP。</p></div>
             <StatusBadge tone="info">{images.length}/{MAX_SOURCING_ATTACHMENTS}</StatusBadge>
           </div>
           {images.length > 0 ? <div className="rework-v2-image-grid">
@@ -719,9 +725,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         </section>
         <div className="sourcing-submit-row">
           <p role="status">{message}</p>
+          {uploadFailed ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <div className="sourcing-create-actions">
             <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button>
-            <button className="dx-button dx-button--primary" type="button" disabled={busy || uploading || !canCreate} onClick={() => void createOrder()}>
+            <button className="dx-button dx-button--primary" type="button" disabled={busy || uploading || uploadFailed || !images.length || !canCreate} onClick={() => void createOrder()}>
               {busy ? "正在提交…" : "提交并进入审批"}
             </button>
           </div>
@@ -786,7 +793,7 @@ function OrderListPage({
 
   const remove = async (item: SourcingCaseSummary): Promise<void> => {
     if (!(await confirmInApp(
-      `确认删除外发定价选厂订单 ${item.erpOrderNo} 吗？删除后将从业务入口隐藏并关闭相关待办，历史证据仍会保留。`,
+      sourcingDeleteConfirmation(item),
     ))) return;
     setDeletingCaseId(item.sourcingCaseId);
     setDeleteError("");
@@ -1065,6 +1072,9 @@ function OrderDetailPage({
     success: string,
     resetFactoryChange = false,
   ): Promise<void> => {
+    if (path.endsWith("/ie-quotes") && (!quote.linePrices.length || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)))) {
+      setMessage("请填写各款大于0且最多2位有效小数的IE价格"); return;
+    }
     setBusy(true);
     const requestKey = actionKey.current ?? createClientRequestId();
     actionKey.current = requestKey;
@@ -1144,6 +1154,7 @@ function OrderDetailPage({
   }
 
   const submitManagement = async (): Promise<void> => {
+    if (!decision.linePrices.length || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))) { setMessage("请填写各款大于0且最多2位有效小数的生产价格"); return; }
     const names = processes.map((value) => value.trim());
     if (names.some((value) => !value) || new Set(names).size !== names.length) {
       setMessage("请完整填写工艺及承包范围，不能重复"); return;
@@ -1231,8 +1242,8 @@ function OrderDetailPage({
           {"daxingUnitPrice" in item ? <div className="rework-detail-core-fact"><dt>大兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
           <div className="rework-detail-core-fact"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
           <div className="rework-detail-core-fact"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.unitPrice) : "—"}</dd></div>
-          <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.unitPrice) : "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
+          <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
@@ -1336,14 +1347,15 @@ function OrderDetailPage({
                   const price = quote.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
                   return <label className="sourcing-line-price-row" key={line.position}>
                     <span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</span>
-                    <input aria-label={`${line.styleNo} IE单价`} value={activeBusinessInput === `quote-${line.position}` ? price : businessInputValue(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setQuote({ ...quote, linePrices: quote.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`quote-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} />
-                    <strong>{formatBusinessCurrency(totalPreview(price, line.quantity))}</strong>
+                    <input aria-label={`${line.styleNo} IE单价`} value={activeBusinessInput === `quote-${line.position}` ? price : newSourcingPriceDisplay(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setQuote({ ...quote, linePrices: quote.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`quote-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} />
+                    <strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong>
                   </label>;
                 })}
               </div>
+              {quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)) ? <p role="status">每款IE价格必须大于0且最多2位有效小数；历史价格不会自动截断，请逐款核对后填写。</p> : null}
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(quote.linePrices, item.lineItems))} readOnly /></label>
               <label className="sourcing-form-wide"><span>价格说明</span><input value={quote.quoteReason} maxLength={500} onChange={(event) => { setQuote({ ...quote, quoteReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || quote.linePrices.some((line) => !line.unitPrice)} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
             </div> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
           </Surface> : null}
 
@@ -1357,9 +1369,10 @@ function OrderDetailPage({
                 {item.lineItems.map((line) => {
                   const price = decision.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
                   const iePrice = item.ieQuote?.linePrices.find((entry) => entry.position === line.position)?.unitPrice;
-                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><input aria-label={`${line.styleNo} 生产单价`} value={activeBusinessInput === `decision-${line.position}` ? price : businessInputValue(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setDecision({ ...decision, linePrices: decision.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`decision-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} /><strong>{formatBusinessCurrency(totalPreview(price, line.quantity))}</strong></label>;
+                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><input aria-label={`${line.styleNo} 生产单价`} value={activeBusinessInput === `decision-${line.position}` ? price : newSourcingPriceDisplay(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setDecision({ ...decision, linePrices: decision.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`decision-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} /><strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
                 })}
               </div>
+              {decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)) ? <p role="status">每款生产价格必须大于0且最多2位有效小数；历史价格不会自动截断，请逐款核对后填写。</p> : null}
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(decision.linePrices, item.lineItems))} readOnly /></label>
           <section className="sourcing-process-editor sourcing-form-wide" aria-label="工艺及承包范围">
             <div className="sourcing-process-editor__heading">
@@ -1378,7 +1391,7 @@ function OrderDetailPage({
             </datalist>
           </section>
               <label className="sourcing-form-wide"><span>选厂/调价说明</span><input value={decision.decisionReason} maxLength={500} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || decision.linePrices.some((line) => !line.unitPrice)} onClick={() => void submitManagement()}>提交调价与选厂</button>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
@@ -1438,11 +1451,17 @@ function OrderDetailPage({
             <p>财务在付款、对账时核对系统信息；核对不影响跟单派单和生产。加工厂、单价、数量及总额只读。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
               <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
-              <div><dt>批准单价</dt><dd>{formatBusinessCurrency(item.decision.unitPrice)}</dd></div>
+              <div><dt>批准单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
               <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
               <div><dt>对应合同</dt><dd>{contract?.status === "ready" ? `${contract.contractNumber} · V${contract.contractVersion}` : "合同 PDF 尚未就绪"}</dd></div>
             </dl> : null}
+            {item.decision && item.decision.sourceType !== "factory_change" && item.decision.linePrices.length > 1 ? <div className="sourcing-owner-line-review" aria-label="财务逐款核对明细">
+              {item.decision.linePrices.map((price) => {
+                const line = item.lineItems.find((entry) => entry.position === price.position);
+                return <div className="sourcing-owner-line-review__row" key={price.position}><b>{String(price.position).padStart(2, "0")}</b><span>{line?.styleNo ?? "历史款号缺失"}<small>{line?.color ?? "历史颜色缺失"} · {formatBusinessDecimal(price.quantity)} 件</small></span><span>批准价 <strong>{formatBusinessCurrency(price.unitPrice)}</strong></span><span>批准行金额 <strong>{formatBusinessCurrency(price.totalAmount)}</strong></span></div>;
+              })}
+            </div> : null}
             {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : contract?.status !== "ready" ? <p className="sourcing-finance-waiting">系统合同 PDF 未就绪，暂不能提交财务核对。</p> : canFinance ? <div className="sourcing-finance-confirmation">
               <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
