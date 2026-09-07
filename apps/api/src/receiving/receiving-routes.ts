@@ -231,6 +231,13 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     return user;
   };
 
+  app.get("/receiving/analysis", async (request, reply) => {
+    const user = await readUser(request);
+    const actor = await businessActor(dependencies.root, user, request.id, "receiving:read");
+    reply.header("Cache-Control", "no-store");
+    return dependencies.service.analysis(actor, request.query);
+  });
+
   const creator = async (request: FastifyRequest) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);

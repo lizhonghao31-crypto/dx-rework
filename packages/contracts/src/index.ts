@@ -1546,4 +1546,7 @@ export * from "./sample-disposal.js";
 
 export * from "./sample-import.js";
 
+
 export * from './sample-analysis.js';
+
+export * from "./receiving-analysis.js";

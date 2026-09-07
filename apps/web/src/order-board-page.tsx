@@ -1,3 +1,4 @@
+import { ReceivingAnalysisPanel } from "./receiving-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
@@ -652,6 +653,7 @@ export function OrderBoardPage() {
       </div>
     </div>
 
+    <ReceivingAnalysisPanel startDate={startDate} endDate={endDate} q={debouncedQuery}/>
     <div className="order-board-kpis">
       <KpiInstrument
         label={searchMode ? "搜索结果订单数" : "期间收货订单数"}

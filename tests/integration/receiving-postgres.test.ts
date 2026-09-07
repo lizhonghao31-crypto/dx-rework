@@ -1,3 +1,4 @@
+import "./receiving-analysis-postgres.cases.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
