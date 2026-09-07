@@ -43,3 +43,7 @@
 - 补充后15项定向测试、strict导航/导入模块TypeScript、ESLint和Vite构建通过。第二次Full Gate验证最终修复Head，不再次触发Review。
 
 - 浏览器实际导航回归：从测试路由进入供应商，编辑名称后执行浏览器Back，选择“继续编辑”后URL恢复供应商路径，草稿“返回保护测试”保留；随后点击站内离开链接，再选择“放弃并离开”，实际切换到目标路由。此验证使用同一installInternalNavigation和实际页面，未产生供应商写入。
+
+## 第二次门禁结果与第三次申请准备
+
+Full Gate34109670897在Head642f38a6690154d0b2852ac9e256e0d0f0630f9d失败：lint/typecheck/build通过，完整套件1182项通过、174项跳过，仅tests/unit/v1-prelaunch-pr-06-ui-workspace.test.ts一项仍在App.tsx查找已移至internal-navigation.ts的滚动代码。现将滚动断言指向真实模块，同时增加App委托该模块的断言，不删除既有N03/IE保护要求。必要回归范围增加该测试文件，未修改返工业务源代码。修正后5文件19项定向测试通过；第三次Full Gate须用户明确授权后推送触发，不自动重跑，不再次触发Review。
