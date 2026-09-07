@@ -1,3 +1,4 @@
+import "./production-analysis-postgres.cases.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionExclusionService } from "../../apps/api/src/sourcing/production-exclusion-service.js";
 import { randomUUID } from "node:crypto";
