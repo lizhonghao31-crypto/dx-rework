@@ -1,3 +1,4 @@
+import { SampleAnalysisService } from './sample-analysis-service.js';
 import type { Pool, PoolClient } from "pg";
 import {
   SAMPLE_PAGE_SIZE, projectSampleView, SampleReadQuerySchema, SampleListResponseSchema,
@@ -69,6 +70,8 @@ export function sampleReadFilter(actor: TrustedActorContext, q: SampleReadQuery)
 
 export class SampleReadService {
   constructor(private readonly database: Pool) {}
+
+  async analysis(actor: TrustedActorContext, input: unknown) { return new SampleAnalysisService(this.database).read(actor,input); }
 
   private async snapshot<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.database.connect();
@@ -164,3 +167,4 @@ export class SampleReadService {
     return SampleAmountsSchema.parse(result.rows[0]);
   }
 }
+
