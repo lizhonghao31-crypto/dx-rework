@@ -6,7 +6,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { IdempotencyService, OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
 import { selectProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
 
-const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 403 ? "FORBIDDEN" : status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION_ERROR" : "INVALID_STATE_TRANSITION", message, status); };
+function fail(message: string, status = 409): never { throw new ApplicationError(status === 403 ? "FORBIDDEN" : status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION_ERROR" : "INVALID_STATE_TRANSITION", message, status); }
 export function requireProductionExclusionRoot(actor: TrustedActorContext): void {
   if (!actor.actorRoles.includes("root_superuser")) fail("仅Root可预览和排除测试生产记录", 403);
 }
