@@ -6,7 +6,7 @@ base SHA: 025ee8f9bb9d8f9f0581b1a1559df1e9ffc3eeae
 working branch: feat/uat-v21-pr09-sample-analysis
 task scope: 固定PR09，只读全量采购/持有/处置分析、精确金额、别名及归档分类查询基础。
 
-允许：apps/api/src/samples/sample-analysis-service.ts、sample-read-service.ts、sample-read-routes.ts；packages/contracts/src/sample-analysis.ts、index.ts；apps/api/migrations/0160_sample_analysis.sql；apps/api/src/platform/migration-manifest.json；tests/unit/sample-analysis.test.ts；tests/integration/sample-analysis-postgres.test.ts；本证据、docs/roadmap/uat-ui-data-upgrade-execution-v2.1.md。
+允许：apps/api/src/samples/sample-analysis-service.ts、sample-read-service.ts、sample-read-routes.ts；packages/contracts/src/sample-analysis.ts、index.ts；apps/api/migrations/0160_sample_analysis.sql；apps/api/src/platform/migration-manifest.json；tests/unit/sample-analysis.test.ts；tests/integration/sample-analysis-postgres.cases.ts、tests/integration/sample-read-postgres.test.ts；本证据、docs/roadmap/uat-ui-data-upgrade-execution-v2.1.md。
 
 禁止：旧金额接口口径、样衣状态机/人员角色、原采购价、旧迁移、前端、外发/返工、共享壳、CI/部署配置、生产数据、540件迁移样衣。
 
@@ -24,3 +24,9 @@ PR08合并形成相关新main，已按025ee8f9重新定位基线；PR09已读取
 - 本PR没有UI和导出接口；PR10复用此API，不增加金额权限。未分类归档不静默并入旧总账或认定作废，明确显示数量/金额待核查；显式历史分类才纳入分析采购历史。归档原详情仍按既有Root限制，响应canOpenDetail明确标识。
 - 映射与分类表只提供读取基础，不提供普通用户写入口，不写默认生产映射；后续精确配置必须遵循当时的生产授权。所有名称分组使用稳定ID或明确原文本键，人员名称只作展示。
 - 回滚：revert代码，保留新增映射/分类事实表，不回写或删除原业务数据。
+
+## 最终Head联查补齐
+
+首轮Full34134631315与Quick34134619117通过。接PR10发现指标明细需要事件事实筛选，补齐持有/90天、首次领用/借出/归还、处置/出售/确认赔付的样衣集合筛选；价格/日期无效向已授权用户返回400，无权仍先403。21单测及6项PGlite数据库回归通过。
+
+首轮日志显示新独立分析SQL测试未纳入旧业务链固定文件清单（其余样衣与迁移真实PostgreSQL通过）。因此改为sample-read-postgres.test.ts导入分析cases，沿既有业务链入口执行；不修改或弱化CI。第二轮将核验实际分析用例运行结果。

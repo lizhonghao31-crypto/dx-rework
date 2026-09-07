@@ -5,7 +5,7 @@ import { afterAll,beforeAll,describe,expect,it } from 'vitest';
 import { SampleAnalysisService } from '../../apps/api/src/samples/sample-analysis-service.js';
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)('sample analysis consistent SQL facts',()=>{
- const schema='analysis_'+randomUUID().replaceAll('-',''),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
+ const schema='sample_'+randomUUID().replaceAll('-',''),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const service=new SampleAnalysisService(db),person=randomUUID(),other=randomUUID(),brand=randomUUID(),department=randomUUID();
  const actor=(role='sample_finance')=>({actorId:person,actorRoles:[role],authorizationCapability:'sample:view_basic',authorizationCapabilities:['sample:view_basic','sample:view_finance'],requestId:'analysis-fixture'});
  const ids:string[]=[];
@@ -64,6 +64,15 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  it('protects classification history and restricts it to archived objects',async()=>{
   await expect(db.query("UPDATE sample_analysis_aliases SET reason='rewrite'")).rejects.toMatchObject({code:'55000'});
   await expect(db.query("INSERT INTO sample_analysis_classifications(sample_id,version,classification,reason,recorded_by) VALUES($1,1,'test_invalid','active sample',$2)",[ids[0],person])).rejects.toMatchObject({code:'23514'});
+ });
+ it('drills each custody, holding and receipt metric into the same qualifying sample set',async()=>{
+  expect((await service.read(actor(),{fact:'held'})).totalCount).toBe(18);
+  expect((await service.read(actor(),{fact:'return'})).items.map(r=>r.sampleId)).toEqual([ids[0]]);
+  expect((await service.read(actor(),{fact:'initial_custody'})).totalCount).toBe(1);
+  expect((await service.read(actor(),{fact:'sale',eventFrom:'2026-09-04',eventTo:'2026-09-04'})).summary).toMatchObject({purchaseCount:1,saleReceipts:'10.00'});
+  expect((await service.read(actor(),{fact:'confirmed_loss',eventFrom:'2026-09-04',eventTo:'2026-09-04'})).summary).toMatchObject({purchaseCount:1,confirmedLossCompensation:'7.00'});
+  expect((await service.read(actor(),{fact:'confirmed_loss',eventFrom:'2026-09-03',eventTo:'2026-09-03'})).totalCount).toBe(0);
+  expect((await service.read(actor(),{fact:'disposal',disposalType:'loss'})).totalCount).toBe(2);
  });
  it('provides indexes for purchaser/date, category/date and price filters',async()=>{
   const client=await db.connect();try{await client.query('BEGIN');await client.query('SET LOCAL enable_seqscan=off');

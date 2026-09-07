@@ -11,6 +11,8 @@ export const SampleAnalysisQuerySchema=z.object({
  brandId:z.string().uuid().optional(),departmentId:z.string().uuid().optional(),
  brand:z.string().min(1).max(200).optional(),department:z.string().min(1).max(200).optional(),category:z.string().max(200).optional(),
  minPrice:price.optional(),maxPrice:price.optional(),status:SampleStatusSchema.optional(),
+ fact:z.enum(['held','held_90_days','initial_custody','borrow','return','disposal','sale','confirmed_loss']).optional(),
+ disposalType:z.enum(['sale','gift','scrap','loss']).optional(),
  group:z.enum(['purchaser','brand','department','category','holder','purchaser_brand']).default('purchaser'),
  page:z.coerce.number().int().min(1).max(100000).default(1),groupPage:z.coerce.number().int().min(1).max(100000).default(1),
 }).strict().refine(q=>!q.purchaseFrom||!q.purchaseTo||q.purchaseFrom<=q.purchaseTo,'采购日期范围无效')

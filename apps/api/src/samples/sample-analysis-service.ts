@@ -3,6 +3,7 @@ import { SampleAnalysisQuerySchema, SampleAnalysisResponseSchema, type SampleAna
 import type { TrustedActorContext } from '../tools/repositories.js';
 import { isRootActor } from '../access/business-authority.js';
 import { requireSampleCapability } from './sample-authority.js';
+import { ApplicationError } from '../platform/errors.js';
 
 export function sampleAnalysisFilter(q:SampleAnalysisQuery) {
  const values:unknown[]=[],conditions:string[]=[];
@@ -14,6 +15,16 @@ export function sampleAnalysisFilter(q:SampleAnalysisQuery) {
   ['brand','s.brand','=','text'],['department','s.department','=','text'],['category','s.category','=','text'],
   ['minPrice','f.purchase_price','>=','numeric'],['maxPrice','f.purchase_price','<=','numeric'],['status','s.status','=','text'],
  ] as const){const v=q[key];if(v!==undefined)conditions.push(`${column}${operator}${bind(v)}::${cast}`);}
+ const eventPeriod=(column:string)=>[column+' IS NOT NULL',...(q.eventFrom?[`${column}>=(${bind(q.eventFrom)}::date::timestamp AT TIME ZONE 'Asia/Shanghai')`]:[]),...(q.eventTo?[`${column}<((${bind(q.eventTo)}::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`]:[])].join(' AND ');
+ if(q.fact==='held'||q.fact==='held_90_days'){
+  conditions.push("s.holder_user_id IS NOT NULL AND s.status IN ('borrowed','return_pending','disposal_pending','loss_payment_pending')");
+  if(q.fact==='held_90_days')conditions.push("s.borrowed_at<CURRENT_TIMESTAMP-interval '90 days'");
+ }
+ if(q.fact==='initial_custody'||q.fact==='borrow'||q.fact==='return')conditions.push(`EXISTS(SELECT 1 FROM sample_custody_records c WHERE c.sample_id=s.sample_id AND ${q.fact==='initial_custody'?'c.initial_custody AND ':q.fact==='borrow'?'NOT c.initial_custody AND ':''}${eventPeriod(q.fact==='return'?'c.returned_at':'c.borrowed_at')})`);
+ if(q.disposalType||q.fact==='disposal'||q.fact==='sale'||q.fact==='confirmed_loss'){
+  const type=q.fact==='sale'?'sale':q.fact==='confirmed_loss'?'loss':q.disposalType;
+  conditions.push(`EXISTS(SELECT 1 FROM sample_disposals d WHERE d.sample_id=s.sample_id AND d.approved_at IS NOT NULL${type?` AND d.disposal_type=${bind(type)}`:''} AND ${eventPeriod(q.fact==='confirmed_loss'?'d.paid_at':'d.approved_at')})`);
+ }
  return {where:conditions.length?conditions.join(' AND '):'TRUE',values};
 }
 const held="holder_user_id IS NOT NULL AND status IN ('borrowed','return_pending','disposal_pending','loss_payment_pending')";
@@ -28,7 +39,9 @@ export class SampleAnalysisService {
  async read(actor:TrustedActorContext,input:unknown){
   // Applies before parsing price filters or obtaining a database connection, for every response branch.
   requireSampleCapability(actor,'sample:view_finance');
-  const q=SampleAnalysisQuerySchema.parse(input),filter=sampleAnalysisFilter(q),client=await this.database.connect();
+  const parsed=SampleAnalysisQuerySchema.safeParse(input);
+  if(!parsed.success)throw new ApplicationError('VALIDATION_ERROR','样衣分析筛选条件无效，请检查日期、单价和人员选择',400);
+  const q=parsed.data,filter=sampleAnalysisFilter(q),client=await this.database.connect();
   const base=`WITH matched AS MATERIALIZED (SELECT s.*,f.purchase_price,
    ba.dimension_id AS brand_id,ba.version AS brand_version,COALESCE(ba.display_name,s.brand) AS brand_name,
    da.dimension_id AS department_id,da.version AS department_version,COALESCE(da.display_name,s.department) AS department_name,cl.classification

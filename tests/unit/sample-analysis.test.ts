@@ -27,4 +27,8 @@ describe('sample analysis query and financial boundary',()=>{
   for(const url of ['/samples/analysis','/samples/analysis?minPrice=bad','/samples/analysis?group=purchaser_brand'])expect((await app.inject({url})).statusCode).toBe(403);
   expect(connect).not.toHaveBeenCalled();await app.close();
  });
+ it('returns a validation error to authorized users without touching the database',async()=>{
+  const connect=vi.fn(),app=Fastify();registerSampleReadRoutes(app,{authenticate:async()=>({id,displayName:'合成财务',businessRoles:['sample_finance'],capabilities:['sample:view_basic','sample:view_finance']}),service:new SampleReadService({connect} as unknown as Pool)});
+  expect((await app.inject({url:'/samples/analysis?minPrice=bad'})).statusCode).toBe(400);expect(connect).not.toHaveBeenCalled();await app.close();
+ });
 });
