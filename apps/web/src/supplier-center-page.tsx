@@ -1,3 +1,4 @@
+import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
@@ -432,6 +433,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
                     {contractVisible ? <dl><div><dt>合同主体</dt><dd>{profile.contractEntityName || "—"}</dd></div><div><dt>乙方代表</dt><dd>{profile.partyBRepresentative || "—"}</dd></div><div><dt>收款人</dt><dd>{profile.payeeName || "—"}</dd></div><div><dt>收款账号</dt><dd className="supplier-bank-account">{profile.bankAccount || "—"}</dd></div><div className="is-wide"><dt>开户行</dt><dd>{profile.bankName || "—"}</dd></div></dl> : <p className="supplier-profile__restricted">当前账号无权查看合同与收款字段。</p>}
                   </section>
                   <section><h3>工艺与产能</h3><dl><div className="is-wide"><dt>可承接工艺</dt><dd>{profile.supportedCrafts.length ? profile.supportedCrafts.join("、") : "尚未维护"}</dd></div><div><dt>常规日产能</dt><dd>{profile.dailyCapacity === null ? "尚未维护" : `${profile.dailyCapacity.toLocaleString("zh-CN")} 件 / 日`}</dd></div></dl></section>
+                  <ProductionAnalysisPanel key={profile.supplierId} supplierId={profile.supplierId} view="supplier"/>
                   <section><h3>变更历史</h3><ol className="supplier-history">{history.map((version) => <li key={version.version}><div><b>版本 {version.version}</b><StatusBadge tone={version.active ? "success" : "warning"}>{version.active ? "启用" : "停用"}</StatusBadge></div><p>{version.changeReason}</p><small>{new Date(version.changedAt).toLocaleString("zh-CN")} · 修改人 {version.changedBy}</small></li>)}</ol></section>
                 </div>
               )}

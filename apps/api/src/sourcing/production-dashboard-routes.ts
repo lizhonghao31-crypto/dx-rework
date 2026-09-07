@@ -13,6 +13,11 @@ export function registerProductionDashboardRoutes(app:FastifyInstance,dependenci
     const token=request.headers.cookie?.split(";").map(p=>p.trim()).find(p=>p.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
     return businessActor(dependencies.root,await dependencies.authenticate(token),request.id,"production-reporting");
   };
+  app.get("/production-dashboard/analysis",async(request,reply)=>{
+    const trusted=await actor(request);
+    reply.header("Cache-Control","no-store");
+    return dependencies.service.analysis(trusted,request.query);
+  });
   app.get("/production-dashboard",async request=>{
     const query=ProductionDashboardQuerySchema.safeParse(request.query);
     if(!query.success)throw new ApplicationError("VALIDATION_ERROR","看板筛选信息无效",400);

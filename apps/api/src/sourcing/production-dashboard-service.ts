@@ -1,3 +1,5 @@
+import { ProductionAnalysisQuerySchema } from "@dx-rework/contracts";
+import { readProductionAnalysis } from "./production-analysis.js";
 import { productionNotExcluded } from "./production-visibility.js";
 import type { Pool, PoolClient } from "pg";
 import { calculateProductionProgress, productionProgressRank, shanghaiDay, type ProductionProgressFacts } from "@dx-rework/domain";
@@ -55,6 +57,14 @@ export class ProductionDashboardService {
       const result=await work(client,(this.clock?.()??timestamp.rows[0]!.as_of).toISOString());
       await client.query("COMMIT");return result;
     }catch(error){await client.query("ROLLBACK").catch(()=>undefined);throw error;}finally{client.release();}
+  }
+  async analysis(actor:TrustedActorContext,input:unknown) {
+    return this.read(actor,async(client,asOf)=>{
+      const parsed=ProductionAnalysisQuerySchema.safeParse(input);
+      if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","生产分析筛选无效",400);
+      const rows=await client.query<ProductionRow>(`${selectProduction} WHERE ${productionVisibility}`,productionVisibilityArgs(actor));
+      return readProductionAnalysis(client,rows.rows.map(toOrder),actor,asOf,parsed.data);
+    });
   }
   async list(actor:TrustedActorContext,input:ProductionDashboardQuery={}) {
     const parsed=ProductionDashboardQuerySchema.safeParse(input);

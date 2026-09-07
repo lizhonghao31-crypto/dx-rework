@@ -1,3 +1,4 @@
+import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
@@ -83,6 +84,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}
     {!productionOrderId?<>
       <ProductionPilotControls/>
+      <ProductionAnalysisPanel/>
       {data?<Surface className="sourcing-list-card"><div className="production-dashboard__toolbar" aria-label="生产运行状态">
         <strong>{data.counts.attention?`${number(data.counts.attention)} 单需关注`:"当前筛选无进度预警"}</strong><span>生产中 {number(data.counts.inProduction)}</span><span>生产完成 {number(data.counts.completed)}</span><span>已发货 {number(data.counts.shipped)}</span>
       </div></Surface>:null}
