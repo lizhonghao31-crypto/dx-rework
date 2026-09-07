@@ -13,3 +13,13 @@ export function productionEventText(event:ProductionDashboardEvent):string {
   if(event.kind==="progress_changed")return `刷新发现：${event.previousState?progressLabels[event.previousState]:""} → ${event.progressState==="stale"?`${event.daysWithoutUpdate}天没更新`:event.progressState?progressLabels[event.progressState]:""}`;
   return ({report:"新增生产",correct:"Root修正记录为",complete:"生产完成",ship:"已发货"})[event.kind];
 }
+
+
+// Animation never changes server-supplied quantities, progress or risk.
+export function canAnimateProductionProgress(item:ProductionDashboardItem,motion:boolean):boolean {
+  return motion&&item.order.status==='in_production'&&!item.progress.frozen&&!!item.progress.firstReportedOn&&item.progress.productionProgress>0&&item.progress.progressState!=='stale'&&item.progress.progressState!=='pending_first_report'&&item.progress.progressState!=='completed';
+}
+export function relativeProductionTime(value:string,now:number):string {
+  const minutes=Math.max(0,Math.floor((now-new Date(value).getTime())/60000));
+  return minutes<1?'不到1分钟':minutes<60?`${minutes}分钟`:minutes<1440?`${Math.floor(minutes/60)}小时${minutes%60?`${minutes%60}分钟`:''}`:`${Math.floor(minutes/1440)}天`;
+}

@@ -11,7 +11,13 @@ describe("web refresh policy", () => {
         (entry.endsWith(".ts") || entry.endsWith(".tsx"))
         && entry !== indicatorRefreshPath)
       .map((entry) => readFile(`${root}/${entry}`, "utf8")));
-    const source = queueSources.join("\n");
+    // PR08 permits only this display-only effect. Removing this exact reviewed block
+    // leaves every other visibility handler subject to the original policy below.
+    const displayClock = 'useEffect(()=>{const update=()=>{setVisible(!document.hidden);setNow(Date.now());};document.addEventListener("visibilitychange",update);const timer=setInterval(()=>{if(!document.hidden)setNow(Date.now());},60000);return()=>{document.removeEventListener("visibilitychange",update);clearInterval(timer);};},[]);';
+    const dashboard = await readFile(`${root}/production-dashboard-page.tsx`, "utf8");
+    expect(dashboard).toContain(displayClock);
+    expect(displayClock).not.toMatch(/fetch|load\(|request\(|dispatchEvent|location/);
+    const source = queueSources.join("\n").replace(displayClock, "");
     expect(source).not.toContain("window.setInterval");
     expect(source).not.toContain('window.addEventListener("focus"');
     expect(source).not.toContain('document.addEventListener("visibilitychange"');
@@ -25,3 +31,4 @@ describe("web refresh policy", () => {
     expect(indicatorRefresh).not.toContain("todos/mine");
   });
 });
+
