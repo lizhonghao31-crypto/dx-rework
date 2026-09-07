@@ -77,3 +77,8 @@ GitHub读文件、读取提交、PR和CI元数据以及Git对象写入通道已�
 UAT-03多款价转厂P1延期，未修复、不关闭入口。本轮不能声称四模块零P1。
 
 本阶段没有生产写入，没有创建测试订单或样衣。遗留生产单954fa950-b31f-4138-9838-4d3fb06ad8df留给PR05；执行前核对精确对象与关联影响。不得按TEST名称扫库或操作迁移样衣。
+
+### PR01 门禁修复（#414）
+
+- 当前第一次 Head：344e3c7ccd846a1f2066cf3d5c6a8a8045a8e240；Quick Gate 通过。Full Gate 34102797390 的 lint/typecheck/build 通过，测试仅两项旧纯文本标题断言失败，其余1161项通过；未将条件跳过的数据库测试计为通过。
+- 追加精确允许路径 tests/unit/business-facing-workflow-ui.test.ts、tests/unit/platform-permission-navigation-hub.test.ts，仅使标题断言包含已批准图标，所有业务只读、菜单顺序、Root和权限断言保留。将集中提交后运行第二次 Full Gate，不 rerun 旧失败 Head。

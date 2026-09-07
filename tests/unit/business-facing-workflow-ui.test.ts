@@ -28,7 +28,7 @@ describe("business-facing workflow UI", () => {
       read("apps/web/src/wages/wage-period-list.tsx"),
       read("apps/web/src/wages/wage-period-detail.tsx"),
     ]);
-    expect(list).toContain("<h1>工资管理</h1>");
+    expect(list).toContain('<h1><NavigationIcon route="/ui/wages" size="title" />工资管理</h1>');
     expect(list).toContain("导出当前工资明细");
     expect(detail).toContain("<h1>返工工资对数明细</h1>");
     expect(detail).toContain('item.pricingUnitSnapshot === "piece" ? "件" : "小时"');

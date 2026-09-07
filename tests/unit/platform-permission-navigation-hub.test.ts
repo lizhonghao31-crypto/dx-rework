@@ -67,7 +67,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain("currentUser && canAccessSupplierCenter(currentUser)");
     expect(components).toContain('name: "供应商目录"');
     expect(components).toContain('name: "资料维护"');
-    expect(employeeAccess).toContain('<h1>人员与权限</h1>');
+    expect(employeeAccess).toContain('<h1><NavigationIcon route="/ui/employee-access" size="title" />人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
     expect(employeeAccess).toContain("employee.isRoot");
     expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 平台管理）");
