@@ -5,7 +5,7 @@ import {
   RequestSourcingFactoryChangeSchema, type SourcingCaseSummary,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { isNewSourcingPrice, newSourcingPriceDisplay, sourcingPriceSummary, sourcingDeleteConfirmation } from "../../apps/web/src/sourcing-price-presentation.js";
+import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation } from "../../apps/web/src/sourcing-price-presentation.js";
 
 describe("ordinary sourcing price precision and readable facts", () => {
   it("accepts two effective decimals including storage zeroes, without silently rounding", () => {
@@ -33,6 +33,9 @@ describe("ordinary sourcing price precision and readable facts", () => {
     expect(calculateSourcingLinesTotalExact([{ unitPrice: "12.34", quantity: 120 }, { unitPrice: "9.5", quantity: 3 }])).toBe("1509.30");
     expect(formatBusinessCurrency("1509.30")).toBe("¥1,509.3");
     expect(formatBusinessDecimal(54550)).toBe("54,550");
+    expect(historicalSourcingPrice("1234.5678")).toBe("¥1,234.5678");
+    expect(historicalSourcingPrice("1.2300")).toBe("¥1.23");
+    expect(sourcingPriceSummary({unitPrice:"1.2345",linePrices:[{unitPrice:"1.2345"}]})).toBe("¥1.2345");
   });
 
   it("never presents the first line as the price of a multi-line order", () => {
@@ -48,3 +51,4 @@ describe("ordinary sourcing price precision and readable facts", () => {
     for (const fact of ["K001 / 蓝", "合成加工厂", "1,200", "历史证据保留", "关联生产单不会自动", "stable-case-id"]) expect(message).toContain(fact);
   });
 });
+
