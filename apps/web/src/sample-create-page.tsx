@@ -24,12 +24,12 @@ export function SampleCreationLinks() {
 
 type FileReference = { attachmentId: string; filename: string };
 export function SampleImageUpload({ label, value, onChange, disabled, onBusy, onPending }: {
-  label: string; value: FileReference[]; onChange(value: FileReference[]): void; disabled: boolean; onBusy(busy: boolean): void; onPending?(count: number): void;
+  label: string; value: FileReference[]; onChange(value: FileReference[]): void; disabled: boolean; onBusy(busy: boolean): void; onPending(count: number): void;
 }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const inFlight = useRef(false);
-  const changePending = (files: File[]) => { setPendingFiles(files); onPending?.(files.length); };
+  const changePending = (files: File[]) => { setPendingFiles(files); onPending(files.length); };
   const upload = async (files: File[]) => {
     if (!files.length || disabled || inFlight.current) return;
     if (value.length + files.length > 20) { setError("最多上传 20 张图片"); return; }
@@ -137,3 +137,4 @@ export function SampleAttachments({ sampleId }: { sampleId: string }) {
   useEffect(() => { const abort = new AbortController(); void request(`samples/${sampleId}/attachments`,SampleAttachmentListSchema,{signal:abort.signal}).then(data => { if (!abort.signal.aborted) setFiles(data.attachments); }).catch(e => { if (!abort.signal.aborted) setError(sampleErrorMessage(e, "附件读取失败")); }); return () => abort.abort(); },[sampleId]);
   return <Surface className="rework-v2-core"><details><summary>样衣图片与凭证</summary>{error ? <p role="alert">{error}</p> : null}{!files.length && !error ? <p>暂无可查看的附件</p> : null}<div className="rework-v2-image-grid">{files.map(file => <article key={`${file.attachmentId}:${file.purpose}`}><a href={apiUrl(`samples/${sampleId}/attachments/${file.attachmentId}/download`)} target="_blank" rel="noreferrer"><img loading="lazy" src={apiUrl(`samples/${sampleId}/attachments/${file.attachmentId}/download`)} alt={`${file.purpose === "purchase_receipt" ? "采购小票" : "样衣图片"}：${file.filename}`} /></a></article>)}</div></details></Surface>;
 }
+

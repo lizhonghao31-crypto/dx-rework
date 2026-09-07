@@ -29,3 +29,11 @@
 - 浏览器通过真实 SampleImageUpload 处理两张本地生成 PNG：第二张确认模拟503后第一张保留，重试后共确认2张、申请3次；移除成功文件后数量正确；待重试时提交禁用。桌面/390px手机截图保留于 pr02-upload/，手机页面宽度390、scrollWidth390。
 - 浏览器预览为离线模拟：Shell、HTTP响应、签名元数据均隔离；HTTP预览环境无安全上下文，哈希仅在预览适配器中替代为固定合成摘要。生产哈希函数未改；真实 OSS、服务端内容校验及完整建档/借还处置未实测。首次浏览器校验因该预览环境限制失败，未计为通过。
 - 可复现离线控件命令：node scripts/sample-upload-preview.mjs <输出目录>。控件样例不是业务UI重新设计或线上UAT证据。
+
+## 唯一一次 Review 与集中修复
+
+- a8ce8bf60a91e313118a24ef2af9f130e40d01ad 的 Full Gate 34105108294 通过；Quick Gate 因 full-gate 标签按工作流条件跳过。
+- Review 5130319945 / P1 comment 3948364540 指出共享上传器调用方遗漏未完成队列。修复范围因此增加 sample-workflow-page.tsx、sample-disposal-page.tsx、tests/unit/sample-upload-consumer-gates.test.ts，属于本次上传改动的必要回归修复。
+- onPending 改为必填契约，覆盖全部 7 处生产调用；归还、批量归还、处置凭证、遗失结案、财务更正的按钮和提交处理同时检查未完成队列。上传器自身仍可重试/移除，避免被父级门禁锁死；处置页分别记录凭证和财务小票队列，并累计活动上传器。
+- 集中修复后定向 Vitest 4 文件 12 项、ESLint 通过；新增 AST 检查所有生产调用必须传递 pending 状态，并检查消费端提交保护。此前控件桌面/手机证据仍适用；不宣称完整线上借还处置验收。
+- 将执行本 PR 第 2 次 Full Gate；不会二次触发 Codex Review。
