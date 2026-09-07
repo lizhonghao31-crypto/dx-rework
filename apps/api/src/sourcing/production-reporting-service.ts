@@ -1,3 +1,6 @@
+import { ProductionExclusionService } from "./production-exclusion-service.js";
+import { productionNotExcluded } from "./production-visibility.js";
+import type { ProductionExclusionInput } from "@dx-rework/contracts";
 import type { ProductionClosureService } from "./production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -26,12 +29,14 @@ const dateCheck = (date: string) => { if (date > today()) fail("业务日期不�
 const asIso = (date: string | Date) => new Date(date).toISOString();
 type Query = Pick<PoolClient,"query">;
 // Parent case deletion does not hide production. Scope uses the frozen supplier.
-const visible = `($1::boolean OR ($2::boolean AND sourcing_production_reporter_allowed($3,production.production_order_id))
+const visible = `${productionNotExcluded} AND ($1::boolean OR ($2::boolean AND sourcing_production_reporter_allowed($3,production.production_order_id))
   OR ($4::boolean AND source_case.created_by=$3))`;
 const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
 
 export class ProductionReportingService {
   constructor(private readonly database: Pool, private readonly idempotency = new IdempotencyService(), private readonly events = new OperationEventRepository(), private readonly closure?: Pick<ProductionClosureService,"refreshOrder">) {}
+  previewExclusion(actor: TrustedActorContext, id: string) { return new ProductionExclusionService(this.database, this.idempotency, this.events).preview(actor, id); }
+  excludeProduction(actor: TrustedActorContext, id: string, input: ProductionExclusionInput, key: string) { return new ProductionExclusionService(this.database, this.idempotency, this.events).exclude(actor, id, input, key); }
   private async order(client: Query, actor: TrustedActorContext, id: string) {
     if (!canRead(actor)) fail("无权查看生产数据",403);
     const result = await client.query<ProductionRow>(`${selectProduction} WHERE ${visible} AND production.production_order_id=$5`, [...visibility(actor),id]);

@@ -1,3 +1,4 @@
+import { ProductionExclusionInputSchema, ProductionExclusionPreviewSchema } from "@dx-rework/contracts";
 import { z } from "zod";
 import { ProductionReportingDetailSchema, ProductionReportingListSchema, ProductionScopeDirectorySchema,
   ProductionReportInputSchema, ProductionCorrectionInputSchema, ProductionExecutionInputSchema, ProductionScopeInputSchema } from "@dx-rework/contracts";
@@ -23,6 +24,11 @@ export function registerProductionReportingRoutes(app:FastifyInstance,dependenci
     return businessActor(dependencies.root,user,request.id,"production-reporting");
   };
   const service=dependencies.service;
+  app.get<{Params:{id:string}}>("/production-reporting/:id/exclusion",async request=>ProductionExclusionPreviewSchema.parse(await service.previewExclusion(await actor(request),parse(Id,request.params.id))));
+  app.post<{Params:{id:string}}>("/production-reporting/:id/exclusion",async request=>{
+    const result=await service.excludeProduction(await actor(request),parse(Id,request.params.id),parse(ProductionExclusionInputSchema,request.body),key(request));
+    return ProductionExclusionPreviewSchema.parse(result.value);
+  });
   app.get("/production-reporting",async request=>{
     const query=parse(z.object({page:z.coerce.number().int().min(1).max(100000).optional(),supplierId:Id.optional(),q:z.string().max(100).optional(),status:z.enum(["in_production","production_completed","shipped"]).optional()}).strict(),request.query);
     return ProductionReportingListSchema.parse(await service.list(await actor(request),query));
