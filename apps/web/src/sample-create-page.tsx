@@ -9,6 +9,7 @@ import { uploadSampleImage } from "./sample-image-upload.js";
 import { createClientRequestId } from "./client-request-id.js";
 import "./rework-v2-form.css";
 import "./search-select.css";
+import "./sample-operations.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 async function request<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
@@ -19,7 +20,7 @@ export function SampleCreationLinks() {
   const [state, setState] = useState<z.infer<typeof availabilitySchema> | null>(null);
   useEffect(() => { const abort = new AbortController(); void request("samples/creation-availability", availabilitySchema, { signal: abort.signal }).then(value => { if (!abort.signal.aborted) setState(value); }).catch(() => {}); return () => abort.abort(); }, []);
   if (!state?.enabled) return null;
-  return <div className="rework-v2-actions">{state.canCreate ? <a href={pageUrl("ui/samples/create")}>新增样衣</a> : null}{state.canBatchCreate ? <a href={pageUrl("ui/samples/batch-create")}>批量录入</a> : null}</div>;
+  return <div className="rework-v2-actions sample-create-links">{state.canCreate ? <a href={pageUrl("ui/samples/create")}>新增样衣</a> : null}{state.canBatchCreate ? <a href={pageUrl("ui/samples/batch-create")}>批量录入</a> : null}</div>;
 }
 
 type FileReference = { attachmentId: string; filename: string };
@@ -108,7 +109,7 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
     } catch (e) { setError(sampleErrorMessage(e, "提交失败")); }
     finally { setBusy(false); }
   };
-  return <Shell active="在管样衣" mobileNavigation="transaction"><main className="rework-v2-page">
+  return <Shell active="在管样衣" mobileNavigation="transaction"><main className="rework-v2-page sample-ops sample-form-page">
     <Header title={batch ? "批量录入样衣" : "新增样衣"} subtitle="提交后直接记为借出中，生成首次领用记录。" badge="样衣管理" />
     <a href={pageUrl("ui/samples")}>返回在管样衣</a>
     {availability && !availability.enabled ? <p role="status">样衣登记尚未开放</p> : null}
@@ -128,7 +129,7 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
       </div><SampleImageUpload label="上传样衣图片" value={item.images} onChange={images => update(item.key,{images})} disabled={disabled} onBusy={onUploadBusy} onPending={count => onPendingUpload(item.key, count)} /></details>
     </Surface>)}
     {batch ? <Button disabled={disabled || items.length >= 50} onClick={() => setItems(current => [...current,empty()])}>增加一件样衣</Button> : null}
-    <div className="rework-v2-actions"><Button variant="primary" disabled={disabled || hasPendingUploads || !receipts.length || !(batch ? availability?.canBatchCreate : availability?.canCreate)} onClick={() => { void submit(); }}>{busy ? "提交中…" : "提交建档并首次领用"}</Button></div>
+    <div className="rework-v2-actions sample-form-footer"><Button variant="primary" disabled={disabled || hasPendingUploads || !receipts.length || !(batch ? availability?.canBatchCreate : availability?.canCreate)} onClick={() => { void submit(); }}>{busy ? "提交中…" : "提交建档并首次领用"}</Button></div>
   </main></Shell>;
 }
 

@@ -30,7 +30,7 @@ export function SampleDisposalActions({item}:{item:SampleView}){
  };
  if(!data)return error?<p role="alert">{error}</p>:null;if(!data.enabled)return null;
  const disabled=action.busy||uploading||hasPendingUploads,proofAttachmentIds=files.map(f=>f.attachmentId),moneyRequired=['sale','loss'].includes(data.pending?.type??'');
- return <Surface className="rework-v2-core"><h2>处置与资料维护</h2>{error||action.error?<p role="alert">{error||action.error}</p>:null}
+ return <Surface className="rework-v2-core sample-action-section"><h2>处置与资料维护</h2>{error||action.error?<p role="alert">{error||action.error}</p>:null}
   {data.pending?<p>待处理处置：{({sale:'出售',gift:'赠送',scrap:'报废',loss:'遗失'})[data.pending.type]}{data.pending.recipient?` · 接收对象：${data.pending.recipient}`:''}{data.pending.responsibleName?` · 责任人：${data.pending.responsibleName}`:''}{data.pending.reason?` · ${data.pending.reason}`:''}</p>:null}
   {data.canRequest?<details><summary>发起处置</summary><div className="rework-v2-grid"><label>处置类型<select value={type} disabled={disabled} onChange={e=>{setType(e.target.value);setFiles([]);}}>{item.status==='in_stock'?<><option value="sale">出售</option><option value="gift">赠送</option></>:null}<option value="scrap">报废</option>{item.status==='borrowed'?<option value="loss">遗失</option>:null}</select></label>
    {['sale','gift'].includes(type)?<label>接收对象<input value={recipient} disabled={disabled} onChange={e=>setRecipient(e.target.value)}/></label>:<label>原因说明<input value={reason} disabled={disabled} onChange={e=>setReason(e.target.value)}/></label>}

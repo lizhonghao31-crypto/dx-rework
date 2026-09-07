@@ -12,6 +12,8 @@ import { ListPagination } from "./list-pagination.js";
 import { createWebUrls } from "../url-contract.js";
 import "./rework-v2-form.css";
 import "./sample-workspace.css";
+import "./sample-operations.css";
+import { SampleCatalogRow, SampleThumbnail, sampleDisplayMoney, type SampleSelection } from "./sample-catalog.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 import { SampleWorkflowActions, SampleBatchReturn } from "./sample-workflow-page.js";
@@ -50,19 +52,7 @@ function SampleBadge({ status }: { status: SampleStatus }) {
 }
 
 export function SampleCard({ item }: { item: SampleView }) {
-  return <Surface className="rework-v2-core sample-card">
-    <a className="sample-card__link" href={pageUrl(`ui/samples/${item.sampleId}`)}>
-      <div className="rework-v2-section-heading"><div><h2>{item.sampleCode}</h2><p>{item.brand} · {item.styleName}{item.styleNo ? ` · ${item.styleNo}` : ""}</p></div><SampleBadge status={item.status} /></div>
-      <dl className="sample-facts">
-        <div><dt>当前持有人</dt><dd>{item.holderName ?? "—"}</dd></div>
-        <div><dt>部门</dt><dd>{item.department}</dd></div>
-        <div><dt>用途</dt><dd>{item.purpose ?? "—"}</dd></div>
-        <div><dt>借出时间</dt><dd>{time(item.borrowedAt)}</dd></div>
-        <div><dt>当前位置</dt><dd>{item.storageLocation ?? (item.holderName ? `由${item.holderName}保管` : "—")}</dd></div>
-        {item.finance ? <div><dt>采购价</dt><dd>¥{item.finance.purchasePrice}</dd></div> : null}
-      </dl>
-    </a>
-  </Surface>;
+  return <SampleCatalogRow item={item} badge={<SampleBadge status={item.status} />} />;
 }
 
 export function SampleHistory({ sampleId, kind }: { sampleId: string; kind: "custody" | "disposal" | "audit" }) {
@@ -97,18 +87,20 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
   const item = detail.item;
   return <>
     <a href={pageUrl("ui/samples")}>返回在管样衣</a>
-    <Surface className="rework-v2-core">
-      <div className="rework-v2-section-heading"><h2>{item.sampleCode} · {item.styleName}</h2><SampleBadge status={item.status} /></div>
-      <dl className="sample-facts">
+    <header className="sample-detail-heading"><div><h2>{item.styleName}</h2><p>{item.sampleCode} · {item.styleNo}</p></div><SampleBadge status={item.status} /></header>
+    <div className="sample-detail-grid"><Surface className="rework-v2-core"><div className="sample-detail-photo"><SampleThumbnail key={`${item.sampleId}:${item.version}`} sampleId={item.sampleId} large /></div></Surface><Surface className="rework-v2-core"><h2>样衣资料</h2>
+      <dl className="sample-info">
         {Object.entries({ 品牌: item.brand, 款号: item.styleNo, 类别: item.category, 颜色: item.color, 尺码: item.size,
           部门: item.department, 采购人: item.purchaserName, 采购日期: item.purchaseDate, 当前持有人: item.holderName,
           用途: item.purpose, 借出时间: time(item.borrowedAt), 当前位置: item.storageLocation ?? (item.holderName ? `由${item.holderName}保管` : null), 备注: item.remark,
         }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "—"}</dd></div>)}
-        {item.finance ? <div><dt>采购价</dt><dd>¥{item.finance.purchasePrice}</dd></div> : null}
+        {item.finance ? <div><dt>采购价</dt><dd>¥{sampleDisplayMoney(item.finance.purchasePrice)}</dd></div> : null}
       </dl>
-    </Surface>
+    </Surface></div>
+    <section id="sample-current-actions" aria-label="当前样衣操作">
     <SampleWorkflowActions key={`workflow-${item.version}`} sampleId={item.sampleId} />
     <SampleDisposalActions key={`disposal-${item.version}`} item={item} />
+    </section>
     {item.finance?<SampleFinancialHistory key={`finance-${item.version}`} sampleId={item.sampleId}/>:null}
     <SampleAttachments key={`attachments-${item.version}`} sampleId={item.sampleId} />
     <Surface className="rework-v2-core"><details open><summary>借还记录</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="custody" /></details></Surface>
@@ -120,6 +112,7 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
 export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: SamplePageMode; sampleId?: string | undefined }) {
   const [data, setData] = useState<SampleListResponse | null>(null), [options, setOptions] = useState<SampleOptions | null>(null);
   const [detail, setDetail] = useState<SampleDetailResponse | null>(null), [amounts, setAmounts] = useState<SampleAmounts | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState("borrowed"), [filters, setFilters] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1), [busy, setBusy] = useState(true), [error, setError] = useState(""), [retry, setRetry] = useState(0);
   useEffect(() => { const refresh = () => setRetry(value => value + 1); window.addEventListener("sample-updated", refresh); return () => window.removeEventListener("sample-updated", refresh); }, []);
@@ -153,12 +146,12 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
     const timer = setTimeout(() => { void load(); }, filters.search ? 250 : 0);
     return () => { clearTimeout(timer); abort.abort(); };
   }, [mode, sampleId, view, filters, page, retry]);
-  return <Shell active={mode === "detail" ? "在管样衣" : titles[mode]}><main className="rework-v2-page sample-workspace">
+  const renderRows = (selection?: SampleSelection) => <div className="sample-rows" aria-busy={busy}>{data?.items.map(item => <SampleCatalogRow item={item} badge={<SampleBadge status={item.status} />} selection={selection} key={item.sampleId} />)}</div>;
+  return <Shell active={mode === "detail" ? "在管样衣" : titles[mode]}><main className={`rework-v2-page sample-workspace${mode === "amounts" ? "" : " sample-ops"}`}>
     <Header title={titles[mode]} subtitle={mode === "pending" ? "查看轮到你处理或与你相关的样衣事项。" : "查看样衣资料、实际保管状态与历史记录。"} badge="样衣管理" />
     {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
     {busy ? <p role="status">正在加载样衣资料…</p> : null}
-    {mode === "managed" ? <><SampleCreationLinks /><SampleArchiveList /></> : null}
-    {mode === "managed" && data ? <SampleBatchReturn items={data.items} /> : null}
+    {mode === "managed" ? <SampleCreationLinks /> : null}
     {mode === "detail" && detail && detail.item.sampleId.toLowerCase() === sampleId?.toLowerCase() ? <SampleDetail key={detail.item.sampleId} detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">
       {Object.entries({ 累计采购金额: amounts.purchaseTotal, 当前在管原值: amounts.managedOriginalValue,
@@ -166,13 +159,14 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
       }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>¥{value}</dd></div>)}
     </dl><p>遗失待赔付不计入已收赔偿；已归档样衣不参与统计。</p></Surface> : null}
     {["managed", "pending", "disposed"].includes(mode) ? <>
-      {data ? <Surface className="rework-v2-core"><div className="sample-toolbar"><span>借出中 {data.counts.borrowed}</span><span>在库 {data.counts.inStock}</span><span>待确认 {data.counts.pending}</span></div></Surface> : null}
-      <Surface className="rework-v2-core">
-        {mode === "managed" ? <div className="sample-toolbar" aria-label="在管状态">
+      {data ? <div className="sample-counts"><span>借出中 <b>{data.counts.borrowed}</b></span><span>在库 <b>{data.counts.inStock}</b></span><span>待确认 <b>{data.counts.pending}</b></span></div> : null}
+      <Surface className="rework-v2-core sample-directory">
+        {mode === "managed" ? <div className="sample-status-filter" aria-label="在管状态">
           {[["borrowed", "借出中"], ["in_stock", "在库"], ["managed", "全部在管"]].map(([value, label]) => <Button key={value} aria-pressed={view === value} variant={view === value ? "primary" : "secondary"} onClick={() => { setView(value!); setPage(1); filter("status", ""); }}>{label}</Button>)}
         </div> : null}
-        <div className="rework-v2-grid">
-          <label>样衣编号 / 款号<input aria-label="样衣编号或款号" placeholder="输入编号或款号的开头" maxLength={100} value={filters.search ?? ""} onChange={e => filter("search", e.target.value)} /></label>
+        <div className="sample-filters">
+          <label className="sample-search">样衣编号 / 款号<input aria-label="样衣编号或款号" placeholder="输入编号或款号的开头" maxLength={100} value={filters.search ?? ""} onChange={e => filter("search", e.target.value)} /></label>
+          <div className="sample-extra-filters"><button type="button" className="sample-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}>持有人 / 品牌 / 部门 / 年份筛选{Object.entries(filters).some(([key,value]) => key !== "search" && value) ? "（已设置）" : ""}</button><div className={filtersOpen ? "is-open" : ""}>
           <label>采购年份<select className="rework-v2-control" value={filters.purchaseYear ?? ""} onChange={e => filter("purchaseYear", e.target.value)}><option value="">全部年份</option>{options?.purchaseYears.map(year => <option key={year}>{year}</option>)}</select></label>
           <label>{mode === "disposed" ? "相关人员" : "当前持有人"}<select className="rework-v2-control" value={filters[mode === "disposed" ? "personUserId" : "holderUserId"] ?? ""} onChange={e => filter(mode === "disposed" ? "personUserId" : "holderUserId", e.target.value)}><option value="">全部人员</option>{options?.people.map(person => <option value={person.userId} key={person.userId}>{person.name}</option>)}</select></label>
           <label>品牌<select className="rework-v2-control" value={filters.brand ?? ""} onChange={e => filter("brand", e.target.value)}><option value="">全部品牌</option>{options?.brands.map(brand => <option key={brand}>{brand}</option>)}</select></label>
@@ -183,11 +177,14 @@ export function SampleWorkspacePage({ mode = "managed", sampleId }: { mode?: Sam
             <label>处置结束日期<input type="date" value={filters.disposedTo ?? ""} onChange={e => filter("disposedTo", e.target.value)} /></label>
           </> : null}
           {mode === "pending" || (mode === "managed" && view === "managed") ? <label>状态<select className="rework-v2-control" value={filters.status ?? ""} onChange={e => filter("status", e.target.value)}><option value="">全部状态</option>{Object.entries(sampleStatusLabels).filter(([value]) => mode === "pending" ? value.endsWith("pending") : ["borrowed", "in_stock", "borrow_pending", "return_pending", "disposal_pending", "loss_payment_pending"].includes(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
+          </div></div>
         </div>
+        <div className="sample-table-head" aria-hidden="true"><span>选择</span><span>样衣 / 品牌类别</span><span>采购 / 持有人</span><span>状态</span><span>操作</span></div>
+        {mode === "managed" && data ? <SampleBatchReturn key={`${view}:${page}:${JSON.stringify(filters)}:${retry}`} items={data.items} loading={busy} selectionScope={`${view}:${page}:${JSON.stringify(filters)}:${retry}`} renderRows={renderRows} /> : renderRows()}
       </Surface>
-      <div className="sample-list" aria-busy={busy}>{data?.items.map(item => <SampleCard item={item} key={item.sampleId} />)}</div>
       {data && !data.items.length ? <p>{data.totalCount ? "本页暂无样衣，请返回第一页。" : "当前筛选暂无样衣"}</p> : null}
       {data ? <><p>共 {data.totalCount} 件</p><ListPagination page={data.page} totalPages={Math.max(1, Math.ceil(data.totalCount / 15))} busy={busy} onPageChange={setPage} ariaLabel="样衣列表分页" /></> : null}
+      {mode === "managed" ? <SampleArchiveList /> : null}
     </> : null}
   </main></Shell>;
 }
