@@ -148,11 +148,10 @@ function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: Sample
     return () => { clearTimeout(timer); abort.abort(); };
   }, [mode, sampleId, view, filters, page, retry]);
   const renderRows = (selection?: SampleSelection) => <div className="sample-rows" aria-busy={busy}>{data?.items.map(item => <SampleCatalogRow item={item} badge={<SampleBadge status={item.status} />} selection={selection} key={item.sampleId} />)}</div>;
-  return <Shell active={mode === "detail" ? "在管样衣" : titles[mode]}><main className={`rework-v2-page sample-workspace${mode === "amounts" ? "" : " sample-ops"}`}>
+  return <Shell active={mode === "detail" ? "在管样衣" : titles[mode]}><div className={`rework-v2-page sample-workspace${mode === "amounts" ? "" : " sample-ops"}`}>
     <Header title={titles[mode]} subtitle={mode === "pending" ? "查看轮到你处理或与你相关的样衣事项。" : "查看样衣资料、实际保管状态与历史记录。"} badge="样衣管理" />
     {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
     {busy ? <p role="status">正在加载样衣资料…</p> : null}
-    {mode === "managed" ? <SampleCreationLinks /> : null}
     {mode === "detail" && detail && detail.item.sampleId.toLowerCase() === sampleId?.toLowerCase() ? <SampleDetail key={detail.item.sampleId} detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">
       {Object.entries({ 累计采购金额: amounts.purchaseTotal, 当前在管原值: amounts.managedOriginalValue,
@@ -160,12 +159,13 @@ function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: Sample
       }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>¥{value}</dd></div>)}
     </dl><p>遗失待赔付不计入已收赔偿；已归档样衣不参与统计。</p></Surface> : null}
     {["managed", "pending", "disposed"].includes(mode) ? <>
-      {data ? <div className="sample-counts"><span>借出中 <b>{data.counts.borrowed}</b></span><span>在库 <b>{data.counts.inStock}</b></span><span>待确认 <b>{data.counts.pending}</b></span></div> : null}
+      <div className="sample-overview-toolbar">{data ? <div className="sample-counts"><span>借出中 <b>{data.counts.borrowed}</b></span><span>在库 <b>{data.counts.inStock}</b></span><span>待确认 <b>{data.counts.pending}</b></span></div> : <span />}
+      {mode === "managed" ? <SampleCreationLinks /> : null}</div>
       <Surface className="rework-v2-core sample-directory">
         {mode === "managed" ? <div className="sample-status-filter" aria-label="在管状态">
           {[["borrowed", "借出中"], ["in_stock", "在库"], ["managed", "全部在管"]].map(([value, label]) => <Button key={value} aria-pressed={view === value} variant={view === value ? "primary" : "secondary"} onClick={() => { setView(value!); setPage(1); filter("status", ""); }}>{label}</Button>)}
         </div> : null}
-        <div className="sample-filters">
+        <div className={`sample-filters sample-filters--${mode}`}>
           <label className="sample-search">样衣编号 / 款号<input aria-label="样衣编号或款号" placeholder="输入编号或款号的开头" maxLength={100} value={filters.search ?? ""} onChange={e => filter("search", e.target.value)} /></label>
           <div className="sample-extra-filters"><button type="button" className="sample-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}>持有人 / 品牌 / 部门 / 年份筛选{Object.entries(filters).some(([key,value]) => key !== "search" && value) ? "（已设置）" : ""}</button><div className={filtersOpen ? "is-open" : ""}>
           <label>采购年份<select className="rework-v2-control" value={filters.purchaseYear ?? ""} onChange={e => filter("purchaseYear", e.target.value)}><option value="">全部年份</option>{options?.purchaseYears.map(year => <option key={year}>{year}</option>)}</select></label>
@@ -187,7 +187,8 @@ function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: Sample
       {data ? <><p>共 {data.totalCount} 件</p><ListPagination page={data.page} totalPages={Math.max(1, Math.ceil(data.totalCount / 15))} busy={busy} onPageChange={setPage} ariaLabel="样衣列表分页" /></> : null}
       {mode === "managed" ? <SampleArchiveList /> : null}
     </> : null}
-  </main></Shell>;
+  </div></Shell>;
 }
 
 export function SampleWorkspacePage(props:{mode?:SamplePageMode;sampleId?:string|undefined}){return props.mode==="amounts"?<SampleAnalysisPage/>:<SampleWorkspaceContents {...props}/>;}
+

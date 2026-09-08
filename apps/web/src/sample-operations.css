@@ -14,3 +14,49 @@
 @media(max-width:520px){.sample-row-actions a{min-height:44px}.sample-ops .sample-detail-grid{grid-template-columns:1fr}.sample-ops .sample-detail-heading{flex-wrap:wrap}.sample-ops .sample-form-footer{flex-wrap:wrap}}
 
 .sample-batch-form--hidden{display:none}
+
+
+/* PR02: the Shell owns outer page spacing; these are module internals. */
+.app-shell .sample-ops{padding:0;font-size:14px;gap:12px}
+.app-shell .sample-workspace.sample-ops{max-width:none}
+.sample-overview-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 16px}
+.sample-ops .sample-overview-toolbar .sample-counts{margin:0;gap:20px}
+.sample-ops .sample-counts b{font-size:20px;margin-left:6px}
+.sample-ops .sample-create-links{display:flex;flex-direction:row;margin:0;gap:8px;align-items:center}
+.sample-ops .sample-create-links a{width:auto;min-width:0;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:6px 14px;box-shadow:var(--ui-control-shadow,none);white-space:nowrap}
+.sample-ops .sample-directory{padding:14px!important}
+.sample-ops .sample-status-filter{gap:8px;align-items:center;margin-bottom:12px}
+.sample-ops .sample-status-filter .dx-button{flex:0 0 auto;min-height:40px;padding:8px 16px;border-radius:0;box-shadow:none;background:transparent;color:var(--dx-v2-color-text-secondary);font-size:14px;line-height:20px}
+.sample-ops .sample-status-filter .dx-button[aria-pressed=true]{color:var(--dx-v2-color-primary);border-bottom-color:var(--dx-v2-color-primary)}
+.sample-ops .sample-filters{align-items:start;gap:12px;margin-bottom:12px}
+.sample-ops .sample-search{min-width:0;align-content:start;gap:5px}
+.sample-ops .sample-search input{height:42px;align-self:start;line-height:20px}
+.sample-ops .sample-extra-filters>div{align-items:start;gap:10px 12px}
+.sample-ops .sample-row{padding:12px 0}
+.sample-ops .sample-table-head{padding:10px 0}
+.sample-ops .sample-detail-heading{margin-block:0 12px}
+.sample-ops .sample-detail-grid{gap:14px;margin-bottom:12px}
+.sample-ops .sample-info{gap:12px 16px}
+.sample-ops .sample-info dd{margin-top:4px}
+.sample-ops .sample-action-section{margin-top:12px}
+.sample-ops details{padding-block:8px}
+.sample-ops details>summary{min-height:40px;display:flex;align-items:center;gap:8px}
+.sample-ops details>summary::before{content:'▸';font-size:12px}
+.sample-ops details[open]>summary::before{content:'▾'}
+.sample-ops details>summary::-webkit-details-marker{display:none}
+@media(max-width:800px){.sample-ops .sample-overview-toolbar{align-items:center}.sample-ops .sample-status-filter .dx-button{min-height:44px;padding:8px 12px}.sample-ops .sample-search input{height:48px;font-size:16px}.sample-ops .sample-create-links a{min-height:44px}.sample-ops .sample-counts{gap:14px}}
+@media(max-width:520px){.sample-overview-toolbar>.sample-create-links{width:100%;justify-content:flex-end}.sample-ops .sample-directory{padding:12px!important}.sample-ops .sample-counts b{font-size:18px}}
+
+.sample-ops .sample-row-actions a{box-shadow:none;background:transparent;color:var(--dx-v2-color-primary);padding:6px 8px}
+
+/* Search spans the first row; all auxiliary filters share the row below. */
+.sample-ops .sample-filters{display:grid;grid-template-columns:minmax(0,1fr)}
+.sample-ops .sample-search{width:100%;margin:0}
+.sample-ops .sample-extra-filters>div{grid-template-columns:repeat(4,minmax(0,1fr))}
+.sample-ops .sample-filters--pending .sample-extra-filters>div{grid-template-columns:repeat(5,minmax(0,1fr))}
+.sample-ops .sample-filters--disposed .sample-extra-filters>div{grid-template-columns:repeat(5,minmax(0,1fr)) repeat(2,minmax(145px,1.3fr))}
+.sample-ops .sample-custody-meta{display:flex;flex-wrap:wrap;column-gap:4px}
+.sample-ops .sample-custody-phrase{white-space:nowrap;overflow-wrap:normal}
+@media(min-width:801px){.sample-ops .sample-table-head,.sample-ops .sample-row{grid-template-columns:32px minmax(200px,1.7fr) minmax(190px,1.4fr) 90px 140px;gap:12px}}
+@media(min-width:801px) and (max-width:1100px){.sample-ops .sample-filters--disposed .sample-extra-filters>div{grid-template-columns:repeat(4,minmax(0,1fr))}.sample-ops .sample-table-head,.sample-ops .sample-row{grid-template-columns:32px minmax(170px,1.4fr) minmax(160px,1.3fr) 76px 80px;gap:10px}}
+@media(max-width:800px){.sample-ops .sample-extra-filters>div,.sample-ops .sample-filters--pending .sample-extra-filters>div,.sample-ops .sample-filters--disposed .sample-extra-filters>div{grid-template-columns:repeat(2,minmax(0,1fr))}}
