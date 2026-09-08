@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
-import type { AcceptanceControlService } from "./acceptance-control.js";
+import type { AuthService } from "./service.js";
 
 const CONTROL_COOKIE = "dx_acceptance_control";
 const BUSINESS_COOKIE = "dx_rework_session";
@@ -20,7 +20,7 @@ export type AcceptanceControlRouteOptions = Readonly<{
 
 export function registerAcceptanceControlRoutes(
   app: FastifyInstance,
-  service: AcceptanceControlService,
+  auth: AuthService,
   options: AcceptanceControlRouteOptions,
 ): void {
   const controlCookie = (token: string) =>
@@ -31,17 +31,17 @@ export function registerAcceptanceControlRoutes(
   const clearBusiness = `${BUSINESS_COOKIE}=; Path=${options.appBasePath}; HttpOnly; SameSite=Lax; Max-Age=0${options.secureCookie ? "; Secure" : ""}`;
 
   app.post<{ Body: { code?: string } }>("/acceptance/control/start", async (request, reply) => {
-    const token = service.begin(request.body?.code ?? "");
+    const token = auth.beginAcceptanceControl(request.body?.code ?? "");
     return reply.header("set-cookie", controlCookie(token)).send({ status: "ready" });
   });
 
   app.get("/acceptance/control/status", async (request) => ({
     status: "ready",
-    identities: await service.listIdentities(cookieToken(request, CONTROL_COOKIE)),
+    identities: await auth.listAcceptanceIdentities(cookieToken(request, CONTROL_COOKIE)),
   }));
 
   app.post<{ Body: { alias?: string } }>("/acceptance/control/switch", async (request, reply) => {
-    const result = await service.switchIdentity(
+    const result = await auth.switchAcceptanceIdentity(
       cookieToken(request, CONTROL_COOKIE),
       request.body?.alias ?? "",
     );
@@ -52,7 +52,7 @@ export function registerAcceptanceControlRoutes(
   });
 
   app.post("/acceptance/control/end", async (request, reply) => {
-    await service.end(
+    await auth.endAcceptanceControl(
       cookieToken(request, CONTROL_COOKIE),
       cookieToken(request, BUSINESS_COOKIE),
     );
