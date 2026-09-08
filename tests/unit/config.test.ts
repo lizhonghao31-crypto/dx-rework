@@ -20,7 +20,36 @@ describe("loadConfig", () => {
     expect(config.port).toBe(3201);
     expect(config.host).toBe("127.0.0.1");
     expect(config.databaseUrl).toBe(validEnvironment.DATABASE_URL);
+    expect(config.acceptanceLab).toEqual({ enabled: false, secret: undefined });
     expect(Object.isFrozen(config)).toBe(true);
+  });
+
+  it("allows the acceptance lab only in test mode with a dedicated secret", () => {
+    const config = loadConfig({
+      ...validEnvironment,
+      ACCEPTANCE_LAB_ENABLED: "true",
+      ACCEPTANCE_LAB_SECRET: "acceptance-lab-secret-with-more-than-32-characters",
+    });
+    expect(config.acceptanceLab.enabled).toBe(true);
+    expect(config.acceptanceLab.secret).toHaveLength(49);
+  });
+
+  it("rejects an acceptance lab without its dedicated secret", () => {
+    expect(() => loadConfig({
+      ...validEnvironment,
+      ACCEPTANCE_LAB_ENABLED: "true",
+    })).toThrow(/dedicated secret/);
+  });
+
+  it("rejects the acceptance lab in production even when all production metadata is valid", () => {
+    expect(() => loadConfig({
+      ...validEnvironment,
+      NODE_ENV: "production",
+      GIT_SHA: "a".repeat(40),
+      BUILD_TIME: "2026-09-08T06:00:00Z",
+      ACCEPTANCE_LAB_ENABLED: "true",
+      ACCEPTANCE_LAB_SECRET: "acceptance-lab-secret-with-more-than-32-characters",
+    })).toThrow(/NODE_ENV=test/);
   });
 
   it("rejects missing database configuration", () => {
