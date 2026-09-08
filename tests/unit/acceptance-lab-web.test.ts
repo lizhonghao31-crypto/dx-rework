@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("acceptance lab controller UI", () => {
-  it("keeps the controller outside business AuthGate without reformatting App or linking production navigation", async () => {
+  it("keeps the controller outside business AuthGate without linking production navigation", async () => {
     const [main, app, page, components] = await Promise.all([
       readFile("apps/web/src/main.tsx", "utf8"),
       readFile("apps/web/src/App.tsx", "utf8"),
@@ -22,5 +22,25 @@ describe("acceptance lab controller UI", () => {
     expect(page).toContain('ACCEPTANCE_ROLE_MATRIX');
     expect(page).toContain('evaluateAcceptanceSnapshot');
     expect(page).toContain('evaluateHttpProbe');
+  });
+
+  it("records versioned evidence, preserves history, exports JSON and uses normal browser scenario entry", async () => {
+    const [page, evidence] = await Promise.all([
+      readFile("apps/web/src/acceptance-lab-page.tsx", "utf8"),
+      readFile("apps/web/src/acceptance-evidence.ts", "utf8"),
+    ]);
+    expect(page).toContain('const EVIDENCE_STORAGE_KEY = "dx-acceptance:evidence:v1"');
+    expect(page).toContain('jsonRequest<VersionPayload>("version")');
+    expect(page).toContain("appendMatrixEvidence");
+    expect(page).toContain("appendScenarioEvidence");
+    expect(page).toContain('new Blob([JSON.stringify(evidenceReport, null, 2)]');
+    expect(page).toContain('window.open("about:blank", "_blank")');
+    expect(page).toContain('opened.location.href = pageUrl(scenario.route)');
+    expect(page).not.toContain("force click");
+    expect(evidence).toContain('"pass" | "fail" | "blocked" | "not_run"');
+    expect(evidence).toContain("matrixAttempts: [...report.matrixAttempts");
+    expect(evidence).toContain("scenarioAttempts: [...report.scenarioAttempts");
+    expect(evidence).toContain("firstFailureForScenario");
+    expect(evidence).toContain('path: "todos/mine?page=1"');
   });
 });
