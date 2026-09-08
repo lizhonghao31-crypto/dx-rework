@@ -24,7 +24,7 @@ class RaceStore implements AuthStore {
     return true;
   }
   async consumeQrState() { return false; }
-  async createQrState(_challenge: QrChallenge) {}
+  async createQrState(challenge: QrChallenge) { void challenge; }
   async upsertIdentity(member: OrganizationMember): Promise<AuthUser> {
     return { id: "worker-internal", displayName: member.displayName, businessRoles: ["worker"], capabilities: ["work:report"] };
   }
