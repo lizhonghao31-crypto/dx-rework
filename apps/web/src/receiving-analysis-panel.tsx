@@ -38,7 +38,7 @@ export function ReceivingAnalysisPanel({startDate, endDate, q}: {startDate: stri
   }, [access, open, query, retry]);
   const change = (patch: Partial<ReceivingAnalysisQuery>) => setQuery({...data?.filters ?? query, page: 1, ...patch});
   return <section className="receiving-analysis">
-    <Button variant="secondary" aria-expanded={open} onClick={() => setOpen(value => !value)}>回货与装箱分析{open ? " · 收起" : " · 展开"}</Button>
+    <Button className="ui-disclosure-trigger" variant="secondary" aria-expanded={open} onClick={() => setOpen(value => !value)}>回货与装箱分析{open ? " · 收起" : " · 展开"}</Button>
     {open && (access === "denied" ? <p role="alert">当前身份无权查看回货分析。</p> : access === "loading" ? <p role="status">正在核验权限…</p> : <>
       <div className="receiving-analysis-toolbar"><h2>差异事实与处理记录</h2><Button variant="secondary" disabled={busy} onClick={() => setRetry(value => value + 1)}>{busy ? "正在读取…" : "刷新分析"}</Button></div>
       <p>沿用订单回货的款号汇总。分批回货、未完成装箱仅表示当前差异，不判定最终损耗；已处理不代表差额归零。</p>
@@ -74,3 +74,4 @@ export function ReceivingAnalysisPanel({startDate, endDate, q}: {startDate: stri
     </>)}
   </section>;
 }
+

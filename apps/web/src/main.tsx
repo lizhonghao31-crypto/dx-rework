@@ -9,6 +9,7 @@ import "./responsibility-determination.css";
 import "./workflow-shell.css";
 import "./dialog-visual-system.css";
 import "./workflow-state-visual.css";
+import "./ui-polish.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element is missing");
@@ -18,3 +19,4 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+

@@ -548,7 +548,7 @@ export function Shell({
       : activeEntry?.name ?? active;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell ui-polish">
       {pullDistance > 0 ? (
         <div
           className="mobile-pull-refresh"
@@ -720,3 +720,4 @@ export function TaskCard({ task }: { task: Task }) {
     </article>
   );
 }
+

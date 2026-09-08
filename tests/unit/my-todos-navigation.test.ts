@@ -43,8 +43,9 @@ describe("my todos first-entry navigation", () => {
     expect(page).not.toContain('state.kind === "ready" && <nav className="my-todos-modules"');
     expect(page).toContain('state.kind === "ready" && <Surface className="my-todos-workspace"');
     expect(page).toContain('<div className="my-todos-toolbar">');
-    expect(page).toContain('<div className="my-todos-modules" role="tablist"');
+    expect(page).toContain('<div className="my-todos-modules" role="group"');
     expect(page).not.toContain('<nav className="my-todos-modules"');
+    expect(page).toContain("aria-pressed={module.id === activeModule}");
     expect(page.indexOf('{ id: "sourcing", label: "外发定价&选厂" }')).toBeLessThan(
       page.indexOf('{ id: "rework", label: "订单返工" }'),
     );
@@ -73,7 +74,7 @@ describe("my todos first-entry navigation", () => {
     expect(css).toContain("background: var(--dx-v2-color-control);");
     expect(css).toContain("justify-content: center;");
     expect(css).toContain("grid-template-columns: minmax(0, 1fr);");
-    expect(css).toContain("repeat(auto-fit, minmax(min(140px, 100%), 1fr))");
+    expect(css).toContain("repeat(2, minmax(0, 1fr))");
     expect(css).toContain("width: 100%;");
     expect(css).toContain("margin-left: 0;");
     expect(css).toContain("background: var(--dx-v2-color-inset);");
@@ -87,3 +88,4 @@ describe("my todos first-entry navigation", () => {
     expect(css).toContain("env(safe-area-inset-bottom, 0px)");
   });
 });
+

@@ -33,7 +33,7 @@ export function ProductionAnalysisPanel({supplierId,view="concentration"}:{suppl
   const change=(patch:Partial<ProductionAnalysisQuery>)=>setQuery({...data?.filters??query,page:1,groupPage:1,...patch,...(supplierId?{supplierId}:{})});
   if(access!=="allowed")return open&&access==="denied"?<p role="alert">当前身份无权查看此分析。</p>:null;
   return <section className="production-analysis">
-    <Button variant="secondary" aria-expanded={open} onClick={()=>setOpen(value=>!value)}>{view==="supplier"?"供应商履约事实":"在外订单与预警复盘"}{open?" · 收起":" · 展开"}</Button>
+    <Button className="ui-disclosure-trigger" variant="secondary" aria-expanded={open} onClick={()=>setOpen(value=>!value)}>{view==="supplier"?"供应商履约事实":"在外订单与预警复盘"}{open?" · 收起":" · 展开"}</Button>
     {open&&<>
       <div className="production-analysis-toolbar"><h2>{view==="supplier"?"本公司与该供应商的履约记录":"本公司在外订单分析"}</h2><Button disabled={busy} onClick={()=>setRetry(value=>value+1)}>{busy?"正在读取…":"刷新分析"}</Button></div>
       <div className="production-analysis-tabs" aria-label="生产分析主题">{([['delivery','交付与回货'],['concentration','在外集中'],['alerts','预警记录']] as const).map(([key,label])=><Button key={key} variant={theme===key?'primary':'secondary'} disabled={busy} onClick={()=>{if(key!==theme)setData(null);setTheme(key);change({status:key==='concentration'?'in_production':undefined,dueBucket:'all'});}}>{label}</Button>)}</div>
@@ -56,3 +56,4 @@ export function ProductionAnalysisPanel({supplierId,view="concentration"}:{suppl
     </>}
   </section>;
 }
+
