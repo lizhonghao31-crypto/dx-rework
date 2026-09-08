@@ -110,7 +110,7 @@ try {
         [randomUUID(), rootId],
       );
     }
-    const bootstrap = await pool.query("SELECT user_id FROM owner_bootstrap_consumptions WHERE singleton=true");
+    const bootstrap = await pool.query<{ user_id: string }>("SELECT user_id FROM owner_bootstrap_consumptions WHERE singleton=true");
     if (!bootstrap.rows[0]) {
       await pool.query(
         `INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
@@ -138,7 +138,7 @@ try {
     requestId: randomUUID(),
   };
 
-  for (const [alias, _displayName, roleCode] of ACCEPTANCE_USERS) {
+  for (const [alias, , roleCode] of ACCEPTANCE_USERS) {
     if (alias === "root") continue;
     const userId = userIdByAlias.get(alias)!;
     const existing = await pool.query(
