@@ -30,6 +30,7 @@ import "./acceptance-lab-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const EVIDENCE_STORAGE_KEY = "dx-acceptance:evidence:v1";
+const PREFLIGHT_TRANSPORT_FAILURE_STATUS = 0;
 
 type AcceptanceIdentity = Readonly<{
   alias: string;
@@ -52,6 +53,7 @@ type ScenarioDraft = Readonly<{
   status: AcceptanceEvidenceStatus;
   actual: string;
   preflight: AcceptanceRequestEvidence;
+  version: AcceptanceRuntimeVersion | null;
 }>;
 
 type VersionPayload = AcceptanceRuntimeVersion & Readonly<{ service?: string }>;
@@ -148,17 +150,29 @@ export function AcceptanceLabPage() {
     setCurrentUser(response.status === 200 && response.body?.user ? response.body.user : null);
   }, []);
 
-  const refreshRuntimeVersion = useCallback(async () => {
-    const response = await jsonRequest<VersionPayload>("version");
-    if (response.status === 200 && response.body?.gitSha && response.body.expectedSchemaVersion) {
-      setRuntimeVersion({
-        gitSha: response.body.gitSha,
-        buildTime: response.body.buildTime,
-        schemaVersion: response.body.schemaVersion,
-        expectedSchemaVersion: response.body.expectedSchemaVersion,
-      });
+  const captureRuntimeVersion = useCallback(async (): Promise<AcceptanceRuntimeVersion | null> => {
+    try {
+      const response = await jsonRequest<VersionPayload>("version");
+      if (response.status === 200 && response.body?.gitSha && response.body.expectedSchemaVersion) {
+        const version: AcceptanceRuntimeVersion = {
+          gitSha: response.body.gitSha,
+          buildTime: response.body.buildTime,
+          schemaVersion: response.body.schemaVersion,
+          expectedSchemaVersion: response.body.expectedSchemaVersion,
+        };
+        setRuntimeVersion(version);
+        return version;
+      }
+    } catch {
+      // A failed fresh read must never fall back to a stale version from an earlier attempt.
     }
+    setRuntimeVersion(null);
+    return null;
   }, []);
+
+  const refreshRuntimeVersion = useCallback(async () => {
+    await captureRuntimeVersion();
+  }, [captureRuntimeVersion]);
 
   const refreshControl = useCallback(async () => {
     setError("");
@@ -219,8 +233,9 @@ export function AcceptanceLabPage() {
       setError("当前有待保存的场景证据，请先保存或取消记录后再运行权限矩阵。");
       return;
     }
-    const startedAt = new Date().toISOString();
     setMatrixRunning(true); setMatrixResults([]); setError("");
+    const attemptVersion = await captureRuntimeVersion();
+    const startedAt = new Date().toISOString();
     const results: MatrixSummary[] = [];
     try {
       for (let index = 0; index < ACCEPTANCE_ROLE_MATRIX.length; index += 1) {
@@ -272,7 +287,7 @@ export function AcceptanceLabPage() {
       updateEvidence((report) => appendMatrixEvidence(report, {
         startedAt,
         completedAt,
-        version: runtimeVersion,
+        version: attemptVersion,
         results,
       }));
     }
@@ -287,6 +302,7 @@ export function AcceptanceLabPage() {
     if (!scenario) return;
     setScenarioRunning(scenarioId); setError("");
     const opened = window.open("about:blank", "_blank");
+    const attemptVersion = await captureRuntimeVersion();
     try {
       const switched = await jsonRequest<{ user?: AuthorizedUser; error?: { message?: string } }>("acceptance/control/switch", {
         method: "POST", body: JSON.stringify({ alias: scenario.alias }),
@@ -311,8 +327,25 @@ export function AcceptanceLabPage() {
         status: preflightPassed ? "not_run" : "fail",
         actual,
         preflight,
+        version: attemptVersion,
       });
       if (opened) opened.location.href = pageUrl(scenario.route);
+    } catch (cause) {
+      opened?.close();
+      const message = cause instanceof Error ? cause.message : "网络请求失败";
+      setError(`场景启动或只读预检连接失败：${message}`);
+      setScenarioDraft({
+        scenarioId,
+        status: "blocked",
+        actual: `场景启动/预检传输失败：${message}`,
+        preflight: {
+          method: "GET",
+          path: scenario.preflight.path,
+          expectedStatus: scenario.preflight.expectedStatus,
+          actualStatus: PREFLIGHT_TRANSPORT_FAILURE_STATUS,
+        },
+        version: attemptVersion,
+      });
     } finally {
       setScenarioRunning("");
     }
@@ -322,14 +355,15 @@ export function AcceptanceLabPage() {
     if (!scenarioDraft) return;
     const scenario = ACCEPTANCE_SCENARIOS.find((candidate) => candidate.id === scenarioDraft.scenarioId);
     if (!scenario) return;
+    const preflightTransportBlocked = scenarioDraft.preflight.actualStatus === PREFLIGHT_TRANSPORT_FAILURE_STATUS;
     const preflightPassed = scenarioDraft.preflight.actualStatus === scenarioDraft.preflight.expectedStatus;
     const saved = updateEvidence((report) => appendScenarioEvidence(report, {
       scenarioId: scenario.id,
       alias: scenario.alias,
-      status: preflightPassed ? scenarioDraft.status : "fail",
+      status: preflightTransportBlocked ? "blocked" : preflightPassed ? scenarioDraft.status : "fail",
       actual: scenarioDraft.actual.trim(),
       recordedAt: new Date().toISOString(),
-      version: runtimeVersion,
+      version: scenarioDraft.version,
       preflight: scenarioDraft.preflight,
     }));
     if (saved) setScenarioDraft(null);
@@ -367,8 +401,9 @@ export function AcceptanceLabPage() {
     return { total: checks.length, failed: checks.filter((entry) => entry.verdict === "fail").length };
   }, [matrixResults]);
   const evidenceSummary = useMemo(() => acceptanceEvidenceSummary(evidenceReport), [evidenceReport]);
+  const scenarioPreflightBlocked = scenarioDraft?.preflight.actualStatus === PREFLIGHT_TRANSPORT_FAILURE_STATUS;
   const scenarioPreflightPassed = scenarioDraft
-    ? scenarioDraft.preflight.actualStatus === scenarioDraft.preflight.expectedStatus
+    ? !scenarioPreflightBlocked && scenarioDraft.preflight.actualStatus === scenarioDraft.preflight.expectedStatus
     : true;
 
   if (state === "loading") return <main className="acceptance-lab"><Surface><p role="status">正在检查隔离验收中心…</p></Surface></main>;
@@ -427,9 +462,13 @@ export function AcceptanceLabPage() {
       </div>
       {scenarioDraft ? <div className="acceptance-scenario-recorder">
         <h3>记录：{ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === scenarioDraft.scenarioId)?.title}</h3>
-        <p>只读预检：GET {scenarioDraft.preflight.path} → HTTP {scenarioDraft.preflight.actualStatus}（预期 {scenarioDraft.preflight.expectedStatus}）</p>
-        {!scenarioPreflightPassed ? <p role="alert">只读预检未达到批准预期，本次场景不能记录为通过，保存时会强制记为失败。</p> : null}
-        <label>结果<select value={scenarioDraft.status} onChange={(event) => setScenarioDraft({ ...scenarioDraft, status: event.target.value as AcceptanceEvidenceStatus })}><option value="not_run">未执行</option><option value="pass" disabled={!scenarioPreflightPassed}>通过</option><option value="fail">失败</option><option value="blocked">受阻</option></select></label>
+        <p>只读预检：GET {scenarioDraft.preflight.path} → {scenarioPreflightBlocked ? "传输失败" : `HTTP ${scenarioDraft.preflight.actualStatus}`}（预期 {scenarioDraft.preflight.expectedStatus}）</p>
+        {scenarioPreflightBlocked
+          ? <p role="alert">只读预检发生传输失败，本次场景只能记录为受阻。</p>
+          : !scenarioPreflightPassed
+            ? <p role="alert">只读预检未达到批准预期，本次场景不能记录为通过，保存时会强制记为失败。</p>
+            : null}
+        <label>结果<select value={scenarioDraft.status} onChange={(event) => setScenarioDraft({ ...scenarioDraft, status: event.target.value as AcceptanceEvidenceStatus })}><option value="not_run" disabled={scenarioPreflightBlocked}>未执行</option><option value="pass" disabled={!scenarioPreflightPassed}>通过</option><option value="fail" disabled={scenarioPreflightBlocked}>失败</option><option value="blocked">受阻</option></select></label>
         <label>实际结果 / 数据或待办变化<textarea value={scenarioDraft.actual} onChange={(event) => setScenarioDraft({ ...scenarioDraft, actual: event.target.value })} placeholder="记录实际看到的页面、按钮、请求结果以及数据/待办变化；敏感形态会在保存和导出边界自动清理。" rows={4} /></label>
         <div><Button onClick={recordScenario}>保存本次证据</Button><Button variant="secondary" onClick={() => setScenarioDraft(null)}>取消记录</Button></div>
       </div> : null}
