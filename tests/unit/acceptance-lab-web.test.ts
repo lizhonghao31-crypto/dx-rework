@@ -24,13 +24,16 @@ describe("acceptance lab controller UI", () => {
     expect(page).toContain('evaluateHttpProbe');
   });
 
-  it("records durable sanitized evidence, preserves history, exports JSON and uses normal browser scenario entry", async () => {
+  it("records durable sanitized evidence, fresh runtime versions and blocked transport failures", async () => {
     const [page, evidence] = await Promise.all([
       readFile("apps/web/src/acceptance-lab-page.tsx", "utf8"),
       readFile("apps/web/src/acceptance-evidence.ts", "utf8"),
     ]);
     expect(page).toContain('const EVIDENCE_STORAGE_KEY = "dx-acceptance:evidence:v1"');
     expect(page).toContain('jsonRequest<VersionPayload>("version")');
+    expect(page).toContain("const attemptVersion = await captureRuntimeVersion()");
+    expect(page).toContain("version: attemptVersion");
+    expect(page).toContain("version: scenarioDraft.version");
     expect(page).toContain("appendMatrixEvidence");
     expect(page).toContain("appendScenarioEvidence");
     expect(page).toContain("sanitizeAcceptanceEvidenceReport");
@@ -38,7 +41,9 @@ describe("acceptance lab controller UI", () => {
     expect(page).toContain("验收证据无法持久保存");
     expect(page).toContain('window.open("about:blank", "_blank")');
     expect(page).toContain('opened.location.href = pageUrl(scenario.route)');
-    expect(page).toContain('status: preflightPassed ? scenarioDraft.status : "fail"');
+    expect(page).toContain("actualStatus: PREFLIGHT_TRANSPORT_FAILURE_STATUS");
+    expect(page).toContain('status: preflightTransportBlocked ? "blocked" : preflightPassed ? scenarioDraft.status : "fail"');
+    expect(page).toContain("本次场景只能记录为受阻");
     expect(page).not.toContain("force click");
     expect(evidence).toContain('"pass" | "fail" | "blocked" | "not_run"');
     expect(evidence).toContain("matrixAttempts: [...report.matrixAttempts");
