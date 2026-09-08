@@ -24,6 +24,7 @@ export type AcceptanceRoleExpectation = Readonly<{
 
 export type AcceptanceIdentitySnapshot = Readonly<{
   alias: string;
+  userId: string;
   roleCodes: readonly string[];
   capabilities: readonly string[];
 }>;
@@ -53,13 +54,29 @@ const suppliersDeny = probe("supplier-list", "供应商目录", "master-data/sup
 const samplesAllow = probe("sample-list", "样衣目录", "samples?page=1", 200);
 const samplesDeny = probe("sample-list", "样衣目录", "samples?page=1", 403);
 
+const sampleMutationCapabilities = [
+  "sample:create",
+  "sample:batch_create",
+  "sample:borrow_request",
+  "sample:borrow_confirm",
+  "sample:return_request",
+  "sample:return_confirm",
+  "sample:update_basic",
+  "sample:update_location",
+  "sample:correct_finance",
+  "sample:dispose_request",
+  "sample:dispose_approve",
+  "sample:loss_close",
+  "sample:archive",
+] as const;
+
 /**
  * Approved expectations are deliberately declared here instead of being generated
  * from role_capabilities. Runtime RBAC is the measured result, never the oracle.
  *
- * The finance-director sample expectation records the 2026-09-08 approved target
- * (read access). It is expected to surface a mismatch until the later permission
- * remediation PR fixes the real role policy.
+ * The finance-director sample expectation records the 2026-09-08 approved target:
+ * full sample read visibility, but no sample mutation authority. It is expected to
+ * surface a mismatch until the later permission remediation PR fixes real RBAC.
  */
 export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
@@ -152,14 +169,16 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     alias: "finance-read",
     expectedRole: "finance_read",
     requiredCapabilities: ["report:view"],
-    forbiddenCapabilities: ["sample:view_basic", "access:admin"],
-    probes: [accessRolesDeny, samplesDeny],
+    forbiddenCapabilities: ["sourcing:view", "supplier_profile:read", "sample:view_basic", "access:admin"],
+    allowedModules: ["rework"],
+    forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
   },
   {
     alias: "finance-director",
     expectedRole: "finance_director",
-    requiredCapabilities: ["sourcing:view", "sample:view_basic"],
-    forbiddenCapabilities: ["access:admin"],
+    requiredCapabilities: ["sourcing:view", "sample:view_basic", "sample:view_finance", "sample:view_audit"],
+    forbiddenCapabilities: ["access:admin", ...sampleMutationCapabilities],
     allowedModules: ["rework", "sourcing", "suppliers", "samples"],
     forbiddenModules: ["production"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesAllow],
@@ -256,6 +275,14 @@ export function evaluateAcceptanceSnapshot(
     expectation.expectedRole,
     identityRoles.join(", ") || "无",
     identityRoles.length === 1 && identityRoles[0] === expectation.expectedRole,
+  ));
+  checks.push(check(
+    `${expectation.alias}:session-user`,
+    "session",
+    "业务 Session 用户",
+    identity.userId,
+    user.id,
+    user.id === identity.userId,
   ));
   checks.push(check(
     `${expectation.alias}:session-role`,
