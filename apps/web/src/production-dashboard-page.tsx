@@ -7,10 +7,11 @@ import type { z } from "zod";
 import { ProductionDashboardSchema, ProductionDashboardDetailSchema, type ProductionDashboard, type ProductionDashboardItem } from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
+import { verifySession } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ListPagination } from "./list-pagination.js";
 import { createWebUrls } from "../url-contract.js";
-import { canMoveProductionEvents, canAnimateProductionProgress, relativeProductionTime, changedDashboardOrders, progressLabels, progressText, productionEventText, productionStatusLabels } from "./production-dashboard-model.js";
+import { canControlProductionMotion, canMoveProductionEvents, canAnimateProductionProgress, relativeProductionTime, changedDashboardOrders, progressLabels, progressText, productionEventText, productionStatusLabels } from "./production-dashboard-model.js";
 import "./sourcing-workspace.css";
 import "./production-dashboard-page.css";
 import "./production-board.css";
@@ -38,6 +39,8 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const [page,setPage]=useState(1),[loading,setLoading]=useState(true),[error,setError]=useState("");
   const [changed,setChanged]=useState<string[]>([]),[paused,setPaused]=useState(false),[hovered,setHovered]=useState(false),[focused,setFocused]=useState(false),[reduced,setReduced]=useState(false);
   const [visible,setVisible]=useState(!document.hidden),[overflow,setOverflow]=useState(false),[now,setNow]=useState(Date.now()),[filtersOpen,setFiltersOpen]=useState(false),[touchReading,setTouchReading]=useState(false);
+  const [canControlMotion,setCanControlMotion]=useState(false);
+  useEffect(()=>{let live=true;void verifySession().then(session=>{if(live)setCanControlMotion(session!=="denied"&&canControlProductionMotion(session.user));}).catch(()=>{if(live)setCanControlMotion(false);});return()=>{live=false;};},[]);
   const sequence=useRef(0),last=useRef<ProductionDashboard|null>(null),belt=useRef<HTMLDivElement|null>(null);
   const load=async(manual=false)=>{
     const version=++sequence.current;setLoading(true);setError("");
@@ -71,19 +74,18 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
     };frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);
   },[moving,data?.asOf]);
   const asOf=data?.asOf??detail?.asOf;
-  return <Shell active="实时看板"><main className="sourcing-workspace production-dashboard production-board">
+  return <Shell active="实时看板"><div className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
     <div className="production-dashboard__toolbar"><a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>{productionOrderId?<a href={pageUrl("ui/production-dashboard")}>返回实时看板</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
-      <Button variant="secondary" aria-pressed={paused} onClick={()=>setPaused(value=>!value)}>{paused?"继续动效":"暂停动效"}</Button>
+      {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
     </div>
-    <ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>
+    <div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>{!productionOrderId?<ProductionPilotControls/>:null}</div>
     {productionOrderId?<ProductionReceiptSummary productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}
     {!productionOrderId?<>
-      <ProductionPilotControls/>
       <ProductionAnalysisPanel/>
       {data?<Surface className="sourcing-list-card"><div className="production-dashboard__toolbar" aria-label="生产运行状态">
         <strong>{data.counts.attention?`${number(data.counts.attention)} 单需关注`:"当前筛选无进度预警"}</strong><span>生产中 {number(data.counts.inProduction)}</span><span>生产完成 {number(data.counts.completed)}</span><span>已发货 {number(data.counts.shipped)}</span>
@@ -128,6 +130,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
         {detail.detail.shipment?<p>发货款号 {detail.detail.shipment.firstStyleNo} · {detail.detail.shipment.shippedOn} · 登记产量 {number(detail.detail.shipment.recordedQuantity)} 件；仓库收货独立记录。</p>:null}
       </details></Surface>
     </>:null}
-  </main></Shell>;
+  </div></Shell>;
 }
+
 

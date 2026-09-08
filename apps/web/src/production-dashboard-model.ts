@@ -23,3 +23,7 @@ export function relativeProductionTime(value:string,now:number):string {
   const minutes=Math.max(0,Math.floor((now-new Date(value).getTime())/60000));
   return minutes<1?'不到1分钟':minutes<60?`${minutes}分钟`:minutes<1440?`${Math.floor(minutes/60)}小时${minutes%60?`${minutes%60}分钟`:''}`:`${Math.floor(minutes/1440)}天`;
 }
+
+
+/** The local motion control is reserved for the authenticated Root account. */
+export function canControlProductionMotion(user:{isRoot?:boolean}|null|undefined){return user?.isRoot===true;}

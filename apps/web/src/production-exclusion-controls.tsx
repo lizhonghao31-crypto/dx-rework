@@ -45,8 +45,8 @@ export function ProductionExclusionControls({ onExcluded }: { onExcluded: () => 
     finally { lock.current = false; setBusy(false); }
   };
   if (!root) return null;
-  return <Surface className="sourcing-list-card">
-    <Button variant="secondary" disabled={busy} onClick={() => setOpen(!open)}>测试／误建生产记录排除</Button>
+  return <Surface className={`sourcing-list-card production-admin-tool${open?' is-open':''}`}>
+    <Button className="ui-disclosure-trigger" aria-expanded={open} variant="secondary" disabled={busy} onClick={() => setOpen(!open)}>测试／误建生产记录排除</Button>
     {open ? <>
       <p>仅按精确ID核对测试或误建对象；普通历史归档不属于测试排除。排除后退出正常列表、动态、预警和统计，历史审计保留。</p>
       <div className="sourcing-form-grid"><label>生产订单ID<input value={id} disabled={busy} maxLength={36} onChange={e => { setId(e.target.value); setPreview(null); setError(""); sequence.current++; }} /></label>
@@ -65,3 +65,4 @@ export function ProductionExclusionControls({ onExcluded }: { onExcluded: () => 
     </> : null}
   </Surface>;
 }
+
