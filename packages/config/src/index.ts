@@ -88,6 +88,13 @@ const EnvironmentSchema = z
         message: "acceptance lab requires a dedicated secret",
       });
     }
+    if (acceptanceEnabled && environment.ROOT_DINGTALK_USER_ID !== "uat-root") {
+      context.addIssue({
+        code: "custom",
+        path: ["ROOT_DINGTALK_USER_ID"],
+        message: "acceptance lab requires ROOT_DINGTALK_USER_ID=uat-root",
+      });
+    }
 
     const deliveryEnabled = (environment.TODO_DELIVERY_ENABLED ?? environment.TODO_RUNTIME_ENABLED) === "true";
     const timingEnabled = (environment.TODO_TIMING_ENABLED ?? environment.TODO_RUNTIME_ENABLED) === "true";
