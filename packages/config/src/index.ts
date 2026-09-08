@@ -37,6 +37,8 @@ const EnvironmentSchema = z
     ROOT_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_SECRET: z.string().min(32).max(1024).optional(),
+    ACCEPTANCE_LAB_ENABLED: BooleanTextSchema,
+    ACCEPTANCE_LAB_SECRET: z.string().min(32).max(1024).optional(),
     TODO_RUNTIME_ENABLED: BooleanTextSchema,
     TODO_DELIVERY_ENABLED: z.enum(["true", "false"]).optional(),
     TODO_TIMING_ENABLED: z.enum(["true", "false"]).optional(),
@@ -68,6 +70,22 @@ const EnvironmentSchema = z
         code: "custom",
         path: ["OWNER_BOOTSTRAP_SECRET"],
         message: "owner bootstrap requires both DingTalk userid and secret or neither",
+      });
+    }
+
+    const acceptanceEnabled = environment.ACCEPTANCE_LAB_ENABLED === "true";
+    if (acceptanceEnabled && environment.NODE_ENV !== "test") {
+      context.addIssue({
+        code: "custom",
+        path: ["ACCEPTANCE_LAB_ENABLED"],
+        message: "acceptance lab can only run with NODE_ENV=test",
+      });
+    }
+    if (acceptanceEnabled && !environment.ACCEPTANCE_LAB_SECRET) {
+      context.addIssue({
+        code: "custom",
+        path: ["ACCEPTANCE_LAB_SECRET"],
+        message: "acceptance lab requires a dedicated secret",
       });
     }
 
@@ -142,6 +160,10 @@ export type AppConfig = Readonly<{
     dingtalkUserId: string | undefined;
     secret: string | undefined;
   }>;
+  acceptanceLab: Readonly<{
+    enabled: boolean;
+    secret: string | undefined;
+  }>;
   todoRuntime: Readonly<{
     enabled: boolean;
     deliveryEnabled: boolean;
@@ -180,6 +202,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       enabled: Boolean(result.data.OWNER_BOOTSTRAP_DINGTALK_USER_ID && result.data.OWNER_BOOTSTRAP_SECRET),
       dingtalkUserId: result.data.OWNER_BOOTSTRAP_DINGTALK_USER_ID,
       secret: result.data.OWNER_BOOTSTRAP_SECRET,
+    },
+    acceptanceLab: {
+      enabled: result.data.ACCEPTANCE_LAB_ENABLED === "true",
+      secret: result.data.ACCEPTANCE_LAB_SECRET,
     },
     todoRuntime: {
       enabled: (result.data.TODO_DELIVERY_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true"
