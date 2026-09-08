@@ -116,7 +116,8 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     }
   }
 
-  override buildQrAuthorizationUrl(_state: string): string {
+  override buildQrAuthorizationUrl(state: string): string {
+    void state;
     throw new DingTalkProtocolError("Acceptance lab does not support QR login");
   }
 
@@ -127,7 +128,8 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     return { userId: member.userId, unionId: member.unionId, corpId: member.corpId };
   }
 
-  override async exchangeQrCode(_code: string): Promise<DingTalkIdentity> {
+  override async exchangeQrCode(code: string): Promise<DingTalkIdentity> {
+    void code;
     throw new DingTalkProtocolError("Acceptance lab does not support QR login");
   }
 
