@@ -66,3 +66,68 @@ export async function preflightExistingAcceptanceIdentity(
   });
   return userId;
 }
+
+export type AcceptanceRootPreflight = Readonly<
+  | { mode: "fresh" }
+  | { mode: "existing"; userId: string }
+>;
+
+export async function preflightAcceptanceRootState(
+  database: Pick<Pool, "query">,
+  corpId: string,
+): Promise<AcceptanceRootPreflight> {
+  const [policy, identity, bootstrap] = await Promise.all([
+    database.query(
+      "SELECT 1 FROM access_security_policy WHERE policy_key='primary'",
+    ),
+    database.query<{ user_id: string }>(
+      `SELECT user_id FROM identity_mappings
+       WHERE provider='dingtalk' AND corp_id=$1 AND provider_user_id='uat-root'`,
+      [corpId],
+    ),
+    database.query<{ user_id: string; provider_user_id: string; corp_id: string }>(
+      `SELECT user_id,provider_user_id,corp_id
+       FROM owner_bootstrap_consumptions
+       WHERE singleton=true
+       LIMIT 1`,
+    ),
+  ]);
+
+  const policyExists = Boolean(policy.rows[0]);
+  const rootUserId = identity.rows[0]?.user_id;
+  const rootBootstrap = bootstrap.rows[0];
+
+  if (!policyExists) {
+    if (rootUserId || rootBootstrap) {
+      throw new Error(
+        "Acceptance Root is partially initialized without the security policy; rebuild the acceptance database before reseeding",
+      );
+    }
+    return { mode: "fresh" };
+  }
+
+  if (!rootUserId) {
+    throw new Error("Acceptance security policy exists but the uat-root identity is missing");
+  }
+  if (
+    !rootBootstrap
+    || rootBootstrap.user_id !== rootUserId
+    || rootBootstrap.provider_user_id !== "uat-root"
+    || rootBootstrap.corp_id !== corpId
+  ) {
+    throw new Error("Acceptance Root bootstrap is not bound to the uat-root identity");
+  }
+
+  const rootAssignment = await database.query(
+    `SELECT 1 FROM user_role_assignments
+     WHERE user_id=$1 AND role_code='owner_group' AND revoked_at IS NULL`,
+    [rootUserId],
+  );
+  if (!rootAssignment.rows[0]) {
+    throw new Error(
+      "Acceptance security policy exists but the UAT Root owner role is missing; rebuild the acceptance database instead of bypassing guards",
+    );
+  }
+
+  return { mode: "existing", userId: rootUserId };
+}
