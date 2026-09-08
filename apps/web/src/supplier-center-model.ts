@@ -40,10 +40,11 @@ export function supplierContractMissingLabels(fields: readonly string[]): string
 export function nextSupplierSelection(
   current: string,
   suppliers: readonly Pick<SupplierSummary, "supplierId">[],
-  compact: boolean,
+  _compact?: boolean,
 ): string {
+  void _compact; // Kept for existing callers; refresh never chooses a record.
   if (current && suppliers.some((supplier) => supplier.supplierId === current)) return current;
-  return compact ? "" : suppliers[0]?.supplierId ?? "";
+  return "";
 }
 
 export function filterSupplierDirectory(
@@ -64,3 +65,4 @@ export function filterSupplierDirectory(
     ].join(" ").toLocaleLowerCase("zh-CN").includes(query);
   });
 }
+

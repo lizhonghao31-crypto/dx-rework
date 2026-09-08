@@ -62,9 +62,11 @@ describe("SSP-02 supplier center model", () => {
       .toEqual(["供应商地址", "乙方代表", "收款账号", "开户行"]);
   });
 
-  it("starts mobile users in the directory and desktop users in the first detail", () => {
+  it("keeps both mobile and desktop users in the directory until they select a supplier", () => {
     expect(nextSupplierSelection("", suppliers, true)).toBe("");
-    expect(nextSupplierSelection("", suppliers, false)).toBe(suppliers[0]?.supplierId);
+    expect(nextSupplierSelection("", suppliers, false)).toBe("");
+    expect(nextSupplierSelection("removed", suppliers, false)).toBe("");
     expect(nextSupplierSelection(suppliers[1]!.supplierId, suppliers, true)).toBe(suppliers[1]?.supplierId);
   });
 });
+
