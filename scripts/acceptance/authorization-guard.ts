@@ -1,15 +1,10 @@
+import type { Pool } from "pg";
+
 export type StandardAcceptanceAuthorization = Readonly<{
   alias: string;
   expectedRole: string;
   activeRoles: readonly string[];
   unrevokedDelegationIds: readonly string[];
-}>;
-
-type Queryable = Readonly<{
-  query: <Row extends Record<string, unknown>>(
-    sql: string,
-    params?: readonly unknown[],
-  ) => Promise<{ rows: Row[] }>;
 }>;
 
 export function assertStandardAcceptanceAuthorization(
@@ -32,7 +27,7 @@ export function assertStandardAcceptanceAuthorization(
 }
 
 export async function preflightExistingAcceptanceIdentity(
-  database: Queryable,
+  database: Pick<Pool, "query">,
   input: Readonly<{
     corpId: string;
     alias: string;
