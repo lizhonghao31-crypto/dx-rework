@@ -31,7 +31,7 @@ describe("loadConfig", () => {
       ACCEPTANCE_LAB_SECRET: "acceptance-lab-secret-with-more-than-32-characters",
     });
     expect(config.acceptanceLab.enabled).toBe(true);
-    expect(config.acceptanceLab.secret).toHaveLength(49);
+    expect(config.acceptanceLab.secret).toHaveLength(50);
   });
 
   it("rejects an acceptance lab without its dedicated secret", () => {
