@@ -1,3 +1,5 @@
+@import "./role-layout-safety.css";
+
 /* Approved 2026-09-08 compact UI. Scoped to the application shell; dialog
    surfaces and mobile sticky action geometry keep their existing contracts. */
 .ui-polish {
