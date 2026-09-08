@@ -8,11 +8,18 @@ import {
   createAcceptanceEvidenceReport,
   firstFailureForScenario,
   parseAcceptanceEvidenceReport,
+  redactAcceptanceEvidenceText,
 } from "../../apps/web/src/acceptance-evidence.js";
 
 describe("acceptance evidence report", () => {
   it("keeps first failures when later attempts pass", () => {
     const created = createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z"));
+    const preflight = {
+      method: "GET" as const,
+      path: "receiving/board?page=1",
+      expectedStatus: 200,
+      actualStatus: 200,
+    };
     const failed = appendScenarioEvidence(created, {
       scenarioId: "warehouse-order-date-filter",
       alias: "warehouse",
@@ -20,6 +27,7 @@ describe("acceptance evidence report", () => {
       actual: "开始日期被结束日期遮挡",
       recordedAt: "2026-09-08T14:01:00.000Z",
       version: null,
+      preflight,
     }, new Date("2026-09-08T14:01:00.000Z"));
     const passed = appendScenarioEvidence(failed, {
       scenarioId: "warehouse-order-date-filter",
@@ -28,6 +36,7 @@ describe("acceptance evidence report", () => {
       actual: "修复后两个日期均可正常点击",
       recordedAt: "2026-09-08T14:02:00.000Z",
       version: null,
+      preflight,
     }, new Date("2026-09-08T14:02:00.000Z"));
 
     expect(passed.scenarioAttempts).toHaveLength(2);
@@ -60,21 +69,42 @@ describe("acceptance evidence report", () => {
     expect(second.matrixAttempts[0]?.version?.gitSha).toBe("abc");
   });
 
-  it("defines representative browser, business and isolated todo scenarios and stores no session secrets", () => {
+  it("defines representative scenarios with mandatory read-only preflights", () => {
     expect(ACCEPTANCE_SCENARIOS.map((scenario) => scenario.id)).toEqual(expect.arrayContaining([
       "finance-director-sample-readonly",
       "warehouse-order-date-filter",
       "owner-todo-inbox",
       "worker-module-boundary",
     ]));
-    expect(ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === "owner-todo-inbox")?.preflight?.path).toBe("todos/mine?page=1");
-    const serialized = JSON.stringify(createAcceptanceEvidenceReport());
-    expect(serialized).not.toContain("dx_rework_session");
-    expect(serialized).not.toContain("dx_acceptance_control");
-    expect(serialized).not.toContain("token");
+    expect(ACCEPTANCE_SCENARIOS.every((scenario) => scenario.preflight.path.length > 0)).toBe(true);
+    expect(ACCEPTANCE_SCENARIOS.every((scenario) => Number.isInteger(scenario.preflight.expectedStatus))).toBe(true);
+    expect(ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === "owner-todo-inbox")?.preflight.path).toBe("todos/mine?page=1");
   });
 
-  it("parses only the versioned report shape", () => {
+  it("redacts secret-shaped scenario notes before evidence can be persisted or exported", () => {
+    const report = createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z"));
+    const secretBearer = "super-secret-bearer-token";
+    const secretSession = "0123456789012345678901234567890123456789012";
+    const dirty = `Authorization: Bearer ${secretBearer}; Cookie: dx_rework_session=${secretSession}; control_code=never-export-me`;
+    const withAttempt = appendScenarioEvidence(report, {
+      scenarioId: "owner-todo-inbox",
+      alias: "owner",
+      status: "blocked",
+      actual: dirty,
+      recordedAt: "2026-09-08T14:01:00.000Z",
+      version: null,
+      preflight: { method: "GET", path: "todos/mine?page=1", expectedStatus: 200, actualStatus: 200 },
+    }, new Date("2026-09-08T14:01:00.000Z"));
+
+    const serialized = JSON.stringify(withAttempt);
+    expect(serialized).not.toContain(secretBearer);
+    expect(serialized).not.toContain(secretSession);
+    expect(serialized).not.toContain("never-export-me");
+    expect(serialized).toContain("REDACTED");
+    expect(redactAcceptanceEvidenceText(dirty)).not.toContain(secretBearer);
+  });
+
+  it("parses only the versioned report shape and sanitizes parsed evidence", () => {
     const report = createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z"));
     expect(parseAcceptanceEvidenceReport(JSON.stringify(report))?.reportId).toBe(report.reportId);
     expect(parseAcceptanceEvidenceReport('{"formatVersion":2}')).toBeNull();
