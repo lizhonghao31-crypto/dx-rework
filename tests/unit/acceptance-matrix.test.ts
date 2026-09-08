@@ -37,12 +37,17 @@ describe("acceptance authorization matrix", () => {
     expect(finance.probes?.find((probe) => probe.id === "sample-list")?.expectedStatus).toBe(200);
   });
 
-  it("defines a complete finance-read module boundary and representative backend denials", () => {
+  it("defines a complete finance-read module boundary and representative backend allow/deny probes", () => {
     const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-read")!;
     expect(finance.allowedModules).toEqual(["rework"]);
     expect(finance.forbiddenModules).toEqual(["sourcing", "suppliers", "production", "samples"]);
-    expect(finance.probes?.map((probe) => [probe.id, probe.expectedStatus])).toEqual([
-      ["access-roles", 403], ["sourcing-list", 403], ["supplier-list", 403], ["sample-list", 403],
+    expect(finance.probes?.map((probe) => [probe.id, probe.path, probe.expectedStatus])).toEqual([
+      ["access-roles", "access/roles", 403],
+      ["rework-report-list", "management/rework-orders", 200],
+      ["sourcing-list", "sourcing/cases?page=1", 403],
+      ["supplier-list", "master-data/suppliers", 403],
+      ["production-dashboard", "production-dashboard", 403],
+      ["sample-list", "samples?page=1", 403],
     ]);
   });
 
