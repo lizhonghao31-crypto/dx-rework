@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
+import type { AcceptanceControlIdentity } from "./acceptance-control.js";
 import type { DingTalkIdentity, DingTalkProvider, OrganizationMember } from "./provider.js";
 
 export type AuthUser = Readonly<{ id: string; displayName: string; capabilities: readonly string[]; businessRoles?: readonly string[] }>;
@@ -25,6 +26,21 @@ export class AuthDeniedError extends Error {
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
+type AcceptanceControllableProvider = DingTalkProvider & Readonly<{
+  beginAcceptanceControl: (code: string) => string;
+  listAcceptanceIdentities: (token: string | undefined) => Promise<readonly AcceptanceControlIdentity[]>;
+  issueAcceptanceLoginCode: (token: string | undefined, alias: string) => Promise<string>;
+  endAcceptanceControl: (token: string | undefined) => void;
+}>;
+
+const isAcceptanceControllableProvider = (provider: DingTalkProvider): provider is AcceptanceControllableProvider => {
+  const candidate = provider as Partial<AcceptanceControllableProvider>;
+  return typeof candidate.beginAcceptanceControl === "function"
+    && typeof candidate.listAcceptanceIdentities === "function"
+    && typeof candidate.issueAcceptanceLoginCode === "function"
+    && typeof candidate.endAcceptanceControl === "function";
+};
+
 export class AuthService {
   constructor(
     private readonly provider: DingTalkProvider,
@@ -34,6 +50,55 @@ export class AuthService {
     private readonly sessionSecret: string,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  acceptanceControlAvailable(): boolean {
+    return isAcceptanceControllableProvider(this.provider);
+  }
+
+  beginAcceptanceControl(code: string): string {
+    const provider = this.acceptanceProvider();
+    try {
+      return provider.beginAcceptanceControl(code);
+    } catch {
+      throw new AuthDeniedError("ACCEPTANCE_CONTROL_INVALID", "验收控制凭证无效、已过期或已使用");
+    }
+  }
+
+  async listAcceptanceIdentities(token: string | undefined): Promise<readonly AcceptanceControlIdentity[]> {
+    const provider = this.acceptanceProvider();
+    try {
+      return await provider.listAcceptanceIdentities(token);
+    } catch {
+      throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "请先取得验收控制权限");
+    }
+  }
+
+  async switchAcceptanceIdentity(
+    controlToken: string | undefined,
+    alias: string,
+  ): Promise<{ token: string; user: AuthUser }> {
+    const provider = this.acceptanceProvider();
+    let loginCode: string;
+    try {
+      loginCode = await provider.issueAcceptanceLoginCode(controlToken, alias);
+    } catch {
+      throw new AuthDeniedError("ACCEPTANCE_IDENTITY_UNAVAILABLE", "验收身份不存在、不可用或控制会话已失效");
+    }
+    return this.loginMobile(loginCode);
+  }
+
+  async endAcceptanceControl(
+    controlToken: string | undefined,
+    businessToken: string | undefined,
+  ): Promise<void> {
+    const provider = this.acceptanceProvider();
+    try {
+      provider.endAcceptanceControl(controlToken);
+    } catch {
+      throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "验收控制会话已失效");
+    }
+    await this.logout(businessToken);
+  }
 
   async beginQr(): Promise<{ authorizationUrl: string; state: string; bindingToken: string }> {
     await this.store.cleanupExpiredAuthArtifacts(this.now());
@@ -79,6 +144,13 @@ export class AuthService {
     const token = randomBytes(32).toString("base64url");
     await this.store.createSession({ id: randomUUID(), tokenHash: this.hashSession(token), userId: user.id, expiresAt: new Date(this.now().getTime() + this.sessionTtlMs), revokedAt: null });
     return { token, user };
+  }
+
+  private acceptanceProvider(): AcceptanceControllableProvider {
+    if (!isAcceptanceControllableProvider(this.provider)) {
+      throw new AuthDeniedError("ACCEPTANCE_NOT_AVAILABLE", "隔离验收中心未启用");
+    }
+    return this.provider;
   }
 
   private hashSession(token: string): string { return createHmac("sha256", this.sessionSecret).update(token).digest("hex"); }
