@@ -81,11 +81,18 @@ describe("acceptance evidence report", () => {
     expect(ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === "owner-todo-inbox")?.preflight.path).toBe("todos/mine?page=1");
   });
 
-  it("redacts secret-shaped scenario notes before evidence can be persisted or exported", () => {
+  it("redacts complete authorization and cookie values before persistence or export", () => {
     const report = createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z"));
     const secretBearer = "super-secret-bearer-token";
+    const secretBasic = "dXNlcjp0b3Atc2VjcmV0";
+    const secretCookie = "cookie-secret-value";
     const secretSession = "0123456789012345678901234567890123456789012";
-    const dirty = `Authorization: Bearer ${secretBearer}; Cookie: dx_rework_session=${secretSession}; control_code=never-export-me`;
+    const dirty = [
+      `Authorization: Bearer ${secretBearer}`,
+      `Authorization: Basic ${secretBasic}`,
+      `Cookie: theme=dark; session=${secretCookie}; dx_rework_session=${secretSession}`,
+      "control_code=never-export-me",
+    ].join("\n");
     const withAttempt = appendScenarioEvidence(report, {
       scenarioId: "owner-todo-inbox",
       alias: "owner",
@@ -98,7 +105,10 @@ describe("acceptance evidence report", () => {
 
     const serialized = JSON.stringify(withAttempt);
     expect(serialized).not.toContain(secretBearer);
+    expect(serialized).not.toContain(secretBasic);
+    expect(serialized).not.toContain(secretCookie);
     expect(serialized).not.toContain(secretSession);
+    expect(serialized).not.toContain("theme=dark");
     expect(serialized).not.toContain("never-export-me");
     expect(serialized).toContain("REDACTED");
     expect(redactAcceptanceEvidenceText(dirty)).not.toContain(secretBearer);
