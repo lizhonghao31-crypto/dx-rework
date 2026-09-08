@@ -1,5 +1,5 @@
 import{describe,expect,it}from'vitest';
-import{analysisDraftQuery,analysisGroupFilter,canReadSampleAnalysis}from'../../apps/web/src/sample-analysis-model.js';
+import{analysisDraftQuery,analysisGroupFilter,canReadSampleAnalysis,analysisNavigation,initialAnalysisNavigation}from'../../apps/web/src/sample-analysis-model.js';
 const first='00000000-0000-4000-8000-000000000100',second='00000000-0000-4000-8000-000000000101';
 describe('sample analysis UI scope and permission',()=>{
  it.each(['sample_finance','sample_approver','owner_group'])('allows financially granted %s',role=>{expect(canReadSampleAnalysis({businessRoles:[role],capabilities:['sample:view_finance']})).toBe(true);expect(canReadSampleAnalysis({businessRoles:[role],capabilities:[]})).toBe(false);});
@@ -9,3 +9,38 @@ describe('sample analysis UI scope and permission',()=>{
  it('rejects inverted dates and excessive decimal precision before any request',()=>{expect(analysisDraftQuery({purchaseFrom:'2026-09-02',purchaseTo:'2026-09-01'}).success).toBe(false);expect(analysisDraftQuery({minPrice:'1.001'}).success).toBe(false);});
  it('drills cross groups using stable person IDs and distinguishes an empty category',()=>{const row={key:'fixture',person:{id:first,name:'同名'},dimension:{id:'raw:品牌A',name:'品牌A'},count:1,amount:'0.10'};expect(analysisGroupFilter('purchaser_brand',row)).toEqual({purchaserUserId:first,brand:'品牌A'});expect(analysisGroupFilter('holder',{...row,person:{id:second,name:'同名'},dimension:null})).toEqual({holderUserId:second});expect(analysisGroupFilter('category',{...row,person:null,dimension:{id:'',name:'未记录类别'}})).toEqual({category:''});});
 });
+
+
+describe('analysis drill return context',()=>{
+ it('restores filters, group and both page positions through nested drills',()=>{
+  const initial={...initialAnalysisNavigation(),query:{...initialAnalysisNavigation().query,group:'brand' as const,page:3,groupPage:2,purchaseFrom:'2026-01-01'},draft:{purchaseFrom:'2026-01-01',minPrice:'0.10'}};
+  const month=analysisNavigation(initial,{type:'drill',patch:{purchaseFrom:'2026-09-01',purchaseTo:'2026-09-30'}});
+  expect(month.query).toMatchObject({page:1,groupPage:1,purchaseFrom:'2026-09-01',purchaseTo:'2026-09-30'});
+  const brand=analysisNavigation(month,{type:'drill',patch:{brand:'原文品牌'}});
+  const back=analysisNavigation(brand,{type:'back'});expect(back).toEqual(month);
+  expect(analysisNavigation(back,{type:'back'})).toEqual(initial);
+  expect(analysisNavigation(initial,{type:'back'})).toBe(initial);
+ });
+ it('keeps a return path through pagination but clears it on explicit filtering',()=>{
+  const month=analysisNavigation(initialAnalysisNavigation(),{type:'drill',patch:{purchaseFrom:'2026-09-01'}});
+  expect(analysisNavigation(month,{type:'change',patch:{page:2}}).history).toHaveLength(1);
+  expect(analysisNavigation(month,{type:'change',patch:{group:'holder'}}).history).toHaveLength(0);
+  expect(analysisNavigation(month,{type:'apply',query:month.query}).history).toHaveLength(0);
+  expect(analysisNavigation(month,{type:'reset'})).toEqual(initialAnalysisNavigation());
+ });
+ it('replaces raw dimensions with stable IDs and removes stale disposal type',()=>{
+  const state={...initialAnalysisNavigation(),query:{...initialAnalysisNavigation().query,brand:'原文',fact:'disposal' as const,disposalType:'sale' as const}};
+  const next=analysisNavigation(state,{type:'drill',patch:{brandId:first,fact:'held'}});
+  expect(next.query.brandId).toBe(first);expect(next.query.brand).toBeUndefined();expect(next.query.disposalType).toBeUndefined();
+ });
+});
+
+ it('drills and paginates from visible successful results after a failed filter request',()=>{
+  const visible={...initialAnalysisNavigation().query,group:'brand' as const,page:2};
+  const failed={...initialAnalysisNavigation(),query:{...visible,minPrice:'99999'},draft:{minPrice:'99999'}};
+  const drilled=analysisNavigation(failed,{type:'drill',baseQuery:visible,patch:{brand:'可见品牌'}});
+  expect(drilled.query.minPrice).toBeUndefined();expect(drilled.query.brand).toBe('可见品牌');
+  const back=analysisNavigation(drilled,{type:'back'});expect(back.query).toEqual(visible);expect(back.draft.minPrice).toBeUndefined();
+  expect(analysisNavigation(failed,{type:'change',baseQuery:visible,patch:{page:3}}).query).toMatchObject({page:3,group:'brand'});
+  expect(analysisNavigation(failed,{type:'change',baseQuery:visible,patch:{page:3}}).query.minPrice).toBeUndefined();
+ });

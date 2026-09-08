@@ -16,3 +16,34 @@ export function analysisGroupFilter(group:SampleAnalysisQuery['group'],row:Sampl
   else if(group==='brand'||group==='purchaser_brand'){if(d.id.startsWith('raw:'))result.brand=d.id.slice(4);else result.brandId=d.id;}}
  return result;
 }
+
+
+export type AnalysisContext={query:SampleAnalysisQuery;draft:AnalysisDraft};
+export type AnalysisNavigation=AnalysisContext&{history:AnalysisContext[]};
+export type AnalysisNavigationAction=
+ |{type:'draft';key:string;value:string}
+ |{type:'apply';query:SampleAnalysisQuery}
+ |{type:'reset'}
+ |{type:'change'|'drill';patch:Partial<SampleAnalysisQuery>;baseQuery?:SampleAnalysisQuery}
+ |{type:'back'};
+export function analysisQueryDraft(query:SampleAnalysisQuery):AnalysisDraft{
+ const result:AnalysisDraft={};for(const [key,value] of Object.entries(query))if(!['page','groupPage','group'].includes(key)&&value!==undefined)result[key]=String(value);
+ result.brandChoice=query.brandId??(query.brand?'raw:'+query.brand:'');result.departmentChoice=query.departmentId??(query.department?'raw:'+query.department:'');
+ delete result.brand;delete result.brandId;delete result.department;delete result.departmentId;return result;
+}
+export function initialAnalysisNavigation():AnalysisNavigation{return {query:SampleAnalysisQuerySchema.parse({}),draft:{},history:[]};}
+export function analysisNavigation(state:AnalysisNavigation,action:AnalysisNavigationAction):AnalysisNavigation{
+ if(action.type==='draft')return {...state,draft:{...state.draft,[action.key]:action.value}};
+ if(action.type==='reset')return initialAnalysisNavigation();
+ if(action.type==='apply')return {query:action.query,draft:state.draft,history:[]};
+ if(action.type==='back'){const previous=state.history.at(-1);return previous?{...previous,history:state.history.slice(0,-1)}:state;}
+ const baseQuery=action.baseQuery??state.query;
+ const baseDraft=JSON.stringify(baseQuery)===JSON.stringify(state.query)?state.draft:analysisQueryDraft(baseQuery);
+ const patch=action.patch,next={...baseQuery,page:1,groupPage:1,...patch};
+ if('brandId'in patch)delete next.brand;if('brand'in patch)delete next.brandId;
+ if('departmentId'in patch)delete next.department;if('department'in patch)delete next.departmentId;
+ if('fact'in patch&&!('disposalType'in patch))delete next.disposalType;
+ const query=SampleAnalysisQuerySchema.parse(next);
+ const history=action.type==='drill'?[...state.history,{query:baseQuery,draft:baseDraft}]:Object.keys(patch).every(key=>key==='page'||key==='groupPage')?state.history:[];
+ return {query,draft:analysisQueryDraft(query),history};
+}
