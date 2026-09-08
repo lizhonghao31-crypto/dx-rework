@@ -10,7 +10,7 @@ describe("business-chain isolated schema cleanup", () => {
     );
 
     expect(source).toContain(
-      "/^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32}|sourcing_[0-9a-f]{32}|sample_[0-9a-f]{32})$/",
+      "/^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32}|sourcing_[0-9a-f]{32}|sample_[0-9a-f]{32}|acceptance_roles_[0-9a-f]{32})$/",
     );
     expect(source).toContain("if (!ISOLATED_GATE_SCHEMA.test(schema)) continue;");
     expect(source).toContain("WHERE nspname LIKE 'full_chain_%'");
@@ -19,6 +19,8 @@ describe("business-chain isolated schema cleanup", () => {
     expect(source).toContain("OR nspname LIKE 'rework_v2_%'");
     expect(source).toContain("OR nspname LIKE 'sourcing_%'");
     expect(source).toContain("OR nspname LIKE 'sample_%'");
+    expect(source).toContain("OR nspname LIKE 'acceptance_roles_%'");
+    expect(source).toContain("tests/integration/acceptance-role-session-postgres.test.ts");
     expect(source).toContain("finally {");
     expect(source).toContain("if (hasDatabase) await cleanupIsolatedGateSchemas();");
     expect(source).not.toContain("DROP SCHEMA public");
