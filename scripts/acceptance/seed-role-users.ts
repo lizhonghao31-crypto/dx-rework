@@ -4,7 +4,10 @@ import pg from "pg";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
-import { assertStandardAcceptanceAuthorization } from "./authorization-guard.js";
+import {
+  assertStandardAcceptanceAuthorization,
+  preflightExistingAcceptanceIdentity,
+} from "./authorization-guard.js";
 import {
   assertAcceptanceDatabaseName,
   assertAcceptanceDatabaseUrl,
@@ -92,6 +95,17 @@ try {
     .rows[0]?.current_database ?? "";
   assertAcceptanceDatabaseName(databaseName, "connected");
 
+  // Hard fail-closed boundary: every existing non-Root standard identity is
+  // checked using SELECTs only before the first user/identity/role mutation.
+  for (const [alias, , roleCode] of ACCEPTANCE_USERS) {
+    if (alias === "root") continue;
+    await preflightExistingAcceptanceIdentity(pool, {
+      corpId,
+      alias,
+      expectedRole: roleCode,
+    });
+  }
+
   for (const [alias, displayName] of ACCEPTANCE_USERS) await ensureUser(alias, displayName);
 
   const rootId = userIdByAlias.get("root")!;
@@ -138,6 +152,8 @@ try {
     requestId: randomUUID(),
   };
 
+  // Defense in depth: the post-mutation snapshot must still be standard before
+  // any missing role is assigned.
   for (const [alias, , roleCode] of ACCEPTANCE_USERS) {
     if (alias === "root") continue;
     const userId = userIdByAlias.get(alias)!;
