@@ -17,14 +17,15 @@ import { AuthService } from "../../apps/api/src/auth/service.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL;
+const inertDatabaseUrl = databaseUrl ?? "postgresql://acceptance:acceptance@127.0.0.1:1/acceptance_skip";
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 
 runWithPostgres("acceptance role sessions", () => {
   const schema = `acceptance_roles_${randomUUID().replaceAll("-", "")}`;
-  const admin = new Pool({ connectionString: databaseUrl! });
+  const admin = new Pool({ connectionString: inertDatabaseUrl });
   const database = new Pool({
-    connectionString: databaseUrl!,
+    connectionString: inertDatabaseUrl,
     options: `-c search_path=${schema}`,
   });
   const corpId = "corp-acceptance";
@@ -38,7 +39,7 @@ runWithPostgres("acceptance role sessions", () => {
 
   const config = loadConfig({
     NODE_ENV: "test",
-    DATABASE_URL: databaseUrl!,
+    DATABASE_URL: inertDatabaseUrl,
     DINGTALK_CORP_ID: corpId,
     DINGTALK_H5_APP_KEY: "acceptance-disabled",
     DINGTALK_H5_APP_SECRET: "acceptance-disabled",
