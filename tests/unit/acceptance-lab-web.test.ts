@@ -18,5 +18,9 @@ describe("acceptance lab controller UI", () => {
     expect(page).toContain('acceptance/control/switch');
     expect(page).toContain('target="_blank"');
     expect(page).toContain('当前被测身份');
+    expect(page).toContain('运行全部角色权限矩阵');
+    expect(page).toContain('ACCEPTANCE_ROLE_MATRIX');
+    expect(page).toContain('evaluateAcceptanceSnapshot');
+    expect(page).toContain('evaluateHttpProbe');
   });
 });
