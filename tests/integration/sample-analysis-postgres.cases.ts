@@ -79,4 +79,17 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
    for(const [sql,index] of [[`SELECT sample_id FROM sample_items WHERE purchaser_user_id='${person}' AND purchase_date>='2026-09-01'`,'sample_analysis_purchaser_date_idx'],["SELECT sample_id FROM sample_items WHERE category='外套' AND purchase_date>='2026-09-01'",'sample_analysis_category_date_idx'],["SELECT sample_id FROM sample_financial_facts WHERE purchase_price BETWEEN 1 AND 2",'sample_analysis_price_idx']])expect(JSON.stringify((await client.query('EXPLAIN (COSTS OFF) '+sql)).rows)).toContain(index);
    await client.query('ROLLBACK');}finally{client.release();}
  });
+ it('orders numeric amounts before group pagination and uses stable keys for ties',async()=>{
+  const rankedPerson=randomUUID();await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'排序合成人员',true)",[rankedPerson]);
+  const values=[9,80,100,1000,1000,...Array.from({length:15},(_,i)=>10+i)];
+  const expected=values.map((amount,i)=>({amount:amount.toFixed(2),key:'raw:Rank'+String(i).padStart(2,'0')}));
+  for(const row of expected)await sample('in_stock',row.amount,rankedPerson,row.key.slice(4));
+  expected.sort((a,b)=>Number(b.amount)-Number(a.amount)||a.key.localeCompare(b.key));
+  const first=await service.read(actor(),{purchaserUserId:rankedPerson,group:'brand'});
+  const second=await service.read(actor(),{purchaserUserId:rankedPerson,group:'brand',groupPage:2});
+  expect(first.groupTotal).toBe(20);expect(first.groups).toHaveLength(15);expect(second.groups).toHaveLength(5);
+  expect([...first.groups,...second.groups].map(({key,amount})=>({key,amount}))).toEqual(expected);
+ });
+
 });
+

@@ -26,3 +26,25 @@
 .sample-analysis input,.sample-analysis select {font-size:var(--dx-form-control-font-size);color:var(--dx-v2-color-text);} .sample-analysis .analysis-toolbar select {min-width:150px;}
 
 .analysis-filter-toggle {display:none;} @media(max-width:600px){.analysis-filter-toggle{display:block;border:0;background:none;color:inherit;font:inherit;min-height:40px;text-align:left;width:100%;cursor:pointer;}.analysis-filter-form:not(.is-open){display:none;}.analysis-filter-form.is-open{margin-top:var(--dx-v2-space-3);}}
+
+
+/* Compact analysis without stretching rankings to the adjacent panel. */
+.app-shell .sample-analysis-workspace{max-width:none;padding:0}
+.sample-analysis{gap:12px}
+.analysis-panels{gap:12px;align-items:start}
+.analysis-panels>.dx-surface{align-content:start;gap:12px}
+.analysis-trend,.analysis-rank{gap:4px;align-content:start;grid-auto-rows:min-content}
+.analysis-trend button,.analysis-rank button{min-height:44px;padding:8px 0;line-height:1.5}
+.analysis-trend button:disabled,.analysis-rank button:disabled{cursor:wait;opacity:.65}
+.sample-analysis .analysis-disclosure{padding:8px 12px!important}
+.analysis-disclosure summary{min-height:40px;display:flex;align-items:center;gap:8px;font-weight:600}
+.analysis-disclosure summary::-webkit-details-marker{display:none}
+.analysis-disclosure summary::before{content:'▸'}
+.analysis-disclosure details[open]>summary::before{content:'▾'}
+.analysis-filter-main{gap:10px 12px}
+.analysis-more{margin-block:10px}
+.analysis-metrics{gap:12px}
+.analysis-metrics dd{font-size:22px;margin-top:4px}
+.analysis-detail-list article{gap:12px;padding-block:12px}
+.analysis-detail-list article>div{gap:4px}
+@media(max-width:600px){.analysis-disclosure summary{min-height:44px}.analysis-rank strong{grid-column:auto}.analysis-rank button{grid-template-columns:20px minmax(0,1fr) auto;font-size:14px}}

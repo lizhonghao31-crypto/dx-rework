@@ -89,7 +89,7 @@ export class SampleAnalysisService {
    const groupTotal=await query(`SELECT count(*)::int AS total FROM (${groupSql}) groups`);
    const groups=await query(`SELECT key,CASE WHEN person_id IS NULL THEN NULL ELSE jsonb_build_object('id',person_id,'name',person_name) END AS person,
     CASE WHEN dimension_id IS NULL THEN NULL ELSE jsonb_build_object('id',dimension_id,'name',dimension_name) END AS dimension,
-    count,amount::numeric(24,2)::text FROM (${groupSql}) groups ORDER BY amount DESC,key LIMIT 15 OFFSET $${filter.values.length+1}`,[(q.groupPage-1)*15]);
+    count,amount::numeric(24,2)::text FROM (${groupSql}) groups ORDER BY groups.amount DESC,groups.key LIMIT 15 OFFSET $${filter.values.length+1}`,[(q.groupPage-1)*15]);
    const items=await query(`SELECT sample_id AS "sampleId",sample_code AS "sampleCode",style_name AS "styleName",style_no AS "styleNo",status,
     to_char(purchase_date,'YYYY-MM-DD') AS "purchaseDate",jsonb_build_object('id',purchaser_user_id,'name',purchaser_name) AS purchaser,
     CASE WHEN holder_user_id IS NULL THEN NULL ELSE jsonb_build_object('id',holder_user_id,'name',holder_name) END AS holder,
@@ -113,3 +113,4 @@ export class SampleAnalysisService {
   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
  }
 }
+
