@@ -259,3 +259,11 @@ process.stdout.write(
     ? "BUSINESS_CHAIN_CORE_GATE_PASSED: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + N01-N11 + two fresh Root single-account passes + isolated acceptance role sessions\n"
     : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
 );
+
+await verifyOssRuntime();
+
+process.stdout.write(
+  hasDatabase
+    ? "BUSINESS_CHAIN_GATE_PASSED\n"
+    : "BUSINESS_CHAIN_STATIC_GATES_PASSED\n",
+);
