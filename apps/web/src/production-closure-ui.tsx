@@ -15,7 +15,7 @@ export function ProductionPilotControls(){
  useEffect(()=>{let live=true;void verifySession().then(s=>{if(live)setRoot(s!=="denied"&&s.user.isRoot===true);}).catch(()=>undefined);return()=>{live=false;};},[]);
  const load=async()=>{try{setData(await read("pilots",ProductionPilotListSchema));}catch(e){setError(e instanceof Error?e.message:"加载失败");}};
  if(!root)return null;
- return <Surface className="sourcing-list-card production-admin-tool" data-open={open}><Button className="ui-disclosure-trigger" aria-expanded={open} variant="secondary" disabled={busy} onClick={()=>{setOpen(!open);if(!open)void load();}}>供应商试点设置</Button>
+ return <Surface className={`sourcing-list-card production-admin-tool${open?' is-open':''}`}><Button className="ui-disclosure-trigger" aria-expanded={open} variant="secondary" disabled={busy} onClick={()=>{setOpen(!open);if(!open)void load();}}>供应商试点设置</Button>
   {open?<><p>按供应商启用生产风险待办和回货关联。关闭后停止新增待办与关联，保留已记录的业务历史。</p>
    {error?<p role="alert">{error}</p>:null}<div className="sourcing-form-grid">{data?.suppliers.map(s=><label key={s.supplierId}>{s.supplierName}
     <select disabled={busy} value={s.enabled?"on":"off"} onChange={async e=>{setBusy(true);setError("");try{
