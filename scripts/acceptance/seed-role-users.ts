@@ -6,6 +6,7 @@ import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import {
   assertStandardAcceptanceAuthorization,
+  preflightAcceptanceRootState,
   preflightExistingAcceptanceIdentity,
 } from "./authorization-guard.js";
 import {
@@ -95,8 +96,12 @@ try {
     .rows[0]?.current_database ?? "";
   assertAcceptanceDatabaseName(databaseName, "connected");
 
-  // Hard fail-closed boundary: every existing non-Root standard identity is
-  // checked using SELECTs only before the first user/identity/role mutation.
+  // Root invariants are checked before any user/identity/role mutation. Existing
+  // partial or contradictory Root state is never repaired implicitly.
+  const rootPreflight = await preflightAcceptanceRootState(pool, corpId);
+
+  // Every existing non-Root standard identity is also checked using SELECTs only
+  // before the first user/identity/role mutation.
   for (const [alias, , roleCode] of ACCEPTANCE_USERS) {
     if (alias === "root") continue;
     await preflightExistingAcceptanceIdentity(pool, {
@@ -109,37 +114,25 @@ try {
   for (const [alias, displayName] of ACCEPTANCE_USERS) await ensureUser(alias, displayName);
 
   const rootId = userIdByAlias.get("root")!;
-  const policy = await pool.query("SELECT 1 FROM access_security_policy WHERE policy_key='primary'");
-  const rootAssignment = await pool.query(
-    "SELECT 1 FROM user_role_assignments WHERE user_id=$1 AND role_code='owner_group' AND revoked_at IS NULL",
-    [rootId],
-  );
-
-  if (!policy.rows[0]) {
-    if (!rootAssignment.rows[0]) {
-      await pool.query(
-        `INSERT INTO user_role_assignments(
-           assignment_id,user_id,role_code,granted_by,grant_reason
-         ) VALUES($1,$2,'owner_group',$2,'验收环境首次Root角色')`,
-        [randomUUID(), rootId],
-      );
-    }
-    const bootstrap = await pool.query<{ user_id: string }>("SELECT user_id FROM owner_bootstrap_consumptions WHERE singleton=true");
-    if (!bootstrap.rows[0]) {
-      await pool.query(
-        `INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
-         VALUES(true,$1,'uat-root',$2)`,
-        [rootId, corpId],
-      );
-    } else if (bootstrap.rows[0].user_id !== rootId) {
-      throw new Error("Acceptance database is already bound to a different Root identity");
-    }
+  if (rootPreflight.mode === "existing" && rootPreflight.userId !== rootId) {
+    throw new Error("Acceptance Root identity changed after preflight; rebuild the acceptance database");
+  }
+  if (rootPreflight.mode === "fresh") {
+    await pool.query(
+      `INSERT INTO user_role_assignments(
+         assignment_id,user_id,role_code,granted_by,grant_reason
+       ) VALUES($1,$2,'owner_group',$2,'验收环境首次Root角色')`,
+      [randomUUID(), rootId],
+    );
+    await pool.query(
+      `INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
+       VALUES(true,$1,'uat-root',$2)`,
+      [rootId, corpId],
+    );
     await pool.query(
       "INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary',$1)",
       [corpId],
     );
-  } else if (!rootAssignment.rows[0]) {
-    throw new Error("Acceptance security policy exists but the UAT Root owner role is missing; rebuild the acceptance database instead of bypassing guards");
   }
 
   const access = new AccessMasterDataService(pool, corpId);
