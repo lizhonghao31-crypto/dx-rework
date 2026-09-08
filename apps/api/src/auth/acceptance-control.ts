@@ -99,25 +99,27 @@ const readControlCode = (code: string, secret: string, now: number): ControlCode
 
 export class AcceptanceControlAuthority {
   private readonly sessions = new Map<string, number>();
-  private readonly consumedCodes = new Map<string, number>();
   private loginSequence = 0;
 
   constructor(
     private readonly database: Pick<Pool, "query">,
+    private readonly corporationId: string,
     private readonly secret: string,
     private readonly now: () => number = Date.now,
   ) {
     if (secret.length < 32) throw new DingTalkProtocolError("Acceptance lab secret is too short");
   }
 
-  begin(code: string): string {
+  async begin(code: string): Promise<string> {
     this.cleanup();
     const payload = readControlCode(code, this.secret, this.now());
-    const codeHash = hash(code);
-    if (this.consumedCodes.has(codeHash)) {
+    const consumed = await this.database.query(
+      "INSERT INTO auth_consumed_codes(code_hash,expires_at) VALUES($1,$2) ON CONFLICT DO NOTHING",
+      [hash(`acceptance-control:${code}`), new Date(payload.expiresAt)],
+    );
+    if (consumed.rowCount !== 1) {
       throw new DingTalkProtocolError("Acceptance control code has already been used");
     }
-    this.consumedCodes.set(codeHash, payload.expiresAt);
     if (this.sessions.size >= MAX_CONTROL_SESSIONS) {
       const oldest = this.sessions.keys().next().value as string | undefined;
       if (oldest) this.sessions.delete(oldest);
@@ -146,11 +148,12 @@ export class AcceptanceControlAuthority {
        JOIN app_users u ON u.id=i.user_id
        LEFT JOIN user_role_assignments ura ON ura.user_id=i.user_id AND ura.revoked_at IS NULL
        LEFT JOIN role_capabilities rc ON rc.role_code=ura.role_code
-       WHERE i.provider='dingtalk'
+       WHERE i.provider='dingtalk' AND i.corp_id=$1
          AND i.provider_user_id LIKE 'uat-%'
          AND i.union_id LIKE 'uat-union-%'
        GROUP BY i.user_id,i.provider_user_id,u.display_name,i.active,i.employed
        ORDER BY i.provider_user_id`,
+      [this.corporationId],
     );
     return result.rows.map((row) => ({
       alias: row.provider_user_id.slice(4),
@@ -170,6 +173,7 @@ export class AcceptanceControlAuthority {
     if (!identities.some((identity) => identity.alias === normalized && identity.active && identity.employed)) {
       throw new DingTalkProtocolError("Acceptance identity is unavailable");
     }
+    await this.revokeBusinessSessions();
     this.loginSequence = (this.loginSequence + 1) % 1_000;
     const expiresAt = this.now() + 5 * 60_000 + this.loginSequence;
     const payload = Buffer.from(JSON.stringify({ alias: normalized, expiresAt }), "utf8").toString("base64url");
@@ -179,14 +183,29 @@ export class AcceptanceControlAuthority {
     return `${payload}.${loginSignature}`;
   }
 
-  end(token: string | undefined): void {
+  async end(token: string | undefined): Promise<void> {
     this.assertControl(token);
+    await this.revokeBusinessSessions();
     this.sessions.delete(hash(token!));
+  }
+
+  private async revokeBusinessSessions(): Promise<void> {
+    await this.database.query(
+      `UPDATE auth_sessions session
+       SET revoked_at=$1
+       FROM identity_mappings identity
+       WHERE session.user_id=identity.user_id
+         AND identity.provider='dingtalk'
+         AND identity.corp_id=$2
+         AND identity.provider_user_id LIKE 'uat-%'
+         AND identity.union_id LIKE 'uat-union-%'
+         AND session.revoked_at IS NULL`,
+      [new Date(this.now()), this.corporationId],
+    );
   }
 
   private cleanup(): void {
     const now = this.now();
     for (const [key, expiresAt] of this.sessions) if (expiresAt <= now) this.sessions.delete(key);
-    for (const [key, expiresAt] of this.consumedCodes) if (expiresAt <= now) this.consumedCodes.delete(key);
   }
 }

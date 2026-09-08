@@ -31,7 +31,7 @@ export function registerAcceptanceControlRoutes(
   const clearBusiness = `${BUSINESS_COOKIE}=; Path=${options.appBasePath}; HttpOnly; SameSite=Lax; Max-Age=0${options.secureCookie ? "; Secure" : ""}`;
 
   app.post<{ Body: { code?: string } }>("/acceptance/control/start", async (request, reply) => {
-    const token = auth.beginAcceptanceControl(request.body?.code ?? "");
+    const token = await auth.beginAcceptanceControl(request.body?.code ?? "");
     return reply.header("set-cookie", controlCookie(token)).send({ status: "ready" });
   });
 

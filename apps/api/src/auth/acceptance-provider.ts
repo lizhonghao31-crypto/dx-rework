@@ -122,12 +122,13 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     }
     this.control = new AcceptanceControlAuthority(
       acceptanceDatabase,
+      acceptanceCorporationId,
       acceptanceSecret,
       acceptanceNow,
     );
   }
 
-  beginAcceptanceControl(code: string): string {
+  beginAcceptanceControl(code: string): Promise<string> {
     return this.control.begin(code);
   }
 
@@ -139,8 +140,8 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     return this.control.issueLoginCode(token, alias);
   }
 
-  endAcceptanceControl(token: string | undefined): void {
-    this.control.end(token);
+  endAcceptanceControl(token: string | undefined): Promise<void> {
+    return this.control.end(token);
   }
 
   override buildQrAuthorizationUrl(state: string): string {

@@ -198,6 +198,17 @@ runWithPostgres("acceptance role sessions", () => {
     const controlCookie = controlRaw!.split(";", 1)[0]!;
     expect(controlCookie).toContain("dx_acceptance_control=");
 
+    const restartedAuth = new AuthService(
+      new AcceptanceDingTalkProvider(database, corpId, acceptanceSecret),
+      new PostgresAuthStore(database, corpId, "uat-root"),
+      corpId,
+      60 * 60_000,
+      sessionSecret,
+    );
+    await expect(restartedAuth.beginAcceptanceControl(code)).rejects.toMatchObject({
+      code: "ACCEPTANCE_CONTROL_INVALID",
+    });
+
     const status = await app.inject({ method: "GET", url: "/acceptance/control/status", headers: { cookie: controlCookie } });
     expect(status.statusCode).toBe(200);
     expect(status.json().identities.map((identity: { alias: string }) => identity.alias)).toEqual(expect.arrayContaining(["root", "worker-a", "finance-director"]));
@@ -218,6 +229,7 @@ runWithPostgres("acceptance role sessions", () => {
     const rootCookie = rootRaw!.split(";", 1)[0]!;
     const root = await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: rootCookie } });
     expect(root.json()).toMatchObject({ user: { id: ids.root, isRoot: true, businessRoles: ["owner_group"] } });
+    expect((await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: workerCookie } })).statusCode).toBe(401);
 
     const end = await app.inject({ method: "POST", url: "/acceptance/control/end", headers: { cookie: `${controlCookie}; ${rootCookie}` } });
     expect(end.statusCode).toBe(204);
@@ -225,6 +237,7 @@ runWithPostgres("acceptance role sessions", () => {
       expect.stringContaining("dx_acceptance_control=;"),
       expect.stringContaining("dx_rework_session=;"),
     ]));
+    expect((await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: rootCookie } })).statusCode).toBe(401);
     expect((await app.inject({ method: "GET", url: "/acceptance/control/status", headers: { cookie: controlCookie } })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/acceptance/control/start", payload: { code } })).statusCode).toBe(401);
   });

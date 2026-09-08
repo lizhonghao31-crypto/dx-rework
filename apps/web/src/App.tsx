@@ -1,5 +1,4 @@
 import { installInternalNavigation } from "./internal-navigation.js";
-import { AcceptanceLabPage } from "./acceptance-lab-page.js";
 import { ProductionDashboardPage } from "./production-dashboard-page.js";
 import { SampleWorkspacePage } from "./sample-workspace-page.js";
 import { SampleHandoffPage } from "./sample-workflow-page.js";
@@ -88,24 +87,33 @@ function readInternalLocation(basePath: string): InternalLocation {
 
 function useInternalLocation(basePath: string): InternalLocation {
   const [location, setLocation] = useState(() => readInternalLocation(basePath));
+
   useEffect(() => installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath))), [basePath]);
+
   return location;
 }
 
 const PLATFORM_MODULE_SESSION_KEY = "dx-rework:platform-module";
 
 function readSelectedPlatformModule(): string | null {
-  try { return window.sessionStorage.getItem(PLATFORM_MODULE_SESSION_KEY); } catch { return null; }
+  try {
+    return window.sessionStorage.getItem(PLATFORM_MODULE_SESSION_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function rememberReworkModule(): void {
-  try { window.sessionStorage.setItem(PLATFORM_MODULE_SESSION_KEY, "rework"); } catch { /* embedded browser */ }
+  try {
+    window.sessionStorage.setItem(PLATFORM_MODULE_SESSION_KEY, "rework");
+  } catch {
+    // Session storage can be unavailable in restricted embedded browsers.
+  }
 }
 
 function skipsInitialPlatformEntryCheck(path: string): boolean {
   return path === "/"
     || path === "/ui/home"
-    || path === "/ui/acceptance-lab"
     || path.startsWith("/ui/sourcing")
     || path.startsWith("/ui/samples")
     || path.startsWith("/auth/");
@@ -117,57 +125,120 @@ function useInitialPlatformEntryCheck(path: string, search: string): boolean {
 
   useEffect(() => {
     if (ready) return;
+
     let mounted = true;
     const query = new URLSearchParams(initialLocation.search);
     if (query.get(PLATFORM_MODULE_QUERY) === "rework") {
-      rememberReworkModule(); setReady(true); return;
+      rememberReworkModule();
+      setReady(true);
+      return;
     }
+
     void verifySession().then((session) => {
       if (!mounted) return;
+
       if (session !== "denied" && session.status === "authorized") {
         const selectedModule = readSelectedPlatformModule();
-        if (shouldRedirectLegacyLandingToPlatformHome(session.user, initialLocation.path, initialLocation.search, selectedModule)) {
-          window.location.replace(pageUrl("ui/home")); return;
+        if (shouldRedirectLegacyLandingToPlatformHome(
+          session.user,
+          initialLocation.path,
+          initialLocation.search,
+          selectedModule,
+        )) {
+          window.location.replace(pageUrl("ui/home"));
+          return;
         }
+
         if (accessiblePlatformModules(session.user).length >= 2) rememberReworkModule();
       }
+
       setReady(true);
     });
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, [initialLocation, ready]);
+
   return ready;
 }
 
 function PlatformEntryChecking() {
-  return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone="info">达兴组织准入</StatusBadge><h1>正在进入业务工作台</h1><p>正在核对可访问的业务模块…</p></Surface></main>;
+  return (
+    <main className="auth-shell">
+      <Surface className="auth-card">
+        <StatusBadge tone="info">达兴组织准入</StatusBadge>
+        <h1>正在进入业务工作台</h1>
+        <p>正在核对可访问的业务模块…</p>
+      </Surface>
+    </main>
+  );
 }
 
 function HomeLanding() {
   const [message, setMessage] = useState("正在进入业务工作台…");
+
   useEffect(() => {
     let mounted = true;
     void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) { window.location.replace(pageUrl("auth/login")); return; }
+        if (!response.ok) {
+          window.location.replace(pageUrl("auth/login"));
+          return;
+        }
         const body = await response.json() as LandingMe;
-        if (body.status === "no_role") { if (mounted) setMessage("当前账号尚未分配业务角色，请联系管理员。"); return; }
+        if (body.status === "no_role") {
+          if (mounted) setMessage("当前账号尚未分配业务角色，请联系管理员。");
+          return;
+        }
+
         const target = platformLandingTarget(body.user);
-        if (!target) { if (mounted) setMessage("当前角色暂时没有可进入的业务模块，请联系管理员核对岗位权限。"); return; }
+        if (!target) {
+          if (mounted) setMessage("当前角色暂时没有可进入的业务模块，请联系管理员核对岗位权限。");
+          return;
+        }
         window.location.replace(pageUrl(target));
       })
-      .catch(() => { if (mounted) setMessage("工作台加载失败，请刷新页面重试。"); });
-    return () => { mounted = false; };
+      .catch(() => {
+        if (mounted) setMessage("工作台加载失败，请刷新页面重试。");
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
-  return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone="info">达兴组织准入</StatusBadge><h1>正在进入业务工作台</h1><p>{message}</p></Surface></main>;
+
+  return (
+    <main className="auth-shell">
+      <Surface className="auth-card">
+        <StatusBadge tone="info">达兴组织准入</StatusBadge>
+        <h1>正在进入业务工作台</h1>
+        <p>{message}</p>
+      </Surface>
+    </main>
+  );
 }
 
 function ReceivingReworkEntryRedirect() {
-  useEffect(() => { window.location.replace(pageUrl("ui/orders")); }, []);
-  return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone="info">订单回货</StatusBadge><h1>请从收货订单发起返工</h1><p>正在返回订单回货看板…</p></Surface></main>;
+  useEffect(() => {
+    window.location.replace(pageUrl("ui/orders"));
+  }, []);
+
+  return (
+    <main className="auth-shell">
+      <Surface className="auth-card">
+        <StatusBadge tone="info">订单回货</StatusBadge>
+        <h1>请从收货订单发起返工</h1>
+        <p>正在返回订单回货看板…</p>
+      </Surface>
+    </main>
+  );
 }
 
 function LegacySupplierCenterRedirect() {
-  useEffect(() => { window.location.replace(pageUrl("ui/suppliers")); }, []);
+  useEffect(() => {
+    window.location.replace(pageUrl("ui/suppliers"));
+  }, []);
   return <Shell active="供应商目录"><Surface className="admin-card"><p>正在进入供应商中心…</p></Surface></Shell>;
 }
 
@@ -183,7 +254,6 @@ export function App() {
   if (path === "/auth/denied") return <DeniedPage />;
   if (path === "/auth/qr") return <QrLoginPage />;
   if (path === "/auth/qr/relay") return <QrRelayPage />;
-  if (path === "/ui/acceptance-lab") return <AcceptanceLabPage />;
   const sampleMatch = path.match(/^\/ui\/samples\/([0-9a-f-]{36})$/i);
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   let page;
@@ -202,7 +272,9 @@ export function App() {
   else if (sourcingOrderMatch?.[1]) page = <SourcingWorkspacePage view="detail" sourcingCaseId={sourcingOrderMatch[1]} />;
   else if (path === "/ui/admin" || path === "/ui/audit") {
     const requestedTab = new URLSearchParams(search).get("tab");
-    const adminTab = requestedTab === "attachments" || requestedTab === "delegations" || requestedTab === "exceptions" ? requestedTab : "audit";
+    const adminTab = requestedTab === "attachments" || requestedTab === "delegations" || requestedTab === "exceptions"
+      ? requestedTab
+      : "audit";
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
@@ -211,8 +283,13 @@ export function App() {
   else if (path === "/ui/suppliers") page = <SupplierCenterPage mode="directory" />;
   else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage mode="manage" />;
   else if (path === "/ui/master-data") {
-    const parameters = new URLSearchParams(search); const masterDataView = parameters.get("view");
-    page = masterDataView === "suppliers" ? parameters.get("tool") === "onboarding" ? <MasterDataPage view="suppliers" /> : <LegacySupplierCenterRedirect /> : <MasterDataPage view={masterDataView === "processes" ? "processes" : "crafts"} />;
+    const parameters = new URLSearchParams(search);
+    const masterDataView = parameters.get("view");
+    page = masterDataView === "suppliers"
+      ? parameters.get("tool") === "onboarding"
+        ? <MasterDataPage view="suppliers" />
+        : <LegacySupplierCenterRedirect />
+      : <MasterDataPage view={masterDataView === "processes" ? "processes" : "crafts"} />;
   }
   else if (path === "/ui/people") page = <WorkforceMasterDataPage />;
   else if (path === "/ui/frontline") page = <FrontlineLandingPage />;
@@ -229,39 +306,162 @@ export function App() {
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
-  else if (path === "/ui/qc/new") page = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(receivingEntryBatchId) ? <Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell> : <ReceivingReworkEntryRedirect />;
-  else if (path === "/ui/process-configuration") page = hasReworkContext ? <Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell> : <WorkflowQueuePage active="返工单看板" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
-  else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext ? <Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell> : <WorkflowQueuePage active="返工单看板" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
+  else if (path === "/ui/qc/new") page = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(receivingEntryBatchId)
+    ? <Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>
+    : <ReceivingReworkEntryRedirect />;
+  else if (path === "/ui/process-configuration") page = hasReworkContext
+    ? <Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
+    : <WorkflowQueuePage active="返工单看板" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
+  else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
+    ? <Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>
+    : <WorkflowQueuePage active="返工单看板" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
 
   const owner = { requiredRole: "owner_group" } as const;
+
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
     if (path === "/ui/samples/handoff") return <AuthGate requiredRole="sample_administrative" requiredCapability="sample:view_basic">{page}</AuthGate>;
-    if (path === "/ui/samples/create" || path === "/ui/samples/batch-create") return <AuthGate requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}>{page}</AuthGate>;
-    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "sample_approver", "owner_group"] : ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"];
-    return <AuthGate requiredAnyOf={roles.map(requiredRole => ({ requiredRole, requiredCapability: path === "/ui/samples/amounts" ? "sample:view_finance" : "sample:view_basic" }))}>{page}</AuthGate>;
+    if (path === "/ui/samples/create" || path === "/ui/samples/batch-create") {
+      return <AuthGate requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}>{page}</AuthGate>;
+    }
+    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "sample_approver", "owner_group"]
+      : ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"];
+    return <AuthGate requiredAnyOf={roles.map(requiredRole => ({ requiredRole,
+      requiredCapability: path === "/ui/samples/amounts" ? "sample:view_finance" : "sample:view_basic",
+    }))}>{page}</AuthGate>;
   }
-  if (path.startsWith("/ui/sourcing")) return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "sourcing:view" }]}>{page}</AuthGate>;
-  if (path === "/ui/frontline" || path === "/ui/frontline/tasks") return <AuthGate requiredAnyOf={[{ requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },{ requiredRole: "worker", requiredCapability: "work:report" },{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" }]}>{page}</AuthGate>;
-  if (path === "/ui/receiving") return <AuthGate requiredAnyOf={[{ requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" }]}>{page}</AuthGate>;
-  if (path === "/ui/qc/new") return <AuthGate requiredAnyOf={[owner,{ requiredRole: "quality_control", requiredCapability: "rework:initiate" }]}>{page}</AuthGate>;
-  if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
-  if (path.startsWith("/ui/production-reporting") || path.startsWith("/ui/production-dashboard")) return <AuthGate requiredAnyOf={[{ requiredRole: "production_reporter", requiredCapability: "production-reporting" },{ requiredRole: "owner_group", requiredCapability: "sourcing:view" },{ requiredRole: "production_management", requiredCapability: "sourcing:view" },{ requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" }]}>{page}</AuthGate>;
-  if (path.startsWith("/ui/suppliers")) return <AuthGate requiredCapability="supplier_profile:read">{page}</AuthGate>;
-  if (path === "/ui/master-data" || path === "/ui/people") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "master_data:manage" }]}>{page}</AuthGate>;
-  if (path === "/ui/process-configuration") return <AuthGate requiredAnyOf={[owner,{ requiredRole: "tail_supervisor", requiredCapability: "process:configure" },{ requiredRole: "ie_reviewer", requiredCapability: "process:review" }]}>{page}</AuthGate>;
-  if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") return <AuthGate requiredAnyOf={[owner,{ requiredRole: "tail_supervisor", requiredCapability: "work:assign" },{ requiredRole: "tail_supervisor", requiredCapability: "submission:audit" },{ requiredRole: "tail_supervisor", requiredCapability: "quantity:adjust" },{ requiredRole: "worker", requiredCapability: "work:report" },{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },{ requiredCapability: "work:report_for_worker" },{ requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" },{ requiredRole: "ie_reviewer", requiredCapability: "process:review" }]}>{page}</AuthGate>;
-  if (path === "/ui/responsibility") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "responsibility:determine" },{ requiredCapability: "responsibility:takeover" },{ requiredCapability: "responsibility:confirm_high_multiplier" },{ requiredCapability: "responsibility:owner_sign" }]}>{page}</AuthGate>;
-  if (path === "/ui/own-factory-approvals") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "own_factory:view" }]}>{page}</AuthGate>;
-  if (path === "/ui/external-responsibilities") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "external_responsibility:view" }]}>{page}</AuthGate>;
-  if (path === "/ui/wages" || path.startsWith("/ui/wages/")) return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "wage:view" }]}>{page}</AuthGate>;
-  if (path === "/ui/admin") return <AuthGate requiredAnyOf={[owner,{ requiredRole: "system_admin", requiredCapability: "admin:read" }]}>{page}</AuthGate>;
-  if (path === "/ui/audit") return <AuthGate requiredAnyOf={[owner,{ requiredRole: "system_admin", requiredCapability: "audit:read" }]}>{page}</AuthGate>;
-  if (path === "/ui/employee-access") return <AuthGate requiredAnyOf={[owner,{ requiredRole: "owner_group", requiredCapability: "access:admin" }]}>{page}</AuthGate>;
-  if (path === "/ui/supervisor") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "dashboard:site:read" }]}>{page}</AuthGate>;
-  if (path === "/ui/tasks") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "dashboard:management:read" },{ requiredCapability: "dashboard:site:read" },{ requiredCapability: "report:view" },{ requiredCapability: "rework:related_orders:view" }]}>{page}</AuthGate>;
-  if (path === "/ui/reports") return <AuthGate requiredAnyOf={[owner,{ requiredCapability: "report:view" }]}>{page}</AuthGate>;
+  if (path.startsWith("/ui/sourcing")) {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "sourcing:view" },
+    ]}>{page}</AuthGate>;
+  }
+
+  if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/receiving") {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/qc/new") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "quality_control", requiredCapability: "rework:initiate" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
+    return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
+  }
+  if (path.startsWith("/ui/production-reporting") || path.startsWith("/ui/production-dashboard")) {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
+      { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
+      { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path.startsWith("/ui/suppliers")) {
+    return <AuthGate requiredCapability="supplier_profile:read">{page}</AuthGate>;
+  }
+  if (path === "/ui/master-data" || path === "/ui/people") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "master_data:manage" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/process-configuration") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "tail_supervisor", requiredCapability: "process:configure" },
+      { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "tail_supervisor", requiredCapability: "work:assign" },
+      { requiredRole: "tail_supervisor", requiredCapability: "submission:audit" },
+      { requiredRole: "tail_supervisor", requiredCapability: "quantity:adjust" },
+      { requiredRole: "worker", requiredCapability: "work:report" },
+      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
+      { requiredCapability: "work:report_for_worker" },
+      { requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" },
+      { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/responsibility") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "responsibility:determine" },
+      { requiredCapability: "responsibility:takeover" },
+      { requiredCapability: "responsibility:confirm_high_multiplier" },
+      { requiredCapability: "responsibility:owner_sign" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/own-factory-approvals") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "own_factory:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/external-responsibilities") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "external_responsibility:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/wages" || path.startsWith("/ui/wages/")) {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "wage:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/admin") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "system_admin", requiredCapability: "admin:read" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/audit") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "system_admin", requiredCapability: "audit:read" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/employee-access") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredRole: "owner_group", requiredCapability: "access:admin" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/supervisor") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "dashboard:site:read" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/tasks") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "dashboard:management:read" },
+      { requiredCapability: "dashboard:site:read" },
+      { requiredCapability: "report:view" },
+      { requiredCapability: "rework:related_orders:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/reports") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "report:view" },
+    ]}>{page}</AuthGate>;
+  }
   return <AuthGate>{page}</AuthGate>;
 }

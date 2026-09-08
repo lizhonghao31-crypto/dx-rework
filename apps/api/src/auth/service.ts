@@ -27,10 +27,10 @@ export class AuthDeniedError extends Error {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 type AcceptanceControllableProvider = DingTalkProvider & Readonly<{
-  beginAcceptanceControl: (code: string) => string;
+  beginAcceptanceControl: (code: string) => Promise<string>;
   listAcceptanceIdentities: (token: string | undefined) => Promise<readonly AcceptanceControlIdentity[]>;
   issueAcceptanceLoginCode: (token: string | undefined, alias: string) => Promise<string>;
-  endAcceptanceControl: (token: string | undefined) => void;
+  endAcceptanceControl: (token: string | undefined) => Promise<void>;
 }>;
 
 const isAcceptanceControllableProvider = (provider: DingTalkProvider): provider is AcceptanceControllableProvider => {
@@ -55,10 +55,10 @@ export class AuthService {
     return isAcceptanceControllableProvider(this.provider);
   }
 
-  beginAcceptanceControl(code: string): string {
+  async beginAcceptanceControl(code: string): Promise<string> {
     const provider = this.acceptanceProvider();
     try {
-      return provider.beginAcceptanceControl(code);
+      return await provider.beginAcceptanceControl(code);
     } catch {
       throw new AuthDeniedError("ACCEPTANCE_CONTROL_INVALID", "验收控制凭证无效、已过期或已使用");
     }
@@ -93,7 +93,7 @@ export class AuthService {
   ): Promise<void> {
     const provider = this.acceptanceProvider();
     try {
-      provider.endAcceptanceControl(controlToken);
+      await provider.endAcceptanceControl(controlToken);
     } catch {
       throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "验收控制会话已失效");
     }
