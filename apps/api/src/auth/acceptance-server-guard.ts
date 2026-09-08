@@ -17,9 +17,9 @@ const externalSideEffectKeys = [
 const assertAcceptanceExternalEffectsDisabled = (
   environment: NodeJS.ProcessEnv,
 ): void => {
-  const configured = externalSideEffectKeys.filter((key) => environment[key]?.trim());
+  const configured: string[] = externalSideEffectKeys.filter((key) => environment[key]?.trim());
   const todoDeliveryEnabled = (environment.TODO_DELIVERY_ENABLED ?? environment.TODO_RUNTIME_ENABLED) === "true";
-  if (todoDeliveryEnabled) configured.push("TODO_DELIVERY_ENABLED" as never);
+  if (todoDeliveryEnabled) configured.push("TODO_DELIVERY_ENABLED");
   if (configured.length > 0) {
     throw new Error(
       `Acceptance lab refuses external side-effect configuration: ${configured.join(", ")}`,
