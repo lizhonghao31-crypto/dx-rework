@@ -2,8 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 
 import type { Pool } from "pg";
 
-import { AuthDeniedError, type AuthService, type AuthUser } from "./service.js";
-import { mintAcceptanceLoginCode } from "./acceptance-provider.js";
+import { DingTalkProtocolError } from "./provider.js";
 
 const ALIAS_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const CONTROL_CODE_TTL_MS = 5 * 60_000;
@@ -47,7 +46,7 @@ const secureEqual = (left: string, right: string): boolean => {
 
 const normalizeAlias = (alias: string): string => {
   const value = alias.trim().toLowerCase();
-  if (!ALIAS_PATTERN.test(value)) throw new AuthDeniedError("ACCEPTANCE_ALIAS_INVALID", "验收身份无效");
+  if (!ALIAS_PATTERN.test(value)) throw new DingTalkProtocolError("Acceptance identity alias is invalid");
   return value;
 };
 
@@ -56,9 +55,9 @@ export function mintAcceptanceControlCode(
   now = Date.now(),
   ttlMs = CONTROL_CODE_TTL_MS,
 ): string {
-  if (secret.length < 32) throw new Error("Acceptance lab secret is too short");
+  if (secret.length < 32) throw new DingTalkProtocolError("Acceptance lab secret is too short");
   if (!Number.isInteger(ttlMs) || ttlMs < 1_000 || ttlMs > CONTROL_CODE_TTL_MS) {
-    throw new Error("Acceptance control code lifetime is invalid");
+    throw new DingTalkProtocolError("Acceptance control code lifetime is invalid");
   }
   const payload: ControlCodePayload = {
     purpose: "acceptance-control",
@@ -72,16 +71,16 @@ export function mintAcceptanceControlCode(
 const readControlCode = (code: string, secret: string, now: number): ControlCodePayload => {
   const [encoded, presentedSignature, extra] = code.split(".");
   if (!encoded || !presentedSignature || extra !== undefined || !secureEqual(presentedSignature, sign(encoded, secret))) {
-    throw new AuthDeniedError("ACCEPTANCE_CONTROL_INVALID", "验收控制凭证无效");
+    throw new DingTalkProtocolError("Acceptance control code is invalid");
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
   } catch {
-    throw new AuthDeniedError("ACCEPTANCE_CONTROL_INVALID", "验收控制凭证无效");
+    throw new DingTalkProtocolError("Acceptance control code is invalid");
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new AuthDeniedError("ACCEPTANCE_CONTROL_INVALID", "验收控制凭证无效");
+    throw new DingTalkProtocolError("Acceptance control code is invalid");
   }
   const payload = parsed as Partial<ControlCodePayload>;
   const expiresAt = Number(payload.expiresAt);
@@ -93,23 +92,22 @@ const readControlCode = (code: string, secret: string, now: number): ControlCode
     || expiresAt <= now
     || expiresAt - now > CONTROL_CODE_TTL_MS
   ) {
-    throw new AuthDeniedError("ACCEPTANCE_CONTROL_EXPIRED", "验收控制凭证已过期或无效");
+    throw new DingTalkProtocolError("Acceptance control code has expired or is invalid");
   }
   return { purpose: "acceptance-control", expiresAt, nonce: payload.nonce };
 };
 
-export class AcceptanceControlService {
+export class AcceptanceControlAuthority {
   private readonly sessions = new Map<string, number>();
   private readonly consumedCodes = new Map<string, number>();
   private loginSequence = 0;
 
   constructor(
     private readonly database: Pick<Pool, "query">,
-    private readonly auth: AuthService,
     private readonly secret: string,
     private readonly now: () => number = Date.now,
   ) {
-    if (secret.length < 32) throw new Error("Acceptance lab secret is too short");
+    if (secret.length < 32) throw new DingTalkProtocolError("Acceptance lab secret is too short");
   }
 
   begin(code: string): string {
@@ -117,7 +115,7 @@ export class AcceptanceControlService {
     const payload = readControlCode(code, this.secret, this.now());
     const codeHash = hash(code);
     if (this.consumedCodes.has(codeHash)) {
-      throw new AuthDeniedError("ACCEPTANCE_CONTROL_REPLAYED", "验收控制凭证已使用");
+      throw new DingTalkProtocolError("Acceptance control code has already been used");
     }
     this.consumedCodes.set(codeHash, payload.expiresAt);
     if (this.sessions.size >= MAX_CONTROL_SESSIONS) {
@@ -132,7 +130,7 @@ export class AcceptanceControlService {
   assertControl(token: string | undefined): void {
     this.cleanup();
     if (!token || !this.sessions.has(hash(token))) {
-      throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "请先取得验收控制权限");
+      throw new DingTalkProtocolError("Acceptance control session is required");
     }
   }
 
@@ -165,30 +163,25 @@ export class AcceptanceControlService {
     }));
   }
 
-  async switchIdentity(
-    token: string | undefined,
-    alias: string,
-  ): Promise<{ token: string; user: AuthUser }> {
+  async issueLoginCode(token: string | undefined, alias: string): Promise<string> {
     this.assertControl(token);
     const normalized = normalizeAlias(alias);
     const identities = await this.listIdentities(token);
     if (!identities.some((identity) => identity.alias === normalized && identity.active && identity.employed)) {
-      throw new AuthDeniedError("ACCEPTANCE_IDENTITY_UNAVAILABLE", "验收身份不存在或不可用");
+      throw new DingTalkProtocolError("Acceptance identity is unavailable");
     }
     this.loginSequence = (this.loginSequence + 1) % 1_000;
-    const loginCode = mintAcceptanceLoginCode(
-      normalized,
-      this.secret,
-      this.now(),
-      5 * 60_000 + this.loginSequence,
-    );
-    return this.auth.loginMobile(loginCode);
+    const expiresAt = this.now() + 5 * 60_000 + this.loginSequence;
+    const payload = Buffer.from(JSON.stringify({ alias: normalized, expiresAt }), "utf8").toString("base64url");
+    const loginSignature = createHmac("sha256", this.secret)
+      .update(`dx-acceptance:${payload}`)
+      .digest("hex");
+    return `${payload}.${loginSignature}`;
   }
 
-  async end(controlToken: string | undefined, businessToken?: string): Promise<void> {
-    this.assertControl(controlToken);
-    this.sessions.delete(hash(controlToken!));
-    if (businessToken) await this.auth.logout(businessToken);
+  end(token: string | undefined): void {
+    this.assertControl(token);
+    this.sessions.delete(hash(token!));
   }
 
   private cleanup(): void {
