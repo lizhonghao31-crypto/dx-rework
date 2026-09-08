@@ -28,6 +28,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
 type AcceptanceControllableProvider = DingTalkProvider & Readonly<{
   beginAcceptanceControl: (code: string) => Promise<string>;
+  assertAcceptanceControl: (token: string | undefined) => void;
   listAcceptanceIdentities: (token: string | undefined) => Promise<readonly AcceptanceControlIdentity[]>;
   issueAcceptanceLoginCode: (token: string | undefined, alias: string) => Promise<string>;
   endAcceptanceControl: (token: string | undefined) => Promise<void>;
@@ -36,6 +37,7 @@ type AcceptanceControllableProvider = DingTalkProvider & Readonly<{
 const isAcceptanceControllableProvider = (provider: DingTalkProvider): provider is AcceptanceControllableProvider => {
   const candidate = provider as Partial<AcceptanceControllableProvider>;
   return typeof candidate.beginAcceptanceControl === "function"
+    && typeof candidate.assertAcceptanceControl === "function"
     && typeof candidate.listAcceptanceIdentities === "function"
     && typeof candidate.issueAcceptanceLoginCode === "function"
     && typeof candidate.endAcceptanceControl === "function";
@@ -84,7 +86,14 @@ export class AuthService {
     } catch {
       throw new AuthDeniedError("ACCEPTANCE_IDENTITY_UNAVAILABLE", "验收身份不存在、不可用或控制会话已失效");
     }
-    return this.loginMobile(loginCode);
+    const result = await this.loginMobile(loginCode);
+    try {
+      provider.assertAcceptanceControl(controlToken);
+    } catch {
+      await this.logout(result.token);
+      throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "验收控制会话已失效，未保留新业务会话");
+    }
+    return result;
   }
 
   async endAcceptanceControl(

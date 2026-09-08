@@ -132,6 +132,10 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     return this.control.begin(code);
   }
 
+  assertAcceptanceControl(token: string | undefined): void {
+    this.control.assertControl(token);
+  }
+
   listAcceptanceIdentities(token: string | undefined): Promise<readonly AcceptanceControlIdentity[]> {
     return this.control.listIdentities(token);
   }
