@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { buildApp } from "../../apps/api/src/app.js";
+import { mintAcceptanceControlCode } from "../../apps/api/src/auth/acceptance-control.js";
 import {
   AcceptanceDingTalkProvider,
   mintAcceptanceLoginCode,
@@ -186,5 +187,45 @@ runWithPostgres("acceptance role sessions", () => {
     expect(first.statusCode).toBe(200);
     expect(replay.statusCode).toBe(401);
     expect(replay.json()).toMatchObject({ error: { code: "CODE_REPLAYED" } });
+  });
+
+  it("keeps controller authority independent while switching real business sessions", async () => {
+    const code = mintAcceptanceControlCode(acceptanceSecret);
+    const start = await app.inject({ method: "POST", url: "/acceptance/control/start", payload: { code } });
+    expect(start.statusCode).toBe(200);
+    const controlHeader = start.headers["set-cookie"];
+    const controlRaw = Array.isArray(controlHeader) ? controlHeader[0] : controlHeader;
+    const controlCookie = controlRaw!.split(";", 1)[0]!;
+    expect(controlCookie).toContain("dx_acceptance_control=");
+
+    const status = await app.inject({ method: "GET", url: "/acceptance/control/status", headers: { cookie: controlCookie } });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().identities.map((identity: { alias: string }) => identity.alias)).toEqual(expect.arrayContaining(["root", "worker-a", "finance-director"]));
+
+    const switchWorker = await app.inject({ method: "POST", url: "/acceptance/control/switch", headers: { cookie: controlCookie }, payload: { alias: "worker-a" } });
+    expect(switchWorker.statusCode).toBe(200);
+    const workerHeader = switchWorker.headers["set-cookie"];
+    const workerRaw = Array.isArray(workerHeader) ? workerHeader[0] : workerHeader;
+    const workerCookie = workerRaw!.split(";", 1)[0]!;
+    const worker = await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: workerCookie } });
+    expect(worker.json()).toMatchObject({ user: { id: ids.worker, isRoot: false, businessRoles: ["worker"] } });
+    expect((await app.inject({ method: "GET", url: "/access/roles", headers: { cookie: workerCookie } })).statusCode).toBe(403);
+
+    const switchRoot = await app.inject({ method: "POST", url: "/acceptance/control/switch", headers: { cookie: controlCookie }, payload: { alias: "root" } });
+    expect(switchRoot.statusCode).toBe(200);
+    const rootHeader = switchRoot.headers["set-cookie"];
+    const rootRaw = Array.isArray(rootHeader) ? rootHeader[0] : rootHeader;
+    const rootCookie = rootRaw!.split(";", 1)[0]!;
+    const root = await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: rootCookie } });
+    expect(root.json()).toMatchObject({ user: { id: ids.root, isRoot: true, businessRoles: ["owner_group"] } });
+
+    const end = await app.inject({ method: "POST", url: "/acceptance/control/end", headers: { cookie: `${controlCookie}; ${rootCookie}` } });
+    expect(end.statusCode).toBe(204);
+    expect(end.headers["set-cookie"]).toEqual(expect.arrayContaining([
+      expect.stringContaining("dx_acceptance_control=;"),
+      expect.stringContaining("dx_rework_session=;"),
+    ]));
+    expect((await app.inject({ method: "GET", url: "/acceptance/control/status", headers: { cookie: controlCookie } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/acceptance/control/start", payload: { code } })).statusCode).toBe(401);
   });
 });
