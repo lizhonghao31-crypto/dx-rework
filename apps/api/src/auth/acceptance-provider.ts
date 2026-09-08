@@ -3,6 +3,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
 
 import {
+  AcceptanceControlAuthority,
+  type AcceptanceControlIdentity,
+} from "./acceptance-control.js";
+import {
   DingTalkProtocolError,
   OfficialDingTalkProvider,
   type DingTalkIdentity,
@@ -97,6 +101,8 @@ const readAcceptanceLoginCode = (
 };
 
 export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
+  private readonly control: AcceptanceControlAuthority;
+
   constructor(
     private readonly acceptanceDatabase: AcceptanceIdentityDatabase,
     private readonly acceptanceCorporationId: string,
@@ -114,6 +120,32 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     if (acceptanceSecret.length < 32) {
       throw new DingTalkProtocolError("Acceptance lab secret is too short");
     }
+    this.control = new AcceptanceControlAuthority(
+      acceptanceDatabase,
+      acceptanceCorporationId,
+      acceptanceSecret,
+      acceptanceNow,
+    );
+  }
+
+  beginAcceptanceControl(code: string): Promise<string> {
+    return this.control.begin(code);
+  }
+
+  assertAcceptanceControl(token: string | undefined): void {
+    this.control.assertControl(token);
+  }
+
+  listAcceptanceIdentities(token: string | undefined): Promise<readonly AcceptanceControlIdentity[]> {
+    return this.control.listIdentities(token);
+  }
+
+  issueAcceptanceLoginCode(token: string | undefined, alias: string): Promise<string> {
+    return this.control.issueLoginCode(token, alias);
+  }
+
+  endAcceptanceControl(token: string | undefined): Promise<void> {
+    return this.control.end(token);
   }
 
   override buildQrAuthorizationUrl(state: string): string {

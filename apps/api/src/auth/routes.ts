@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
+import { registerAcceptanceControlRoutes } from "./acceptance-control-routes.js";
 import type { AuthService } from "./service.js";
 
 const COOKIE = "dx_rework_session";
@@ -46,6 +47,15 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
     }
     current.count += 1;
   };
+
+  if (auth.acceptanceControlAvailable()) {
+    registerAcceptanceControlRoutes(app, auth, {
+      secureCookie,
+      appBasePath: cookiePath,
+      ttlSeconds,
+    });
+  }
+
   app.post<{ Body: { code?: string } }>("/auth/mobile", { preHandler: limitPublicLogin }, async (request, reply) => {
     const result = await auth.loginMobile(request.body?.code ?? "");
     return reply.header("set-cookie", setSession(result.token)).send({ user: result.user, status: result.user.capabilities.length ? "authorized" : "no_role" });
