@@ -1,0 +1,121 @@
+/* Approved 2026-09-08 compact UI. Scoped to the application shell; dialog
+   surfaces and mobile sticky action geometry keep their existing contracts. */
+.ui-polish {
+  --ui-surface-shadow: 0 2px 8px rgba(75, 90, 105, .08);
+  --ui-control-shadow: 0 1px 3px rgba(75, 90, 105, .08);
+}
+
+.ui-polish .page-heading {
+  margin-bottom: var(--dx-v2-space-3);
+  row-gap: var(--dx-v2-space-2);
+}
+
+.ui-polish .page-heading h1 {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.ui-polish .page-heading > .dx-badge {
+  justify-self: start;
+  align-self: start;
+}
+
+.ui-polish main .dx-surface,
+.ui-polish main .dx-kpi {
+  box-shadow: var(--ui-surface-shadow);
+}
+
+.ui-polish main .dx-button {
+  box-shadow: var(--ui-control-shadow);
+}
+
+.ui-polish main .dx-button:disabled {
+  box-shadow: none;
+}
+
+.ui-polish main .dx-surface .dx-surface {
+  box-shadow: none;
+  border-color: var(--dx-form-control-border);
+}
+
+.ui-polish .section-title {
+  flex-wrap: wrap;
+  gap: var(--dx-v2-space-2);
+}
+
+.ui-polish .section-title h2,
+.ui-polish .section-title h3 {
+  margin-block: 0;
+}
+
+/* Explicit disclosure variant: never style every aria-expanded control,
+   because navigation, menus and workflow actions have different semantics. */
+.ui-polish .dx-button.ui-disclosure-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: start;
+  gap: var(--dx-v2-space-2);
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-color: var(--dx-form-control-border);
+  border-radius: var(--dx-v2-radius-sm);
+  box-shadow: none;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.ui-polish .ui-disclosure-trigger::before {
+  content: "";
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.ui-polish .ui-disclosure-trigger[aria-expanded="true"]::before {
+  transform: rotate(135deg);
+}
+
+.ui-polish :is(.receiving-analysis, .production-analysis, .work-analysis) {
+  gap: var(--dx-v2-space-3);
+  align-content: start;
+}
+
+.ui-polish :is(.receiving-analysis-toolbar, .production-analysis-toolbar, .work-analysis-toolbar) {
+  gap: var(--dx-v2-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ui-polish :is(.receiving-analysis-tabs, .production-analysis-tabs) .dx-button {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-inline: 12px;
+  white-space: normal;
+}
+
+.ui-polish :is(.receiving-analysis, .production-analysis, .work-analysis) :is(h2, h3, p, dl) {
+  margin-block: 6px;
+}
+
+@media (max-width: 800px) {
+  .ui-polish .dx-button.ui-disclosure-trigger {
+    min-height: 44px;
+  }
+
+  .ui-polish .mobile-primary-navigation :is(.dx-nav-item, .mobile-primary-navigation__more-trigger) {
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px;
+  }
+}
+
+.ui-polish .my-todos-workspace {
+  padding: 0;
+}

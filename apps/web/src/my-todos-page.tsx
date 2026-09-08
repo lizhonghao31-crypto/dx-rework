@@ -272,11 +272,11 @@ export function MyTodosPage() {
       )}
       {state.kind === "ready" && <Surface className="my-todos-workspace">
         <div className="my-todos-toolbar">
-          <div className="my-todos-modules" role="tablist" aria-label="待办模块">
+          <div className="my-todos-modules" role="group" aria-label="待办模块">
             {visibleTodoModules.map((module) => <button
               type="button"
               className={module.id === activeModule ? "is-active" : ""}
-              aria-current={module.id === activeModule ? "page" : undefined}
+              aria-pressed={module.id === activeModule}
               disabled={busy}
               onClick={() => openModule(module.id)}
               key={module.id}
@@ -384,3 +384,4 @@ export function MyTodosPage() {
     </Shell>
   );
 }
+

@@ -1,4 +1,6 @@
-# 返工 UI 全平台基础参数规则 V1.1
+# 返工 UI 全平台基础参数规则 V1.2
+
+**2026-09-08 已批准修订：** 本轮全系统紧凑UI按 `../roadmap/ui-polish-20260908-v1.0.md` 执行，允许已验收页面的基础间距、按钮比例与折叠入口调整。共享Shell下标题间距12px；表面阴影采用 `ui-polish.css` 的轻阴影语义变量，嵌套表面用细边框；折叠标题桌面至少40px、移动至少44px。沿用既有字体、配色、输入与移动提交尺寸。待办按钮按内容分配空间，手机两列，数量独立徽标。新规则覆盖下文旧视觉限制，不变更业务流程。
 
 **2026-09-07 已批准修订：** 参数对齐仅约束输入框/按钮等基础尺寸、配色、字体字号及同类基础控件状态，不要求不同业务模块采用相同排版模式、列表结构或布局风格。供应商、样衣、实时生产及分析页可依任务重构布局，先提供中文可点击样板，确认后复用样板组件/CSS接入业务。不得用下文旧“复用布局/列表”措辞否决这项已批准自由度。已验收返工不重排；导航顺序、路由、权限、文本标签保持不变。
 
@@ -59,4 +61,5 @@
 - allowed files: AGENTS.md、docs/roadmap/platform-2.0-rules-index-v1.0.md、docs/requirements/rework-ui-golden-source-v1.0.md、docs/requirements/sourcing-supplier-production-v1.0.md、packages/ui/src/、apps/web/src/相关共享组件和样式、对应验证证据。
 - forbidden files: 数据库迁移、API业务逻辑、身份权限、ERP接入、部署配置、SSP-06与样衣业务代码。
 - gate: 本地lint、web类型检查与构建、真实页面对照；共享UI使用Full Gate。
+
 
