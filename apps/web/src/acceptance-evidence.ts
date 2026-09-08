@@ -63,10 +63,15 @@ const newId = (prefix: string, now = new Date()): string =>
   `${prefix}-${now.toISOString().replace(/[-:.TZ]/g, "")}-${Math.random().toString(36).slice(2, 8)}`;
 
 const EVIDENCE_SECRET_PATTERNS: readonly Readonly<{ pattern: RegExp; replacement: string }>[] = [
+  {
+    pattern: /\b((?:proxy-)?authorization\s*[:=]\s*)[^\r\n;]*/gi,
+    replacement: "$1[REDACTED]",
+  },
+  { pattern: /\b(cookie\s*[:=]\s*)[^\r\n]*/gi, replacement: "$1[REDACTED]" },
   { pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, replacement: "Bearer [REDACTED]" },
   { pattern: /\b(dx_(?:rework_session|acceptance_control)\s*=\s*)[^;\s]+/gi, replacement: "$1[REDACTED]" },
   {
-    pattern: /\b((?:authorization|cookie|token|control(?:[_\s-]?(?:credential|code))?)\s*[:=]\s*)[^\s,;]+/gi,
+    pattern: /\b((?:token|control(?:[_\s-]?(?:credential|code))?)\s*[:=]\s*)[^\r\n;]*/gi,
     replacement: "$1[REDACTED]",
   },
   { pattern: /\b[A-Za-z0-9_-]{20,}\.[0-9a-f]{64}\b/gi, replacement: "[REDACTED_ACCEPTANCE_CODE]" },
