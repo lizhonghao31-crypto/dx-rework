@@ -9,6 +9,13 @@ export type AcceptanceRuntimeVersion = Readonly<{
   expectedSchemaVersion: string;
 }>;
 
+export type AcceptanceRequestEvidence = Readonly<{
+  method: "GET" | "POST";
+  path: string;
+  expectedStatus: number;
+  actualStatus: number;
+}>;
+
 export type AcceptanceMatrixEvidence = Readonly<{
   attemptId: string;
   startedAt: string;
@@ -17,6 +24,7 @@ export type AcceptanceMatrixEvidence = Readonly<{
   results: readonly Readonly<{
     alias: string;
     checks: readonly AcceptanceMatrixCheck[];
+    requests: readonly AcceptanceRequestEvidence[];
   }>[];
 }>;
 
@@ -39,12 +47,7 @@ export type AcceptanceScenarioEvidence = Readonly<{
   actual: string;
   recordedAt: string;
   version: AcceptanceRuntimeVersion | null;
-  preflight?: Readonly<{
-    method: "GET";
-    path: string;
-    expectedStatus: number;
-    actualStatus: number;
-  }>;
+  preflight?: AcceptanceRequestEvidence;
 }>;
 
 export type AcceptanceEvidenceReport = Readonly<{
@@ -159,6 +162,13 @@ export function firstFailureForScenario(
   return report.scenarioAttempts.find((attempt) => attempt.scenarioId === scenarioId && attempt.status === "fail");
 }
 
+export function latestScenarioEvidence(
+  report: AcceptanceEvidenceReport,
+  scenarioId: string,
+): AcceptanceScenarioEvidence | undefined {
+  return [...report.scenarioAttempts].reverse().find((attempt) => attempt.scenarioId === scenarioId);
+}
+
 export function acceptanceEvidenceSummary(report: AcceptanceEvidenceReport) {
   const latestMatrix = report.matrixAttempts.at(-1);
   const matrixChecks = latestMatrix?.results.flatMap((result) => result.checks) ?? [];
@@ -183,7 +193,12 @@ export function parseAcceptanceEvidenceReport(raw: string | null): AcceptanceEvi
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<AcceptanceEvidenceReport>;
-    if (value.formatVersion !== 1 || typeof value.reportId !== "string" || !Array.isArray(value.matrixAttempts) || !Array.isArray(value.scenarioAttempts)) return null;
+    if (
+      value.formatVersion !== 1
+      || typeof value.reportId !== "string"
+      || !Array.isArray(value.matrixAttempts)
+      || !Array.isArray(value.scenarioAttempts)
+    ) return null;
     return value as AcceptanceEvidenceReport;
   } catch {
     return null;
