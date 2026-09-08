@@ -21,71 +21,8 @@ import "./supplier-center-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
-type SupplierProfile = SupplierSummary & Readonly<{
-  notes: string;
-  contactPerson: string | null;
-  contactPhone: string | null;
-  address: string | null;
-  contractEntityName?: string | null;
-  partyBRepresentative?: string | null;
-  payeeName?: string | null;
-  bankAccount?: string | null;
-  bankName?: string | null;
-  changeReason: string;
-  changedBy: string;
-  changedAt: string;
-}>;
-
-type SupplierDraft = {
-  supplierName: string;
-  active: boolean;
-  notes: string;
-  contactPerson: string;
-  contactPhone: string;
-  address: string;
-  contractEntityName: string;
-  partyBRepresentative: string;
-  payeeName: string;
-  bankAccount: string;
-  bankName: string;
-  supportedCrafts: string;
-  dailyCapacity: string;
-  changeReason: string;
-};
-
-const emptyDraft = (): SupplierDraft => ({
-  supplierName: "",
-  active: true,
-  notes: "",
-  contactPerson: "",
-  contactPhone: "",
-  address: "",
-  contractEntityName: "",
-  partyBRepresentative: "",
-  payeeName: "",
-  bankAccount: "",
-  bankName: "",
-  supportedCrafts: "",
-  dailyCapacity: "",
-  changeReason: "",
-});
-
-const draftFromProfile = (profile: SupplierProfile): SupplierDraft => ({
-  supplierName: profile.supplierName,
-  active: profile.active,
-  notes: profile.notes,
-  contactPerson: profile.contactPerson ?? "",
-  contactPhone: profile.contactPhone ?? "",
-  address: profile.address ?? "",
-  contractEntityName: profile.contractEntityName ?? "",
-  partyBRepresentative: profile.partyBRepresentative ?? "",
-  payeeName: profile.payeeName ?? "",
-  bankAccount: profile.bankAccount ?? "",
-  bankName: profile.bankName ?? "",
-  supportedCrafts: profile.supportedCrafts.join("、"),
-  dailyCapacity: profile.dailyCapacity === null ? "" : String(profile.dailyCapacity),
-  changeReason: "",
-});
+import {emptyDraft,draftFromProfile,supplierDraftPayload,type SupplierProfile,type SupplierDraft} from "./supplier-profile-draft.js";
+import {SupplierProfileForm} from "./supplier-profile-form.js";
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
@@ -104,7 +41,6 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.status === 204 ? undefined as T : await response.json() as T;
 }
 
-const nullable = (value: string): string | null => value.trim() || null;
 
 export function SupplierCenterNavigation({ active }: { active: "directory" | "manage" }) {
   return (
@@ -126,6 +62,9 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [status, setStatus] = useState<"active" | "inactive" | "all">("active");
   const [draft, setDraft] = useState<SupplierDraft>(emptyDraft);
   const [editing, setEditing] = useState(false);
+  const [creating,setCreating]=useState(false),[identityLoading,setIdentityLoading]=useState(true),[identityError,setIdentityError]=useState("");
+  const creationCode=useRef(""),savedSelection=useRef("");
+  const [savedMessage,setSavedMessage]=useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
@@ -135,7 +74,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const writeLock = useRef(false);
   const discardLock = useRef(false);
   const refreshLock = useRef(false);
-  const dirty = editing && profile !== null && JSON.stringify(draft) !== JSON.stringify(draftFromProfile(profile));
+  const dirty = creating || (editing && profile !== null && JSON.stringify(draft) !== JSON.stringify(draftFromProfile(profile)));
   const detailReady = !detailLoading && profile?.supplierId === selectedId && selectedId !== "";
 
   useEffect(() => {
@@ -167,9 +106,11 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   }, [dirty, busy]);
 
   const selectSupplier = async (id: string) => {
-    if (id === selectedRef.current || !await discardChanges()) return;
+    if ((!creating && id === selectedRef.current) || !await discardChanges()) return;
     if (writeLock.current || refreshLock.current) return;
     selectedRef.current = id;
+    savedSelection.current='';setSavedMessage('');
+    setCreating(false);
     setError("");
     setProfile(null);
     setHistory([]);
@@ -180,6 +121,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   };
 
   const cancelEdit = async () => {
+    if (creating) {if(await discardChanges()){setCreating(false);setEditing(false);setDraft(emptyDraft());}return;}
     if (!profile || !detailReady || !await discardChanges()) return;
     setDraft(draftFromProfile(profile));
     setEditing(false);
@@ -187,28 +129,27 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const canWrite = user ? canWriteSupplierProfiles(user) : false;
   const canMaintain = mode === "manage" && canWrite;
 
-  useEffect(() => {
-    let mounted = true;
-    void Promise.all([
-      verifySession(),
-      json<SupplierSummary[]>("master-data/suppliers?includeInactive=true"),
-    ]).then(([session, items]) => {
-      if (!mounted || session === "denied") return;
-      setUser(session.user);
-      setSuppliers(items);
-      const id = "";
-      selectedRef.current = id;
-      setSelectedId(id);
-    }).catch((loadError: unknown) => {
-      if (mounted) setError(loadError instanceof Error ? loadError.message : "供应商目录加载失败");
-    });
-    return () => { mounted = false; };
-  }, []);
+  const loadIdentity=async()=>{
+    setIdentityLoading(true);setIdentityError("");
+    try{const session=await verifySession();if(session==="denied")throw new Error("登录已失效，请重新登录");setUser(session.user);}
+    catch(e){setUser(null);setIdentityError(e instanceof Error?e.message:"身份核验失败，请重试");}
+    finally{setIdentityLoading(false);}
+  };
+  useEffect(()=>{let live=true;void verifySession().then(session=>{if(!live)return;if(session==="denied")throw new Error("登录已失效，请重新登录");setUser(session.user);}).catch(e=>{if(live)setIdentityError(e instanceof Error?e.message:"身份核验失败，请重试");}).finally(()=>{if(live)setIdentityLoading(false);});return()=>{live=false;};},[]);
+  useEffect(()=>{let live=true;setRefreshing(true);void json<SupplierSummary[]>("master-data/suppliers?includeInactive=true").then(items=>{if(live)setSuppliers(items);}).catch(e=>{if(live)setError(e instanceof Error?e.message:"供应商目录加载失败");}).finally(()=>{if(live)setRefreshing(false);});return()=>{live=false;};},[]);
+
+  const beginCreate=async()=>{
+    if(!canMaintain||!await discardChanges()||writeLock.current||refreshLock.current)return;
+    creationCode.current='SUP_'+Array.from(crypto.getRandomValues(new Uint8Array(12)),value=>value.toString(16).padStart(2,'0')).join('').toUpperCase();
+    savedSelection.current='';setSavedMessage('');
+    selectedRef.current='';setSelectedId('');setProfile(null);setHistory([]);setDraft(emptyDraft());setError('');setDetailLoading(false);setCreating(true);setEditing(true);
+  };
 
   const refreshDirectory = async () => {
     if (!await discardChanges() || writeLock.current || refreshLock.current) return;
     refreshLock.current = true;
     setRefreshing(true);
+    setCreating(false);
     setError("");
     // Invalidate the editable snapshot before either directory or detail reload.
     setProfile(null);
@@ -233,6 +174,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
 
   useEffect(() => {
     let mounted = true;
+    if(creating)return ()=>{mounted=false;};
     setProfile(null);
     setHistory([]);
     setDraft(emptyDraft());
@@ -250,12 +192,12 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       setProfile(nextProfile);
       setHistory(nextHistory);
       setDraft(draftFromProfile(nextProfile));
-      setEditing(mode === "manage" && canWrite);
+      setEditing(mode === "manage" && canWrite && savedSelection.current !== selectedId);
     }).catch((loadError: unknown) => {
       if (mounted && selectedRef.current === selectedId) setError(loadError instanceof Error ? loadError.message : "供应商详情加载失败");
     }).finally(() => { if (mounted && selectedRef.current === selectedId) setDetailLoading(false); });
     return () => { mounted = false; };
-  }, [selectedId, mode, canWrite, reload, refreshing]);
+  }, [selectedId, mode, canWrite, reload, refreshing, creating]);
 
   const filtered = useMemo(() => filterSupplierDirectory(suppliers, {
     query,
@@ -267,65 +209,22 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const contractVisible = profile ? Object.hasOwn(profile, "contractEntityName") : false;
 
   const save = async () => {
-    if (!profile || !canMaintain || !detailReady || profile.supplierId !== selectedRef.current || writeLock.current || discardLock.current || refreshLock.current) return;
-    const errors: string[] = [];
-    if (!draft.supplierName.trim()) errors.push("供应商显示名称不能为空");
-    if (!draft.changeReason.trim()) errors.push("请填写修改原因");
-    const dailyCapacity = draft.dailyCapacity.trim() ? Number(draft.dailyCapacity) : null;
-    if (dailyCapacity !== null && (!Number.isInteger(dailyCapacity) || dailyCapacity <= 0)) {
-      errors.push("常规日产能必须是正整数");
-    }
-    const supportedCrafts = draft.supportedCrafts.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
-    if (new Set(supportedCrafts).size !== supportedCrafts.length) errors.push("可承接工艺不能重复");
-    if (errors.length) {
-      setError(errors.join("；"));
-      return;
-    }
-    writeLock.current = true;
-    const targetId = profile.supplierId;
-    setBusy(true);
-    setError("");
-    try {
-      await json(`master-data/suppliers/${profile.supplierId}/versions`, {
-        method: "POST",
-        body: JSON.stringify({
-          supplierName: draft.supplierName.trim(),
-          active: draft.active,
-          notes: draft.notes.trim(),
-          contactPerson: nullable(draft.contactPerson),
-          contactPhone: nullable(draft.contactPhone),
-          address: nullable(draft.address),
-          contractEntityName: nullable(draft.contractEntityName),
-          partyBRepresentative: nullable(draft.partyBRepresentative),
-          payeeName: nullable(draft.payeeName),
-          bankAccount: nullable(draft.bankAccount),
-          bankName: nullable(draft.bankName),
-          supportedCrafts,
-          dailyCapacity,
-          expectedVersion: profile.version,
-          changeReason: draft.changeReason.trim(),
-        }),
-      });
-      const items = await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true");
-      setSuppliers(items);
-      const [nextProfile, nextHistory] = await Promise.all([
-        json<SupplierProfile>(`master-data/suppliers/${profile.supplierId}`),
-        json<SupplierProfile[]>(`master-data/suppliers/${profile.supplierId}/history`),
-      ]);
-      if (selectedRef.current !== targetId) return;
-      if (nextProfile.supplierId !== targetId || nextHistory.some((item) => item.supplierId !== targetId)) {
-        throw new Error("保存后返回的供应商不一致，请刷新核对。");
-      }
-      setProfile(nextProfile);
-      setHistory(nextHistory);
-      setDraft(draftFromProfile(nextProfile));
-      setEditing(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "供应商资料保存失败");
-    } finally {
-      writeLock.current = false;
-      setBusy(false);
-    }
+    if(!canMaintain||writeLock.current||discardLock.current||refreshLock.current)return;
+    if(!creating&&(!profile||!detailReady||profile.supplierId!==selectedRef.current))return;
+    const parsed=supplierDraftPayload(draft,{creating,code:creationCode.current,version:profile?.version??1});
+    if(!parsed.success){setError(parsed.error);return;}
+    writeLock.current=true;setBusy(true);setError("");
+    try{
+      const result=await json<{supplierId:string;version:number}>(creating?"master-data/suppliers":`master-data/suppliers/${profile!.supplierId}/versions`,{method:"POST",body:JSON.stringify(parsed.data)});
+      if(!creating&&result.supplierId!==profile!.supplierId)throw new Error("保存结果与当前供应商不一致，请刷新核对。");
+      // Once committed, leave create mode before refreshing so a read failure cannot resubmit a new supplier.
+      savedSelection.current=result.supplierId;setSavedMessage("资料已保存 · 版本 "+result.version);
+      selectedRef.current=result.supplierId;setCreating(false);setSelectedId(result.supplierId);setEditing(false);setProfile(null);setHistory([]);setDetailLoading(true);
+      setReload(value=>value+1);
+      try{setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true"));}
+      catch{setError("资料已保存，目录刷新失败，请刷新目录核对。");}
+    }catch(e){setError(e instanceof Error?e.message:"供应商资料保存失败");}
+    finally{writeLock.current=false;setBusy(false);}
   };
 
   const toggleActive = async () => {
@@ -339,19 +238,20 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       <header className="page-heading supplier-center-heading">
         <div>
           <h1><NavigationIcon route={mode === "manage" ? "/ui/suppliers/manage" : "/ui/suppliers"} size="title" />供应商中心</h1>
-          <p></p>
+          <p>{mode==="manage"?"填写并保存供应商资料，保留每次修改记录。":"查看供应商资料、工艺与常规产能。"}</p>
         </div>
         <div className="supplier-center-heading__actions">
-          <StatusBadge tone={canMaintain ? "info" : "neutral"}>{canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
-          {canMaintain ? <a className="dx-button" href={`${pageUrl("ui/master-data")}?view=suppliers&tool=onboarding`}>新增与批量导入</a> : null}
+          <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
+          {canMaintain ? <Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button> : null}
         </div>
       </header>
-      <SupplierCenterNavigation active={mode} />
+      {identityError?<p role="alert">{identityError} <Button onClick={()=>void loadIdentity()}>重新核验</Button></p>:null}
+      {savedMessage?<p className="supplier-center-notice" role="status">{savedMessage}</p>:null}
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
-      {mode === "manage" && !canWrite ? (
+      {mode === "manage" && !identityLoading && !identityError && !canWrite ? (
         <div className="supplier-center-notice" role="status">当前账号为只读，可查看资料与变更历史。</div>
       ) : null}
-      <div className={`supplier-center-workspace${selectedId ? " has-selection" : ""}`}>
+      <div className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
           <div className="supplier-directory__heading">
             <div><h2>供应商目录</h2><p>共 {filtered.length} 家</p></div>
@@ -386,7 +286,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
         </Surface>
 
         <Surface className="supplier-profile">
-          {!profile || !detailReady ? <div className="supplier-center-empty" role="status"><h2>{detailLoading ? "正在加载供应商…" : "选择供应商"}</h2><p>{selectedId ? "详情未就绪时不能编辑或保存；加载失败可点击刷新重试。" : "从目录中选择一项查看资料与版本历史。"}</p></div> : (
+          {creating&&canMaintain?<><div className="supplier-profile__heading"><Button disabled={busy} onClick={()=>void cancelEdit()}>返回目录</Button><h2>新增供应商</h2></div><SupplierProfileForm draft={draft} onDraft={setDraft} busy={busy} ready creating onSave={()=>void save()} onCancel={()=>void cancelEdit()}/></>:!profile || !detailReady ? <div className="supplier-center-empty" role="status"><h2>{detailLoading ? "正在加载供应商…" : "选择供应商"}</h2><p>{selectedId ? "详情未就绪时不能编辑或保存；加载失败可点击刷新重试。" : "从目录中选择一项查看资料与版本历史。"}</p></div> : (
             <>
               <div className="supplier-profile__heading">
                 <Button className="supplier-profile__back" disabled={busy || refreshing} onClick={() => void selectSupplier("")}>返回目录</Button>
@@ -402,29 +302,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
               </div>
 
               {editing && canMaintain ? (
-                <form className="supplier-profile-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-                  <fieldset disabled={busy || !detailReady}><legend>基础与联系</legend>
-                    <label>供应商显示名称<input value={draft.supplierName} onChange={(event) => setDraft({ ...draft, supplierName: event.target.value })} /></label>
-                    <label>联系人<input value={draft.contactPerson} onChange={(event) => setDraft({ ...draft, contactPerson: event.target.value })} /></label>
-                    <label>联系电话<input value={draft.contactPhone} onChange={(event) => setDraft({ ...draft, contactPhone: event.target.value })} /></label>
-                    <label className="is-wide">地址<input value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} /></label>
-                    <label className="is-wide">备注<textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
-                  </fieldset>
-                  <fieldset disabled={busy || !detailReady}><legend>合同与收款</legend>
-                    <label>合同主体名称<input value={draft.contractEntityName} onChange={(event) => setDraft({ ...draft, contractEntityName: event.target.value })} /></label>
-                    <label>乙方代表<input value={draft.partyBRepresentative} onChange={(event) => setDraft({ ...draft, partyBRepresentative: event.target.value })} /></label>
-                    <label>收款人<input value={draft.payeeName} onChange={(event) => setDraft({ ...draft, payeeName: event.target.value })} /></label>
-                    <label>收款账号<input value={draft.bankAccount} onChange={(event) => setDraft({ ...draft, bankAccount: event.target.value })} /></label>
-                    <label className="is-wide">开户行<input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></label>
-                  </fieldset>
-                  <fieldset disabled={busy || !detailReady}><legend>工艺与产能</legend>
-                    <label className="is-wide">可承接工艺<input value={draft.supportedCrafts} placeholder="使用顿号或逗号分隔" onChange={(event) => setDraft({ ...draft, supportedCrafts: event.target.value })} /></label>
-                    <label>常规日产能<input inputMode="numeric" value={draft.dailyCapacity} onChange={(event) => setDraft({ ...draft, dailyCapacity: event.target.value })} /></label>
-                    <label>启用状态<select value={draft.active ? "active" : "inactive"} onChange={(event) => setDraft({ ...draft, active: event.target.value === "active" })}><option value="active">启用</option><option value="inactive">停用</option></select></label>
-                    <label className="is-wide">修改原因<input value={draft.changeReason} onChange={(event) => setDraft({ ...draft, changeReason: event.target.value })} /></label>
-                  </fieldset>
-                  <div className="supplier-profile-form__actions"><Button type="button" disabled={busy} onClick={() => void cancelEdit()}>取消</Button><Button type="submit" variant="primary" disabled={busy || !detailReady}>{busy ? "保存中…" : "保存新版本"}</Button></div>
-                </form>
+                <SupplierProfileForm draft={draft} onDraft={setDraft} busy={busy} ready={detailReady} creating={false} onSave={()=>void save()} onCancel={()=>void cancelEdit()}/>
               ) : (
                 <div className="supplier-profile__sections">
                   <section><h3>基础与联系</h3><dl><div><dt>联系人</dt><dd>{profile.contactPerson || "—"}</dd></div><div><dt>联系电话</dt><dd>{profile.contactPhone || "—"}</dd></div><div className="is-wide"><dt>地址</dt><dd>{profile.address || "—"}</dd></div><div className="is-wide"><dt>备注</dt><dd>{profile.notes || "—"}</dd></div></dl></section>
@@ -444,3 +322,4 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     </Shell>
   );
 }
+
