@@ -4,8 +4,8 @@ import type { Pool } from "pg";
 
 import {
   DingTalkProtocolError,
+  OfficialDingTalkProvider,
   type DingTalkIdentity,
-  type DingTalkProvider,
   type DirectoryOrganizationMember,
   type OrganizationMember,
 } from "./provider.js";
@@ -96,44 +96,54 @@ const readAcceptanceLoginCode = (
   return { alias, expiresAt };
 };
 
-export class AcceptanceDingTalkProvider implements DingTalkProvider {
+export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
   constructor(
-    private readonly database: AcceptanceIdentityDatabase,
-    private readonly corporationId: string,
-    private readonly secret: string,
-    private readonly now: () => number = Date.now,
+    private readonly acceptanceDatabase: AcceptanceIdentityDatabase,
+    private readonly acceptanceCorporationId: string,
+    private readonly acceptanceSecret: string,
+    private readonly acceptanceNow: () => number = Date.now,
   ) {
-    if (secret.length < 32) throw new DingTalkProtocolError("Acceptance lab secret is too short");
+    super({
+      corpId: acceptanceCorporationId,
+      h5AppKey: "acceptance-disabled",
+      h5AppSecret: "acceptance-disabled",
+      webClientId: "acceptance-disabled",
+      webClientSecret: "acceptance-disabled",
+      qrRedirectUri: "https://acceptance.invalid/auth/qr/callback",
+    });
+    if (acceptanceSecret.length < 32) {
+      throw new DingTalkProtocolError("Acceptance lab secret is too short");
+    }
   }
 
-  buildQrAuthorizationUrl(_state: string): string {
+  override buildQrAuthorizationUrl(_state: string): string {
     throw new DingTalkProtocolError("Acceptance lab does not support QR login");
   }
 
-  async exchangeMobileCode(code: string): Promise<DingTalkIdentity> {
-    const payload = readAcceptanceLoginCode(code, this.secret, this.now());
+  override async exchangeMobileCode(code: string): Promise<DingTalkIdentity> {
+    const payload = readAcceptanceLoginCode(code, this.acceptanceSecret, this.acceptanceNow());
     const member = await this.memberByProviderUserId(`${PROVIDER_PREFIX}${payload.alias}`);
     if (!member) throw new DingTalkProtocolError("Acceptance identity was not found");
     return { userId: member.userId, unionId: member.unionId, corpId: member.corpId };
   }
 
-  async exchangeQrCode(_code: string): Promise<DingTalkIdentity> {
+  override async exchangeQrCode(_code: string): Promise<DingTalkIdentity> {
     throw new DingTalkProtocolError("Acceptance lab does not support QR login");
   }
 
-  async getOrganizationMember(identity: DingTalkIdentity, corpId: string): Promise<OrganizationMember | null> {
-    if (corpId !== this.corporationId || (identity.corpId && identity.corpId !== corpId)) return null;
+  override async getOrganizationMember(identity: DingTalkIdentity, corpId: string): Promise<OrganizationMember | null> {
+    if (corpId !== this.acceptanceCorporationId || (identity.corpId && identity.corpId !== corpId)) return null;
     if (!identity.userId.startsWith(PROVIDER_PREFIX) || !identity.unionId.startsWith(UNION_PREFIX)) return null;
     const member = await this.memberByProviderUserId(identity.userId);
     if (!member || member.unionId !== identity.unionId) return null;
     return member;
   }
 
-  async listOrganizationMembers(corpId: string): Promise<DirectoryOrganizationMember[]> {
-    if (corpId !== this.corporationId) {
+  override async listOrganizationMembers(corpId: string): Promise<DirectoryOrganizationMember[]> {
+    if (corpId !== this.acceptanceCorporationId) {
       throw new DingTalkProtocolError("Acceptance directory belongs to a different corporation");
     }
-    const result = await this.database.query<AcceptanceIdentityRow>(
+    const result = await this.acceptanceDatabase.query<AcceptanceIdentityRow>(
       `SELECT i.provider_user_id,i.union_id,u.display_name,i.active,i.employed,
               COALESCE(profile.department_names,'{}'::text[]) department_names
        FROM identity_mappings i
@@ -158,7 +168,7 @@ export class AcceptanceDingTalkProvider implements DingTalkProvider {
 
   private async memberByProviderUserId(providerUserId: string): Promise<OrganizationMember | null> {
     if (!providerUserId.startsWith(PROVIDER_PREFIX)) return null;
-    const result = await this.database.query<AcceptanceIdentityRow>(
+    const result = await this.acceptanceDatabase.query<AcceptanceIdentityRow>(
       `SELECT i.provider_user_id,i.union_id,u.display_name,i.active,i.employed
        FROM identity_mappings i
        JOIN app_users u ON u.id=i.user_id
@@ -167,12 +177,12 @@ export class AcceptanceDingTalkProvider implements DingTalkProvider {
          AND i.provider_user_id LIKE 'uat-%'
          AND i.union_id LIKE 'uat-union-%'
        LIMIT 1`,
-      [this.corporationId, providerUserId],
+      [this.acceptanceCorporationId, providerUserId],
     );
     const row = result.rows[0];
     if (!row) return null;
     return {
-      corpId: this.corporationId,
+      corpId: this.acceptanceCorporationId,
       userId: row.provider_user_id,
       unionId: row.union_id,
       displayName: row.display_name,
