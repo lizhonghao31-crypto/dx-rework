@@ -27,7 +27,7 @@ export function SampleAnalysisView({data,legacy,busy,error,draft,onDraft,onApply
    {select('brandChoice','品牌',options?.brands??[])}{select('departmentChoice','部门',options?.departments??[])}{select('category','类别',(options?.categories??[]).map(value=>({id:value,name:value||'未记录类别'})))}
    {select('status','当前状态',Object.entries(analysisStatusLabels).map(([id,name])=>({id,name})))}{input('minPrice','最低采购单价')}{input('maxPrice','最高采购单价')}{input('eventFrom','借还 / 处置 / 回款开始','date')}{input('eventTo','借还 / 处置 / 回款结束','date')}
   </div></details><div className="analysis-form-actions"><Button type="submit" disabled={busy}>应用筛选</Button><Button variant="secondary" disabled={busy} onClick={onReset}>清除筛选</Button></div></form></Surface>
-  {data?<><p className="analysis-scope">结果口径：采购 {data.filters.purchaseFrom??'不限开始'} 至 {data.filters.purchaseTo??'不限结束'}；事件 {data.filters.eventFrom??'不限开始'} 至 {data.filters.eventTo??'不限结束'}。共 {n(data.totalCount)} 件，汇总覆盖全部符合条件的样衣。</p>
+  {data?<>
   <p className="analysis-scope">生效条件：{Object.entries(data.filters).filter(([key,value])=>!['page','groupPage','group','purchaseFrom','purchaseTo','eventFrom','eventTo'].includes(key)&&value!==undefined).map(([key,value])=>{
     const labels:Record<string,string>={purchaserUserId:'采购人',holderUserId:'持有人',brand:'品牌',brandId:'品牌',department:'部门',departmentId:'部门',category:'类别',status:'状态',minPrice:'最低单价',maxPrice:'最高单价',fact:'事实范围',disposalType:'处置类型'};
     const facts:Record<string,string>={held:'当前持有',held_90_days:'持有超过90天',initial_custody:'首次领用',borrow:'后续借出',return:'确认归还',disposal:'已批准处置',sale:'已批准出售',confirmed_loss:'已确认赔付'};
