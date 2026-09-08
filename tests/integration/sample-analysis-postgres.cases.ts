@@ -11,8 +11,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const ids:string[]=[];
  async function sample(status:string,price:string,purchaser=person,rawBrand='品牌A'){
   const id=randomUUID(),isHeld=['borrowed','loss_payment_pending'].includes(status);
-  await db.query(`INSERT INTO sample_items(sample_id,sample_code,status,brand,style_name,color,department,purchase_date,purchaser_user_id,purchaser_name,holder_user_id,holder_name,borrowed_at,created_by,archived_from_status,archived_reason)
-   VALUES($1::uuid,$1::text,$2,$3,'分析合成样衣','蓝','设计部','2026-09-01',$4,'同名人员',$5,$6,'2026-09-01',$7,$8,$9)`,[id,status,rawBrand,purchaser,isHeld?purchaser:null,isHeld?'同名人员':null,person,status==='archived'?'borrowed':null,status==='archived'?'待分类':null]);
+  await db.query(`INSERT INTO sample_items(sample_id,sample_code,status,brand,style_name,color,department,purchase_date,purchaser_user_id,purchaser_name,holder_user_id,holder_name,borrowed_at,created_by,archived_from_status,archived_reason,storage_location)
+   VALUES($1::uuid,$1::text,$2,$3,'分析合成样衣','蓝','设计部','2026-09-01',$4,'同名人员',$5,$6,'2026-09-01',$7,$8,$9,$10)`,[id,status,rawBrand,purchaser,isHeld?purchaser:null,isHeld?'同名人员':null,person,status==='archived'?'borrowed':null,status==='archived'?'待分类':null,['in_stock','borrow_pending'].includes(status)?'合成测试库位':null]);
   await db.query('INSERT INTO sample_financial_facts(sample_id,purchase_price) VALUES($1,$2)',[id,price]);return id;
  }
  async function disposal(status:string,type:string,amount:string,approved:string,paid:string|null){
@@ -92,4 +92,5 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  });
 
 });
+
 
