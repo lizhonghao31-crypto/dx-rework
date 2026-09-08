@@ -4,6 +4,10 @@ import pg from "pg";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import {
+  databaseNameFromConnectionUrl,
+  isAcceptanceDatabaseName,
+} from "./database-guard.js";
 
 const { Pool } = pg;
 
@@ -34,9 +38,9 @@ if (process.env.NODE_ENV !== "test" || process.env.ACCEPTANCE_LAB_ENABLED !== "t
   throw new Error("Acceptance role seeding requires NODE_ENV=test and ACCEPTANCE_LAB_ENABLED=true");
 }
 if (!acceptanceDatabaseUrl) throw new Error("ACCEPTANCE_DATABASE_URL is required; DATABASE_URL fallback is forbidden");
-const parsed = new URL(acceptanceDatabaseUrl);
-if (!/(?:accept|uat|test)/i.test(parsed.pathname)) {
-  throw new Error("Acceptance database name must visibly contain accept, uat, or test");
+const configuredDatabaseName = databaseNameFromConnectionUrl(acceptanceDatabaseUrl);
+if (!isAcceptanceDatabaseName(configuredDatabaseName)) {
+  throw new Error("Acceptance database name must contain an explicitly delimited accept, acceptance, uat, or test token");
 }
 const corpId = process.env.DINGTALK_CORP_ID?.trim();
 if (!corpId) throw new Error("DINGTALK_CORP_ID is required");
@@ -88,7 +92,7 @@ const ensureUser = async (alias: string, displayName: string): Promise<string> =
 try {
   const databaseName = (await pool.query<{ current_database: string }>("SELECT current_database()"))
     .rows[0]?.current_database ?? "";
-  if (!/(?:accept|uat|test)/i.test(databaseName)) {
+  if (!isAcceptanceDatabaseName(databaseName)) {
     throw new Error(`Refusing acceptance seed against database ${databaseName || "<unknown>"}`);
   }
 
