@@ -40,8 +40,8 @@ class RaceStore implements AuthStore {
 class RacingAcceptanceProvider implements DingTalkProvider {
   private controlActive = true;
   private releaseMember!: () => void;
-  readonly memberLookupStarted = new Promise<void>(resolve => { this.memberLookupStartedResolve = resolve; });
   private memberLookupStartedResolve!: () => void;
+  readonly memberLookupStarted = new Promise<void>(resolve => { this.memberLookupStartedResolve = resolve; });
   private readonly memberRelease = new Promise<void>(resolve => { this.releaseMember = resolve; });
 
   buildQrAuthorizationUrl() { return "https://acceptance.invalid"; }
