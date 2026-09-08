@@ -95,11 +95,22 @@ runWithPostgres("acceptance role sessions", () => {
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
     )) as Manifest;
+    await database.query(`
+      CREATE TABLE schema_migrations (
+        version text PRIMARY KEY,
+        checksum char(64) NOT NULL,
+        applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     for (const migration of manifest.migrations) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
         "utf8",
       ));
+      await database.query(
+        "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
+        [migration.version, migration.checksum],
+      );
     }
 
     await seedUser(ids.root, "root", "[UAT] Root", "owner_group");
