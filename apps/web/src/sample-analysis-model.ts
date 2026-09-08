@@ -24,7 +24,7 @@ export type AnalysisNavigationAction=
  |{type:'draft';key:string;value:string}
  |{type:'apply';query:SampleAnalysisQuery}
  |{type:'reset'}
- |{type:'change'|'drill';patch:Partial<SampleAnalysisQuery>}
+ |{type:'change'|'drill';patch:Partial<SampleAnalysisQuery>;baseQuery?:SampleAnalysisQuery}
  |{type:'back'};
 export function analysisQueryDraft(query:SampleAnalysisQuery):AnalysisDraft{
  const result:AnalysisDraft={};for(const [key,value] of Object.entries(query))if(!['page','groupPage','group'].includes(key)&&value!==undefined)result[key]=String(value);
@@ -37,11 +37,13 @@ export function analysisNavigation(state:AnalysisNavigation,action:AnalysisNavig
  if(action.type==='reset')return initialAnalysisNavigation();
  if(action.type==='apply')return {query:action.query,draft:state.draft,history:[]};
  if(action.type==='back'){const previous=state.history.at(-1);return previous?{...previous,history:state.history.slice(0,-1)}:state;}
- const patch=action.patch,next={...state.query,page:1,groupPage:1,...patch};
+ const baseQuery=action.baseQuery??state.query;
+ const baseDraft=JSON.stringify(baseQuery)===JSON.stringify(state.query)?state.draft:analysisQueryDraft(baseQuery);
+ const patch=action.patch,next={...baseQuery,page:1,groupPage:1,...patch};
  if('brandId'in patch)delete next.brand;if('brand'in patch)delete next.brandId;
  if('departmentId'in patch)delete next.department;if('department'in patch)delete next.departmentId;
  if('fact'in patch&&!('disposalType'in patch))delete next.disposalType;
  const query=SampleAnalysisQuerySchema.parse(next);
- const history=action.type==='drill'?[...state.history,{query:state.query,draft:state.draft}]:Object.keys(patch).every(key=>key==='page'||key==='groupPage')?state.history:[];
+ const history=action.type==='drill'?[...state.history,{query:baseQuery,draft:baseDraft}]:Object.keys(patch).every(key=>key==='page'||key==='groupPage')?state.history:[];
  return {query,draft:analysisQueryDraft(query),history};
 }

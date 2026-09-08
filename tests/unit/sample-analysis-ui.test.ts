@@ -34,3 +34,13 @@ describe('analysis drill return context',()=>{
   expect(next.query.brandId).toBe(first);expect(next.query.brand).toBeUndefined();expect(next.query.disposalType).toBeUndefined();
  });
 });
+
+ it('drills and paginates from visible successful results after a failed filter request',()=>{
+  const visible={...initialAnalysisNavigation().query,group:'brand' as const,page:2};
+  const failed={...initialAnalysisNavigation(),query:{...visible,minPrice:'99999'},draft:{minPrice:'99999'}};
+  const drilled=analysisNavigation(failed,{type:'drill',baseQuery:visible,patch:{brand:'可见品牌'}});
+  expect(drilled.query.minPrice).toBeUndefined();expect(drilled.query.brand).toBe('可见品牌');
+  const back=analysisNavigation(drilled,{type:'back'});expect(back.query).toEqual(visible);expect(back.draft.minPrice).toBeUndefined();
+  expect(analysisNavigation(failed,{type:'change',baseQuery:visible,patch:{page:3}}).query).toMatchObject({page:3,group:'brand'});
+  expect(analysisNavigation(failed,{type:'change',baseQuery:visible,patch:{page:3}}).query.minPrice).toBeUndefined();
+ });
