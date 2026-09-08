@@ -48,8 +48,8 @@ const accessRolesAllow = probe("access-roles", "人员权限角色表", "access/
 const accessRolesDeny = probe("access-roles", "人员权限角色表", "access/roles", 403);
 const sourcingAllow = probe("sourcing-list", "报价选厂订单列表", "sourcing/cases?page=1", 200);
 const sourcingDeny = probe("sourcing-list", "报价选厂订单列表", "sourcing/cases?page=1", 403);
-const suppliersAllow = probe("supplier-list", "供应商目录", "master-data/suppliers?page=1", 200);
-const suppliersDeny = probe("supplier-list", "供应商目录", "master-data/suppliers?page=1", 403);
+const suppliersAllow = probe("supplier-list", "供应商目录", "master-data/suppliers", 200);
+const suppliersDeny = probe("supplier-list", "供应商目录", "master-data/suppliers", 403);
 const samplesAllow = probe("sample-list", "样衣目录", "samples?page=1", 200);
 const samplesDeny = probe("sample-list", "样衣目录", "samples?page=1", 403);
 
