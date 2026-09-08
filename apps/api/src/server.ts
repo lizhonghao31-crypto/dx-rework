@@ -21,6 +21,7 @@ import { AdminAuditService } from "./admin-audit-service.js";
 import { AdminConsoleService } from "./admin-console-service.js";
 import { buildApp } from "./app.js";
 import { AcceptanceDingTalkProvider } from "./auth/acceptance-provider.js";
+import { assertAcceptanceServerDatabase } from "./auth/acceptance-server-guard.js";
 import { OfficialDingTalkProvider } from "./auth/provider.js";
 import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { AuthService } from "./auth/service.js";
@@ -73,6 +74,14 @@ const database = new Pool({
   connectionTimeoutMillis: 3_000,
   idleTimeoutMillis: 30_000,
 });
+if (config.acceptanceLab.enabled) {
+  try {
+    await assertAcceptanceServerDatabase(config.databaseUrl, database);
+  } catch (error) {
+    await database.end();
+    throw error;
+  }
+}
 
 const rootAuthority = new RootAuthority(
   database,
