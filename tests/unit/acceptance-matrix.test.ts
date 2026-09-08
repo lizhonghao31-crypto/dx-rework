@@ -10,7 +10,8 @@ const user = (
   role: string,
   capabilities: readonly string[],
   isRoot = false,
-) => ({ id: `user-${role}`, displayName: role, businessRoles: [role], capabilities, isRoot });
+  id = `user-${role}`,
+) => ({ id, displayName: role, businessRoles: [role], capabilities, isRoot });
 
 describe("acceptance authorization matrix", () => {
   it("covers every standard seeded acceptance alias exactly once", () => {
@@ -23,20 +24,46 @@ describe("acceptance authorization matrix", () => {
     ]);
   });
 
-  it("keeps finance-director sample read access as an approved target instead of deriving it from current RBAC", () => {
+  it("keeps finance-director sample access read-only as an approved target instead of deriving it from current RBAC", () => {
     const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-director")!;
-    expect(finance.requiredCapabilities).toContain("sample:view_basic");
+    expect(finance.requiredCapabilities).toEqual(expect.arrayContaining([
+      "sample:view_basic", "sample:view_finance", "sample:view_audit",
+    ]));
+    expect(finance.forbiddenCapabilities).toEqual(expect.arrayContaining([
+      "sample:create", "sample:batch_create", "sample:update_basic", "sample:correct_finance",
+      "sample:dispose_request", "sample:dispose_approve", "sample:archive",
+    ]));
     expect(finance.allowedModules).toContain("samples");
     expect(finance.probes?.find((probe) => probe.id === "sample-list")?.expectedStatus).toBe(200);
+  });
+
+  it("defines a complete finance-read module boundary and representative backend denials", () => {
+    const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-read")!;
+    expect(finance.allowedModules).toEqual(["rework"]);
+    expect(finance.forbiddenModules).toEqual(["sourcing", "suppliers", "production", "samples"]);
+    expect(finance.probes?.map((probe) => [probe.id, probe.expectedStatus])).toEqual([
+      ["access-roles", 403], ["sourcing-list", 403], ["supplier-list", 403], ["sample-list", 403],
+    ]);
+  });
+
+  it("detects a session bound to the wrong UAT identity even when role and capability profile match", () => {
+    const worker = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "worker-a")!;
+    const checks = evaluateAcceptanceSnapshot(
+      worker,
+      { alias: "worker-a", userId: "uat-worker-a-id", roleCodes: ["worker"], capabilities: ["work:report"] },
+      user("worker", ["work:report"], false, "uat-worker-b-id"),
+    );
+    expect(checks.find((entry) => entry.key.endsWith(":session-user"))?.verdict).toBe("fail");
   });
 
   it("reports role, root and capability drift without rewriting the approved expectation", () => {
     const worker = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "worker-a")!;
     const checks = evaluateAcceptanceSnapshot(
       worker,
-      { alias: "worker-a", roleCodes: ["worker"], capabilities: ["work:report"] },
+      { alias: "worker-a", userId: "user-worker", roleCodes: ["worker"], capabilities: ["work:report"] },
       user("worker", ["work:report", "access:admin"], true),
     );
+    expect(checks.find((entry) => entry.key.endsWith(":session-user"))?.verdict).toBe("pass");
     expect(checks.find((entry) => entry.key.endsWith(":root"))?.verdict).toBe("fail");
     expect(checks.find((entry) => entry.key.includes("access:admin"))?.verdict).toBe("fail");
   });
