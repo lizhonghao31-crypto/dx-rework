@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
@@ -12,6 +12,7 @@ import {
   firstFailureForScenario,
   latestScenarioEvidence,
   parseAcceptanceEvidenceReport,
+  sanitizeAcceptanceEvidenceReport,
   type AcceptanceEvidenceReport,
   type AcceptanceEvidenceStatus,
   type AcceptanceRequestEvidence,
@@ -50,7 +51,7 @@ type ScenarioDraft = Readonly<{
   scenarioId: string;
   status: AcceptanceEvidenceStatus;
   actual: string;
-  preflight?: AcceptanceRequestEvidence;
+  preflight: AcceptanceRequestEvidence;
 }>;
 
 type VersionPayload = AcceptanceRuntimeVersion & Readonly<{ service?: string }>;
@@ -105,7 +106,10 @@ function initialEvidenceReport(): AcceptanceEvidenceReport {
 }
 
 function persistEvidenceReport(report: AcceptanceEvidenceReport): void {
-  try { window.localStorage.setItem(EVIDENCE_STORAGE_KEY, JSON.stringify(report)); } catch { /* restricted browser */ }
+  window.localStorage.setItem(
+    EVIDENCE_STORAGE_KEY,
+    JSON.stringify(sanitizeAcceptanceEvidenceReport(report)),
+  );
 }
 
 export function AcceptanceLabPage() {
@@ -120,15 +124,23 @@ export function AcceptanceLabPage() {
   const [matrixResults, setMatrixResults] = useState<readonly MatrixSummary[]>([]);
   const [runtimeVersion, setRuntimeVersion] = useState<AcceptanceRuntimeVersion | null>(null);
   const [evidenceReport, setEvidenceReport] = useState<AcceptanceEvidenceReport>(initialEvidenceReport);
+  const evidenceReportRef = useRef(evidenceReport);
   const [scenarioDraft, setScenarioDraft] = useState<ScenarioDraft | null>(null);
   const [scenarioRunning, setScenarioRunning] = useState("");
 
-  const updateEvidence = useCallback((update: (report: AcceptanceEvidenceReport) => AcceptanceEvidenceReport) => {
-    setEvidenceReport((current) => {
-      const next = update(current);
+  useEffect(() => { evidenceReportRef.current = evidenceReport; }, [evidenceReport]);
+
+  const updateEvidence = useCallback((update: (report: AcceptanceEvidenceReport) => AcceptanceEvidenceReport): boolean => {
+    const next = sanitizeAcceptanceEvidenceReport(update(evidenceReportRef.current));
+    try {
       persistEvidenceReport(next);
-      return next;
-    });
+    } catch {
+      setError("验收证据无法持久保存。本次结果未记入报告，请检查浏览器存储权限或空间后重试。");
+      return false;
+    }
+    evidenceReportRef.current = next;
+    setEvidenceReport(next);
+    return true;
   }, []);
 
   const refreshCurrentUser = useCallback(async () => {
@@ -181,6 +193,10 @@ export function AcceptanceLabPage() {
   };
 
   const switchIdentity = async (alias: string) => {
+    if (scenarioDraft) {
+      setError("当前有待保存的场景证据，请先保存或取消记录后再切换身份。");
+      return;
+    }
     setBusyAlias(alias); setError("");
     try {
       const response = await jsonRequest<{ user?: AuthorizedUser; error?: { message?: string } }>("acceptance/control/switch", {
@@ -199,6 +215,10 @@ export function AcceptanceLabPage() {
   };
 
   const runMatrix = async () => {
+    if (scenarioDraft) {
+      setError("当前有待保存的场景证据，请先保存或取消记录后再运行权限矩阵。");
+      return;
+    }
     const startedAt = new Date().toISOString();
     setMatrixRunning(true); setMatrixResults([]); setError("");
     const results: MatrixSummary[] = [];
@@ -259,6 +279,10 @@ export function AcceptanceLabPage() {
   };
 
   const startScenario = async (scenarioId: string) => {
+    if (scenarioDraft) {
+      setError("当前有待保存的场景证据，请先保存或取消记录后再开始其他场景。");
+      return;
+    }
     const scenario = ACCEPTANCE_SCENARIOS.find((candidate) => candidate.id === scenarioId);
     if (!scenario) return;
     setScenarioRunning(scenarioId); setError("");
@@ -273,19 +297,21 @@ export function AcceptanceLabPage() {
         return;
       }
       setCurrentUser(switched.body.user);
-      let preflight: AcceptanceRequestEvidence | undefined;
-      let actual = "";
-      if (scenario.preflight) {
-        const response = await fetch(apiUrl(scenario.preflight.path), { credentials: "include", cache: "no-store" });
-        preflight = {
-          method: "GET",
-          path: scenario.preflight.path,
-          expectedStatus: scenario.preflight.expectedStatus,
-          actualStatus: response.status,
-        };
-        actual = `预检 ${scenario.preflight.path}: HTTP ${response.status}（预期 ${scenario.preflight.expectedStatus}）`;
-      }
-      setScenarioDraft({ scenarioId, status: "not_run", actual, ...(preflight ? { preflight } : {}) });
+      const response = await fetch(apiUrl(scenario.preflight.path), { credentials: "include", cache: "no-store" });
+      const preflight: AcceptanceRequestEvidence = {
+        method: "GET",
+        path: scenario.preflight.path,
+        expectedStatus: scenario.preflight.expectedStatus,
+        actualStatus: response.status,
+      };
+      const preflightPassed = preflight.actualStatus === preflight.expectedStatus;
+      const actual = `预检 ${scenario.preflight.path}: HTTP ${response.status}（预期 ${scenario.preflight.expectedStatus}）`;
+      setScenarioDraft({
+        scenarioId,
+        status: preflightPassed ? "not_run" : "fail",
+        actual,
+        preflight,
+      });
       if (opened) opened.location.href = pageUrl(scenario.route);
     } finally {
       setScenarioRunning("");
@@ -296,24 +322,26 @@ export function AcceptanceLabPage() {
     if (!scenarioDraft) return;
     const scenario = ACCEPTANCE_SCENARIOS.find((candidate) => candidate.id === scenarioDraft.scenarioId);
     if (!scenario) return;
-    updateEvidence((report) => appendScenarioEvidence(report, {
+    const preflightPassed = scenarioDraft.preflight.actualStatus === scenarioDraft.preflight.expectedStatus;
+    const saved = updateEvidence((report) => appendScenarioEvidence(report, {
       scenarioId: scenario.id,
       alias: scenario.alias,
-      status: scenarioDraft.status,
+      status: preflightPassed ? scenarioDraft.status : "fail",
       actual: scenarioDraft.actual.trim(),
       recordedAt: new Date().toISOString(),
       version: runtimeVersion,
-      ...(scenarioDraft.preflight ? { preflight: scenarioDraft.preflight } : {}),
+      preflight: scenarioDraft.preflight,
     }));
-    setScenarioDraft(null);
+    if (saved) setScenarioDraft(null);
   };
 
   const exportEvidence = () => {
-    const blob = new Blob([JSON.stringify(evidenceReport, null, 2)], { type: "application/json;charset=utf-8" });
+    const safeReport = sanitizeAcceptanceEvidenceReport(evidenceReport);
+    const blob = new Blob([JSON.stringify(safeReport, null, 2)], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${evidenceReport.reportId}.json`;
+    anchor.download = `${safeReport.reportId}.json`;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
@@ -321,6 +349,10 @@ export function AcceptanceLabPage() {
   };
 
   const end = async () => {
+    if (scenarioDraft) {
+      setError("当前有待保存的场景证据，请先保存或取消记录后再结束验收。");
+      return;
+    }
     setError("");
     const response = await fetch(apiUrl("acceptance/control/end"), {
       method: "POST", credentials: "include", cache: "no-store",
@@ -335,6 +367,9 @@ export function AcceptanceLabPage() {
     return { total: checks.length, failed: checks.filter((entry) => entry.verdict === "fail").length };
   }, [matrixResults]);
   const evidenceSummary = useMemo(() => acceptanceEvidenceSummary(evidenceReport), [evidenceReport]);
+  const scenarioPreflightPassed = scenarioDraft
+    ? scenarioDraft.preflight.actualStatus === scenarioDraft.preflight.expectedStatus
+    : true;
 
   if (state === "loading") return <main className="acceptance-lab"><Surface><p role="status">正在检查隔离验收中心…</p></Surface></main>;
   if (state === "unavailable") return <main className="acceptance-lab"><Surface><h1>隔离验收中心未启用</h1><p>此入口只在明确启用 Acceptance Lab 的测试环境提供，正式环境不会注册控制接口。</p></Surface></main>;
@@ -351,19 +386,19 @@ export function AcceptanceLabPage() {
   return <main className="acceptance-lab">
     <header className="acceptance-lab__header">
       <div><StatusBadge tone="success">Acceptance Lab 已隔离</StatusBadge><h1>角色权限验收中心</h1><p>每次切换都会建立对应合成用户的真实业务 Session，不继承操作者 Root 权限。</p></div>
-      <Button variant="secondary" onClick={() => void end()} disabled={matrixRunning || Boolean(scenarioRunning)}>结束验收</Button>
+      <Button variant="secondary" onClick={() => void end()} disabled={matrixRunning || Boolean(scenarioRunning) || Boolean(scenarioDraft)}>结束验收</Button>
     </header>
     {error ? <p role="alert" className="acceptance-lab__error">{error}</p> : null}
 
     <Surface className="acceptance-evidence-panel">
-      <div className="acceptance-evidence-heading"><div><h2>验收证据报告</h2><p>矩阵重跑和场景复测只追加新 attempt，不覆盖历史失败；报告不会保存 Cookie、Token 或控制凭证。</p></div><Button variant="secondary" onClick={exportEvidence}>导出 JSON 报告</Button></div>
+      <div className="acceptance-evidence-heading"><div><h2>验收证据报告</h2><p>矩阵重跑和场景复测只追加新 attempt，不覆盖历史失败；持久化和导出边界会自动清理 Cookie、Token、控制凭证和 Session 形态的敏感值。</p></div><Button variant="secondary" onClick={exportEvidence}>导出 JSON 报告</Button></div>
       <div className="acceptance-evidence-meta"><span>报告：{evidenceReport.reportId}</span><span>矩阵运行：{evidenceReport.matrixAttempts.length} 次</span><span>历史场景失败：{evidenceSummary.historicalFailures}</span>{runtimeVersion ? <><span>Git：{runtimeVersion.gitSha.slice(0, 12)}</span><span>Schema：{runtimeVersion.schemaVersion ?? "未知"}</span></> : <span>版本信息读取中</span>}</div>
       <div className="acceptance-evidence-summary"><strong>最新矩阵 {evidenceSummary.matrixTotal - evidenceSummary.matrixFailed}/{evidenceSummary.matrixTotal || 0} 通过</strong><span>场景：{evidenceSummary.scenarios.pass} 通过 · {evidenceSummary.scenarios.fail} 失败 · {evidenceSummary.scenarios.blocked} 受阻 · {evidenceSummary.scenarios.notRun} 未执行</span></div>
     </Surface>
 
     <Surface className="acceptance-matrix-panel">
       <div><h2>自动权限矩阵</h2><p>批准矩阵与运行时 RBAC 分开保存；逐角色切换真实 Session，并核对角色、capability、模块入口和只读 HTTP 边界。</p></div>
-      <Button onClick={() => void runMatrix()} disabled={matrixRunning || Boolean(scenarioRunning) || identities.length === 0}>{matrixRunning ? `执行中 ${matrixProgress}` : "运行全部角色权限矩阵"}</Button>
+      <Button onClick={() => void runMatrix()} disabled={matrixRunning || Boolean(scenarioRunning) || Boolean(scenarioDraft) || identities.length === 0}>{matrixRunning ? `执行中 ${matrixProgress}` : "运行全部角色权限矩阵"}</Button>
       {matrixTotals.total > 0 ? <div className="acceptance-matrix-summary"><strong>{matrixTotals.total - matrixTotals.failed}/{matrixTotals.total} 通过</strong><span>{matrixTotals.failed} 项不一致</span></div> : null}
       {matrixResults.length > 0 ? <div className="acceptance-matrix-results">
         {matrixResults.map((result) => {
@@ -385,16 +420,17 @@ export function AcceptanceLabPage() {
             <div><strong>{scenario.title}</strong><small>{scenario.alias} · {scenario.kind}</small></div>
             <p>{scenario.expected}</p>
             <ol>{scenario.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-            <div className="acceptance-scenario-meta"><span>最新：{latest ? statusLabels[latest.status] : "未执行"}</span>{firstFailure ? <span>首次失败仍保留：{firstFailure.recordedAt}</span> : null}</div>
-            <Button variant="secondary" onClick={() => void startScenario(scenario.id)} disabled={matrixRunning || Boolean(scenarioRunning)}>{scenarioRunning === scenario.id ? "正在切换身份…" : "开始场景并打开业务页"}</Button>
+            <div className="acceptance-scenario-meta"><span>预检：GET {scenario.preflight.path} → 预期 HTTP {scenario.preflight.expectedStatus}</span><span>最新：{latest ? statusLabels[latest.status] : "未执行"}</span>{firstFailure ? <span>首次失败仍保留：{firstFailure.recordedAt}</span> : null}</div>
+            <Button variant="secondary" onClick={() => void startScenario(scenario.id)} disabled={matrixRunning || Boolean(scenarioRunning) || Boolean(scenarioDraft)}>{scenarioRunning === scenario.id ? "正在切换身份…" : "开始场景并打开业务页"}</Button>
           </article>;
         })}
       </div>
       {scenarioDraft ? <div className="acceptance-scenario-recorder">
         <h3>记录：{ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === scenarioDraft.scenarioId)?.title}</h3>
-        {scenarioDraft.preflight ? <p>只读预检：GET {scenarioDraft.preflight.path} → HTTP {scenarioDraft.preflight.actualStatus}（预期 {scenarioDraft.preflight.expectedStatus}）</p> : null}
-        <label>结果<select value={scenarioDraft.status} onChange={(event) => setScenarioDraft({ ...scenarioDraft, status: event.target.value as AcceptanceEvidenceStatus })}><option value="not_run">未执行</option><option value="pass">通过</option><option value="fail">失败</option><option value="blocked">受阻</option></select></label>
-        <label>实际结果 / 数据或待办变化<textarea value={scenarioDraft.actual} onChange={(event) => setScenarioDraft({ ...scenarioDraft, actual: event.target.value })} placeholder="记录实际看到的页面、按钮、请求结果以及数据/待办变化；不要粘贴 Cookie 或 Token。" rows={4} /></label>
+        <p>只读预检：GET {scenarioDraft.preflight.path} → HTTP {scenarioDraft.preflight.actualStatus}（预期 {scenarioDraft.preflight.expectedStatus}）</p>
+        {!scenarioPreflightPassed ? <p role="alert">只读预检未达到批准预期，本次场景不能记录为通过，保存时会强制记为失败。</p> : null}
+        <label>结果<select value={scenarioDraft.status} onChange={(event) => setScenarioDraft({ ...scenarioDraft, status: event.target.value as AcceptanceEvidenceStatus })}><option value="not_run">未执行</option><option value="pass" disabled={!scenarioPreflightPassed}>通过</option><option value="fail">失败</option><option value="blocked">受阻</option></select></label>
+        <label>实际结果 / 数据或待办变化<textarea value={scenarioDraft.actual} onChange={(event) => setScenarioDraft({ ...scenarioDraft, actual: event.target.value })} placeholder="记录实际看到的页面、按钮、请求结果以及数据/待办变化；敏感形态会在保存和导出边界自动清理。" rows={4} /></label>
         <div><Button onClick={recordScenario}>保存本次证据</Button><Button variant="secondary" onClick={() => setScenarioDraft(null)}>取消记录</Button></div>
       </div> : null}
     </Surface>
@@ -409,7 +445,7 @@ export function AcceptanceLabPage() {
       {identities.map(identity => <Surface className="acceptance-identity" key={identity.userId}>
         <div><strong>{identity.displayName}</strong><small>{identity.roleCodes.map(role => roleLabels[role] ?? role).join(" / ") || "未分配角色"}</small></div>
         <div className="acceptance-identity__meta"><span>{identity.alias}</span><span>{identity.capabilities.length} 项 capability</span></div>
-        <Button onClick={() => void switchIdentity(identity.alias)} disabled={!identity.active || !identity.employed || Boolean(busyAlias) || matrixRunning || Boolean(scenarioRunning)}>{busyAlias === identity.alias ? "切换中…" : "切换到此身份"}</Button>
+        <Button onClick={() => void switchIdentity(identity.alias)} disabled={!identity.active || !identity.employed || Boolean(busyAlias) || matrixRunning || Boolean(scenarioRunning) || Boolean(scenarioDraft)}>{busyAlias === identity.alias ? "切换中…" : "切换到此身份"}</Button>
       </Surface>)}
     </section>
   </main>;
