@@ -4,9 +4,10 @@ import pg from "pg";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { assertStandardAcceptanceAuthorization } from "./authorization-guard.js";
 import {
-  databaseNameFromConnectionUrl,
-  isAcceptanceDatabaseName,
+  assertAcceptanceDatabaseName,
+  assertAcceptanceDatabaseUrl,
 } from "./database-guard.js";
 
 const { Pool } = pg;
@@ -38,10 +39,7 @@ if (process.env.NODE_ENV !== "test" || process.env.ACCEPTANCE_LAB_ENABLED !== "t
   throw new Error("Acceptance role seeding requires NODE_ENV=test and ACCEPTANCE_LAB_ENABLED=true");
 }
 if (!acceptanceDatabaseUrl) throw new Error("ACCEPTANCE_DATABASE_URL is required; DATABASE_URL fallback is forbidden");
-const configuredDatabaseName = databaseNameFromConnectionUrl(acceptanceDatabaseUrl);
-if (!isAcceptanceDatabaseName(configuredDatabaseName)) {
-  throw new Error("Acceptance database name must contain an explicitly delimited accept, acceptance, uat, or test token");
-}
+assertAcceptanceDatabaseUrl(acceptanceDatabaseUrl);
 const corpId = process.env.DINGTALK_CORP_ID?.trim();
 if (!corpId) throw new Error("DINGTALK_CORP_ID is required");
 
@@ -92,9 +90,7 @@ const ensureUser = async (alias: string, displayName: string): Promise<string> =
 try {
   const databaseName = (await pool.query<{ current_database: string }>("SELECT current_database()"))
     .rows[0]?.current_database ?? "";
-  if (!isAcceptanceDatabaseName(databaseName)) {
-    throw new Error(`Refusing acceptance seed against database ${databaseName || "<unknown>"}`);
-  }
+  assertAcceptanceDatabaseName(databaseName, "connected");
 
   for (const [alias, displayName] of ACCEPTANCE_USERS) await ensureUser(alias, displayName);
 
@@ -141,6 +137,31 @@ try {
     authorizationCapabilities: ["access:admin"],
     requestId: randomUUID(),
   };
+
+  for (const [alias, , roleCode] of ACCEPTANCE_USERS) {
+    if (alias === "root") continue;
+    const userId = userIdByAlias.get(alias)!;
+    const [roles, delegations] = await Promise.all([
+      pool.query<{ role_code: string }>(
+        `SELECT role_code FROM user_role_assignments
+         WHERE user_id=$1 AND revoked_at IS NULL
+         ORDER BY role_code`,
+        [userId],
+      ),
+      pool.query<{ delegation_id: string }>(
+        `SELECT delegation_id FROM delegated_authorizations
+         WHERE grantee_user_id=$1 AND revoked_at IS NULL
+         ORDER BY delegation_id`,
+        [userId],
+      ),
+    ]);
+    assertStandardAcceptanceAuthorization({
+      alias,
+      expectedRole: roleCode,
+      activeRoles: roles.rows.map((row) => row.role_code),
+      unrevokedDelegationIds: delegations.rows.map((row) => row.delegation_id),
+    });
+  }
 
   for (const [alias, , roleCode] of ACCEPTANCE_USERS) {
     if (alias === "root") continue;
