@@ -36,7 +36,7 @@ export type AcceptanceScenarioDefinition = Readonly<{
   route: string;
   expected: string;
   steps: readonly string[];
-  preflight?: Readonly<{ path: string; expectedStatus: number }>;
+  preflight: Readonly<{ path: string; expectedStatus: number }>;
 }>;
 
 export type AcceptanceScenarioEvidence = Readonly<{
@@ -47,7 +47,7 @@ export type AcceptanceScenarioEvidence = Readonly<{
   actual: string;
   recordedAt: string;
   version: AcceptanceRuntimeVersion | null;
-  preflight?: AcceptanceRequestEvidence;
+  preflight: AcceptanceRequestEvidence;
 }>;
 
 export type AcceptanceEvidenceReport = Readonly<{
@@ -61,6 +61,35 @@ export type AcceptanceEvidenceReport = Readonly<{
 
 const newId = (prefix: string, now = new Date()): string =>
   `${prefix}-${now.toISOString().replace(/[-:.TZ]/g, "")}-${Math.random().toString(36).slice(2, 8)}`;
+
+const EVIDENCE_SECRET_PATTERNS: readonly Readonly<{ pattern: RegExp; replacement: string }>[] = [
+  { pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, replacement: "Bearer [REDACTED]" },
+  { pattern: /\b(dx_(?:rework_session|acceptance_control)\s*=\s*)[^;\s]+/gi, replacement: "$1[REDACTED]" },
+  {
+    pattern: /\b((?:authorization|cookie|token|control(?:[_\s-]?(?:credential|code))?)\s*[:=]\s*)[^\s,;]+/gi,
+    replacement: "$1[REDACTED]",
+  },
+  { pattern: /\b[A-Za-z0-9_-]{20,}\.[0-9a-f]{64}\b/gi, replacement: "[REDACTED_ACCEPTANCE_CODE]" },
+  { pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, replacement: "[REDACTED_JWT]" },
+  { pattern: /\b[A-Za-z0-9_-]{43}\b/g, replacement: "[REDACTED_SESSION]" },
+];
+
+export function redactAcceptanceEvidenceText(value: string): string {
+  return EVIDENCE_SECRET_PATTERNS.reduce(
+    (current, entry) => current.replace(entry.pattern, entry.replacement),
+    value,
+  );
+}
+
+export function sanitizeAcceptanceEvidenceReport(report: AcceptanceEvidenceReport): AcceptanceEvidenceReport {
+  return {
+    ...report,
+    scenarioAttempts: report.scenarioAttempts.map((attempt) => ({
+      ...attempt,
+      actual: redactAcceptanceEvidenceText(attempt.actual),
+    })),
+  };
+}
 
 export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
   {
@@ -89,6 +118,7 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
       "不用 force click 或 DOM 注入，正常点击开始日期并选择日期。",
       "再正常点击结束日期，确认两个控件都可操作且没有重叠。",
     ],
+    preflight: { path: "receiving/board?page=1", expectedStatus: 200 },
   },
   {
     id: "owner-todo-inbox",
@@ -116,6 +146,7 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
       "从当前身份业务页进入前线工作区。",
       "正常浏览导航，确认不存在供应商、样衣、生产看板和人员权限管理入口。",
     ],
+    preflight: { path: "frontline/work-tasks?kind=worker", expectedStatus: 200 },
   },
 ];
 
@@ -151,7 +182,10 @@ export function appendScenarioEvidence(
   return {
     ...report,
     updatedAt: now.toISOString(),
-    scenarioAttempts: [...report.scenarioAttempts, { ...input, attemptId: newId("scenario", now) }],
+    scenarioAttempts: [
+      ...report.scenarioAttempts,
+      { ...input, actual: redactAcceptanceEvidenceText(input.actual), attemptId: newId("scenario", now) },
+    ],
   };
 }
 
@@ -199,7 +233,7 @@ export function parseAcceptanceEvidenceReport(raw: string | null): AcceptanceEvi
       || !Array.isArray(value.matrixAttempts)
       || !Array.isArray(value.scenarioAttempts)
     ) return null;
-    return value as AcceptanceEvidenceReport;
+    return sanitizeAcceptanceEvidenceReport(value as AcceptanceEvidenceReport);
   } catch {
     return null;
   }
