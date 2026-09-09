@@ -324,7 +324,8 @@ export class TailInspectionService {
   }
 
   private ensureReporter(actor: TrustedActorContext): void {
-    if (!isRootActor(actor) && (!actor.actorRoles.includes("worker") || actor.authorizationCapability !== "tail_inspection:report")) {
+    const tailReportingRole = actor.actorRoles.includes("worker") || actor.actorRoles.includes("tail_inspector");
+    if (!isRootActor(actor) && (!tailReportingRole || actor.authorizationCapability !== "tail_inspection:report")) {
       fail("只有被分配整查的工人可以提交整查报数", 403, "FORBIDDEN");
     }
   }
@@ -337,7 +338,10 @@ export class TailInspectionService {
 
   private ensureRead(actor: TrustedActorContext): void {
     if (isRootActor(actor)) return;
-    const reporter = actor.actorRoles.includes("worker") && actor.authorizationCapability === "tail_inspection:report";
+    // Current HTTP authorization emits worker. The retired role is accepted only for immutable
+    // historical actor snapshots and direct legacy service fixtures; it is never assigned anew.
+    const reporter = (actor.actorRoles.includes("worker") || actor.actorRoles.includes("tail_inspector"))
+      && actor.authorizationCapability === "tail_inspection:report";
     const supervisor = actor.actorRoles.includes("tail_supervisor") && ["process:configure", "submission:audit"].includes(actor.authorizationCapability);
     if (!reporter && !supervisor) fail("当前角色无权查看整查报数", 403, "FORBIDDEN");
   }
