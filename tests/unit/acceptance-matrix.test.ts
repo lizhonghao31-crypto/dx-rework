@@ -52,6 +52,33 @@ describe("acceptance authorization matrix", () => {
     }
   });
 
+  it("binds newly confirmed cross-module checks to canonical Golden Source IDs", () => {
+    const owner = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "owner")!;
+    const production = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "production-management")!;
+    const ie = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "ie")!;
+    const merchandiser = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "merchandiser")!;
+    const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-director")!;
+
+    expect(owner.ruleRefs?.["http:access-roles"]).toEqual({
+      ruleId: "PERM-PLATFORM-ACCESS-ADMIN-001", status: "approved",
+    });
+    expect(production.ruleRefs?.["http:production-dashboard"]).toEqual({
+      ruleId: "PERM-ROLE-PRODUCTION-MANAGEMENT-001", status: "approved",
+    });
+    expect(ie.ruleRefs?.["http:production-dashboard"]).toEqual({
+      ruleId: "PERM-ROLE-IE-001", status: "approved",
+    });
+    expect(merchandiser.ruleRefs?.["http:production-dashboard"]).toEqual({
+      ruleId: "PERM-ROLE-MERCHANDISER-001", status: "approved",
+    });
+    expect(finance.ruleRefs?.["http:production-dashboard"]).toEqual({
+      ruleId: "PERM-ROLE-FINANCE-DIRECTOR-001", status: "approved",
+    });
+    expect(finance.ruleRefs?.["http:access-roles"]).toEqual({
+      ruleId: "PERM-PLATFORM-ACCESS-ADMIN-001", status: "approved",
+    });
+  });
+
   it("marks every confirmed supplier-center boundary approved instead of pending", () => {
     const expected = new Map([
       ["production-management", "PERM-SUPPLIER-PM-CENTER-001"],
