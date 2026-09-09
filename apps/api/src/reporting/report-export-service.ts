@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { BUSINESS_TIME_ZONE, businessCellValue, businessFieldLabel, isBusinessMoneyField, isBusinessNumberField } from "@dx-rework/contracts/business-display";
 import type { ReportQuery, ReportType } from "@dx-rework/contracts/reporting";
 
+import { assertBusinessExportAllowed, assertWageDataExportAllowed } from "../access/export-authority.js";
+import { ApplicationError } from "../platform/errors.js";
 import { OperationEventRepository, type SqlClient, type TrustedActorContext } from "../tools/repositories.js";
 import type { ManagementReportingService } from "./management-reporting-service.js";
 import { buildWorkbook, workbookNumberCell, type WorkbookCell } from "./xlsx-workbook.js";
@@ -50,6 +52,18 @@ export class ReportExportService {
     filename: string;
     content: Buffer;
   }> {
+    assertBusinessExportAllowed(actor.actorRoles, "report:export");
+    const root = actor.actorRoles.includes("root_superuser");
+    const currentCapabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
+    if (reportType === "wages") {
+      assertWageDataExportAllowed(actor.actorRoles);
+      if (!root && !currentCapabilities.includes("wage:view")) {
+        throw new ApplicationError("FORBIDDEN", "当前身份无权查看工资明细", 403);
+      }
+    } else if (!root && !currentCapabilities.includes("report:view")) {
+      throw new ApplicationError("FORBIDDEN", "当前身份无权查看该报表", 403);
+    }
+
     const { range, data } = await this.reporting.exportData(actor, reportType, query);
     const filename = `${reportNames[reportType]}-${range.from}-${range.to}.xlsx`;
     const filterRows: WorkbookCell[][] = [
