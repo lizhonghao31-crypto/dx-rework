@@ -4,13 +4,13 @@ const SUPPLIER_CONTACT_ROLES = new Set([
   "production_management",
 ]);
 
+// Keep finance visibility on the roles already confirmed by the supplier-profile foundation.
+// Do not infer cross-supplier payment access for other payable roles without an approved mapping.
 const SUPPLIER_CONTRACT_ROLES = new Set([
   "owner_group",
   "order_merchandiser",
   "production_management",
   "factory_payables",
-  "embroidery_washing_payables",
-  "fabric_payables",
   "finance_director",
 ]);
 
@@ -19,8 +19,6 @@ const SUPPLIER_PAYMENT_ROLES = new Set([
   "order_merchandiser",
   "production_management",
   "factory_payables",
-  "embroidery_washing_payables",
-  "fabric_payables",
   "finance_director",
 ]);
 
