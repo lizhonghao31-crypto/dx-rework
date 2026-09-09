@@ -43,17 +43,10 @@ export function registerEmployeeAccessRoutes(
   const authenticated = (request: FastifyRequest): Promise<AuthUser> =>
     dependencies.authenticate(cookieToken(request));
 
-  const ownerActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+  const rootActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
-    const isRoot = await dependencies.root.isRootUser(user.id);
-    if (
-      !isRoot
-      && (
-        user.businessRoles?.includes("owner_group") !== true
-        || !user.capabilities.includes("access:admin")
-      )
-    ) {
-      throw new ApplicationError("FORBIDDEN", "仅老板权限组可维护员工权限", 403);
+    if (!await dependencies.root.isRootUser(user.id)) {
+      throw new ApplicationError("FORBIDDEN", "仅Root可维护员工权限", 403);
     }
     return businessActor(
       dependencies.root,
@@ -64,12 +57,12 @@ export function registerEmployeeAccessRoutes(
   };
 
   app.get("/employee-access/employees", async (request) => {
-    await ownerActor(request);
+    await rootActor(request);
     return dependencies.service.listDirectory();
   });
 
   app.post<{ Params: { userId: string } }>("/employee-access/employees/:userId/roles", async (request, reply) => {
-    const actor = await ownerActor(request);
+    const actor = await rootActor(request);
     const params = parse(EmployeeAccessUserParamsSchema, request.params);
     const body = parse(EmployeeAccessGrantRoleSchema, request.body);
     await dependencies.root.assertProtectedRoleMutation(actor.actorId, body.roleCode);
@@ -83,7 +76,7 @@ export function registerEmployeeAccessRoutes(
   });
 
   app.delete<{ Params: { assignmentId: string } }>("/employee-access/assignments/:assignmentId", async (request, reply) => {
-    const actor = await ownerActor(request);
+    const actor = await rootActor(request);
     const params = parse(EmployeeAccessAssignmentParamsSchema, request.params);
     const body = parse(EmployeeAccessReasonSchema, request.body);
     await dependencies.root.assertAssignmentMutation(actor.actorId, params.assignmentId);
@@ -92,7 +85,7 @@ export function registerEmployeeAccessRoutes(
   });
 
   app.post<{ Params: { userId: string } }>("/employee-access/employees/:userId/disable", async (request, reply) => {
-    const actor = await ownerActor(request);
+    const actor = await rootActor(request);
     const params = parse(EmployeeAccessUserParamsSchema, request.params);
     const body = parse(EmployeeAccessReasonSchema, request.body);
     await dependencies.root.assertTargetAccessMutation(actor.actorId, params.userId);
@@ -101,7 +94,7 @@ export function registerEmployeeAccessRoutes(
   });
 
   app.post<{ Params: { userId: string } }>("/employee-access/employees/:userId/restore", async (request, reply) => {
-    const actor = await ownerActor(request);
+    const actor = await rootActor(request);
     const params = parse(EmployeeAccessUserParamsSchema, request.params);
     const body = parse(EmployeeAccessReasonSchema, request.body);
     await dependencies.root.assertTargetAccessMutation(actor.actorId, params.userId);
@@ -110,7 +103,7 @@ export function registerEmployeeAccessRoutes(
   });
 
   app.post("/employee-access/directory/sync", async (request) =>
-    dependencies.service.syncDirectory(await ownerActor(request)));
+    dependencies.service.syncDirectory(await rootActor(request)));
 
   app.post("/employee-access/bootstrap", async (request, reply) => {
     const user = await authenticated(request);
