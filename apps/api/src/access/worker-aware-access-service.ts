@@ -9,6 +9,7 @@ import {
   OperationEventRepository,
   type TrustedActorContext,
 } from "../tools/repositories.js";
+import { isRootActor } from "./business-authority.js";
 import { AccessMasterDataService } from "./service.js";
 
 const hash = (scope: string, payload: unknown): string =>
@@ -37,6 +38,9 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
     actor: TrustedActorContext,
     input: AssignRole,
   ): Promise<{ assignmentId: string }> {
+    if (!isRootActor(actor)) {
+      throw new ApplicationError("FORBIDDEN", "人员与业务角色仅允许 Root 维护", 403);
+    }
     const normalizedRoleCode = EXECUTION_ROLE_INPUTS.includes(
       input.roleCode as (typeof EXECUTION_ROLE_INPUTS)[number],
     ) ? "worker" : input.roleCode;
@@ -108,6 +112,17 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
     }
   }
 
+  override async revokeRole(
+    actor: TrustedActorContext,
+    assignmentId: string,
+    reason: string,
+  ): Promise<void> {
+    if (!isRootActor(actor)) {
+      throw new ApplicationError("FORBIDDEN", "人员与业务角色仅允许 Root 维护", 403);
+    }
+    await super.revokeRole(actor, assignmentId, reason);
+  }
+
   async removeWorkAssignment(
     actor: TrustedActorContext,
     workTaskId: string,
@@ -130,7 +145,7 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
           scope: action,
           actorKey: actor.actorId,
           key: idempotencyKey,
-          requestHash: hash(action, payload),
+          requestHash: hash(scope, payload),
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
         async () => {
