@@ -24,8 +24,8 @@
 |---|---|---|
 | 回货开始日期与结束日期重叠、开始日期点击被截获 | order-board-page.css固定首列44px供导出使用；order-board-page.tsx按canExport条件渲染按钮，无按钮时开始日期占据该列 | 已由前序布局PR修复；Acceptance需复验 |
 | 返工筛选框重叠 | rework-query-mobile.css桌面固定列最小宽度；共享dx-field默认最小250px；页面可用宽度还要扣除侧栏 | 已由前序布局PR修复；Acceptance需复验 |
-| 财务可见返工列表但详情拒绝 | 列表按dashboard/report能力读取；详情broadBusinessReader不含finance_director，finance_read还要求该订单已有工资记录 | 待下一权限专项修复；不可用删列表或全面提权掩盖 |
-| 财务总监看不到样衣 | platform-modules、App路由、sample-authority与sample-analysis-model的角色白名单不含finance_director | 权限治理01施工中：仅开放sample:view_basic / sample:view_finance / sample:view_audit，写权限保持禁止；待Full Gate与Acceptance复验 |
+| 财务可见返工列表但详情拒绝 | 列表按dashboard/report能力读取；详情broadBusinessReader不含finance_director，finance_read还要求该订单已有工资记录 | 权限治理02施工中：仅把finance_director加入返工详情全量只读；finance_read仍保持工资事实后可见，不扩大写权限 |
+| 财务总监看不到样衣 | platform-modules、App路由、sample-authority与sample-analysis-model的角色白名单不含finance_director | 权限治理01已由#439修复并合并；仅开放sample:view_basic / sample:view_finance / sample:view_audit，写权限保持禁止；Acceptance待复验 |
 | 外发历史报nextCursor及page字段不匹配 | 当前main的SourcingCaseListResponseSchema已使用page/pageSize/totalCount/totalPages；截图客户端仍期待nextCursor | 待核对实际部署/静态资源/浏览器会话版本；尚不能归因于数据库或权限 |
 
 ## 本次修复
@@ -45,6 +45,15 @@
 
 边界：以上是隔离布局/原生输入夹具，不是真实账号UAT，不包含生产API或Windows钉钉原生弹层验收。新增5项结构回归交由当前PR Head的Full Gate验证；本地未安装完整项目依赖，未声称本地全套lint、build、unit通过。线上未部署，不能标记已解决。
 
+## 2026-09-09 权限治理02
+
+- base: `main@2a73f618235020d412370d9f60f80335ab0d7d42`
+- branch: `fix/acceptance-audit-finance-rework-detail`
+- 目标：修复财务总监能进入返工模块/列表但任意尚未生成工资事实的返工详情被403拒绝。
+- 修复边界：`finance_director` 获得返工业务详情全量**只读**准入，与其现有全局财务查看和管理列表范围一致；不把 `finance_read` 从工资事实范围提升为全量详情，不新增角色 capability，不修改任何业务写动作、状态机、金额、Todo、真实人员角色或Root行为。
+- 附件读取继续复用详情授权链；只有能查看对应返工单时才允许下载绑定附件。
+- 验收：财务总监在无工资事实订单上详情允许；普通 `finance_read` 同一订单仍拒绝，有工资事实后仍允许；Full Gate exact Head全绿后合并。
+
 ## 后续专项与结束条件
 
 1. 权限一致性：覆盖每个已启用业务角色，逐项检查菜单、路由、列表范围、详情、字段/附件、写入、导出、待办深链及撤权后的会话。财务总监新增样衣基本/财务/审计查看范围，不默认为新增、调价、交接、处置审批或Root权限；独立样衣财务现有能力保留。
@@ -53,4 +62,4 @@
 4. 真账号与负向验收：有权角色可正常进入并完成本职操作；无权角色直接访问链接/API仍被拒绝；普通工人、仓管不可取得达兴成本价；Root既有调试能力不变。
 5. 原四项优化仍暂停：供应商串页与分工、新增审批、分析面板收口、测试订单删除。1222及其他生产订单本PR不读取、不修改、不清理。
 
-本专项完成需提供逐项实际结果与未通过项；当前权限治理PR只处理财务总监样衣只读，不代表全系统审查完成。
+本专项完成需提供逐项实际结果与未通过项；当前权限治理02只处理财务总监返工详情只读一致性，不代表全系统审查完成。
