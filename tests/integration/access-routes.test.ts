@@ -128,8 +128,8 @@ describe("access routes", () => {
     });
   });
 
-  it("derives the actor from the session and ignores no caller-supplied identity", async () => {
-    const { app, service } = create(["access:admin"]);
+  it("derives the Root actor from the trusted session for personnel administration", async () => {
+    const { app, service } = create([], [], true);
     const response = await app.inject({
       method: "POST",
       url: "/access/role-assignments",
@@ -143,7 +143,7 @@ describe("access routes", () => {
     expect(response.statusCode).toBe(201);
     expect(service.assignRole.mock.calls[0]?.[0]).toEqual({
       actorId: "00000000-0000-4000-8000-000000000001",
-      actorRoles: ["owner_group"],
+      actorRoles: ["root_superuser"],
       authorizationCapability: "access:admin",
       requestId: "access-request-1",
     });
@@ -214,15 +214,15 @@ describe("access routes", () => {
     expect(administrator.service.assignRole).not.toHaveBeenCalled();
   });
 
-  it("hides protected roles from non-root role options", async () => {
+  it("rejects non-root role catalog access even if a stale access capability is present", async () => {
     const normalOwner = create(["access:admin"], ["owner_group"], false);
     const response = await normalOwner.app.inject({
       method: "GET",
       url: "/access/roles",
       headers: { cookie: "dx_rework_session=trusted" },
     });
-    expect(response.statusCode).toBe(200);
-    expect(response.json().map((role: { roleCode: string }) => role.roleCode)).toEqual(["worker"]);
+    expect(response.statusCode).toBe(403);
+    expect(normalOwner.service.listRoles).not.toHaveBeenCalled();
   });
 
   it("adds an audited alias to an existing stable person ID", async () => {
@@ -647,7 +647,6 @@ describe("access routes", () => {
     })).statusCode).toBe(403);
     expect(worker.service.replaceTailInspectionDefaultWorkers).not.toHaveBeenCalled();
   });
-
 
   it("serves a filtered process catalog page without changing the legacy list", async () => {
     const { app, service } = create(["process_catalog:read"], ["quality_control"]);

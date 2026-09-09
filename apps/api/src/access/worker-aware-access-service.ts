@@ -14,12 +14,13 @@ import { AccessMasterDataService } from "./service.js";
 const hash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope, payload })).digest("hex");
 
+const EXECUTION_ROLE_INPUTS = ["worker", "tail_inspector"] as const;
+
 /**
  * Keeps execution roles and the business-person model synchronized.
- * Worker and tail-inspector roles are not considered successfully provisioned
- * until their internal business-person record also exists. If that second step fails, the freshly
- * granted role is immediately revoked so the final authorization state is not
- * left half-configured.
+ * The retired tail-inspector role is normalized to the ordinary worker role;
+ * tail inspection remains an execution capability of workers rather than a
+ * standalone personnel role.
  */
 export class WorkerAwareAccessMasterDataService extends AccessMasterDataService {
   private readonly correctionIdempotency = new IdempotencyService();
@@ -36,18 +37,28 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
     actor: TrustedActorContext,
     input: AssignRole,
   ): Promise<{ assignmentId: string }> {
-    const assignment = await super.assignRole(actor, input);
-    if (!(["worker", "tail_inspector"] as const).includes(input.roleCode as "worker" | "tail_inspector")) return assignment;
-    const roleLabel = input.roleCode === "tail_inspector" ? "整查" : "工人";
+    const normalizedRoleCode = EXECUTION_ROLE_INPUTS.includes(
+      input.roleCode as (typeof EXECUTION_ROLE_INPUTS)[number],
+    ) ? "worker" : input.roleCode;
+    const effectiveInput: AssignRole = normalizedRoleCode !== input.roleCode
+      ? {
+          ...input,
+          roleCode: normalizedRoleCode,
+          reason: `${input.reason.slice(0, 430)}（独立整查角色已退役，按普通工人授权）`,
+        }
+      : input;
+    const assignment = await super.assignRole(actor, effectiveInput);
+    if (effectiveInput.roleCode !== "worker") return assignment;
+    const roleLabel = "工人";
 
     try {
       const people = await this.listPeople({ includeInactive: true });
-      if (people.some((person) => person.appUserId === input.userId)) {
+      if (people.some((person) => person.appUserId === effectiveInput.userId)) {
         return assignment;
       }
 
       const roleAssignments = await this.listRoleAssignments({
-        userId: input.userId,
+        userId: effectiveInput.userId,
         includeRevoked: false,
       });
       const executionAssignment = roleAssignments.find(
@@ -73,7 +84,7 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
       };
       await this.createPerson(masterDataActor, {
         personType: "internal",
-        appUserId: input.userId,
+        appUserId: effectiveInput.userId,
         displayName: executionAssignment.displayName,
         aliases: [],
         reason: `授予${roleLabel}角色自动建立内部作业人员档案`,

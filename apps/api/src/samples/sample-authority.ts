@@ -19,7 +19,6 @@ const owner: readonly SampleCapability[] = [
 ];
 export const SAMPLE_ROLE_CAPABILITIES: Readonly<Record<string, readonly SampleCapability[]>> = {
   sample_designer: designer, sample_administrative: administrative, sample_finance: finance, owner_group: owner,
-  sample_approver: ["sample:view_basic", "sample:view_finance", "sample:view_audit", "sample:dispose_approve"],
   finance_director: financeDirectorReadOnly,
 };
 
