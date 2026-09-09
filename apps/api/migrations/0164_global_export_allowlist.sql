@@ -39,32 +39,3 @@ ON CONFLICT DO NOTHING;
 
 ALTER TABLE role_capabilities ENABLE TRIGGER role_capabilities_no_delete;
 ALTER TABLE role_capabilities ENABLE TRIGGER role_capabilities_no_insert;
-
--- Export capabilities are also available through global delegated authorization.
--- Revoke every historical export delegation so stale grants cannot survive the role reset.
-ALTER TABLE delegated_authorizations DISABLE TRIGGER delegated_authorizations_revoke_only;
-UPDATE delegated_authorizations
-SET revoked_at=CURRENT_TIMESTAMP,
-    revoked_by=grantor_user_id,
-    revoke_reason='2026-09-09 数据导出权限统一收口'
-WHERE capability IN ('receiving:export','report:export','wage:export')
-  AND revoked_at IS NULL;
-ALTER TABLE delegated_authorizations ENABLE TRIGGER delegated_authorizations_revoke_only;
-
--- Generic delegation must not become an escape hatch around the fixed export allowlist.
-CREATE OR REPLACE FUNCTION reject_unapproved_data_export_delegation()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  IF NEW.capability IN ('receiving:export','report:export','wage:export') THEN
-    RAISE EXCEPTION 'data export capabilities cannot be delegated without an approved permission change'
-      USING ERRCODE='42501';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-DROP TRIGGER IF EXISTS delegated_authorizations_export_default_deny ON delegated_authorizations;
-CREATE TRIGGER delegated_authorizations_export_default_deny
-  BEFORE INSERT ON delegated_authorizations
-  FOR EACH ROW EXECUTE FUNCTION reject_unapproved_data_export_delegation();
