@@ -57,7 +57,7 @@ export function registerTailInspectionRoutes(app: FastifyInstance, dependencies:
       && user.capabilities.includes("process:configure");
     const supervisorReview = user.businessRoles?.includes("tail_supervisor") === true
       && user.capabilities.includes("submission:audit");
-    const inspector = user.businessRoles?.includes("tail_inspector") === true
+    const inspector = user.businessRoles?.includes("worker") === true
       && user.capabilities.includes("tail_inspection:report");
     if (mode === "options") {
       if (!root && !supervisorConfigure) throw new ApplicationError("FORBIDDEN", "当前角色无权分配整查人员", 403);
@@ -65,7 +65,7 @@ export function registerTailInspectionRoutes(app: FastifyInstance, dependencies:
     }
     if (mode === "report") {
       if (!root && !inspector) throw new ApplicationError("FORBIDDEN", "当前角色无权提交整查报数", 403);
-      return businessActor(dependencies.root, user, request.id, "tail_inspection:report", root ? "tail_inspector" : undefined);
+      return businessActor(dependencies.root, user, request.id, "tail_inspection:report", root ? "worker" : undefined);
     }
     if (mode === "review") {
       if (!root && !supervisorReview) throw new ApplicationError("FORBIDDEN", "当前角色无权驳回整查报数", 403);
