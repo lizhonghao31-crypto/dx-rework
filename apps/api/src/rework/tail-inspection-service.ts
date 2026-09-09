@@ -324,8 +324,7 @@ export class TailInspectionService {
   }
 
   private ensureReporter(actor: TrustedActorContext): void {
-    const tailReportingRole = actor.actorRoles.includes("worker") || actor.actorRoles.includes("tail_inspector");
-    if (!isRootActor(actor) && (!tailReportingRole || actor.authorizationCapability !== "tail_inspection:report")) {
+    if (!isRootActor(actor) && (!actor.actorRoles.includes("worker") || actor.authorizationCapability !== "tail_inspection:report")) {
       fail("只有被分配整查的工人可以提交整查报数", 403, "FORBIDDEN");
     }
   }
