@@ -230,14 +230,11 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   const roleManager = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
     const isRoot = await dependencies.root.isRootUser(user.id);
-    if (!isRoot && user.businessRoles?.includes("owner_group") !== true) {
-      throw new ApplicationError("FORBIDDEN", "仅老板或超级用户可管理业务角色", 403);
-    }
-    if (!isRoot && !user.capabilities.includes("access:admin")) {
-      throw new ApplicationError("FORBIDDEN", "无权执行该操作", 403);
+    if (!isRoot) {
+      throw new ApplicationError("FORBIDDEN", "仅超级用户可管理业务角色", 403);
     }
     const actorRoles = [...(user.businessRoles ?? [])];
-    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    if (!actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
     return {
       actorId: user.id,
       actorRoles,
