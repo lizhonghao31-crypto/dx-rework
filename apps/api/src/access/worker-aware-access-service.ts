@@ -145,7 +145,7 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
           scope: action,
           actorKey: actor.actorId,
           key: idempotencyKey,
-          requestHash: hash(scope, payload),
+          requestHash: hash(action, payload),
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
         async () => {
