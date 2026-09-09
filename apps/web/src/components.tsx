@@ -12,7 +12,7 @@ import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
-import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessSamples } from "./platform-modules.js";
+import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
@@ -386,9 +386,10 @@ export function Shell({
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
     || hasCapability("rework:related_orders:view");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
-  const systemManagementAccess = isRoot || (!isOwner && (
-    auditAccess || technicalAdminAccess || hasCapability("master_data:manage")
-  ));
+  const systemManagementAccess = isRoot
+    || auditAccess
+    || technicalAdminAccess
+    || (!isOwner && hasCapability("master_data:manage"));
 
   const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
@@ -401,7 +402,7 @@ export function Shell({
   if (currentUser && canAccessProduction(currentUser)) {
     globalNavigation.push({
       name: "实时生产看板",
-      description: "生产订单与填报",
+      description: "查看生产订单与进度",
       href: "/ui/production-dashboard",
     });
   }
@@ -506,7 +507,13 @@ export function Shell({
       }]
     : [];
   const productionNavigation: NavigationEntry[] = currentUser && canAccessProduction(currentUser)
-    ? [{ name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard" }, { name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] : [];
+    ? [
+        { name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard" },
+        ...(canAccessProductionReporting(currentUser)
+          ? [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }]
+          : []),
+      ]
+    : [];
   const navigation: NavigationEntry[] = [
     ...globalNavigation,
     ...reworkNavigation,
