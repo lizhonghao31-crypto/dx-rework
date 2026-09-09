@@ -78,7 +78,7 @@ export class TailInspectionService {
        FROM app_users user_row
        JOIN user_role_assignments assignment
          ON assignment.user_id=user_row.id
-        AND assignment.role_code='tail_inspector'
+        AND assignment.role_code='worker'
         AND assignment.revoked_at IS NULL
        JOIN business_roles role
          ON role.role_code=assignment.role_code AND role.enabled=true
@@ -307,7 +307,7 @@ export class TailInspectionService {
         entityType: "rework_tail_inspection_assignment",
         entityId: assignmentId,
         recipientUserId: assignment.tail_inspector_user_id,
-        requiredRole: "tail_inspector",
+        requiredRole: "worker",
         requiredCapability: "tail_inspection:report",
         route: { routeName: "rework_detail", entityId: assignment.rework_order_id, tab: "tail_inspection" },
         policyKey: "general",
@@ -324,8 +324,8 @@ export class TailInspectionService {
   }
 
   private ensureReporter(actor: TrustedActorContext): void {
-    if (!isRootActor(actor) && (!actor.actorRoles.includes("tail_inspector") || actor.authorizationCapability !== "tail_inspection:report")) {
-      fail("只有整查可以提交整查报数", 403, "FORBIDDEN");
+    if (!isRootActor(actor) && (!actor.actorRoles.includes("worker") || actor.authorizationCapability !== "tail_inspection:report")) {
+      fail("只有被分配整查的工人可以提交整查报数", 403, "FORBIDDEN");
     }
   }
 
@@ -337,7 +337,7 @@ export class TailInspectionService {
 
   private ensureRead(actor: TrustedActorContext): void {
     if (isRootActor(actor)) return;
-    const reporter = actor.actorRoles.includes("tail_inspector") && actor.authorizationCapability === "tail_inspection:report";
+    const reporter = actor.actorRoles.includes("worker") && actor.authorizationCapability === "tail_inspection:report";
     const supervisor = actor.actorRoles.includes("tail_supervisor") && ["process:configure", "submission:audit"].includes(actor.authorizationCapability);
     if (!reporter && !supervisor) fail("当前角色无权查看整查报数", 403, "FORBIDDEN");
   }
