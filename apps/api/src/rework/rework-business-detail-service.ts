@@ -210,6 +210,7 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
     "owner_group",
     "production_management",
     "tail_supervisor",
+    "finance_director",
   ].includes(role));
 
 const actorCapabilities = (actor: TrustedActorContext): readonly string[] =>
