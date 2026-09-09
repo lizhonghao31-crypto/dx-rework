@@ -11,12 +11,19 @@ import {
 
 describe("platform permission and desktop navigation hub", () => {
   it("classifies existing capabilities without creating a second permission system", () => {
-    expect(accessModuleIdsForCapabilities(["rework:initiate", "sourcing:view", "access:admin"]))
-      .toEqual(["rework", "sourcing", "platform"]);
+    expect(accessModuleIdsForCapabilities([
+      "rework:initiate",
+      "sourcing:view",
+      "supplier_profile:read",
+      "sample:view_basic",
+      "access:admin",
+    ])).toEqual(["rework", "sourcing", "suppliers", "samples", "platform"]);
+    expect(accessModuleLabelsForCapabilities(["supplier_profile:read", "sample:view_basic"]))
+      .toEqual(["供应商中心", "样衣管理"]);
     expect(accessModuleLabelsForCapabilities(["sourcing:quote:write"]))
       .toEqual(["外发定价&选厂"]);
     expect(accessModuleIdsForCapabilities(["tools:user", "todo:view", "receiving:create"]))
-      .toEqual([]);
+      .toEqual(["rework"]);
     expect(accessModuleIdsForCapabilities(["rework:initiate", "todo:view"]))
       .toEqual(["rework"]);
     expect(employeeHasAccessModule(
@@ -24,22 +31,42 @@ describe("platform permission and desktop navigation hub", () => {
       [{ roleCode: "ie_reviewer", capabilities: ["sourcing:view", "sourcing:quote:write"] }],
       "sourcing",
     )).toBe(true);
-    expect(accessModuleIdsForRole("owner_group")).toEqual(["rework", "sourcing", "production", "platform"]);
-    expect(employeeHasAccessModule(["owner_group"], [], "sourcing")).toBe(true);
+    expect(accessModuleIdsForRole("owner_group")).toEqual([
+      "rework", "sourcing", "suppliers", "production", "samples", "platform",
+    ]);
+    expect(employeeHasAccessModule(["owner_group"], [], "samples")).toBe(true);
+    expect(employeeHasAccessModule(["owner_group"], [], "suppliers")).toBe(true);
     expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
     expect(employeeHasAccessModule(["tail_inspector"], [], "rework")).toBe(true);
+    expect(employeeHasAccessModule(
+      ["order_merchandiser"],
+      [{
+        roleCode: "order_merchandiser",
+        capabilities: ["quantity:confirm", "sourcing:view", "supplier_profile:read"],
+      }],
+      "production",
+    )).toBe(true);
+    expect(employeeHasAccessModule(
+      ["sample_finance"],
+      [{ roleCode: "sample_finance", capabilities: ["sample:view_basic", "sample:view_finance"] }],
+      "samples",
+    )).toBe(true);
     expect(todoModuleIdsForUser({
       businessRoles: ["warehouse_receiver"],
       capabilities: ["receiving:create", "todo:view"],
-    })).toEqual([]);
+    })).toEqual(["rework"]);
     expect(todoModuleIdsForUser({
       businessRoles: ["system_admin"],
       capabilities: ["admin:read", "todo:view"],
     })).toEqual([]);
     expect(todoModuleIdsForUser({
       businessRoles: ["order_merchandiser"],
-      capabilities: ["quantity:confirm", "sourcing:view", "todo:view"],
+      capabilities: ["quantity:confirm", "sourcing:view", "supplier_profile:read", "todo:view"],
     })).toEqual(["rework", "sourcing", "production"]);
+    expect(todoModuleIdsForUser({
+      businessRoles: ["sample_finance"],
+      capabilities: ["sample:view_basic", "sample:view_finance", "todo:view"],
+    })).toEqual(["samples"]);
   });
 
   it("renders standalone global entries and permission-gated grouped desktop navigation", async () => {
@@ -69,8 +96,10 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain('name: "资料维护"');
     expect(employeeAccess).toContain('<h1><NavigationIcon route="/ui/employee-access" size="title" />人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
+    expect(employeeAccess).toContain('<option value="suppliers">供应商中心</option>');
+    expect(employeeAccess).toContain('<option value="samples">样衣管理</option>');
     expect(employeeAccess).toContain("employee.isRoot");
-    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 平台管理）");
+    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 平台管理）");
     expect(systemNavigation).toContain(">人员与权限</a>");
     expect(css).toContain(".desktop-navigation__group");
     expect(css).toContain("color: var(--dx-v2-color-surface);");
