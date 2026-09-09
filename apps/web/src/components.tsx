@@ -379,15 +379,16 @@ export function Shell({
   const isSystemAdmin = currentUser?.businessRoles?.includes("system_admin") === true;
   const hasRole = (role: string) => currentUser?.businessRoles?.includes(role) === true;
   const hasCapability = (capability: string) => currentUser?.capabilities.includes(capability) === true;
-  const auditAccess = isRoot || isOwner || (isSystemAdmin && hasCapability("audit:read"));
+  const auditAccess = isRoot || (isSystemAdmin && hasCapability("audit:read"));
   const technicalAdminAccess = isRoot || (isSystemAdmin && hasCapability("admin:read"));
   const todoAccess = hasCapability("todo:view");
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
     || hasCapability("rework:related_orders:view");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
-  const systemManagementAccess = auditAccess || technicalAdminAccess
-    || isRoot || isOwner || hasCapability("master_data:manage");
+  const systemManagementAccess = isRoot || (!isOwner && (
+    auditAccess || technicalAdminAccess || hasCapability("master_data:manage")
+  ));
 
   const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
