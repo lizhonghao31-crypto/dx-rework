@@ -215,7 +215,7 @@
 
 样衣处置/出售等审批必须按模块 Golden Source 由批准身份执行；不得因为样衣审批能力扩展其他模块权限。
 
-## 5. 返工与财务查看
+## 5. 返工、工资与财务查看
 
 ### PERM-REWORK-FINANCE-DIRECTOR-001 · 财务总监返工全量只读
 
@@ -230,6 +230,16 @@
 **来源：** `docs/roadmap/role-ui-access-audit-20260908.md` 权限治理02
 
 `finance_read` 保持其既有工资/报表事实范围，不因财务总监获得全量返工详情而同步提权。
+
+### PERM-WAGE-MONTH-CLOSE-EXPORT-001 · 工资月结会计工资导出
+
+**状态：APPROVED**  
+**来源：** 2026-09-09 业务负责人明确确认
+
+- `wage_month_close_accountant` 保持现有 `wage:view`；
+- 必须拥有 `wage:export`，可使用现有“导出当前工资明细”功能；
+- 该角色业务显示名称统一为“工资月结会计”；
+- 不因此新增工资修改、工资月结流程、其他模块或人员权限。
 
 ### PERM-REWORK-WORKER-001 · 工人返工任务范围
 
