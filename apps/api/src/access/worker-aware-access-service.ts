@@ -14,6 +14,8 @@ import { AccessMasterDataService } from "./service.js";
 const hash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope, payload })).digest("hex");
 
+const EXECUTION_ROLE_INPUTS = ["worker", "tail_inspector"] as const;
+
 /**
  * Keeps execution roles and the business-person model synchronized.
  * The retired tail-inspector role is normalized to the ordinary worker role;
@@ -35,10 +37,13 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
     actor: TrustedActorContext,
     input: AssignRole,
   ): Promise<{ assignmentId: string }> {
-    const effectiveInput: AssignRole = input.roleCode === "tail_inspector"
+    const normalizedRoleCode = EXECUTION_ROLE_INPUTS.includes(
+      input.roleCode as (typeof EXECUTION_ROLE_INPUTS)[number],
+    ) ? "worker" : input.roleCode;
+    const effectiveInput: AssignRole = normalizedRoleCode !== input.roleCode
       ? {
           ...input,
-          roleCode: "worker",
+          roleCode: normalizedRoleCode,
           reason: `${input.reason.slice(0, 430)}（独立整查角色已退役，按普通工人授权）`,
         }
       : input;
