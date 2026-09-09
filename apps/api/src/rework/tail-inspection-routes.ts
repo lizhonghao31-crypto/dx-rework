@@ -57,10 +57,7 @@ export function registerTailInspectionRoutes(app: FastifyInstance, dependencies:
       && user.capabilities.includes("process:configure");
     const supervisorReview = user.businessRoles?.includes("tail_supervisor") === true
       && user.capabilities.includes("submission:audit");
-    // Real sessions use worker after migration 0165. The retired role remains accepted only for
-    // stale authenticated test/session snapshots during the cutover; it is no longer assignable.
-    const inspector = (user.businessRoles?.includes("worker") === true
-      || user.businessRoles?.includes("tail_inspector") === true)
+    const inspector = user.businessRoles?.includes("worker") === true
       && user.capabilities.includes("tail_inspection:report");
     if (mode === "options") {
       if (!root && !supervisorConfigure) throw new ApplicationError("FORBIDDEN", "当前角色无权分配整查人员", 403);

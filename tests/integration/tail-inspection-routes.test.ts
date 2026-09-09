@@ -71,8 +71,8 @@ describe("tail inspection routes", () => {
     expect(service.listOptions).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "process:configure" }));
   });
 
-  it("lets only the tail inspector submit an integer, per-process count", async () => {
-    const { app, service } = create(["tail_inspector"], ["tail_inspection:report"]);
+  it("lets only a worker with tail-inspection permission submit an integer, per-process count", async () => {
+    const { app, service } = create(["worker"], ["tail_inspection:report"]);
     const result = await app.inject({
       method: "POST",
       url: `/tail-inspection-assignments/${assignmentId}/reports`,
@@ -81,7 +81,7 @@ describe("tail inspection routes", () => {
     });
     expect(result.statusCode).toBe(201);
     expect(service.submit).toHaveBeenCalledWith(
-      expect.objectContaining({ actorRoles: ["tail_inspector"], authorizationCapability: "tail_inspection:report" }),
+      expect.objectContaining({ actorRoles: ["worker"], authorizationCapability: "tail_inspection:report" }),
       assignmentId,
       { returnedQuantity: 20, items: [{ configurationItemId: itemId, inspectedQuantity: 20 }] },
       "tail-report-1",
