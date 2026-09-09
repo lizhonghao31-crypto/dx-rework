@@ -12,10 +12,11 @@ describe('sample handoff contracts and module integration',()=>{
   expect(SampleConfirmSchema.safeParse({version:1,token:'姓名二维码'}).success).toBe(false);
   expect(SampleCancelSchema.safeParse({version:1,reason:''}).success).toBe(false);
  });
- it('routes sample tasks within the configured platform prefix and rejects technical role inheritance',()=>{
+ it('routes sample tasks within the configured platform prefix and rejects retired or technical role inheritance',()=>{
   const entityId=randomUUID(),todoId=randomUUID();expect(buildTodoDeepLink('/platform/',{routeName:'sample_detail',entityId,todoId})).toBe(`/platform/ui/samples/${entityId}?todo=${todoId}`);
   const capabilities=['todo:view','sample:view_basic'];
-  for(const role of ['sample_designer','sample_administrative','sample_finance','sample_approver','owner_group'])expect(todoModuleIdsForUser({businessRoles:[role],capabilities})).toContain('samples');
+  for(const role of ['sample_designer','sample_administrative','sample_finance','owner_group'])expect(todoModuleIdsForUser({businessRoles:[role],capabilities})).toContain('samples');
+  expect(todoModuleIdsForUser({businessRoles:['sample_approver'],capabilities})).not.toContain('samples');
   expect(todoModuleIdsForUser({businessRoles:['system_admin'],capabilities})).not.toContain('samples');
   expect(todoModuleIdsForUser({businessRoles:[],capabilities:[],isRoot:true})).toContain('samples');
  });
