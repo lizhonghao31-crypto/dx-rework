@@ -44,13 +44,15 @@ describe("global export permission closure", () => {
   });
 
   it("guards every current business-data export surface at route and service boundaries", async () => {
-    const [authority, receiving, reports, wages, toolsRoutes, toolsService] = await Promise.all([
+    const [authority, receiving, reports, reportRoutes, wages, toolsRoutes, toolsService, csv] = await Promise.all([
       read("apps/api/src/access/business-authority.ts"),
       read("apps/api/src/receiving/receiving-service.ts"),
       read("apps/api/src/reporting/report-export-service.ts"),
+      read("apps/api/src/reporting/management-reporting-routes.ts"),
       read("apps/api/src/wages/wage-export-service.ts"),
       read("apps/api/src/tools/routes.ts"),
       read("apps/api/src/tools/exports.ts"),
+      read("apps/web/src/csv.ts"),
     ]);
 
     expect(authority).toContain('capability.endsWith(":export")');
@@ -58,17 +60,24 @@ describe("global export permission closure", () => {
     expect(receiving).toContain('this.assertBoardOperator(actor, "receiving:export")');
     expect(reports).toContain('assertBusinessExportAllowed(actor.actorRoles, "report:export")');
     expect(reports).toContain("assertWageDataExportAllowed(actor.actorRoles)");
+    expect(reportRoutes).toContain('reportType === "wages" ? "wage:export" : "report:export"');
     expect(wages).toContain("assertWageDataExportAllowed(actor.actorRoles)");
     expect(toolsRoutes).toContain('assertBusinessExportAllowed(authenticated.trusted.actorRoles,"tools:export")');
     expect(toolsRoutes).toContain('binding.entityType==="export_job"');
     expect(toolsService).toContain('assertBusinessExportAllowed(actor.actorRoles,"tools:export")');
+    expect(csv).toContain('apiUrl("access/data-export/authorize")');
+    expect(csv).toContain("blankImportTemplate");
   });
 
   it("does not treat blank import templates as business-data exports", async () => {
-    const masterData = await read("apps/web/src/master-data-page.tsx");
+    const [masterData, csv] = await Promise.all([
+      read("apps/web/src/master-data-page.tsx"),
+      read("apps/web/src/csv.ts"),
+    ]);
     expect(masterData).toContain("downloadSupplierTemplate");
     expect(masterData).toContain("downloadProcessTemplate");
     expect(masterData).not.toContain("exportSupplierData");
     expect(masterData).not.toContain("exportProcessData");
+    expect(csv).toContain('filename.endsWith("批量导入模板.csv")');
   });
 });
