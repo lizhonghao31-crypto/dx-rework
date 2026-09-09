@@ -12,6 +12,8 @@ describe("PR03 permission closure policy", () => {
   it("keeps personnel and permission administration Root-only while preserving bootstrap", () => {
     expect(isRootOnlyPersonnelPath("/access/roles")).toBe(true);
     expect(isRootOnlyPersonnelPath("/access/role-assignments/assignment-1")).toBe(true);
+    expect(isRootOnlyPersonnelPath("/access/delegations")).toBe(true);
+    expect(isRootOnlyPersonnelPath("/access/delegations/delegation-1")).toBe(true);
     expect(isRootOnlyPersonnelPath("/employee-access/employees")).toBe(true);
     expect(isRootOnlyPersonnelPath("/employee-access/bootstrap")).toBe(false);
     expect(isRootOnlyPersonnelPath("/master-data/suppliers")).toBe(false);
