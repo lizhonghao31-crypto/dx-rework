@@ -41,7 +41,12 @@ function create(
       expiresAt: new Date(0).toISOString(),
     })),
   };
-  const exports = { create: vi.fn(), query: vi.fn(), isOwnedBy: vi.fn(async () => true) };
+  const exports = {
+    create: vi.fn(),
+    query: vi.fn(),
+    isOwnedBy: vi.fn(async () => true),
+    isOwnedResultAttachment: vi.fn(async () => false),
+  };
   const app = buildApp({
     config,
     checkDatabase: async () => {},
@@ -119,6 +124,28 @@ describe("public tools routes", () => {
     expect(await authorizeBound({ entityType: "export_job", entityId: "00000000-0000-4000-8000-000000000002", uploadedBy: "worker" })).toBe(true);
     expect(await authorizeBound({ entityType: "rework", entityId: "00000000-0000-4000-8000-000000000003", uploadedBy: "worker" })).toBe(false);
     expect(exports.isOwnedBy).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000099", "00000000-0000-4000-8000-000000000002");
+  });
+
+  it("rechecks the current export allowlist for requester-owned result attachments even when unbound", async () => {
+    const denied = create(["tools:user"], ["tail_supervisor"]);
+    denied.exports.isOwnedResultAttachment.mockResolvedValue(true);
+    const deniedResponse = await denied.app.inject({
+      method: "GET",
+      url: "/tools/attachments/00000000-0000-4000-8000-000000000001/download",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(deniedResponse.statusCode).toBe(403);
+    expect(denied.attachments.createDownloadIntent).not.toHaveBeenCalled();
+
+    const allowed = create(["tools:user"], ["owner_group"]);
+    allowed.exports.isOwnedResultAttachment.mockResolvedValue(true);
+    const allowedResponse = await allowed.app.inject({
+      method: "GET",
+      url: "/tools/attachments/00000000-0000-4000-8000-000000000001/download",
+      headers: { cookie: "dx_rework_session=trusted" },
+    });
+    expect(allowedResponse.statusCode).toBe(200);
+    expect(allowed.attachments.createDownloadIntent).toHaveBeenCalledTimes(1);
   });
 
   it("denies generic export jobs to non-allowlisted roles and permits an owner", async () => {
