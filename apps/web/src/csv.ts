@@ -16,26 +16,39 @@ async function authorizeDataExport(): Promise<void> {
   if (!response.ok) throw new Error("当前角色未获得数据导出授权");
 }
 
+const triggerCsvDownload = (
+  filename: string,
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+): void => {
+  const text = [headers, ...rows]
+    .map((row) => row.map((cell) => escapeCell(String(cell ?? ""))).join(","))
+    .join("\r\n");
+  const blob = new Blob(["\uFEFF", text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
+
 export function downloadCsv(filename: string, headers: readonly string[], rows: readonly (readonly string[])[]): void {
-  void authorizeDataExport().then(() => {
-    const text = [headers, ...rows]
-      .map((row) => row.map((cell) => escapeCell(String(cell ?? ""))).join(","))
-      .join("\r\n");
-    const blob = new Blob(["\uFEFF", text], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    try {
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }).catch((error: unknown) => {
-    console.warn("Data export denied", error);
-  });
+  const blankImportTemplate = rows.length === 0 && filename.endsWith("批量导入模板.csv");
+  if (blankImportTemplate) {
+    triggerCsvDownload(filename, headers, rows);
+    return;
+  }
+  void authorizeDataExport()
+    .then(() => triggerCsvDownload(filename, headers, rows))
+    .catch((error: unknown) => {
+      console.warn("Data export denied", error);
+    });
 }
 
 export function parseCsv(text: string): string[][] {
