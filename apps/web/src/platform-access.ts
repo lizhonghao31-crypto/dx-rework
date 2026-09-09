@@ -1,15 +1,22 @@
-export type PlatformAccessModuleId = "rework" | "sourcing" | "production" | "platform";
-export type TodoAccessModuleId = Extract<PlatformAccessModuleId, "rework" | "sourcing" | "production"> | "samples";
+export type PlatformAccessModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "platform";
+export type TodoAccessModuleId = "rework" | "sourcing" | "production" | "samples";
 
 export type PlatformRoleAccess = Readonly<{
   roleCode: string;
   capabilities: readonly string[];
 }>;
 
-const MODULE_ORDER: readonly PlatformAccessModuleId[] = ["rework", "sourcing", "production", "platform"];
+export const PLATFORM_ACCESS_MODULE_ORDER: readonly PlatformAccessModuleId[] = [
+  "rework",
+  "sourcing",
+  "suppliers",
+  "production",
+  "samples",
+  "platform",
+];
 
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
-  owner_group: MODULE_ORDER,
+  owner_group: PLATFORM_ACCESS_MODULE_ORDER,
   system_admin: ["platform"],
   tail_inspector: ["rework"],
 };
@@ -17,7 +24,9 @@ const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessMod
 export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, string> = {
   rework: "订单返工",
   sourcing: "外发定价&选厂",
+  suppliers: "供应商中心",
   production: "实时生产看板",
+  samples: "样衣管理",
   platform: "平台管理",
 };
 
@@ -31,6 +40,7 @@ const isPlatformCapability = (capability: string): boolean =>
 const REWORK_CAPABILITY_PREFIXES = [
   "dashboard:",
   "rework:",
+  "receiving:",
   "process:",
   "task:",
   "submission:",
@@ -46,6 +56,7 @@ const REWORK_CAPABILITY_PREFIXES = [
   "tail_inspection:",
   "responsibility:",
   "settlement:",
+  "report:",
 ] as const;
 
 const isReworkCapability = (capability: string): boolean =>
@@ -60,13 +71,17 @@ export function accessModuleIdsForCapabilities(
       modules.add("production");
     } else if (capability.startsWith("sourcing:")) {
       modules.add("sourcing");
+    } else if (capability.startsWith("supplier_profile:")) {
+      modules.add("suppliers");
+    } else if (capability.startsWith("sample:")) {
+      modules.add("samples");
     } else if (isPlatformCapability(capability)) {
       modules.add("platform");
     } else if (isReworkCapability(capability)) {
       modules.add("rework");
     }
   }
-  return MODULE_ORDER.filter((moduleId) => modules.has(moduleId));
+  return PLATFORM_ACCESS_MODULE_ORDER.filter((moduleId) => modules.has(moduleId));
 }
 
 export function accessModuleLabelsForCapabilities(
@@ -80,7 +95,16 @@ export function accessModuleIdsForRole(
   roleCode: string,
   capabilities: readonly string[] = [],
 ): PlatformAccessModuleId[] {
-  return [...(PROTECTED_ROLE_MODULES[roleCode] ?? accessModuleIdsForCapabilities(capabilities))];
+  const modules = new Set<PlatformAccessModuleId>(
+    PROTECTED_ROLE_MODULES[roleCode] ?? accessModuleIdsForCapabilities(capabilities),
+  );
+  if (
+    ["production_management", "order_merchandiser"].includes(roleCode)
+    && capabilities.includes("sourcing:view")
+  ) {
+    modules.add("production");
+  }
+  return PLATFORM_ACCESS_MODULE_ORDER.filter((moduleId) => modules.has(moduleId));
 }
 
 export function accessModuleLabelsForRole(
@@ -115,7 +139,7 @@ export function todoModuleIdsForUser(user: Readonly<{
   const classified = roles.length > 0
     ? roles.flatMap((roleCode) => accessModuleIdsForRole(roleCode, user.capabilities))
     : accessModuleIdsForCapabilities(user.capabilities);
-  const modules = new Set<TodoAccessModuleId | PlatformAccessModuleId>(classified);
+  const modules = new Set<PlatformAccessModuleId>(classified);
   if (user.capabilities.includes("todo:view") && user.capabilities.includes("sample:view_basic") && roles.some(role => ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"].includes(role))) modules.add("samples");
   if (user.capabilities.includes("todo:view") && user.capabilities.includes("sourcing:view") && roles.some(role=>["order_merchandiser","production_management","owner_group"].includes(role))) modules.add("production");
   else modules.delete("production");
