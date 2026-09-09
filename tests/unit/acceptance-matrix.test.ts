@@ -83,7 +83,8 @@ describe("acceptance authorization matrix", () => {
 
   it("never turns a pending business rule into a failure even when actual access differs", () => {
     const tail = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "tail-supervisor")!;
-    const supplierProbe = tail.probes?.find((probe) => probe.id === "supplier-list")!;
+    const supplierProbe = tail.probes?.find((probe) => probe.id === "supplier-list");
+    if (!supplierProbe) throw new Error("tail-supervisor supplier-list probe is missing");
     const check = evaluateHttpProbe(tail, supplierProbe, 200);
     expect(check.expected).toBe("HTTP 403");
     expect(check.actual).toBe("HTTP 200");
@@ -94,7 +95,8 @@ describe("acceptance authorization matrix", () => {
 
   it("lets an approved Golden Source rule fail when runtime behavior diverges", () => {
     const root = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "root")!;
-    const accessProbe = root.probes?.find((probe) => probe.id === "access-roles")!;
+    const accessProbe = root.probes?.find((probe) => probe.id === "access-roles");
+    if (!accessProbe) throw new Error("root access-roles probe is missing");
     const check = evaluateHttpProbe(root, accessProbe, 403);
     expect(check.verdict).toBe("fail");
     expect(check.ruleId).toBe("PERM-PLATFORM-ROOT-001");
