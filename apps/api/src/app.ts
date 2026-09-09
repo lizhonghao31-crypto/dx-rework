@@ -23,6 +23,7 @@ import { AuthDeniedError } from "./auth/service.js";
 import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/schema-version.js";
 import { registerToolsRoutes, type ToolsHttpDependencies } from "./tools/routes.js";
 import { registerAccessRoutes, type AccessHttpDependencies } from "./access/routes.js";
+import { registerDataExportAuthorizationRoutes } from "./access/data-export-authorization-routes.js";
 import {
   registerEmployeeAccessRoutes,
   type EmployeeAccessHttpDependencies,
@@ -143,7 +144,10 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     });
   }
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
-  if (dependencies.access) registerAccessRoutes(app, dependencies.access);
+  if (dependencies.access) {
+    registerAccessRoutes(app, dependencies.access);
+    registerDataExportAuthorizationRoutes(app, dependencies.access);
+  }
   if (dependencies.employeeAccess) registerEmployeeAccessRoutes(app, dependencies.employeeAccess);
   if (dependencies.receiving) registerReceivingRoutes(app, dependencies.receiving);
   if (dependencies.sourcing) registerSourcingRoutes(app, dependencies.sourcing);

@@ -1,6 +1,7 @@
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import { assertBusinessExportAllowed } from "./export-authority.js";
 import type { RootAuthority } from "./root-authority.js";
 
 export const ROOT_ACTOR_ROLE = "root_superuser";
@@ -44,6 +45,9 @@ export async function businessActor(
   }
   if (isRoot && !authorizationCapabilities.includes(BUSINESS_READ_ALL_CAPABILITY)) {
     authorizationCapabilities.push(BUSINESS_READ_ALL_CAPABILITY);
+  }
+  if (capability.endsWith(":export")) {
+    assertBusinessExportAllowed(actorRoles, capability);
   }
 
   return {

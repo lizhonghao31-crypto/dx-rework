@@ -85,7 +85,7 @@ export function registerManagementReportingRoutes(
   app.get("/management/reports/:reportType/export.xlsx", async (request, reply) => {
     const { reportType } = parse(ReportTypeParamsSchema, request.params);
     const result = await dependencies.exportService.export(
-      await actor(request, "report:export"),
+      await actor(request, reportType === "wages" ? "wage:export" : "report:export"),
       reportType,
       parse(ReportQuerySchema, request.query),
     );
@@ -95,4 +95,3 @@ export function registerManagementReportingRoutes(
       .send(result.content);
   });
 }
-

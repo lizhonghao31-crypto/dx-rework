@@ -102,7 +102,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
   it("rejects changed export filters and reclaims an expired running lease", async () => {
     const service = new ExportJobService(pool);
     const key = randomUUID();
-    const actor = { actorId, actorRoles: ["employee"], authorizationCapability: "tools:user", requestId: randomUUID() };
+    const actor = { actorId, actorRoles: ["owner_group"], authorizationCapability: "tools:user", requestId: randomUUID() };
     const created = await service.create(actor, { exportType: "test", filters: { a: 1 }, idempotencyKey: key });
     expect((await service.create(actor, { exportType: "test", filters: { a: 1 }, idempotencyKey: key })).exportJobId).toBe(created.exportJobId);
     await expect(service.create(actor, { exportType: "test", filters: { a: 2 }, idempotencyKey: key })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT", statusCode: 409 });
@@ -112,7 +112,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
 
   it("completes exports only with ready attachments owned by the requester or bound to the job", async () => {
     const service = new ExportJobService(pool);
-    const actor = { actorId, actorRoles: ["employee"], authorizationCapability: "tools:user", requestId: randomUUID() };
+    const actor = { actorId, actorRoles: ["owner_group"], authorizationCapability: "tools:user", requestId: randomUUID() };
     const job = await service.create(actor, { exportType: "ready-check", filters: {}, idempotencyKey: randomUUID() });
     const claimed=(await service.claim(pool,10,300)).find((row)=>row.export_job_id===job.exportJobId);
     if(!claimed?.claim_token)throw new Error("expected export claim token");
@@ -153,7 +153,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
   });
 
   it("fences stale export completion and failure after lease reclaim",async()=>{
-    const service=new ExportJobService(pool);const actor={actorId,actorRoles:["employee"],authorizationCapability:"tools:user",requestId:randomUUID()};
+    const service=new ExportJobService(pool);const actor={actorId,actorRoles:["owner_group"],authorizationCapability:"tools:user",requestId:randomUUID()};
     const job=await service.create(actor,{exportType:"lease-fence",filters:{},idempotencyKey:randomUUID()});
     const first=(await service.claim(pool,10,300)).find((row)=>row.export_job_id===job.exportJobId);if(!first?.claim_token)throw new Error("expected first claim");
     await pool.query("UPDATE export_jobs SET claimed_at=CURRENT_TIMESTAMP-interval '10 minutes' WHERE export_job_id=$1",[job.exportJobId]);
