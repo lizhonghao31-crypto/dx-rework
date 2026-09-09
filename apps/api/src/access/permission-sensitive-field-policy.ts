@@ -50,6 +50,23 @@ export function canReadDaxingPrice(roles: readonly string[], isRoot: boolean): b
   return isRoot || roles.some((role) => DAXING_PRICE_ROLES.has(role));
 }
 
+function filterSupplierMissingFields(
+  raw: unknown[],
+  options: Readonly<{
+    contactAllowed: boolean;
+    contractAllowed: boolean;
+    paymentAllowed: boolean;
+  }>,
+): unknown[] {
+  return raw.filter((entry) => {
+    if (typeof entry !== "string") return false;
+    if (!options.contactAllowed && entry === "address") return false;
+    if (!options.contractAllowed && ["contractEntityName", "partyBRepresentative"].includes(entry)) return false;
+    if (!options.paymentAllowed && ["payeeName", "bankAccount", "bankName"].includes(entry)) return false;
+    return true;
+  });
+}
+
 function redactObject(
   value: unknown,
   options: Readonly<{
@@ -71,14 +88,12 @@ function redactObject(
     if (options.supplier && !options.paymentAllowed && SUPPLIER_PAYMENT_FIELDS.has(key)) continue;
     if (options.daxingPrice && !options.daxingPriceAllowed && DAXING_PRICE_FIELDS.has(key)) continue;
 
-    if (options.supplier && key === "contractDataMissing" && Array.isArray(raw)) {
-      output[key] = raw.filter((entry) => {
-        if (typeof entry !== "string") return false;
-        if (!options.contactAllowed && entry === "address") return false;
-        if (!options.contractAllowed && ["contractEntityName", "partyBRepresentative"].includes(entry)) return false;
-        if (!options.paymentAllowed && ["payeeName", "bankAccount", "bankName"].includes(entry)) return false;
-        return true;
-      });
+    if (
+      options.supplier
+      && (key === "contractDataMissing" || key === "missingFields")
+      && Array.isArray(raw)
+    ) {
+      output[key] = filterSupplierMissingFields(raw, options);
       continue;
     }
 
@@ -87,13 +102,19 @@ function redactObject(
   return output;
 }
 
+function isSupplierBearingPath(path: string): boolean {
+  if (path === "/master-data/suppliers" || path.startsWith("/master-data/suppliers/")) return true;
+  if (path === "/sourcing/factories") return true;
+  return /^\/sourcing\/cases\/[^/]+\/contract(?:\/.*)?$/.test(path);
+}
+
 export function redactPermissionSensitivePayload(
   path: string,
   payload: unknown,
   roles: readonly string[],
   isRoot: boolean,
 ): unknown {
-  const supplier = path === "/master-data/suppliers" || path.startsWith("/master-data/suppliers/");
+  const supplier = isSupplierBearingPath(path);
   const daxingPrice = path === "/sourcing" || path.startsWith("/sourcing/");
   if (!supplier && !daxingPrice) return payload;
 
