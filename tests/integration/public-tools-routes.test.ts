@@ -109,16 +109,29 @@ describe("public tools routes", () => {
     expect(attachments.createDownloadIntent).not.toHaveBeenCalled();
   });
 
-  it("authorizes a worker-owned attachment through its requester-owned export binding", async () => {
-    const { app, attachments, exports } = create();
+  it("authorizes an allowed requester-owned export binding", async () => {
+    const { app, attachments, exports } = create(["tools:user"], ["owner_group"]);
     const response = await app.inject({ method: "GET", url: "/tools/attachments/00000000-0000-4000-8000-000000000001/download", headers: { cookie: "dx_rework_session=trusted" } });
     expect(response.statusCode).toBe(200);
     const trustedActor = attachments.createDownloadIntent.mock.calls[0]?.[0];
-    expect(trustedActor).toMatchObject({ actorRoles: ["tail_supervisor"], authorizationCapability: "tools:user" });
+    expect(trustedActor).toMatchObject({ actorRoles: ["owner_group"], authorizationCapability: "tools:user" });
     const authorizeBound = attachments.createDownloadIntent.mock.calls[0]?.[2];
     expect(await authorizeBound({ entityType: "export_job", entityId: "00000000-0000-4000-8000-000000000002", uploadedBy: "worker" })).toBe(true);
     expect(await authorizeBound({ entityType: "rework", entityId: "00000000-0000-4000-8000-000000000003", uploadedBy: "worker" })).toBe(false);
     expect(exports.isOwnedBy).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000099", "00000000-0000-4000-8000-000000000002");
+  });
+
+  it("denies generic export jobs to non-allowlisted roles and permits an owner", async () => {
+    const payload = { exportType: "business-data", filters: {}, idempotencyKey: "export-1" };
+    const denied = create(["tools:user"], ["tail_supervisor"]);
+    const deniedResponse = await denied.app.inject({ method: "POST", url: "/tools/exports", headers: { cookie: "dx_rework_session=trusted" }, payload });
+    expect(deniedResponse.statusCode).toBe(403);
+    expect(denied.exports.create).not.toHaveBeenCalled();
+
+    const allowed = create(["tools:user"], ["owner_group"]);
+    const allowedResponse = await allowed.app.inject({ method: "POST", url: "/tools/exports", headers: { cookie: "dx_rework_session=trusted" }, payload });
+    expect(allowedResponse.statusCode).toBe(201);
+    expect(allowed.exports.create).toHaveBeenCalledTimes(1);
   });
 
   it("redirects explicit preview and download navigations through the existing authorization path", async () => {
