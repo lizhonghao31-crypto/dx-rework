@@ -14,7 +14,7 @@
     { "version": "0012_responsibility_direct_delegation", "checksum": "5e40152c10bab23cac1f2c1a07679f1f1a4ffededd07983dc9517dfcc808ecf0" },
     { "version": "0013_responsibility_review_closure", "checksum": "b5703c4525791a3c1784af468576ba82882badbf186df55ea860dfcdf335c794" },
     { "version": "0014_responsibility_source_share_coverage", "checksum": "78ab96bde7e029cfc1683839e6efd9ccb5de9a5601f98e615c6bd0373720afa4" },
-    { "version": "0015_own_factory_responsibility_approval", "checksum": "4904e7efd14a4e7a68212f67aff06881dc4c7e20144f61940c00c7f66fca1d49" },
+    { "version": "0015_own_factory_responsibility_approval", "checksum": "4904e7efd14a4e7a68212f67aff06881dc4c7f66fca1d49" },
     { "version": "0016_responsibility_amount_contract_restore", "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925" },
     { "version": "0017_external_responsibility_deduction", "checksum": "11320eebff234300d7243897fbcab90144dd2c61cb450b957def3a0394887e97" },
     { "version": "0018_external_responsibility_review_closure", "checksum": "ccaf2c0f99451a27502db18a270ddaa94c7e997228ad85f5b602608cb016b010" },
@@ -164,6 +164,6 @@
     { "version": "0162_finance_director_sample_read", "checksum": "fbdf0faedd1852a8f2a1727577781b2b1914c0473902b71813c0892e64a1346b" },
     { "version": "0163_wage_month_close_accountant_export", "checksum": "6da345017a939e3be992b0dff2201ab76c9bbc425181be65d60c43431b8b7fe2" },
     { "version": "0164_global_export_allowlist", "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3" },
-    { "version": "0165_permission_role_field_closure", "checksum": "3c0eddf4eca7fd9ca1856778e9416b8fad129ad83cc5b0c79d41d87db3265ad7" }
+    { "version": "0165_permission_role_field_closure", "checksum": "98b06ecd4e5cbe55d05bba072484ded6fd9a645069bfac5d3a55d1f0e5d71cf0" }
   ]
 }
