@@ -11,12 +11,16 @@ const administrative: readonly SampleCapability[] = [
 const finance: readonly SampleCapability[] = [
   "sample:view_basic", "sample:view_finance", "sample:view_audit", "sample:create", "sample:batch_create", "sample:update_basic", "sample:correct_finance",
 ];
+const financeDirectorReadOnly: readonly SampleCapability[] = [
+  "sample:view_basic", "sample:view_finance", "sample:view_audit",
+];
 const owner: readonly SampleCapability[] = [
   ...designer, "sample:view_finance", "sample:view_audit", "sample:dispose_request", "sample:dispose_approve",
 ];
 export const SAMPLE_ROLE_CAPABILITIES: Readonly<Record<string, readonly SampleCapability[]>> = {
   sample_designer: designer, sample_administrative: administrative, sample_finance: finance, owner_group: owner,
   sample_approver: ["sample:view_basic", "sample:view_finance", "sample:view_audit", "sample:dispose_approve"],
+  finance_director: financeDirectorReadOnly,
 };
 
 // Only accept a server-built actor (businessActor/RootAuthority), never request-body roles.
