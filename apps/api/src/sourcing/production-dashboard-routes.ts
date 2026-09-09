@@ -5,22 +5,14 @@ import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
-import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ProductionDashboardService } from "./production-dashboard-service.js";
-
-const dashboardReadActor = (actor: TrustedActorContext): TrustedActorContext => {
-  const capabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
-  if (!actor.actorRoles.includes("finance_director") || !capabilities.includes("sourcing:view")) return actor;
-  if (actor.actorRoles.includes("production_management")) return actor;
-  return { ...actor, actorRoles: [...actor.actorRoles, "production_management"] };
-};
 
 export function registerProductionDashboardRoutes(app:FastifyInstance,dependencies:{
   authenticate(token:string|undefined):Promise<AuthUser>;root?:RootAuthority|undefined;service:ProductionDashboardService;
 }) {
   const actor=async(request:FastifyRequest)=>{
     const token=request.headers.cookie?.split(";").map(p=>p.trim()).find(p=>p.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
-    return dashboardReadActor(await businessActor(dependencies.root,await dependencies.authenticate(token),request.id,"production-reporting"));
+    return businessActor(dependencies.root,await dependencies.authenticate(token),request.id,"production-reporting");
   };
   app.get("/production-dashboard/analysis",async(request,reply)=>{
     const trusted=await actor(request);
