@@ -21,9 +21,11 @@ describe("production analysis boundaries",()=>{
   });
   it("requires both UI role and capability; production read does not unlock quality",()=>{
     expect(canReadProductionAnalysis({businessRoles:["production_management"],capabilities:["sourcing:view"]})).toBe(true);
+    expect(canReadProductionAnalysis({businessRoles:["finance_director"],capabilities:["sourcing:view"]})).toBe(true);
     expect(canReadProductionAnalysis({businessRoles:["production_reporter"],capabilities:["production-reporting"]})).toBe(true);
     for(const role of ["worker","warehouse_receiver","finance","ie_reviewer","system_admin"])expect(canReadProductionAnalysis({businessRoles:[role],capabilities:["sourcing:view","production-reporting"]})).toBe(false);
     expect(canReadProductionAnalysis({businessRoles:["production_management"],capabilities:[]})).toBe(false);
+    expect(canReadProductionAnalysis({businessRoles:["finance_director"],capabilities:[]})).toBe(false);
     expect(mayReadProductionQuality({actorId:"a",actorRoles:["production_reporter"],authorizationCapability:"production-reporting",requestId:"r"})).toBe(false);
   });
   it("rejects a session without business role before calling analysis",async()=>{
@@ -38,5 +40,13 @@ describe("production analysis boundaries",()=>{
     const response=await app.inject({method:"GET",url:"/production-dashboard/analysis?page=2"});
     expect(response.statusCode).toBe(200);expect(response.headers["cache-control"]).toBe("no-store");
     expect(analysis.mock.calls[0]?.[0]).toMatchObject({actorId:"stable-user",actorRoles:["production_management"]});await app.close();
+  });
+  it("keeps finance director identity intact instead of synthesizing production_management",async()=>{
+    const app=Fastify(),analysis=vi.fn<(actor:unknown,input:unknown)=>Promise<{asOf:string}>>(async()=>({asOf:"test"}));
+    registerProductionDashboardRoutes(app,{authenticate:async()=>({id:"finance-user",businessRoles:["finance_director"],capabilities:["sourcing:view"]}) as unknown as AuthUser,service:{analysis} as unknown as ProductionDashboardService});
+    const response=await app.inject({method:"GET",url:"/production-dashboard/analysis"});
+    expect(response.statusCode).toBe(200);
+    expect(analysis.mock.calls[0]?.[0]).toMatchObject({actorId:"finance-user",actorRoles:["finance_director"]});
+    expect(analysis.mock.calls[0]?.[0]).not.toMatchObject({actorRoles:expect.arrayContaining(["production_management"])});await app.close();
   });
 });
