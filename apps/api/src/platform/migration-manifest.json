@@ -164,6 +164,7 @@
     { "version": "0162_finance_director_sample_read", "checksum": "fbdf0faedd1852a8f2a1727577781b2b1914c0473902b71813c0892e64a1346b" },
     { "version": "0163_wage_month_close_accountant_export", "checksum": "6da345017a939e3be992b0dff2201ab76c9bbc425181be65d60c43431b8b7fe2" },
     { "version": "0164_global_export_allowlist", "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3" },
-    { "version": "0165_permission_role_field_closure", "checksum": "f5d51b76d624b60be04254c470019ac187b4a65807469ca439ab016d97fa29e6" }
+    { "version": "0165_own_tail_responsibility_history", "checksum": "0dbe7b879033745373b51a72d94b6231dea1c5a46ff100ddbdefe35d7a2bd19d" },
+    { "version": "0166_permission_role_field_closure", "checksum": "f5d51b76d624b60be04254c470019ac187b4a65807469ca439ab016d97fa29e6" }
   ]
 }
