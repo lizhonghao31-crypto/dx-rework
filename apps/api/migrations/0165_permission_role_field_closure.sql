@@ -91,3 +91,82 @@ CREATE TRIGGER delegated_authorizations_no_access_admin
   BEFORE INSERT ON delegated_authorizations
   FOR EACH ROW
   EXECUTE FUNCTION reject_access_admin_delegation();
+
+-- The legacy tail-inspection assignment table is retained because it is immutable historical
+-- workflow evidence. New assignments now target an ordinary worker that carries the existing
+-- tail_inspection:report capability.
+CREATE OR REPLACE FUNCTION guard_rework_tail_inspection_assignment_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'tail inspection assignment must start active' USING ERRCODE='23514';
+  END IF;
+  IF NOT EXISTS(
+    SELECT 1
+    FROM app_users inspector
+    JOIN user_role_assignments role_assignment
+      ON role_assignment.user_id=inspector.id
+     AND role_assignment.role_code='worker'
+     AND role_assignment.revoked_at IS NULL
+    JOIN business_roles role
+      ON role.role_code=role_assignment.role_code AND role.enabled=true
+    JOIN role_capabilities capability
+      ON capability.role_code=role_assignment.role_code
+     AND capability.capability='tail_inspection:report'
+    WHERE inspector.id=NEW.tail_inspector_user_id AND inspector.enabled=true
+  ) THEN
+    RAISE EXCEPTION 'tail inspection assignment requires an active worker with tail inspection reporting permission'
+      USING ERRCODE='42501';
+  END IF;
+  IF NOT EXISTS(
+    SELECT 1
+    FROM operation_events event
+    WHERE event.event_id=NEW.operation_event_id
+      AND event.request_id=NEW.request_id
+      AND event.actor_id=NEW.assigned_by
+      AND event.action='rework.process_configuration.submit'
+      AND event.authorization_capability='process:configure'
+      AND event.entity_type='rework_order'
+      AND event.entity_id=NEW.rework_order_id::text
+  ) THEN
+    RAISE EXCEPTION 'tail inspection assignment requires the matching N02 submit event'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Historical todo/source-event snapshots may still name tail_inspector. Keep those immutable facts
+-- usable by interpreting that retired role only for tail_inspection:report as the current worker
+-- role. This does not re-enable or assign tail_inspector.
+CREATE OR REPLACE FUNCTION todo_user_has_direct_role(
+  candidate uuid,
+  required_role text,
+  required_capability text
+) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT access_is_root_actor(candidate)
+  OR EXISTS (
+    SELECT 1
+    FROM user_role_assignments assignment
+    JOIN business_roles role
+      ON role.role_code=assignment.role_code AND role.enabled=true
+    JOIN role_capabilities capability
+      ON capability.role_code=assignment.role_code
+     AND capability.capability=required_capability
+    JOIN app_users user_record
+      ON user_record.id=assignment.user_id AND user_record.enabled=true
+    JOIN identity_mappings identity
+      ON identity.user_id=user_record.id AND identity.provider='dingtalk'
+     AND identity.active=true AND identity.employed=true
+    JOIN access_security_policy policy
+      ON policy.policy_key='primary'
+     AND policy.dingtalk_corp_id=identity.corp_id
+    WHERE assignment.user_id=candidate
+      AND assignment.role_code=CASE
+        WHEN required_role='tail_inspector' AND required_capability='tail_inspection:report'
+          THEN 'worker'
+        ELSE required_role
+      END
+      AND assignment.revoked_at IS NULL
+  );
+$$;
