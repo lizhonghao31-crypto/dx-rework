@@ -73,7 +73,7 @@ describe("acceptance evidence report", () => {
     expect(second.matrixAttempts[0]?.version?.gitSha).toBe("abc");
   });
 
-  it("reports approved pass/fail separately from standards that are still pending", () => {
+  it("reports approved pass/fail separately from genuinely unconfirmed synthetic checks", () => {
     const report = appendMatrixEvidence(
       createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z")),
       {
@@ -81,7 +81,7 @@ describe("acceptance evidence report", () => {
         completedAt: "2026-09-08T14:04:00.000Z",
         version: null,
         results: [{
-          alias: "tail-supervisor",
+          alias: "synthetic",
           requests: [],
           checks: [
             {
@@ -94,7 +94,7 @@ describe("acceptance evidence report", () => {
             },
             {
               key: "pending", category: "http", label: "pending", expected: "HTTP 403", actual: "HTTP 200", verdict: "pending",
-              ruleId: "PERM-SUPPLIER-TAIL-001", ruleStatus: "pending",
+              ruleId: "PERM-SYNTHETIC-PENDING-001", ruleStatus: "pending",
             },
           ],
         }],
@@ -108,7 +108,7 @@ describe("acceptance evidence report", () => {
     expect(summary.matrixPending).toBe(1);
   });
 
-  it("quarantines a pending manual scenario so it cannot become green or red evidence", () => {
+  it("records the confirmed worker boundary as strict governed evidence", () => {
     const base = createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z"));
     const withWorker = appendScenarioEvidence(base, {
       scenarioId: "worker-module-boundary",
@@ -126,15 +126,15 @@ describe("acceptance evidence report", () => {
     }, new Date("2026-09-08T14:01:00.000Z"));
     const attempt = withWorker.scenarioAttempts[0]!;
     expect(attempt.ruleId).toBe("PERM-PLATFORM-WORKER-CROSSMODULE-001");
-    expect(attempt.ruleStatus).toBe("pending");
-    expect(attempt.status).toBe("not_run");
-    expect(attempt.actual).toContain("标准待确认");
-    expect(firstFailureForScenario(withWorker, "worker-module-boundary")).toBeUndefined();
+    expect(attempt.ruleStatus).toBe("approved");
+    expect(attempt.status).toBe("fail");
+    expect(attempt.actual).not.toContain("标准待确认");
+    expect(firstFailureForScenario(withWorker, "worker-module-boundary")).toBeDefined();
     const summary = acceptanceEvidenceSummary(withWorker);
     expect(summary.scenarios.pass).toBe(0);
-    expect(summary.scenarios.fail).toBe(0);
-    expect(summary.scenarios.pending).toBe(1);
-    expect(summary.historicalFailures).toBe(0);
+    expect(summary.scenarios.fail).toBe(1);
+    expect(summary.scenarios.pending).toBe(0);
+    expect(summary.historicalFailures).toBe(1);
   });
 
   it("defines representative scenarios with mandatory read-only preflights and explicit governance", () => {
@@ -148,7 +148,7 @@ describe("acceptance evidence report", () => {
     expect(ACCEPTANCE_SCENARIOS.every((scenario) => Number.isInteger(scenario.preflight.expectedStatus))).toBe(true);
     expect(ACCEPTANCE_SCENARIOS.every((scenario) => scenario.ruleId.length > 0)).toBe(true);
     expect(ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === "owner-todo-inbox")?.preflight.path).toBe("todos/mine?page=1");
-    expect(ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === "worker-module-boundary")?.ruleStatus).toBe("pending");
+    expect(ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === "worker-module-boundary")?.ruleStatus).toBe("approved");
   });
 
   it("redacts complete authorization and cookie values before persistence or export", () => {
