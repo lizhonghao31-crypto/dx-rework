@@ -248,7 +248,9 @@ export class ManagementReportingService {
       range: { from: range.from, to: range.to, timezone: TIMEZONE },
       rowCount: rows.length,
       truncated,
-      canExport: capabilities(actor).includes("report:export"),
+      canExport: reportType === "wages"
+        ? capabilities(actor).includes("wage:export")
+        : capabilities(actor).includes("report:export"),
       totals: recalculateDisplayedTotals(rows, data.totals),
       columns: data.columns,
       rows,
@@ -260,7 +262,7 @@ export class ManagementReportingService {
     data: ReportData;
   }> {
     this.validateReportStatus(reportType, query.status);
-    await this.require(actor, "report:export");
+    await this.require(actor, reportType === "wages" ? "wage:export" : "report:export");
     const client = await this.db.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -301,4 +303,3 @@ export class ManagementReportingService {
   }
 
 }
-
