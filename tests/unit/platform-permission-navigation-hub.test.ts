@@ -54,7 +54,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(todoModuleIdsForUser({
       businessRoles: ["warehouse_receiver"],
       capabilities: ["receiving:create", "todo:view"],
-    })).toEqual(["rework"]);
+    })).toEqual([]);
     expect(todoModuleIdsForUser({
       businessRoles: ["system_admin"],
       capabilities: ["admin:read", "todo:view"],
@@ -67,6 +67,10 @@ describe("platform permission and desktop navigation hub", () => {
       businessRoles: ["sample_finance"],
       capabilities: ["sample:view_basic", "sample:view_finance", "todo:view"],
     })).toEqual(["samples"]);
+    expect(todoModuleIdsForUser({
+      businessRoles: ["finance_director"],
+      capabilities: ["sample:view_basic", "sample:view_finance", "sample:view_audit", "todo:view"],
+    })).not.toContain("samples");
   });
 
   it("renders standalone global entries and permission-gated grouped desktop navigation", async () => {
