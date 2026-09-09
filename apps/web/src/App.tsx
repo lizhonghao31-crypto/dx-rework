@@ -326,8 +326,8 @@ export function App() {
     if (path === "/ui/samples/create" || path === "/ui/samples/batch-create") {
       return <AuthGate requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}>{page}</AuthGate>;
     }
-    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "sample_approver", "finance_director", "owner_group"]
-      : ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "finance_director", "owner_group"];
+    const roles = path === "/ui/samples/amounts" ? ["sample_finance", "finance_director", "owner_group"]
+      : ["sample_designer", "sample_administrative", "sample_finance", "finance_director", "owner_group"];
     return <AuthGate requiredAnyOf={roles.map(requiredRole => ({ requiredRole,
       requiredCapability: path === "/ui/samples/amounts" ? "sample:view_finance" : "sample:view_basic",
     }))}>{page}</AuthGate>;
@@ -343,7 +343,6 @@ export function App() {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
       { requiredRole: "worker", requiredCapability: "work:report" },
-      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/receiving") {
@@ -360,7 +359,16 @@ export function App() {
   if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
   }
-  if (path.startsWith("/ui/production-reporting") || path.startsWith("/ui/production-dashboard")) {
+  if (path.startsWith("/ui/production-dashboard")) {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
+      { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
+      { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
+      { requiredRole: "finance_director", requiredCapability: "sourcing:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path.startsWith("/ui/production-reporting")) {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
@@ -391,7 +399,6 @@ export function App() {
       { requiredRole: "tail_supervisor", requiredCapability: "submission:audit" },
       { requiredRole: "tail_supervisor", requiredCapability: "quantity:adjust" },
       { requiredRole: "worker", requiredCapability: "work:report" },
-      { requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" },
       { requiredCapability: "work:report_for_worker" },
       { requiredRole: "order_merchandiser", requiredCapability: "quantity:confirm" },
       { requiredRole: "ie_reviewer", requiredCapability: "process:review" },
@@ -437,10 +444,7 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/employee-access") {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredRole: "owner_group", requiredCapability: "access:admin" },
-    ]}>{page}</AuthGate>;
+    return <AuthGate requiredRole="root_superuser">{page}</AuthGate>;
   }
   if (path === "/ui/supervisor") {
     return <AuthGate requiredAnyOf={[
