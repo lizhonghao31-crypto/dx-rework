@@ -35,7 +35,6 @@ const ACCEPTANCE_USERS = [
   ["sample-designer", "[UAT] 样衣设计师", "sample_designer"],
   ["sample-admin", "[UAT] 样衣管理员", "sample_administrative"],
   ["sample-finance", "[UAT] 样衣财务", "sample_finance"],
-  ["sample-approver", "[UAT] 样衣审批人", "sample_approver"],
 ] as const;
 
 const acceptanceDatabaseUrl = process.env.ACCEPTANCE_DATABASE_URL?.trim();
