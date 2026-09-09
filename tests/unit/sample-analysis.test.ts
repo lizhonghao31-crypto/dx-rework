@@ -13,11 +13,11 @@ describe('sample analysis query and financial boundary',()=>{
   const q=SampleAnalysisQuerySchema.parse({purchaserUserId:id,holderUserId:randomUUID(),brand:"x' OR true --",minPrice:'999999999999.99'});
   const f=sampleAnalysisFilter(q);expect(f.where).not.toContain(q.brand);expect(f.where).not.toContain(id);expect(f.values).toContain(q.brand);expect(f.values).toContain('999999999999.99');expect(f.values).toContain(q.holderUserId);expect(f.values).toContain(id);
  });
- it.each(['sample_designer','sample_administrative','system_admin','worker'])('denies %s before parsing financial filters or reading',async role=>{
+ it.each(['sample_designer','sample_administrative','sample_approver','system_admin','worker'])('denies %s before parsing financial filters or reading',async role=>{
   const connect=vi.fn(),service=new SampleAnalysisService({connect} as unknown as Pool);
   await expect(service.read(actor(role),{minPrice:'invalid'})).rejects.toMatchObject({code:'FORBIDDEN'});expect(connect).not.toHaveBeenCalled();
  });
- it.each(['sample_finance','sample_approver','owner_group','root_superuser'])('allows %s through the financial guard and rolls back a query failure',async role=>{
+ it.each(['sample_finance','owner_group','root_superuser'])('allows %s through the financial guard and rolls back a query failure',async role=>{
   const query=vi.fn().mockResolvedValueOnce({rows:[]}).mockRejectedValueOnce(new Error('isolated DB failure')).mockResolvedValue({rows:[]}),release=vi.fn();
   const service=new SampleAnalysisService({connect:async()=>({query,release})} as unknown as Pool);
   await expect(service.read(actor(role),{})).rejects.toThrow('isolated DB failure');expect(query.mock.calls[0]?.[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');expect(query).toHaveBeenLastCalledWith('ROLLBACK');expect(release).toHaveBeenCalledOnce();

@@ -57,7 +57,8 @@ describe("v1 prelaunch default candidates and frontline entry", () => {
     expect(assignmentSheetStyles).toContain("@media(min-width:641px)");
     expect(assignmentSheetStyles).toContain(".process-worker-mobile-sheet-backdrop{position:fixed;inset:0;z-index:1080;display:grid");
     expect(app).toContain('path === "/ui/frontline"');
-    expect(app).toContain('{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" }');
+    expect(app).toContain('{ requiredRole: "worker", requiredCapability: "work:report" }');
+    expect(app).not.toContain('{ requiredRole: "tail_inspector", requiredCapability: "tail_inspection:report" }');
     expect(reporting).toContain('"work:report_for_worker", "tail_inspection:report"');
     expect(workReporting).toContain('actor.actorRoles.some((role) => role === "worker" || role === "tail_inspector")');
     expect(reporting).toContain("workTaskActorUserId: actor.actorId");

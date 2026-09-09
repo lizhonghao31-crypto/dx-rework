@@ -22,8 +22,8 @@ describe("finance director sample read-only remediation", () => {
     const app = await readFile("apps/web/src/App.tsx", "utf8");
     expect(app).toContain('requiredRole="sample_administrative" requiredCapability="sample:view_basic"');
     expect(app).toContain('requiredRole="sample_finance" requiredCapability={path.endsWith("batch-create") ? "sample:batch_create" : "sample:create"}');
-    expect(app).toContain('["sample_finance", "sample_approver", "finance_director", "owner_group"]');
-    expect(app).toContain('["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "finance_director", "owner_group"]');
+    expect(app).toContain('["sample_finance", "finance_director", "owner_group"]');
+    expect(app).toContain('["sample_designer", "sample_administrative", "sample_finance", "finance_director", "owner_group"]');
   });
 
   it("shows the finance read navigation without aliasing finance director to sample finance", async () => {
