@@ -4,6 +4,7 @@ import {ProductionAnalysisQuerySchema,type SourcingProductionOrder} from "@dx-re
 import {productionDueBucket,selectProductionAnalysisOrders,mayReadProductionQuality} from "../../apps/api/src/sourcing/production-analysis.js";
 import {canReadProductionAnalysis} from "../../apps/web/src/production-analysis-model.js";
 import {registerProductionDashboardRoutes} from "../../apps/api/src/sourcing/production-dashboard-routes.js";
+import {canReadProductionReporting,isProductionReporter} from "../../apps/api/src/sourcing/production-reporting-service.js";
 import type {ProductionDashboardService} from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import type {AuthUser} from "../../apps/api/src/auth/service.js";
 describe("production analysis boundaries",()=>{
@@ -19,13 +20,16 @@ describe("production analysis boundaries",()=>{
     const two={...one,productionOrderId:"b",supplierId:"10000000-0000-4000-8000-000000000002"};
     expect(selectProductionAnalysisOrders([one,two],ProductionAnalysisQuerySchema.parse({supplierId:two.supplierId}),"2026-09-07")).toEqual([two]);
   });
-  it("requires both UI role and capability; production read does not unlock quality",()=>{
+  it("requires both UI role and capability; production read does not unlock quality or reporting writes",()=>{
     expect(canReadProductionAnalysis({businessRoles:["production_management"],capabilities:["sourcing:view"]})).toBe(true);
     expect(canReadProductionAnalysis({businessRoles:["finance_director"],capabilities:["sourcing:view"]})).toBe(true);
     expect(canReadProductionAnalysis({businessRoles:["production_reporter"],capabilities:["production-reporting"]})).toBe(true);
     for(const role of ["worker","warehouse_receiver","finance","ie_reviewer","system_admin"])expect(canReadProductionAnalysis({businessRoles:[role],capabilities:["sourcing:view","production-reporting"]})).toBe(false);
     expect(canReadProductionAnalysis({businessRoles:["production_management"],capabilities:[]})).toBe(false);
     expect(canReadProductionAnalysis({businessRoles:["finance_director"],capabilities:[]})).toBe(false);
+    const financeActor={actorId:"finance",actorRoles:["finance_director"],authorizationCapability:"production-reporting",authorizationCapabilities:["sourcing:view"],requestId:"r"};
+    expect(canReadProductionReporting(financeActor)).toBe(true);
+    expect(isProductionReporter(financeActor)).toBe(false);
     expect(mayReadProductionQuality({actorId:"a",actorRoles:["production_reporter"],authorizationCapability:"production-reporting",requestId:"r"})).toBe(false);
   });
   it("rejects a session without business role before calling analysis",async()=>{
