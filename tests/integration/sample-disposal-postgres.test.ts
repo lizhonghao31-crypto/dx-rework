@@ -103,12 +103,11 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await disposal.archive(owner(),id,{version:4,reason:'暂存'},randomUUID());
   await expect(disposal.correctFinance(f,id,{...input,version:5},randomUUID())).rejects.toMatchObject({code:'INVALID_STATE_TRANSITION'});
  });
- it('deduplicates owner/approver assignments and closes every approval peer after an independent approver acts',async()=>{
+ it('routes disposal approval only to active owner roles after the standalone approver role is retired',async()=>{
   const id=await sample();await disposal.request(clerk(),id,{version:1,type:'scrap',reason:'破损',proofAttachmentIds:[await attachment(administrative)]},randomUUID());
   const tasks=(await db.query("SELECT recipient_user_id,status FROM rework_todos WHERE entity_id=$1 AND category='sample_disposal_approval'",[id])).rows;
-  expect(tasks).toHaveLength(2);expect(tasks.map(t=>t.recipient_user_id).sort()).toEqual([other,approver].sort());
-  expect(await disposal.actions(actor('sample_approver',approver),id)).toMatchObject({canApprove:true,canCorrectFinance:false,canReplaceReceipts:false,canUpdateBasic:false,canArchive:false});
-  await disposal.decide(actor('sample_approver',approver),id,{version:2,decision:'approve'},randomUUID());
+  expect(tasks).toHaveLength(1);expect(tasks.map(t=>t.recipient_user_id)).toEqual([other]);
+  await disposal.decide(actor('owner_group',other),id,{version:2,decision:'approve'},randomUUID());
   expect((await row(id)).status).toBe('scrapped');
   expect((await db.query("SELECT status FROM rework_todos WHERE entity_id=$1",[id])).rows.every(t=>t.status==='completed')).toBe(true);
  });
