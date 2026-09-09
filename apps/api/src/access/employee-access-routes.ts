@@ -57,8 +57,8 @@ export function registerEmployeeAccessRoutes(
   };
 
   app.get("/employee-access/employees", async (request) => {
-    await rootActor(request);
-    return dependencies.service.listDirectory();
+    const actor = await rootActor(request);
+    return dependencies.service.listDirectory(actor);
   });
 
   app.post<{ Params: { userId: string } }>("/employee-access/employees/:userId/roles", async (request, reply) => {
