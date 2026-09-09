@@ -14,25 +14,28 @@ const user = (
 ) => ({ id, displayName: role, businessRoles: [role], capabilities, isRoot });
 
 describe("acceptance authorization matrix", () => {
-  it("covers every standard seeded acceptance alias exactly once", () => {
+  it("covers every active standard seeded acceptance alias exactly once", () => {
     const aliases = ACCEPTANCE_ROLE_MATRIX.map((entry) => entry.alias);
     expect(new Set(aliases).size).toBe(aliases.length);
     expect(aliases).toEqual([
       "root", "owner", "production-management", "ie", "tail-supervisor", "qc", "warehouse",
       "worker-a", "worker-b", "merchandiser", "finance-read", "finance-director", "factory-payables",
-      "system-admin", "production-reporter", "sample-designer", "sample-admin", "sample-finance", "sample-approver",
+      "system-admin", "production-reporter", "sample-designer", "sample-admin", "sample-finance",
     ]);
+    expect(aliases).not.toContain("sample-approver");
   });
 
-  it("keeps finance-director sample access read-only and binds it to its approved Golden Source rule", () => {
+  it("keeps finance-director sample access read-only and adds the confirmed production dashboard", () => {
     const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-director")!;
     expect(finance.requiredCapabilities).toEqual(expect.arrayContaining([
-      "sample:view_basic", "sample:view_finance", "sample:view_audit",
+      "supplier_profile:read", "sample:view_basic", "sample:view_finance", "sample:view_audit",
     ]));
     expect(finance.forbiddenCapabilities).toEqual(expect.arrayContaining([
-      "sample:create", "sample:batch_create", "sample:update_basic", "sample:correct_finance",
+      "access:admin", "sample:create", "sample:batch_create", "sample:update_basic", "sample:correct_finance",
       "sample:dispose_request", "sample:dispose_approve", "sample:archive",
     ]));
+    expect(finance.allowedModules).toContain("production");
+    expect(finance.probes?.find((probe) => probe.id === "production-dashboard")?.expectedStatus).toBe(200);
     for (const key of [
       "cap:sample:view_basic:allow",
       "cap:sample:view_finance:allow",
@@ -49,7 +52,7 @@ describe("acceptance authorization matrix", () => {
     }
   });
 
-  it("keeps supplier-center scope pending when the Golden Source has not approved full master-data access", () => {
+  it("marks every confirmed supplier-center boundary approved instead of pending", () => {
     const expected = new Map([
       ["production-management", "PERM-SUPPLIER-PM-CENTER-001"],
       ["ie", "PERM-SUPPLIER-IE-CENTER-001"],
@@ -64,8 +67,16 @@ describe("acceptance authorization matrix", () => {
     ]);
     for (const [alias, ruleId] of expected) {
       const entry = ACCEPTANCE_ROLE_MATRIX.find((candidate) => candidate.alias === alias)!;
-      expect(entry.ruleRefs?.["http:supplier-list"]).toEqual({ ruleId, status: "pending" });
+      expect(entry.ruleRefs?.["http:supplier-list"]).toEqual({ ruleId, status: "approved" });
     }
+  });
+
+  it("locks personnel administration to Root at acceptance level", () => {
+    const root = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "root")!;
+    const owner = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "owner")!;
+    expect(root.probes?.find((probe) => probe.id === "access-roles")?.expectedStatus).toBe(200);
+    expect(owner.probes?.find((probe) => probe.id === "access-roles")?.expectedStatus).toBe(403);
+    expect(owner.forbiddenCapabilities).toContain("access:admin");
   });
 
   it("detects a session bound to the wrong UAT identity as an infrastructure failure", () => {
@@ -81,16 +92,16 @@ describe("acceptance authorization matrix", () => {
     expect(session.ruleId).toBe("ACCEPTANCE-INFRASTRUCTURE");
   });
 
-  it("never turns a pending business rule into a failure even when actual access differs", () => {
+  it("lets an approved supplier boundary fail when runtime access diverges", () => {
     const tail = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "tail-supervisor")!;
     const supplierProbe = tail.probes?.find((probe) => probe.id === "supplier-list");
     if (!supplierProbe) throw new Error("tail-supervisor supplier-list probe is missing");
     const check = evaluateHttpProbe(tail, supplierProbe, 200);
     expect(check.expected).toBe("HTTP 403");
     expect(check.actual).toBe("HTTP 200");
-    expect(check.verdict).toBe("pending");
+    expect(check.verdict).toBe("fail");
     expect(check.ruleId).toBe("PERM-SUPPLIER-TAIL-001");
-    expect(check.ruleStatus).toBe("pending");
+    expect(check.ruleStatus).toBe("approved");
   });
 
   it("lets an approved Golden Source rule fail when runtime behavior diverges", () => {
