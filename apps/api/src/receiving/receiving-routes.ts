@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import { businessActor, isRootUser } from "../access/business-authority.js";
+import { assertDataExportPolicy } from "../access/data-export-policy.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -280,7 +281,9 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     if (!root && !permitted) {
       throw new ApplicationError("FORBIDDEN", "没有权限执行此订单回货操作", 403);
     }
-    return businessActor(dependencies.root, user, request.id, capability, root && role ? role : undefined);
+    const trusted = await businessActor(dependencies.root, user, request.id, capability, root && role ? role : undefined);
+    if (capability === "receiving:export") assertDataExportPolicy(trusted, "general");
+    return trusted;
   };
 
   app.get<{ Querystring: { q?: string } }>("/receiving/repeat-options", async (request) => {
