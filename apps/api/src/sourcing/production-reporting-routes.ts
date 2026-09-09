@@ -7,6 +7,7 @@ import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
+import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ProductionReportingService } from "./production-reporting-service.js";
 const parse = <T>(schema:z.ZodType<T>,value:unknown):T => {
   const result=schema.safeParse(value);
@@ -15,6 +16,12 @@ const parse = <T>(schema:z.ZodType<T>,value:unknown):T => {
 };
 const Id=z.string().uuid();
 const key=(request:FastifyRequest)=>parse(z.string().regex(/^[A-Za-z0-9._:-]{1,200}$/),request.headers["idempotency-key"]);
+const financeReadActor=(actor:TrustedActorContext):TrustedActorContext=>{
+  const capabilities=actor.authorizationCapabilities??[actor.authorizationCapability];
+  if(!actor.actorRoles.includes("finance_director")||!capabilities.includes("sourcing:view"))return actor;
+  if(actor.actorRoles.includes("production_management"))return actor;
+  return {...actor,actorRoles:[...actor.actorRoles,"production_management"]};
+};
 export function registerProductionReportingRoutes(app:FastifyInstance,dependencies:{
   authenticate(token:string|undefined):Promise<AuthUser>;root?:RootAuthority|undefined;service:ProductionReportingService;
 }) {
@@ -23,6 +30,7 @@ export function registerProductionReportingRoutes(app:FastifyInstance,dependenci
     const user=await dependencies.authenticate(token);
     return businessActor(dependencies.root,user,request.id,"production-reporting");
   };
+  const readActor=async(request:FastifyRequest)=>financeReadActor(await actor(request));
   const service=dependencies.service;
   app.get<{Params:{id:string}}>("/production-reporting/:id/exclusion",async request=>ProductionExclusionPreviewSchema.parse(await service.previewExclusion(await actor(request),parse(Id,request.params.id))));
   app.post<{Params:{id:string}}>("/production-reporting/:id/exclusion",async request=>{
@@ -31,11 +39,11 @@ export function registerProductionReportingRoutes(app:FastifyInstance,dependenci
   });
   app.get("/production-reporting",async request=>{
     const query=parse(z.object({page:z.coerce.number().int().min(1).max(100000).optional(),supplierId:Id.optional(),q:z.string().max(100).optional(),status:z.enum(["in_production","production_completed","shipped"]).optional()}).strict(),request.query);
-    return ProductionReportingListSchema.parse(await service.list(await actor(request),query));
+    return ProductionReportingListSchema.parse(await service.list(await readActor(request),query));
   });
   app.get("/production-reporting/scopes",async request=>ProductionScopeDirectorySchema.parse(await service.scopeDirectory(await actor(request))));
   app.post("/production-reporting/scopes",async request=>service.setScope(await actor(request),parse(ProductionScopeInputSchema,request.body),key(request)));
-  app.get<{Params:{id:string}}>("/production-reporting/:id",async request=>ProductionReportingDetailSchema.parse(await service.detail(await actor(request),parse(Id,request.params.id))));
+  app.get<{Params:{id:string}}>("/production-reporting/:id",async request=>ProductionReportingDetailSchema.parse(await service.detail(await readActor(request),parse(Id,request.params.id))));
   app.post<{Params:{id:string}}>("/production-reporting/:id/reports",async request=>{
     const result=await service.report(await actor(request),parse(Id,request.params.id),parse(ProductionReportInputSchema,request.body),key(request));
     return ProductionReportingDetailSchema.parse(result.value);
