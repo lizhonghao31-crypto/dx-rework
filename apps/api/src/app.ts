@@ -132,13 +132,13 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   });
 
   if (dependencies.access) {
-    app.addHook("preSerialization", async (request, _reply, payload) => {
+    app.addHook("preSerialization", async (request, reply, payload) => {
       const path = request.url.split("?", 1)[0] ?? request.url;
       const sensitiveResponse = path === "/master-data/suppliers"
         || path.startsWith("/master-data/suppliers/")
         || path === "/sourcing"
         || path.startsWith("/sourcing/");
-      if (!sensitiveResponse) return payload;
+      if (!sensitiveResponse || reply.statusCode >= 400) return payload;
 
       const user = await dependencies.access!.authenticate(permissionCookieToken(request.headers.cookie));
       const isRoot = await dependencies.access!.root.isRootUser(user.id);
@@ -192,7 +192,10 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.wages) registerWageRoutes(app, dependencies.wages);
   if (dependencies.todos) registerTodoRoutes(app, dependencies.todos);
   if (dependencies.reporting) registerManagementReportingRoutes(app, dependencies.reporting);
-  if (dependencies.adminAudit) registerAdminAuditRoutes(app, dependencies.adminAudit);
+  if (dependencies.adminAudit) registerAdminAuditRoutes(app, {
+    ...dependencies.adminAudit,
+    root: dependencies.adminAudit.root ?? dependencies.access?.root,
+  });
   if (dependencies.adminConsole) registerAdminConsoleRoutes(app, dependencies.adminConsole);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
