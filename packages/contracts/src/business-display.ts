@@ -135,7 +135,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   embroidery_washing_payables: "印绣花洗水应付会计",
   fabric_payables: "面料供应商应付会计",
   administrative_clerk: "行政文员",
-  wage_month_close_accountant: "工资资料查看",
+  wage_month_close_accountant: "工资月结会计",
   finance_read: "财务全局查看",
   worker: "员工",
   payroll_review: "旧版工资复核（已停用）",
