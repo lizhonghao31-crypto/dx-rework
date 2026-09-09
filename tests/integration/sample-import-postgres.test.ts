@@ -15,6 +15,18 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const root=randomUUID(),designer=randomUUID(),other=randomUUID(),administrative=randomUUID(),peer=randomUUID(),finance=randomUUID();
  const actor=(role:string,id:string)=>({actorId:id,actorRoles:[role],authorizationCapability:'sample:view_basic',authorizationCapabilities:[...SampleCapabilitySchema.options,'todo:view'],requestId:`sample-test-${randomUUID()}`});
  const owner=()=>actor('root_superuser',root),projection=new RootAwareTodoProjectionService(new TodoService(db)),disposal=new SampleDisposalService(db,'sample-handoff-corp',projection),service=new SampleImportService(db,'sample-handoff-corp',disposal);
+ const setUserEnabledAsRoot=async(id:string,enabled:boolean)=>{
+  const client=await db.connect();
+  try{
+   await client.query('BEGIN');
+   await client.query("SELECT set_config('dx_rework.employee_access_actor_id',$1,true)",[root]);
+   await client.query('UPDATE app_users SET enabled=$2 WHERE id=$1',[id,enabled]);
+   await client.query('COMMIT');
+  }catch(error){
+   await client.query('ROLLBACK');
+   throw error;
+  }finally{client.release();}
+ };
  beforeAll(async()=>{
   await admin.query(`CREATE SCHEMA ${schema}`);
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
@@ -45,7 +57,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const plan:SampleImportPlan={sourceHash:sampleSourceHash(source),reason:'固定验收映射',objects:[{objectKey:key,attachmentId,sha256:'a'.repeat(64),sizeBytes:10}],decisions:inventorySampleSource(source).report.issues.map(i=>({...i,conclusion:'固定身份映射已核实'})),items:[{legacyId:original.id,sourceHash:sampleSourceHash(original),status:'borrowed',purchaserUserId:designer,holderUserId:designer,holderName:'同名员工',borrowedAt:history.borrowedAt,purpose:history.purpose,storageLocation:null,archivedFromStatus:null,archiveReason:null,normalizationReason:'原始借出记录保留',custody:[{legacyId:history.id,sourceHash:sampleSourceHash(history),holderUserId:designer,holderName:history.borrower,department:history.department,purpose:history.purpose,borrowedAt:history.borrowedAt,returnedAt:null,disposedAt:null,initialCustody:true,requestedBy:designer,confirmedBy:null}],requests:[]}]};
   await expect(service.import(actor('system_admin',other),source,plan)).rejects.toMatchObject({code:'FORBIDDEN'});
   await expect(service.import(owner(),source,{...plan,objects:[{...plan.objects[0],sha256:'b'.repeat(64)}]})).rejects.toMatchObject({code:'VALIDATION_ERROR'});
-  await db.query('UPDATE app_users SET enabled=false WHERE id=$1',[designer]);await expect(service.import(owner(),source,plan)).rejects.toMatchObject({code:'VALIDATION_ERROR'});await db.query('UPDATE app_users SET enabled=true WHERE id=$1',[designer]);
+  await setUserEnabledAsRoot(designer,false);await expect(service.import(owner(),source,plan)).rejects.toMatchObject({code:'VALIDATION_ERROR'});await setUserEnabledAsRoot(designer,true);
   const first=await service.import(owner(),source,plan);expect(first.passed).toBe(true);expect(first.amounts.purchaseTotal).toEqual({expected:'12.34',actual:'12.34'});expect(Object.keys(first.amounts)).toHaveLength(5);
   expect((await db.query("SELECT borrowed_at FROM sample_custody_records WHERE legacy_id='h1'")).rows[0].borrowed_at.toISOString()).toBe('2020-01-01T01:00:00.525Z');
   const enable={action:'enable',reconciliationId:first.reconciliationId,sourceHash:plan.sourceHash,sourceFreezeEvidence:'isolated source fixture frozen',backupRestoreEvidence:'isolated backup fixture',businessUatEvidence:'fixed business fixtures',reason:'test'};
