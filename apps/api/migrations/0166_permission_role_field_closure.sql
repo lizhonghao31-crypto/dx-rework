@@ -202,6 +202,60 @@ BEGIN
 END;
 $$;
 
+-- Manual employee access state is also a Root-only personnel-admin action. Normal authentication and
+-- authorization lifecycle writes remain valid when they merely converge enabled to the effective
+-- authorization state; the explicit manual-disable/restore transitions require the Root actor context
+-- established by EmployeeAccessService inside the same transaction.
+CREATE OR REPLACE FUNCTION guard_employee_access_state_root()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  requested_actor_id uuid;
+  effective_authorization boolean;
+BEGIN
+  IF NEW.enabled IS NOT DISTINCT FROM OLD.enabled
+     AND NEW.manual_access_disabled IS NOT DISTINCT FROM OLD.manual_access_disabled THEN
+    RETURN NEW;
+  END IF;
+
+  effective_authorization := access_is_root_actor(NEW.id)
+    OR access_user_has_effective_authorization(NEW.id);
+
+  IF (
+    OLD.manual_access_disabled=false
+    AND NEW.manual_access_disabled=true
+  ) OR (
+    OLD.manual_access_disabled=true
+    AND NEW.manual_access_disabled=false
+    AND OLD.enabled=false
+    AND NEW.enabled=true
+  ) OR (
+    OLD.enabled=true
+    AND NEW.enabled=false
+    AND NEW.manual_access_disabled=false
+    AND effective_authorization=true
+  ) THEN
+    requested_actor_id := nullif(
+      current_setting('dx_rework.employee_access_actor_id',true),
+      ''
+    )::uuid;
+    IF requested_actor_id IS NULL OR NOT access_is_root_actor(requested_actor_id) THEN
+      RAISE EXCEPTION 'employee access state can only be maintained by root'
+        USING ERRCODE='42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS app_users_employee_access_root_guard ON app_users;
+CREATE TRIGGER app_users_employee_access_root_guard
+  BEFORE UPDATE OF enabled,manual_access_disabled ON app_users
+  FOR EACH ROW
+  EXECUTE FUNCTION guard_employee_access_state_root();
+
 -- Prevent future delegated capability from recreating a business-user personnel-admin path.
 CREATE OR REPLACE FUNCTION reject_access_admin_delegation()
 RETURNS trigger
@@ -260,6 +314,77 @@ BEGIN
       AND event.entity_id=NEW.rework_order_id::text
   ) THEN
     RAISE EXCEPTION 'tail inspection assignment requires the matching N02 submit event'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Unified tail-inspection work reports are new business mutations, so immutable historical actor
+-- snapshots that still contain tail_inspector must not authorize them. Require the actual event actor
+-- to be Root or a currently active ordinary worker carrying tail_inspection:report.
+CREATE OR REPLACE FUNCTION guard_rework_work_report_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  task_execution_kind text;
+BEGIN
+  SELECT item.execution_kind
+  INTO task_execution_kind
+  FROM rework_work_tasks task
+  JOIN rework_process_configuration_items item
+    ON item.configuration_item_id=task.configuration_item_id
+  WHERE task.work_task_id=NEW.work_task_id
+    AND task.rework_order_id=NEW.rework_order_id
+    AND task.configuration_item_id=NEW.configuration_item_id;
+
+  IF task_execution_kind IS NULL OR NOT EXISTS (
+    SELECT 1
+    FROM operation_events event
+    WHERE event.event_id=nullif(current_setting('dx_rework.work_event_id',true),'')::uuid
+      AND event.request_id=nullif(current_setting('dx_rework.work_request_id',true),'')
+      AND event.action='rework.work_report.submit'
+      AND event.authorization_capability=(
+        CASE task_execution_kind
+          WHEN 'tail_inspection' THEN 'tail_inspection:report'
+          ELSE event.authorization_capability
+        END
+      )
+      AND (
+        task_execution_kind='tail_inspection'
+        OR event.authorization_capability IN ('work:report','work:report_for_worker')
+      )
+      AND (
+        task_execution_kind<>'tail_inspection'
+        OR access_is_root_actor(event.actor_id)
+        OR EXISTS (
+          SELECT 1
+          FROM app_users reporter
+          JOIN user_role_assignments assignment
+            ON assignment.user_id=reporter.id
+           AND assignment.role_code='worker'
+           AND assignment.revoked_at IS NULL
+          JOIN business_roles role
+            ON role.role_code=assignment.role_code
+           AND role.enabled=true
+          JOIN role_capabilities capability
+            ON capability.role_code=assignment.role_code
+           AND capability.capability='tail_inspection:report'
+          JOIN identity_mappings identity
+            ON identity.user_id=reporter.id
+           AND identity.provider='dingtalk'
+           AND identity.active=true
+           AND identity.employed=true
+          JOIN access_security_policy policy
+            ON policy.policy_key='primary'
+           AND policy.dingtalk_corp_id=identity.corp_id
+          WHERE reporter.id=event.actor_id
+            AND reporter.enabled=true
+        )
+      )
+      AND event.entity_type='rework_order'
+      AND event.entity_id=NEW.rework_order_id::text
+  ) THEN
+    RAISE EXCEPTION 'work report requires current execution-kind authorization'
       USING ERRCODE='55000';
   END IF;
   RETURN NEW;
