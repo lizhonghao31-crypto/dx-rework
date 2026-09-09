@@ -4,26 +4,65 @@
 
 -- The standalone tail-inspector role is retired, but the business operation remains available to
 -- ordinary workers through tail_inspection:report. Preserve existing operators by adding worker
--- assignments before the old role is disabled. Do not revoke the old rows: they remain immutable
--- historical evidence and become ineffective once the role is disabled.
+-- assignments before the old role is disabled. Each replacement grant is a NEW authorization at
+-- migration time, not a historical rewrite: keep the legacy row untouched and emit an explicit
+-- append-only migration event tied to the newly created assignment.
 ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation;
 
+WITH replacements AS (
+  SELECT
+    gen_random_uuid() assignment_id,
+    gen_random_uuid() event_id,
+    legacy.assignment_id source_assignment_id,
+    legacy.user_id,
+    legacy.granted_by
+  FROM user_role_assignments legacy
+  WHERE legacy.role_code='tail_inspector'
+    AND legacy.revoked_at IS NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM user_role_assignments worker_assignment
+      WHERE worker_assignment.user_id=legacy.user_id
+        AND worker_assignment.role_code='worker'
+        AND worker_assignment.revoked_at IS NULL
+    )
+), audit_rows AS (
+  INSERT INTO operation_events(
+    event_id,request_id,actor_id,actor_roles,authorization_capability,
+    action,entity_type,entity_id,before_state,after_state,reason
+  )
+  SELECT
+    replacement.event_id,
+    'migration:0165:tail-inspector-to-worker:' || replacement.source_assignment_id::text,
+    replacement.granted_by,
+    ARRAY['migration_0165'],
+    'migration:role-retirement',
+    'migration.role.tail_inspector_to_worker',
+    'user_role_assignment',
+    replacement.assignment_id::text,
+    jsonb_build_object(
+      'sourceAssignmentId',replacement.source_assignment_id,
+      'roleCode','tail_inspector'
+    ),
+    jsonb_build_object(
+      'userId',replacement.user_id,
+      'roleCode','worker',
+      'sourceAssignmentId',replacement.source_assignment_id,
+      'migration','0165_permission_role_field_closure'
+    ),
+    '独立整查角色退役：迁移为普通工人；保留原角色授权历史'
+  FROM replacements replacement
+  RETURNING entity_id
+)
 INSERT INTO user_role_assignments(
   assignment_id,user_id,role_code,granted_by,grant_reason,granted_at
 )
 SELECT
-  gen_random_uuid(),legacy.user_id,'worker',legacy.granted_by,
-  '独立整查角色退役：自动迁移为普通工人',legacy.granted_at
-FROM user_role_assignments legacy
-WHERE legacy.role_code='tail_inspector'
-  AND legacy.revoked_at IS NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM user_role_assignments worker_assignment
-    WHERE worker_assignment.user_id=legacy.user_id
-      AND worker_assignment.role_code='worker'
-      AND worker_assignment.revoked_at IS NULL
-  );
+  replacement.assignment_id,replacement.user_id,'worker',replacement.granted_by,
+  '独立整查角色退役：0165 迁移为普通工人；来源授权 ' || replacement.source_assignment_id::text,
+  CURRENT_TIMESTAMP
+FROM replacements replacement
+JOIN audit_rows audit ON audit.entity_id=replacement.assignment_id::text;
 
 ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation;
 
@@ -64,11 +103,25 @@ CREATE TRIGGER business_roles_no_update
   EXECUTE FUNCTION reject_operation_event_mutation();
 
 -- Personnel/role administration is Root-only. Root uses the trusted identity bypass and does not
--- need a persisted role capability, so no business role may retain access:admin.
+-- need a persisted role capability, so no business role may retain access:admin. System-admin is a
+-- technical operator only: retain only explicitly technical capabilities and strip every business
+-- grant that later migrations may have reintroduced (for example supplier-profile maintenance).
 ALTER TABLE role_capabilities DISABLE TRIGGER role_capabilities_no_delete;
 
 DELETE FROM role_capabilities
 WHERE capability='access:admin';
+
+DELETE FROM role_capabilities
+WHERE role_code='system_admin'
+  AND capability NOT IN (
+    'tools:user',
+    'admin:read',
+    'admin:exception:manage',
+    'audit:read',
+    'todo:runtime',
+    'erp:emergency_intake',
+    'erp:result:read'
+  );
 
 ALTER TABLE role_capabilities ENABLE TRIGGER role_capabilities_no_delete;
 
