@@ -1,6 +1,7 @@
 import { businessCellValue, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
 import type { Pool } from "pg";
 
+import { assertWageDataExportAllowed } from "../access/export-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import { buildWorkbook, workbookNumberCell, type WorkbookCell } from "../reporting/xlsx-workbook.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -65,8 +66,12 @@ export class WageExportService {
   constructor(private readonly db: Pool) {}
 
   async export(actor: TrustedActorContext, periodId: string): Promise<{ filename: string; content: Buffer }> {
-    if (!actor.authorizationCapabilities?.includes("wage:export")) fail("缺少工资导出能力", 403, "FORBIDDEN");
-    await this.db.query("SELECT access_authorized_actor_roles($1,'wage:export')", [actor.actorId]);
+    assertWageDataExportAllowed(actor.actorRoles);
+    const root = actor.actorRoles.includes("root_superuser");
+    const currentCapabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
+    if (!root && !currentCapabilities.includes("wage:view")) fail("缺少工资查看能力", 403, "FORBIDDEN");
+    if (!root && !currentCapabilities.includes("wage:export")) fail("缺少工资导出能力", 403, "FORBIDDEN");
+    if (!root) await this.db.query("SELECT access_authorized_actor_roles($1,'wage:export')", [actor.actorId]);
     const periodResult = await this.db.query<PeriodRow>(
       `SELECT period_month::text,status,original_total::text,locked_by,locked_at
        FROM rework_wage_periods
