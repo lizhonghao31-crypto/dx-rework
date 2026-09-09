@@ -165,6 +165,6 @@
     { "version": "0163_wage_month_close_accountant_export", "checksum": "6da345017a939e3be992b0dff2201ab76c9bbc425181be65d60c43431b8b7fe2" },
     { "version": "0164_global_export_allowlist", "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3" },
     { "version": "0165_own_tail_responsibility_history", "checksum": "0c1d96d6734f342c8a5d0fc2e422dcb81ade20913bb5cbb672091533226e1f3f" },
-    { "version": "0166_permission_role_field_closure", "checksum": "b4e8afa5d53ce3b489c9beae5d503ba0c1ac1dae22bbac7f319ac4e964763a28" }
+    { "version": "0166_permission_role_field_closure", "checksum": "c7ff5ec6b10b1147d6d2671bba900585fd965a2a215fa294df5fc3596d8a1eea" }
   ]
 }
