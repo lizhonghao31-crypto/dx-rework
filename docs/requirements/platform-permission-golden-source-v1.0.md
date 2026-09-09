@@ -5,7 +5,7 @@
 **适用仓库：** `lizhonghao31-crypto/dx-rework`  
 **目的：** 为 Acceptance Lab、权限审计、UI 准入、HTTP Route、Service、PostgreSQL 约束和 Todo 路由提供同一套业务权限标准。
 
-> 本文件是“权限标准”的最高入口。Acceptance Matrix 只能把本文件中 **APPROVED** 的规则翻译为机器检查，不能根据当前 `role_capabilities`、现有页面、现有 API 或开发者判断反向生成标准。
+> 本文件是“权限标准”的最高入口。Acceptance Matrix 只能把本文件中 **APPROVED** 的规则翻译为机器检查，不能根据当前 `role_capabilities`、现有页面、现有 API、测试现状或开发者判断反向生成标准。
 
 ## 0. 权威顺序
 
@@ -84,14 +84,14 @@
 ### PERM-SOURCING-DAXING-PRICE-001 · 达兴价格敏感字段
 
 **状态：APPROVED**  
-**来源：** `docs/requirements/sourcing-supplier-production-v1.0.md` §2、价格权限条款
+**来源：** `docs/requirements/sourcing-supplier-production-v1.0.md` 的达兴价格权限条款
 
 - 达兴价格仅向该订单的跟单、IE、生产管理、老板、财务和 Root 展示；
 - 普通工人、仓管、驻厂生产填报人员及其他无外发五节点权限者不得查看；
 - 后端响应也不得向无权角色返回该字段；
 - 达兴价格不得进入合同、供应商生产页面或供应商发货凭证。
 
-### PERM-SUPPLIER-OWNER-001 · 老板供应商中心准入
+### PERM-SUPPLIER-OWNER-001 · 老板供应商业务读取
 
 **状态：APPROVED**  
 **来源：** `docs/requirements/authorization-policy-2026-08-08.md` §3；`docs/requirements/sourcing-supplier-production-v1.0.md` §4
@@ -105,44 +105,44 @@
 
 跟单、IE、生产管理、老板以及外发付款核对相关财务角色，可以在其外发职责需要的范围内读取供应商资料。合同敏感资料、内部价格及写权限必须继续按独立规则限制。
 
-### PERM-SUPPLIER-TAIL-001 · 尾部主管是否可进入供应商中心
+### PERM-SUPPLIER-TAIL-001 · 尾部主管是否可进入完整供应商中心
 
 **状态：PENDING**  
-**原因：** 当前 Acceptance Matrix 写成“禁止供应商中心/供应商目录”，但现有需求文件未找到足以证明该平台级禁止规则的明确业务批准；返工业务本身又存在读取供应商目录用于责任/工厂选择的历史能力，不能直接把目录读取等同于供应商中心越权。
+**原因：** 当前 Acceptance Matrix 写成“禁止供应商中心/供应商目录”，但现有需求文件未找到足以证明该平台级禁止规则的明确业务批准；返工业务又存在读取供应商目录用于责任/工厂选择的历史能力，不能直接把基础目录读取等同于供应商中心越权。
 
 在业务负责人明确批准前：
 
-- Acceptance Lab 不得把尾部主管可读取 `master-data/suppliers` 或可进入供应商相关入口直接判为 P1/P2；
+- Acceptance Lab 不得把尾部主管可读取 `master-data/suppliers` 或出现供应商相关入口直接判为 P1/P2；
 - 不得为了矩阵变绿撤销正式权限；
 - 后续需明确区分“返工场景供应商选择数据”与“供应商中心完整资料”的数据范围。
 
-### PERM-SUPPLIER-QC-001 · 质检是否可进入供应商中心
+### PERM-SUPPLIER-QC-001 · 质检是否可进入完整供应商中心
 
 **状态：PENDING**  
 **原因：** 与 `PERM-SUPPLIER-TAIL-001` 相同；当前缺少明确业务批准，且质检在返工发起/责任上下文中可能需要基础供应商目录。
 
 在业务负责人明确批准前，不得将当前实现直接判为权限泄漏。
 
-### PERM-SUPPLIER-WORKER-001 · 工人供应商中心
+### PERM-SUPPLIER-WORKER-001 · 工人完整供应商中心准入
 
-**状态：APPROVED**  
-**来源：** `docs/requirements/sourcing-supplier-production-v1.0.md` 的达兴价格/无外发五节点权限边界；平台最小权限原则
+**状态：PENDING**  
+**原因：** 已批准来源明确禁止普通工人读取达兴价格，但没有找到足以把“不得看达兴价格”扩大解释成“绝对不得进入任何供应商基础资料页面”的业务批准。
 
-普通工人不得进入供应商中心，不得读取供应商完整资料、合同资料或达兴价格。
+已确定的硬边界只有：普通工人不得读取达兴价格、供应商合同敏感资料或获得供应商维护写权限。完整供应商中心是否全部禁止，待业务负责人确认。
 
-### PERM-SUPPLIER-WAREHOUSE-001 · 仓管供应商中心
+### PERM-SUPPLIER-WAREHOUSE-001 · 仓管完整供应商中心准入
 
-**状态：APPROVED（供应商中心禁止；订单回货所需供应商名称/基础关联事实除外）**  
-**来源：** `docs/requirements/sourcing-supplier-production-v1.0.md` 的无外发五节点权限与达兴价格隔离规则
+**状态：PENDING**  
+**原因：** 已批准来源明确禁止仓管读取达兴价格，但订单回货业务本身需要供应商名称/订单关联事实；当前没有足以证明“仓管绝对不得进入任何供应商基础资料页面”的独立批准规则。
 
-仓管不得进入供应商中心，不得读取达兴价格或供应商合同敏感资料；订单回货页面为完成收货所需展示的供应商名称/订单关联事实不视为供应商中心准入。
+已确定的硬边界只有：仓管不得读取达兴价格、供应商合同敏感资料或获得供应商维护写权限。完整供应商中心是否全部禁止，待业务负责人确认。
 
-### PERM-PRODUCTION-REPORTER-001 · 驻厂生产填报
+### PERM-PRODUCTION-REPORTER-001 · 驻厂生产填报最小范围
 
 **状态：APPROVED**  
 **来源：** `docs/requirements/sourcing-supplier-production-v1.0.md` §4.2、达兴价格隔离规则
 
-驻厂生产填报人员只维护其生产填报职责需要的数据；不因生产填报角色获得外发定价、供应商合同资料、达兴价格或样衣权限。
+驻厂生产填报人员只维护其生产填报职责需要的数据；不因生产填报角色获得外发定价、供应商合同资料或达兴价格。
 
 ## 4. 样衣模块
 
@@ -164,28 +164,28 @@
 **状态：APPROVED**  
 **来源：** `docs/requirements/sample-system-migration-v1.0.md`
 
-设计师拥有样衣业务所需的基本查看及按样衣流程明确赋予的借出/归还发起能力；不因设计师角色获得样衣财务信息或其他平台业务模块权限。
+设计师拥有样衣业务所需的基本查看及按样衣流程明确赋予的借出/归还发起能力；不因设计师角色获得样衣财务信息。
 
 ### PERM-SAMPLE-ADMIN-001 · 样衣行政
 
 **状态：APPROVED**  
 **来源：** `docs/requirements/sample-system-migration-v1.0.md`
 
-样衣行政负责样衣实物管理、借还确认及按规则发起处置等行政动作；不等同于平台 `system_admin`，不因样衣行政角色获得外发、供应商中心或技术管理权限。
+样衣行政负责样衣实物管理、借还确认及按规则发起处置等行政动作；不等同于平台 `system_admin`。
 
 ### PERM-SAMPLE-FINANCE-001 · 样衣财务
 
 **状态：APPROVED**  
 **来源：** `docs/requirements/sample-system-migration-v1.0.md`
 
-`sample_finance` 是独立样衣财务角色，可读取样衣基本/财务信息并执行模块 Golden Source 明确允许的财务维护；不得被 `finance_director` 替代，也不因样衣财务角色获得外发或供应商中心权限。
+`sample_finance` 是独立样衣财务角色，可读取样衣基本/财务信息并执行模块 Golden Source 明确允许的财务维护；不得被 `finance_director` 替代。
 
-### PERM-SAMPLE-APPROVER-001 · 样衣审批人
+### PERM-SAMPLE-APPROVER-001 · 样衣审批
 
 **状态：APPROVED**  
 **来源：** `docs/requirements/sample-system-migration-v1.0.md`
 
-样衣审批按模块 Golden Source 仅由老板/Root 等批准身份执行；独立验收角色只能获得该模块明确授予的查看/审批范围，不扩展到其他平台模块。
+样衣处置/出售等审批必须按模块 Golden Source 由老板/Root 等批准身份执行；不得因为样衣审批能力扩展其他模块权限。
 
 ## 5. 返工与财务查看
 
@@ -203,12 +203,17 @@
 
 `finance_read` 保持其既有工资/报表事实范围，不因财务总监获得全量返工详情而同步提权。
 
-### PERM-REWORK-WORKER-001 · 工人最小业务边界
+### PERM-REWORK-WORKER-001 · 工人返工任务范围
 
-**状态：APPROVED**  
-**来源：** 返工业务既有角色模型及最小权限原则；Acceptance 代表场景已批准
+**状态：APPROVED（仅返工任务范围）**  
+**来源：** 返工业务既有角色模型
 
-工人只能进入其返工工作入口及本人任务相关数据，不得进入人员权限管理、外发定价、供应商中心、实时生产看板或样衣模块。
+工人只执行分配给自己的返工任务和个人上数/计薪相关动作。
+
+### PERM-PLATFORM-WORKER-CROSSMODULE-001 · 工人跨模块禁止范围
+
+**状态：PENDING**  
+**原因：** 当前 Acceptance 代表场景把供应商、样衣、生产看板和人员权限管理全部列为禁止入口，但该组合禁止规则尚未逐条追溯到业务 Golden Source；在逐条确认前不能因为某个入口存在就直接判定实现错误。
 
 ## 6. Acceptance Matrix 使用规则
 
@@ -238,6 +243,9 @@
 |---|---|---|
 | `PERM-SUPPLIER-TAIL-001` | 尾部主管能否进入完整供应商中心；若仅需返工选择供应商，允许的数据范围到哪里 | PENDING |
 | `PERM-SUPPLIER-QC-001` | 质检能否进入完整供应商中心；若仅需返工发起/责任上下文读取供应商，允许的数据范围到哪里 | PENDING |
+| `PERM-SUPPLIER-WORKER-001` | 普通工人是否完全禁止供应商基础资料入口，还是只禁止敏感字段/维护能力 | PENDING |
+| `PERM-SUPPLIER-WAREHOUSE-001` | 仓管是否完全禁止供应商基础资料入口，还是只允许订单回货所需关联事实 | PENDING |
+| `PERM-PLATFORM-WORKER-CROSSMODULE-001` | 工人对样衣、实时生产、人员权限等跨模块入口的逐项批准依据 | PENDING |
 
 后续业务负责人给出结论时，只更新相应规则状态和范围，不重写整套权限模型。
 
