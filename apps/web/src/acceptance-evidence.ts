@@ -1,6 +1,7 @@
 import type { AcceptanceMatrixCheck } from "./acceptance-matrix.js";
 
 export type AcceptanceEvidenceStatus = "pass" | "fail" | "blocked" | "not_run";
+export type AcceptanceScenarioRuleStatus = "approved" | "pending" | "infrastructure";
 
 export type AcceptanceRuntimeVersion = Readonly<{
   gitSha: string;
@@ -37,6 +38,8 @@ export type AcceptanceScenarioDefinition = Readonly<{
   expected: string;
   steps: readonly string[];
   preflight: Readonly<{ path: string; expectedStatus: number }>;
+  ruleId: string;
+  ruleStatus: AcceptanceScenarioRuleStatus;
 }>;
 
 export type AcceptanceScenarioEvidence = Readonly<{
@@ -48,10 +51,12 @@ export type AcceptanceScenarioEvidence = Readonly<{
   recordedAt: string;
   version: AcceptanceRuntimeVersion | null;
   preflight: AcceptanceRequestEvidence;
+  ruleId: string;
+  ruleStatus: AcceptanceScenarioRuleStatus;
 }>;
 
 export type AcceptanceEvidenceReport = Readonly<{
-  formatVersion: 1;
+  formatVersion: 2;
   reportId: string;
   createdAt: string;
   updatedAt: string;
@@ -110,6 +115,8 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
       "确认页面没有新增、修改、借还确认、处置、审批、归档等写操作入口。",
     ],
     preflight: { path: "samples?page=1", expectedStatus: 200 },
+    ruleId: "PERM-SAMPLE-FINANCE-DIRECTOR-001",
+    ruleStatus: "approved",
   },
   {
     id: "warehouse-order-date-filter",
@@ -124,6 +131,8 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
       "再正常点击结束日期，确认两个控件都可操作且没有重叠。",
     ],
     preflight: { path: "receiving/board?page=1", expectedStatus: 200 },
+    ruleId: "ACCEPTANCE-SCENARIO-WAREHOUSE-DATE",
+    ruleStatus: "infrastructure",
   },
   {
     id: "owner-todo-inbox",
@@ -138,6 +147,8 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
       "确认页面身份仍为 UAT 老板；本场景只读取待办，不触发外部发送。",
     ],
     preflight: { path: "todos/mine?page=1", expectedStatus: 200 },
+    ruleId: "ACCEPTANCE-SCENARIO-OWNER-TODO-ISOLATION",
+    ruleStatus: "infrastructure",
   },
   {
     id: "worker-module-boundary",
@@ -152,13 +163,15 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
       "正常浏览导航，确认不存在供应商、样衣、生产看板和人员权限管理入口。",
     ],
     preflight: { path: "frontline/work-tasks?kind=worker", expectedStatus: 200 },
+    ruleId: "PERM-PLATFORM-WORKER-CROSSMODULE-001",
+    ruleStatus: "pending",
   },
 ];
 
 export function createAcceptanceEvidenceReport(now = new Date()): AcceptanceEvidenceReport {
   const timestamp = now.toISOString();
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     reportId: newId("acceptance", now),
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -181,15 +194,29 @@ export function appendMatrixEvidence(
 
 export function appendScenarioEvidence(
   report: AcceptanceEvidenceReport,
-  input: Omit<AcceptanceScenarioEvidence, "attemptId">,
+  input: Omit<AcceptanceScenarioEvidence, "attemptId" | "ruleId" | "ruleStatus">,
   now = new Date(),
 ): AcceptanceEvidenceReport {
+  const definition = ACCEPTANCE_SCENARIOS.find((scenario) => scenario.id === input.scenarioId);
+  const ruleId = definition?.ruleId ?? "PERM-ACCEPTANCE-UNMAPPED-001";
+  const ruleStatus: AcceptanceScenarioRuleStatus = definition?.ruleStatus ?? "pending";
+  const quarantined = ruleStatus === "pending";
+  const actual = quarantined
+    ? `[标准待确认 ${ruleId}] ${input.actual}`
+    : input.actual;
   return {
     ...report,
     updatedAt: now.toISOString(),
     scenarioAttempts: [
       ...report.scenarioAttempts,
-      { ...input, actual: redactAcceptanceEvidenceText(input.actual), attemptId: newId("scenario", now) },
+      {
+        ...input,
+        status: quarantined ? "not_run" : input.status,
+        actual: redactAcceptanceEvidenceText(actual),
+        ruleId,
+        ruleStatus,
+        attemptId: newId("scenario", now),
+      },
     ],
   };
 }
@@ -198,7 +225,11 @@ export function firstFailureForScenario(
   report: AcceptanceEvidenceReport,
   scenarioId: string,
 ): AcceptanceScenarioEvidence | undefined {
-  return report.scenarioAttempts.find((attempt) => attempt.scenarioId === scenarioId && attempt.status === "fail");
+  return report.scenarioAttempts.find(
+    (attempt) => attempt.scenarioId === scenarioId
+      && attempt.ruleStatus !== "pending"
+      && attempt.status === "fail",
+  );
 }
 
 export function latestScenarioEvidence(
@@ -214,33 +245,53 @@ export function acceptanceEvidenceSummary(report: AcceptanceEvidenceReport) {
   const latestScenarioById = new Map<string, AcceptanceScenarioEvidence>();
   for (const attempt of report.scenarioAttempts) latestScenarioById.set(attempt.scenarioId, attempt);
   const latestScenarios = [...latestScenarioById.values()];
+  const governedScenarioDefinitions = ACCEPTANCE_SCENARIOS.filter((scenario) => scenario.ruleStatus !== "pending");
+  const governedLatest = latestScenarios.filter((attempt) => attempt.ruleStatus !== "pending");
+  const governedAttemptedIds = new Set(governedLatest.map((attempt) => attempt.scenarioId));
   return {
     matrixTotal: matrixChecks.length,
     matrixPassed: matrixChecks.filter((check) => check.verdict === "pass").length,
     matrixFailed: matrixChecks.filter((check) => check.verdict === "fail").length,
     matrixPending: matrixChecks.filter((check) => check.verdict === "pending").length,
     scenarios: {
-      pass: latestScenarios.filter((attempt) => attempt.status === "pass").length,
-      fail: latestScenarios.filter((attempt) => attempt.status === "fail").length,
-      blocked: latestScenarios.filter((attempt) => attempt.status === "blocked").length,
-      notRun: ACCEPTANCE_SCENARIOS.length - latestScenarios.length
-        + latestScenarios.filter((attempt) => attempt.status === "not_run").length,
+      pass: governedLatest.filter((attempt) => attempt.status === "pass").length,
+      fail: governedLatest.filter((attempt) => attempt.status === "fail").length,
+      blocked: governedLatest.filter((attempt) => attempt.status === "blocked").length,
+      notRun: governedScenarioDefinitions.filter((scenario) => !governedAttemptedIds.has(scenario.id)).length
+        + governedLatest.filter((attempt) => attempt.status === "not_run").length,
+      pending: ACCEPTANCE_SCENARIOS.filter((scenario) => scenario.ruleStatus === "pending").length,
     },
-    historicalFailures: report.scenarioAttempts.filter((attempt) => attempt.status === "fail").length,
+    historicalFailures: report.scenarioAttempts.filter(
+      (attempt) => attempt.ruleStatus !== "pending" && attempt.status === "fail",
+    ).length,
   };
 }
+
+const hasGovernedMatrixChecks = (value: AcceptanceEvidenceReport): boolean =>
+  value.matrixAttempts.every((attempt) => attempt.results.every((result) => result.checks.every((check) =>
+    typeof check.ruleId === "string"
+      && ["approved", "pending", "unmapped", "infrastructure"].includes(check.ruleStatus),
+  )));
+
+const hasGovernedScenarioEvidence = (value: AcceptanceEvidenceReport): boolean =>
+  value.scenarioAttempts.every((attempt) =>
+    typeof attempt.ruleId === "string"
+      && ["approved", "pending", "infrastructure"].includes(attempt.ruleStatus),
+  );
 
 export function parseAcceptanceEvidenceReport(raw: string | null): AcceptanceEvidenceReport | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<AcceptanceEvidenceReport>;
     if (
-      value.formatVersion !== 1
+      value.formatVersion !== 2
       || typeof value.reportId !== "string"
       || !Array.isArray(value.matrixAttempts)
       || !Array.isArray(value.scenarioAttempts)
     ) return null;
-    return sanitizeAcceptanceEvidenceReport(value as AcceptanceEvidenceReport);
+    const report = value as AcceptanceEvidenceReport;
+    if (!hasGovernedMatrixChecks(report) || !hasGovernedScenarioEvidence(report)) return null;
+    return sanitizeAcceptanceEvidenceReport(report);
   } catch {
     return null;
   }
