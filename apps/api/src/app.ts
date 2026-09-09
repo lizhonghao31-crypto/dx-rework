@@ -24,6 +24,7 @@ import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/sch
 import { registerToolsRoutes, type ToolsHttpDependencies } from "./tools/routes.js";
 import { registerAccessRoutes, type AccessHttpDependencies } from "./access/routes.js";
 import { registerDataExportAuthorizationRoutes } from "./access/data-export-authorization-routes.js";
+import { redactPermissionSensitivePayload } from "./access/permission-sensitive-field-policy.js";
 import {
   registerEmployeeAccessRoutes,
   type EmployeeAccessHttpDependencies,
@@ -80,6 +81,13 @@ export type AppDependencies = Readonly<{
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
+const permissionCookieToken = (cookieHeader: string | undefined): string | undefined =>
+  cookieHeader
+    ?.split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith("dx_rework_session="))
+    ?.slice("dx_rework_session=".length);
+
 export function serializeRequestForLog(request: { id?: string; method?: string; url?: string }): Record<string, string | undefined> {
   return {
     requestId: request.id,
@@ -122,6 +130,21 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   app.addHook("onRequest", async (request, reply) => {
     void reply.header("x-request-id", request.id);
   });
+
+  if (dependencies.access) {
+    app.addHook("preSerialization", async (request, _reply, payload) => {
+      const path = request.url.split("?", 1)[0] ?? request.url;
+      const sensitiveResponse = path === "/master-data/suppliers"
+        || path.startsWith("/master-data/suppliers/")
+        || path === "/sourcing"
+        || path.startsWith("/sourcing/");
+      if (!sensitiveResponse) return payload;
+
+      const user = await dependencies.access!.authenticate(permissionCookieToken(request.headers.cookie));
+      const isRoot = await dependencies.access!.root.isRootUser(user.id);
+      return redactPermissionSensitivePayload(path, payload, user.businessRoles ?? [], isRoot);
+    });
+  }
 
   app.get<{ Reply: LiveHealthResponse }>("/health/live", async () => ({
     status: "ok",
@@ -253,4 +276,3 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   return app;
 }
-
