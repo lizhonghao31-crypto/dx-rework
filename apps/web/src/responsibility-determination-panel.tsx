@@ -118,14 +118,14 @@ const formsFromResponse = (
 ): ProcessForm[] => {
   const persisted = response.determination?.processes ?? [];
   return response.sourceProcesses
-    .filter((source) => source.executionKind === "worker" || tailCostBearer === "processing_factory")
+    .filter((source) => source.executionKind === "worker" || tailCostBearer !== null)
     .map((source) => {
       const current = persisted.find((process) => process.configurationItemId === source.configurationItemId);
       const tailAllocation: AllocationForm = {
-        responsibilityType: "processing_factory",
+        responsibilityType: tailCostBearer === "own_factory" ? "own_factory" : "processing_factory",
         sharePercent: "100",
-        multiplier: "1.200",
-        supplierId: preferredProcessingFactoryId(response),
+        multiplier: tailCostBearer === "own_factory" ? "1.000" : "1.200",
+        supplierId: tailCostBearer === "own_factory" ? "" : preferredProcessingFactoryId(response),
       };
       return {
         configurationItemId: source.configurationItemId,
@@ -325,9 +325,8 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     setTailCostBearer(next);
     setProcesses((current) => {
       const workerProcesses = current.filter((process) => process.executionKind === "worker");
-      if (next !== "processing_factory") return workerProcesses;
-      const tailProcess = formsFromResponse(response, next).find((process) => process.executionKind === "tail_inspection");
-      return tailProcess ? [...workerProcesses, tailProcess] : workerProcesses;
+      const tailProcesses = formsFromResponse(response, next).filter((process) => process.executionKind === "tail_inspection");
+      return [...workerProcesses, ...tailProcesses];
     });
   };
 
@@ -640,3 +639,4 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     {ownerSigning && !response?.canOwnerSign && <p>等待有审批权限的老板处理。</p>}
   </div>;
 }
+

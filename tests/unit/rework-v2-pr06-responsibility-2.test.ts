@@ -70,7 +70,7 @@ describe("PR-06 responsibility 2.0", () => {
     expect(engine).not.toContain("wage.payable_amount::text amount");
   });
 
-  it("includes tail-check execution only when the processing factory bears its cost", async () => {
+  it("includes tail-check execution for either explicit cost bearer", async () => {
     const engine = await readFile("apps/api/src/rework/responsibility-determination-service.ts", "utf8");
     const sourceRows = engine.slice(
       engine.indexOf("const sourceRows"),
@@ -78,6 +78,7 @@ describe("PR-06 responsibility 2.0", () => {
     );
     expect(sourceRows.match(/item\.execution_kind IN \('worker','tail_inspection'\)/g)).toHaveLength(2);
     expect(engine).toContain('includedInResponsibility: row.execution_kind === "worker"');
-    expect(engine).toContain('|| order.tail_inspection_cost_bearer === "processing_factory"');
+    expect(engine).toContain('|| order.tail_inspection_cost_bearer !== null');
   });
 });
+

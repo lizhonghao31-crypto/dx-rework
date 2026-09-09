@@ -694,12 +694,48 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       tail_inspection_cost_bearer_source: "quality_inspection",
     });
 
+    // Own-factory tail is a real responsibility share. Older clients omit
+    // the tail row, so the service must derive it from the explicit choice.
+    for (const badAllocation of [
+      { responsibilityType: "own_factory", shareBps: 10000, multiplier: "1.200" },
+      { responsibilityType: "processing_factory", shareBps: 10000, multiplier: "1.200", supplierId: factorySupplierId },
+    ]) {
+      await expect(responsibility.saveDraft(
+        production(), submitted.value.reworkOrderId,
+        CreateResponsibilityDraftSchema.parse({
+          expectedOrderVersion: n06Approved.value.orderVersion,
+          expectedCurrentDeterminationVersion: null, handlerUserId: ids.production,
+          tailInspectionCostBearer: "own_factory",
+          processes: [n07Processes[0], {
+            configurationItemId: tailItem.configurationItemId,
+            multiplier: "1.000", allocations: [badAllocation],
+          }],
+        }), randomUUID(),
+      )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    }
+    const ownTailDraft = await responsibility.saveDraft(
+      production(), submitted.value.reworkOrderId,
+      CreateResponsibilityDraftSchema.parse({
+        expectedOrderVersion: n06Approved.value.orderVersion,
+        expectedCurrentDeterminationVersion: null, handlerUserId: ids.production,
+        tailInspectionCostBearer: "own_factory", processes: [n07Processes[0]],
+      }), randomUUID(),
+    );
+    expect(ownTailDraft.value.determination).toMatchObject({ calculationTotal: "172.00" });
+    expect(ownTailDraft.value.determination!.processes).toHaveLength(2);
+    expect(ownTailDraft.value.determination!.processes.find(
+      (process) => process.configurationItemId === tailItem.configurationItemId,
+    )).toMatchObject({
+      baseAmount: "40.00", responsibilityAmount: "40.00",
+      allocations: [expect.objectContaining({ responsibilityType: "own_factory", shareBps: 10000, multiplier: "1.000", roundedAmount: "40.00" })],
+    });
+
     const n07Draft = await responsibility.saveDraft(
       production(),
       submitted.value.reworkOrderId,
       CreateResponsibilityDraftSchema.parse({
-        expectedOrderVersion: n06Approved.value.orderVersion,
-        expectedCurrentDeterminationVersion: null,
+        expectedOrderVersion: ownTailDraft.value.orderVersion,
+        expectedCurrentDeterminationVersion: ownTailDraft.value.determination!.version,
         handlerUserId: ids.production,
         tailInspectionCostBearer: "processing_factory",
         processes: n07Processes,
@@ -1817,3 +1853,4 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }]);
   });
 });
+
