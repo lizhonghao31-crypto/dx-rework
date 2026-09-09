@@ -470,7 +470,7 @@ export function Shell({
     { name: "待确认中心", description: "与你相关的借还和处置事项", href: "/ui/samples/pending" },
     { name: "已处置样衣", description: "出售、赠送、报废与遗失记录", href: "/ui/samples/disposed" },
   ] : [];
-  if (sampleNavigation.length && (isRoot || ((hasRole("sample_finance") || hasRole("sample_approver") || isOwner) && hasCapability("sample:view_finance")))) {
+  if (sampleNavigation.length && (isRoot || ((hasRole("sample_finance") || hasRole("sample_approver") || hasRole("finance_director") || isOwner) && hasCapability("sample:view_finance")))) {
     sampleNavigation.push({ name: "库存金额管理", description: "采购原值与处置回款", href: "/ui/samples/amounts" });
   }
 
@@ -720,4 +720,3 @@ export function TaskCard({ task }: { task: Task }) {
     </article>
   );
 }
-
