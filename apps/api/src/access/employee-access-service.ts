@@ -124,7 +124,8 @@ export class EmployeeAccessService {
     private readonly events = new OperationEventRepository(),
   ) {}
 
-  async listDirectory(): Promise<EmployeeAccessDirectory> {
+  async listDirectory(actor?: TrustedActorContext): Promise<EmployeeAccessDirectory> {
+    if (actor) await this.assertRootActor(actor, this.database, false);
     const [employees, history, sync] = await Promise.all([
       this.database.query<EmployeeRow>(
         `SELECT
@@ -156,23 +157,25 @@ export class EmployeeAccessService {
          ORDER BY u.display_name,u.id`,
         [this.corporationId, this.rootDingtalkUserId ?? null],
       ),
-      this.database.query<RoleHistoryRow>(
-        `SELECT
-           ura.assignment_id,
-           ura.user_id,
-           ura.role_code,
-           ura.granted_at,
-           ura.granted_by,
-           ura.grant_reason,
-           ura.revoked_at,
-           ura.revoked_by,
-           ura.revoke_reason
-         FROM user_role_assignments ura
-         JOIN identity_mappings i
-           ON i.user_id=ura.user_id AND i.provider='dingtalk' AND i.corp_id=$1
-         ORDER BY ura.user_id,ura.granted_at DESC,ura.assignment_id`,
-        [this.corporationId],
-      ),
+      actor
+        ? this.database.query<RoleHistoryRow>(
+            `SELECT
+               ura.assignment_id,
+               ura.user_id,
+               ura.role_code,
+               ura.granted_at,
+               ura.granted_by,
+               ura.grant_reason,
+               ura.revoked_at,
+               ura.revoked_by,
+               ura.revoke_reason
+             FROM user_role_assignments ura
+             JOIN identity_mappings i
+               ON i.user_id=ura.user_id AND i.provider='dingtalk' AND i.corp_id=$1
+             ORDER BY ura.user_id,ura.granted_at DESC,ura.assignment_id`,
+            [this.corporationId],
+          )
+        : Promise.resolve({ rows: [] as RoleHistoryRow[] }),
       this.database.query<{ synced_at: Date | null }>(
         "SELECT max(last_directory_synced_at) synced_at FROM employee_directory_profiles",
       ),
@@ -218,15 +221,18 @@ export class EmployeeAccessService {
     actor: TrustedActorContext,
     input: { userId: string; roleCode: string; reason: string },
   ): Promise<{ assignmentId: string }> {
+    await this.assertRootActor(actor, this.database, false);
     return this.access.assignRole(actor, input);
   }
 
   async revokeRole(actor: TrustedActorContext, assignmentId: string, reason: string): Promise<void> {
+    await this.assertRootActor(actor, this.database, false);
     await this.access.revokeRole(actor, assignmentId, reason);
   }
 
   async disableAccess(actor: TrustedActorContext, userId: string, reason: string): Promise<void> {
     await this.transaction(async (client) => {
+      await this.assertRootActor(actor, client);
       await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
       const target = await this.loadAccessState(client, userId, true);
       if (!target.enabled) throw new ApplicationError("CONFLICT", "目标员工已经停用", 409);
@@ -273,6 +279,7 @@ export class EmployeeAccessService {
 
   async restoreAccess(actor: TrustedActorContext, userId: string, reason: string): Promise<void> {
     await this.transaction(async (client) => {
+      await this.assertRootActor(actor, client);
       const target = await this.loadAccessState(client, userId, false);
       if (target.enabled) throw new ApplicationError("CONFLICT", "目标员工已经启用", 409);
       if (!target.active || !target.employed || target.corp_id !== this.corporationId) {
@@ -310,10 +317,12 @@ export class EmployeeAccessService {
   }
 
   async syncDirectory(actor: TrustedActorContext): Promise<EmployeeAccessSyncResponse> {
+    await this.assertRootActor(actor, this.database, false);
     const members = await this.provider.listOrganizationMembers(this.corporationId);
     const syncedAt = new Date();
 
     return this.transaction(async (client) => {
+      await this.assertRootActor(actor, client);
       let changed = 0;
       for (const member of members) {
         const normalizedDepartments = [...new Set(member.departmentNames)].sort((left, right) =>
@@ -377,7 +386,7 @@ export class EmployeeAccessService {
             entityId: user.id,
             before: before ? directoryAuditState(before) : undefined,
             after: directoryAuditState(after),
-            reason: "老板手动同步钉钉通讯录",
+            reason: "Root手动同步钉钉通讯录",
           });
         }
       }
@@ -393,7 +402,7 @@ export class EmployeeAccessService {
         entityType: "dingtalk_corporation",
         entityId: this.corporationId,
         after: response,
-        reason: "老板手动同步钉钉通讯录",
+        reason: "Root手动同步钉钉通讯录",
       });
       return response;
     });
@@ -450,6 +459,26 @@ export class EmployeeAccessService {
       return { assignmentId: result.rows[0]?.assignment_id ?? assignmentId };
     } catch (error) {
       return translateDatabaseError(error);
+    }
+  }
+
+  private async assertRootActor(
+    actor: TrustedActorContext,
+    queryable: Pool | PoolClient,
+    setMutationContext = true,
+  ): Promise<void> {
+    const result = await queryable.query<{ allowed: boolean }>(
+      "SELECT access_is_root_actor($1) allowed",
+      [actor.actorId],
+    );
+    if (result.rows[0]?.allowed !== true) {
+      throw new ApplicationError("FORBIDDEN", "人员与权限管理仅允许 Root", 403);
+    }
+    if (setMutationContext) {
+      await queryable.query(
+        "SELECT set_config('dx_rework.employee_access_actor_id',$1,true)",
+        [actor.actorId],
+      );
     }
   }
 
