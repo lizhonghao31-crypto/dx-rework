@@ -8,6 +8,26 @@ const ALIAS_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const CONTROL_CODE_TTL_MS = 5 * 60_000;
 const CONTROL_SESSION_TTL_MS = 8 * 60 * 60_000;
 const MAX_CONTROL_SESSIONS = 32;
+const STANDARD_ACCEPTANCE_PROVIDER_USER_IDS = [
+  "uat-root",
+  "uat-owner",
+  "uat-production-management",
+  "uat-ie",
+  "uat-tail-supervisor",
+  "uat-qc",
+  "uat-warehouse",
+  "uat-worker-a",
+  "uat-worker-b",
+  "uat-merchandiser",
+  "uat-finance-read",
+  "uat-finance-director",
+  "uat-factory-payables",
+  "uat-system-admin",
+  "uat-production-reporter",
+  "uat-sample-designer",
+  "uat-sample-admin",
+  "uat-sample-finance",
+] as const;
 
 type ControlCodePayload = Readonly<{
   purpose: "acceptance-control";
@@ -149,11 +169,11 @@ export class AcceptanceControlAuthority {
        LEFT JOIN user_role_assignments ura ON ura.user_id=i.user_id AND ura.revoked_at IS NULL
        LEFT JOIN role_capabilities rc ON rc.role_code=ura.role_code
        WHERE i.provider='dingtalk' AND i.corp_id=$1
-         AND i.provider_user_id LIKE 'uat-%'
+         AND i.provider_user_id=ANY($2::text[])
          AND i.union_id LIKE 'uat-union-%'
        GROUP BY i.user_id,i.provider_user_id,u.display_name,i.active,i.employed
        ORDER BY i.provider_user_id`,
-      [this.corporationId],
+      [this.corporationId, STANDARD_ACCEPTANCE_PROVIDER_USER_IDS],
     );
     return result.rows.map((row) => ({
       alias: row.provider_user_id.slice(4),
