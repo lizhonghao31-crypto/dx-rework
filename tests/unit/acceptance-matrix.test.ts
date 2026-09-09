@@ -98,6 +98,23 @@ describe("acceptance authorization matrix", () => {
     }
   });
 
+  it("keeps existing supplier readers allowed when the user explicitly chose no expansion", () => {
+    for (const alias of ["tail-supervisor", "qc"]) {
+      const entry = ACCEPTANCE_ROLE_MATRIX.find((candidate) => candidate.alias === alias)!;
+      expect(entry.requiredCapabilities).toContain("supplier_profile:read");
+      expect(entry.allowedModules).toContain("suppliers");
+      expect(entry.forbiddenModules).not.toContain("suppliers");
+      const supplierProbe = entry.probes?.find((probe) => probe.id === "supplier-list");
+      if (!supplierProbe) throw new Error(`${alias} supplier-list probe is missing`);
+      expect(supplierProbe.expectedStatus).toBe(200);
+      const check = evaluateHttpProbe(entry, supplierProbe, 403);
+      expect(check.expected).toBe("HTTP 200");
+      expect(check.actual).toBe("HTTP 403");
+      expect(check.verdict).toBe("fail");
+      expect(check.ruleStatus).toBe("approved");
+    }
+  });
+
   it("locks personnel administration to Root at acceptance level", () => {
     const root = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "root")!;
     const owner = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "owner")!;
@@ -117,18 +134,6 @@ describe("acceptance authorization matrix", () => {
     expect(session.verdict).toBe("fail");
     expect(session.ruleStatus).toBe("infrastructure");
     expect(session.ruleId).toBe("ACCEPTANCE-INFRASTRUCTURE");
-  });
-
-  it("lets an approved supplier boundary fail when runtime access diverges", () => {
-    const tail = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "tail-supervisor")!;
-    const supplierProbe = tail.probes?.find((probe) => probe.id === "supplier-list");
-    if (!supplierProbe) throw new Error("tail-supervisor supplier-list probe is missing");
-    const check = evaluateHttpProbe(tail, supplierProbe, 200);
-    expect(check.expected).toBe("HTTP 403");
-    expect(check.actual).toBe("HTTP 200");
-    expect(check.verdict).toBe("fail");
-    expect(check.ruleId).toBe("PERM-SUPPLIER-TAIL-001");
-    expect(check.ruleStatus).toBe("approved");
   });
 
   it("lets an approved Golden Source rule fail when runtime behavior diverges", () => {
