@@ -15,10 +15,18 @@ export const PLATFORM_ACCESS_MODULE_ORDER: readonly PlatformAccessModuleId[] = [
   "platform",
 ];
 
+const BUSINESS_MODULES: readonly PlatformAccessModuleId[] = [
+  "rework",
+  "sourcing",
+  "suppliers",
+  "production",
+  "samples",
+];
+
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
-  owner_group: PLATFORM_ACCESS_MODULE_ORDER,
+  owner_group: BUSINESS_MODULES,
+  finance_director: BUSINESS_MODULES,
   system_admin: ["platform"],
-  tail_inspector: ["rework"],
 };
 
 export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, string> = {
@@ -106,7 +114,7 @@ export function accessModuleIdsForRole(
     PROTECTED_ROLE_MODULES[roleCode] ?? accessModuleIdsForCapabilities(capabilities),
   );
   if (
-    ["production_management", "order_merchandiser"].includes(roleCode)
+    ["production_management", "order_merchandiser", "finance_director"].includes(roleCode)
     && capabilities.includes("sourcing:view")
   ) {
     modules.add("production");
@@ -154,7 +162,6 @@ const todoBaseModuleIdsForRole = (
   capabilities: readonly string[],
 ): TodoAccessModuleId[] => {
   if (roleCode === "owner_group") return ["rework", "sourcing", "production"];
-  if (roleCode === "tail_inspector") return ["rework"];
   if (roleCode === "system_admin") return [];
   return todoBaseModuleIdsForCapabilities(capabilities);
 };
@@ -171,7 +178,7 @@ export function todoModuleIdsForUser(user: Readonly<{
     ? roles.flatMap((roleCode) => todoBaseModuleIdsForRole(roleCode, user.capabilities))
     : todoBaseModuleIdsForCapabilities(user.capabilities);
   const modules = new Set<TodoAccessModuleId>(classified);
-  if (user.capabilities.includes("todo:view") && user.capabilities.includes("sample:view_basic") && roles.some(role => ["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "owner_group"].includes(role))) modules.add("samples");
+  if (user.capabilities.includes("todo:view") && user.capabilities.includes("sample:view_basic") && roles.some(role => ["sample_designer", "sample_administrative", "sample_finance", "owner_group"].includes(role))) modules.add("samples");
   if (user.capabilities.includes("todo:view") && user.capabilities.includes("sourcing:view") && roles.some(role=>["order_merchandiser","production_management","owner_group"].includes(role))) modules.add("production");
   else modules.delete("production");
   return (["rework", "sourcing", "production", "samples"] as const).filter((moduleId) => modules.has(moduleId));
