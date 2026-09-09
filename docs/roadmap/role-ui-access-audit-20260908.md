@@ -22,10 +22,10 @@
 
 | 问题 | 源码事实 | 状态 |
 |---|---|---|
-| 回货开始日期与结束日期重叠、开始日期点击被截获 | order-board-page.css固定首列44px供导出使用；order-board-page.tsx按canExport条件渲染按钮，无按钮时开始日期占据该列 | 本次修复候选 |
-| 返工筛选框重叠 | rework-query-mobile.css桌面固定列最小宽度；共享dx-field默认最小250px；页面可用宽度还要扣除侧栏 | 本次修复候选 |
-| 财务可见返工列表但详情拒绝 | 列表按dashboard/report能力读取；详情broadBusinessReader不含finance_director，finance_read还要求该订单已有工资记录 | 待权限专项修复；不可用删列表或全面提权掩盖 |
-| 财务总监看不到样衣 | platform-modules、App路由、sample-authority与sample-analysis-model的角色白名单不含finance_director | 待前后端一致开放；本PR未授予角色或修改账户 |
+| 回货开始日期与结束日期重叠、开始日期点击被截获 | order-board-page.css固定首列44px供导出使用；order-board-page.tsx按canExport条件渲染按钮，无按钮时开始日期占据该列 | 已由前序布局PR修复；Acceptance需复验 |
+| 返工筛选框重叠 | rework-query-mobile.css桌面固定列最小宽度；共享dx-field默认最小250px；页面可用宽度还要扣除侧栏 | 已由前序布局PR修复；Acceptance需复验 |
+| 财务可见返工列表但详情拒绝 | 列表按dashboard/report能力读取；详情broadBusinessReader不含finance_director，finance_read还要求该订单已有工资记录 | 待下一权限专项修复；不可用删列表或全面提权掩盖 |
+| 财务总监看不到样衣 | platform-modules、App路由、sample-authority与sample-analysis-model的角色白名单不含finance_director | 权限治理01施工中：仅开放sample:view_basic / sample:view_finance / sample:view_audit，写权限保持禁止；待Full Gate与Acceptance复验 |
 | 外发历史报nextCursor及page字段不匹配 | 当前main的SourcingCaseListResponseSchema已使用page/pageSize/totalCount/totalPages；截图客户端仍期待nextCursor | 待核对实际部署/静态资源/浏览器会话版本；尚不能归因于数据库或权限 |
 
 ## 本次修复
@@ -53,4 +53,4 @@
 4. 真账号与负向验收：有权角色可正常进入并完成本职操作；无权角色直接访问链接/API仍被拒绝；普通工人、仓管不可取得达兴成本价；Root既有调试能力不变。
 5. 原四项优化仍暂停：供应商串页与分工、新增审批、分析面板收口、测试订单删除。1222及其他生产订单本PR不读取、不修改、不清理。
 
-本专项完成需提供逐项实际结果与未通过项；本PR只交付首批布局修复，不代表全系统审查完成。
+本专项完成需提供逐项实际结果与未通过项；当前权限治理PR只处理财务总监样衣只读，不代表全系统审查完成。
