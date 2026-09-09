@@ -5,6 +5,7 @@
 -- wage_month_close_accountant exception is limited to wage:export.
 
 ALTER TABLE role_capabilities DISABLE TRIGGER role_capabilities_no_insert;
+ALTER TABLE role_capabilities DISABLE TRIGGER role_capabilities_no_delete;
 
 DELETE FROM role_capabilities
 WHERE capability='receiving:export'
@@ -36,4 +37,5 @@ INSERT INTO role_capabilities(role_code,capability) VALUES
   ('wage_month_close_accountant','wage:export')
 ON CONFLICT DO NOTHING;
 
+ALTER TABLE role_capabilities ENABLE TRIGGER role_capabilities_no_delete;
 ALTER TABLE role_capabilities ENABLE TRIGGER role_capabilities_no_insert;
