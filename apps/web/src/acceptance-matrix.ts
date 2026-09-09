@@ -2,13 +2,20 @@ import type { AuthorizedUser } from "./auth.js";
 import { accessiblePlatformModules } from "./platform-modules.js";
 
 export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples";
-export type AcceptanceMatrixVerdict = "pass" | "fail";
+export type AcceptanceMatrixVerdict = "pass" | "fail" | "pending";
+export type AcceptanceRuleStatus = "approved" | "pending" | "unmapped" | "infrastructure";
+
+export type AcceptanceRuleRef = Readonly<{
+  ruleId: string;
+  status: AcceptanceRuleStatus;
+}>;
 
 export type AcceptanceHttpProbe = Readonly<{
   id: string;
   label: string;
   path: string;
   expectedStatus: number;
+  infrastructure?: boolean;
 }>;
 
 export type AcceptanceRoleExpectation = Readonly<{
@@ -20,6 +27,7 @@ export type AcceptanceRoleExpectation = Readonly<{
   allowedModules?: readonly AcceptanceModuleId[];
   forbiddenModules?: readonly AcceptanceModuleId[];
   probes?: readonly AcceptanceHttpProbe[];
+  ruleRefs?: Readonly<Record<string, AcceptanceRuleRef>>;
 }>;
 
 export type AcceptanceIdentitySnapshot = Readonly<{
@@ -36,7 +44,21 @@ export type AcceptanceMatrixCheck = Readonly<{
   expected: string;
   actual: string;
   verdict: AcceptanceMatrixVerdict;
+  ruleId: string;
+  ruleStatus: AcceptanceRuleStatus;
 }>;
+
+export const ACCEPTANCE_INFRASTRUCTURE_RULE: AcceptanceRuleRef = Object.freeze({
+  ruleId: "ACCEPTANCE-INFRASTRUCTURE",
+  status: "infrastructure",
+});
+
+const UNMAPPED_BUSINESS_RULE: AcceptanceRuleRef = Object.freeze({
+  ruleId: "PERM-ACCEPTANCE-UNMAPPED-001",
+  status: "unmapped",
+});
+const approved = (ruleId: string): AcceptanceRuleRef => ({ ruleId, status: "approved" });
+const pending = (ruleId: string): AcceptanceRuleRef => ({ ruleId, status: "pending" });
 
 const probe = (id: string, label: string, path: string, expectedStatus: number): AcceptanceHttpProbe => ({
   id,
@@ -72,13 +94,18 @@ const sampleMutationCapabilities = [
   "sample:archive",
 ] as const;
 
+const sampleMutationDenyRules = Object.fromEntries(
+  sampleMutationCapabilities.map((capability) => [
+    `cap:${capability}:deny`,
+    approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
+  ]),
+);
+
 /**
- * Approved expectations are deliberately declared here instead of being generated
- * from role_capabilities. Runtime RBAC is the measured result, never the oracle.
- *
- * The finance-director sample expectation records the 2026-09-08 approved target:
- * full sample read visibility, but no sample mutation authority. It is expected to
- * surface a mismatch until the later permission remediation PR fixes real RBAC.
+ * Business expectations remain independent from runtime RBAC, but only checks
+ * traceable to an APPROVED Golden Source rule may pass/fail. PENDING or unmapped
+ * business checks are still executed and retain expected/actual evidence, while
+ * their verdict is "pending" so current implementation cannot become the oracle.
  */
 export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
@@ -87,6 +114,17 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     expectedRoot: true,
     allowedModules: ["rework", "sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesAllow, sourcingAllow, suppliersAllow, samplesAllow],
+    ruleRefs: {
+      "module:rework:allow": approved("PERM-PLATFORM-ROOT-001"),
+      "module:sourcing:allow": approved("PERM-PLATFORM-ROOT-001"),
+      "module:suppliers:allow": approved("PERM-PLATFORM-ROOT-001"),
+      "module:production:allow": approved("PERM-PLATFORM-ROOT-001"),
+      "module:samples:allow": approved("PERM-PLATFORM-ROOT-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ROOT-001"),
+      "http:sourcing-list": approved("PERM-PLATFORM-ROOT-001"),
+      "http:supplier-list": approved("PERM-PLATFORM-ROOT-001"),
+      "http:sample-list": approved("PERM-PLATFORM-ROOT-001"),
+    },
   },
   {
     alias: "owner",
@@ -94,6 +132,21 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     requiredCapabilities: ["todo:view", "sourcing:view", "supplier_profile:read", "sample:view_basic"],
     allowedModules: ["rework", "sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesAllow, sourcingAllow, suppliersAllow, samplesAllow],
+    ruleRefs: {
+      "cap:todo:view:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "cap:sourcing:view:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "cap:supplier_profile:read:allow": approved("PERM-SUPPLIER-OWNER-001"),
+      "cap:sample:view_basic:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "module:rework:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "module:sourcing:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "module:suppliers:allow": approved("PERM-SUPPLIER-OWNER-001"),
+      "module:production:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "module:samples:allow": approved("PERM-PLATFORM-OWNER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-OWNER-001"),
+      "http:sourcing-list": approved("PERM-PLATFORM-OWNER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-OWNER-001"),
+      "http:sample-list": approved("PERM-PLATFORM-OWNER-001"),
+    },
   },
   {
     alias: "production-management",
@@ -103,6 +156,13 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework", "sourcing", "suppliers", "production"],
     forbiddenModules: ["samples"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    ruleRefs: {
+      "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
+      "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
+      "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
+      "module:suppliers:allow": pending("PERM-SUPPLIER-PM-CENTER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-PM-CENTER-001"),
+    },
   },
   {
     alias: "ie",
@@ -112,6 +172,13 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework", "sourcing", "suppliers"],
     forbiddenModules: ["samples", "production"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    ruleRefs: {
+      "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
+      "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
+      "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
+      "module:suppliers:allow": pending("PERM-SUPPLIER-IE-CENTER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-IE-CENTER-001"),
+    },
   },
   {
     alias: "tail-supervisor",
@@ -121,6 +188,10 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "module:suppliers:deny": pending("PERM-SUPPLIER-TAIL-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-TAIL-001"),
+    },
   },
   {
     alias: "qc",
@@ -130,6 +201,10 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "module:suppliers:deny": pending("PERM-SUPPLIER-QC-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-QC-001"),
+    },
   },
   {
     alias: "warehouse",
@@ -139,6 +214,10 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "module:suppliers:deny": pending("PERM-SUPPLIER-WAREHOUSE-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-WAREHOUSE-001"),
+    },
   },
   {
     alias: "worker-a",
@@ -148,6 +227,22 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "cap:work:report:allow": approved("PERM-REWORK-WORKER-001"),
+      "module:rework:allow": approved("PERM-REWORK-WORKER-001"),
+      "cap:supplier_profile:read:deny": pending("PERM-SUPPLIER-WORKER-001"),
+      "module:suppliers:deny": pending("PERM-SUPPLIER-WORKER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-WORKER-001"),
+      "cap:access:admin:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sourcing:view:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sample:view_basic:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:sourcing:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:production:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:samples:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:access-roles": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:sourcing-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:sample-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+    },
   },
   {
     alias: "worker-b",
@@ -157,6 +252,22 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "cap:work:report:allow": approved("PERM-REWORK-WORKER-001"),
+      "module:rework:allow": approved("PERM-REWORK-WORKER-001"),
+      "cap:supplier_profile:read:deny": pending("PERM-SUPPLIER-WORKER-001"),
+      "module:suppliers:deny": pending("PERM-SUPPLIER-WORKER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-WORKER-001"),
+      "cap:access:admin:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sourcing:view:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sample:view_basic:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:sourcing:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:production:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:samples:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:access-roles": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:sourcing-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:sample-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+    },
   },
   {
     alias: "merchandiser",
@@ -166,6 +277,15 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework", "sourcing", "suppliers", "production"],
     forbiddenModules: ["samples"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    ruleRefs: {
+      "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
+      "cap:sourcing:inquiry:create:allow": approved("PERM-SOURCING-FIVE-001"),
+      "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
+      "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
+      "cap:supplier_profile:read:allow": pending("PERM-SUPPLIER-MERCH-CENTER-001"),
+      "module:suppliers:allow": pending("PERM-SUPPLIER-MERCH-CENTER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-MERCH-CENTER-001"),
+    },
   },
   {
     alias: "finance-read",
@@ -175,6 +295,11 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, reworkReportAllow, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
+    ruleRefs: {
+      "cap:report:view:allow": approved("PERM-REWORK-FINANCE-READ-001"),
+      "module:rework:allow": approved("PERM-REWORK-FINANCE-READ-001"),
+      "http:rework-report-list": approved("PERM-REWORK-FINANCE-READ-001"),
+    },
   },
   {
     alias: "finance-director",
@@ -184,6 +309,20 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["rework", "sourcing", "suppliers", "samples"],
     forbiddenModules: ["production"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesAllow],
+    ruleRefs: {
+      "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
+      "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
+      "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
+      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
+      "cap:sample:view_finance:allow": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
+      "cap:sample:view_audit:allow": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
+      ...sampleMutationDenyRules,
+      "module:samples:allow": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
+      "http:sample-list": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
+      "module:rework:allow": approved("PERM-REWORK-FINANCE-DIRECTOR-001"),
+      "module:suppliers:allow": pending("PERM-SUPPLIER-FINANCE-CENTER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-FINANCE-CENTER-001"),
+    },
   },
   {
     alias: "factory-payables",
@@ -193,6 +332,11 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["sourcing", "suppliers"],
     forbiddenModules: ["samples", "production"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    ruleRefs: {
+      "cap:supplier_profile:read:allow": pending("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+      "module:suppliers:allow": pending("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+      "http:supplier-list": pending("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+    },
   },
   {
     alias: "system-admin",
@@ -201,6 +345,20 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sample:view_basic", "sourcing:view"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "cap:admin:read:allow": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "cap:audit:read:allow": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "cap:sample:view_basic:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "cap:sourcing:view:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "module:sourcing:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "module:suppliers:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "module:production:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "module:samples:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "http:access-roles": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "http:sourcing-list": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "http:supplier-list": approved("PERM-PLATFORM-SYSADMIN-001"),
+      "http:sample-list": approved("PERM-PLATFORM-SYSADMIN-001"),
+    },
   },
   {
     alias: "production-reporter",
@@ -210,6 +368,10 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["production"],
     forbiddenModules: ["sourcing", "suppliers", "samples"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    ruleRefs: {
+      "cap:production-reporting:allow": approved("PERM-PRODUCTION-REPORTER-001"),
+      "module:production:allow": approved("PERM-PRODUCTION-REPORTER-001"),
+    },
   },
   {
     alias: "sample-designer",
@@ -219,6 +381,12 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    ruleRefs: {
+      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-DESIGNER-001"),
+      "cap:sample:view_finance:deny": approved("PERM-SAMPLE-DESIGNER-001"),
+      "module:samples:allow": approved("PERM-SAMPLE-DESIGNER-001"),
+      "http:sample-list": approved("PERM-SAMPLE-DESIGNER-001"),
+    },
   },
   {
     alias: "sample-admin",
@@ -228,6 +396,12 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    ruleRefs: {
+      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-ADMIN-001"),
+      "cap:sample:view_finance:deny": approved("PERM-SAMPLE-ADMIN-001"),
+      "module:samples:allow": approved("PERM-SAMPLE-ADMIN-001"),
+      "http:sample-list": approved("PERM-SAMPLE-ADMIN-001"),
+    },
   },
   {
     alias: "sample-finance",
@@ -237,6 +411,12 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    ruleRefs: {
+      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-FINANCE-001"),
+      "cap:sample:view_finance:allow": approved("PERM-SAMPLE-FINANCE-001"),
+      "module:samples:allow": approved("PERM-SAMPLE-FINANCE-001"),
+      "http:sample-list": approved("PERM-SAMPLE-FINANCE-001"),
+    },
   },
   {
     alias: "sample-approver",
@@ -246,8 +426,18 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
     probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    ruleRefs: {
+      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-APPROVER-001"),
+      "cap:sample:view_finance:allow": approved("PERM-SAMPLE-APPROVER-001"),
+      "cap:sample:view_audit:allow": approved("PERM-SAMPLE-APPROVER-001"),
+      "module:samples:allow": approved("PERM-SAMPLE-APPROVER-001"),
+      "http:sample-list": approved("PERM-SAMPLE-APPROVER-001"),
+    },
   },
 ];
+
+const ruleFor = (expectation: AcceptanceRoleExpectation, key: string): AcceptanceRuleRef =>
+  expectation.ruleRefs?.[key] ?? UNMAPPED_BUSINESS_RULE;
 
 const check = (
   key: string,
@@ -256,7 +446,19 @@ const check = (
   expected: string,
   actual: string,
   passed: boolean,
-): AcceptanceMatrixCheck => ({ key, category, label, expected, actual, verdict: passed ? "pass" : "fail" });
+  rule: AcceptanceRuleRef,
+): AcceptanceMatrixCheck => ({
+  key,
+  category,
+  label,
+  expected,
+  actual,
+  verdict: rule.status === "pending" || rule.status === "unmapped"
+    ? "pending"
+    : passed ? "pass" : "fail",
+  ruleId: rule.ruleId,
+  ruleStatus: rule.status,
+});
 
 export function expectationForAlias(alias: string): AcceptanceRoleExpectation | undefined {
   return ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === alias);
@@ -277,6 +479,7 @@ export function evaluateAcceptanceSnapshot(
     expectation.expectedRole,
     identityRoles.join(", ") || "无",
     identityRoles.length === 1 && identityRoles[0] === expectation.expectedRole,
+    ACCEPTANCE_INFRASTRUCTURE_RULE,
   ));
   checks.push(check(
     `${expectation.alias}:session-user`,
@@ -285,6 +488,7 @@ export function evaluateAcceptanceSnapshot(
     identity.userId,
     user.id,
     user.id === identity.userId,
+    ACCEPTANCE_INFRASTRUCTURE_RULE,
   ));
   checks.push(check(
     `${expectation.alias}:session-role`,
@@ -293,6 +497,7 @@ export function evaluateAcceptanceSnapshot(
     expectation.expectedRole,
     sessionRoles.join(", ") || "无",
     sessionRoles.length === 1 && sessionRoles[0] === expectation.expectedRole,
+    ACCEPTANCE_INFRASTRUCTURE_RULE,
   ));
   const rootExpected = expectation.expectedRoot === true;
   checks.push(check(
@@ -302,58 +507,73 @@ export function evaluateAcceptanceSnapshot(
     rootExpected ? "是" : "否",
     user.isRoot ? "是" : "否",
     user.isRoot === rootExpected,
+    ACCEPTANCE_INFRASTRUCTURE_RULE,
   ));
 
   for (const capability of expectation.requiredCapabilities ?? []) {
+    const localKey = `cap:${capability}:allow`;
     checks.push(check(
-      `${expectation.alias}:cap:${capability}:allow`,
+      `${expectation.alias}:${localKey}`,
       "capability",
       `应有 ${capability}`,
       "允许",
       user.capabilities.includes(capability) ? "允许" : "缺失",
       user.capabilities.includes(capability),
+      ruleFor(expectation, localKey),
     ));
   }
   for (const capability of expectation.forbiddenCapabilities ?? []) {
+    const localKey = `cap:${capability}:deny`;
     checks.push(check(
-      `${expectation.alias}:cap:${capability}:deny`,
+      `${expectation.alias}:${localKey}`,
       "capability",
       `不得有 ${capability}`,
       "拒绝",
       user.capabilities.includes(capability) ? "意外允许" : "拒绝",
       !user.capabilities.includes(capability),
+      ruleFor(expectation, localKey),
     ));
   }
 
   const actualModules = new Set(accessiblePlatformModules(user).map((module) => module.id));
   for (const moduleId of expectation.allowedModules ?? []) {
+    const localKey = `module:${moduleId}:allow`;
     checks.push(check(
-      `${expectation.alias}:module:${moduleId}:allow`,
+      `${expectation.alias}:${localKey}`,
       "module",
       `模块 ${moduleId}`,
       "可进入",
       actualModules.has(moduleId) ? "可进入" : "不可进入",
       actualModules.has(moduleId),
+      ruleFor(expectation, localKey),
     ));
   }
   for (const moduleId of expectation.forbiddenModules ?? []) {
+    const localKey = `module:${moduleId}:deny`;
     checks.push(check(
-      `${expectation.alias}:module:${moduleId}:deny`,
+      `${expectation.alias}:${localKey}`,
       "module",
       `模块 ${moduleId}`,
       "不可进入",
       actualModules.has(moduleId) ? "意外可进入" : "不可进入",
       !actualModules.has(moduleId),
+      ruleFor(expectation, localKey),
     ));
   }
   return checks;
 }
 
 export function evaluateHttpProbe(
-  alias: string,
+  expectationOrAlias: AcceptanceRoleExpectation | string,
   probeDefinition: AcceptanceHttpProbe,
   actualStatus: number,
 ): AcceptanceMatrixCheck {
+  const alias = typeof expectationOrAlias === "string" ? expectationOrAlias : expectationOrAlias.alias;
+  const rule = probeDefinition.infrastructure
+    ? ACCEPTANCE_INFRASTRUCTURE_RULE
+    : typeof expectationOrAlias === "string"
+      ? UNMAPPED_BUSINESS_RULE
+      : ruleFor(expectationOrAlias, `http:${probeDefinition.id}`);
   return check(
     `${alias}:http:${probeDefinition.id}`,
     "http",
@@ -361,5 +581,6 @@ export function evaluateHttpProbe(
     `HTTP ${probeDefinition.expectedStatus}`,
     `HTTP ${actualStatus}`,
     actualStatus === probeDefinition.expectedStatus,
+    rule,
   );
 }
