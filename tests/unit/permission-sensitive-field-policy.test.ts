@@ -74,6 +74,66 @@ describe("PR03-B sensitive field policy", () => {
     expect(worker.contractDataMissing).toEqual([]);
   });
 
+  it("redacts derived supplier state on supplier-bearing sourcing routes", () => {
+    const factoryPayload = {
+      items: [{
+        supplierId: "supplier-1",
+        supplierName: "测试供应商",
+        contractDataMissing: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+      }],
+    };
+    expect(redactPermissionSensitivePayload(
+      "/sourcing/factories",
+      factoryPayload,
+      ["finance_director"],
+      false,
+    )).toEqual({
+      items: [{
+        supplierId: "supplier-1",
+        supplierName: "测试供应商",
+        contractDataMissing: ["contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+      }],
+    });
+    expect(redactPermissionSensitivePayload(
+      "/sourcing/factories",
+      factoryPayload,
+      ["ie_reviewer"],
+      false,
+    )).toEqual({
+      items: [{ supplierId: "supplier-1", supplierName: "测试供应商", contractDataMissing: [] }],
+    });
+
+    const contractPayload = {
+      item: {
+        status: "pending_supplement",
+        missingFields: ["address", "contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+      },
+    };
+    expect(redactPermissionSensitivePayload(
+      "/sourcing/cases/case-1/contract",
+      contractPayload,
+      ["finance_director"],
+      false,
+    )).toEqual({
+      item: {
+        status: "pending_supplement",
+        missingFields: ["contractEntityName", "partyBRepresentative", "payeeName", "bankAccount", "bankName"],
+      },
+    });
+    expect(redactPermissionSensitivePayload(
+      "/sourcing/cases/case-1/contract/generate",
+      contractPayload,
+      ["ie_reviewer"],
+      false,
+    )).toEqual({ item: { status: "pending_supplement", missingFields: [] } });
+    expect(redactPermissionSensitivePayload(
+      "/sourcing/cases/case-1/contract",
+      contractPayload,
+      [],
+      true,
+    )).toEqual(contractPayload);
+  });
+
   it("redacts Daxing price recursively from sourcing responses", () => {
     const payload = {
       items: [{
