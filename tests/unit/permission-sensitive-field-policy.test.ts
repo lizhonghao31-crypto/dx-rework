@@ -19,17 +19,19 @@ describe("PR03-B sensitive field policy", () => {
     expect(canReadDaxingPrice([], true)).toBe(true);
   });
 
-  it("keeps supplier contacts narrower than contract and payment finance access", () => {
+  it("keeps supplier finance data on the already-confirmed finance roles", () => {
     expect(canReadSupplierContactData(["order_merchandiser"], false)).toBe(true);
     expect(canReadSupplierContactData(["finance_director"], false)).toBe(false);
     expect(canReadSupplierContactData(["factory_payables"], false)).toBe(false);
 
-    for (const role of ["factory_payables", "embroidery_washing_payables", "fabric_payables", "finance_director"]) {
+    for (const role of ["factory_payables", "finance_director"]) {
       expect(canReadSupplierContractData([role], false)).toBe(true);
       expect(canReadSupplierPaymentData([role], false)).toBe(true);
     }
-    expect(canReadSupplierContractData(["ie_reviewer"], false)).toBe(false);
-    expect(canReadSupplierPaymentData(["worker"], false)).toBe(false);
+    for (const role of ["embroidery_washing_payables", "fabric_payables", "ie_reviewer", "worker"]) {
+      expect(canReadSupplierContractData([role], false)).toBe(false);
+      expect(canReadSupplierPaymentData([role], false)).toBe(false);
+    }
   });
 
   it("redacts supplier fields and derived missing-state without leaking hidden groups", () => {
