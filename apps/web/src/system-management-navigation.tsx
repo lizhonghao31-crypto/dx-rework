@@ -34,7 +34,7 @@ export function SystemManagementNavigation({
         if (!mounted) return;
         const user = body?.status === "authorized" ? body.user : undefined;
         setAccess({
-          employee: user?.isRoot === true || user?.businessRoles?.includes("owner_group") === true || user?.capabilities.includes("access:admin") === true,
+          employee: user?.isRoot === true,
           masterData: user?.isRoot === true || user?.businessRoles?.includes("owner_group") === true || user?.capabilities.includes("master_data:manage") === true,
           technical: user?.isRoot === true || (user?.businessRoles?.includes("system_admin") === true && user.capabilities.includes("admin:read")),
         });
