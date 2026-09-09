@@ -434,16 +434,10 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/admin") {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredRole: "system_admin", requiredCapability: "admin:read" },
-    ]}>{page}</AuthGate>;
+    return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
   }
   if (path === "/ui/audit") {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredRole: "system_admin", requiredCapability: "audit:read" },
-    ]}>{page}</AuthGate>;
+    return <AuthGate requiredRole="system_admin" requiredCapability="audit:read">{page}</AuthGate>;
   }
   if (path === "/ui/employee-access") {
     return <AuthGate requiredRole="root_superuser" requiredCapability="access:admin">{page}</AuthGate>;
