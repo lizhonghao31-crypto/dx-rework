@@ -11,6 +11,7 @@ import { verifySession } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { ListPagination } from "./list-pagination.js";
 import { createWebUrls } from "../url-contract.js";
+import { canAccessProductionReporting } from "./platform-modules.js";
 import { canControlProductionMotion, canMoveProductionEvents, canAnimateProductionProgress, relativeProductionTime, changedDashboardOrders, progressLabels, progressText, productionEventText, productionStatusLabels } from "./production-dashboard-model.js";
 import "./sourcing-workspace.css";
 import "./production-dashboard-page.css";
@@ -39,8 +40,8 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const [page,setPage]=useState(1),[loading,setLoading]=useState(true),[error,setError]=useState("");
   const [changed,setChanged]=useState<string[]>([]),[paused,setPaused]=useState(false),[hovered,setHovered]=useState(false),[focused,setFocused]=useState(false),[reduced,setReduced]=useState(false);
   const [visible,setVisible]=useState(!document.hidden),[overflow,setOverflow]=useState(false),[now,setNow]=useState(Date.now()),[filtersOpen,setFiltersOpen]=useState(false),[touchReading,setTouchReading]=useState(false);
-  const [canControlMotion,setCanControlMotion]=useState(false);
-  useEffect(()=>{let live=true;void verifySession().then(session=>{if(live)setCanControlMotion(session!=="denied"&&canControlProductionMotion(session.user));}).catch(()=>{if(live)setCanControlMotion(false);});return()=>{live=false;};},[]);
+  const [canControlMotion,setCanControlMotion]=useState(false),[canOpenReporting,setCanOpenReporting]=useState(false);
+  useEffect(()=>{let live=true;void verifySession().then(session=>{if(!live)return;if(session==="denied"){setCanControlMotion(false);setCanOpenReporting(false);return;}setCanControlMotion(canControlProductionMotion(session.user));setCanOpenReporting(canAccessProductionReporting(session.user));}).catch(()=>{if(live){setCanControlMotion(false);setCanOpenReporting(false);}});return()=>{live=false;};},[]);
   const sequence=useRef(0),last=useRef<ProductionDashboard|null>(null),belt=useRef<HTMLDivElement|null>(null);
   const load=async(manual=false)=>{
     const version=++sequence.current;setLoading(true);setError("");
@@ -76,7 +77,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const asOf=data?.asOf??detail?.asOf;
   return <Shell active="实时看板"><div className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
-    <div className="production-dashboard__toolbar"><a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>{productionOrderId?<a href={pageUrl("ui/production-dashboard")}>返回实时看板</a>:null}
+    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={pageUrl("ui/production-dashboard")}>返回实时看板</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
