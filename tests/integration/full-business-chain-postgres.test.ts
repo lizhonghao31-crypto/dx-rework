@@ -187,7 +187,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   );
   const tailInspect = () => actor(
     ids.tailInspector,
-    ["tail_inspector"],
+    ["worker"],
     "tail_inspection:report",
   );
   const worker = () => actor(ids.worker, ["worker"], "work:report");
