@@ -52,7 +52,6 @@ export class ReportExportService {
     filename: string;
     content: Buffer;
   }> {
-    assertBusinessExportAllowed(actor.actorRoles, "report:export");
     const root = actor.actorRoles.includes("root_superuser");
     const currentCapabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
     if (reportType === "wages") {
@@ -60,8 +59,11 @@ export class ReportExportService {
       if (!root && !currentCapabilities.includes("wage:view")) {
         throw new ApplicationError("FORBIDDEN", "当前身份无权查看工资明细", 403);
       }
-    } else if (!root && !currentCapabilities.includes("report:view")) {
-      throw new ApplicationError("FORBIDDEN", "当前身份无权查看该报表", 403);
+    } else {
+      assertBusinessExportAllowed(actor.actorRoles, "report:export");
+      if (!root && !currentCapabilities.includes("report:view")) {
+        throw new ApplicationError("FORBIDDEN", "当前身份无权查看该报表", 403);
+      }
     }
 
     const { range, data } = await this.reporting.exportData(actor, reportType, query);
