@@ -41,7 +41,7 @@
     { "version": "0039_practical_quantity_amount_precision", "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3" },
     { "version": "0040_root_identity_separation_bypass", "checksum": "213c43110d67caaebc9227e7492567e9146c459b934f2281c95e47df74b2ca15" },
     { "version": "0041_root_wage_decider_constraint", "checksum": "d7e3c954e21e8a07dc4c4d2ea7a54247a58357577b8bba0964443d807ade77a4" },
-    { "version": "0042_external_processing_factory_auto_route", "checksum": "bbbaa9ce36f09c11486f9c742b505d2cc1b10bb6330a849b1eaf20829d6e9aac" },
+    { "version": "0042_external_processing_factory_auto_route", "checksum": "bbbaa9ce36f109c11486f9c742b505d2cc1b10bb6330a849b1eaf20829d6e9aac" },
     { "version": "0043_external_direct_payables", "checksum": "2044da29575d700b9930d9d759fb317c03eb50648c4c791628baa04b6afeeb87" },
     { "version": "0044_uat_initiation_context", "checksum": "3a16b7a7d980609efd4bd706b775714868c13efbaf43019caaf4d9d295542de0" },
     { "version": "0045_responsibility_settled_wage_base", "checksum": "8153c0182b0c6cb91e47ea102807e4930bc8d2f34faad1f453b27991123d155d" },
@@ -89,7 +89,7 @@
     { "version": "0087_effective_work_report_quantity", "checksum": "3044161405547f7fcf4bc212a2407a96015025cc51fd37072ff212c33c0da4ba" },
     { "version": "0088_root_receiving_correction", "checksum": "76faf84dadb0d04723f1af8cd0db52992d9b4143171fec27b5d662f134dd28c4" },
     { "version": "0089_employee_access_role_lifecycle", "checksum": "dfcbdccb2104e3e151d42da939d76c3e4f4f2d459daad2b93514a0c5508e3281" },
-    { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3" },
+    { "version": "0090_dingtalk_todo_creator_identity", "checksum": "dfed325d2f12e3b970d8e51af64dc32bfc67b3ea2fe497480b7d7e3" },
     { "version": "0091_role_entry_todo_reliability", "checksum": "79d4670a3848183498ac57fdc6a4b8d485e9591291521eaa2504e1a49c6bf03c" },
     { "version": "0092_temporary_worker_profile_update", "checksum": "f2e7858399d4a0e7770ad384759294af2309946542c44b6cbc6271bfeeff19c5" },
     { "version": "0093_tail_inspection_worker_role", "checksum": "549e69774c6624a3d0fcaacab567df0df3eec2c2a185ec9e9815ab7ba0da093b" },
@@ -143,7 +143,7 @@
     { "version": "0141_rework_receiving_quantity_ceiling", "checksum": "939d22fa93017263987df72411fe5595db9b4bf1a3bee33e43e9088dd5d8a234" },
     { "version": "0142_merchandiser_responsibility_deduction_access", "checksum": "9ac93460c82727ed6723d2adbf30d8e37390e5885ca5b7794afb30fd041fca0b" },
     { "version": "0143_sourcing_supplier_profile_foundation", "checksum": "cb980b93147a2f3837ae865e247b8c8e76552b33267e1e01be5a57117059eaf5" },
-    { "version": "0144_sourcing_multi_style_pricing", "checksum": "887f52302b779c48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679" },
+    { "version": "0144_sourcing_multi_style_pricing", "checksum": "887f52302b7791b48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679" },
     { "version": "0145_sourcing_line_review_approval_snapshot", "checksum": "c098dd6dcd8f737d28ae34d01c01a1bedb04871b939404184672d3aa8da0123c" },
     { "version": "0146_sourcing_contract_pdf_finance", "checksum": "4d7f7cd4d7a1846c62e4553dd66efbd9de919744709ded0d5081a98d0a7b684c" },
     { "version": "0147_sourcing_contract_input_correction", "checksum": "258112ffc7ca331654d67384a15145e23b6d41746554618d981f5425f61b12ae" },
@@ -163,6 +163,6 @@
     { "version": "0161_work_operation_diagnostics", "checksum": "09e94daf7f227901e1a87340e66c79e68f0ce7384227480f1d4ca19002265a6a" },
     { "version": "0162_finance_director_sample_read", "checksum": "fbdf0faedd1852a8f2a1727577781b2b1914c0473902b71813c0892e64a1346b" },
     { "version": "0163_wage_month_close_accountant_export", "checksum": "6da345017a939e3be992b0dff2201ab76c9bbc425181be65d60c43431b8b7fe2" },
-    { "version": "0164_global_export_allowlist", "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3" }
+    { "version": "0164_global_export_allowlist", "checksum": "678af25f503bc8c319f330f12caf8deaa9b61eedd183d8892a15a62266d4e687" }
   ]
 }
