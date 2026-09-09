@@ -85,6 +85,13 @@ const statusLabels: Readonly<Record<AcceptanceEvidenceStatus, string>> = {
   not_run: "未执行",
 };
 
+const ruleStatusLabel = (check: AcceptanceMatrixCheck): string => {
+  if (check.ruleStatus === "infrastructure") return "验收基础设施规则";
+  if (check.ruleStatus === "approved") return `${check.ruleId} · 已批准`;
+  if (check.ruleStatus === "pending") return `${check.ruleId} · 标准待确认`;
+  return `${check.ruleId} · 尚未绑定业务标准`;
+};
+
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<{ status: number; body: T | null }> {
   const response = await fetch(apiUrl(path), {
     credentials: "include",
@@ -247,6 +254,7 @@ export function AcceptanceLabPage() {
           results.push({ alias: expectation.alias, requests, checks: [{
             key: `${expectation.alias}:identity-missing`, category: "identity", label: "标准验收身份",
             expected: "存在", actual: "缺失", verdict: "fail",
+            ruleId: "ACCEPTANCE-INFRASTRUCTURE", ruleStatus: "infrastructure",
           }] });
           continue;
         }
@@ -257,6 +265,7 @@ export function AcceptanceLabPage() {
         if (switched.status !== 200) {
           results.push({ alias: expectation.alias, requests, checks: [evaluateHttpProbe(expectation.alias, {
             id: "switch", label: "切换真实业务 Session", path: "acceptance/control/switch", expectedStatus: 200,
+            infrastructure: true,
           }, switched.status)] });
           if (switched.status === 401) throw new Error("验收控制会话已失效，请重新取得控制凭证。");
           continue;
@@ -266,6 +275,7 @@ export function AcceptanceLabPage() {
         if (me.status !== 200 || !me.body?.user) {
           results.push({ alias: expectation.alias, requests, checks: [evaluateHttpProbe(expectation.alias, {
             id: "auth-me", label: "真实业务 Session", path: "auth/me", expectedStatus: 200,
+            infrastructure: true,
           }, me.status)] });
           continue;
         }
@@ -273,7 +283,7 @@ export function AcceptanceLabPage() {
         for (const probe of expectation.probes ?? []) {
           const response = await fetch(apiUrl(probe.path), { credentials: "include", cache: "no-store" });
           requests.push({ method: "GET", path: probe.path, expectedStatus: probe.expectedStatus, actualStatus: response.status });
-          checks.push(evaluateHttpProbe(expectation.alias, probe, response.status));
+          checks.push(evaluateHttpProbe(expectation, probe, response.status));
         }
         results.push({ alias: expectation.alias, checks, requests });
         setMatrixResults([...results]);
@@ -398,7 +408,12 @@ export function AcceptanceLabPage() {
   const currentTarget = useMemo(() => currentUser ? platformLandingTarget(currentUser) : null, [currentUser]);
   const matrixTotals = useMemo(() => {
     const checks = matrixResults.flatMap((result) => result.checks);
-    return { total: checks.length, failed: checks.filter((entry) => entry.verdict === "fail").length };
+    return {
+      total: checks.length,
+      passed: checks.filter((entry) => entry.verdict === "pass").length,
+      failed: checks.filter((entry) => entry.verdict === "fail").length,
+      pending: checks.filter((entry) => entry.verdict === "pending").length,
+    };
   }, [matrixResults]);
   const evidenceSummary = useMemo(() => acceptanceEvidenceSummary(evidenceReport), [evidenceReport]);
   const scenarioPreflightBlocked = scenarioDraft?.preflight.actualStatus === PREFLIGHT_TRANSPORT_FAILURE_STATUS;
@@ -428,18 +443,22 @@ export function AcceptanceLabPage() {
     <Surface className="acceptance-evidence-panel">
       <div className="acceptance-evidence-heading"><div><h2>验收证据报告</h2><p>矩阵重跑和场景复测只追加新 attempt，不覆盖历史失败；持久化和导出边界会自动清理 Cookie、Token、控制凭证和 Session 形态的敏感值。</p></div><Button variant="secondary" onClick={exportEvidence}>导出 JSON 报告</Button></div>
       <div className="acceptance-evidence-meta"><span>报告：{evidenceReport.reportId}</span><span>矩阵运行：{evidenceReport.matrixAttempts.length} 次</span><span>历史场景失败：{evidenceSummary.historicalFailures}</span>{runtimeVersion ? <><span>Git：{runtimeVersion.gitSha.slice(0, 12)}</span><span>Schema：{runtimeVersion.schemaVersion ?? "未知"}</span></> : <span>版本信息读取中</span>}</div>
-      <div className="acceptance-evidence-summary"><strong>最新矩阵 {evidenceSummary.matrixTotal - evidenceSummary.matrixFailed}/{evidenceSummary.matrixTotal || 0} 通过</strong><span>场景：{evidenceSummary.scenarios.pass} 通过 · {evidenceSummary.scenarios.fail} 失败 · {evidenceSummary.scenarios.blocked} 受阻 · {evidenceSummary.scenarios.notRun} 未执行</span></div>
+      <div className="acceptance-evidence-summary"><strong>最新矩阵 {evidenceSummary.matrixPassed} 通过 · {evidenceSummary.matrixFailed} 失败 · {evidenceSummary.matrixPending} 标准待确认 / 共 {evidenceSummary.matrixTotal}</strong><span>场景：{evidenceSummary.scenarios.pass} 通过 · {evidenceSummary.scenarios.fail} 失败 · {evidenceSummary.scenarios.blocked} 受阻 · {evidenceSummary.scenarios.notRun} 未执行</span></div>
     </Surface>
 
     <Surface className="acceptance-matrix-panel">
-      <div><h2>自动权限矩阵</h2><p>批准矩阵与运行时 RBAC 分开保存；逐角色切换真实 Session，并核对角色、capability、模块入口和只读 HTTP 边界。</p></div>
+      <div><h2>自动权限矩阵</h2><p>机器只允许有 APPROVED Golden Source 的业务规则判通过/失败；PENDING 或尚未绑定来源的检查仍记录实际结果，但只显示“标准待确认”，不会被当成权限缺陷。</p></div>
       <Button onClick={() => void runMatrix()} disabled={matrixRunning || Boolean(scenarioRunning) || Boolean(scenarioDraft) || identities.length === 0}>{matrixRunning ? `执行中 ${matrixProgress}` : "运行全部角色权限矩阵"}</Button>
-      {matrixTotals.total > 0 ? <div className="acceptance-matrix-summary"><strong>{matrixTotals.total - matrixTotals.failed}/{matrixTotals.total} 通过</strong><span>{matrixTotals.failed} 项不一致</span></div> : null}
+      {matrixTotals.total > 0 ? <div className="acceptance-matrix-summary"><strong>{matrixTotals.passed} 通过 · {matrixTotals.failed} 失败</strong><span>{matrixTotals.pending} 项标准待确认 · 共 {matrixTotals.total} 项</span></div> : null}
       {matrixResults.length > 0 ? <div className="acceptance-matrix-results">
         {matrixResults.map((result) => {
           const failed = result.checks.filter((entry) => entry.verdict === "fail");
-          return <details key={result.alias} open={failed.length > 0}><summary><strong>{result.alias}</strong><span>{failed.length === 0 ? "通过" : `${failed.length} 项不一致`}</span></summary>
-            <div className="acceptance-matrix-checks">{result.checks.map((entry) => <div className={`acceptance-matrix-check is-${entry.verdict}`} key={entry.key}><span>{entry.label}</span><small>预期：{entry.expected} · 实际：{entry.actual}</small></div>)}</div>
+          const pending = result.checks.filter((entry) => entry.verdict === "pending");
+          const summary = failed.length > 0
+            ? `${failed.length} 项不一致`
+            : pending.length > 0 ? `${pending.length} 项标准待确认` : "通过";
+          return <details key={result.alias} open={failed.length > 0 || pending.length > 0}><summary><strong>{result.alias}</strong><span>{summary}</span></summary>
+            <div className="acceptance-matrix-checks">{result.checks.map((entry) => <div className={`acceptance-matrix-check is-${entry.verdict}`} key={entry.key}><span>{entry.label}</span><small>预期：{entry.expected} · 实际：{entry.actual}</small><small>规则：{ruleStatusLabel(entry)}</small></div>)}</div>
           </details>;
         })}
       </div> : null}

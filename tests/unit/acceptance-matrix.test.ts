@@ -24,7 +24,7 @@ describe("acceptance authorization matrix", () => {
     ]);
   });
 
-  it("keeps finance-director sample access read-only as an approved target instead of deriving it from current RBAC", () => {
+  it("keeps finance-director sample access read-only and binds it to its approved Golden Source rule", () => {
     const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-director")!;
     expect(finance.requiredCapabilities).toEqual(expect.arrayContaining([
       "sample:view_basic", "sample:view_finance", "sample:view_audit",
@@ -33,52 +33,91 @@ describe("acceptance authorization matrix", () => {
       "sample:create", "sample:batch_create", "sample:update_basic", "sample:correct_finance",
       "sample:dispose_request", "sample:dispose_approve", "sample:archive",
     ]));
-    expect(finance.allowedModules).toContain("samples");
-    expect(finance.probes?.find((probe) => probe.id === "sample-list")?.expectedStatus).toBe(200);
+    for (const key of [
+      "cap:sample:view_basic:allow",
+      "cap:sample:view_finance:allow",
+      "cap:sample:view_audit:allow",
+      "cap:sample:create:deny",
+      "cap:sample:archive:deny",
+      "module:samples:allow",
+      "http:sample-list",
+    ]) {
+      expect(finance.ruleRefs?.[key]).toEqual({
+        ruleId: "PERM-SAMPLE-FINANCE-DIRECTOR-001",
+        status: "approved",
+      });
+    }
   });
 
-  it("defines a complete finance-read module boundary and representative backend allow/deny probes", () => {
-    const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-read")!;
-    expect(finance.allowedModules).toEqual(["rework"]);
-    expect(finance.forbiddenModules).toEqual(["sourcing", "suppliers", "production", "samples"]);
-    expect(finance.probes?.map((probe) => [probe.id, probe.path, probe.expectedStatus])).toEqual([
-      ["access-roles", "access/roles", 403],
-      ["rework-report-list", "management/rework-orders", 200],
-      ["sourcing-list", "sourcing/cases?page=1", 403],
-      ["supplier-list", "master-data/suppliers", 403],
-      ["production-dashboard", "production-dashboard", 403],
-      ["sample-list", "samples?page=1", 403],
+  it("keeps supplier-center scope pending when the Golden Source has not approved full master-data access", () => {
+    const expected = new Map([
+      ["production-management", "PERM-SUPPLIER-PM-CENTER-001"],
+      ["ie", "PERM-SUPPLIER-IE-CENTER-001"],
+      ["tail-supervisor", "PERM-SUPPLIER-TAIL-001"],
+      ["qc", "PERM-SUPPLIER-QC-001"],
+      ["warehouse", "PERM-SUPPLIER-WAREHOUSE-001"],
+      ["worker-a", "PERM-SUPPLIER-WORKER-001"],
+      ["worker-b", "PERM-SUPPLIER-WORKER-001"],
+      ["merchandiser", "PERM-SUPPLIER-MERCH-CENTER-001"],
+      ["finance-director", "PERM-SUPPLIER-FINANCE-CENTER-001"],
+      ["factory-payables", "PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"],
     ]);
+    for (const [alias, ruleId] of expected) {
+      const entry = ACCEPTANCE_ROLE_MATRIX.find((candidate) => candidate.alias === alias)!;
+      expect(entry.ruleRefs?.["http:supplier-list"]).toEqual({ ruleId, status: "pending" });
+    }
   });
 
-  it("detects a session bound to the wrong UAT identity even when role and capability profile match", () => {
+  it("detects a session bound to the wrong UAT identity as an infrastructure failure", () => {
     const worker = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "worker-a")!;
     const checks = evaluateAcceptanceSnapshot(
       worker,
       { alias: "worker-a", userId: "uat-worker-a-id", roleCodes: ["worker"], capabilities: ["work:report"] },
       user("worker", ["work:report"], false, "uat-worker-b-id"),
     );
-    expect(checks.find((entry) => entry.key.endsWith(":session-user"))?.verdict).toBe("fail");
+    const session = checks.find((entry) => entry.key.endsWith(":session-user"))!;
+    expect(session.verdict).toBe("fail");
+    expect(session.ruleStatus).toBe("infrastructure");
+    expect(session.ruleId).toBe("ACCEPTANCE-INFRASTRUCTURE");
   });
 
-  it("reports role, root and capability drift without rewriting the approved expectation", () => {
-    const worker = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "worker-a")!;
-    const checks = evaluateAcceptanceSnapshot(
-      worker,
-      { alias: "worker-a", userId: "user-worker", roleCodes: ["worker"], capabilities: ["work:report"] },
-      user("worker", ["work:report", "access:admin"], true),
-    );
-    expect(checks.find((entry) => entry.key.endsWith(":session-user"))?.verdict).toBe("pass");
-    expect(checks.find((entry) => entry.key.endsWith(":root"))?.verdict).toBe("fail");
-    expect(checks.find((entry) => entry.key.includes("access:admin"))?.verdict).toBe("fail");
-  });
-
-  it("compares safe HTTP probes against explicit expected statuses", () => {
-    const check = evaluateHttpProbe("worker-a", {
-      id: "access-roles", label: "人员权限角色表", path: "access/roles", expectedStatus: 403,
-    }, 200);
-    expect(check.verdict).toBe("fail");
+  it("never turns a pending business rule into a failure even when actual access differs", () => {
+    const tail = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "tail-supervisor")!;
+    const supplierProbe = tail.probes?.find((probe) => probe.id === "supplier-list");
+    if (!supplierProbe) throw new Error("tail-supervisor supplier-list probe is missing");
+    const check = evaluateHttpProbe(tail, supplierProbe, 200);
     expect(check.expected).toBe("HTTP 403");
     expect(check.actual).toBe("HTTP 200");
+    expect(check.verdict).toBe("pending");
+    expect(check.ruleId).toBe("PERM-SUPPLIER-TAIL-001");
+    expect(check.ruleStatus).toBe("pending");
+  });
+
+  it("lets an approved Golden Source rule fail when runtime behavior diverges", () => {
+    const root = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "root")!;
+    const accessProbe = root.probes?.find((probe) => probe.id === "access-roles");
+    if (!accessProbe) throw new Error("root access-roles probe is missing");
+    const check = evaluateHttpProbe(root, accessProbe, 403);
+    expect(check.verdict).toBe("fail");
+    expect(check.ruleId).toBe("PERM-PLATFORM-ROOT-001");
+    expect(check.ruleStatus).toBe("approved");
+  });
+
+  it("quarantines an unmapped business check instead of treating current implementation as the oracle", () => {
+    const check = evaluateHttpProbe("worker-a", {
+      id: "unmapped", label: "尚未绑定规则的业务探针", path: "example", expectedStatus: 403,
+    }, 200);
+    expect(check.verdict).toBe("pending");
+    expect(check.ruleStatus).toBe("unmapped");
+    expect(check.ruleId).toBe("PERM-ACCEPTANCE-UNMAPPED-001");
+  });
+
+  it("keeps infrastructure HTTP checks strict without a business Golden Source rule", () => {
+    const check = evaluateHttpProbe("worker-a", {
+      id: "switch", label: "切换真实业务 Session", path: "acceptance/control/switch", expectedStatus: 200,
+      infrastructure: true,
+    }, 500);
+    expect(check.verdict).toBe("fail");
+    expect(check.ruleStatus).toBe("infrastructure");
   });
 });
