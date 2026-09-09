@@ -32,12 +32,16 @@ describe("platform permission and desktop navigation hub", () => {
       "sourcing",
     )).toBe(true);
     expect(accessModuleIdsForRole("owner_group")).toEqual([
-      "rework", "sourcing", "suppliers", "production", "samples", "platform",
+      "rework", "sourcing", "suppliers", "production", "samples",
+    ]);
+    expect(accessModuleIdsForRole("finance_director")).toEqual([
+      "rework", "sourcing", "suppliers", "production", "samples",
     ]);
     expect(employeeHasAccessModule(["owner_group"], [], "samples")).toBe(true);
     expect(employeeHasAccessModule(["owner_group"], [], "suppliers")).toBe(true);
+    expect(employeeHasAccessModule(["owner_group"], [], "platform")).toBe(false);
     expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
-    expect(employeeHasAccessModule(["tail_inspector"], [], "rework")).toBe(true);
+    expect(employeeHasAccessModule(["tail_inspector"], [], "rework")).toBe(false);
     expect(employeeHasAccessModule(
       ["order_merchandiser"],
       [{
