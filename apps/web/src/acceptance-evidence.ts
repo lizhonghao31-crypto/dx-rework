@@ -216,7 +216,9 @@ export function acceptanceEvidenceSummary(report: AcceptanceEvidenceReport) {
   const latestScenarios = [...latestScenarioById.values()];
   return {
     matrixTotal: matrixChecks.length,
+    matrixPassed: matrixChecks.filter((check) => check.verdict === "pass").length,
     matrixFailed: matrixChecks.filter((check) => check.verdict === "fail").length,
+    matrixPending: matrixChecks.filter((check) => check.verdict === "pending").length,
     scenarios: {
       pass: latestScenarios.filter((attempt) => attempt.status === "pass").length,
       fail: latestScenarios.filter((attempt) => attempt.status === "fail").length,
