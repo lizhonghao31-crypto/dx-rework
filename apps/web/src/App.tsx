@@ -374,6 +374,7 @@ export function App() {
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
+      { requiredRole: "finance_director", requiredCapability: "sourcing:view" },
     ]}>{page}</AuthGate>;
   }
   if (path.startsWith("/ui/suppliers")) {
