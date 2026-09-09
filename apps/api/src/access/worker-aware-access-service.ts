@@ -36,7 +36,11 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
     input: AssignRole,
   ): Promise<{ assignmentId: string }> {
     const effectiveInput: AssignRole = input.roleCode === "tail_inspector"
-      ? { ...input, roleCode: "worker", reason: `${input.reason}（独立整查角色已退役，按普通工人授权）` }
+      ? {
+          ...input,
+          roleCode: "worker",
+          reason: `${input.reason.slice(0, 430)}（独立整查角色已退役，按普通工人授权）`,
+        }
       : input;
     const assignment = await super.assignRole(actor, effectiveInput);
     if (effectiveInput.roleCode !== "worker") return assignment;
