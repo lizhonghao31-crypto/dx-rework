@@ -102,12 +102,14 @@ describe("sample migration inventory", () => {
     expect(report.attachments.find(a => a.objectKey === "daxing-sample/request.png")?.references[0]?.entityType).toBe("borrow_request");
   });
   it("rejects staging before any database connection for every non-root role", async () => {
-    for (const role of ["owner_group", "sample_finance", "sample_administrative", "sample_designer", "system_admin"]) {
+    for (const role of ["owner_group", "sample_finance", "sample_administrative", "sample_designer", "finance_director", "system_admin"]) {
       await expect(stageSampleSource({} as Pool, actor(role, SampleCapabilitySchema.options), source())).rejects.toMatchObject({ code: "FORBIDDEN" });
     }
   });
   it("matches SQL grants to the server allowlist, without granting root-only capabilities", async () => {
-    const sql = await readFile("apps/api/migrations/0152_sample_domain_foundation.sql", "utf8") + await readFile("apps/api/migrations/0158_sample_role_finance_maintenance.sql", "utf8");
+    const sql = await readFile("apps/api/migrations/0152_sample_domain_foundation.sql", "utf8")
+      + await readFile("apps/api/migrations/0158_sample_role_finance_maintenance.sql", "utf8")
+      + await readFile("apps/api/migrations/0162_finance_director_sample_read.sql", "utf8");
     for (const [role, allowed] of Object.entries(SAMPLE_ROLE_CAPABILITIES)) {
       for (const capability of SampleCapabilitySchema.options) expect(sql.includes(`('${role}','${capability}')`)).toBe(allowed.includes(capability));
     }
