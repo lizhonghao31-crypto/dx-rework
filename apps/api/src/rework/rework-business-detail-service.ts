@@ -210,6 +210,7 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
     "owner_group",
     "production_management",
     "tail_supervisor",
+    "finance_director",
   ].includes(role));
 
 const actorCapabilities = (actor: TrustedActorContext): readonly string[] =>
@@ -766,7 +767,7 @@ export class ReworkBusinessDetailService {
     await client.query(
       `INSERT INTO rework_tail_defective_quantity_entries(
          entry_id,rework_order_id,quantity,recorded_by,operation_event_id,request_id
-       ) VALUES($1,$2,$3,$4,$5,$6)`,
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
       [entryId, reworkOrderId, input.quantity, actor.actorId, eventId, actor.requestId],
     );
     await client.query(
