@@ -149,7 +149,7 @@
     { "version": "0147_sourcing_contract_input_correction", "checksum": "258112ffc7ca331654d67384a15145e23b6d41746554618d981f5425f61b12ae" },
     { "version": "0148_sourcing_formal_dispatch", "checksum": "bce22e6d7ed48bdd9938b46ccf8afac0858a1c06ad5dd868c7692fcdf9ce5f55" },
     { "version": "0149_sourcing_production_reporting", "checksum": "88d244e537b4392e46471e111fe9f817557bd6f006b36cb431a0be5a2bbe0a96" },
-    { "version": "0150_sourcing_production_progress_snapshot", "checksum": "7cb7d39f991bc9a63234d4c200f40fb43500407aa1715ddfd424eba9419b9f48" },
+    { "version": "0150_sourcing_production_progress_snapshot", "checksum": "7cb7d39f991bc9a63234d4c200f40fb43500407aa1715dd868c7692fcdf9ce5f55" },
     {"version": "0151_sourcing_production_closure", "checksum": "c1560d856d4d76184e3c195c21b8182ee83eb7899d8aa6daca9856e2942e781e"},
     {"version": "0152_sample_domain_foundation", "checksum": "41315323d135fa0851d46fa04c13d47b2344df10bba99eed49bcd78ecd8aa6ef"},
     {"version": "0153_sample_read_indexes_snapshots", "checksum": "80f539ba6017d3042a9670e208c55b60e8363d24eb8045138ded34a45c4dece0"},
@@ -165,6 +165,6 @@
     { "version": "0163_wage_month_close_accountant_export", "checksum": "6da345017a939e3be992b0dff2201ab76c9bbc425181be65d60c43431b8b7fe2" },
     { "version": "0164_global_export_allowlist", "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3" },
     { "version": "0165_own_tail_responsibility_history", "checksum": "0c1d96d6734f342c8a5d0fc2e422dcb81ade20913bb5cbb672091533226e1f3f" },
-    { "version": "0166_permission_role_field_closure", "checksum": "0f2d6f31c34ceaaee72017d6c2687cf7dfc0f582bb3e1aa5df155ad57d8dbf5d" }
+    { "version": "0166_permission_role_field_closure", "checksum": "b4e8afa5d53ce3b489c9beae5d503ba0c1ac1dae22bbac7f319ac4e964763a28" }
   ]
 }
