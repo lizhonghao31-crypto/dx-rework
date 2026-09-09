@@ -5,18 +5,52 @@
 -- The standalone tail-inspector role is retired, but the business operation remains available to
 -- ordinary workers through tail_inspection:report. Preserve existing operators by adding worker
 -- assignments before the old role is disabled. Each replacement grant is a NEW authorization at
--- migration time, not a historical rewrite: keep the legacy row untouched and emit an explicit
--- append-only migration event tied to the newly created assignment.
+-- migration time, not a historical rewrite. The immutable Root identity is the accountable migration
+-- actor; the legacy grantor is retained only as source provenance.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM user_role_assignments legacy
+    WHERE legacy.role_code='tail_inspector'
+      AND legacy.revoked_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_role_assignments worker_assignment
+        WHERE worker_assignment.user_id=legacy.user_id
+          AND worker_assignment.role_code='worker'
+          AND worker_assignment.revoked_at IS NULL
+      )
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM owner_bootstrap_consumptions root
+    WHERE root.singleton=true
+      AND access_is_root_actor(root.user_id)
+  ) THEN
+    RAISE EXCEPTION '0166 tail inspector migration requires an active Root actor'
+      USING ERRCODE='42501';
+  END IF;
+END;
+$$;
+
 ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation;
 
-WITH replacements AS (
+WITH migration_actor AS (
+  SELECT root.user_id actor_id
+  FROM owner_bootstrap_consumptions root
+  WHERE root.singleton=true
+    AND access_is_root_actor(root.user_id)
+  LIMIT 1
+), replacements AS (
   SELECT
     gen_random_uuid() assignment_id,
     gen_random_uuid() event_id,
     legacy.assignment_id source_assignment_id,
     legacy.user_id,
-    legacy.granted_by
+    legacy.granted_by source_granted_by,
+    migration_actor.actor_id migration_actor_id
   FROM user_role_assignments legacy
+  CROSS JOIN migration_actor
   WHERE legacy.role_code='tail_inspector'
     AND legacy.revoked_at IS NULL
     AND NOT EXISTS (
@@ -34,20 +68,23 @@ WITH replacements AS (
   SELECT
     replacement.event_id,
     'migration:0166:tail-inspector-to-worker:' || replacement.source_assignment_id::text,
-    replacement.granted_by,
-    ARRAY['migration_0166'],
+    replacement.migration_actor_id,
+    ARRAY['root_superuser','migration_0166'],
     'migration:role-retirement',
     'migration.role.tail_inspector_to_worker',
     'user_role_assignment',
     replacement.assignment_id::text,
     jsonb_build_object(
       'sourceAssignmentId',replacement.source_assignment_id,
+      'sourceGrantedBy',replacement.source_granted_by,
       'roleCode','tail_inspector'
     ),
     jsonb_build_object(
       'userId',replacement.user_id,
       'roleCode','worker',
       'sourceAssignmentId',replacement.source_assignment_id,
+      'sourceGrantedBy',replacement.source_granted_by,
+      'migrationActorId',replacement.migration_actor_id,
       'migration','0166_permission_role_field_closure'
     ),
     '独立整查角色退役：迁移为普通工人；保留原角色授权历史'
@@ -58,8 +95,11 @@ INSERT INTO user_role_assignments(
   assignment_id,user_id,role_code,granted_by,grant_reason,granted_at
 )
 SELECT
-  replacement.assignment_id,replacement.user_id,'worker',replacement.granted_by,
-  '独立整查角色退役：0166 迁移为普通工人；来源授权 ' || replacement.source_assignment_id::text,
+  replacement.assignment_id,replacement.user_id,'worker',replacement.migration_actor_id,
+  '独立整查角色退役：0166 迁移为普通工人；来源授权 '
+    || replacement.source_assignment_id::text
+    || '；原授权人 '
+    || replacement.source_granted_by::text,
   CURRENT_TIMESTAMP
 FROM replacements replacement
 JOIN audit_rows audit ON audit.entity_id=replacement.assignment_id::text;
@@ -124,6 +164,43 @@ WHERE role_code='system_admin'
   );
 
 ALTER TABLE role_capabilities ENABLE TRIGGER role_capabilities_no_delete;
+
+-- Close the database authorization boundary as well as the HTTP boundary. Existing assignment and
+-- revocation triggers call this function, so redefining it here makes every future role mutation
+-- Root-only without rewriting historical migrations.
+CREATE OR REPLACE FUNCTION access_role_manager_roles(
+  requested_actor_id uuid
+) RETURNS text[] LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  actor_roles text[];
+BEGIN
+  IF NOT access_is_root_actor(requested_actor_id) THEN
+    RAISE EXCEPTION 'business roles can only be maintained by root'
+      USING ERRCODE='42501';
+  END IF;
+
+  SELECT array_agg(DISTINCT ura.role_code ORDER BY ura.role_code)
+  INTO actor_roles
+  FROM user_role_assignments ura
+  JOIN business_roles br ON br.role_code=ura.role_code AND br.enabled=true
+  JOIN app_users u ON u.id=ura.user_id AND u.enabled=true
+  WHERE ura.user_id=requested_actor_id
+    AND ura.revoked_at IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM identity_mappings i
+      JOIN access_security_policy policy
+        ON policy.policy_key='primary'
+       AND policy.dingtalk_corp_id=i.corp_id
+      WHERE i.user_id=ura.user_id
+        AND i.provider='dingtalk'
+        AND i.active=true
+        AND i.employed=true
+    );
+
+  RETURN array_append(COALESCE(actor_roles,'{}'::text[]),'root_superuser');
+END;
+$$;
 
 -- Prevent future delegated capability from recreating a business-user personnel-admin path.
 CREATE OR REPLACE FUNCTION reject_access_admin_delegation()
