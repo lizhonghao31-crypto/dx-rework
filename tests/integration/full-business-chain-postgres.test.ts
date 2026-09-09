@@ -700,18 +700,28 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       { responsibilityType: "own_factory", shareBps: 10000, multiplier: "1.200" },
       { responsibilityType: "processing_factory", shareBps: 10000, multiplier: "1.200", supplierId: factorySupplierId },
     ]) {
-      await expect(responsibility.saveDraft(
-        production(), submitted.value.reworkOrderId,
-        CreateResponsibilityDraftSchema.parse({
-          expectedOrderVersion: n06Approved.value.orderVersion,
-          expectedCurrentDeterminationVersion: null, handlerUserId: ids.production,
-          tailInspectionCostBearer: "own_factory",
-          processes: [n07Processes[0], {
-            configurationItemId: tailItem.configurationItemId,
-            multiplier: "1.000", allocations: [badAllocation],
-          }],
-        }), randomUUID(),
-      )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      const invalidDraft = {
+        expectedOrderVersion: n06Approved.value.orderVersion,
+        expectedCurrentDeterminationVersion: null, handlerUserId: ids.production,
+        tailInspectionCostBearer: "own_factory",
+        processes: [n07Processes[0], {
+          configurationItemId: tailItem.configurationItemId,
+          multiplier: "1.000", allocations: [badAllocation],
+        }],
+      };
+      if (badAllocation.responsibilityType === "own_factory") {
+        // The wire contract rejects a non-1 own-factory multiplier before
+        // the application service is called; assert that synchronous boundary.
+        expect(() => CreateResponsibilityDraftSchema.parse(invalidDraft))
+          .toThrow("Own-factory responsibility multiplier must be 1");
+      } else {
+        // A valid external allocation still conflicts with the explicit
+        // own-factory tail bearer, which the application service must reject.
+        await expect(responsibility.saveDraft(
+          production(), submitted.value.reworkOrderId,
+          CreateResponsibilityDraftSchema.parse(invalidDraft), randomUUID(),
+        )).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      }
     }
     const ownTailDraft = await responsibility.saveDraft(
       production(), submitted.value.reworkOrderId,
