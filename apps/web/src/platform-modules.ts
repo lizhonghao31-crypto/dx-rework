@@ -23,10 +23,15 @@ export function canAccessSamples(user: AuthorizedUser): boolean {
     && user.businessRoles?.some(role => ["sample_designer", "sample_administrative", "sample_finance", "finance_director", "owner_group"].includes(role)) === true);
 }
 
-export function canAccessProduction(user: AuthorizedUser): boolean {
+export function canAccessProductionReporting(user: AuthorizedUser): boolean {
   return user.isRoot === true
     || (user.businessRoles?.includes("production_reporter") === true && user.capabilities.includes("production-reporting"))
-    || (user.businessRoles?.some(role => ["owner_group", "production_management", "order_merchandiser", "finance_director"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
+    || (user.businessRoles?.some(role => ["owner_group", "production_management", "order_merchandiser"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
+}
+
+export function canAccessProduction(user: AuthorizedUser): boolean {
+  return canAccessProductionReporting(user)
+    || (user.businessRoles?.includes("finance_director") === true && user.capabilities.includes("sourcing:view"));
 }
 
 export function accessiblePlatformModules(user: AuthorizedUser): readonly PlatformModule[] {
