@@ -1,7 +1,7 @@
 import {SampleAnalysisQuerySchema,type SampleAnalysisQuery,type SampleAnalysisResponse} from '@dx-rework/contracts';
 import type {AuthorizedUser} from './auth.js';
 type AnalysisDraft=Record<string,string>;
-export function canReadSampleAnalysis(user:Pick<AuthorizedUser,'isRoot'|'businessRoles'|'capabilities'>){return user.isRoot===true||(user.capabilities.includes('sample:view_finance')&&user.businessRoles?.some(r=>['sample_finance','sample_approver','owner_group'].includes(r))===true);}
+export function canReadSampleAnalysis(user:Pick<AuthorizedUser,'isRoot'|'businessRoles'|'capabilities'>){return user.isRoot===true||(user.capabilities.includes('sample:view_finance')&&user.businessRoles?.some(r=>['sample_finance','sample_approver','finance_director','owner_group'].includes(r))===true);}
 export function analysisDraftQuery(draft:AnalysisDraft,group:SampleAnalysisQuery['group']='purchaser'){
  const values:Record<string,string|number>={group,page:1,groupPage:1};
  for(const [key,value] of Object.entries(draft))if(value.trim()&&key!=='brandChoice'&&key!=='departmentChoice')values[key]=value.trim();
