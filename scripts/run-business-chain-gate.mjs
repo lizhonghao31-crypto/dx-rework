@@ -194,6 +194,7 @@ const tests = [
 if (hasDatabase) {
   tests.push(
     "tests/integration/full-business-chain-postgres.test.ts",
+    "tests/integration/own-tail-responsibility-history-postgres.test.ts",
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
     "tests/integration/receiving-postgres.test.ts",
     "tests/integration/rework-v2-n01-postgres.test.ts",
@@ -270,3 +271,4 @@ process.stdout.write(
     ? "BUSINESS_CHAIN_GATE_PASSED\n"
     : "BUSINESS_CHAIN_STATIC_GATES_PASSED\n",
 );
+

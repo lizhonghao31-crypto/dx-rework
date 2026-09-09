@@ -419,7 +419,7 @@ export class ResponsibilityDeterminationService {
         pricingUnit: row.pricing_unit,
         executionKind: row.execution_kind,
         includedInResponsibility: row.execution_kind === "worker"
-          || order.tail_inspection_cost_bearer === "processing_factory",
+          || order.tail_inspection_cost_bearer !== null,
         baseAmount: row.base_amount,
       })),
       determination: determination
@@ -745,10 +745,25 @@ export class ResponsibilityDeterminationService {
          AND configuration.status='approved'
          AND (
            item.execution_kind='worker'
-           OR (item.execution_kind='tail_inspection' AND $2='processing_factory')
+           OR (item.execution_kind='tail_inspection' AND $2 IN ('own_factory','processing_factory'))
          )`,
       [orderId, targetTailCostBearer],
     );
+    // Older clients omit own-factory tail rows. Derive the fixed allocation
+    // from the explicit order-level choice, then use the normal audited engine.
+    if (targetTailCostBearer === "own_factory") {
+      input = { ...input, processes: [...input.processes] };
+      for (const item of approvedResult.rows) {
+        if (item.execution_kind === "tail_inspection"
+          && !input.processes.some((row) => row.configurationItemId === item.configuration_item_id)) {
+          input.processes.push({
+            configurationItemId: item.configuration_item_id,
+            multiplier: "1.000",
+            allocations: [{ responsibilityType: "own_factory", shareBps: 10000, multiplier: "1.000" }],
+          });
+        }
+      }
+    }
     if (
       new Set(input.processes.map((row) => row.configurationItemId)).size !==
         approvedResult.rows.length ||
@@ -770,7 +785,17 @@ export class ResponsibilityDeterminationService {
       const approved = approvedResult.rows.find(
         (item) => item.configuration_item_id === row.configurationItemId,
       );
-      if (approved?.execution_kind === "tail_inspection") {
+      if (approved?.execution_kind === "tail_inspection" && targetTailCostBearer === "own_factory") {
+        const allocation = row.allocations[0];
+        if (row.allocations.length !== 1
+          || allocation?.responsibilityType !== "own_factory"
+          || allocation.shareBps !== 10000
+          || decimalToScaled(allocation.multiplier ?? "1.000", 3) !== 1_000n
+          || allocation.supplierId != null) {
+          fail("整查费用由本厂承担时必须按本厂 100%、倍率 1 计入责任", 400, "VALIDATION_ERROR");
+        }
+      }
+      if (approved?.execution_kind === "tail_inspection" && targetTailCostBearer === "processing_factory") {
         const allocation = row.allocations[0];
         if (row.allocations.length !== 1
           || allocation?.responsibilityType !== "processing_factory"
@@ -1260,3 +1285,4 @@ export class ResponsibilityDeterminationService {
     }
   }
 }
+
