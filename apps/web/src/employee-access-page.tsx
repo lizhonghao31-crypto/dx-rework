@@ -256,9 +256,11 @@ export function EmployeeAccessPage() {
               onChange={(event) => setModuleFilter(event.target.value as "all" | PlatformAccessModuleId)}
             >
               <option value="all">全部模块</option>
-              <option value="rework">返工</option>
-              <option value="sourcing">报价&amp;选厂</option>
+              <option value="rework">订单返工</option>
+              <option value="sourcing">外发定价&amp;选厂</option>
+              <option value="suppliers">供应商中心</option>
               <option value="production">实时生产看板</option>
+              <option value="samples">样衣管理</option>
               <option value="platform">平台管理</option>
             </select>
             <input
@@ -293,7 +295,7 @@ export function EmployeeAccessPage() {
                   || employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
                 const assignedRoleNames = employee.businessRoles.map(assignedRoleDisplayName);
                 const accessRoleNames = employee.isRoot
-                  ? ["Root（订单返工 / 外发定价&选厂 / 平台管理）", ...assignedRoleNames]
+                  ? ["Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 平台管理）", ...assignedRoleNames]
                   : assignedRoleNames;
                 const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
                 const wouldDisableLastOwner =

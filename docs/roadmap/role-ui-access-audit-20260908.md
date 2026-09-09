@@ -24,8 +24,9 @@
 |---|---|---|
 | 回货开始日期与结束日期重叠、开始日期点击被截获 | order-board-page.css固定首列44px供导出使用；order-board-page.tsx按canExport条件渲染按钮，无按钮时开始日期占据该列 | 已由前序布局PR修复；Acceptance需复验 |
 | 返工筛选框重叠 | rework-query-mobile.css桌面固定列最小宽度；共享dx-field默认最小250px；页面可用宽度还要扣除侧栏 | 已由前序布局PR修复；Acceptance需复验 |
-| 财务可见返工列表但详情拒绝 | 列表按dashboard/report能力读取；详情broadBusinessReader不含finance_director，finance_read还要求该订单已有工资记录 | 权限治理02施工中：仅把finance_director加入返工详情全量只读；finance_read仍保持工资事实后可见，不扩大写权限 |
-| 财务总监看不到样衣 | platform-modules、App路由、sample-authority与sample-analysis-model的角色白名单不含finance_director | 权限治理01已由#439修复并合并；仅开放sample:view_basic / sample:view_finance / sample:view_audit，写权限保持禁止；Acceptance待复验 |
+| 财务可见返工列表但详情拒绝 | 列表按dashboard/report能力读取；详情broadBusinessReader此前不含finance_director，finance_read仍要求该订单已有工资记录 | 权限治理02已由#440修复并合并；事后Codex Review未发现major issue；finance_read范围未扩大 |
+| 财务总监看不到样衣 | platform-modules、App路由、sample-authority与sample-analysis-model此前的角色白名单不含finance_director | 权限治理01已由#439修复并合并；仅开放sample:view_basic / sample:view_finance / sample:view_audit，写权限保持禁止；Acceptance待复验 |
+| 人员权限后台模块分类滞后 | platform-access仅识别订单返工、外发定价&选厂、实时生产看板、平台管理；未识别供应商中心和样衣管理；仓管receiving能力未归入返工，生产管理/订单跟单的生产看板角色条件也未进入人员权限模块分类 | 权限治理03施工中：只修权限后台的模块归类、筛选和显示，不新增任何真实业务权限 |
 | 外发历史报nextCursor及page字段不匹配 | 当前main的SourcingCaseListResponseSchema已使用page/pageSize/totalCount/totalPages；截图客户端仍期待nextCursor | 待核对实际部署/静态资源/浏览器会话版本；尚不能归因于数据库或权限 |
 
 ## 本次修复
@@ -53,6 +54,18 @@
 - 修复边界：`finance_director` 获得返工业务详情全量**只读**准入，与其现有全局财务查看和管理列表范围一致；不把 `finance_read` 从工资事实范围提升为全量详情，不新增角色 capability，不修改任何业务写动作、状态机、金额、Todo、真实人员角色或Root行为。
 - 附件读取继续复用详情授权链；只有能查看对应返工单时才允许下载绑定附件。
 - 验收：财务总监在无工资事实订单上详情允许；普通 `finance_read` 同一订单仍拒绝，有工资事实后仍允许；Full Gate exact Head全绿后合并。
+- 结果：#440 已合并；最终合并 commit `90119cb99eec3b6203ca3d8af9b3fd780828662a` 的事后Codex Review未发现major issue。
+
+## 2026-09-09 权限治理03
+
+- base: `main@90119cb99eec3b6203ca3d8af9b3fd780828662a`
+- branch: `fix/acceptance-audit-employee-module-classification`
+- 目标：把“人员与权限”恢复为当前平台真实模块结构的管理入口，避免管理员看到的角色/模块归类落后于系统实际入口。
+- 当前平台分类固定为：订单返工、外发定价&选厂、供应商中心、实时生产看板、样衣管理、平台管理。
+- 归类只读取既有role/capability事实：`supplier_profile:*`归供应商中心，`sample:*`归样衣管理，`receiving:*`和现有返工报表能力归订单返工；生产管理/订单跟单只有在现有`sourcing:view`条件满足时才归实时生产看板，保持与正式`canAccessProduction`角色条件一致。
+- Root与老板的后台展示同步当前全部模块；人员模块筛选新增供应商中心和样衣管理。
+- **不新增、撤销或修改任何role_capabilities，不修改员工角色，不改变正式路由/Service/数据库鉴权。** 这是管理后台分类一致性修复，不是业务提权PR。
+- 验收：角色模块标签、模块筛选、Root/老板展示、仓管返工归类、订单跟单/生产管理生产看板归类、样衣/供应商角色归类均有定向回归；Full Gate后执行一次Codex Review，由Work自行处理finding。
 
 ## 后续专项与结束条件
 
@@ -62,4 +75,4 @@
 4. 真账号与负向验收：有权角色可正常进入并完成本职操作；无权角色直接访问链接/API仍被拒绝；普通工人、仓管不可取得达兴成本价；Root既有调试能力不变。
 5. 原四项优化仍暂停：供应商串页与分工、新增审批、分析面板收口、测试订单删除。1222及其他生产订单本PR不读取、不修改、不清理。
 
-本专项完成需提供逐项实际结果与未通过项；当前权限治理02只处理财务总监返工详情只读一致性，不代表全系统审查完成。
+本专项完成需提供逐项实际结果与未通过项；当前权限治理03只处理人员权限后台模块分类一致性，不代表全系统审查完成。
