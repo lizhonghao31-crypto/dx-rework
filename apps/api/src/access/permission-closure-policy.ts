@@ -1,6 +1,7 @@
 export const ROOT_ONLY_PERSONNEL_PATHS = [
   "/access/roles",
   "/access/role-assignments",
+  "/access/delegations",
   "/employee-access/",
 ] as const;
 
@@ -40,6 +41,8 @@ export function isRootOnlyPersonnelPath(path: string): boolean {
   return path === "/access/roles"
     || path === "/access/role-assignments"
     || path.startsWith("/access/role-assignments/")
+    || path === "/access/delegations"
+    || path.startsWith("/access/delegations/")
     || path.startsWith("/employee-access/");
 }
 
