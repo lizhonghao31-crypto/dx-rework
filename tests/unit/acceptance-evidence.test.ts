@@ -53,7 +53,11 @@ describe("acceptance evidence report", () => {
       version: { gitSha: "abc", buildTime: "now", schemaVersion: "0160", expectedSchemaVersion: "0160" },
       results: [{
         alias: "worker-a",
-        checks: [{ key: "worker-a:http:x", category: "http", label: "x", expected: "HTTP 403", actual: "HTTP 200", verdict: "fail" }],
+        checks: [{
+          key: "worker-a:http:x", category: "http", label: "x",
+          expected: "HTTP 403", actual: "HTTP 200", verdict: "fail",
+          ruleId: "PERM-TEST-001", ruleStatus: "approved",
+        }],
         requests: [{ method: "GET", path: "samples?page=1", expectedStatus: 403, actualStatus: 200 }],
       }],
     }, new Date("2026-09-08T14:04:00.000Z"));
@@ -67,6 +71,41 @@ describe("acceptance evidence report", () => {
     expect(second.matrixAttempts).toHaveLength(2);
     expect(second.matrixAttempts[0]?.results[0]?.requests[0]?.path).toBe("samples?page=1");
     expect(second.matrixAttempts[0]?.version?.gitSha).toBe("abc");
+  });
+
+  it("reports approved pass/fail separately from standards that are still pending", () => {
+    const report = appendMatrixEvidence(
+      createAcceptanceEvidenceReport(new Date("2026-09-08T14:00:00.000Z")),
+      {
+        startedAt: "2026-09-08T14:03:00.000Z",
+        completedAt: "2026-09-08T14:04:00.000Z",
+        version: null,
+        results: [{
+          alias: "tail-supervisor",
+          requests: [],
+          checks: [
+            {
+              key: "pass", category: "module", label: "pass", expected: "x", actual: "x", verdict: "pass",
+              ruleId: "PERM-APPROVED-001", ruleStatus: "approved",
+            },
+            {
+              key: "fail", category: "module", label: "fail", expected: "x", actual: "y", verdict: "fail",
+              ruleId: "PERM-APPROVED-002", ruleStatus: "approved",
+            },
+            {
+              key: "pending", category: "http", label: "pending", expected: "HTTP 403", actual: "HTTP 200", verdict: "pending",
+              ruleId: "PERM-SUPPLIER-TAIL-001", ruleStatus: "pending",
+            },
+          ],
+        }],
+      },
+      new Date("2026-09-08T14:04:00.000Z"),
+    );
+    const summary = acceptanceEvidenceSummary(report);
+    expect(summary.matrixTotal).toBe(3);
+    expect(summary.matrixPassed).toBe(1);
+    expect(summary.matrixFailed).toBe(1);
+    expect(summary.matrixPending).toBe(1);
   });
 
   it("defines representative scenarios with mandatory read-only preflights", () => {
