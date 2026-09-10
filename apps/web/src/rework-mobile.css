@@ -1,0 +1,42 @@
+.responsibility-mobile-preview, .rework-mobile-current-node { display:none; }
+@media (max-width:760px) {
+  .rework-detail-header .page-heading h1 { flex-wrap:wrap; gap:8px; font-size:22px; overflow-wrap:anywhere; }
+  .rework-detail-header .rework-detail-back { width:100%; margin:0; min-height:44px; }
+  .rework-detail-target-layout { display:flex; flex-direction:column; gap:12px; padding-bottom:24px; }
+  .rework-detail-target-layout > .rework-detail-workspace { order:0; padding:12px; }
+  .rework-detail-target-layout > .rework-detail-core-facts { order:1; }
+  .rework-detail-target-layout > .rework-responsibility-result { order:2; margin-bottom:0; }
+  .rework-detail-target-layout > .rework-detail-dynamic-information { order:3; }
+  .rework-detail-target-layout > .inspection-readonly { order:4; }
+  .rework-detail-target-layout > .rework-detail-overview-grid { order:5; }
+  .rework-mobile-current-node { display:inline; }
+  .rework-detail-target-layout .rework-detail-task__heading { align-items:start; flex-wrap:wrap; gap:8px; }
+  .rework-detail-target-layout .rework-detail-task__heading h2 { font-size:18px; line-height:1.5; }
+  .rework-detail-target-layout :is(p,small,label,dt,dd,.dx-badge,.rework-detail-single-piece-total) { font-size:16px; line-height:1.5; }
+  .rework-detail-target-layout :is(input,select,textarea,.dx-button) { font-size:16px; min-width:0; scroll-margin-block:100px; }
+  .rework-detail-target-layout .dx-button { min-height:44px; white-space:normal; }
+  .rework-detail-target-layout .rework-detail-core-facts { gap:8px; }
+  .rework-detail-target-layout .rework-detail-core-fact { padding:12px; min-height:0; }
+  .rework-detail-target-layout .rework-detail-core-fact dd { white-space:normal; overflow-wrap:anywhere; }
+  .rework-detail-target-layout .rework-detail-dynamic-facts { grid-template-columns:minmax(0,1fr); }
+  .rework-detail-target-layout .rework-detail-overview-grid { gap:12px; }
+  .rework-detail-target-layout .rework-detail-mobile-panel-toggle { min-height:48px; font-size:16px; padding:8px 4px; }
+  .rework-detail-target-layout .rework-workflow__mobile-rail { flex-direction:column; overflow:visible; }
+  .rework-detail-target-layout .rework-workflow__mobile-rail .rework-workflow__node { flex-basis:auto; width:100%; min-width:0; box-sizing:border-box; padding:12px; }
+  .rework-detail-target-layout .rework-workflow__mobile-rail .rework-workflow__node :is(strong,small,em) { font-size:16px; white-space:normal; }
+  .rework-detail-target-layout .work-reporting-page .n04-process-group__main { grid-template-columns:minmax(0,1fr); gap:8px; }
+  .rework-detail-target-layout .work-reporting-page .n04-process-group__main :is(strong,small,b,span) { font-size:16px; white-space:normal; }
+  .rework-detail-target-layout .work-reporting-page .n04-worker-row { grid-template-columns:minmax(0,1fr) auto; border-radius:0; box-shadow:none; padding:12px 0; }
+  .rework-detail-target-layout .work-reporting-page .n04-worker-row :is(b,em,small,span) { font-size:16px; }
+  .rework-detail-target-layout .responsibility-mobile-preview { display:block; }
+  .rework-detail-target-layout .responsibility-mobile-preview p { margin:6px 0; overflow-wrap:anywhere; }
+  .rework-detail-target-layout .responsibility-process:not(.is-mobile-editing) > .responsibility-mobile-preview ~ :is(.responsibility-party-list,.responsibility-process__footer) { display:none; }
+  .rework-detail-target-layout .responsibility-process.is-mobile-editing .responsibility-party { grid-template-columns:minmax(0,1fr); }
+  .rework-detail-target-layout :is(.responsibility-actions,.n04-completion-action,.work-reporting-primary-action) { position:sticky; bottom:calc(84px + env(safe-area-inset-bottom,0px)); z-index:8; padding:12px; background:var(--dx-v2-color-surface); border-top:1px solid var(--dx-v2-color-border); }
+  .rework-detail-target-layout .responsibility-actions { display:flex; flex-wrap:wrap; gap:8px; }
+  .rework-detail-target-layout .responsibility-actions .dx-button { flex:1; }
+  .rework-detail-target-layout :is(.work-reporting-dialog,.responsibility-batch-dialog) { max-height:80dvh; overflow:auto; }
+}
+@media (max-width:760px) and (max-height:500px) {
+  .rework-detail-target-layout :is(.responsibility-actions,.n04-completion-action,.work-reporting-primary-action) { position:static; }
+}

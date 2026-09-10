@@ -34,6 +34,7 @@ export function ReworkQueryPage() {
   const [overdue, setOverdue] = useState(initial.get("overdue") ?? "");
   const [exception, setException] = useState(initial.get("exception") ?? "");
   const [page,setPage]=useState(() => { const value=Number(initial.get("page")); return Number.isInteger(value)&&value>0?value:1; });
+  const [moreFilters,setMoreFilters]=useState(Boolean(initial.get("from")||initial.get("to")||initial.get("overdue")));
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(true);
@@ -80,15 +81,18 @@ export function ReworkQueryPage() {
       .finally(() => setDeletingOrderId(""));
   };
   const items = state.kind === "ready" ? state.value.items : [];
-  return <Shell active="返工单看板">
+  return <Shell active="返工单看板"><div className="rework-query-content">
     <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
     <ReworkFlowPanel keyword={q} search={debouncedQ} node={status} from={from} to={to} refreshToken={refresh} onQuery={value=>{setQ(value);resetPage();}} onNode={value=>{setStatus(value);resetPage();}} onRefresh={()=>setRefresh(value=>value+1)} />
     <Surface className="reporting-filters reporting-filters--orders">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
       <label>责任<select value={responsibilityType} onChange={event=>{setResponsibilityType(event.target.value);resetPage();}}>{responsibilityTypes.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></label>
+      <button type="button" className="rework-query-more-toggle" aria-expanded={moreFilters} aria-controls="rework-query-more" onClick={()=>setMoreFilters(!moreFilters)}>日期 / 更多筛选 {moreFilters?'−':'+'}</button>
+      <div id="rework-query-more" className={`rework-query-more${moreFilters?' is-open':''}`}>
       <label className="reporting-date-range">日期范围<span><input aria-label="开始日期" type="date" value={from} onChange={event=>{setFrom(event.target.value);resetPage();}} /><i>至</i><input aria-label="结束日期" type="date" value={to} onChange={event=>{setTo(event.target.value);resetPage();}} /></span></label>
       <label>逾期<select value={overdue} onChange={(event) => {setOverdue(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅逾期</option><option value="false">未逾期</option></select></label>
+      </div>
       <label>异常<select value={exception} onChange={(event) => {setException(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅异常</option><option value="false">无异常</option></select></label>
       <Button className="reporting-filters__refresh" onClick={() => setRefresh((value) => value + 1)}>刷新</Button>
     </Surface>
@@ -104,6 +108,6 @@ export function ReworkQueryPage() {
       ariaLabel="返工单分页"
       onPageChange={setPage}
     />}
-  </Shell>;
+  </div></Shell>;
 }
 
