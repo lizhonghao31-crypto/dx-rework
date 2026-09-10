@@ -913,7 +913,7 @@ export function OrderBoardPage() {
             ><img src={attachmentUrl(attachment.attachmentId, "preview")} alt={`处理凭证${index + 1}`} /></button>)}
           </div>
         </div> : null) : <div className="order-board-difference-evidence">
-          <label>处理凭证（选填，最多3张）<input type="file" accept="image/jpeg,image/png,image/webp" multiple
+          <label>处理凭证（选填，最多3张）<input type="file" accept="image/*" multiple
             disabled={mutationBusy || differenceImages.length >= 3}
             onChange={(event) => { selectDifferenceImages(event.target.files); event.target.value = ""; }} /></label>
           <div className="order-board-difference-evidence__images">
