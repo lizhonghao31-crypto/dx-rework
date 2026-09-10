@@ -505,7 +505,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     {!embedded && <div className="section-title responsibility-heading">
       <div>
         <h2>{ownerSigning ? "N08 · 老板签字" : "N07 · 责任判定"}</h2>
-        <p>{ownerSigning ? "仅包含本厂责任时需要老板确认；核对后同意或驳回。" : "每道工序可添加多个责任方，比例合计必须为 100%；金额由工资基础、比例和倍率自动计算。"}</p>
+        <p>{ownerSigning ? "本厂责任及订单重新判责需老板确认；核对后同意或驳回。" : "每道工序可添加多个责任方，比例合计必须为 100%；金额由责任计算基数、比例和倍率自动计算。"}</p>
       </div>
       <StatusBadge tone={ownerSigning || determination?.stage === "finalized" ? "success" : "warning"}>{statusText}</StatusBadge>
     </div>}
@@ -522,7 +522,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
         <b>{tailCostBearerSourceLabel(response)}：{tailCostBearerLabel(response.tailInspectionCostBearer)}</b>
       </div>
       <div className="responsibility-tail-review__summary">
-        <span>工资基础 {tailSource ? displayMoney(tailSource.baseAmount) : "待生成"}</span>
+        <span title="用于计算责任金额的该工序基础人工费用，不等同于员工最终工资。">责任计算基数 {tailSource ? displayMoney(tailSource.baseAmount) : "待生成"}</span>
         <strong>本次确认：{tailCostBearer === "own_factory" ? "本厂承担" : tailCostBearer === "processing_factory" ? "加工厂承担（100% × 1.2）" : "待补充"}</strong>
         {editable && !tailBearerEditing && <Button disabled={Boolean(busyAction)} onClick={() => setTailBearerEditing(true)}>修改承担方</Button>}
       </div>
@@ -548,7 +548,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
         <div className="responsibility-process__title">
           <div className="responsibility-process__identity">
             {editable && process.executionKind === "worker" && <input aria-label={`选择工序 ${process.processName}`} type="checkbox" checked={selectedProcessIds.includes(process.configurationItemId)} onChange={(event) => setSelectedProcessIds((current) => event.target.checked ? [...current, process.configurationItemId] : current.filter((id) => id !== process.configurationItemId))} />}
-            <div><h3>{process.processName}</h3><p>工资基础 {displayMoney(process.baseAmount)} · {process.pricingUnit === "piece" ? "按件" : "按小时"}</p></div>
+            <div><h3>{process.processName}</h3><p title="用于计算责任金额的该工序基础人工费用，不等同于员工最终工资。">责任计算基数 {displayMoney(process.baseAmount)} · {process.pricingUnit === "piece" ? "按件" : "按小时"}</p></div>
           </div>
           <b className={totalBps === 10000n ? "share-ok" : "share-error"}>责任比例 {totalBps === null ? "格式有误" : `${Number(totalBps) / 100}%`}</b>
         </div>

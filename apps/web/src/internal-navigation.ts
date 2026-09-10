@@ -69,7 +69,11 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     if (guards.size && !await canLeaveInternalPage()) return;
     ++generation;
     position += 1;
-    window.history.pushState({ [POSITION]: position }, "", `${url.pathname}${url.search}${url.hash}`);
+    const sourcePath = basePath && window.location.pathname.startsWith(basePath) ? window.location.pathname.slice(basePath.length) : window.location.pathname;
+    const returnTo = /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(relativePath)
+      ? { dxReworkReturnTo: /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(sourcePath)
+          ? window.history.state?.dxReworkReturnTo : `${sourcePath}${window.location.search}${window.location.hash}` } : {};
+    window.history.pushState({ [POSITION]: position, ...returnTo }, "", `${url.pathname}${url.search}${url.hash}`);
     remember();
     if (url.hash) window.requestAnimationFrame(() => document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" }));
     else window.scrollTo({ top: 0, left: 0 });

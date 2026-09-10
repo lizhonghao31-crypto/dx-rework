@@ -716,3 +716,15 @@ details.inspection-readonly {
   .rework-detail-target-layout .rework-detail-task__heading{min-height:26px}
   .rework-detail-target-layout .rework-detail-task__heading h2{font-size:15px;line-height:20px}
 }
+
+/* B PR08: order responsibility result and source return. */
+.rework-detail-back { display:inline-flex; align-items:center; margin-right:12px; font-size:16px; white-space:nowrap; }
+.rework-responsibility-result { margin-bottom:16px; }
+.rework-responsibility-result__summary { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.rework-responsibility-result__summary > span { flex:1; }
+.rework-responsibility-result details { margin-top:12px; }
+.rework-responsibility-result__version { display:grid; gap:4px; padding:12px 0; border-bottom:1px solid var(--color-border, #ddd); }
+.rework-responsibility-result__form { margin-top:12px; }
+.rework-responsibility-result__form label { display:grid; gap:6px; }
+.rework-responsibility-result__form textarea { width:100%; min-height:80px; font:inherit; }
+.rework-responsibility-result__form button { margin-right:8px; }

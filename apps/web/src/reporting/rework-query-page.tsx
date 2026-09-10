@@ -33,7 +33,7 @@ export function ReworkQueryPage() {
   const [to,setTo]=useState(initial.get("to")??"");
   const [overdue, setOverdue] = useState(initial.get("overdue") ?? "");
   const [exception, setException] = useState(initial.get("exception") ?? "");
-  const [page,setPage]=useState(1);
+  const [page,setPage]=useState(() => { const value=Number(initial.get("page")); return Number.isInteger(value)&&value>0?value:1; });
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(true);
@@ -43,6 +43,13 @@ export function ReworkQueryPage() {
   const resetPage=()=>{setPage(1);};
   const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,page: String(page), limit: "15" }), [debouncedQ,status,responsibilityType,from,to,overdue,exception,page]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    for (const [name,value] of Object.entries({q,status,responsibilityType,from,to,overdue,exception,page:page>1?String(page):""})) {
+      if(value) url.searchParams.set(name,value); else url.searchParams.delete(name);
+    }
+    window.history.replaceState(window.history.state,"",url);
+  }, [q,status,responsibilityType,from,to,overdue,exception,page]);
   useEffect(() => {
     const controller = new AbortController();
     setRefreshing(true);

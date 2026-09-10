@@ -7,6 +7,8 @@ import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
+import { OrderResponsibilityRevisionPanel } from "./order-responsibility-revision-panel.js";
+import { reworkReturnPath } from "./rework-return-path.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
 import { ImageViewer } from "./image-viewer.js";
@@ -453,7 +455,7 @@ export function ReworkDetailPage({
       if (!nextNode) return;
       const url = new URL(window.location.href);
       url.searchParams.set("node", nextNode);
-      window.history.replaceState({}, "", url);
+      window.history.replaceState(window.history.state, "", url);
     } catch {
       // Mutation already succeeded; preserve its success feedback and allow a manual refresh.
     }
@@ -495,7 +497,7 @@ export function ReworkDetailPage({
     return () => controller.abort();
   }, [load, reworkOrderId]);
 
-  const backAction = returnToTodos ? { action: "返回我的待办", actionHref: "/ui/my-tasks" } : {};
+  const backAction = { backHref: reworkReturnPath(window.location.search, window.history.state?.dxReworkReturnTo, returnToTodos) };
   if (state.kind === "loading") {
     return <Shell active="全部订单"><Header title="返工单详情" badge="实时读取" {...backAction} /><Surface>正在加载返工单…</Surface></Shell>;
   }
@@ -692,6 +694,7 @@ export function ReworkDetailPage({
   return (
     <Shell active="全部订单">
       <div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
+      {canSeeResponsibility && ["pending_responsibility_determination","pending_owner_signature","pending_responsibility_action","completed"].includes(detail.status) && <OrderResponsibilityRevisionPanel orderId={detail.reworkOrderId} orderVersion={detail.version} onChanged={syncAfterNodeAction} />}
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
           <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>

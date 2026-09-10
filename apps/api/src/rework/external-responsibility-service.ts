@@ -605,8 +605,8 @@ export class ExternalResponsibilityService {
       case_id: string; rework_order_id: string; rework_no: string | null; style_no: string | null; order_no: string | null; problem_part: string | null; responsibility_type: ResponsibilityType; supplier_name_snapshot: string; status: CaseStatus; proposed_deduction_amount: string; actual_deducted_amount: string; remaining_amount: string; case_version: number; overdue: boolean; can_act: boolean;
     }>(
       `SELECT c.case_id,c.rework_order_id,o.rework_no,o.style_no,o.order_no,o.problem_part,c.responsibility_type,c.supplier_name_snapshot,c.status,c.proposed_deduction_amount::text,
-              COALESCE((SELECT sum(entry.amount) FROM rework_external_deduction_entries entry WHERE entry.case_id=c.case_id),0)::text actual_deducted_amount,
-              (c.proposed_deduction_amount-COALESCE((SELECT sum(entry.amount) FROM rework_external_deduction_entries entry WHERE entry.case_id=c.case_id),0))::text remaining_amount,
+              COALESCE((SELECT sum(entry.amount) FROM external_deduction_scope(c.case_id) entry),0)::text actual_deducted_amount,
+              (c.proposed_deduction_amount-COALESCE((SELECT sum(entry.amount) FROM external_deduction_scope(c.case_id) entry),0))::text remaining_amount,
               c.case_version,
               EXISTS(SELECT 1 FROM rework_external_deduction_follow_ups follow WHERE follow.case_id=c.case_id AND follow.next_follow_up_at<CURRENT_TIMESTAMP) overdue,
               CASE
@@ -831,7 +831,7 @@ export class ExternalResponsibilityService {
         `SELECT COALESCE(sum(entry.amount),0)::text actual,
                 COALESCE(sum(entry.amount),0)=case_record.proposed_deduction_amount is_full
          FROM rework_external_responsibility_cases case_record
-         LEFT JOIN rework_external_deduction_entries entry ON entry.case_id=case_record.case_id
+         LEFT JOIN LATERAL external_deduction_scope(case_record.case_id) entry ON true
          WHERE case_record.case_id=$1
          GROUP BY case_record.proposed_deduction_amount`,
         [caseId],
@@ -857,7 +857,7 @@ export class ExternalResponsibilityService {
       const ledger=(await client.query<{actual:string;request_version:number}>(
         `SELECT COALESCE(sum(entry.amount),0)::text actual,
                 COALESCE((SELECT max(request_version) FROM rework_external_deduction_special_requests WHERE case_id=$1),0)+1 request_version
-         FROM rework_external_deduction_entries entry WHERE entry.case_id=$1`,[caseId],
+         FROM external_deduction_scope($1) entry`,[caseId],
       )).rows[0]!;
       const actual=toCents(ledger.actual); const proposed=toCents(current.proposed_deduction_amount);
       if(actual===proposed) fail("实际扣款已等于拟扣金额，请直接确认完成",400,"VALIDATION_ERROR");
@@ -1015,7 +1015,7 @@ export class ExternalResponsibilityService {
   private async caseDto(actor: TrustedActorContext, row: CaseRow, executor: Queryable): Promise<ExternalResponsibilityCaseResponse> {
     const [items,deductions,followUps,closure,special,revisions,permissions] = await Promise.all([
       executor.query<{external_item_id:string;configuration_item_id:string;responsibility_type:ResponsibilityType;process_snapshot:Record<string,unknown>;multiplier_snapshot:string;share_bps_snapshot:number;proposed_amount:string;amount_line_snapshot:Record<string,unknown>}>(`SELECT item.external_item_id,item.configuration_item_id,item.responsibility_type,item.process_snapshot,item.multiplier_snapshot::text,item.share_bps_snapshot,item.proposed_amount::text,item.amount_line_snapshot FROM rework_external_responsibility_case_items mapping JOIN rework_external_responsibility_items item ON item.external_item_id=mapping.external_item_id WHERE mapping.case_id=$1 ORDER BY item.configuration_item_id`,[row.case_id]),
-      executor.query<{deduction_entry_id:string;entry_type:"deduction"|"adjustment"|"reversal";amount:string;deducted_on:string;reference_no:string|null;attachment_ids:string[];reverses_entry_id:string|null;recorded_by:string;created_at:Date}>(`SELECT deduction_entry_id,entry_type,amount::text,deducted_on::text,reference_no,attachment_ids,reverses_entry_id,recorded_by,created_at FROM rework_external_deduction_entries WHERE case_id=$1 ORDER BY created_at,deduction_entry_id`,[row.case_id]),
+      executor.query<{deduction_entry_id:string;entry_type:"deduction"|"adjustment"|"reversal";amount:string;deducted_on:string;reference_no:string|null;attachment_ids:string[];reverses_entry_id:string|null;recorded_by:string;created_at:Date}>(`SELECT deduction_entry_id,entry_type,amount::text,deducted_on::text,reference_no,attachment_ids,reverses_entry_id,recorded_by,created_at FROM external_deduction_scope($1) ORDER BY created_at,deduction_entry_id`,[row.case_id]),
       executor.query<{follow_up_id:string;content:string;supplier_feedback:string|null;next_follow_up_at:Date|null;attachment_ids:string[];created_by:string;created_at:Date}>(`SELECT follow_up_id,content,supplier_feedback,next_follow_up_at,attachment_ids,created_by,created_at FROM rework_external_deduction_follow_ups WHERE case_id=$1 ORDER BY created_at,follow_up_id`,[row.case_id]),
       executor.query<{result:"full"|"partial"|"not_deducted";proposed_amount:string;actual_deducted_amount:string;remaining_amount:string;reason:string|null;evidence_attachment_ids:string[];remaining_difference_disposition:string|null;closed_by:string;closed_at:Date}>(`SELECT result,proposed_amount::text,actual_deducted_amount::text,remaining_amount::text,reason,evidence_attachment_ids,remaining_difference_disposition,closed_by,closed_at FROM rework_external_deduction_closures WHERE case_id=$1`,[row.case_id]),
       executor.query<{special_request_id:string;request_version:number;reason:string;attachment_ids:string[];proposed_amount_snapshot:string;actual_deducted_amount_snapshot:string;remaining_amount_snapshot:string;requested_by:string;requested_at:Date;decision:"approved"|"returned"|null;decision_reason:string|null;decided_by:string|null;decided_at:Date|null}>(`SELECT source.special_request_id,source.request_version,source.reason,source.attachment_ids,source.proposed_amount_snapshot::text,source.actual_deducted_amount_snapshot::text,source.remaining_amount_snapshot::text,source.requested_by,source.requested_at,decision.decision,decision.reason decision_reason,decision.decided_by,decision.decided_at FROM rework_external_deduction_special_requests source LEFT JOIN rework_external_deduction_special_decisions decision USING(special_request_id) WHERE source.case_id=$1 ORDER BY source.request_version DESC LIMIT 1`,[row.case_id]),
