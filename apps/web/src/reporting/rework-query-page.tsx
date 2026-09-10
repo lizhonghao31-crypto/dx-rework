@@ -1,4 +1,4 @@
-import {WorkAnalysisPanel} from "../work-analysis-panel.js";
+import {ReworkFlowPanel} from "../rework-flow-panel.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
@@ -75,7 +75,7 @@ export function ReworkQueryPage() {
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="返工单看板">
     <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
-    <WorkAnalysisPanel kind="workflow" />
+    <ReworkFlowPanel keyword={q} search={debouncedQ} node={status} from={from} to={to} refreshToken={refresh} onQuery={value=>{setQ(value);resetPage();}} onNode={value=>{setStatus(value);resetPage();}} onRefresh={()=>setRefresh(value=>value+1)} />
     <Surface className="reporting-filters reporting-filters--orders">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>

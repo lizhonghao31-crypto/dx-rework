@@ -8,8 +8,16 @@ const line=z.object({position:z.number().int(),styleNo:z.string().nullable(),col
 const stage=z.object({id:z.string(),version:z.number().int(),recordedAt:instant,lines:z.array(line)});
 export const QuoteAnalysisResponseSchema=z.object({asOf:z.string().datetime(),filters:WorkAnalysisQuerySchema,total:z.number().int(),missingInitialCount:z.number().int(),items:z.array(z.object({id:z.string().uuid(),orderNo:z.string(),archived:z.boolean(),initial:stage,ie:z.array(stage),approved:z.array(stage)}))});
 export type QuoteAnalysisResponse=z.infer<typeof QuoteAnalysisResponseSchema>;
-const transition=z.object({id:z.string(),from:z.string().nullable(),to:z.string().nullable(),action:z.string(),changesNode:z.boolean(),enteredAt:instant,leftAt:instant});
-export const WorkflowAnalysisResponseSchema=z.object({asOf:z.string().datetime(),filters:WorkAnalysisQuerySchema,total:z.number().int(),missingEntryCount:z.number().int(),groups:z.array(z.object({key:z.string(),count:z.number().int(),missingEntryCount:z.number().int()})),items:z.array(z.object({id:z.string().uuid(),kind:z.enum(['sourcing','rework']),label:z.string(),status:z.string(),independentFinance:z.boolean(),enteredAt:instant,history:z.array(transition)}))});
+export const WorkflowAnalysisQuerySchema=WorkAnalysisQuerySchema.safeExtend({
+ node:z.string().max(80).default(''),state:z.enum(['all','waiting','closed']).default('all'),
+ roundtrip:z.enum(['all','yes','repeated','no']).default('all'),issue:z.enum(['all','missing']).default('all'),
+ sort:z.enum(['longest','shortest']).default('longest'),
+});
+export type WorkflowAnalysisQuery=z.infer<typeof WorkflowAnalysisQuerySchema>;
+const transition=z.object({id:z.string(),from:z.string().nullable(),to:z.string().nullable(),action:z.string(),changesNode:z.boolean(),enteredAt:instant,leftAt:instant,actorName:z.string().nullable().default(null),reason:z.string().nullable().default(null),returned:z.boolean().default(false)});
+export const WorkflowAnalysisResponseSchema=z.object({asOf:z.string().datetime(),filters:WorkflowAnalysisQuerySchema,total:z.number().int(),waitingCount:z.number().int().default(0),roundtripCount:z.number().int().default(0),repeatedCount:z.number().int().default(0),longestEnteredAt:instant.default(null),missingEntryCount:z.number().int(),groups:z.array(z.object({key:z.string(),count:z.number().int(),missingEntryCount:z.number().int()})),items:z.array(z.object({id:z.string().uuid(),kind:z.enum(['sourcing','rework']),label:z.string(),status:z.string(),independentFinance:z.boolean(),enteredAt:instant,styleNo:z.string().nullable().default(null),orderNo:z.string().nullable().default(null),
+ submitterName:z.string().nullable().default(null),handlers:z.array(z.string()).default([]),roundtripCount:z.number().int().default(0),
+ execution:z.array(z.object({taskId:z.string(),processName:z.string(),people:z.array(z.string()),reports:z.array(z.object({id:z.string(),quantity:z.string(),at:instant,actorName:z.string().nullable(),rejected:z.boolean()}))})).default([]),history:z.array(transition)}))});
 export type WorkflowAnalysisResponse=z.infer<typeof WorkflowAnalysisResponseSchema>;
 export const DiagnosticOutcomeSchema=z.enum(['success','validation','permission','technical']);
 export const DiagnosticsResponseSchema=z.object({asOf:z.string().datetime(),filters:WorkAnalysisQuerySchema,recordingSince:instant,total:z.number().int(),recordCount:z.string(),groups:z.array(z.object({operation:z.string(),outcome:DiagnosticOutcomeSchema,code:z.string(),count:z.string(),replayedCount:z.string(),lastAt:z.string().datetime()})),revisions:z.array(z.object({action:z.string(),field:z.string(),count:z.string()}))});
