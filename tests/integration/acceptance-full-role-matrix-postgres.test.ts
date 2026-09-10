@@ -8,10 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { buildApp } from "../../apps/api/src/app.js";
-import {
-  AcceptanceDingTalkProvider,
-  mintAcceptanceLoginCode,
-} from "../../apps/api/src/auth/acceptance-provider.js";
+import { mintAcceptanceControlCode } from "../../apps/api/src/auth/acceptance-control.js";
+import { AcceptanceDingTalkProvider } from "../../apps/api/src/auth/acceptance-provider.js";
 import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 import { AuthService } from "../../apps/api/src/auth/service.js";
 import {
@@ -145,13 +143,17 @@ runWithPostgres("full acceptance role matrix", () => {
     await admin.end();
   });
 
-  const login = async (alias: string): Promise<{ cookie: string; user: SessionUser }> => {
+  const switchIdentity = async (
+    controlCookie: string,
+    alias: string,
+  ): Promise<{ cookie: string; user: SessionUser }> => {
     const response = await app.inject({
       method: "POST",
-      url: "/auth/mobile",
-      payload: { code: mintAcceptanceLoginCode(alias, acceptanceSecret) },
+      url: "/acceptance/control/switch",
+      headers: { cookie: controlCookie },
+      payload: { alias },
     });
-    expect(response.statusCode, `${alias}: login`).toBe(200);
+    expect(response.statusCode, `${alias}: control switch`).toBe(200);
     const header = response.headers["set-cookie"];
     const raw = Array.isArray(header) ? header[0] : header;
     const cookie = raw!.split(";", 1)[0]!;
@@ -160,11 +162,20 @@ runWithPostgres("full acceptance role matrix", () => {
     return { cookie, user: me.json().user as SessionUser };
   };
 
-  it("switches every active Golden Source identity through real AuthService/RBAC and reports every mismatch in one run", async () => {
+  it("switches every active Golden Source identity through the real Acceptance control/AuthService/RBAC path and reports every mismatch in one run", async () => {
     const failures: string[] = [];
+    const start = await app.inject({
+      method: "POST",
+      url: "/acceptance/control/start",
+      payload: { code: mintAcceptanceControlCode(acceptanceSecret) },
+    });
+    expect(start.statusCode).toBe(200);
+    const controlHeader = start.headers["set-cookie"];
+    const controlRaw = Array.isArray(controlHeader) ? controlHeader[0] : controlHeader;
+    const controlCookie = controlRaw!.split(";", 1)[0]!;
 
     for (const expectation of ACCEPTANCE_ROLE_MATRIX) {
-      const { cookie, user } = await login(expectation.alias);
+      const { cookie, user } = await switchIdentity(controlCookie, expectation.alias);
       const expectedUserId = userIds.get(expectation.alias)!;
       const checks = evaluateAcceptanceSnapshot(
         expectation,
@@ -181,8 +192,8 @@ runWithPostgres("full acceptance role matrix", () => {
       }
 
       for (const probe of expectation.probes ?? []) {
-        if (!['access-roles', 'supplier-list'].includes(probe.id)) continue;
-        const url = probe.id === 'access-roles' ? '/access/roles' : '/master-data/suppliers';
+        if (!["access-roles", "supplier-list"].includes(probe.id)) continue;
+        const url = probe.id === "access-roles" ? "/access/roles" : "/master-data/suppliers";
         const response = await app.inject({ method: "GET", url, headers: { cookie } });
         const check = evaluateHttpProbe(expectation, probe, response.statusCode);
         if (check.verdict !== "pass") {
