@@ -166,6 +166,7 @@
     { "version": "0164_global_export_allowlist", "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3" },
     { "version": "0165_own_tail_responsibility_history", "checksum": "0c1d96d6734f342c8a5d0fc2e422dcb81ade20913bb5cbb672091533226e1f3f" },
     { "version": "0166_permission_role_field_closure", "checksum": "c7ff5ec6b10b1147d6d2671bba900585fd965a2a215fa294df5fc3596d8a1eea" },
-    { "version": "0167_final_acceptance_permission_closure", "checksum": "12141083ee0559bb2a86f215c02a69cfd64036fa0fbe22e00aa172400ed22489" }
+    { "version": "0167_final_acceptance_permission_closure", "checksum": "12141083ee0559bb2a86f215c02a69cfd64036fa0fbe22e00aa172400ed22489" },
+    { "version": "0168_final_acceptance_supplier_catalog_closure", "checksum": "49010b86acdea3ac128789258c6880c13cae5d978891296c5b3a06fac3f9d587" }
   ]
 }
