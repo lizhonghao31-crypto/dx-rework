@@ -208,9 +208,10 @@ if (hasDatabase) {
     "tests/integration/sample-disposal-postgres.test.ts",
     "tests/integration/sample-import-postgres.test.ts",
     "tests/integration/acceptance-role-session-postgres.test.ts",
+    "tests/integration/acceptance-full-role-matrix-postgres.test.ts",
   );
   process.stdout.write(
-    "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + isolated acceptance role sessions/control switching + browser/root/storage regressions\n",
+    "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + isolated acceptance role sessions/control switching + full active-role acceptance matrix + browser/root/storage regressions\n",
   );
 } else {
   process.stdout.write(
@@ -260,7 +261,7 @@ if (exitCode !== 0) {
 
 process.stdout.write(
   hasDatabase
-    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + N01-N11 + two fresh Root single-account passes + isolated acceptance role sessions/control switching\n"
+    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + N01-N11 + two fresh Root single-account passes + isolated acceptance role sessions/control switching + full active-role acceptance matrix\n"
     : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
 );
 
