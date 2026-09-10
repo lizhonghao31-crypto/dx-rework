@@ -882,6 +882,28 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(history.rows.every((image) => image.entity_id === resolved.value.resolutionId)).toBe(true);
   });
 
+  it("filters the original board by pending, handled and stale snapshots without counting missing packing as zero", async () => {
+    const styleNo = "B-PR05-FILTER";
+    const created = await service.create(receiver(), {styleNo, documentQuantity: 100, actualQuantity: 90, attachmentIds: [await readyImage()]}, randomUUID());
+    const query = (status = "all") => service.board(businessDate(), businessDate(), styleNo, status);
+    const initial = await query("missing_packing");
+    expect(initial.totalCount).toBe(1); expect(initial.rows[0]!.packingDifferenceQuantity).toBeNull();
+    expect(initial.insights).toEqual({pendingCount: 1, missingPackingCount: 1, staleCount: 0});
+    const row = initial.rows[0]!;
+    const resolved = await service.resolveDifference(differenceResolver(), {receivingBatchId: created.value.receivingBatchId,
+      expectedVersion: row.version, expectedDocumentQuantity: 100, expectedActualQuantity: 90,
+      differenceType: "receiving", result: "下一批补回"}, randomUUID());
+    expect((await query("pending")).totalCount).toBe(0);
+    expect((await query("handled")).rows[0]!.receivingDifferenceResolution?.resolutionId).toBe(resolved.value.resolutionId);
+    await service.createRepeated(receiver(), {receivingBatchId: row.receivingBatchId, source: "jiashun", actualQuantity: 5}, randomUUID());
+    const stale = await query("stale");
+    expect(stale.totalCount).toBe(1); expect(stale.insights).toEqual({pendingCount: 1, missingPackingCount: 1, staleCount: 1});
+    expect(stale.rows[0]).toMatchObject({differenceQuantity: -5, receivingDifferenceResolution: null, staleResolution: true});
+    expect(stale.rows[0]!.resolutionHistory[0]).toMatchObject({resolutionId: resolved.value.resolutionId, differenceQuantity: -10, result: "下一批补回"});
+    expect((await query("packing_difference")).totalCount).toBe(0);
+    expect((await query("receiving_difference")).kpis.orderCount).toBe(1);
+  });
+
   it("rejects invalid evidence atomically without saving a false handled result", async () => {
     const deliveryImage = await readyImage();
     const created = await service.create(receiver(), {

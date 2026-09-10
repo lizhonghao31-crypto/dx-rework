@@ -130,3 +130,12 @@
 .order-board-difference-evidence__images>div{display:grid;gap:4px;width:76px}
 .order-board-difference-evidence__images img{display:block;width:76px;height:76px;object-fit:cover;border-radius:6px}
 .order-board-difference-evidence__preview{padding:0;border:1px solid #c7d0da;border-radius:6px;background:#fff;cursor:pointer}
+
+/* B方案：分析只进入原筛选与原订单行。 */
+.order-board-page .order-board-insights { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+.order-board-page .order-board-insights button { border:1px solid #dbe3ec; border-radius:8px; padding:8px 12px; background:transparent; color:inherit; cursor:pointer; }
+.order-board-page .order-board-insights button[aria-pressed="true"] { background:#eff6ff; border-color:#93c5fd; }
+.order-board-page .order-board-stale-resolution { padding:8px 12px; color:#805317; font-size:13px; }
+.order-board-page .order-board-stale-resolution summary { cursor:pointer; }
+.order-board-page .order-board-stale-resolution div { display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; border-top:1px solid #eee; }
+@media(max-width:600px) { .order-board-page .order-board-insights button { min-height:40px; } }

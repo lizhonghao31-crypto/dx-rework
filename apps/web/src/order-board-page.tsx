@@ -1,4 +1,3 @@
-import { ReceivingAnalysisPanel } from "./receiving-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
@@ -23,7 +22,7 @@ import "./order-board-page.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type ReworkStatus = "draft" | "active" | "completed" | null;
-type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple";
+type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple" | "receiving_difference" | "packing_difference" | "missing_packing" | "pending" | "handled" | "stale";
 
 type ReceivingHistoryItem = Readonly<{
   receiptId: string;
@@ -73,6 +72,8 @@ type BoardRow = Readonly<{
   packingRecordedAt: string | null;
   receivingDifferenceResolution: DifferenceResolution | null;
   packingDifferenceResolution: DifferenceResolution | null;
+  staleResolution?: boolean;
+  resolutionHistory?: readonly (DifferenceResolution & { differenceType: "receiving" | "packing"; differenceQuantity: number })[];
   receiptCount: number;
   receivingHistory: readonly ReceivingHistoryItem[];
   lastReceivedAt: string;
@@ -91,6 +92,7 @@ type BoardResult = Readonly<{
   endDate: string;
   mode: "range" | "search";
   status: BoardStatus;
+  insights?: Readonly<{ pendingCount: number; missingPackingCount: number; staleCount: number }>;
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -690,6 +692,12 @@ export function OrderBoardPage() {
         <label>款号<input type="search" placeholder="快速搜索款号" value={query} onChange={(event) => { resetPagination(); setQuery(event.target.value.toUpperCase()); }} /></label>
         <label>状态<select value={status} onChange={(event) => { resetPagination(); setStatus(event.target.value as BoardStatus); }}>
           <option value="all">全部状态</option>
+          <option value="receiving_difference">回货有差异</option>
+          <option value="packing_difference">装箱有差异</option>
+          <option value="missing_packing">装箱未记录</option>
+          <option value="pending">待处理</option>
+          <option value="handled">已有处理</option>
+          <option value="stale">待复核旧处理</option>
           <option value="normal">正常</option>
           <option value="short">少收</option>
           <option value="extra">多收</option>
@@ -701,7 +709,12 @@ export function OrderBoardPage() {
       </div>
     </div>
 
-    <ReceivingAnalysisPanel startDate={startDate} endDate={endDate} q={debouncedQuery}/>
+    <div className="order-board-insights" aria-label="当前筛选异常摘要">
+      <button aria-pressed={status === "pending"} disabled={pageLoading} onClick={() => { resetPagination(); setStatus("pending"); }}>待处理差异 {data?.insights?.pendingCount ?? "—"}</button>
+      <button aria-pressed={status === "missing_packing"} disabled={pageLoading} onClick={() => { resetPagination(); setStatus("missing_packing"); }}>装箱未记录 {data?.insights?.missingPackingCount ?? "—"}</button>
+      <button aria-pressed={status === "stale"} disabled={pageLoading} onClick={() => { resetPagination(); setStatus("stale"); }}>处理后数据变化 {data?.insights?.staleCount ?? "—"}</button>
+      {status !== "all" ? <button onClick={() => { resetPagination(); setStatus("all"); }}>查看全部</button> : null}
+    </div>
     <div className="order-board-kpis">
       <KpiInstrument
         label={searchMode ? "搜索结果订单数" : "期间收货订单数"}
@@ -799,6 +812,12 @@ export function OrderBoardPage() {
             </div>
           </div>
         </Surface>
+        {row.staleResolution ? <details className="order-board-stale-resolution"><summary>处理后数据已变化 · 待复核</summary>
+          <p>旧处理对应当时快照，请按当前数量重新核对。原处理记录保留。</p>
+          {row.resolutionHistory?.map(record => <div key={record.resolutionId}><strong>{record.differenceType === "receiving" ? "收货" : "装箱"}历史差异 {signedQuantity(record.differenceQuantity)}</strong><span>{record.result} · {record.handledBy} · {historyDateTime(record.handledAt)}</span>
+            {record.attachments?.length ? <button onClick={() => setAttachmentViewer({ attachments: record.attachments!, index: 0, title: "历史处理凭证" })}>查看处理凭证</button> : null}
+          </div>)}
+        </details> : null}
         {historyExpanded ? <section className="order-board-history" aria-label={`${row.styleNo}多次收货记录`}>
           {row.receivingHistory.map((item) => {
             const historyTone = item.differenceQuantity < 0 ? "short" : item.differenceQuantity > 0 ? "extra" : "even";
