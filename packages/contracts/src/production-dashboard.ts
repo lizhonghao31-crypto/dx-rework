@@ -9,10 +9,17 @@ export const ProductionProgressSchema = z.object({
   frozen: z.boolean(), firstReportedOn: z.string().date().nullable(), completedQuantity: z.number().int().nonnegative(),
   lastUpdatedAt: z.string().datetime().nullable(), attention: z.boolean(),
 }).strict();
-export const ProductionDashboardItemSchema = z.object({ order: SourcingProductionOrderSchema, progress: ProductionProgressSchema }).strict();
+export const ProductionChaseSchema = z.object({
+  remainingQuantity: z.number().int().nonnegative(), remainingWorkdays: z.number().int().nonnegative().nullable(),
+  requiredDailyQuantity: z.number().int().nonnegative().nullable(), recentDayCount: z.number().int().min(0).max(3),
+  recentDailyQuantity: z.number().nonnegative().nullable(), deliveryPressure: z.boolean(), dueThisWeek: z.boolean(),
+  supplierOpenCount: z.number().int().nonnegative(), supplierDueThisWeekCount: z.number().int().nonnegative(),
+}).strict();
+export const ProductionDashboardItemSchema = z.object({ order: SourcingProductionOrderSchema, progress: ProductionProgressSchema, chase: ProductionChaseSchema.optional() }).strict();
 export const ProductionDashboardQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).optional(), q: z.string().max(100).optional(),
   supplierId: z.string().uuid().optional(), status: SourcingProductionStatusSchema.optional(), progressState: ProductionProgressStateSchema.optional(),
+  risk: z.enum(["attention", "stale", "due_pressure"]).optional(),
   previousAsOf: z.string().datetime().optional(),
 }).strict();
 export const ProductionDashboardEventSchema = z.object({
@@ -25,6 +32,7 @@ export const ProductionDashboardEventSchema = z.object({
 export const ProductionDashboardSchema = z.object({
   asOf: z.string().datetime(), items: z.array(ProductionDashboardItemSchema).max(15), page: z.number().int().positive(), pageSize: z.literal(15), totalCount: z.number().int().nonnegative(),
   counts: z.object({inProduction:z.number().int().nonnegative(),completed:z.number().int().nonnegative(),shipped:z.number().int().nonnegative(),attention:z.number().int().nonnegative()}).strict(),
+  chaseCounts: z.object({attention: z.number().int().nonnegative(), stale: z.number().int().nonnegative(), duePressure: z.number().int().nonnegative()}).optional(),
   suppliers: z.array(z.object({supplierId:z.string().uuid(),supplierName:z.string()}).strict()),
   events: z.array(ProductionDashboardEventSchema).max(20),
 }).strict();

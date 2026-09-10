@@ -1,4 +1,3 @@
-import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
@@ -37,11 +36,12 @@ export function ProductionProgressBars({item,motion=false}:{item:ProductionDashb
 export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:string|undefined}) {
   const [data,setData]=useState<ProductionDashboard|null>(null),[detail,setDetail]=useState<z.infer<typeof ProductionDashboardDetailSchema>|null>(null);
   const [q,setQ]=useState(""),[supplier,setSupplier]=useState(""),[status,setStatus]=useState(""),[progressState,setProgressState]=useState("");
+  const [risk,setRisk]=useState(""),[root,setRoot]=useState(false),[managementOpen,setManagementOpen]=useState(false),[deleting,setDeleting]=useState<string|null>(null);
   const [page,setPage]=useState(1),[loading,setLoading]=useState(true),[error,setError]=useState("");
   const [changed,setChanged]=useState<string[]>([]),[paused,setPaused]=useState(false),[hovered,setHovered]=useState(false),[focused,setFocused]=useState(false),[reduced,setReduced]=useState(false);
   const [visible,setVisible]=useState(!document.hidden),[overflow,setOverflow]=useState(false),[now,setNow]=useState(Date.now()),[filtersOpen,setFiltersOpen]=useState(false),[touchReading,setTouchReading]=useState(false);
   const [canControlMotion,setCanControlMotion]=useState(false),[canOpenReporting,setCanOpenReporting]=useState(false);
-  useEffect(()=>{let live=true;void verifySession().then(session=>{if(!live)return;if(session==="denied"){setCanControlMotion(false);setCanOpenReporting(false);return;}setCanControlMotion(canControlProductionMotion(session.user));setCanOpenReporting(canAccessProductionReporting(session.user));}).catch(()=>{if(live){setCanControlMotion(false);setCanOpenReporting(false);}});return()=>{live=false;};},[]);
+  useEffect(()=>{let live=true;void verifySession().then(session=>{if(!live)return;if(session==="denied"){setCanControlMotion(false);setCanOpenReporting(false);return;}setRoot(session.user.isRoot===true);setCanControlMotion(canControlProductionMotion(session.user));setCanOpenReporting(canAccessProductionReporting(session.user));}).catch(()=>{if(live){setCanControlMotion(false);setCanOpenReporting(false);}});return()=>{live=false;};},[]);
   const sequence=useRef(0),last=useRef<ProductionDashboard|null>(null),belt=useRef<HTMLDivElement|null>(null);
   const load=async(manual=false)=>{
     const version=++sequence.current;setLoading(true);setError("");
@@ -52,7 +52,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
           if(!response.ok&&response.status!==404)throw new Error("生产待办已读状态保存失败，请刷新重试");
           window.dispatchEvent(new Event("dx-rework:todo-read"));}
       }}
-      else{const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);if(progressState)params.set("progressState",progressState);
+      else{const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);if(progressState)params.set("progressState",progressState);if(risk)params.set("risk",risk);
         if(manual&&last.current)params.set("previousAsOf",last.current.asOf);
         const result=await request(`?${params}`,ProductionDashboardSchema);
         if(version===sequence.current){setChanged(manual&&last.current?changedDashboardOrders(last.current.items,result.items):[]);setData(result);last.current=result;}
@@ -60,7 +60,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
     }catch(e){if(version===sequence.current)setError(e instanceof Error?e.message:"加载失败");}finally{if(version===sequence.current)setLoading(false);}
   };
   // Only initial load, explicit filter/page changes and the refresh button request data.
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,page,q,supplier,status,progressState]);
+  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,page,q,supplier,status,progressState,risk]);
   useEffect(()=>{if(!changed.length)return;const timer=setTimeout(()=>setChanged([]),1800);return()=>clearTimeout(timer);},[changed]);
   useEffect(()=>{const media=window.matchMedia("(prefers-reduced-motion: reduce)");const update=()=>setReduced(media.matches);update();media.addEventListener("change",update);return()=>media.removeEventListener("change",update);},[]);
   useEffect(()=>{const update=()=>{setVisible(!document.hidden);setNow(Date.now());};document.addEventListener("visibilitychange",update);const timer=setInterval(()=>{if(!document.hidden)setNow(Date.now());},60000);return()=>{document.removeEventListener("visibilitychange",update);clearInterval(timer);};},[]);
@@ -81,16 +81,20 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
+      {root?<Button variant="secondary" aria-expanded={managementOpen} onClick={()=>setManagementOpen(value=>!value)}>管理⌄</Button>:null}
     </div>
-    <div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>{!productionOrderId?<ProductionPilotControls/>:null}</div>
+    {root&&managementOpen?<div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>{!productionOrderId?<ProductionPilotControls/>:null}</div>:null}
     {productionOrderId?<ProductionReceiptSummary productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}
     {!productionOrderId?<>
-      <ProductionAnalysisPanel/>
-      {data?<Surface className="sourcing-list-card"><div className="production-dashboard__toolbar" aria-label="生产运行状态">
-        <strong>{data.counts.attention?`${number(data.counts.attention)} 单需关注`:"当前筛选无进度预警"}</strong><span>生产中 {number(data.counts.inProduction)}</span><span>生产完成 {number(data.counts.completed)}</span><span>已发货 {number(data.counts.shipped)}</span>
-      </div></Surface>:null}
+      {data?<div className="production-chase-summary" aria-label="当前筛选追单摘要">
+        <button aria-pressed={risk==="attention"} onClick={()=>{setRisk("attention");setPage(1);}}>需关注 {number(data.chaseCounts?.attention??data.counts.attention)}</button>
+        <button aria-pressed={risk==="stale"} onClick={()=>{setRisk("stale");setPage(1);}}>2天未更新 {number(data.chaseCounts?.stale??0)}</button>
+        <button aria-pressed={risk==="due_pressure"} onClick={()=>{setRisk("due_pressure");setPage(1);}}>本周交期承压 {number(data.chaseCounts?.duePressure??0)}</button>
+        <span>生产中 {number(data.counts.inProduction)} · 完成 {number(data.counts.completed)} · 已发货 {number(data.counts.shipped)}</span>
+        {risk?<button onClick={()=>{setRisk("");setPage(1);}}>清除风险筛选</button>:null}
+      </div>:null}
       {data?.events.length?<Surface className="sourcing-list-card"><div className="production-dashboard__toolbar"><strong>最近生产动态</strong>
         {touchReading?<Button variant="secondary" onClick={()=>setTouchReading(false)}>结束触摸阅读</Button>:null}</div>
         <div className="production-dashboard__events board-events" ref={belt} onTouchStart={()=>setTouchReading(true)} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onFocusCapture={()=>setFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setFocused(false);}}>
@@ -105,18 +109,30 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
         <label>供应商<select value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">全部负责供应商</option>{data?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</select></label>
         <label>生产状态<select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">全部状态</option>{Object.entries(productionStatusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label>生产进度<select value={progressState} onChange={e=>{setProgressState(e.target.value);setPage(1);}}><option value="">全部进度</option>{Object.entries(progressLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label>追单风险<select value={risk} onChange={e=>{setRisk(e.target.value);setPage(1);}}><option value="">全部</option><option value="attention">需关注</option><option value="stale">2天未更新</option><option value="due_pressure">本周交期承压</option></select></label>
         </div></div>
       </div><div className="board-table-head" aria-hidden="true"><span>订单 / 供应商</span><span>产量 / 交期</span><span>生产与时间进度</span><span>最近记录 / 关注原因</span><span>操作</span></div><div aria-busy={loading}>
         {data?.items.map(item=><article className={`board-row${changed.includes(item.order.productionOrderId)?" production-dashboard__changed":""}`} key={item.order.productionOrderId}>
-          <div className="board-identity"><a href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}`)}><strong>{item.order.firstStyleNo}</strong></a><span>{item.order.supplierName}</span><StatusBadge tone={item.order.status==="in_production"?"info":"success"}>{productionStatusLabels[item.order.status]}</StatusBadge></div>
+          <div className="board-identity"><a href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}`)}><strong>{item.order.firstStyleNo}</strong></a><span>{item.order.supplierName}</span>{item.chase&&item.order.status==="in_production"?<small className="board-concentration" title="本公司当前权限可见的未完订单，不代表供应商全部产能">当前 {item.chase.supplierOpenCount} 张未完 · {item.chase.supplierDueThisWeekCount} 张本周到期</small>:null}<StatusBadge tone={item.order.status==="in_production"?"info":"success"}>{productionStatusLabels[item.order.status]}</StatusBadge></div>
           <div className="board-quantity"><strong>{number(item.progress.completedQuantity)} <small>/ {number(item.order.quantity)} 件</small></strong><span>{item.progress.frozen?"完成时产量":"累计产量"}</span><span>交期 {item.order.deliveryDate??"未记录"}</span>{item.order.lines.length>1?<small>{item.order.lines.length} 个款色 · 详情逐项查看</small>:null}</div>
           <ProductionProgressBars item={item} motion={motion}/>
           <div className="board-update"><time title={item.progress.lastUpdatedAt?timestamp(item.progress.lastUpdatedAt):undefined}>{item.progress.lastUpdatedAt?`距上次记录 ${relativeProductionTime(item.progress.lastUpdatedAt,now)}`:"待首次上报"}</time><p className="board-reason" data-state={item.progress.progressState}>{progressText(item.progress)}</p>{item.order.sourceCaseArchived?<span>原外发单已删除 · 生产记录保留</span>:null}</div>
-          <a className="board-detail-link" href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}`)}>详情</a>
+          <div className="board-row-actions"><a className="board-detail-link" href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}`)}>详情</a>{root?<button className="board-delete" onClick={()=>setDeleting(item.order.productionOrderId)}>删除</button>:null}</div>
+          {item.chase&&item.order.status==="in_production"?<div className="board-chase">
+            <strong>剩余 {number(item.chase.remainingQuantity)} 件</strong>
+            <span>{item.chase.remainingWorkdays===null?"交期未记录":`距交期 ${item.chase.remainingWorkdays} 个工作日`}</span>
+            {item.chase.requiredDailyQuantity!==null?<span>需日均 {number(item.chase.requiredDailyQuantity)} 件</span>:null}
+            <span>{item.chase.recentDailyQuantity===null?"近期有效记录不足，暂不判断":`近3个有效生产日均 ${number(item.chase.recentDailyQuantity)} 件`}</span>
+            {item.chase.deliveryPressure?<strong className="is-pressure">交期承压</strong>:null}
+          </div>:null}
         </article>)}
         {data&&!data.items.length?<p>{data.totalCount?"本页暂无订单，请返回第一页。":"当前筛选暂无生产订单"}</p>:null}
-      </div>{data?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(data.totalCount/15))} onPageChange={setPage} busy={loading} ariaLabel="实时看板分页"/>:null}</Surface>
+      </div><details><summary>计算口径</summary>剩余工作日包含今天，按周一至周五计算。近3个有效生产日取最近7自然日内有上报的日期；修正取最新版本，无上报不补0，数据不足不推测。</details>{data?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(data.totalCount/15))} onPageChange={setPage} busy={loading} ariaLabel="实时看板分页"/>:null}</Surface>
     </>:null}
+    {deleting?<div className="production-delete-overlay" role="presentation"><section role="dialog" aria-modal="true" aria-label="删除测试或误建生产订单" className="production-delete-dialog">
+      <div className="production-dashboard__toolbar"><h2>删除测试 / 误建记录</h2><Button variant="secondary" onClick={()=>setDeleting(null)}>关闭</Button></div>
+      <ProductionExclusionControls key={deleting} productionOrderId={deleting} onExcluded={()=>{setDeleting(null);setData(null);setDetail(null);last.current=null;void load();}}/>
+    </section></div>:null}
     {detail?<>
       <Surface className="sourcing-list-card board-detail"><h2>{detail.detail.order.firstStyleNo} · {detail.detail.order.supplierName}</h2><p>{productionStatusLabels[detail.detail.order.status]} · 交货日期 {detail.detail.order.deliveryDate??"未记录"}</p>
         <ProductionProgressBars item={{order:detail.detail.order,progress:detail.progress}} motion={motion}/><p className="board-reason" data-state={detail.progress.progressState}>{progressText(detail.progress)}</p>

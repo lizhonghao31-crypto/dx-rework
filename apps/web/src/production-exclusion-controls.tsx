@@ -14,9 +14,9 @@ async function request(id: string, init?: RequestInit): Promise<ProductionExclus
   if (!response.ok) throw new Error(body?.error?.message ?? "生产记录排除操作失败，请重试");
   return ProductionExclusionPreviewSchema.parse(body);
 }
-export function ProductionExclusionControls({ onExcluded }: { onExcluded: () => void }) {
-  const [root, setRoot] = useState(false), [open, setOpen] = useState(false);
-  const [id, setId] = useState(""), [reason, setReason] = useState(""), [error, setError] = useState("");
+export function ProductionExclusionControls({ onExcluded, productionOrderId }: { onExcluded: () => void; productionOrderId?: string }) {
+  const [root, setRoot] = useState(false), [open, setOpen] = useState(Boolean(productionOrderId));
+  const [id, setId] = useState(productionOrderId ?? ""), [reason, setReason] = useState(""), [error, setError] = useState("");
   const [preview, setPreview] = useState<ProductionExclusionPreview | null>(null), [busy, setBusy] = useState(false);
   const lock = useRef(false), sequence = useRef(0), attempt = useRef<{ signature: string; key: string } | null>(null);
   useEffect(() => { let live = true; void verifySession().then(s => { if (live) setRoot(s !== "denied" && s.user.isRoot === true); }).catch(() => undefined); return () => { live = false; sequence.current++; }; }, []);
@@ -30,6 +30,7 @@ export function ProductionExclusionControls({ onExcluded }: { onExcluded: () => 
     catch (e) { if (version === sequence.current) setError(e instanceof Error ? e.message : "预览失败"); }
     finally { lock.current = false; setBusy(false); }
   };
+  useEffect(() => { if (root && productionOrderId) void load(); }, [root, productionOrderId]);
   const exclude = async () => {
     if (lock.current || !preview || preview.exclusion || preview.order.productionOrderId !== id.trim() || !reason.trim()) return;
     lock.current = true; setBusy(true); setError("");
@@ -49,7 +50,7 @@ export function ProductionExclusionControls({ onExcluded }: { onExcluded: () => 
     <Button className="ui-disclosure-trigger" aria-expanded={open} variant="secondary" disabled={busy} onClick={() => setOpen(!open)}>测试／误建生产记录排除</Button>
     {open ? <>
       <p>仅按精确ID核对测试或误建对象；普通历史归档不属于测试排除。排除后退出正常列表、动态、预警和统计，历史审计保留。</p>
-      <div className="sourcing-form-grid"><label>生产订单ID<input value={id} disabled={busy} maxLength={36} onChange={e => { setId(e.target.value); setPreview(null); setError(""); sequence.current++; }} /></label>
+      <div className="sourcing-form-grid"><label>生产订单ID<input value={id} disabled={busy || Boolean(productionOrderId)} maxLength={36} onChange={e => { setId(e.target.value); setPreview(null); setError(""); sequence.current++; }} /></label>
       <Button variant="secondary" disabled={busy} onClick={() => void load()}>预览精确对象</Button></div>
       {error ? <p role="alert">{error}</p> : null}
       {preview ? <section aria-label="生产排除预览"><h3>{preview.order.firstStyleNo} · {preview.order.supplierName}</h3>

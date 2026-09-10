@@ -39,3 +39,20 @@
 .production-board details{padding:8px 0;margin:0}
 .production-board summary{min-height:40px;cursor:pointer;align-content:center}
 @media(max-width:800px){.production-board .production-dashboard__toolbar{gap:8px}.production-board .board-directory{padding:12px!important}.production-admin-tools{gap:6px}.production-board summary{min-height:44px}.production-board .production-admin-tool>.ui-disclosure-trigger{min-height:44px}}
+
+/* B方案：原列表追单摘要和低频管理。 */
+.production-board .production-chase-summary { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
+.production-board .production-chase-summary button { border:1px solid #dbe3ec; background:transparent; border-radius:8px; padding:8px 12px; color:inherit; cursor:pointer; }
+.production-board .production-chase-summary button[aria-pressed="true"] { background:#eff6ff; border-color:#93c5fd; }
+.production-board .board-extra>div { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.production-board .board-row-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.production-board .board-delete { border:0; background:transparent; color:#a32222; padding:8px; cursor:pointer; }
+.production-board .board-chase { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; font-size:13px; color:var(--dx-v2-color-text-secondary); }
+.production-board .board-chase .is-pressure { color:#a32222; }
+.production-board .board-chase details { padding:0; }
+.production-board .board-chase summary { min-height:0; }
+.production-board .board-concentration { color:var(--dx-v2-color-text-secondary); font-size:12px; }
+.production-board .production-delete-overlay { position:fixed; inset:0; z-index:1400; display:flex; align-items:center; justify-content:center; background:#0006; padding:16px; }
+.production-board .production-delete-dialog { max-width:700px; width:100%; max-height:90dvh; overflow:auto; background:white; border-radius:12px; padding:16px; }
+@media(max-width:900px) { .production-board .board-extra>div { grid-template-columns:repeat(2,minmax(0,1fr)); } .production-board .board-row-actions { grid-column:2; grid-row:3; justify-content:flex-end; } }
+@media(max-width:520px) { .production-board .board-row-actions { grid-row:4; } .production-board .board-chase { font-size:14px; } .production-board .board-extra>div { grid-template-columns:1fr; } }

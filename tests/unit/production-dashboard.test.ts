@@ -1,3 +1,4 @@
+import { addProductionChase } from "../../apps/api/src/sourcing/production-chase.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
@@ -91,5 +92,21 @@ describe("SSP-08 complete-set selection and refresh",()=>{
       expect((await app.inject({method:"GET",url:"/production-dashboard?page=0"})).statusCode).toBe(400);
       expect((await app.inject({method:"GET",url:"/production-dashboard?progressState=approved_by_finance"})).statusCode).toBe(400);
       expect(connect).not.toHaveBeenCalled();}finally{await app.close();}
+  });
+});
+
+describe("B方案 production chasing",()=>{
+  it("compares actual days with required rate and shows scoped supplier concentration",()=>{
+    const first=item(101,{quantity:1500,completedQuantity:250,deliveryDate:"2026-09-15"}),second=item(102,{deliveryDate:"2026-09-11",completedQuantity:100});
+    const days=new Map([[first.order.productionOrderId,[{day:"2026-09-07",quantity:220},{day:"2026-09-08",quantity:220},{day:"2026-09-09",quantity:220}]]]);
+    const enriched=addProductionChase([first,second],days,"2026-09-10T00:00:00Z");
+    expect(enriched[0]!.chase).toMatchObject({remainingQuantity:1250,remainingWorkdays:4,requiredDailyQuantity:313,recentDailyQuantity:220,deliveryPressure:true,supplierOpenCount:2,supplierDueThisWeekCount:1});
+    expect(enriched[1]!.chase).toMatchObject({recentDayCount:0,recentDailyQuantity:null,deliveryPressure:false});
+    expect(selectDashboardPage(enriched,{risk:"attention"}).totalCount).toBe(1);
+  });
+  it("does not fill missing days with zero or infer a rate without a workday denominator",()=>{
+    const first=item(103,{deliveryDate:"2026-09-06"});
+    const days=new Map([[first.order.productionOrderId,[{day:"2026-09-08",quantity:0},{day:"2026-09-09",quantity:20},{day:"2026-08-01",quantity:30}]]]);
+    expect(addProductionChase([first],days,"2026-09-10T00:00:00Z")[0]!.chase).toMatchObject({remainingWorkdays:0,requiredDailyQuantity:null,recentDayCount:2,recentDailyQuantity:null,deliveryPressure:false});
   });
 });
