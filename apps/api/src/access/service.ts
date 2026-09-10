@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { CreateSupplierSchema, ReviseSupplierSchema, SUPPLIER_BATCH_COLUMNS, type SupplierBatchApply, type SupplierBatchCell, type SupplierBatchRow } from "@dx-rework/contracts";
+import { flagSupplierBatchDuplicates, planSupplierBatchRow, supplierBatchPayload, type SupplierBatchProfile } from "./supplier-batch-model.js";
 
 import type {
   AssignRole,
@@ -17,7 +19,7 @@ import type {
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
-import { OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
+import { IdempotencyService, OperationEventRepository, type SqlClient, type TrustedActorContext } from "../tools/repositories.js";
 import { isRootActor } from "./business-authority.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
@@ -1258,8 +1260,56 @@ export class AccessMasterDataService {
     });
   }
 
+  private async supplierBatchCatalog(client: SqlClient = this.database): Promise<SupplierBatchProfile[]> {
+    const result = await client.query<Parameters<AccessMasterDataService["serializeSupplierProfile"]>[0]>("SELECT * FROM current_supplier_catalog");
+    return result.rows.map(row => this.serializeSupplierProfile(row, true) as unknown as SupplierBatchProfile);
+  }
+
+  async previewSupplierBatch(actor: TrustedActorContext, rows: SupplierBatchCell[][]): Promise<SupplierBatchRow[]> {
+    if (!isRootActor(actor)) throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
+    if (JSON.stringify(rows[0]) !== JSON.stringify(SUPPLIER_BATCH_COLUMNS.map(([, label]) => label))) {
+      throw new ApplicationError("VALIDATION_ERROR", "列名或顺序与模板不一致，请使用标准模板", 400);
+    }
+    const catalog = await this.supplierBatchCatalog();
+    const planned = rows.slice(1).flatMap((cells, index) => cells.every(cell => cell === null || String(cell).trim() === "") ? []
+      : [planSupplierBatchRow(cells, catalog, `SUP_${randomUUID().replaceAll("-", "").slice(0,24).toUpperCase()}`, index + 2)]);
+    return flagSupplierBatchDuplicates(planned);
+  }
+
+  async applySupplierBatchRow(actor: TrustedActorContext, input: SupplierBatchApply, key: string) {
+    if (!isRootActor(actor)) throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
+    return this.transaction(async client => new IdempotencyService().execute(client, {
+      scope: "supplier-batch-row", actorKey: actor.actorId, key,
+      requestHash: createHash("sha256").update(JSON.stringify(input)).digest("hex"),
+      expiresAt: new Date(Date.now() + 30 * 86400_000),
+    }, async () => {
+      // Serialize batch identity checks so two uploads cannot create the same new supplier.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('supplier-batch-identity',0))");
+      if (input.expectedSupplierId) await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [input.expectedSupplierId]);
+      const row = planSupplierBatchRow(input.cells, await this.supplierBatchCatalog(client), input.supplierCode);
+      if (["conflict", "error"].includes(row.status)) throw new ApplicationError("VALIDATION_ERROR", row.message, 400);
+      if (row.status === "create" && !/^SUP_[A-F0-9]{24}$/.test(input.supplierCode)) throw new ApplicationError("VALIDATION_ERROR", "新增编码无效，请重新预检生成系统编码", 400);
+      if (row.supplierId !== input.expectedSupplierId || row.version !== input.expectedVersion || row.supplierCode !== input.supplierCode) {
+        throw new ApplicationError("CONFLICT", "供应商资料或匹配对象已变化，请重新预检", 409);
+      }
+      if (input.confirmedFields.some(field => !row.changes.some(change => change.field === field && change.needsConfirmation))) {
+        throw new ApplicationError("CONFLICT", "确认字段与预检差异不一致，请重新预检", 409);
+      }
+      const selected = row.changes.filter(change => !change.needsConfirmation || input.confirmedFields.includes(change.field));
+      if (row.supplierId && !selected.length) return { statusCode: 200, response: { supplierId: row.supplierId, version: row.version!, unchanged: true } };
+      const payload = supplierBatchPayload(row, input);
+      const result = row.supplierId
+        ? await this.reviseSupplierWithClient(client, actor, row.supplierId, ReviseSupplierSchema.parse(payload))
+        : await this.createSupplierWithClient(client, actor, CreateSupplierSchema.parse(payload));
+      return { statusCode: 200, response: { ...result, unchanged: false } };
+    }));
+  }
+
   async createSupplier(actor: TrustedActorContext, input: CreateSupplier): Promise<{ supplierId: string; version: number }> {
-    return this.transaction(async (client) => {
+    return this.transaction(client => this.createSupplierWithClient(client, actor, input));
+  }
+
+  private async createSupplierWithClient(client: PoolClient, actor: TrustedActorContext, input: CreateSupplier) {
       const supplierId = randomUUID();
       await client.query(
         "INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type) VALUES($1,$2,$3)",
@@ -1267,11 +1317,13 @@ export class AccessMasterDataService {
       );
       await this.insertSupplierVersion(client, actor, supplierId, 1, input);
       return { supplierId, version: 1 };
-    });
   }
 
   async reviseSupplier(actor: TrustedActorContext, supplierId: string, input: ReviseSupplier): Promise<{ supplierId: string; version: number }> {
-    return this.transaction(async (client) => {
+    return this.transaction(client => this.reviseSupplierWithClient(client, actor, supplierId, input));
+  }
+
+  private async reviseSupplierWithClient(client: PoolClient, actor: TrustedActorContext, supplierId: string, input: ReviseSupplier) {
       const item = await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [supplierId]);
       if (!item.rows[0]) throw new ApplicationError("NOT_FOUND", "供应商不存在", 404);
       const current = await client.query<{
@@ -1323,7 +1375,6 @@ export class AccessMasterDataService {
         changeReason: input.changeReason,
       });
       return { supplierId, version };
-    });
   }
 
   async createDelegation(actor: TrustedActorContext, input: CreateDelegation): Promise<{ delegationId: string }> {

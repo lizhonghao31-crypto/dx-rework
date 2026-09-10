@@ -1,4 +1,4 @@
-import {CreateSupplierSchema,ReviseSupplierSchema} from "@dx-rework/contracts";
+import {CreateSupplierSchema,ReviseSupplierSchema,SUPPLIER_REQUIRED_FIELDS} from "@dx-rework/contracts";
 import type {SupplierSummary} from "./supplier-center-model.js";
 export type SupplierProfile = SupplierSummary & Readonly<{
   notes: string;
@@ -75,7 +75,7 @@ export const draftFromProfile = (profile: SupplierProfile): SupplierDraft => ({
 
 const nullable=(value:string)=>value.trim()||null;
 export function supplierDraftPayload(draft:SupplierDraft,context:{creating:boolean;code:string;version:number}){
- const required: [keyof SupplierDraft,string][]=[['supplierName','供应商名称'],['contactPerson','联系人'],['contactPhone','联系电话'],['address','地址'],['payeeName','收款人'],['bankAccount','收款账号'],['bankName','开户行'],['supportedCrafts','可承接工艺']];
+ const required=SUPPLIER_REQUIRED_FIELDS;
  const missing=required.filter(([key])=>!String(draft[key]).trim()).map(([,label])=>label);
  if(missing.length)return {success:false as const,error:'请填写：'+missing.join('、')};
  if(!context.creating&&!draft.changeReason.trim())return {success:false as const,error:'请填写修改原因'};

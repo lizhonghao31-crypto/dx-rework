@@ -26,6 +26,8 @@ import {
   RoleAssignmentParamsSchema,
   RoleAssignmentsQuerySchema,
   SupplierParamsSchema,
+  SupplierBatchPreviewSchema,
+  SupplierBatchApplySchema,
   UpdateTemporaryWorkerProfileSchema,
   WorkTaskParamsSchema,
 } from "@dx-rework/contracts";
@@ -37,6 +39,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { ROOT_ACTOR_ROLE } from "./business-authority.js";
 import type { RootAuthority } from "./root-authority.js";
 import type { AccessMasterDataService } from "./service.js";
+import { supplierBatchTemplate } from "./supplier-batch-template.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -476,6 +479,24 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
         parse(CreateSupplierSchema, request.body),
       ),
     ));
+
+  app.get("/master-data/suppliers/import/template.xlsx", async (request, reply) => {
+    await supplierWriteActor(request);
+    return reply.header("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+      .header("content-disposition", 'attachment; filename="supplier-template.xlsx"').send(supplierBatchTemplate());
+  });
+  // XLSX stays limited to 2 MB in the client. JSON may expand to six bytes per code unit;
+  // 201 rows × 15 cells × 1,000 code units plus JSON framing fits within 20 MiB.
+  app.post("/master-data/suppliers/import/preview", { bodyLimit: 20 * 1024 * 1024 }, async request => {
+    const accessActor = await supplierWriteActor(request);
+    return dependencies.service.previewSupplierBatch(accessActor, parse(SupplierBatchPreviewSchema, request.body).rows);
+  });
+  app.post("/master-data/suppliers/import/rows", async (request, reply) => {
+    const accessActor = await supplierWriteActor(request);
+    const result = await dependencies.service.applySupplierBatchRow(accessActor, parse(SupplierBatchApplySchema, request.body), idempotencyKey(request));
+    if (result.reused) reply.header("idempotency-replayed", "true");
+    return reply.code(result.statusCode).send(result.response);
+  });
 
   app.post<{ Params: { supplierId: string } }>("/master-data/suppliers/:supplierId/versions", async (request, reply) =>
     reply.code(201).send(

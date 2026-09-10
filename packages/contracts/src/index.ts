@@ -1,4 +1,5 @@
 import { z } from "zod";
+export * from "./supplier-batch.js";
 
 export * from "./wages.js";
 export * from "./todos.js";
