@@ -48,3 +48,11 @@
 .analysis-detail-list article{gap:12px;padding-block:12px}
 .analysis-detail-list article>div{gap:4px}
 @media(max-width:600px){.analysis-disclosure summary{min-height:44px}.analysis-rank strong{grid-column:auto}.analysis-rank button{grid-template-columns:20px minmax(0,1fr) auto;font-size:14px}}
+
+/* B方案 PR07：原分析区域内平铺筛选，采购与事件期间独立。 */
+.sample-analysis .analysis-filter-main { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.sample-analysis .analysis-filter-form { display:block; margin:0; }
+.sample-analysis .analysis-form-actions { margin-top:12px; }
+@media(max-width:1200px) { .sample-analysis .analysis-filter-main { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:800px) { .sample-analysis .analysis-filter-main { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:480px) { .sample-analysis .analysis-filter-main { grid-template-columns:minmax(0,1fr); } }
