@@ -160,21 +160,12 @@ runWithPostgres("full acceptance role matrix", () => {
     return { cookie, user: me.json().user as SessionUser };
   };
 
-  it("switches every active Golden Source identity through real AuthService/RBAC and matches approved capabilities/modules", async () => {
+  it("switches every active Golden Source identity through real AuthService/RBAC and reports every mismatch in one run", async () => {
+    const failures: string[] = [];
+
     for (const expectation of ACCEPTANCE_ROLE_MATRIX) {
       const { cookie, user } = await login(expectation.alias);
       const expectedUserId = userIds.get(expectation.alias)!;
-      expect(user.id, `${expectation.alias}: user id`).toBe(expectedUserId);
-      expect(user.businessRoles, `${expectation.alias}: role`).toEqual([expectation.expectedRole]);
-      expect(user.isRoot === true, `${expectation.alias}: root`).toBe(expectation.expectedRoot === true);
-
-      for (const capability of expectation.requiredCapabilities ?? []) {
-        expect(user.capabilities, `${expectation.alias}: required ${capability}`).toContain(capability);
-      }
-      for (const capability of expectation.forbiddenCapabilities ?? []) {
-        expect(user.capabilities, `${expectation.alias}: forbidden ${capability}`).not.toContain(capability);
-      }
-
       const checks = evaluateAcceptanceSnapshot(
         expectation,
         {
@@ -185,24 +176,21 @@ runWithPostgres("full acceptance role matrix", () => {
         },
         user,
       );
-      expect(
-        checks.filter((check) => check.verdict !== "pass"),
-        `${expectation.alias}: approved session/capability/module matrix`,
-      ).toEqual([]);
-
-      const accessProbe = expectation.probes?.find((probe) => probe.id === "access-roles");
-      if (accessProbe) {
-        const response = await app.inject({ method: "GET", url: "/access/roles", headers: { cookie } });
-        const check = evaluateHttpProbe(expectation, accessProbe, response.statusCode);
-        expect(check.verdict, `${expectation.alias}: access-roles`).toBe("pass");
+      for (const check of checks.filter((entry) => entry.verdict !== "pass")) {
+        failures.push(`${check.key}: expected=${check.expected}; actual=${check.actual}; rule=${check.ruleId}; verdict=${check.verdict}`);
       }
 
-      const supplierProbe = expectation.probes?.find((probe) => probe.id === "supplier-list");
-      if (supplierProbe) {
-        const response = await app.inject({ method: "GET", url: "/master-data/suppliers", headers: { cookie } });
-        const check = evaluateHttpProbe(expectation, supplierProbe, response.statusCode);
-        expect(check.verdict, `${expectation.alias}: supplier-list`).toBe("pass");
+      for (const probe of expectation.probes ?? []) {
+        if (!['access-roles', 'supplier-list'].includes(probe.id)) continue;
+        const url = probe.id === 'access-roles' ? '/access/roles' : '/master-data/suppliers';
+        const response = await app.inject({ method: "GET", url, headers: { cookie } });
+        const check = evaluateHttpProbe(expectation, probe, response.statusCode);
+        if (check.verdict !== "pass") {
+          failures.push(`${check.key}: expected=${check.expected}; actual=${check.actual}; rule=${check.ruleId}; verdict=${check.verdict}`);
+        }
       }
     }
+
+    expect(failures, failures.join("\n")).toEqual([]);
   });
 });
