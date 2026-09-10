@@ -8,6 +8,11 @@ const ALIAS_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const CONTROL_CODE_TTL_MS = 5 * 60_000;
 const CONTROL_SESSION_TTL_MS = 8 * 60 * 60_000;
 const MAX_CONTROL_SESSIONS = 32;
+const RETIRED_ACCEPTANCE_ALIASES = new Set([
+  "administrative-clerk",
+  "sample-approver",
+  "tail-inspector",
+]);
 
 type ControlCodePayload = Readonly<{
   purpose: "acceptance-control";
@@ -155,15 +160,17 @@ export class AcceptanceControlAuthority {
        ORDER BY i.provider_user_id`,
       [this.corporationId],
     );
-    return result.rows.map((row) => ({
-      alias: row.provider_user_id.slice(4),
-      userId: row.user_id,
-      displayName: row.display_name,
-      active: row.active,
-      employed: row.employed,
-      roleCodes: row.role_codes ?? [],
-      capabilities: row.capabilities ?? [],
-    }));
+    return result.rows
+      .filter((row) => !RETIRED_ACCEPTANCE_ALIASES.has(row.provider_user_id.slice(4)))
+      .map((row) => ({
+        alias: row.provider_user_id.slice(4),
+        userId: row.user_id,
+        displayName: row.display_name,
+        active: row.active,
+        employed: row.employed,
+        roleCodes: row.role_codes ?? [],
+        capabilities: row.capabilities ?? [],
+      }));
   }
 
   async issueLoginCode(token: string | undefined, alias: string): Promise<string> {
