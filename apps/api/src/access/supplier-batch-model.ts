@@ -36,7 +36,7 @@ export function planSupplierBatchRow(cells: SupplierBatchCell[], catalog: readon
   }
   if (target) Object.assign(row, { supplierId: target.supplierId, version: target.version, supplierCode: target.supplierCode, supplierName: row.supplierName || target.supplierName });
   if (!blank(raw.bankAccount) && typeof raw.bankAccount !== "string") return fail("收款账号必须为文本；请按原始账号重新填写，不能将已舍入数字转成文本");
-  if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(text("bankAccount"))) return fail("收款账号不能使用科学计数法，请填写原始文本账号");
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(text("bankAccount"))) return fail("收款账号不能使用科学计数法，请填写原始文本账号");
   const supplied: Record<string, unknown> = {};
   for (const [field] of SUPPLIER_BATCH_COLUMNS) {
     if (field === "supplierCode" || field === "supplierType" || !text(field)) continue;

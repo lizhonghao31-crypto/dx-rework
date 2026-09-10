@@ -53,7 +53,7 @@ describe("supplier batch identity and merge rules", () => {
   });
   it("rejects invalid capacities, duplicate crafts, numeric and scientific-notation bank accounts", () => {
     for (const dailyCapacity of [0, -1, 1.1, 1_000_000_001]) expect(plan({ ...complete, dailyCapacity }).status).toBe("error");
-    for (const bankAccount of [Number("12345678901234567890"), "1.23456789E+19"]) expect(plan({ ...complete, bankAccount }).message).toContain("账号");
+    for (const bankAccount of [Number("12345678901234567890"), "1.23456789E+19", ".1E+20", "1.E+20", "-.1e-20", "+1.E20"]) expect(plan({ ...complete, bankAccount }).message).toContain("账号");
     expect(plan({ ...complete, supportedCrafts: "车缝、车缝" }).status).toBe("error");
     expect(plan({ ...complete, dailyCapacity: 200 }).status).toBe("create");
   });
